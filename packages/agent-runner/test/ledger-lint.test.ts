@@ -111,8 +111,8 @@ describe('lintLocalLedger (over a working tree)', () => {
 		place('ideas', 'shared');
 		place('observations', 'shared');
 		place('findings', 'shared');
-		place('prd', 'shared');
-		place('prd-sliced', 'shared');
+		place('brief', 'shared');
+		place('brief-tasked', 'shared');
 		expect(lintLocalLedger(root)).toEqual([]);
 	});
 

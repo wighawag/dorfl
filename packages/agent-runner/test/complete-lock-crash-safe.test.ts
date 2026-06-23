@@ -233,7 +233,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'prd-sliced', 'zeta', briefFile('zeta'));
+		seedTerminalOnArbiter(arbiter, 'brief-tasked', 'zeta', briefFile('zeta'));
 
 		const rec = await reconcileItemLockAgainstMain({
 			item: 'brief:zeta',

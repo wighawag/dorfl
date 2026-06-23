@@ -39,9 +39,9 @@ function trackedOnArbiter(cwd: string, folder: string, slug: string): boolean {
 	);
 }
 const briefOnArbiter = (cwd: string, slug: string): boolean =>
-	trackedOnArbiter(cwd, 'prd', slug);
+	trackedOnArbiter(cwd, 'brief', slug);
 const taskingFolderOnArbiter = (cwd: string, slug: string): boolean =>
-	trackedOnArbiter(cwd, 'slicing', slug);
+	trackedOnArbiter(cwd, 'tasking', slug);
 /** Does the arbiter HOLD the per-item lock ref for the brief `slug`? */
 function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 	const r = run(

@@ -49,7 +49,7 @@ function stageTask(repo: string, slug: string): void {
 
 /** Stage a PRD file in `work/briefs/proposed/` on the arbiter. */
 function stageBrief(repo: string, slug: string): void {
-	stageStaged(repo, 'pre-prd', slug);
+	stageStaged(repo, 'pre-brief', slug);
 }
 
 function stageStaged(repo: string, folder: string, slug: string): void {

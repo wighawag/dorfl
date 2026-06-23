@@ -18,7 +18,7 @@ let root: string;
 
 /** Seed one `work/<folder>/<file>` with the given frontmatter. */
 function writeItem(
-	folder: 'backlog' | 'in-progress' | 'done' | 'prd' | 'prd-sliced',
+	folder: 'backlog' | 'in-progress' | 'done' | 'brief' | 'brief-tasked',
 	file: string,
 	frontmatter: Record<string, string>,
 	body = 'body',
@@ -118,7 +118,7 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 	it('a bare slug ERRORS on a task/brief collision (never silently guesses)', () => {
 		// Seed BOTH a task and a brief named `auto-slice` — the ADR's example.
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 
 		expect(() =>
 			resolveSlug({
@@ -147,7 +147,7 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		// is the per-item lock ref). The brief namespace still claims the slug via its
 		// ready/ residence, so a bare slug is still ambiguous.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
-		writeItem('prd', 'shared.md', {slug: 'shared'});
+		writeItem('brief', 'shared.md', {slug: 'shared'});
 
 		expect(() =>
 			resolveSlug({
@@ -160,7 +160,7 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 
 	it('an explicit task: prefix is ALWAYS unambiguous — resolves to the task even on a collision, no error', () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 
 		const resolved = resolveSlug({
 			arg: 'task:auto-slice',
@@ -177,7 +177,7 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 
 	it('an explicit brief: prefix is ALWAYS unambiguous — resolves to the brief even on a collision, no error', () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 
 		const resolved = resolveSlug({
 			arg: 'brief:auto-slice',
@@ -233,7 +233,7 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 	it('the brief existence check resolves the slug from frontmatter, not just the filename', () => {
 		// A brief file named oddly but whose frontmatter slug matches still collides.
 		writeItem('backlog', 'feature.md', {slug: 'feature'});
-		writeItem('prd', 'renamed-on-disk.md', {slug: 'feature'});
+		writeItem('brief', 'renamed-on-disk.md', {slug: 'feature'});
 
 		expect(() =>
 			resolveSlug({
@@ -315,7 +315,7 @@ describe('resolveAdvanceArg — the advance verb resolver (task/brief/obs, bare 
 
 	it('keeps the bare-slug cross-check: ERRORS on a task/brief collision (same as do)', () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
 		expect(() =>
 			resolveAdvanceArg({
 				arg: 'auto-slice',
@@ -401,14 +401,14 @@ describe('resolveSliceOnlyArg — the task-only command guard', () => {
 		// Even with a colliding brief seeded, the task-only path resolves the bare
 		// slug straight to the task (the brief namespace is unreachable here), so
 		// there is no cross-namespace check and no error.
-		writeItem('prd', 'feature.md', {slug: 'feature'});
+		writeItem('brief', 'feature.md', {slug: 'feature'});
 		expect(resolveTaskOnlyArg('feature')).toBe('feature');
 	});
 });
 
 describe('ledger-read seam — resolvePrdExistence (the brief read path)', () => {
 	it('reports a brief present in work/briefs/ready/', () => {
-		writeItem('prd', 'p.md', {slug: 'p'});
+		writeItem('brief', 'p.md', {slug: 'p'});
 		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
 			slug: 'p',
@@ -419,7 +419,7 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 	});
 
 	it('reports a brief present only via its work/briefs/tasked/ resting file (already sliced)', () => {
-		writeItem('prd-sliced', 's.md', {slug: 's'});
+		writeItem('brief-tasked', 's.md', {slug: 's'});
 		const r = currentLedgerRead.resolveBriefExistence({
 			repoPath: repoPath(),
 			slug: 's',
@@ -431,7 +431,7 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 
 	it('resolves the slug from frontmatter, falling back to filename', () => {
 		// Frontmatter slug wins over the filename.
-		writeItem('prd', 'on-disk-name.md', {slug: 'real-slug'});
+		writeItem('brief', 'on-disk-name.md', {slug: 'real-slug'});
 		expect(
 			currentLedgerRead.resolveBriefExistence({
 				repoPath: repoPath(),
@@ -439,7 +439,7 @@ describe('ledger-read seam — resolvePrdExistence (the brief read path)', () =>
 			}).exists,
 		).toBe(true);
 		// Filename fallback when no frontmatter slug.
-		writeItem('prd', 'filename-slug.md', {});
+		writeItem('brief', 'filename-slug.md', {});
 		expect(
 			currentLedgerRead.resolveBriefExistence({
 				repoPath: repoPath(),

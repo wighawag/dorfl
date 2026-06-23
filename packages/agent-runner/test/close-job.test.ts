@@ -113,7 +113,7 @@ afterEach(() => {
 
 describe('runCloseJob — the brief case (consumes the "brief complete?" query)', () => {
 	it("closes the brief's issue when ALL its tasks are in work/tasks/done/", async () => {
-		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
 		write('done', 'b.md', {slug: 'b', brief: 'my-brief'});
 
@@ -138,7 +138,7 @@ describe('runCloseJob — the brief case (consumes the "brief complete?" query)'
 	});
 
 	it("leaves the brief's issue OPEN when one of its tasks is NOT yet in work/tasks/done/", async () => {
-		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
 		write('backlog', 'b.md', {slug: 'b', brief: 'my-brief'}); // not landed
 
@@ -156,7 +156,7 @@ describe('runCloseJob — the brief case (consumes the "brief complete?" query)'
 	});
 
 	it('finds the brief issue from work/briefs/tasked/ too (a brief that has been tasked)', async () => {
-		write('prd-sliced', 'my-brief.md', {slug: 'my-brief', issue: '7'});
+		write('brief-tasked', 'my-brief.md', {slug: 'my-brief', issue: '7'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
 
 		const provider = new MemoryIssueProvider();
@@ -207,7 +207,7 @@ describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
 describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)', () => {
 	it('a fanned task carries brief: (NOT issue:) and reaches the number via the brief only', async () => {
 		// The brief carries the issue number; the fanned task carries `brief:` only.
-		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
 
 		const provider = new MemoryIssueProvider();
@@ -230,7 +230,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 	it('on a hand-edited task carrying BOTH brief: and issue:, brief: WINS (issue: ignored)', async () => {
 		// A contradiction only a human hand-edit could produce; resolveClosingIssue
 		// makes `brief:` win, so the task is NOT a lone-task candidate for issue 99.
-		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief', issue: '99'});
 
 		const provider = new MemoryIssueProvider();
@@ -245,7 +245,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 	});
 
 	it('considers each brief issue ONCE even with many tasks pointing at it (dedup)', async () => {
-		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
 		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
 		write('done', 'b.md', {slug: 'b', brief: 'my-brief'});
 		write('done', 'c.md', {slug: 'c', brief: 'my-brief'});
@@ -262,7 +262,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 
 	it('ignores artifacts with NO closure link (no issue:, no prd:)', async () => {
 		write('done', 'plain.md', {slug: 'plain'});
-		write('prd', 'no-issue-brief.md', {slug: 'no-issue-brief'});
+		write('brief', 'no-issue-brief.md', {slug: 'no-issue-brief'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({

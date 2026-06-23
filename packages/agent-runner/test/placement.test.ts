@@ -115,22 +115,23 @@ describe('placement.resolvePlacement: precedence chain', () => {
 
 describe("placement.placementFolder: maps the side onto a lifecycle's slots", () => {
 	const TASK_SLOTS = {staging: 'pre-backlog', pool: 'backlog'};
-	// STEP A keeps `prd/` as the auto-slice POOL name (the STEP-B rename to
-	// `prd-ready/` is deferred to `folder-taxonomy-reorg-and-rename`), so the
-	// PRD-placement caller passes `{staging: 'pre-prd', pool: 'prd'}` (slice
-	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`).
-	const BRIEF_SLOTS = {staging: 'pre-prd', pool: 'prd'};
+	// The brief-placement caller passes its own staging/pool slots (the same
+	// lifecycle-generic resolver serves both regimes); modelled here with the
+	// current brief fixture words `{staging: 'pre-brief', pool: 'brief'}`. These
+	// are illustrative slot strings the resolver echoes back, not on-disk names
+	// (the real caller threads `briefs/proposed`/`briefs/ready` via `work-layout`).
+	const BRIEF_SLOTS = {staging: 'pre-brief', pool: 'brief'};
 
-	it('slice slots: staging \u2192 pre-backlog, pool \u2192 backlog', () => {
+	it('task slots: staging \u2192 pre-backlog, pool \u2192 backlog', () => {
 		expect(placementFolder(TASK_SLOTS, 'staging')).toBe('pre-backlog');
 		expect(placementFolder(TASK_SLOTS, 'pool')).toBe('backlog');
 	});
 
-	it('prd slots (the PRD-placement caller): staging \u2192 pre-prd, pool \u2192 prd', () => {
-		// The PRD-placement slice (`pre-prd-staging-pool-split-and-untrusted-prd-
-		// placement`) REUSES this exact resolver with its own slots; this asserts
-		// the lifecycle-generic seam holds (the same function serves both).
-		expect(placementFolder(BRIEF_SLOTS, 'staging')).toBe('pre-prd');
-		expect(placementFolder(BRIEF_SLOTS, 'pool')).toBe('prd');
+	it('brief slots (the brief-placement caller): staging \u2192 pre-brief, pool \u2192 brief', () => {
+		// The brief-placement caller REUSES this exact resolver with its own slots;
+		// this asserts the lifecycle-generic seam holds (the same function serves
+		// both).
+		expect(placementFolder(BRIEF_SLOTS, 'staging')).toBe('pre-brief');
+		expect(placementFolder(BRIEF_SLOTS, 'pool')).toBe('brief');
 	});
 });

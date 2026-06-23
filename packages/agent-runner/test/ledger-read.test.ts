@@ -100,7 +100,7 @@ describe('ledger-read seam — local-tree resolve method', () => {
 
 describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD source)', () => {
 	function writeBrief(
-		folder: 'prd' | 'slicing' | 'prd-sliced',
+		folder: 'brief' | 'tasking' | 'brief-tasked',
 		file: string,
 		fm: Record<string, string>,
 	): void {
@@ -115,12 +115,12 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 	}
 
 	it('enumerates work/briefs/ready/*.md with each PRD’s gate axes, sorted by slug', () => {
-		writeBrief('prd', 'beta.md', {
+		writeBrief('brief', 'beta.md', {
 			slug: 'beta',
 			needsAnswers: 'true',
 			briefAfter: '[alpha]',
 		});
-		writeBrief('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
+		writeBrief('brief', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
 
 		const pool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
@@ -141,13 +141,13 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 
 	it('collects already-SLICED slugs from `work/briefs/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `sliced:` marker was removed)', () => {
 		// alpha + gamma rest in prd-sliced/ (sliced); beta is still to-slice in prd/.
-		writeBrief('prd-sliced', 'alpha.md', {slug: 'alpha'});
-		writeBrief('prd', 'beta.md', {slug: 'beta'});
-		writeBrief('prd-sliced', 'gamma.md', {slug: 'gamma'});
+		writeBrief('brief-tasked', 'alpha.md', {slug: 'alpha'});
+		writeBrief('brief', 'beta.md', {slug: 'beta'});
+		writeBrief('brief-tasked', 'gamma.md', {slug: 'gamma'});
 		// An INERT leftover `sliced:` line on a PRD still in prd/ does NOT count (folder
 		// = truth; the marker was removed in remove-sliced-marker-step-b, so the line is
 		// ignored): delta carries one but resides in prd/, so it is NOT sliced.
-		writeBrief('prd', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
+		writeBrief('brief', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
 
 		const pool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
@@ -165,7 +165,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 	});
 
 	it('falls back to the filename when a PRD has no slug frontmatter', () => {
-		writeBrief('prd', 'no-slug.md', {title: 'x'});
+		writeBrief('brief', 'no-slug.md', {title: 'x'});
 		const pool = currentLedgerRead.resolveBriefPool({
 			repoPath: join(root, 'repo'),
 		});

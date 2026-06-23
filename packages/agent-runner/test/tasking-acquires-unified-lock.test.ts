@@ -61,9 +61,9 @@ function trackedOnArbiter(cwd: string, folder: string, slug: string): boolean {
 	);
 }
 const briefOnArbiter = (cwd: string, slug: string): boolean =>
-	trackedOnArbiter(cwd, 'prd', slug);
+	trackedOnArbiter(cwd, 'brief', slug);
 const taskingOnArbiter = (cwd: string, slug: string): boolean =>
-	trackedOnArbiter(cwd, 'slicing', slug);
+	trackedOnArbiter(cwd, 'tasking', slug);
 
 describe('acquireTaskingLock acquires the unified per-item lock (the marker is RETIRED)', () => {
 	it('a successful acquire holds the lock (prd:<slug>, action slice); the body stays in prd/ (NO slicing/ marker)', async () => {

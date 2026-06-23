@@ -399,7 +399,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
  */
 function writeBrief(
 	repo: string,
-	status: 'prd' | 'prd-sliced',
+	status: 'brief' | 'brief-tasked',
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
@@ -415,7 +415,7 @@ function writeBrief(
 
 describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	it('a ready ungated PRD appears as sliceable when autoTask is on (no per-repo config)', () => {
-		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
@@ -426,10 +426,16 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	});
 
 	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the sliceable pool', () => {
-		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
-		writeBrief('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
-		writeBrief('repo', 'prd', 'asks.md', {slug: 'asks', needsAnswers: 'true'});
-		writeBrief('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
+		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'brief', 'human.md', {slug: 'human', humanOnly: 'true'});
+		writeBrief('repo', 'brief', 'asks.md', {
+			slug: 'asks',
+			needsAnswers: 'true',
+		});
+		writeBrief('repo', 'brief', 'after.md', {
+			slug: 'after',
+			briefAfter: '[dep]',
+		});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
@@ -442,7 +448,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	});
 
 	it('an autoTask:false repo yields no SLICEABLE PRD legs (the gate still binds)', () => {
-		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: false}),
@@ -452,7 +458,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	});
 
 	it('honours the per-repo `.agent-runner.json` autoTask override (off globally, on per-repo)', () => {
-		writeBrief('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
 			JSON.stringify({autoTask: true}),
@@ -468,8 +474,11 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	});
 
 	it('a briefAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
-		writeBrief('repo', 'prd', 'after.md', {slug: 'after', briefAfter: '[dep]'});
-		writeBrief('repo', 'prd-sliced', 'dep.md', {slug: 'dep'});
+		writeBrief('repo', 'brief', 'after.md', {
+			slug: 'after',
+			briefAfter: '[dep]',
+		});
+		writeBrief('repo', 'brief-tasked', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
@@ -485,7 +494,7 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `briefs[]`)',
 		() => {
 			writeItem('repo', 'backlog', 'go.md', {slug: 'go', blockedBy: '[]'});
-			writeBrief('repo', 'prd', 'cut.md', {slug: 'cut'});
+			writeBrief('repo', 'brief', 'cut.md', {slug: 'cut'});
 			const report = scanRepoPaths(
 				[join(root, 'repo')],
 				mergeConfig({autoBuild: true, autoTask: true}),
@@ -685,7 +694,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writeBrief('repo', 'prd', 'blocked-prd.md', {
+		writeBrief('repo', 'brief', 'blocked-prd.md', {
 			slug: 'blocked-prd',
 			needsAnswers: 'true',
 		});

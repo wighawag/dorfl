@@ -226,7 +226,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 	it('dropped on a BRIEF → moves to work/briefs/dropped/ (the brief regime terminal; the per-regime split, no slug collision)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'foo',
-			folder: 'prd',
+			folder: 'brief',
 			type: 'brief',
 			questions: ['ship it?'],
 			answers: ['no'],
@@ -650,7 +650,7 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 	it('BRIEF (symmetric): a concurrent promote `briefs/proposed → briefs/ready` — apply commits at the POST-MOVE path', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'bar',
-			folder: 'pre-prd',
+			folder: 'pre-brief',
 			type: 'brief',
 			questions: ['scope?'],
 			answers: ['narrow'],
