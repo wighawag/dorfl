@@ -1,5 +1,5 @@
 /**
- * Minimal, dependency-free parser for the small slice of YAML frontmatter the
+ * Minimal, dependency-free parser for the small subset of YAML frontmatter the
  * `work/` contract uses: top-level scalar keys and string lists (inline `[a, b]`
  * or block `- a` form). It deliberately does NOT implement general YAML — only
  * what `work/` task frontmatter needs (slug, humanOnly, blockedBy, ...).

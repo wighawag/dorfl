@@ -27,7 +27,7 @@ Task titles and descriptions use the project's domain glossary. Respect ADRs / f
 
 ### 3. Draft vertical tasks
 
-Each task is a **tracer bullet** — a thin path through ALL layers end-to-end, not a horizontal task of one layer.
+Each task is a **tracer bullet** — a thin vertical path through ALL layers end-to-end, not a horizontal cross-section of one layer.
 
 - Each task delivers a narrow but COMPLETE path (schema → logic → API/UI → tests).
 - A completed task is demoable/verifiable on its own.
