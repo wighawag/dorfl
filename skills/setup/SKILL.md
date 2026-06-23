@@ -244,14 +244,14 @@ Standing per-change rules agents must follow in this repo.
 	"verify": "<stack-appropriate command from A3>",
 	"harness": "pi",
 	"autoBuild": false,
-	"autoSlice": false,
+	"autoTask": false,
 	"promptGuidance": {"testFirst": true}
 }
 ```
 
 > Only include `promptGuidance` if the maintainer answered YES to the A2 nudge question. If they said no / skip / don't know, OMIT the whole `promptGuidance` object — the runtime default (`false`) takes over.
 
-> `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoSlice` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). `noPR` — the PR-INTENT axis (default off = "open a PR"): set `true` (or pass `--no-pr`) to push the branch but deliberately SKIP the review request even on an authed GitHub arbiter (the explicit suppress-PR intent). The review-request PROVIDER itself is NOT a config key — it is purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else push-only), with the identity's `providers.github` / ambient `gh` auth deciding whether `gh` can open the PR; there is no `provider`/`--provider` override. Add `defaultArbiter`, `integration`, `noPR`, `model` only as the repo needs them.
+> `prepare` — the env-prep / install step the runner runs ONCE before the first `verify` on a fresh worktree (install deps / submodules / codegen, from A3b). The sibling of `verify`, NOT baked into it (`prepare` = env-ready, `verify` = tree-green). **OMIT it entirely if the repo has no deps to install** (unset ⇒ a no-op; never write a default `pnpm install` into a repo with no lockfile). `verify` — the acceptance gate (set it correctly for the stack; cheap-first; no install/env-prep — that lives in `prepare`). `harness` — the agent adapter (`pi`, or `null` + `agentCmd` for a shell agent). `autoBuild` / `autoTask` — strict-by-default (off; `autoBuild` is the build-gate, renamed from the now-removed `allowAgents`, which has no alias). `noPR` — the PR-INTENT axis (default off = "open a PR"): set `true` (or pass `--no-pr`) to push the branch but deliberately SKIP the review request even on an authed GitHub arbiter (the explicit suppress-PR intent). The review-request PROVIDER itself is NOT a config key — it is purely arbiter-derived (a GitHub remote ⇒ the GitHub provider, else push-only), with the identity's `providers.github` / ambient `gh` auth deciding whether `gh` can open the PR; there is no `provider`/`--provider` override. Add `defaultArbiter`, `integration`, `noPR`, `model` only as the repo needs them.
 
 ```
 
