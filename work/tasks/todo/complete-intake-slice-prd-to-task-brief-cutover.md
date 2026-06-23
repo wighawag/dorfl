@@ -64,3 +64,7 @@ agent-runner claim complete-intake-slice-prd-to-task-brief-cutover --arbiter <re
 git fetch <remote> && git switch -c work/complete-intake-slice-prd-to-task-brief-cutover <remote>/main
 git mv work/tasks/todo/complete-intake-slice-prd-to-task-brief-cutover.md work/tasks/done/complete-intake-slice-prd-to-task-brief-cutover.md
 ```
+
+## Requeue 2026-06-23
+
+Gate-1 green (2585 tests) on the kept branch bc9ad67; Gate-2 hit the known 'review verdict was not valid JSON' parser crash (infra fault, not the work). Kept green tip pushed to origin work branch. Recover the stranded branch and open the PR; do NOT re-run the build.
