@@ -55,3 +55,7 @@ agent-runner claim rename-src-comment-prose-slicing-to-tasking --arbiter <remote
 git fetch <remote> && git switch -c work/rename-src-comment-prose-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-src-comment-prose-slicing-to-tasking.md work/tasks/done/rename-src-comment-prose-slicing-to-tasking.md
 ```
+
+## Requeue 2026-06-23
+
+Gate-2 verdict JSON-parse crash (position 6182) AFTER green Gate-1 (2585 tests) and AFTER the prose sweep was applied. Recurring infra/gate fault on large diffs, not the work. Continue from the kept branch; re-run gate + Gate-2.
