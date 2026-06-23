@@ -49,3 +49,7 @@ agent-runner claim rename-protocol-prose-workcontract-and-surface-slicing-to-tas
 git fetch <remote> && git switch -c work/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking.md work/tasks/done/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking.md
 ```
+
+## Requeue 2026-06-23
+
+Gate-2 verdict JSON-parse crash (position 6114) AFTER green Gate-1 (2585 tests) and AFTER the WORK-CONTRACT/SURFACE prose sweep was applied. Recurring infra/gate fault, not the work. Continue from the kept branch; re-run gate + Gate-2.
