@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Possible stale `scan --json` key: emitted-CI `jq` reads `.prds[]`, TS field is `briefs`
 
 2026-06-23 (noticed during `rename-src-comment-prose-slicing-to-tasking`, the
