@@ -67,3 +67,12 @@ agent-runner claim rename-residual-slice-test-labels-and-skill-provenance --arbi
 git fetch <remote> && git switch -c work/rename-residual-slice-test-labels-and-skill-provenance <remote>/main
 git mv work/tasks/todo/rename-residual-slice-test-labels-and-skill-provenance.md work/tasks/done/rename-residual-slice-test-labels-and-skill-provenance.md
 ```
+
+## Gate-3 follow-up (2026-06-23, conductor) — finish the close-job.test.ts describe coherently
+
+A first build correctly renamed only the FIRST `close-job.test.ts` it-block, leaving the rest of its describe on old vocabulary (an incoherent half-rename). Continuing from the kept branch, ALSO sweep the WHOLE describe so it reads coherently:
+- Describe titles: `runCloseJob — the PRD case (...)` -> `... the brief case (...)`; `runCloseJob — the lone-slice case (...)` -> `... the lone-task case (...)`.
+- Sibling it-block test NAMES: `leaves the PRD issue OPEN when a prd:<slug> slice is NOT yet ...` -> brief/task wording; `finds the PRD issue from work/briefs/tasked/ too (a PRD that has been sliced)` -> brief/tasked wording; `a fanned slice carries prd: (NOT issue:) and reaches the number via the PRD only` -> `a fanned task carries brief: ...`; `closes a lone slice (issue:, no prd:) ...` / `leaves a lone slice OPEN ...` -> lone-task wording.
+- Slug fixtures `my-prd` -> `my-brief` (and the matching `brief: 'my-prd'` refs + `toContain('my-prd')` assertions, together).
+- **SCOPE FENCE:** leave the `write('prd', ...)` / `write('prd-sliced', ...)` FOLDER-WORD first args verbatim — the fixture-folder compat-seam task `clean-break-fixture-folder-vocab-compat-seam` owns those. Only the describe/it NAMES + the `my-prd` slug fixtures here.
+- Keep all the already-correct work from the first build (labels, vars, scan prose, skill self-sufficiency, the other fixtures). Gate green.
