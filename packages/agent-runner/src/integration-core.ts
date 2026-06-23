@@ -153,7 +153,7 @@ export interface IntegrationLifecycle {
 	/**
 	 * The trailing transition tag on the runner-owned commit subject
 	 * (`<type>(<slug>): <summary>; <commitTag>`). Defaults to `done` (the build
-	 * lifecycle); the tasking transition supplies `sliced`. Cosmetic — it names
+	 * lifecycle); the tasking transition supplies `tasked`. Cosmetic — it names
 	 * WHICH lifecycle landed; it gates nothing.
 	 */
 	commitTag?: string;
@@ -922,7 +922,7 @@ export async function performIntegration(
 	const summary = input.message ?? defaultMessage;
 	const type = (input.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE;
 	// The trailing transition tag: a build is `; done`, a TASKING transition is
-	// `; sliced` (the lifecycle supplies it). Keeps the runner-owned commit subject
+	// `; tasked` (the lifecycle supplies it). Keeps the runner-owned commit subject
 	// honest about WHICH lifecycle landed.
 	const commitMessage = `${type}(${slug}): ${summary}; ${lifecycle?.commitTag ?? 'done'}`;
 	await gitHard(['commit', '-q', '-m', commitMessage], cwd, env);

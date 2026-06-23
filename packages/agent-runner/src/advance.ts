@@ -87,7 +87,7 @@ import type {NewQuestion} from './sidecar.js';
  *     the verb here is a SINGLE named-item tick; the bare form errors clearly
  *     ("needs the driver task"). See the `## Decisions` block in the task.
  *
- * The build-slice / slice-prd rungs ORCHESTRATE the existing `do` / `do brief:`
+ * The build-task / task-brief rungs ORCHESTRATE the existing `do` / `do brief:`
  * machinery ({@link performDo}) — `advance` is a driver layered ON TOP, NEVER a
  * peer that duplicates the build/task path (ONE build path, ONE task path —
  * US #6).
@@ -174,7 +174,7 @@ export interface AdvanceContext {
 	doOptions?: Omit<DoOptions, 'arg'>;
 	/**
 	 * The build/task ORCHESTRATION DRIVER seam (task
-	 * `advance-loop-driver-registry-set-job-worktrees`). The build-slice / slice-prd
+	 * `advance-loop-driver-registry-set-job-worktrees`). The build-task / task-brief
 	 * rungs ORCHESTRATE `do` by handing the resolved arg + the threaded
 	 * {@link doOptions} to THIS driver. `undefined` ⇒ {@link performDo} (the IN-PLACE
 	 * substrate — the human-local one-shot `advance` command + today's
@@ -422,7 +422,7 @@ export const defaultRungExecutor: RungExecutor = {
 };
 
 /**
- * ORCHESTRATE `do`/`do brief:` for the build-slice / slice-prd rungs: hand the
+ * ORCHESTRATE `do`/`do brief:` for the build-task / task-brief rungs: hand the
  * resolved namespaced identity to {@link performDo} (the ONE build path / ONE
  * task path). `advance` is a driver ON TOP — it does NOT duplicate `do`. The
  * `do` outcome is mapped back onto the tick's outcome surface.
@@ -977,7 +977,7 @@ export async function performAdvance(
  * Is this a TREE-LESS rung (`surface`/`apply`/`triage-observation`) — the rungs
  * that have NO inner `performDo`, so the advancing acquire must ALSO take the
  * unified per-item lock (`action: advance`) to realise advance∥claim / advance∥task
- * exclusion? The build/task rungs (`build-slice`/`slice-prd`) are the inverse:
+ * exclusion? The build/task rungs (`build-task`/`task-brief`) are the inverse:
  * their inner `do` holds the SAME unified ref, so the advance layer must NOT take
  * it (it would deadlock the tick against itself). `no-op`/`invariant-violation`
  * never reach the lock step. This is the single place the tree-less-only policy
@@ -995,9 +995,9 @@ function dispatchRung(
 	input: RungExecInput,
 ): Promise<RungExecResult> {
 	switch (input.classification.kind) {
-		case 'build-slice':
+		case 'build-task':
 			return executor.buildTask(input);
-		case 'slice-prd':
+		case 'task-brief':
 			return executor.taskBrief(input);
 		case 'triage-observation':
 			return executor.triageObservation(input);

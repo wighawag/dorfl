@@ -48,7 +48,7 @@ import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
  * **Why an isolated cwd composes with all five rungs (only the runner is new).**
  * The advance tick threads a `cwd` + `arbiter` + a build/task `doDriver`:
  *
- *   - the **build-slice / slice-prd** rungs ORCHESTRATE `do`/`do brief:` via the
+ *   - the **build-task / task-brief** rungs ORCHESTRATE `do`/`do brief:` via the
  *     `doDriver` seam — we inject {@link jobWorktreeDoDriver} (off the cwd-resolved
  *     arbiter), so they build/task ISOLATED in their OWN job worktree (the SAME
  *     isolation `do --isolated` gives the build tick) instead of in `process.cwd()`;

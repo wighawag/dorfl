@@ -100,7 +100,7 @@ export interface AcquireAdvancingLockOptions {
 	 * sets this PER RUNG (the policy lives where the rung is known — `advance.ts`):
 	 * `true` for the TREE-LESS rungs (`surface`/`apply`/`triage`), which have no
 	 * inner `do` and so genuinely need the unified hold to realise advance∥claim /
-	 * advance∥task exclusion; `false` (the default) for the build-slice / slice-prd
+	 * advance∥task exclusion; `false` (the default) for the build-task / task-brief
 	 * rungs, whose inner `performDo` ALREADY takes the SAME `task-<slug>`/`brief-<slug>`
 	 * ref — taking it again here would DEADLOCK the tick against itself, so for those
 	 * the acquire is a NO-OP `acquired`. When `true`, a lock `lost` makes the acquire
@@ -249,7 +249,7 @@ export interface ReleaseAdvancingLockOptions {
 	 * Release the item's UNIFIED per-item lock (the complement of
 	 * {@link AcquireAdvancingLockOptions.acquireUnified}). The advance tick sets this
 	 * for a TREE-LESS rung (`surface`/`apply`/`triage`), where the acquire took the
-	 * unified lock; `false` (the default) for the build-slice / slice-prd rungs,
+	 * unified lock; `false` (the default) for the build-task / task-brief rungs,
 	 * which never took it at the advance layer (the inner `performDo`'s claim/task
 	 * lock is the exclusion point and is released by the inner `do`) — for those the
 	 * release is a NO-OP `released`.

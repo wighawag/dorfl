@@ -39,8 +39,8 @@
  *
  * "ANALYSE" is NOT "always advance" — surface-and-pause is itself a rung, so the
  * ANALYSE branch resolves to the per-TYPE rung the executor will run (the cells
- * of the brief's "Per-item-type transitions" table): `build-slice` (task),
- * `slice-prd` (brief), `triage-observation` (observation) when there are no open
+ * of the brief's "Per-item-type transitions" table): `build-task` (task),
+ * `task-brief` (brief), `triage-observation` (observation) when there are no open
  * questions; `surface` (first-pass question generation) when `needsAnswers` but
  * no sidecar yet; `apply` when all entries are answered.
  */
@@ -73,9 +73,9 @@ export interface TickItem {
 export type TickRungKind =
 	// --- ANALYSE rungs (no open questions; advance one lifecycle rung) ---
 	/** A ready task → build it (later: invoke the `do <slug>` machinery). */
-	| 'build-slice'
+	| 'build-task'
 	/** A ready brief → task it (later: invoke the `do brief:<slug>` machinery). */
-	| 'slice-prd'
+	| 'task-brief'
 	/** An untriaged observation → triage it (auto-disposition or surface a question). */
 	| 'triage-observation'
 	// --- Transitional ANALYSE rungs (driven by the two signals) ---
@@ -117,8 +117,8 @@ export interface TickClassification {
 
 /** The per-TYPE ANALYSE rung when there are no open questions (the no-gate path). */
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
-	task: 'build-slice',
-	brief: 'slice-prd',
+	task: 'build-task',
+	brief: 'task-brief',
 	observation: 'triage-observation',
 };
 
@@ -131,7 +131,7 @@ const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
  *   - `needsAnswers` NOT true:
  *       - a sidecar present ⇒ INVARIANT 1 BROKEN (`sidecar-without-needsAnswers`)
  *         → `invariant-violation`. (`needsAnswers:false ⟺ no active sidecar`.)
- *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-slice` / `slice-prd` /
+ *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-task` / `task-brief` /
  *         `triage-observation`).
  *   - `needsAnswers` true:
  *       - NO sidecar ⇒ `surface` (first-pass question generation — transitional).

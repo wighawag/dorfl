@@ -161,7 +161,7 @@ export interface IntakeVerdict {
 
 /** The terminal status of one `intake <N>` run. */
 export type IntakeRunOutcome =
-	| 'sliced' // a `slice` verdict → backlog slice written + integrated
+	| 'tasked' // a `slice` verdict → backlog slice written + integrated
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
 	| 'prd' // a `prd` verdict → the brief file (`work/briefs/ready/<slug>.md`) written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
@@ -1395,7 +1395,7 @@ async function integrationToIntakeResult(
 		});
 		return {
 			exitCode: 0,
-			outcome: kind === 'prd' ? 'prd' : 'sliced',
+			outcome: kind === 'prd' ? 'prd' : 'tasked',
 			issueNumber,
 			emittedSlug: slug,
 			emitted: relPath,

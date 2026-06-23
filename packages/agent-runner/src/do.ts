@@ -129,7 +129,7 @@ export type DoOutcome =
 	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'sliced' // `do brief:<slug>` — the brief was tasked into work/backlog/ (runner-owned)
+	| 'tasked' // `do brief:<slug>` — the brief was tasked into work/backlog/ (runner-owned)
 	| 'gate-refused' // `do brief:<slug>` — the tasking gate refused (honest skip)
 	| 'stale'; // `do brief:<slug>` — the held brief was edited under the lock (stale tasking)
 
@@ -555,8 +555,8 @@ function taskResultToDoResult(tasked: TaskResult): DoResult {
 	let outcome: DoOutcome;
 	let exitCode: 0 | 1 | 2 | 3;
 	switch (tasked.outcome) {
-		case 'sliced':
-			outcome = 'sliced';
+		case 'tasked':
+			outcome = 'tasked';
 			exitCode = 0;
 			break;
 		case 'gate-refused':

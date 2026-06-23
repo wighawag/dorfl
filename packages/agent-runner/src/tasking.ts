@@ -100,7 +100,7 @@ import type {ReviewGate} from './review-gate.js';
 
 /** The terminal status of one `do brief:<slug>` tasking run. */
 export type TaskOutcome =
-	| 'sliced' // gate passed (agent) / unbound (human) → lock → agent → committed
+	| 'tasked' // gate passed (agent) / unbound (human) → lock → agent → committed
 	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/briefAfter)
 	| 'lock-lost' // the lock was lost/contended (another tasker holds it)
 	| 'agent-failed' // the agent invocation itself errored
@@ -672,7 +672,7 @@ export async function performTask(
 			lifecycle: {
 				// Read the PR title / commit summary from the held brief (before it moves).
 				titlePath: workItemPath(cwd, 'briefs-ready', slug),
-				commitTag: 'sliced',
+				commitTag: 'tasked',
 				stage: () =>
 					stageTaskingLifecycle({
 						cwd,
@@ -753,7 +753,7 @@ export async function performTask(
 	note(message);
 	return {
 		exitCode: 0,
-		outcome: 'sliced',
+		outcome: 'tasked',
 		slug,
 		emitted,
 		loop: loopTag,
@@ -818,7 +818,7 @@ function integrationToTaskResult(
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
 			`through the shared core (moved work/briefs/ready/ -> work/briefs/tasked/, the ` +
 			`tasked resting state) and ${landed}.`;
-		return {exitCode: 0, outcome: 'sliced', slug, emitted, loop, message};
+		return {exitCode: 0, outcome: 'tasked', slug, emitted, loop, message};
 	}
 	if (core.outcome === 'rebase-conflict') {
 		return {
