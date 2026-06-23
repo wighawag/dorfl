@@ -72,3 +72,7 @@ git mv work/tasks/todo/rename-advance-rung-and-sliced-outcome-tokens.md work/tas
 ## Requeue 2026-06-23
 
 transient-infra (model overloaded_error) mid-build; the work is fine. Continue from the kept branch tip: complete the TickRungKind build-slice->build-task / slice-prd->task-brief rename + the 'sliced'->'tasked' run-outcome (intake.ts ONLY the 'sliced' arm at L1398, leave kind==='prd' for the dependent task), update all asserting tests, get the gate green.
+
+## Requeue 2026-06-23
+
+Gate-1+Gate-2 green on the kept branch b116794 but the final integrate push hit a --force-with-lease stale-info race; pushed the kept green tip to origin manually. Recover the stranded branch and open the PR (do NOT re-run the build).
