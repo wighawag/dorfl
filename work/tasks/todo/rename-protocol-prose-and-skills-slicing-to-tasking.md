@@ -52,3 +52,7 @@ agent-runner claim rename-protocol-prose-and-skills-slicing-to-tasking --arbiter
 git fetch <remote> && git switch -c work/rename-protocol-prose-and-skills-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-protocol-prose-and-skills-slicing-to-tasking.md work/tasks/done/rename-protocol-prose-and-skills-slicing-to-tasking.md
 ```
+
+## Requeue 2026-06-23
+
+Gate-2 BLOCK fix (small, literal, continue from kept branch): two stale autoSlice references remain (autoSlice was renamed to autoTask in PR #209; it no longer exists in code, and is NOT on this task's keep-list). Fix exactly: (1) skills/setup/SKILL.md line 247 in the .agent-runner.json template: "autoSlice": false -> "autoTask": false; (2) skills/setup/SKILL.md line ~254 prose: 'autoBuild / autoSlice — strict-by-default' -> 'autoBuild / autoTask'; (3) skills/orchestrate/SKILL.md line 54: 'gate-gated by autoSlice' -> 'gate-gated by autoTask'. Keep everything else from your branch. Re-verify: grep -rn 'autoSlice' skills/ returns nothing. Then re-run the gate.
