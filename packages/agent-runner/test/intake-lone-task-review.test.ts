@@ -127,11 +127,11 @@ function stubIssueProvider(
 }
 
 /** A canned `slice` decision verdict (the STUBBED decision seam — no model/network). */
-const SLICE_VERDICT: IntakeVerdict = {
-	outcome: 'slice',
-	sliceSlug: 'add-quiet-flag',
-	sliceTitle: 'Add a --quiet flag to suppress progress notes',
-	sliceBody: [
+const TASK_VERDICT: IntakeVerdict = {
+	outcome: 'task',
+	taskSlug: 'add-quiet-flag',
+	taskTitle: 'Add a --quiet flag to suppress progress notes',
+	taskBody: [
 		'## What to build',
 		'',
 		'A --quiet flag on the CLI that suppresses the progress notes.',
@@ -162,7 +162,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			reviewSlice: async () => {
 				rounds++;
 				return {verdict: 'approve', findings: []};
@@ -188,7 +188,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 		expect(onBranch).toMatch(/^issue: 42$/m);
 		// The `slice created` completion comment was posted (the existing success path).
 		expect(issueProvider.comments).toHaveLength(1);
-		expect(issueProvider.comments[0].body).toContain('Created slice');
+		expect(issueProvider.comments[0].body).toContain('Created task');
 		// The success path used the existing `created` marker, NOT a new kind.
 		const marker = parseIntakeMarker(issueProvider.comments[0].body);
 		expect(marker?.kind).toBe('created');
@@ -216,7 +216,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			reviewSlice: async (input) => {
 				round++;
 				if (round === 1) {
@@ -273,7 +273,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			// ALWAYS blocks but ALWAYS proposes an edit (still tightening — never a
 			// no-edit blocking question, so the early-flip does NOT fire) — the hard cap
 			// is what must terminate it. A blocking round that proposes an `edit` is
@@ -312,7 +312,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			// A blocking question with no clear thread answer AND no edit to apply on
 			// round 1 → flip to ASK IMMEDIATELY (early flip — does not burn rounds 2/3).
 			reviewSlice: async () => {
@@ -360,7 +360,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			reviewSlice: async () => {
 				round++;
 				// Round 1: tighten the draft (an `edit`) AND block — because it proposes an
@@ -394,7 +394,7 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => SLICE_VERDICT,
+			decide: async () => TASK_VERDICT,
 			// The review gate throws (a launch/parse failure) — the dispatcher's
 			// try/catch maps it onto agent-failed, NOT a silent emit.
 			reviewSlice: async () => {
@@ -440,7 +440,10 @@ describe('intake <N> — the lone-slice bounded internal review (stubbed review 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 2}}),
-			decide: async () => ({outcome: 'prd', prdTitle: 'A coherent feature'}),
+			decide: async () => ({
+				outcome: 'brief',
+				briefTitle: 'A coherent feature',
+			}),
 			reviewSlice: spyGate,
 			env: gitEnv(),
 		});

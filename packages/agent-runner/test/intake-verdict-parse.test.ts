@@ -50,48 +50,48 @@ const ARBITER = 'arbiter';
 // 1. parseIntakeVerdict — the parse table (four outcomes + three throw cases).
 // ---------------------------------------------------------------------------
 describe('parseIntakeVerdict — the parse table', () => {
-	it('parses a `slice` verdict out of prose-wrapped + fenced output', () => {
+	it('parses a `task` verdict out of prose-wrapped + fenced output', () => {
 		const output = [
 			'Here is my decision for the issue.',
 			'',
 			'```json',
 			JSON.stringify({
-				outcome: 'slice',
-				sliceSlug: 'add-quiet-flag',
-				sliceTitle: 'Add a --quiet flag',
-				sliceBody: '## What to build\n\nA --quiet flag.',
+				outcome: 'task',
+				taskSlug: 'add-quiet-flag',
+				taskTitle: 'Add a --quiet flag',
+				taskBody: '## What to build\n\nA --quiet flag.',
 			}),
 			'```',
 			'',
-			'That is the slice.',
+			'That is the task.',
 		].join('\n');
 		const v = parseIntakeVerdict(output);
-		expect(v.outcome).toBe('slice');
-		expect(v.sliceSlug).toBe('add-quiet-flag');
-		expect(v.sliceTitle).toBe('Add a --quiet flag');
-		expect(v.sliceBody).toBe('## What to build\n\nA --quiet flag.');
+		expect(v.outcome).toBe('task');
+		expect(v.taskSlug).toBe('add-quiet-flag');
+		expect(v.taskTitle).toBe('Add a --quiet flag');
+		expect(v.taskBody).toBe('## What to build\n\nA --quiet flag.');
 	});
 
-	it('parses a `prd` verdict including the gate axes', () => {
+	it('parses a `brief` verdict including the gate axes', () => {
 		const output = [
 			'```json',
 			JSON.stringify({
-				outcome: 'prd',
-				prdSlug: 'big-feature',
-				prdTitle: 'A big coherent feature',
-				prdBody: '## Problem Statement\n\nIt is big.',
-				prdHumanOnly: true,
-				prdNeedsAnswers: true,
+				outcome: 'brief',
+				briefSlug: 'big-feature',
+				briefTitle: 'A big coherent feature',
+				briefBody: '## Problem Statement\n\nIt is big.',
+				briefHumanOnly: true,
+				briefNeedsAnswers: true,
 			}),
 			'```',
 		].join('\n');
 		const v = parseIntakeVerdict(output);
-		expect(v.outcome).toBe('prd');
-		expect(v.prdSlug).toBe('big-feature');
-		expect(v.prdTitle).toBe('A big coherent feature');
-		expect(v.prdBody).toBe('## Problem Statement\n\nIt is big.');
-		expect(v.prdHumanOnly).toBe(true);
-		expect(v.prdNeedsAnswers).toBe(true);
+		expect(v.outcome).toBe('brief');
+		expect(v.briefSlug).toBe('big-feature');
+		expect(v.briefTitle).toBe('A big coherent feature');
+		expect(v.briefBody).toBe('## Problem Statement\n\nIt is big.');
+		expect(v.briefHumanOnly).toBe(true);
+		expect(v.briefNeedsAnswers).toBe(true);
 	});
 
 	it('parses an `ask` verdict (question only)', () => {
@@ -111,14 +111,14 @@ describe('parseIntakeVerdict — the parse table', () => {
 	});
 
 	it('tolerates missing OPTIONALS (the dispatcher has fallbacks)', () => {
-		// A `slice` with no slug/body — the dispatcher derives a slug from the title.
+		// A `task` with no slug/body — the dispatcher derives a slug from the title.
 		const v = parseIntakeVerdict(
-			'{"outcome":"slice","sliceTitle":"Only a title"}',
+			'{"outcome":"task","taskTitle":"Only a title"}',
 		);
-		expect(v.outcome).toBe('slice');
-		expect(v.sliceTitle).toBe('Only a title');
-		expect(v.sliceSlug).toBeUndefined();
-		expect(v.sliceBody).toBeUndefined();
+		expect(v.outcome).toBe('task');
+		expect(v.taskTitle).toBe('Only a title');
+		expect(v.taskSlug).toBeUndefined();
+		expect(v.taskBody).toBeUndefined();
 	});
 
 	it('THROWS when no JSON object is present', () => {
@@ -131,13 +131,13 @@ describe('parseIntakeVerdict — the parse table', () => {
 		// An `"outcome"` key is present (so the span is found) but the object is
 		// malformed (a trailing comma) — JSON.parse fails.
 		expect(() =>
-			parseIntakeVerdict('```json\n{"outcome":"slice",}\n```'),
+			parseIntakeVerdict('```json\n{"outcome":"task",}\n```'),
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in {ask,slice,prd,bounce}', () => {
+	it('THROWS on an outcome not in {ask,task,brief,bounce}', () => {
 		expect(() => parseIntakeVerdict('{"outcome":"merge"}')).toThrow(
-			/ask\|slice\|prd\|bounce/,
+			/ask\|task\|brief\|bounce/,
 		);
 	});
 });
@@ -214,7 +214,7 @@ function spyHarness(output: string): Harness {
 }
 
 describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no injected decide)', () => {
-	it('a real-path `slice` verdict on launched.output is PARSED + DISPATCHED (backlog slice + issue: N + propose PR)', async () => {
+	it('a real-path `task` verdict on launched.output is PARSED + DISPATCHED (backlog task + issue: N + propose PR)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		// The agent emits a fenced verdict block wrapped in prose — the realistic shape.
@@ -223,10 +223,10 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 			'',
 			'```json',
 			JSON.stringify({
-				outcome: 'slice',
-				sliceSlug: 'add-quiet-flag',
-				sliceTitle: 'Add a --quiet flag to suppress progress notes',
-				sliceBody: [
+				outcome: 'task',
+				taskSlug: 'add-quiet-flag',
+				taskTitle: 'Add a --quiet flag to suppress progress notes',
+				taskBody: [
 					'## What to build',
 					'',
 					'A --quiet flag that suppresses the progress notes.',
@@ -264,7 +264,7 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(result.emittedSlug).toBe('add-quiet-flag');
 		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
 
-		// PROPOSE (default): the slice rides the work/<slug> branch; main untouched.
+		// PROPOSE (default): the task rides the work/<slug> branch; main untouched.
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
@@ -277,12 +277,12 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(onBranch).toContain('slug: add-quiet-flag');
 		expect(onBranch).toMatch(/^issue: 42$/m);
 		expect(onBranch).toContain('covers: []');
-		expect(onBranch).not.toMatch(/^prd:/m);
+		expect(onBranch).not.toMatch(/^brief:/m);
 		expect(onBranch).not.toContain('Fixes');
-		// The AGENT posted nothing itself (runner owns seams); on a SUCCESSFUL slice the
-		// RUNNER posts exactly ONE informational `slice created` completion comment.
+		// The AGENT posted nothing itself (runner owns seams); on a SUCCESSFUL task the
+		// RUNNER posts exactly ONE informational `task created` completion comment.
 		expect(issueProvider.comments).toHaveLength(1);
-		expect(issueProvider.comments[0].body).toContain('Created slice');
+		expect(issueProvider.comments[0].body).toContain('Created task');
 	});
 
 	it('a MALFORMED launched.output degrades to `agent-failed` (exit 1), not a crash', async () => {

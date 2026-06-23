@@ -65,11 +65,11 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  * `issue-intake` — the source of truth):
  * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
  *   question; emit NOTHING; STOP.
- * - **SLICE** (clear AND fits ONE tracer-bullet slice): write
- *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
- *   lone-slice closure link, NOT `Fixes #N`), integrate via {@link
+ * - **TASK** (clear AND fits ONE tracer-bullet task): write
+ *   `work/backlog/<slug>.md` (`covers: []`, NO `brief:`) carrying `issue: N` (the
+ *   lone-task closure link, NOT `Fixes #N`), integrate via {@link
  *   performIntegration} (default `propose`).
- * - **PRD** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
+ * - **BRIEF** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
  *   which is NEVER bounced): write the brief file (`work/briefs/ready/<slug>.md`) with `issue: N` (+ the gate
  *   axes the verdict carried), integrate, STOP (tasking is the separate `do brief:`
  *   step).
@@ -78,7 +78,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  *   issue ATOMICALLY — the "file separate issues" text as the closing comment +
  *   `reason: not planned` (the honest GitHub-native signal) in ONE `closeIssue`
  *   call; emit NOTHING. Intake closes on BOUNCE (as not planned); NEVER on
- *   slice/prd (CI's close-job closes those via the `issue:` field) / ask.
+ *   task/brief (CI's close-job closes those via the `issue:` field) / ask.
  *
  * The per-outcome integration KNOBS, the processing LOCK, and event-classification
  * are LATER tasks and are NOT built here (default `propose` is fine here).
@@ -90,12 +90,12 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
  */
 
 /** The four outcomes the decision prompt classifies an issue into (the decision table). */
-export type IntakeOutcome = 'ask' | 'slice' | 'prd' | 'bounce';
+export type IntakeOutcome = 'ask' | 'task' | 'brief' | 'bounce';
 
 /**
- * The VERDICT the decision prompt returns — `{ask,slice,prd,bounce}` + the drafted
- * content for the chosen outcome. THIS code path consumes only the `slice` branch's
- * fields (`sliceSlug` / `sliceTitle` / `sliceBody`); the `ask`/`prd`/`bounce`
+ * The VERDICT the decision prompt returns — `{ask,task,brief,bounce}` + the drafted
+ * content for the chosen outcome. THIS code path consumes only the `task` branch's
+ * fields (`taskSlug` / `taskTitle` / `taskBody`); the `ask`/`brief`/`bounce`
  * fields are carried on the shape (so the type is stable for the next task) but
  * not dispatched here.
  */
@@ -103,22 +103,22 @@ export interface IntakeVerdict {
 	/** Which outcome the prompt chose for the issue. */
 	outcome: IntakeOutcome;
 	/**
-	 * The drafted slice's content-derived slug (`slice` outcome). The dispatcher
+	 * The drafted task's content-derived slug (`task` outcome). The dispatcher
 	 * SANITISES it (a content-derived slug, never a counter) before writing
-	 * `work/backlog/<slug>.md`. Falls back to a slug derived from {@link sliceTitle}
+	 * `work/backlog/<slug>.md`. Falls back to a slug derived from {@link taskTitle}
 	 * when absent/empty.
 	 */
-	sliceSlug?: string;
-	/** The drafted slice's `title:` (`slice` outcome). */
-	sliceTitle?: string;
+	taskSlug?: string;
+	/** The drafted task's `title:` (`task` outcome). */
+	taskTitle?: string;
 	/**
-	 * The drafted slice BODY (`slice` outcome) — the markdown AFTER the frontmatter
+	 * The drafted task BODY (`task` outcome) — the markdown AFTER the frontmatter
 	 * (the `## What to build` / `## Acceptance criteria` / `## Prompt` sections). The
-	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `prd:`) carrying
-	 * the lone-slice `issue: N` closure link itself; the agent never writes
+	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `brief:`) carrying
+	 * the lone-task `issue: N` closure link itself; the agent never writes
 	 * git-visible files.
 	 */
-	sliceBody?: string;
+	taskBody?: string;
 	/**
 	 * The drafted clarifying question (`ask` outcome) — the dispatcher posts it via
 	 * `postIssueComment`, emits nothing, and STOPS (a later run resumes from the
@@ -126,30 +126,30 @@ export interface IntakeVerdict {
 	 */
 	question?: string;
 	/**
-	 * The drafted brief's content-derived slug (`prd` outcome). The dispatcher
+	 * The drafted brief's content-derived slug (`brief` outcome). The dispatcher
 	 * SANITISES it through `paramCase` (never a counter) before writing the brief
-	 * file (`work/briefs/ready/<slug>.md`). Falls back to a slug derived from {@link prdTitle} when
+	 * file (`work/briefs/ready/<slug>.md`). Falls back to a slug derived from {@link briefTitle} when
 	 * absent/empty.
 	 */
-	prdSlug?: string;
-	/** The drafted PRD's `title:` (`prd` outcome). */
-	prdTitle?: string;
+	briefSlug?: string;
+	/** The drafted brief's `title:` (`brief` outcome). */
+	briefTitle?: string;
 	/**
-	 * The drafted PRD BODY (`prd` outcome) — the markdown AFTER the frontmatter
+	 * The drafted brief BODY (`brief` outcome) — the markdown AFTER the frontmatter
 	 * (`## Problem Statement` / `## Solution` / `## User Stories` / …). The dispatcher
 	 * writes the frontmatter (title/slug/`issue: N` + the gate axes) itself; the
 	 * agent never writes git-visible files.
 	 */
-	prdBody?: string;
+	briefBody?: string;
 	/**
-	 * The brief's gate axes (`prd` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
+	 * The brief's gate axes (`brief` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
 	 * the emitted brief frontmatter (brief `issue-intake` US #8: "the emitted artifact
 	 * carries … its own gate axes"). Both omitted (undeclared) by default; the prompt
-	 * sets `prdHumanOnly: true` when a human should drive the TASKING and/or
-	 * `prdNeedsAnswers: true` when open questions remain.
+	 * sets `briefHumanOnly: true` when a human should drive the TASKING and/or
+	 * `briefNeedsAnswers: true` when open questions remain.
 	 */
-	prdHumanOnly?: boolean;
-	prdNeedsAnswers?: boolean;
+	briefHumanOnly?: boolean;
+	briefNeedsAnswers?: boolean;
 	/**
 	 * The drafted bounce message (`bounce` outcome) — the dispatcher carries it as
 	 * the CLOSING COMMENT on the atomic `closeIssue` ("please file separate issues")
@@ -161,9 +161,9 @@ export interface IntakeVerdict {
 
 /** The terminal status of one `intake <N>` run. */
 export type IntakeRunOutcome =
-	| 'tasked' // a `slice` verdict → backlog slice written + integrated
+	| 'tasked' // a `task` verdict → backlog task written + integrated
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
-	| 'prd' // a `prd` verdict → the brief file (`work/briefs/ready/<slug>.md`) written + integrated
+	| 'briefed' // a `brief` verdict → the brief file (`work/briefs/ready/<slug>.md`) written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
 	| 'no-new-input' // the TRIAGE saw intake had the last word + nothing unseen → SKIP (ran, deliberately did nothing)
 	| 'already-terminal' // the TRIAGE saw the issue was already transformed (a `bounced`/`created` marker) → SKIP
@@ -178,16 +178,16 @@ export interface IntakeResult {
 	outcome: IntakeRunOutcome;
 	/** The issue number acted on. */
 	issueNumber: number;
-	/** The slug of the emitted artifact (slice OR prd outcome). */
+	/** The slug of the emitted artifact (task OR brief outcome). */
 	emittedSlug?: string;
-	/** Repo-relative path of the emitted artifact (slice OR prd outcome). */
+	/** Repo-relative path of the emitted artifact (task OR brief outcome). */
 	emitted?: string;
 	/** True iff a comment was posted on the issue (ask / bounce outcomes). */
 	commented?: boolean;
 	/**
 	 * True iff the ISSUE was closed (the BOUNCE outcome — a terminal bounce closes
 	 * the issue atomically as `not planned`). Additive (mirrors {@link commented}),
-	 * so CI / callers can observe the close. Never set on ask/slice/prd.
+	 * so CI / callers can observe the close. Never set on ask/task/brief.
 	 */
 	closed?: boolean;
 	/** Human-readable summary of the terminal condition. */
@@ -225,9 +225,9 @@ export interface PerformIntakeOptions {
 	 */
 	decide?: IntakeDecider;
 	/**
-	 * The LONE-SLICE bounded-review seam (prompt → review verdict). After a `slice`
-	 * verdict and BEFORE the write/integrate, {@link dispatchSlice} runs a bounded
-	 * (3-round, HARD-CAPPED) adversarial self-review on the SINGLE drafted slice
+	 * The LONE-SLICE bounded-review seam (prompt → review verdict). After a `task`
+	 * verdict and BEFORE the write/integrate, {@link dispatchTask} runs a bounded
+	 * (3-round, HARD-CAPPED) adversarial self-review on the SINGLE drafted task
 	 * through this seam (observation
 	 * `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
 	 * Tests inject a CANNED review verdict (no model/network) — the new testable
@@ -368,40 +368,40 @@ function briefLandingToSide(
 }
 
 /**
- * The emitted artifact TYPE `intake` decides at RUNTIME — a `slice` verdict emits
- * `work/backlog/<slug>.md`, a `prd` verdict emits the brief file (`work/briefs/ready/<slug>.md`). The two
- * granular flag axes (`--merge-slice`/`--propose-slice` vs `--merge-prd`/
- * `--propose-prd`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
+ * The emitted artifact TYPE `intake` decides at RUNTIME — a `task` verdict emits
+ * `work/backlog/<slug>.md`, a `brief` verdict emits the brief file (`work/briefs/ready/<slug>.md`). The two
+ * granular flag axes (`--merge-task`/`--propose-task` vs `--merge-brief`/
+ * `--propose-brief`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
-export type IntakeArtifactType = 'slice' | 'prd';
+export type IntakeArtifactType = 'task' | 'brief';
 
 /**
  * The PER-OUTCOME integration mode FLAG SET (brief `issue-intake` US #9). Because
  * `intake` decides the artifact TYPE at runtime, a single `--merge`/`--propose`
- * cannot express a type-conditional policy ("merge a PRD but propose a slice") —
+ * cannot express a type-conditional policy ("merge a brief but propose a task") —
  * hence the four GRANULAR per-type flags layered over the two AGGREGATES:
  *
- * - **granular:** `--merge-prd`/`--propose-prd` apply iff the outcome is a PRD;
- *   `--merge-slice`/`--propose-slice` apply iff it is a slice.
+ * - **granular:** `--merge-brief`/`--propose-brief` apply iff the outcome is a brief;
+ *   `--merge-task`/`--propose-task` apply iff it is a task.
  * - **aggregates:** `--merge` = merge BOTH types; `--propose` = propose BOTH.
  *
  * `intake` owns only these KNOBS; WHICH knobs CI sets (from gate state +
  * author-trust) is CI's POLICY, authored in `runner-in-ci` — NOT here.
  */
 export interface IntakeIntegrationFlags {
-	/** Aggregate: merge BOTH a slice and a PRD (the broad knob, overridden per type). */
+	/** Aggregate: merge BOTH a task and a brief (the broad knob, overridden per type). */
 	merge?: boolean;
-	/** Aggregate: propose BOTH a slice and a PRD. */
+	/** Aggregate: propose BOTH a task and a brief. */
 	propose?: boolean;
-	/** Granular: merge a PRD (overrides the aggregate for the PRD outcome). */
-	mergePrd?: boolean;
-	/** Granular: propose a PRD (overrides the aggregate for the PRD outcome). */
-	proposePrd?: boolean;
-	/** Granular: merge a slice (overrides the aggregate for the slice outcome). */
-	mergeSlice?: boolean;
-	/** Granular: propose a slice (overrides the aggregate for the slice outcome). */
-	proposeSlice?: boolean;
+	/** Granular: merge a brief (overrides the aggregate for the brief outcome). */
+	mergeBrief?: boolean;
+	/** Granular: propose a brief (overrides the aggregate for the brief outcome). */
+	proposeBrief?: boolean;
+	/** Granular: merge a task (overrides the aggregate for the task outcome). */
+	mergeTask?: boolean;
+	/** Granular: propose a task (overrides the aggregate for the task outcome). */
+	proposeTask?: boolean;
 }
 
 /** Both per-type integration modes, resolved from the flag set in ONE eager pass. */
@@ -448,12 +448,12 @@ function granularFromFlags(
  * - **aggregates:** `--merge` ⇒ merge both; `--propose` ⇒ propose both (this axis
  *   COMPOSES the existing {@link integrationFromFlags}, reusing its mutual
  *   exclusion + error message).
- * - **granular routes per type:** `--merge-prd` merges a PRD (and leaves a slice at
+ * - **granular routes per type:** `--merge-brief` merges a brief (and leaves a task at
  *   the aggregate/default), etc.
- * - **GRANULAR OVERRIDES AGGREGATE:** `--merge --propose-slice` ⇒ merge a PRD,
- *   propose a slice.
- * - **same type + both modes is a usage ERROR:** `--merge-prd --propose-prd` (and
- *   `--merge-slice --propose-slice`), and the aggregate `--merge --propose`.
+ * - **GRANULAR OVERRIDES AGGREGATE:** `--merge --propose-task` ⇒ merge a brief,
+ *   propose a task.
+ * - **same type + both modes is a usage ERROR:** `--merge-brief --propose-brief` (and
+ *   `--merge-task --propose-task`), and the aggregate `--merge --propose`.
  *
  * Throws (a usage error) on any mutually-exclusive pair. The dispatcher picks the
  * field matching the runtime verdict's type; ask/bounce never integrate, so the
@@ -476,22 +476,22 @@ export function resolveIntakeIntegrationModes(
 		propose: flags.propose,
 	});
 	// GRANULAR axes — `integrationFromFlags` per type (the same-type-both error).
-	const prdGranular = granularFromFlags(
-		'prd',
-		flags.mergePrd,
-		flags.proposePrd,
+	const briefGranular = granularFromFlags(
+		'brief',
+		flags.mergeBrief,
+		flags.proposeBrief,
 	);
-	const sliceGranular = granularFromFlags(
-		'slice',
-		flags.mergeSlice,
-		flags.proposeSlice,
+	const taskGranular = granularFromFlags(
+		'task',
+		flags.mergeTask,
+		flags.proposeTask,
 	);
 	// GRANULAR OVERRIDES AGGREGATE; aggregate over the (config/propose) default.
 	// The result KEYS carry the task/brief vocabulary; the per-type flag axes
-	// (`--merge-prd`/`--merge-slice`) keep their user-facing spelling.
+	// (`--merge-brief`/`--merge-task`) keep their user-facing spelling.
 	return {
-		brief: prdGranular ?? aggregate ?? defaultMode,
-		task: sliceGranular ?? aggregate ?? defaultMode,
+		brief: briefGranular ?? aggregate ?? defaultMode,
+		task: taskGranular ?? aggregate ?? defaultMode,
 	};
 }
 
@@ -800,13 +800,13 @@ async function decideAndDispatch(
 		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
 	}
 
-	// DISPATCH on the verdict — the FULL four-outcome decision table (PRD
+	// DISPATCH on the verdict — the FULL four-outcome decision table (brief
 	// `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
 	// git/seam side-effect below (the in-band boundary): the write + integrate
-	// (slice/prd) and the `postIssueComment` (ask/bounce).
+	// (task/brief) and the `postIssueComment` (ask/bounce).
 	//
 	// PER-OUTCOME integration (brief `issue-intake` US #9): the resolved mode is keyed on the runtime
-	// artifact TYPE — a `slice` verdict integrates with the task mode, a `prd`
+	// artifact TYPE — a `task` verdict integrates with the task mode, a `brief`
 	// verdict with the brief mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
 	const modes = options.integration ?? {task: 'propose', brief: 'propose'};
@@ -815,8 +815,8 @@ async function decideAndDispatch(
 	// intake posts — the chain-model primitive the TRIAGE unions into `seenSet`.
 	const seenDelta = computeSeenDelta(comments);
 	switch (verdict.outcome) {
-		case 'slice':
-			return dispatchSlice({
+		case 'task':
+			return dispatchTask({
 				verdict,
 				issueNumber,
 				cwd,
@@ -839,8 +839,8 @@ async function decideAndDispatch(
 				agentEnv: options.env,
 				note,
 			});
-		case 'prd':
-			return dispatchPrd({
+		case 'brief':
+			return dispatchBrief({
 				verdict,
 				issueNumber,
 				cwd,
@@ -914,7 +914,7 @@ async function decideAndDispatch(
  *
  * - **ask** (non-terminal): `postIssueComment` the drafted question, emit NOTHING,
  *   and LEAVE THE ISSUE OPEN — it waits for the thread to be answered (a later run
- *   resumes from it). The slice/prd path also never closes (CI's close-job does,
+ *   resumes from it). The task/brief path also never closes (CI's close-job does,
  *   via the `issue:` field). Intake closes ONLY on BOUNCE.
  * - **bounce** (TERMINAL): the asks are unrelated and must be re-filed, so an OPEN
  *   issue is a dishonest "still in play" signal. Intake CLOSES the issue
@@ -1010,15 +1010,15 @@ async function dispatchComment(params: {
 }
 
 /**
- * DISPATCH the `slice` outcome: derive a content-derived slug, write
- * `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
- * lone-slice closure link, NOT `Fixes #N`), and integrate via {@link
+ * DISPATCH the `task` outcome: derive a content-derived slug, write
+ * `work/backlog/<slug>.md` (`covers: []`, NO `brief:`) carrying `issue: N` (the
+ * lone-task closure link, NOT `Fixes #N`), and integrate via {@link
  * performIntegration}. The runner owns the git: it onboards a
  * `work/<slug>` branch off fresh `<arbiter>/main`, then the lifecycle `stage`
- * writes + stages the slice and the band commits + rebases + integrates it. The
+ * writes + stages the task and the band commits + rebases + integrates it. The
  * agent did NO git/seam ops.
  */
-async function dispatchSlice(params: {
+async function dispatchTask(params: {
 	verdict: IntakeVerdict;
 	issueNumber: number;
 	cwd: string;
@@ -1058,12 +1058,12 @@ async function dispatchSlice(params: {
 	} = params;
 
 	// A content-derived slug — NEVER a counter (brief `issue-intake` US #8). Prefer the drafted
-	// `sliceSlug`, else derive from the drafted title; sanitise either through
+	// `taskSlug`, else derive from the drafted title; sanitise either through
 	// `paramCase` so the filename + frontmatter slug are well-formed.
 	const slug = resolveSlug(verdict);
 	if (slug === '') {
 		const message =
-			`Intake produced a 'slice' verdict for issue #${issueNumber} with no usable ` +
+			`Intake produced a 'task' verdict for issue #${issueNumber} with no usable ` +
 			`slug/title to derive a content-derived slug from (never a counter).`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
@@ -1083,8 +1083,8 @@ async function dispatchSlice(params: {
 		review = await runLoneSliceReview({
 			slug,
 			issueNumber,
-			draftTitle: verdict.sliceTitle ?? slug,
-			draftBody: verdict.sliceBody,
+			draftTitle: verdict.taskTitle ?? slug,
+			draftBody: verdict.taskBody,
 			gate: reviewSlice,
 			cwd,
 			// The review AGENT launches AMBIENT (never the identity-scoped env).
@@ -1132,8 +1132,8 @@ async function dispatchSlice(params: {
 		});
 	}
 
-	// CONVERGED: the (possibly edited) slice is emitted via the EXISTING write/integrate
-	// path below + the existing `slice created` completion comment. The refined body
+	// CONVERGED: the (possibly edited) task is emitted via the EXISTING write/integrate
+	// path below + the existing `task created` completion comment. The refined body
 	// replaces the agent's first draft.
 	const reviewedBody = review.body;
 
@@ -1145,7 +1145,7 @@ async function dispatchSlice(params: {
 	// build branch for the same slug. The agent ran no git.
 	await switchToWorkBranch(cwd, arbiter, 'task', slug, env);
 
-	const sliceContent = renderBacklogSlice({
+	const taskContent = renderBacklogTask({
 		slug,
 		title: review.title,
 		body: reviewedBody,
@@ -1165,7 +1165,7 @@ async function dispatchSlice(params: {
 		// tasking transition does.
 		skipVerify: true,
 		// Default `propose` (the per-outcome KNOBS are a later task). The
-		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-slice` lands on main
+		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-task` lands on main
 		// (`merge` IS the auto-land mode, never downgraded).
 		mode: integration,
 		noPR,
@@ -1180,7 +1180,8 @@ async function dispatchSlice(params: {
 			titlePath: join(cwd, relPath),
 			title: review.title,
 			commitTag: 'intake',
-			stage: () => stageIntakeSlice({cwd, relPath, content: sliceContent, env}),
+			stage: () =>
+				stageIntakeContent({cwd, relPath, content: taskContent, env}),
 		},
 		env,
 		note,
@@ -1199,7 +1200,7 @@ async function dispatchSlice(params: {
 }
 
 /**
- * DISPATCH the `prd` outcome: derive a content-derived slug, write the brief
+ * DISPATCH the `brief` outcome: derive a content-derived slug, write the brief
  * file (`work/briefs/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the close JOB
  * reaches via `task.brief: → brief issue:`; on a fanned brief the number lives ONLY on
  * the brief — a fanned task uses `brief:`, NOT its own `issue:`, which is the
@@ -1209,7 +1210,7 @@ async function dispatchSlice(params: {
  * vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The runner
  * owns the git exactly as the task branch does; the agent did NO git/seam ops.
  */
-async function dispatchPrd(params: {
+async function dispatchBrief(params: {
 	verdict: IntakeVerdict;
 	issueNumber: number;
 	cwd: string;
@@ -1248,11 +1249,11 @@ async function dispatchPrd(params: {
 	} = params;
 
 	// A content-derived slug — NEVER a counter (brief `issue-intake` US #8). Prefer the drafted
-	// `prdSlug`, else derive from the drafted title.
-	const slug = resolvePrdSlug(verdict);
+	// `briefSlug`, else derive from the drafted title.
+	const slug = resolveBriefSlug(verdict);
 	if (slug === '') {
 		const message =
-			`Intake produced a 'prd' verdict for issue #${issueNumber} with no usable ` +
+			`Intake produced a 'brief' verdict for issue #${issueNumber} with no usable ` +
 			`slug/title to derive a content-derived slug from (never a counter).`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
@@ -1260,7 +1261,7 @@ async function dispatchPrd(params: {
 	// RUNNER-DETERMINISTIC PLACEMENT (task
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
-	// which folder the runner writes the intake-authored PRD into BEFORE handing
+	// which folder the runner writes the intake-authored brief into BEFORE handing
 	// it to the shared integrate band: the SAME precedence chain the tasker uses
 	// (`explicit > untrusted-origin ⇒ staging > briefsLandIn > built-in (staging)`),
 	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
@@ -1282,13 +1283,13 @@ async function dispatchPrd(params: {
 	// producer prefix keeps it distinct from a `do brief:<slug>` tasking branch.
 	await switchToWorkBranch(cwd, arbiter, 'brief', slug, env);
 
-	const prdContent = renderPrd({
+	const briefContent = renderBrief({
 		slug,
-		title: verdict.prdTitle ?? slug,
-		body: verdict.prdBody,
+		title: verdict.briefTitle ?? slug,
+		body: verdict.briefBody,
 		issueNumber,
-		humanOnly: verdict.prdHumanOnly,
-		needsAnswers: verdict.prdNeedsAnswers,
+		humanOnly: verdict.briefHumanOnly,
+		needsAnswers: verdict.briefNeedsAnswers,
 		originTrust,
 	});
 
@@ -1310,9 +1311,10 @@ async function dispatchPrd(params: {
 			// race as the task path: `stage()` writes the brief file AFTER the title
 			// read). `titlePath` stays set but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
-			title: verdict.prdTitle ?? slug,
+			title: verdict.briefTitle ?? slug,
 			commitTag: 'intake',
-			stage: () => stageIntakeSlice({cwd, relPath, content: prdContent, env}),
+			stage: () =>
+				stageIntakeContent({cwd, relPath, content: briefContent, env}),
 		},
 		env,
 		note,
@@ -1322,7 +1324,7 @@ async function dispatchPrd(params: {
 		issueNumber,
 		slug,
 		relPath,
-		kind: 'prd',
+		kind: 'brief',
 		cwd,
 		issueProvider,
 		seen,
@@ -1345,7 +1347,7 @@ async function integrationToIntakeResult(
 		issueNumber: number;
 		slug: string;
 		relPath: string;
-		kind?: 'slice' | 'prd';
+		kind?: 'task' | 'brief';
 		/** The working checkout the issue seam shells `gh` in. */
 		cwd: string;
 		/** The issue seam the completion comment is posted back through. */
@@ -1357,8 +1359,8 @@ async function integrationToIntakeResult(
 	},
 ): Promise<IntakeResult> {
 	const {issueNumber, slug, relPath, cwd, issueProvider, seen, env, note} = ctx;
-	const kind = ctx.kind ?? 'slice';
-	const artifact = kind === 'prd' ? 'PRD' : 'slice';
+	const kind = ctx.kind ?? 'task';
+	const artifact = kind === 'brief' ? 'brief' : 'task';
 	if (core.outcome === 'completed') {
 		const landed =
 			core.integration?.mode === 'merge'
@@ -1375,8 +1377,8 @@ async function integrationToIntakeResult(
 			`the runner integrated it through the shared core and ${landed}.`;
 		// CLOSE THE LOOP (this task): post ONE INFORMATIONAL completion comment back on
 		// the issue for the SUCCESSFUL outcome — the confirmation the ASK/BOUNCE comments
-		// already give the author. It reports `slice created` / `prd created` (NEVER
-		// "issue resolved"; intake never closes on slice/prd — CI's close-job does, via
+		// already give the author. It reports `task created` / `brief created` (NEVER
+		// "issue resolved"; intake never closes on task/brief — CI's close-job does, via
 		// the `issue:` field) and links the artifact by integration mode: the PR `url` in
 		// propose, the landed `commit` in merge. The marker carries `kind=created` (the
 		// TRIAGE treats it as TERMINAL → `already-terminal`), so the comment cannot
@@ -1395,7 +1397,7 @@ async function integrationToIntakeResult(
 		});
 		return {
 			exitCode: 0,
-			outcome: kind === 'prd' ? 'prd' : 'tasked',
+			outcome: kind === 'brief' ? 'briefed' : 'tasked',
 			issueNumber,
 			emittedSlug: slug,
 			emitted: relPath,
@@ -1426,29 +1428,29 @@ async function integrationToIntakeResult(
 
 /**
  * Build the INFORMATIONAL completion-comment BODY (with its FULL `created` marker)
- * for a SUCCESSFUL `slice` / `prd` outcome — the PURE, seam-free core of
+ * for a SUCCESSFUL `task` / `brief` outcome — the PURE, seam-free core of
  * {@link postCompletionComment}, exported so both link variants are unit-testable
  * without a live seam. The comment:
  *
- * - reports `slice created` / `prd created` framed as CREATED — NEVER "issue
- *   resolved/closed" (intake never closes on the slice/prd path).
+ * - reports `task created` / `brief created` framed as CREATED — NEVER "issue
+ *   resolved/closed" (intake never closes on the task/brief path).
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
  *   `commit` (the additive {@link IntegrateResult.commit}) in merge. A degraded
  *   propose (no `url`) or a failed merge-tip read (no `commit`) simply OMITS the
  *   link — the comment still confirms what was created (the artifact is safe on the
- *   branch/main regardless). No PRD link beyond the slug.
+ *   branch/main regardless). No brief link beyond the slug.
  * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
  *   (`kind=created slug=<slug> seen=<id>,…`) so the triage's `already-terminal`
  *   branch consumes it — the comment cannot re-trigger intake.
  */
 export function composeIntakeCompletionComment(params: {
-	kind: 'slice' | 'prd';
+	kind: 'task' | 'brief';
 	slug: string;
 	integration: IntegrateResult | undefined;
 	seen: string[];
 }): string {
 	const {kind, slug, integration, seen} = params;
-	const artifact = kind === 'prd' ? 'PRD' : 'slice';
+	const artifact = kind === 'brief' ? 'brief' : 'task';
 	const link =
 		integration?.mode === 'merge'
 			? integration.commit !== undefined
@@ -1467,17 +1469,17 @@ export function composeIntakeCompletionComment(params: {
 }
 
 /**
- * Post the INFORMATIONAL completion comment for a SUCCESSFUL `slice` / `prd`
- * outcome (this slice). It closes the loop the ASK/BOUNCE comments already close
+ * Post the INFORMATIONAL completion comment for a SUCCESSFUL `task` / `brief`
+ * outcome (this task). It closes the loop the ASK/BOUNCE comments already close
  * for the other outcomes: the issue author gets a confirmation when intake did the
  * useful thing. The comment:
  *
- * - reports `slice created` / `prd created` — NEVER "issue resolved/closed".
- *   Intake never closes the issue on the slice/prd path (CI's future close-job
+ * - reports `task created` / `brief created` — NEVER "issue resolved/closed".
+ *   Intake never closes the issue on the task/brief path (CI's future close-job
  *   does, via the `issue:` field); this comment changes NO issue state.
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
- *   `commit` (the additive {@link IntegrateResult.commit} this slice surfaces) in
- *   merge. No PRD link beyond the slug.
+ *   `commit` (the additive {@link IntegrateResult.commit} this task surfaces) in
+ *   merge. No brief link beyond the slug.
  * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
  *   (`kind=created slug=<slug> seen=<id>,…`). `kind=created` is TERMINAL, so the
  *   triage's `already-terminal` branch then treats the issue as already-transformed
@@ -1490,7 +1492,7 @@ export function composeIntakeCompletionComment(params: {
 async function postCompletionComment(params: {
 	issueProvider: IssueProvider;
 	issueNumber: number;
-	kind: 'slice' | 'prd';
+	kind: 'task' | 'brief';
 	slug: string;
 	/** The integrate result — carries the propose `url` / the merge `commit` link. */
 	integration: IntegrateResult | undefined;
@@ -1512,7 +1514,7 @@ async function postCompletionComment(params: {
 		env,
 		note,
 	} = params;
-	const artifact = kind === 'prd' ? 'PRD' : 'slice';
+	const artifact = kind === 'brief' ? 'brief' : 'task';
 	// Build the full stamped body (CREATED wording + mode-keyed link + the FULL
 	// `created` marker) via the exported pure builder — unit-tested directly for both
 	// link variants (propose `url` / merge `commit`).
@@ -1539,29 +1541,29 @@ async function postCompletionComment(params: {
 
 /**
  * Resolve a content-derived slug from the verdict — NEVER a counter (brief `issue-intake` US #8).
- * Prefer the drafted `sliceSlug`, else derive from the drafted title; both go
+ * Prefer the drafted `taskSlug`, else derive from the drafted title; both go
  * through `paramCase` (the brand case-transform) so the result is a clean
  * lowercase-`-`-joined slug. An empty result (no slug AND no title) signals the
  * caller to refuse (a counter fallback is forbidden).
  */
 function resolveSlug(verdict: IntakeVerdict): string {
 	const candidate =
-		verdict.sliceSlug && verdict.sliceSlug.trim() !== ''
-			? verdict.sliceSlug
-			: (verdict.sliceTitle ?? '');
+		verdict.taskSlug && verdict.taskSlug.trim() !== ''
+			? verdict.taskSlug
+			: (verdict.taskTitle ?? '');
 	return paramCase(candidate);
 }
 
 /**
- * Resolve a content-derived slug for the PRD outcome — NEVER a counter (brief `issue-intake` US #8).
- * Prefer the drafted `prdSlug`, else derive from the drafted PRD title; both go
+ * Resolve a content-derived slug for the brief outcome — NEVER a counter (brief `issue-intake` US #8).
+ * Prefer the drafted `briefSlug`, else derive from the drafted brief title; both go
  * through `paramCase`. An empty result signals the caller to refuse.
  */
-function resolvePrdSlug(verdict: IntakeVerdict): string {
+function resolveBriefSlug(verdict: IntakeVerdict): string {
 	const candidate =
-		verdict.prdSlug && verdict.prdSlug.trim() !== ''
-			? verdict.prdSlug
-			: (verdict.prdTitle ?? '');
+		verdict.briefSlug && verdict.briefSlug.trim() !== ''
+			? verdict.briefSlug
+			: (verdict.briefTitle ?? '');
 	return paramCase(candidate);
 }
 
@@ -1576,7 +1578,7 @@ function resolvePrdSlug(verdict: IntakeVerdict): string {
  * `brief:` (brief `issue-intake` decision table). When the agent drafted no body, a thin default
  * scaffold keeps the file a valid task.
  */
-function renderBacklogSlice(params: {
+function renderBacklogTask(params: {
 	slug: string;
 	title: string;
 	body: string | undefined;
@@ -1632,7 +1634,7 @@ function renderBacklogSlice(params: {
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
  * default scaffold keeps the file a valid brief that `do brief:` can later task.
  */
-function renderPrd(params: {
+function renderBrief(params: {
 	slug: string;
 	title: string;
 	body: string | undefined;
@@ -1691,13 +1693,13 @@ function renderPrd(params: {
 }
 
 /**
- * STAGE the intake slice into the index on the `work/<slug>` branch (the
+ * STAGE the intake artifact content into the index on the `work/<slug>` branch (the
  * {@link performIntegration} lifecycle seam): write the `work/backlog/<slug>.md`
  * file (runner-owned; the agent never writes git-visible files) and `git add` it.
  * The band's subsequent `git add -A` + atomic commit folds it into ONE runner-owned
  * commit.
  */
-async function stageIntakeSlice(params: {
+async function stageIntakeContent(params: {
 	cwd: string;
 	relPath: string;
 	content: string;
@@ -1800,11 +1802,11 @@ async function runDecision(
  * {@link extractJsonObjectSpan} (NOT a forked second "first JSON object in agent
  * prose" extractor — the review gates anchor on `"verdict"`, intake on
  * `"outcome"`; same need, one implementation — coherence), `JSON.parse`s it, and
- * validates the shape: `outcome ∈ {ask,slice,prd,bounce}`.
+ * validates the shape: `outcome ∈ {ask,task,brief,bounce}`.
  *
- * The per-outcome fields map 1:1 onto {@link IntakeVerdict} (`slice` →
- * sliceSlug?/sliceTitle/sliceBody, `prd` →
- * prdSlug?/prdTitle/prdBody/prdHumanOnly?/prdNeedsAnswers?, `ask` → question,
+ * The per-outcome fields map 1:1 onto {@link IntakeVerdict} (`task` →
+ * taskSlug?/taskTitle/taskBody, `brief` →
+ * briefSlug?/briefTitle/briefBody/briefHumanOnly?/briefNeedsAnswers?, `ask` → question,
  * `bounce` → bounceMessage). Missing OPTIONALS are tolerated — the dispatcher
  * already has fallbacks (slug-from-title, the thin comment/scaffold defaults).
  *
@@ -1835,43 +1837,45 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 	const outcome = obj.outcome;
 	if (
 		outcome !== 'ask' &&
-		outcome !== 'slice' &&
-		outcome !== 'prd' &&
+		outcome !== 'task' &&
+		outcome !== 'brief' &&
 		outcome !== 'bounce'
 	) {
 		throw new Error(
-			`intake verdict 'outcome' was not one of ask|slice|prd|bounce (got ` +
+			`intake verdict 'outcome' was not one of ask|task|brief|bounce (got ` +
 				`${JSON.stringify(outcome)}).`,
 		);
 	}
 	// Map the per-outcome fields onto the verdict shape, keeping ONLY the strings/
 	// booleans the dispatcher consumes (a missing optional stays absent — the
 	// dispatcher's fallbacks cover it). Every field is optional on the type, so the
-	// `slice`/`prd` content + the `ask`/`bounce` text are carried verbatim when present.
+	// `task`/`brief` content + the `ask`/`bounce` text are carried verbatim when present.
 	const str = (v: unknown): string | undefined =>
 		typeof v === 'string' ? v : undefined;
 	const bool = (v: unknown): boolean | undefined =>
 		typeof v === 'boolean' ? v : undefined;
 	return {
 		outcome,
-		...(str(obj.sliceSlug) !== undefined
-			? {sliceSlug: str(obj.sliceSlug)}
+		...(str(obj.taskSlug) !== undefined ? {taskSlug: str(obj.taskSlug)} : {}),
+		...(str(obj.taskTitle) !== undefined
+			? {taskTitle: str(obj.taskTitle)}
 			: {}),
-		...(str(obj.sliceTitle) !== undefined
-			? {sliceTitle: str(obj.sliceTitle)}
-			: {}),
-		...(str(obj.sliceBody) !== undefined
-			? {sliceBody: str(obj.sliceBody)}
-			: {}),
+		...(str(obj.taskBody) !== undefined ? {taskBody: str(obj.taskBody)} : {}),
 		...(str(obj.question) !== undefined ? {question: str(obj.question)} : {}),
-		...(str(obj.prdSlug) !== undefined ? {prdSlug: str(obj.prdSlug)} : {}),
-		...(str(obj.prdTitle) !== undefined ? {prdTitle: str(obj.prdTitle)} : {}),
-		...(str(obj.prdBody) !== undefined ? {prdBody: str(obj.prdBody)} : {}),
-		...(bool(obj.prdHumanOnly) !== undefined
-			? {prdHumanOnly: bool(obj.prdHumanOnly)}
+		...(str(obj.briefSlug) !== undefined
+			? {briefSlug: str(obj.briefSlug)}
 			: {}),
-		...(bool(obj.prdNeedsAnswers) !== undefined
-			? {prdNeedsAnswers: bool(obj.prdNeedsAnswers)}
+		...(str(obj.briefTitle) !== undefined
+			? {briefTitle: str(obj.briefTitle)}
+			: {}),
+		...(str(obj.briefBody) !== undefined
+			? {briefBody: str(obj.briefBody)}
+			: {}),
+		...(bool(obj.briefHumanOnly) !== undefined
+			? {briefHumanOnly: bool(obj.briefHumanOnly)}
+			: {}),
+		...(bool(obj.briefNeedsAnswers) !== undefined
+			? {briefNeedsAnswers: bool(obj.briefNeedsAnswers)}
 			: {}),
 		...(str(obj.bounceMessage) !== undefined
 			? {bounceMessage: str(obj.bounceMessage)}
@@ -2091,7 +2095,7 @@ function composeLoneSliceAskComment(params: {
 	questions: string[];
 }): string {
 	const {issueNumber, slug, draftTitle, draftBody, questions} = params;
-	const draft = renderBacklogSlice({
+	const draft = renderBacklogTask({
 		slug,
 		title: draftTitle,
 		body: draftBody,
@@ -2280,14 +2284,14 @@ export const parseLoneSliceReviewVerdict = parseReviewVerdict;
  * 1. the **"clear?" bar** = `to-task`/`needsAnswers`' "would I build the wrong
  *    thing if I guessed?" — if a material requirement/scope/acceptance question is
  *    unanswered, ASK (never guess a spec from a vague issue);
- * 2. the **"one slice?" bar** = `to-task`' tracer-bullet test (one thin end-to-end
- *    path, demoable on its own) — fits → SLICE, needs splitting → PRD;
- * 3. **PRD vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → PRD;
+ * 2. the **"one task?" bar** = `to-task`' tracer-bullet test (one thin end-to-end
+ *    path, demoable on its own) — fits → TASK, needs splitting → BRIEF;
+ * 3. **BRIEF vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → BRIEF;
  *    genuinely unrelated → BOUNCE. Size NEVER forces a bounce — only unrelatedness
- *    (the over-bounce guard: a coupled-but-small pair gets a light PRD, never a
+ *    (the over-bounce guard: a coupled-but-small pair gets a light BRIEF, never a
  *    bounce).
  *
- * The prompt anchors to `to-task`/`to-brief` for the slice/PRD SHAPES it drafts. Its
+ * The prompt anchors to `to-task`/`to-brief` for the task/brief SHAPES it drafts. Its
  * JUDGEMENT is NOT unit-tested (exactly as the review prompt's is not) — only the
  * dispatch is. The agent only DRAFTS the verdict + its content; it does NO git/seam
  * ops (the runner owns every postComment / write / integrate — the in-band boundary).
@@ -2352,46 +2356,46 @@ export function buildIntakeDecisionBrief(
 		'  from a vague issue). The runner posts it and stops; a later run resumes from',
 		'  the updated thread.',
 		'',
-		'- **SLICE** — the issue is CLEAR *and* it fits ONE tracer-bullet vertical slice',
+		'- **TASK** — the issue is CLEAR *and* it fits ONE tracer-bullet vertical task',
 		'  (a single thin end-to-end path, demoable on its own — `to-task`’ criterion).',
-		'  Draft that ONE slice in the `to-task` shape (a `## What to build`,',
+		'  Draft that ONE task in the `to-task` shape (a `## What to build`,',
 		'  `## Acceptance criteria`, and `## Prompt`). The runner writes',
 		'  `work/backlog/<slug>.md` (`covers: []`, NO `brief:`) carrying `issue: N` (the',
-		'  lone-slice closure link, NOT `Fixes #N`) and integrates it.',
+		'  lone-task closure link, NOT `Fixes #N`) and integrates it.',
 		'',
-		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE slice (it',
-		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 slice',
-		'  ⟺ a shared vision worth recording ⟺ a PRD. Draft a PRD in the `to-brief` shape',
+		'- **BRIEF** — the issue is CLEAR *and* coherent but needs MORE THAN ONE task (it',
+		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 task',
+		'  ⟺ a shared vision worth recording ⟺ a brief. Draft a brief in the `to-brief` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
 		'  The runner writes the brief file (`work/briefs/ready/<slug>.md`) with `issue: N` and integrates it;',
 		'  TASKING the brief is a SEPARATE later step (`do brief:`) — do not task it here.',
 		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
-		'  (light) PRD — they are NEVER bounced.**',
+		'  (light) brief — they are NEVER bounced.**',
 		'',
 		'- **BOUNCE** — the issue is really MULTIPLE UNRELATED concerns wearing one issue:',
 		'  you cannot articulate a SINGLE shared vision tying them together. Draft a short',
 		'  message asking the author to file separate issues. A bounce is TERMINAL, so the',
 		'  runner CLOSES the issue ATOMICALLY — your message as the closing comment +',
 		'  reason "not planned" (the honest signal that the asks must be re-filed). Intake',
-		'  closes on BOUNCE only; never on slice/prd (CI’s close-job) / ask.',
+		'  closes on BOUNCE only; never on task/brief (CI’s close-job) / ask.',
 		'',
 		'## The three decision aids (apply them in order)',
 		'',
 		'1. **"clear?"** (ASK vs the rest): the `needsAnswers` bar — would acting now risk',
 		'   building the wrong thing? If yes → ASK. Otherwise it is clear; continue.',
-		'2. **"one slice?"** (SLICE vs PRD): the `to-task` tracer-bullet test — one thin',
-		'   end-to-end path, demoable alone? Fits → SLICE; needs splitting → PRD.',
-		'3. **"shared vision?"** (PRD vs BOUNCE): coupled (even if small) → PRD; genuinely',
+		'2. **"one task?"** (TASK vs BRIEF): the `to-task` tracer-bullet test — one thin',
+		'   end-to-end path, demoable alone? Fits → TASK; needs splitting → BRIEF.',
+		'3. **"shared vision?"** (BRIEF vs BOUNCE): coupled (even if small) → BRIEF; genuinely',
 		'   unrelated → BOUNCE. SIZE NEVER forces a bounce — only UNRELATEDNESS does. Do',
-		'   not over-bounce a small coupled pair: it is a light PRD.',
+		'   not over-bounce a small coupled pair: it is a light brief.',
 		'',
 		'## Boundary',
 		'',
-		'You only DRAFT the verdict + its content (the slice/PRD body, or the comment',
+		'You only DRAFT the verdict + its content (the task/brief body, or the comment',
 		'text). You do NOT perform ANY git operation and you do NOT post any comment — the',
-		'runner owns every git/seam side-effect (write, integrate, postComment). For a PRD',
+		'runner owns every git/seam side-effect (write, integrate, postComment). For a brief',
 		'verdict, also judge its gate axes (humanOnly / needsAnswers) so the runner can',
-		'surface them on the emitted PRD.',
+		'surface them on the emitted brief.',
 		'',
 		'## Output — hand the verdict back as ONE fenced JSON block',
 		'',
@@ -2400,22 +2404,22 @@ export function buildIntakeDecisionBrief(
 		'`"outcome"` plus ONLY the fields for that outcome:',
 		'',
 		'```json',
-		'{"outcome": "slice", "sliceSlug": "<content-derived-slug>", "sliceTitle": "<title>", "sliceBody": "<the markdown AFTER the frontmatter>"}',
+		'{"outcome": "task", "taskSlug": "<content-derived-slug>", "taskTitle": "<title>", "taskBody": "<the markdown AFTER the frontmatter>"}',
 		'```',
 		'',
-		'- **slice** → `sliceTitle` + `sliceBody` (the `## What to build` / `## Acceptance',
+		'- **task** → `taskTitle` + `taskBody` (the `## What to build` / `## Acceptance',
 		'  criteria` / `## Prompt` markdown — NOT the frontmatter; the runner writes the',
-		'  frontmatter + the `issue: N` link) and an optional `sliceSlug` (the runner',
+		'  frontmatter + the `issue: N` link) and an optional `taskSlug` (the runner',
 		'  derives one from the title if you omit it — never a counter).',
-		'- **prd** → `prdTitle` + `prdBody` (the `## Problem Statement` / `## Solution` / …',
+		'- **brief** → `briefTitle` + `briefBody` (the `## Problem Statement` / `## Solution` / …',
 		'  markdown AFTER the frontmatter; the runner writes the frontmatter + `issue: N`),',
-		'  an optional `prdSlug`, and the gate axes `prdHumanOnly` / `prdNeedsAnswers`',
+		'  an optional `briefSlug`, and the gate axes `briefHumanOnly` / `briefNeedsAnswers`',
 		'  (booleans — set `true` when a human should drive the TASKING and/or open',
 		'  questions remain; omit otherwise).',
 		'- **ask** → `question` (the single next clarifying question).',
 		'- **bounce** → `bounceMessage` (the “file separate issues” message).',
 		'',
-		'`outcome` MUST be exactly one of `ask` | `slice` | `prd` | `bounce`. Strings are',
+		'`outcome` MUST be exactly one of `ask` | `task` | `brief` | `bounce`. Strings are',
 		'plain text inside the JSON (escape newlines as \\n). Do not wrap the JSON in any',
 		'other structure — the runner pulls the first `{"outcome": …}` object out and',
 		'dispatches on it.',
