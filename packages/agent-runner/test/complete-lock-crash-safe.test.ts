@@ -228,7 +228,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		});
 		await acquireItemLock({
 			item: 'brief:zeta',
-			action: 'slice',
+			action: 'task',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

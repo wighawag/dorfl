@@ -188,7 +188,7 @@ async function runAcquire(
 	// a lock is dead via `release-lock` + `gc --ledger`).
 	const lock = await acquireItemLock({
 		item: `brief:${slug}`,
-		action: 'slice',
+		action: 'task',
 		cwd,
 		arbiter,
 		holder: by,

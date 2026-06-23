@@ -86,7 +86,7 @@ describe('acquireTaskingLock — happy path', () => {
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(entry?.action).toBe('slice');
+		expect(entry?.action).toBe('task');
 		expect(entry?.state).toBe('active');
 	});
 

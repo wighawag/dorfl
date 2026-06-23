@@ -90,7 +90,7 @@ describe('acquireTaskingLock acquires the unified per-item lock (the marker is R
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(entry?.action).toBe('slice');
+		expect(entry?.action).toBe('task');
 		expect(entry?.state).toBe('active');
 		// The blob snapshot the lock TOOK is still returned (the stale-edit check needs it).
 		expect(result.lockedBlob).toMatch(/^[0-9a-f]{40}$/);
@@ -122,7 +122,7 @@ describe('a lock LOST makes the slicing acquire lose definitively with NO marker
 		const a = raceClone(seeded, 'a');
 		const held = await acquireItemLock({
 			item: 'brief:alpha',
-			action: 'slice',
+			action: 'task',
 			cwd: a,
 			arbiter: ARBITER,
 			env: racerEnv('a'),

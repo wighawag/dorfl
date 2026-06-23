@@ -203,7 +203,7 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 	it('covers all four terminals (task done/cancelled, brief tasked/dropped)', async () => {
 		const cases: Array<{
 			item: string;
-			action: 'implement' | 'slice';
+			action: 'implement' | 'task';
 			folder: string;
 			entry: string;
 		}> = [
@@ -221,13 +221,13 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 			},
 			{
 				item: 'brief:b-tasked',
-				action: 'slice',
+				action: 'task',
 				folder: 'briefs-tasked',
 				entry: 'brief-b-tasked',
 			},
 			{
 				item: 'brief:b-dropped',
-				action: 'slice',
+				action: 'task',
 				folder: 'briefs-dropped',
 				entry: 'brief-b-dropped',
 			},
