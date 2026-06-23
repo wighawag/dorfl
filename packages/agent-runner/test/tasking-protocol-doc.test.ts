@@ -1,19 +1,19 @@
 /**
- * Slice `slicing-protocol-doc-and-vocabulary-fix`: the slicing discipline,
- * relocated in-band as `SLICING-PROTOCOL.md`, on the shared machinery built by
- * the keystone slice (`review-protocol-doc-and-shared-machinery`) and extended
- * by the surface slice. The third + last runner-invoked discipline.
+ * The tasking discipline, relocated in-band as `TASKING-PROTOCOL.md`, on the
+ * shared machinery built by the keystone task
+ * (`review-protocol-doc-and-shared-machinery`) and extended by the surface
+ * task. The third + last runner-invoked discipline.
  *
  * This suite covers:
  *   - The setup mirror (the doc lands in `work/protocol/` byte-identical to
  *     the `skills/setup/protocol/` source-of-truth) and
- *     `work/protocol/VERSION` is bumped past the pre-slice value.
- *   - The vendored set ships `dist/protocol/SLICING-PROTOCOL.md` alongside the
+ *     `work/protocol/VERSION` is bumped past the pre-task value.
+ *   - The vendored set ships `dist/protocol/TASKING-PROTOCOL.md` alongside the
  *     other runtime-read docs (the SET vendor, not a special case).
- *   - The per-discipline shape DRIFT GUARD (D2): a canonical slice-task
- *     fixture both PARSES via the frontmatter parser AND matches the prose
- *     shape `SLICING-PROTOCOL.md` describes.
- *   - The slicing prompt builder REFERENCES `SLICING-PROTOCOL.md` (in-band
+ *   - The per-discipline shape DRIFT GUARD (D2): a canonical task fixture
+ *     both PARSES via the frontmatter parser AND matches the prose
+ *     shape `TASKING-PROTOCOL.md` describes.
+ *   - The tasking prompt builder REFERENCES `TASKING-PROTOCOL.md` (in-band
  *     discipline), does NOT re-inline the confidence-check / `humanOnly` rules
  *     (the prompt-snapshot guard against re-emerging duplication), AND no
  *     longer carries the stale pre-rename vocabulary (`to-slices`,
@@ -34,7 +34,7 @@ const SOURCE = resolve(REPO, 'skills', 'setup', 'protocol');
 const MIRROR = resolve(REPO, 'work', 'protocol');
 const VENDORED = resolve(HERE, '..', 'dist', 'protocol');
 const SKILL = resolve(REPO, 'skills', 'to-task', 'SKILL.md');
-const SLICING_SRC = resolve(
+const TASKING_SRC = resolve(
 	REPO,
 	'packages',
 	'agent-runner',
@@ -42,19 +42,19 @@ const SLICING_SRC = resolve(
 	'tasking.ts',
 );
 
-describe('SLICING-PROTOCOL.md \u2014 the new in-band slicing discipline doc', () => {
+describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => {
 	it('exists at the SOURCE-of-truth location (`skills/setup/protocol/`)', () => {
-		expect(existsSync(resolve(SOURCE, 'SLICING-PROTOCOL.md'))).toBe(true);
+		expect(existsSync(resolve(SOURCE, 'TASKING-PROTOCOL.md'))).toBe(true);
 	});
 
 	it('is mirrored BYTE-IDENTICAL into `work/protocol/` (the propagated copy)', () => {
-		const src = readFileSync(resolve(SOURCE, 'SLICING-PROTOCOL.md'), 'utf8');
-		const mirror = readFileSync(resolve(MIRROR, 'SLICING-PROTOCOL.md'), 'utf8');
+		const src = readFileSync(resolve(SOURCE, 'TASKING-PROTOCOL.md'), 'utf8');
+		const mirror = readFileSync(resolve(MIRROR, 'TASKING-PROTOCOL.md'), 'utf8');
 		expect(mirror).toBe(src);
 	});
 
-	it('carries the full slicing discipline (tracer-bullet rules + two-axis gate + confidence check + file-orthogonality)', () => {
-		const doc = readFileSync(resolve(SOURCE, 'SLICING-PROTOCOL.md'), 'utf8');
+	it('carries the full tasking discipline (tracer-bullet rules + two-axis gate + confidence check + file-orthogonality)', () => {
+		const doc = readFileSync(resolve(SOURCE, 'TASKING-PROTOCOL.md'), 'utf8');
 		// The tracer-bullet rule (verbatim from the source skill).
 		expect(doc).toMatch(/tracer bullet/i);
 		expect(doc).toMatch(/vertical/i);
@@ -69,8 +69,8 @@ describe('SLICING-PROTOCOL.md \u2014 the new in-band slicing discipline doc', ()
 		// The brief-vs-task gate disjointness.
 		expect(doc).toMatch(/DISJOINT/);
 		expect(doc).toMatch(/briefAfter/);
-		// The prose-description of the emitted slice shape (D2).
-		expect(doc).toMatch(/emitted slice shape/i);
+		// The prose-description of the emitted task shape (D2).
+		expect(doc).toMatch(/emitted task shape/i);
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
 		expect(doc).toMatch(/\bbrief\b/);
@@ -81,9 +81,9 @@ describe('SLICING-PROTOCOL.md \u2014 the new in-band slicing discipline doc', ()
 		expect(doc).toMatch(/work\/tasks\/todo/);
 	});
 
-	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-slice value', () => {
-		// The pre-slice value (set by the surface slice) is 2026-06-23 \u2014 this
-		// slice's bump must exceed it.
+	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
+		// The pre-task value (set by the surface task) is 2026-06-23 \u2014 this
+		// task's bump must exceed it.
 		const version = readFileSync(resolve(MIRROR, 'VERSION'), 'utf8');
 		expect(version).toMatch(/protocol-version:\s*\d{4}-\d{2}-\d{2}/);
 		const match = /protocol-version:\s*(\d{4}-\d{2}-\d{2})/.exec(version);
@@ -92,39 +92,39 @@ describe('SLICING-PROTOCOL.md \u2014 the new in-band slicing discipline doc', ()
 	});
 });
 
-describe('vendor-protocol.mjs \u2014 the SET now ships SLICING-PROTOCOL.md too', () => {
+describe('vendor-protocol.mjs \u2014 the SET now ships TASKING-PROTOCOL.md too', () => {
 	it('keeps vendoring the prior set (CLAIM / REVIEW / SURFACE)', () => {
 		expect(existsSync(resolve(VENDORED, 'CLAIM-PROTOCOL.md'))).toBe(true);
 		expect(existsSync(resolve(VENDORED, 'REVIEW-PROTOCOL.md'))).toBe(true);
 		expect(existsSync(resolve(VENDORED, 'SURFACE-PROTOCOL.md'))).toBe(true);
 	});
 
-	it('vendors `dist/protocol/SLICING-PROTOCOL.md` (the new set member)', () => {
-		expect(existsSync(resolve(VENDORED, 'SLICING-PROTOCOL.md'))).toBe(true);
+	it('vendors `dist/protocol/TASKING-PROTOCOL.md` (the new set member)', () => {
+		expect(existsSync(resolve(VENDORED, 'TASKING-PROTOCOL.md'))).toBe(true);
 		const vendored = readFileSync(
-			resolve(VENDORED, 'SLICING-PROTOCOL.md'),
+			resolve(VENDORED, 'TASKING-PROTOCOL.md'),
 			'utf8',
 		);
 		expect(vendored).toMatch(/tracer bullet/i);
 	});
 
-	it('the vendored SLICING-PROTOCOL.md is BYTE-IDENTICAL to the source-of-truth', () => {
-		const src = readFileSync(resolve(SOURCE, 'SLICING-PROTOCOL.md'), 'utf8');
+	it('the vendored TASKING-PROTOCOL.md is BYTE-IDENTICAL to the source-of-truth', () => {
+		const src = readFileSync(resolve(SOURCE, 'TASKING-PROTOCOL.md'), 'utf8');
 		const vendored = readFileSync(
-			resolve(VENDORED, 'SLICING-PROTOCOL.md'),
+			resolve(VENDORED, 'TASKING-PROTOCOL.md'),
 			'utf8',
 		);
 		expect(vendored).toBe(src);
 	});
 });
 
-describe('Per-discipline shape DRIFT GUARD \u2014 a canonical slice-task fixture parses AND matches the doc', () => {
-	// A canonical emitted slice-task FILE: the shape the runner reads. Mirrors
+describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parses AND matches the doc', () => {
+	// A canonical emitted task FILE: the shape the runner reads. Mirrors
 	// `work/protocol/task-template.md` plus the live `parseFrontmatter` reader.
 	const fixture = [
 		'---',
-		'title: A canonical slice task',
-		'slug: canonical-slice-task',
+		'title: A canonical task',
+		'slug: canonical-task',
 		'brief: example-brief',
 		'blockedBy: [other-task]',
 		'covers: [1, 2]',
@@ -151,15 +151,15 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical slice-task fixture
 
 	it('the frontmatter parser accepts the canonical fixture (every field reads back as the doc describes)', () => {
 		const fm = parseFrontmatter(fixture);
-		expect(fm.slug).toBe('canonical-slice-task');
+		expect(fm.slug).toBe('canonical-task');
 		expect(fm.brief).toBe('example-brief');
 		expect(fm.blockedBy).toEqual(['other-task']);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.humanOnly).toBeUndefined();
 	});
 
-	it('every authoring field the fixture exercises is DESCRIBED in SLICING-PROTOCOL.md (the doc mirrors the parser; D2)', () => {
-		const doc = readFileSync(resolve(SOURCE, 'SLICING-PROTOCOL.md'), 'utf8');
+	it('every authoring field the fixture exercises is DESCRIBED in TASKING-PROTOCOL.md (the doc mirrors the parser; D2)', () => {
+		const doc = readFileSync(resolve(SOURCE, 'TASKING-PROTOCOL.md'), 'utf8');
 		// Required frontmatter (the parser reads these).
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
@@ -183,22 +183,22 @@ describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline 
 	// `buildTaskingBrief` is module-private; read its assembled output for
 	// `slug: 'example-brief'` from the source file so this test is hermetic and
 	// does not require exporting the builder. (The same indirect-read pattern
-	// the surface slice's prompt assertions use.)
-	const SLICING = readFileSync(SLICING_SRC, 'utf8');
+	// the surface task's prompt assertions use.)
+	const TASKING = readFileSync(TASKING_SRC, 'utf8');
 	// The literal lines the builder emits; we assert against the SOURCE text of
 	// the builder, which is the assembled prompt prose (modulo the `${slug}`
 	// interpolation).
 	const builderBody = (() => {
 		const match =
 			/function buildTaskingBrief\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
-				SLICING,
+				TASKING,
 			);
 		expect(match).toBeTruthy();
 		return match![1];
 	})();
 
-	it('REFERENCES `work/protocol/SLICING-PROTOCOL.md` (the in-band discipline)', () => {
-		expect(builderBody).toMatch(/work\/protocol\/SLICING-PROTOCOL\.md/);
+	it('REFERENCES `work/protocol/TASKING-PROTOCOL.md` (the in-band discipline)', () => {
+		expect(builderBody).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
 	});
 
 	it('points the agent at the HELD brief in `work/briefs/ready/<slug>.md` (current vocabulary)', () => {
@@ -252,8 +252,8 @@ describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointe
 	});
 
 	it('points at the protocol doc as the source of truth (not duplicating the discipline)', () => {
-		expect(skill).toMatch(/work\/protocol\/SLICING-PROTOCOL\.md/);
-		expect(skill).toMatch(/skills\/setup\/protocol\/SLICING-PROTOCOL\.md/);
+		expect(skill).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
+		expect(skill).toMatch(/skills\/setup\/protocol\/TASKING-PROTOCOL\.md/);
 	});
 
 	it('is THIN \u2014 the full discipline body no longer lives here', () => {

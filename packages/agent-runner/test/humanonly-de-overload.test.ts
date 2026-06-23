@@ -186,16 +186,16 @@ describe('slicer heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		});
 		expect(result.outcome).toBe('sliced');
 		// AFTER the relocation (slice `slicing-protocol-doc-and-vocabulary-fix`):
-		// the de-overloaded language lives in `SLICING-PROTOCOL.md`, NOT inlined in
+		// the de-overloaded language lives in `TASKING-PROTOCOL.md`, NOT inlined in
 		// the prompt. The prompt now POINTS at the doc + names the staging folder.
-		expect(capturedPrompt).toMatch(/work\/protocol\/SLICING-PROTOCOL\.md/);
+		expect(capturedPrompt).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
 		expect(capturedPrompt).toMatch(/work\/tasks\/backlog/);
 		expect(capturedPrompt).not.toMatch(/work\/pre-backlog/);
 		// The destination check: the doc carries the de-overloaded language.
 		const HERE = dirname(fileURLToPath(import.meta.url));
 		const REPO = resolve(HERE, '..', '..', '..');
 		const doc = readFileSync(
-			resolve(REPO, 'skills', 'setup', 'protocol', 'SLICING-PROTOCOL.md'),
+			resolve(REPO, 'skills', 'setup', 'protocol', 'TASKING-PROTOCOL.md'),
 			'utf8',
 		);
 		expect(doc).toMatch(/NEVER-for-agents BY NATURE/i);
