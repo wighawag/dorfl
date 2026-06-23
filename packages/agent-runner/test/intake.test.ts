@@ -796,18 +796,18 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(asked.closed).toBeUndefined();
 
 		// SLICE: emits a slice, no close.
-		const sliceProvider = stubIssueProvider({issue: {number: 9}});
+		const taskProvider = stubIssueProvider({issue: {number: 9}});
 		const sliced = await performIntake({
 			issueNumber: 9,
 			cwd: repo,
 			arbiter: ARBITER,
-			issueProvider: sliceProvider,
+			issueProvider: taskProvider,
 			decide: async () => TASK_VERDICT,
 			reviewSlice: convergingReviewGate,
 			env: gitEnv(),
 		});
 		expect(sliced.outcome).toBe('tasked');
-		expect(sliceProvider.closes).toHaveLength(0);
+		expect(taskProvider.closes).toHaveLength(0);
 		expect(sliced.closed).toBeUndefined();
 
 		// BRIEF: emits a brief, no close.
@@ -1324,7 +1324,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			existsOnArbiterMain(repo, 'backlog', 'quiet-and-verbose-modes'),
 		).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const prdOnMain = gitIn(
+		const briefOnMain = gitIn(
 			[
 				'cat-file',
 				'-e',
@@ -1333,7 +1333,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			repo,
 		);
 		// `cat-file -e` exits 0 (no output) when the blob exists.
-		expect(prdOnMain).toBe('');
+		expect(briefOnMain).toBe('');
 	});
 
 	it('ask/bounce IGNORE the modes (no integrate happens regardless of the flags)', async () => {

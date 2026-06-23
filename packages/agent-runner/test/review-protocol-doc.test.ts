@@ -175,11 +175,11 @@ describe('The four review-prompt builders \u2014 in-band reference + no re-inlin
 	const prompts = [
 		{name: 'buildReviewPrompt', text: buildReviewPrompt('alpha')},
 		{
-			name: 'buildSliceAcceptancePrompt',
+			name: 'buildTaskAcceptancePrompt',
 			text: buildTaskAcceptancePrompt('alpha'),
 		},
 		{
-			name: 'buildSliceReviewPrompt',
+			name: 'buildTaskReviewPrompt',
 			text: buildTaskReviewPrompt({
 				slug: 'alpha',
 				cwd: '/tmp/x',

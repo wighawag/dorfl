@@ -33,8 +33,8 @@ afterEach(() => {
 describe('encodeWorkId', () => {
 	it('is flat: host__org__name__slug (dot→dash per segment), reusing the repo-key encoding', () => {
 		expect(
-			encodeWorkId('git@github.com:wighawag/agent-runner.git', 'my-slice'),
-		).toBe('github-com__wighawag__agent-runner__my-slice');
+			encodeWorkId('git@github.com:wighawag/agent-runner.git', 'my-task'),
+		).toBe('github-com__wighawag__agent-runner__my-task');
 	});
 
 	it('encodes an https URL the same way', () => {

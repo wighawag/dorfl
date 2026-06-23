@@ -112,10 +112,10 @@ afterEach(() => {
 });
 
 describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', () => {
-	it('closes the PRD issue when ALL its prd:<slug> slices are in work/tasks/done/', async () => {
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-prd'});
-		write('done', 'b.md', {slug: 'b', brief: 'my-prd'});
+	it("closes the brief's issue when ALL its tasks are in work/tasks/done/", async () => {
+		write('prd', 'my-brief.md', {slug: 'my-brief', issue: '42'});
+		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
+		write('done', 'b.md', {slug: 'b', brief: 'my-brief'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -131,7 +131,7 @@ describe('runCloseJob — the PRD case (consumes the "PRD complete?" query)', ()
 			issueNumber: 42,
 			reason: 'completed',
 		});
-		expect(provider.closeCalls[0].comment).toContain('my-prd');
+		expect(provider.closeCalls[0].comment).toContain('my-brief');
 		expect(result.candidates.find((c) => c.issueNumber === 42)?.decision).toBe(
 			'closed',
 		);
