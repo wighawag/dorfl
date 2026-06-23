@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-06-23: test comments/describe-names still cite the renamed `sliceablePrds` symbol (now `taskableBriefs`)
 
 The live src helper was renamed `sliceablePrds` -> `taskableBriefs`
