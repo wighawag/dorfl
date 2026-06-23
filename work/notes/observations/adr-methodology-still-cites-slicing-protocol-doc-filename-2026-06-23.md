@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Observation: ADR §6 still cites the old `SLICING-PROTOCOL.md` filename (2026-06-23)
 
 After renaming the protocol doc `SLICING-PROTOCOL.md` → `TASKING-PROTOCOL.md` (task `rename-protocol-doc-slicing-to-tasking`), `docs/adr/methodology-and-skills.md:81` still references the old filename `SLICING-PROTOCOL.md` (and the verb "slicing") in its §6 refinement bullet — a now-dangling filename reference to a file that no longer exists.
