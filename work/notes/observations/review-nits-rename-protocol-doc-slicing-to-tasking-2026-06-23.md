@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'rename-protocol-doc-slicing-to-tasking
 date: 2026-06-23
 status: open
 reviewOf: rename-protocol-doc-slicing-to-tasking
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
