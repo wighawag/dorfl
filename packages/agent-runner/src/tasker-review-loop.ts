@@ -588,7 +588,7 @@ export function harnessTaskReviewGate(
 			prompt: buildTaskReviewPrompt(input),
 			model: input.taskerLoopModel,
 			// A DISTINCT session id per pass + fresh context so launches never collide.
-			sessionId: `slice-review-${input.slug}-m${input.execution}-n${input.pass}`,
+			sessionId: `task-review-${input.slug}-m${input.execution}-n${input.pass}`,
 			sessionsDir: input.sessionsDir,
 			env: input.env,
 		});

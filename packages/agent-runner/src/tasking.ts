@@ -1328,7 +1328,7 @@ async function runTaskAgent(
 		command: options.agentCmd ?? '',
 		prompt,
 		model: options.model,
-		sessionId: `slice-${slug}`,
+		sessionId: `task-${slug}`,
 		sessionsDir: options.sessionsDir,
 		env: agentEnv,
 	});
