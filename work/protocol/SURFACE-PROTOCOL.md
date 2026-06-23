@@ -112,6 +112,6 @@ Notes for the hand-writer:
 
 ## Boundaries (the scope fence)
 
-- **`to-task` / `review` stay COMPOSED and UNCHANGED (US #35).** You call them; you never modify or reimplement them. They are the single sources for slicing/reviewing judgement — only `batch-qa`'s orchestration is absorbed (by the engine), not the producer/reviewer skills.
+- **`to-task` / `review` stay COMPOSED and UNCHANGED (US #35).** You call them; you never modify or reimplement them. They are the single sources for tasking/reviewing judgement — only `batch-qa`'s orchestration is absorbed (by the engine), not the producer/reviewer skills.
 - **You absorb only `batch-qa`'s question-FORMULATION judgement** (the composed review + native triage + pre-existing-question gather, with inline context + suggested defaults). `batch-qa`'s BOUND / APPLY / ITERATE / one-file orchestration is the ENGINE's job now (or `orchestrate`'s, for the human batch) — NOT yours. You formulate the questions for ONE item; you do not batch, apply, or iterate.
 - **You write nothing and you invent no answer.** Both laws, restated because they are the whole point: GATHER-only, PERSIST-NEVER; surface the residue, NEVER invent an answer.
