@@ -4,10 +4,10 @@
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — `agent-runner intake <N>` reads issue #N + its comment thread,
-# runs a prompt→verdict decision (ask / slice / PRD / bounce), and dispatches it.
+# runs a prompt→verdict decision (ask / task / PRD / bounce), and dispatches it.
 # CI owns ONLY the trigger + the merge-vs-propose POLICY + the delivery surface;
 # the TRANSFORM is the engine's (the Out-of-Scope fence — CI re-implements none of
-# it). The lone-slice review/edit loop `intake` already runs ALSO surfaces its
+# it). The lone-task review/edit loop `intake` already runs ALSO surfaces its
 # findings as questions back into THIS issue thread via the issue-comment seam (insertion
 # point E) — REUSED, not a new review mechanism.
 #
@@ -171,7 +171,7 @@ jobs:
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. EXPLICIT `intake <N>`, never a bare slug. The per-outcome
         # flags carry the merge-vs-propose POLICY derived above. `intake` runs the
-        # lone-slice review/edit loop and posts its findings as questions back into
+        # lone-task review/edit loop and posts its findings as questions back into
         # THIS issue thread (insertion point E) through the issue-comment seam —
         # CI surfaces E by invoking intake; it adds no new review mechanism.
         env:
