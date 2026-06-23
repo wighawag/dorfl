@@ -2,7 +2,7 @@
 title: the same-slug promote CAS-race test in advance-triage.test.ts STILL flakes "2 winners" under full-suite parallel load (despite PR #90's deterministic-contention fix)
 date: 2026-06-13
 status: open
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was observed
