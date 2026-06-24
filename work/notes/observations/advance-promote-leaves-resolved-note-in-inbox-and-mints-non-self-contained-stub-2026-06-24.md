@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-24
 needsAnswers: false
+triaged: keep
 ---
 
 ## What was seen
@@ -211,3 +212,11 @@ Git rm in the apply atomic commit with the reason in the commit message is suffi
 ## Recommended: delete
 
 A human answered "delete": this item can be removed (git history is the archive). The agent leaves the deletion to the human per the capture-bucket contract.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `prd:observation-discharge-by-deletion-self-contained-promotion-and-prd-route` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: The observation's own applied answers (2026-06-24) explicitly state it is superseded by the now-merged PRD `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` (in work/prds/tasked/) and its 5 tasks (PRs #231–#235), which carry all of this note's signal — Defects A, B, C and the WORK-CONTRACT.md L65/L67 amendment — end to end. Disposition is recorded as `dropped` with a `## Recommended: delete` marker. Unambiguous map onto the existing PRD.
