@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'surface-promote-prd-as-human-only-disp
 date: 2026-06-24
 status: open
 reviewOf: surface-promote-prd-as-human-only-disposition
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
