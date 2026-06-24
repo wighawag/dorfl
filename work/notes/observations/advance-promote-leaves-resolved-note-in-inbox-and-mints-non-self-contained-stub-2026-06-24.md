@@ -3,8 +3,7 @@ title: advance apply/triage does not discharge an answered observation by deleti
 type: observation
 status: spotted
 spotted: 2026-06-24
-needsAnswers: false
-triaged: keep
+needsAnswers: true
 ---
 
 ## What was seen
@@ -184,39 +183,3 @@ Refs: `packages/dorfl/src/triage-persist.ts:294` (`promoteObservation`),
 `packages/dorfl/src/apply-persist.ts:538-565`, `:689` (`DELETE_HEADING`);
 `work/protocol/WORK-CONTRACT.md` L59/L65/L67/L74; `packages/dorfl/src/work-layout.ts:58`.
 Evidence tip: origin/main `4f02ce5` (2026-06-24).
-
-## Applied answers 2026-06-24
-
-### q1: What becomes of this observation? The maintainer has already ruled on the core tension (deletion-on-apply is correct), and the body itself suggests the remaining fix is PRD-sized (vocabulary change for `promote-prd` + `promoteObservation` rework to be self-contained and branch on artifact type + intake-seam reuse + WORK-CONTRACT.md L65/L67 amendment + retiring `triaged:`/`## Recommended: delete` resting-state machinery across triage and apply). A single `promote-task` would understate the scope; `promote-adr` would capture only the protocol-clause clarification, not the engine rework; a hand-authored PRD with the note `dropped` is the explicit fallback the body names. Note: `promote-prd` is not currently in the disposition vocabulary (`sidecar.ts:84-90`) — that is itself one of the things this observation is asking for; until it exists, the in-loop choice reduces to `promote-task` (oversized) or `dropped` + hand-authored PRD in `prds/proposed/`.
-
-dropped. reason: superseded by the now-merged PRD observation-discharge-by-deletion-self-contained-promotion-and-prd-route (in prds/tasked/) and its 5 tasks (PRs #231-#235), which carry all of this note's signal end to end. The in-loop promote-prd route this note asked for now exists, so the note's purpose is fully discharged; drop it.
-
-disposition: dropped
-
-### q2: Protocol-edit follow-through: amend WORK-CONTRACT.md L65/L67 to state deletion-on-apply explicitly (the human's ratified promote/drop answer is what authorises the delete), so the 'never auto-delete a signal' clause is not misread as barring it — and retire the `triaged:`/`## Recommended: delete` resting-state machinery for notes. Confirm this doc edit + machinery retirement is in scope of whatever artifact is spawned, and that the SOURCE-OF-TRUTH copy at `skills/setup/protocol/WORK-CONTRACT.md` is edited (not just the propagated `work/protocol/` copy — see repo AGENTS.md).
-
-Done. WORK-CONTRACT.md was amended (task work-contract-sanction-deletion-on-apply-discharge, PR #233) stating deletion-on-apply is human-authored and not barred by the never-auto-delete clause; the SOURCE skills/setup/protocol/ copy was edited and the work/protocol/ mirror kept byte-identical. The triaged:/## Recommended: delete resting-state machinery for notes was retired (task delete-on-discharge-for-dropped-and-duplicate-routes, PR #232).
-
-### q3: (Defect B) Must `promoteObservation` produce a SELF-CONTAINED spawned artifact — copying the observation's mechanism + fix shape + any answered scoping into the task/PRD body — rather than the current back-pointer stub at `triage-persist.ts:294`/`:309`? Is the self-containment asserted/verified by the engine (a structural check) before the note is deleted, or only by reviewer judgement?
-
-Yes, and done. promoteObservation now builds a self-contained body (buildPromotedBody lifts the observation's mechanism + transcribes its ## Open questions; needsAnswers reflects them) and git rm's the note+sidecar in the SAME atomic commit as the create (keystone task promotion-self-contained-body-and-delete-on-promote-task-route, PR #231). Self-containment is the precondition for the same-commit deletion.
-
-### q4: (Defect C) Should the disposition vocabulary GAIN `promote-prd` (and `promoteObservation` BRANCH on artifact type, routing through the shared placement resolver `intake` uses — `intake.ts:371-372`, `:1249-1304`)? If yes: reuse intake's `emitPrd`/placement seam directly, or a triage-local analogue that calls into the same resolver? Who judges 'too big for a task' — the human via the `promote-prd` answer the surface offers, or an automated heuristic?
-
-Yes, and done. promote-prd was added to the disposition vocabulary and promoteObservation branches on artifact type (task -> tasks-ready, prd -> prds-proposed) via the SAME triage-local createItemThroughCas writer (NOT intake's branch+integrate band), per the maintainer's Resolved decision 1 (tasks promote-prd-disposition-and-triage-local-cas-prd-writer #234 + surface-promote-prd-as-human-only-disposition #235). The human is the judge via the promote-prd disposition offered at the surface; the auto gate never picks it.
-
-### q5: (Dropped vs promote symmetry) Does the `dropped`/`duplicate` path need the same self-containment guarantee as `promote`, or is it sufficient to `git rm` the note and record the `reason:` in the commit message (since nothing downstream carries the signal and it has been judged moot)? Should the commit-message format for the drop be specified (e.g. `reason: <out-of-scope|superseded by <x>|duplicate|abandoned>`)?
-
-Git rm in the apply atomic commit with the reason in the commit message is sufficient (a dropped note has nothing downstream carrying it). Implemented: the dropped/delete/duplicate routes now git rm the note in a standalone commit with the reason recorded in the message (task delete-on-discharge-for-dropped-and-duplicate-routes, PR #232).
-
-## Recommended: delete
-
-A human answered "delete": this item can be removed (git history is the archive). The agent leaves the deletion to the human per the capture-bucket contract.
-
-## Triaged: maps onto an existing item
-
-This observation maps UNAMBIGUOUSLY onto `prd:observation-discharge-by-deletion-self-contained-promotion-and-prd-route` (already
-covered there), so it is settled — marked triaged:keep and dropped out
-of the candidate pool (never re-asked).
-
-Reason: The observation's own applied answers (2026-06-24) explicitly state it is superseded by the now-merged PRD `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` (in work/prds/tasked/) and its 5 tasks (PRs #231–#235), which carry all of this note's signal — Defects A, B, C and the WORK-CONTRACT.md L65/L67 amendment — end to end. Disposition is recorded as `dropped` with a `## Recommended: delete` marker. Unambiguous map onto the existing PRD.
