@@ -68,7 +68,7 @@ Some thing.
 /** Write a task file into work/<folder>/<slug>.md under root, return root. */
 function seedTask(
 	root: string,
-	folder: 'in-progress' | 'backlog',
+	folder: 'in-progress' | 'backlog' | 'pre-backlog',
 	slug: string,
 	body: string,
 	prd = 'my-prd',
@@ -679,6 +679,58 @@ describe('resolveTask — in-progress over backlog', () => {
 
 	it('throws PromptError when the slug is in neither folder', () => {
 		expect(() => resolveTask(scratch.root, 'missing')).toThrow(PromptError);
+	});
+});
+
+describe('resolveTask — --allow-backlog widens to tasks-backlog (staging)', () => {
+	// prd `do-allow-backlog-drive-staged-tasks-without-promotion`: an operator's
+	// explicit `--allow-backlog` lets resolution ALSO search `tasks/backlog/`
+	// (staging) at LOWEST priority; default off keeps staging invisible.
+	let scratch: Scratch;
+	beforeEach(() => {
+		scratch = makeScratch('dorfl-prompt-allow-backlog-');
+	});
+	afterEach(() => {
+		scratch.cleanup();
+	});
+
+	it('WITHOUT the flag: a staged-only task does NOT resolve (no silent widening)', () => {
+		seedTask(scratch.root, 'pre-backlog', 'staged', '> the STAGED body');
+		expect(() => resolveTask(scratch.root, 'staged')).toThrow(PromptError);
+		// Explicit flag-off is the same as today.
+		expect(() =>
+			resolveTask(scratch.root, 'staged', undefined, {allowBacklog: false}),
+		).toThrow(PromptError);
+	});
+
+	it('WITH the flag: resolves a task that exists ONLY in tasks-backlog', () => {
+		seedTask(scratch.root, 'pre-backlog', 'staged', '> the STAGED body');
+		const task = resolveTask(scratch.root, 'staged', undefined, {
+			allowBacklog: true,
+		});
+		expect(task.folder).toBe('tasks-backlog');
+		expect(task.taskPrompt).toContain('STAGED');
+	});
+
+	it('precedence: a slug in BOTH tasks-ready and tasks-backlog resolves to READY', () => {
+		seedTask(scratch.root, 'backlog', 'dup', '> the READY copy');
+		seedTask(scratch.root, 'pre-backlog', 'dup', '> the STAGED copy');
+		const task = resolveTask(scratch.root, 'dup', undefined, {
+			allowBacklog: true,
+		});
+		expect(task.folder).toBe('tasks-ready');
+		expect(task.taskPrompt).toContain('READY');
+		expect(task.taskPrompt).not.toContain('STAGED');
+	});
+
+	it('in-progress still wins over a staged copy under the flag', () => {
+		seedTask(scratch.root, 'pre-backlog', 'dup', '> the STAGED copy');
+		seedTask(scratch.root, 'in-progress', 'dup', '> the IN-PROGRESS copy');
+		const task = resolveTask(scratch.root, 'dup', undefined, {
+			allowBacklog: true,
+		});
+		expect(task.folder).toBe('in-progress');
+		expect(task.taskPrompt).toContain('IN-PROGRESS');
 	});
 });
 

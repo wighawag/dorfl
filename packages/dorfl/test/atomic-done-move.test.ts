@@ -58,6 +58,94 @@ async function claimAndBranch(slug: string) {
 	return {seeded, repo};
 }
 
+/**
+ * The `--allow-backlog` analogue of {@link claimAndBranch} (prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion`): seed a STAGED task
+ * (`tasks/backlog/<slug>`), claim it under the flag (the body RESTS in staging),
+ * and branch off main with uncommitted agent work.
+ */
+async function claimAndBranchStaged(slug: string) {
+	const seeded = seedRepoWithArbiter(scratch.root, [], {staged: [slug]});
+	const repo = seeded.repo;
+	const claim = await performClaim({
+		slug,
+		cwd: repo,
+		arbiter: ARBITER,
+		allowBacklog: true,
+		env: gitEnv(),
+	});
+	expect(claim.exitCode).toBe(0);
+	gitIn(['fetch', '-q', ARBITER], repo);
+	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
+	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
+	return {seeded, repo};
+}
+
+describe('atomic done-move — --allow-backlog staged source (tasks/backlog/ → done/)', () => {
+	// prd `do-allow-backlog-drive-staged-tasks-without-promotion`, decision 4: the
+	// done-move sources from `tasks-backlog` and the arbiter is the authority for
+	// the actual source folder (the arbiter holds the slug in tasks/backlog/).
+	it('a staged source done-moves tasks/backlog/ → tasks/done/ directly (the move is a MOVE)', async () => {
+		const {repo} = await claimAndBranchStaged('staged');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'staged',
+			source: 'tasks-backlog',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		// Landed in done/ ONLY — the arbiter-resolved source (tasks/backlog/) was
+		// removed; the move is a move, not a copy.
+		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'backlog', 'staged')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'staged')).toBe(false);
+	});
+
+	it('the arbiter-side reconciler resolves a tasks/backlog/-resident slug even when a SIBLING advanced main (rebase reconcile)', async () => {
+		// A sibling job lands its OWN done-move on <arbiter>/main between our claim and
+		// our rebase. Our staged done-move must still rebase + land cleanly, with the
+		// arbiter resolving OUR slug's source folder (tasks/backlog/) correctly.
+		const {seeded, repo} = await claimAndBranchStaged('staged');
+
+		// Sibling advances main with an unrelated ledger move (its own done file).
+		const sibling = seeded.clone('sibling');
+		gitIn(['switch', '-q', '-c', 'sibling/x', `${ARBITER}/main`], sibling);
+		mkdirSync(join(sibling, 'work', 'tasks', 'done'), {recursive: true});
+		writeFileSync(
+			join(sibling, 'work', 'tasks', 'done', 'sibling-x.md'),
+			'---\ntitle: sibling-x\nslug: sibling-x\n---\n\ndone elsewhere\n',
+		);
+		gitIn(['add', '-A'], sibling);
+		gitIn(['commit', '-q', '-m', 'done: sibling-x'], sibling);
+		gitIn(['push', '-q', ARBITER, 'sibling/x:main'], sibling);
+		rmSync(sibling, {recursive: true, force: true});
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'staged',
+			source: 'tasks-backlog',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(false);
+		// The sibling's move is untouched.
+		expect(existsOnArbiterMain(repo, 'done', 'sibling-x')).toBe(true);
+	});
+});
+
 describe('atomic done-move — the move is a MOVE, not a COPY (defect 1)', () => {
 	// NOTE: the historical divergent-base scenario (the arbiter holds the slug in a
 	// TRANSIENT folder — `in-progress/`/`needs-attention/` — while the branch base has

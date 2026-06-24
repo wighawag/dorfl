@@ -140,6 +140,120 @@ describe('do <slug> — in-place happy path → exit', () => {
 	});
 });
 
+describe('do task:<slug> --allow-backlog — drive a STAGED task in place (backlog→done)', () => {
+	// prd `do-allow-backlog-drive-staged-tasks-without-promotion` (the keystone):
+	// a human drives a task that lives ONLY in tasks/backlog/ WITHOUT promoting it
+	// to the pool; the done-move goes tasks/backlog/ → tasks/done/ directly.
+	it('WITH the flag: resolves + claims + builds a staged task; it lands in tasks/done/', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		const result = await performDo({
+			arg: 'task:staged',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			allowBacklog: true,
+			dorfl: editingAgent,
+			env: gitEnv(),
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('completed');
+		expect(result.slug).toBe('staged');
+
+		// The completed task landed in tasks/done/ — the full backlog→done path.
+		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(true);
+		// It NEVER bounced through the pool (tasks/ready/), and left staging.
+		expect(existsOnArbiterMain(repo, 'backlog', 'staged')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'staged')).toBe(false);
+
+		// The agent's edit landed (the runner committed it with the done-move).
+		expect(
+			gitIn(['cat-file', '-e', 'arbiter/main:agent-output.txt'], repo),
+		).toBe('');
+	});
+
+	it('the claim of a staged task wrote nothing to main and moved no body before the done-move', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		// An agent that ASSERTS the body still RESTS in tasks/backlog/ at build time
+		// (claim acquired the lock but never moved the staged body).
+		const assertingAgent: DoDorfl = ({cwd, slug}) => {
+			expect(currentBranch(cwd)).toBe(`work/task-${slug}`);
+			expect(
+				existsSync(join(cwd, 'work', 'tasks', 'backlog', `${slug}.md`)),
+			).toBe(true);
+			expect(
+				existsSync(join(cwd, 'work', 'tasks', 'ready', `${slug}.md`)),
+			).toBe(false);
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const result = await performDo({
+			arg: 'task:staged',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			allowBacklog: true,
+			dorfl: assertingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(true);
+	});
+
+	it('WITHOUT the flag: the same staged task fails to resolve (no silent widening)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		const result = await performDo({
+			arg: 'task:staged',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			// allowBacklog omitted ⇒ default off.
+			dorfl: editingAgent,
+			env: gitEnv(),
+		});
+		// Not claimable from the pool (it is only in staging) ⇒ lost (exit 2), and
+		// the staged body is untouched.
+		expect(result.exitCode).not.toBe(0);
+		expect(result.outcome).not.toBe('completed');
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(false);
+	});
+
+	it('a slug in BOTH tasks/ready/ and tasks/backlog/ resolves to the READY copy', async () => {
+		// The malformed-state tie-break (prd decision 5): ready before backlog. Seed
+		// the SAME slug in both folders, with distinguishable bodies.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['dup'], {
+			staged: ['dup'],
+		});
+		let seenPrompt: string | undefined;
+		const capturingAgent: DoDorfl = ({cwd, prompt}) => {
+			seenPrompt = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const result = await performDo({
+			arg: 'task:dup',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			allowBacklog: true,
+			dorfl: capturingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		// The done-move sourced from tasks/ready/ (the READY copy won): the pool copy
+		// is gone, and the staged copy is left behind (untouched by this build).
+		expect(existsOnArbiterMain(repo, 'done', 'dup')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'dup')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'dup')).toBe(true);
+	});
+});
+
 describe('do <slug> — promptGuidance.testFirst reaches the AUTONOMOUS worker prompt', () => {
 	// REGRESSION (prompt-guidance-testfirst Gate-2 block): the resolved
 	// `promptGuidance` MUST reach the prompt the autonomous `do` worker is handed.

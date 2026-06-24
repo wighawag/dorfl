@@ -272,6 +272,20 @@ export interface DoOptions {
 	 * to rebase). Loud, never the default.
 	 */
 	ignoreDivergedMain?: boolean;
+	/**
+	 * **`--allow-backlog`** (prd
+	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): let this `do task:`
+	 * invocation FIND, CLAIM, and COMPLETE a task that lives in `tasks/backlog/`
+	 * (staging) IN PLACE, WITHOUT first promoting it to the pool — so no `advance`
+	 * leg / `run` daemon can claim it out from under the operator. It widens ONLY
+	 * resolution (`resolveTask` also searches `tasks-backlog`, lowest priority) +
+	 * the claimable predicate (`performClaim` accepts a staged body); claim/lock/
+	 * build/gate are identical, and the done-move goes `tasks/backlog/ → tasks/done/`
+	 * directly (the explicit drive IS the promotion). EXPLICIT-INVOCATION-ONLY:
+	 * default off, never set by `run`/auto-pick/`advance` (the leak-fence). The
+	 * task-build path only; the `do prd:` path is unaffected.
+	 */
+	allowBacklog?: boolean;
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;
@@ -533,6 +547,15 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewGate?: ReviewGate;
 	/** The task-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
 	taskReviewGate?: ReviewGate;
+	/**
+	 * **`--allow-backlog`** on the no-checkout `do --remote`/`--isolated` path (see
+	 * {@link DoOptions.allowBacklog}): widen resolution + the claimable predicate to
+	 * ALSO accept a `tasks/backlog/`-resident task, so the human-driven `drive-tasks`
+	 * opt-in backlog mode can build a STAGED task in place. The done-move goes
+	 * `tasks/backlog/ → tasks/done/` directly. Default off; never set by an
+	 * autonomous path. The task-build path only.
+	 */
+	allowBacklog?: boolean;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/** Sink for human-readable progress notes. */
@@ -847,7 +870,17 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//         fresh-main `work/<slug>` switch, incl. the §14 continue/rebase path)
 	//         WITHOUT re-claiming — the split the seam mandates (claim → driver,
 	//         onboarding → strategy).
-	const claim = await performClaim({slug, cwd, arbiter, env, note});
+	const claim = await performClaim({
+		slug,
+		cwd,
+		arbiter,
+		// `--allow-backlog`: widen the claimable predicate to ALSO accept a
+		// `tasks/backlog/`-resident body. Claim stays a pure lock (writes nothing to
+		// `main`, moves nothing); default off ⇒ pool-only, exactly as today.
+		allowBacklog: options.allowBacklog === true,
+		env,
+		note,
+	});
 	if (claim.outcome === 'lost') {
 		return {exitCode: 2, outcome: 'lost', slug, message: claim.message};
 	}
@@ -966,12 +999,19 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// `work/<slug>` whose tip is STRANDED off main) the task may already be in
 		// `work/done/`; admit `done/` ONLY behind the tip-vs-arbiter stranded gate
 		// (story 5), reusing the SAME refs the continue-detection uses.
-		const task = resolveTask(tree.dir, slug, {
-			cwd: tree.dir,
-			branchRef: `${tree.arbiterRemote}/${tree.branch}`,
-			mainRef: `${tree.arbiterRemote}/main`,
-			env,
-		});
+		const task = resolveTask(
+			tree.dir,
+			slug,
+			{
+				cwd: tree.dir,
+				branchRef: `${tree.arbiterRemote}/${tree.branch}`,
+				mainRef: `${tree.arbiterRemote}/main`,
+				env,
+			},
+			// `--allow-backlog`: also resolve a `tasks/backlog/`-resident body
+			// (lowest priority). Default off ⇒ unchanged.
+			{allowBacklog: options.allowBacklog === true},
+		);
 		// CONTINUE-mode (the `agent-prompt-continue-context` task): if the arbiter
 		// holds a kept `work/<slug>` ahead of main (a requeue) the checkout was
 		// CONTINUED onto it — inject the continue block (prior diff + reason + note).
@@ -1106,6 +1146,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// with --ignore-diverged-main the guard was bypassed there too, so either way
 		// the (now non-fatal) local-main sync handles any persisting divergence.
 		ignoreDivergedMain: true,
+		// `--allow-backlog`: treat a `tasks/backlog/`-resident body as a valid build
+		// source so the done-move goes `tasks/backlog/ → tasks/done/` directly. Gated
+		// on the flag (without it `complete` refuses a staged strand). Default off.
+		allowBacklog: options.allowBacklog === true,
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
@@ -1865,6 +1909,9 @@ export async function performDoRemote(
 			slug,
 			cwd: claimDir,
 			arbiter: 'origin',
+			// `--allow-backlog`: accept a `tasks/backlog/`-resident body (staging). The
+			// claim stays a pure lock. Default off ⇒ pool-only.
+			allowBacklog: options.allowBacklog === true,
 			env,
 			note,
 		});
@@ -2080,6 +2127,9 @@ async function runRemotePipeline(
 		cwd,
 		arbiter: arbiterRemote,
 		resume: true,
+		// `--allow-backlog`: a staged body (claimed, still in `tasks/backlog/`) is a
+		// valid onboard residence; without this `start` would read it as `absent`.
+		allowBacklog: options.allowBacklog === true,
 		env,
 		note,
 	});
@@ -2118,12 +2168,18 @@ async function runRemotePipeline(
 		// CONTINUE-aware resolution (job-worktree path): admit `work/done/` ONLY
 		// behind the tip-vs-arbiter stranded gate (story 5), using the worktree's
 		// primed `<origin>/work/<slug>` vs `<origin>/main` tracking refs.
-		const task = resolveTask(cwd, slug, {
+		const task = resolveTask(
 			cwd,
-			branchRef: `${arbiterRemote}/${branch}`,
-			mainRef: `${arbiterRemote}/main`,
-			env,
-		});
+			slug,
+			{
+				cwd,
+				branchRef: `${arbiterRemote}/${branch}`,
+				mainRef: `${arbiterRemote}/main`,
+				env,
+			},
+			// `--allow-backlog`: also resolve a `tasks/backlog/`-resident body.
+			{allowBacklog: options.allowBacklog === true},
+		);
 		// CONTINUE-mode (job-worktree path): the worktree's tracking refs were primed
 		// above (`primeWorktreeTrackingRef`), so reuse the SAME continue-detection with
 		// the worktree's `<origin>/work/<slug>` vs `<origin>/main` refs.
@@ -2232,6 +2288,9 @@ async function runRemotePipeline(
 		// the bare mirror and never ff's the operator's local main, so the guard does
 		// not apply here — opt out explicitly (the task: do NOT touch do --remote/run).
 		ignoreDivergedMain: true,
+		// `--allow-backlog`: a staged build sources from `tasks/backlog/` (gated on
+		// the flag; otherwise a staged strand still refuses). Default off.
+		allowBacklog: options.allowBacklog === true,
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,

@@ -528,6 +528,24 @@ export interface ContinueResolutionGate {
 }
 
 /**
+ * Extra knobs for {@link resolveTask} beyond the continue gate. Today the only
+ * member is `allowBacklog` (prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion`): the operator's
+ * EXPLICIT `do … --allow-backlog`, which widens resolution to also search
+ * `tasks-backlog` (staging) at LOWEST priority. Default off (omitted) \u21d2 the
+ * resolution is byte-identical to today; no autonomous path sets it.
+ */
+export interface ResolveTaskOptions {
+	/**
+	 * When `true`, append `tasks-backlog` (staging) to the resolution order at
+	 * LOWEST priority (after `tasks-ready`), so a human can drive a staged task in
+	 * place WITHOUT promoting it. The READY copy wins a same-slug tie. Reachable
+	 * ONLY via the explicit `--allow-backlog` flag \u2014 never `run`/auto-pick/advance.
+	 */
+	allowBacklog?: boolean;
+}
+
+/**
  * True iff the work-branch tip (`gate.branchRef`) is genuinely STRANDED: it
  * resolves to a commit that is NOT reachable on the arbiter main
  * (`gate.mainRef`). REUSES {@link isAncestor} (`gc.ts`) — the one reachability
@@ -563,13 +581,27 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
  * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
  * is byte-identical to the original `['in-progress','tasks-ready']`-only resolution.
+ *
+ * `--allow-backlog` (prd `do-allow-backlog-drive-staged-tasks-without-promotion`):
+ * when {@link ResolveTaskOptions.allowBacklog} is set, `tasks-backlog` (the staging
+ * folder) is appended at the LOWEST priority — after `tasks-ready`, so a slug
+ * present in BOTH the pool and staging resolves to the READY copy (the same-slug
+ * precedence the prd's decision 5 fixes). Default off ⇒ byte-identical to today
+ * (no autonomous path sets it; staging stays unreachable to `run`/auto-pick).
  */
 export function resolveTask(
 	cwd: string,
 	slug: string,
 	continueGate?: ContinueResolutionGate,
+	options?: ResolveTaskOptions,
 ): ResolvedTask {
 	const order: TaskFolder[] = ['in-progress', 'tasks-ready'];
+	// `--allow-backlog`: append `tasks-backlog` at LOWEST priority (after
+	// `tasks-ready`), so the READY copy wins a same-slug tie and a staged task is
+	// only reachable behind the explicit flag. Default off ⇒ unchanged.
+	if (options?.allowBacklog === true) {
+		order.push('tasks-backlog');
+	}
 	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
 	// the tip-vs-arbiter gate (NEVER folder name alone). A complete task (tip on
 	// the arbiter) leaves the order untouched, so onboard never re-runs it.

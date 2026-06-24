@@ -78,6 +78,17 @@ export interface StartOptions {
 	 */
 	override?: boolean;
 	/**
+	 * `--allow-backlog` (prd
+	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): recognise a
+	 * `tasks/backlog/`-resident body (staging) as a valid start/onboard residence,
+	 * so the no-checkout `do --remote/--isolated … --allow-backlog` flow (which
+	 * onboards via `start` after a backlog-aware claim) does not read the staged
+	 * task as `absent`. It widens ONLY the folder RESOLUTION (`tasks-backlog` is
+	 * treated like the pool for the lock re-key + the backlog onboard); claim/lock/
+	 * build are identical. Default off ⇒ staging is invisible, exactly as today.
+	 */
+	allowBacklog?: boolean;
+	/**
 	 * `--agent` (task `agent-interactive-launch`): after onboarding onto
 	 * `work/<slug>`, launch the configured harness INTERACTIVELY in the checkout —
 	 * a foreground session the human drives (no prepared prompt). Injected as a
@@ -175,7 +186,13 @@ async function runStart(
 	// Folder on the arbiter's main is the source of truth (NOT claimed_by) for the
 	// DURABLE residence; HELD-NESS is read from the per-item LOCK ref, not a folder.
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const folder = await dispatchFolder(slug, arbiter, cwd, env);
+	const folder = await dispatchFolder(
+		slug,
+		arbiter,
+		cwd,
+		env,
+		options.allowBacklog === true,
+	);
 
 	const result = await onboardFromFolder(folder, {
 		options,
@@ -218,18 +235,34 @@ async function runStart(
  *   - held `stuck` ⇒ `needs-attention` (the recovery dispatch: print the reason,
  *     resume the lock `stuck → active`, onboard).
  * Everything else dispatches by folder unchanged.
+ *
+ * Under `--allow-backlog` (prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion`) a body resting in
+ * `tasks/backlog/` (staging) is treated EXACTLY like the pool for this re-key
+ * (held active ⇒ in-progress; held stuck ⇒ needs-attention; else the backlog
+ * onboard), so the no-checkout `do … --allow-backlog` flow that claimed a staged
+ * task (the body stays in `tasks/backlog/`) onboards instead of reading `absent`.
  */
 async function dispatchFolder(
 	slug: string,
 	arbiter: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
+	allowBacklog = false,
 ): Promise<Folder> {
-	const folder = await folderOnArbiterMain(slug, arbiter, cwd, env);
-	if (folder !== 'tasks-ready') {
+	const folder = await folderOnArbiterMain(
+		slug,
+		arbiter,
+		cwd,
+		env,
+		allowBacklog,
+	);
+	// `--allow-backlog`: a staged (`tasks-backlog`) body re-keys like the pool.
+	const inPool = folder === 'tasks-ready' || folder === 'tasks-backlog';
+	if (!inPool) {
 		return folder;
 	}
-	// In `backlog/`: claimed-ness + stuck-ness are the per-item lock, not the folder.
+	// In the pool/staging: claimed-ness + stuck-ness are the per-item lock, not the folder.
 	const lock = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	if (lock && lock.state === 'stuck') {
 		return 'needs-attention';
@@ -874,15 +907,35 @@ async function inferSlugFromBranch(
 	return parseWorkBranchRef(sym.stdout.trim())?.slug ?? '';
 }
 
-/** Which work/ folder the slug currently lives in on `<arbiter>/main`. */
+/**
+ * Which work/ folder the slug currently lives in on `<arbiter>/main`. Under
+ * `--allow-backlog` (prd `do-allow-backlog-drive-staged-tasks-without-promotion`)
+ * it ALSO recognises `tasks/backlog/` (staging) at LOWEST priority — after the
+ * pool — so a same-slug pool copy still wins; otherwise staging is invisible.
+ */
 async function folderOnArbiterMain(
 	slug: string,
 	arbiter: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<Folder> {
-	const folders: Exclude<Folder, 'absent'>[] = [
+	allowBacklog = false,
+): Promise<
+	| 'tasks-ready'
+	| 'tasks-backlog'
+	| 'in-progress'
+	| 'needs-attention'
+	| 'done'
+	| 'absent'
+> {
+	const folders: (
+		| 'tasks-ready'
+		| 'tasks-backlog'
+		| 'in-progress'
+		| 'needs-attention'
+		| 'done'
+	)[] = [
 		'tasks-ready',
+		...(allowBacklog ? (['tasks-backlog'] as const) : []),
 		'in-progress',
 		'needs-attention',
 		'done',

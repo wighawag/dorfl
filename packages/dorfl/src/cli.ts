@@ -695,6 +695,8 @@ interface DoFlags {
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
 	ignoreDivergedMain?: boolean;
+	/** `--allow-backlog`: drive a staged (tasks/backlog/) task in place without promoting it (`do task:` only). EXPLICIT-INVOCATION-ONLY — never config/env. */
+	allowBacklog?: boolean;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -1884,6 +1886,10 @@ export function buildProgram(): Command {
 			'--ignore-diverged-main',
 			'override the in-place divergence guard: run even when local main is ahead of <arbiter>/main (unpushed). The work still lands on the arbiter; local main is left for you to `git rebase`. In-place only; loud, never default.',
 		)
+		.option(
+			'--allow-backlog',
+			'do task:<slug> ONLY: also FIND, CLAIM, and COMPLETE a task that lives in tasks/backlog/ (staging), driving it in place WITHOUT promoting it to the pool (so no advance leg / run daemon can claim it out from under you). The done-move goes tasks/backlog/ -> tasks/done/ directly (your explicit drive IS the promotion). EXPLICIT-INVOCATION-ONLY: default off, never set by run/auto-pick/advance or config/env.',
+		)
 		.option('--agent-cmd <cmd>', 'command to run the agent on the task prompt')
 		.option(
 			'--model <id>',
@@ -2170,6 +2176,18 @@ export function buildProgram(): Command {
 					);
 					process.exit(1);
 				}
+				// `--allow-backlog` is EXPLICIT-SINGLE-TASK-ONLY (the leak-fence): it must
+				// not combine with the no-checkout auto-pick / -n / multi-item forms
+				// (those select FROM the pool). Reject the misuse loudly, mirroring the
+				// in-place guard + the `--watch` multi guard above.
+				if (remoteMulti && flags.allowBacklog === true) {
+					console.error(
+						`error: --allow-backlog drives ONE named staged task in place; it does ` +
+							`not combine with the ${form} auto-pick / -n / multi-item forms ` +
+							`(those select from the pool). Name a single task: ${usage} --allow-backlog.`,
+					);
+					process.exit(1);
+				}
 				if (args.length === 0 || count !== undefined) {
 					// AUTO-PICK / `-n <x>` over the MIRROR-SIDE eligible-pool scan, SEQUENTIAL.
 					const multi = await performDoRemoteAuto({
@@ -2192,9 +2210,12 @@ export function buildProgram(): Command {
 				}
 
 				// Exactly one named item: the single-item remote pipeline.
+				// `--allow-backlog` rides ONLY this single-named-task call (never the
+				// shared base used by auto-pick / multi) — the leak-fence.
 				const remoteResult = await performDoRemote({
 					...baseRemoteOptions,
 					arg: args[0],
+					allowBacklog: flags.allowBacklog === true,
 				});
 				if (remoteResult.exitCode !== 0) {
 					console.error(`error: ${remoteResult.message}`);
@@ -2316,6 +2337,25 @@ export function buildProgram(): Command {
 				noteBlock: (message) => console.error(message),
 			};
 
+			// `--allow-backlog` is EXPLICIT-SINGLE-TASK-ONLY (prd
+			// `do-allow-backlog-drive-staged-tasks-without-promotion`, decision 4): it
+			// drives ONE named staged task in place. It must NOT combine with the
+			// AUTO-PICK (zero-args / -n) or MULTI-ITEM forms — those select FROM the
+			// pool, and letting the flag widen a pool selection is exactly the
+			// competition-bug-one-layer-down the fence forbids. Reject the misuse loudly
+			// (mirroring the `--watch` multi guard) rather than silently widen a pool.
+			if (
+				flags.allowBacklog === true &&
+				(args.length !== 1 || count !== undefined)
+			) {
+				console.error(
+					'error: --allow-backlog drives ONE named staged task in place; it does ' +
+						'not combine with auto-pick / -n / multi-item forms (those select from ' +
+						`the pool). Name a single task: dorfl do task:<slug> --allow-backlog.`,
+				);
+				process.exit(1);
+			}
+
 			// DISPATCH the variadic grammar (in-place forms):
 			//   zero args         -> AUTO-PICK `count` (default 1) across the two pools
 			//                        (ordered by selectionOrder; default drain = tasks-first)
@@ -2343,7 +2383,14 @@ export function buildProgram(): Command {
 			}
 
 			// Exactly one named item: the single-item in-place pipeline (do-in-place).
-			const result = await performDo({...baseDoOptions, arg: args[0]});
+			// `--allow-backlog` rides ONLY this single-named-task call (never the
+			// auto-pick / multi base above) — the leak-fence: the flag is read from the
+			// typed CLI flag here, not from config/env, and never reaches a pool path.
+			const result = await performDo({
+				...baseDoOptions,
+				arg: args[0],
+				allowBacklog: flags.allowBacklog === true,
+			});
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			}
