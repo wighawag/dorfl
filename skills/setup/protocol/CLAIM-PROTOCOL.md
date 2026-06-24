@@ -1,12 +1,12 @@
 # Claim protocol (consumed by the runner — `agent-runner claim`/`do`/`complete`)
 
-This documents how a `work/tasks/todo/<slug>.md` item is **atomically claimed** by one agent (human or AFK) when several may try at once. The **to-task** skill does not perform claims — it only emits files in a shape this protocol can consume. The **lifecycle** skill implements the steps here.
+This documents how a `work/tasks/todo/<slug>.md` item is **atomically claimed** by one agent (human or autonomous) when several may try at once. The tasking discipline does not perform claims — it only emits files in a shape this protocol can consume. The runner/lifecycle implements the steps here.
 
 ## The core idea: claim = acquiring the item's per-item LOCK (an atomic create-only ref push)
 
-A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`prd`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/todo/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`). (ADR `ledger-status-on-per-item-lock-refs`.)
+A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`prd`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/todo/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`).
 
-This SUPERSEDES the older claim mechanism (a `git mv todo/ → in-progress/` micro-commit raced on the shared `main` ref): that shared-`main` CAS falsely-contended between DIFFERENT items under parallelism and exhausted its retry budget; per-item lock refs never falsely contend. The claimable predicate is now **"the body is in the pool `tasks/todo/` on `main` AND no lock is held on its ref."**
+The claimable predicate is **"the body is in the pool `tasks/todo/` on `main` AND no lock is held on its ref."**
 
 **Separate the claim from the work.** Acquire the lock first (cheap, collision-detecting); do the work only after the lock is provably held.
 
@@ -40,7 +40,7 @@ These steps are implemented (and verified against real git, including a truly si
 agent-runner claim <slug> [--arbiter <remote>] [--by <who>] [--dry-run]
 ```
 
-Exit codes: `0` claimed · `2` not claimable (not in the pool, or the lock is already held = lost) · `1` usage/env error. The acquire is self-arbitrating (no `3 contended` retry class, unlike the old shared-`main` CAS — a per-item lock never falsely contends). The steps it performs:
+Exit codes: `0` claimed · `2` not claimable (not in the pool, or the lock is already held = lost) · `1` usage/env error. The acquire is self-arbitrating (no contended-retry class — a per-item lock never falsely contends). The steps it performs:
 
 ## Claim steps
 
@@ -62,7 +62,7 @@ CLAIM (acquire the per-item lock; collision-detecting, no body move):
 
 WORK (only after the lock is held):
   5. git switch -c work/<type>-<slug> <arbiter>/main   # the body is still in tasks/todo/ on main
-     (use a dedicated worktree/clone for isolation when running AFK / in parallel)
+     (use a dedicated worktree/clone for isolation when running in parallel)
   6. do the work; tests green.
   7a. SUCCESS path — the runner, at integration, lands the DURABLE move on main:
         git mv work/tasks/todo/<slug>.md work/tasks/done/<slug>.md
@@ -177,7 +177,7 @@ body tasks/todo/ -> work/tasks/done/, the completion commit, the lock release, a
 integration.
 ```
 
-Why the "no git" line is **in-band** in the prompt (not delegated to a host config like a global `AGENTS.md`): a portable runner cannot assume the target machine has any such rule, so the boundary travels with the prompt. This keeps the acceptance-test gate authoritative (the agent can't commit/merge around it) and the runner the single owner of git state.
+The "no git" line is **in-band** in the prompt (not delegated to a host config like a global `AGENTS.md`): a portable runner cannot assume the target machine has any such rule, so the boundary travels with the prompt. This keeps the acceptance-test gate authoritative (the agent can't commit/merge around it) and the runner the single owner of git state.
 
 ## Completed-task commit message
 
@@ -197,8 +197,8 @@ Keep it ONE commit (work + the `git mv`) so a task's completion is a single, ato
 
 ## Why this prevents (not merely detects) double-claims
 
-The rejected push is the rejection of the claim. Because the arbiter serializes ref updates on `main`, only one `claim/<slug>:main` can be the fast-forward winner; all others are rejected atomically by `git receive-pack`'s ref lock. No lock server, no integrator process. `--force-with-lease` is a CAS against the expected old value (safe); `--force` would clobber and MUST NOT be used.
+The rejected push is the rejection of the claim. Because the arbiter serializes ref updates, only one create-only push to `refs/agent-runner/lock/<type>-<slug>` can win; all others are rejected atomically by `git receive-pack`'s ref lock. No lock server, no integrator process. `--force-with-lease` is a CAS against the expected old value (safe); `--force` would clobber and MUST NOT be used.
 
-## Isolation for parallel AFK agents
+## Isolation for parallel agents
 
 Run each agent's work in its **own clone or worktree** so on-disk code changes can't collide; conflicts then only surface at integration time (normal PR-style resolution), never as corrupted shared state. Clones-of-an-arbiter give fully independent object stores (best isolation); worktrees share one object store (save disk) — either is fine, but prefer separate clones when many agents run at once.

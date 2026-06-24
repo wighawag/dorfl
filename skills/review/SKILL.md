@@ -13,4 +13,4 @@ description: 'Thoroughly and adversarially review a work/-protocol artifact agai
 2. Apply its lenses IN ORDER to the artifact under review, ENDING in the destination check.
 3. Emit the verdict it specifies (`{verdict, findings, …}`); the caller routes it (you write nothing — see "Your output" in the protocol doc).
 
-> Why the standard lives in `work/protocol/`: a `review`-named discipline that the autonomous runner invokes BY NAME must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied. See ADR `methodology-and-skills.md` §6.
+> Why the standard lives in `work/protocol/`: a `review`-named discipline that the autonomous runner invokes BY NAME must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied.

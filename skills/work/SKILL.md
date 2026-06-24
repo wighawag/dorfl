@@ -6,9 +6,9 @@ description: "Router over this repo's work/-contract skills: ask which skill or 
 
 # Work (the router)
 
-The other workflow skills are **user-invoked** (`disable-model-invocation: true`), so the agent can no longer surface them for you. _You_ are the index now. This skill is that index: it names the work/-contract skills and the flow between them, so you don't have to remember them all.
+The other workflow skills are **user-invoked** (`disable-model-invocation: true`), so the agent will not surface them for you on its own. _You_ are the index. This skill is that index: it names the work/-contract skills and the flow between them, so you don't have to remember them all.
 
-A **flow** is a path through the skills. Most work travels one **main flow**; the disciplines are cross-cutting and get composed _by file-path load_ from inside whichever skill is running (never by model auto-invocation). That file-path composition is how a user-invoked skill can compose another user-invoked one here, unlike Matt's slash-composed skills.
+A **flow** is a path through the skills. Most work travels one **main flow**; the disciplines are cross-cutting and get composed _by file-path load_ from inside whichever skill is running (never by model auto-invocation). That file-path composition is how a user-invoked skill composes another user-invoked one here.
 
 ## The main flow: idea to built
 
@@ -34,15 +34,15 @@ A starting situation that generates work, then merges onto the main flow.
 - **`promote`** (human-invoked): the pre-promotion checklist. Judge ONE staged item (`tasks/backlog/` / `prds/proposed/`) — review + freshness + pool-readiness — and emit promote / keep-staged / drop. Writes/moves nothing; the human or the runner's `promote` verb does the move. The staging→pool review-gate discipline.
 - **`answer-questions`** (human-invoked): the read-side mirror of `surface-questions`. Walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify (cited to evidence), DEFER the genuine-judgement ones with context + a suggested default. Proposes; never finalises — the human is the clock.
 
-## What this repo deliberately does NOT have
+## What this system deliberately does NOT have
 
-Matt Pocock's tracker-coupled skills have no place here. Their JOB is done by file-based equivalents, not disregarded:
+There is **no issue tracker and no label state-machine** — their job is done by `work/` files and folders-as-status:
 
-- **`to-prd` becomes `to-prd`**, **`to-issues` becomes `to-task`** (write `work/` files instead of tracker issues).
-- **`triage` (label state-machine) becomes `triage-observations`** plus folders-as-status plus the autonomy gate.
-- **`setup-matt-pocock-skills` becomes `setup`.**
+- a feature spec is a **prd file** (`to-prd`), not a tracker epic; buildable units are **task files** (`to-task`), not tracker issues.
+- signal triage is **`triage-observations`** over the `work/notes/observations/` inbox plus folders-as-status plus the autonomy gate, not a label workflow.
+- onboarding a repo is **`setup`**, not a tracker integration.
 
-Matt's NON-tracker disciplines (`grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs`, `tdd`, `prototype`, `handoff`, `improve-codebase-architecture`, `resolving-merge-conflicts`) are NOT superseded. Use them upstream, verbatim, alongside these.
+General engineering disciplines that are NOT part of the `work/` contract — `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs`, `tdd`, `prototype`, `handoff`, `improve-codebase-architecture`, `resolving-merge-conflicts` — are complementary: use them alongside these skills whenever the work calls for them.
 
 ## Note for autonomous runners
 

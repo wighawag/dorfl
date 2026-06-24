@@ -32,4 +32,4 @@ For each staged item, run the `review` discipline FIRST (it is the body of this 
 
 You WRITE nothing and you MOVE nothing — you surface the verdict; the human or the runner's `promote` verb performs the transition (and a DROP is its own runner-owned move to the terminal). Batch the verdicts when judging several staged items at once, ordered by leverage (what each promotion unblocks downstream).
 
-> Why position is human-gated and runner-moved: placement is runner-deterministic on the way IN (the `originTrust` stamp + policy decide STAGING vs POOL); promotion OUT is the human's review-gate. The agent never sets the folder. See `work/protocol/WORK-CONTRACT.md` (staging → pool) and the governing ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement.md`.
+> Why position is human-gated and runner-moved: placement is runner-deterministic on the way IN (the `originTrust` stamp + policy decide STAGING vs POOL); promotion OUT is the human's review-gate. The agent never sets the folder. See `work/protocol/WORK-CONTRACT.md` (staging → pool).

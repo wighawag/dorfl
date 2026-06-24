@@ -13,4 +13,4 @@ description: "GATHER the open-judgement residue for ONE work/ item and EMIT ques
 2. For ONE `work/` item, apply its discipline: gather the open-judgement residue (composed `review` block-findings + the native observation-triage question + the item's pre-existing open questions) and formulate the open questions.
 3. EMIT the `{item, questions:[…]}` shape it specifies; the caller routes/persists it (you write nothing — see "How the caller persists your questions" in the protocol doc).
 
-> Why the standard lives in `work/protocol/`: a `surface-questions`-named discipline that the autonomous runner invokes BY NAME must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied. See ADR `methodology-and-skills.md` §6.
+> Why the standard lives in `work/protocol/`: a `surface-questions`-named discipline that the autonomous runner invokes BY NAME must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied.

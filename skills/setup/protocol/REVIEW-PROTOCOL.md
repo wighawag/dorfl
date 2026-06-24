@@ -2,7 +2,7 @@
 
 The **review discipline** the autonomous runner invokes by name on a `work/`-protocol artifact before that artifact is _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a prd before tasking, a set of tasks before they land, or a captured note. The runner spawns a fresh-context agent and tells it to "run the review protocol"; that agent reads THIS doc and applies its standard.
 
-This is the runner-invoked counterpart to `CLAIM-PROTOCOL.md`: the protocol contains how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor), and JUDGED BEFORE LANDING (this doc) — one contract, in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/review/SKILL.md`; the standard lives here.)
+The protocol describes how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor), and JUDGED BEFORE LANDING (this doc). It is in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/review/SKILL.md`; the standard lives here.)
 
 > This doc is **protocol-native**: it assumes the repo uses the `work/` contract and reviews the artifact AGAINST that contract. Every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to `work/protocol/<doc>` in the repo under review.
 
@@ -40,7 +40,7 @@ Every concrete claim the artifact makes, checked against the real world.
 
 ### 2. Cleanup-vs-behaviour
 
-Anything framed as removal / dead-code / no-op, checked for **hidden live behaviour**. (Real catch: a `--by` flag "just cleanup" was actually feeding the claim commit and being read back.) If a "cleanup" changes behaviour, that's a defect or an unowned scope.
+Anything framed as removal / dead-code / no-op, checked for **hidden live behaviour** (e.g. a flag claimed "just cleanup" that is actually still read somewhere). If a "cleanup" changes behaviour, that's a defect or an unowned scope.
 
 This lens also owns **acceptance-criteria conformance** for code:
 
@@ -58,11 +58,11 @@ Do the artifacts COMPOSE, and do they obey the contract?
   - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its prd; a falsely-complete `needsAnswers:false` is a defect.
   - **`blockedBy` / `prd` / `covers`** present and correct (`prd` required iff `covers` is set); deps reference real slugs.
   - **bucket polarity** for notes: _observation_ = spotted/unverified (append-only); _finding_ = verified EXTERNAL/domain ground truth; _ADR_ = a decision WE made + why (in `docs/adr/`). A note in the wrong bucket is a finding.
-  - **a task's `## Prompt`** is self-contained (an AFK agent could start from the file alone) and includes the drift-check.
+  - **a task's `## Prompt`** is self-contained (an agent could start from the file alone) and includes the drift-check.
 
 ### 4. Conceptual coherence (does it fit the system's LANGUAGE?)
 
-The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — it is how, in practice, a single concept got applied at the WRONG LAYER and the inconsistency survived multiple tasks + prds (the `autoTask` gate that gated the `do prd:` VERB when it should have gated only the autonomous SELECTION — see `work/notes/findings/autoslice-gate-conflates-verb-autonomy-and-review-loop.md`).
+The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — a single concept applied at the WRONG LAYER (e.g. a policy gate placed on an explicit verb when it should gate only the autonomous selection step), an inconsistency that can otherwise survive across multiple tasks and prds.
 
 For each concept / flag / config key / verb / status the artifact introduces or touches, ask three questions:
 
@@ -88,7 +88,7 @@ _"If every task is built / the code is merged exactly as written, do we END UP W
 
 Emit a verdict per reviewed item — and **write nothing** (no frontmatter edits, no `git mv`, no file changes). The caller routes it.
 
-The verdict is a single JSON object with this shape (the **emitted-shape contract**). The runtime PARSER is the source of truth for the shape; this prose mirrors what it enforces (a fixture-matches-doc test pins the two together — see the prd's D2):
+The verdict is a single JSON object with this shape (the **emitted-shape contract**). The runtime PARSER is the source of truth for the shape; this prose mirrors what it enforces:
 
 - `verdict` — REQUIRED, exactly `"approve"` or `"block"`. `approve` lets the artifact proceed; `block` keeps it out (the caller routes to needs-attention / `needsAnswers` / a comment).
 - `findings` — REQUIRED, an array (possibly empty). Each finding is:

@@ -29,7 +29,7 @@ That is the whole difference; the loop, the selection, and the stuck-set are ide
 
 This skill does its OWN intelligent per-task selection (graph order + freshness + diff review) and dispatches `do` **per chosen slug** — it never uses `do`'s auto-pick (that is `run`'s daemon mechanism, not a conductor's). It builds **one task at a time, end-to-end**, and it builds **`--isolated`, ALWAYS** — never in-place.
 
-`do task:<slug> --isolated` builds in a per-job worktree off THIS repo's arbiter (the SAME isolation `run` uses), inferring the arbiter from cwd. The human checkout is **never touched**: no dirty-tree refusal, no claim/done-move churn in your tree, no entanglement with the human's (or your own) uncommitted work, no rebuild-the-dist-mid-drive dance. The conductor is a pure observer of the arbiter. (`do --remote <url>` is the same isolation against a FOREIGN repo with no checkout; `--isolated` is its same-repo sibling. When `--isolated` becomes `do`'s default the flag simply drops — no change to this skill's logic.)
+`do task:<slug> --isolated` builds in a per-job worktree off THIS repo's arbiter (the SAME isolation `run` uses), inferring the arbiter from cwd. The human checkout is **never touched**: no dirty-tree refusal, no claim/done-move churn in your tree, no entanglement with the human's (or your own) uncommitted work, no rebuild-the-dist-mid-drive dance. The conductor is a pure observer of the arbiter. (`do --remote <url>` is the same isolation against a FOREIGN repo with no checkout; `--isolated` is its same-repo sibling.)
 
 The ONE consequence to respect: an isolated build reads the task + its `blockedBy` deps from the **arbiter's `main`**, so a **local-only / un-pushed task is INVISIBLE** to it. Do NOT fall back to in-place for such a task — **push it (and its deps) to the arbiter first** (the arbiter is the source of truth; a task that isn't on it isn't ready to drive). There is no in-place mode in this skill.
 
@@ -203,13 +203,13 @@ The batch is conversational (asked) or reported (unattended), not a written file
 This skill builds READY TASKS. Two things sit ABOVE it, sharing its loop shape:
 
 - **`orchestrate`** — the human-in-the-loop META conductor: surveys _everything_ (observations / ideas / prds / tasks), advances what it can (tasking prds, triaging), fills judgement gaps with the human conversationally until new tasks are READY, then **delegates the building to THIS skill** and surfaces the stuck-set to the human.
-- **`advance` (the `advance-loop` prd, not yet built)** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-tasks` + `orchestrate` are the human-agency, synchronous siblings of `advance`; expect them to converge on the same tick contract.
+- **`advance`** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-tasks` + `orchestrate` are the human-agency, synchronous siblings of `advance`; they share the same tick contract.
 
 The conductor is **tick-agnostic**: today the per-item action is `agent-runner do task:<slug>` (build a task); as `advance`-class ticks land (task / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
 
-## Pitfalls (learned in practice)
+## Pitfalls
 
 - **The interrupt footgun.** Aborting your `do` wrapper does NOT kill the spawned agent — it keeps editing files in the background. After any interrupt, `ps`-find + kill the `do`/agent/`tsc` tree, discard its partial edits, and release the claim (the runner reverts the lock; the body is already resting in the pool `tasks/todo/`) before redoing.
 - **Flaky tests red a good gate.** If a task's gate fails ONLY on a known-flaky test with everything else green, re-run before treating it as a real block (and the flake itself is a `notes/observations/` note, not a task fix).
 - **A `do` that delivers no code is NOT a success** (nothing changed → the gate passes vacuously). The runner catches this two ways — an agent STOP (drift) routes to needs-attention before the gate, and Gate-2 (plus your Gate-3) check the _diff against the criteria_, not just the gate. Trust the block; never merge an empty-or-criteria-unmet diff.
-- **Don't sum two freshness models.** When reporting cross-repo + local state, keep them distinct (the lesson the cwd-local-vs-registry reporting encodes).
+- **Don't sum two freshness models.** When reporting cross-repo + local state, keep them distinct.

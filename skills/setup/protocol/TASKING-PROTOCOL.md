@@ -2,7 +2,7 @@
 
 The **tasking discipline** the autonomous runner invokes by name on a prd in `work/prds/ready/` to decompose it into independently-grabbable, file-based work tasks (tracer-bullet vertical tasks). The runner spawns a fresh-context agent and tells it to "run the tasking protocol"; that agent reads THIS doc and applies its standard.
 
-This is the runner-invoked counterpart to `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, and `SURFACE-PROTOCOL.md`: the protocol contains how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor), JUDGED BEFORE LANDING (`REVIEW-PROTOCOL.md`), has its OPEN QUESTIONS SURFACED (`SURFACE-PROTOCOL.md`), and — between prd and buildable task — TASKED (this doc). One contract, in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/to-task/SKILL.md`; the standard lives here.)
+This is one of the runner-invoked protocol disciplines (alongside `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, and `SURFACE-PROTOCOL.md`): the protocol describes how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the `verify` floor), JUDGED BEFORE LANDING (`REVIEW-PROTOCOL.md`), has its OPEN QUESTIONS SURFACED (`SURFACE-PROTOCOL.md`), and — between prd and buildable task — TASKED (this doc). It is in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/to-task/SKILL.md`; the standard lives here.)
 
 > This doc is **protocol-native**: it assumes the repo uses the `work/` contract. Every bare "WORK-CONTRACT" / "CLAIM-PROTOCOL" mention below refers to `work/protocol/<doc>` in the repo under work.
 
@@ -10,14 +10,14 @@ You **emit task files; you do not act on them** — see [Git protocol](#git-prot
 
 ## When to use vs. not
 
-- **Use** when tasking a `work/prds/ready/<slug>.md`, a design doc, or a plan into grabbable units for solo-with-agents (incl. parallel AFK) work.
+- **Use** when tasking a `work/prds/ready/<slug>.md`, a design doc, or a plan into grabbable units for solo-with-agents (incl. parallel) work.
 - **Don't** use to _write_ the prd (that's a separate step — `to-prd`) or to _claim/run_ a task (that's the runner: `agent-runner claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
 
 ## Process
 
 ### 1. Locate / confirm the source
 
-Work from a `work/prds/ready/<slug>.md`, a design doc, or the conversation context. If the source is a path, read it fully. The `work/` folder lives **inside the target project repo** (versioned with its code), like the existing `tasks/` convention.
+Work from a `work/prds/ready/<slug>.md`, a design doc, or the conversation context. If the source is a path, read it fully. The `work/` folder lives **inside the target project repo** (versioned with its code).
 
 ### 2. Explore the codebase (if not already)
 
@@ -32,10 +32,10 @@ Each task is a **tracer bullet** — a thin vertical path through ALL layers end
 - Each task delivers a narrow but COMPLETE path (schema → logic → API/UI → tests).
 - A completed task is demoable/verifiable on its own.
 - Prefer many thin tasks over few thick ones.
-- Set the **two gate axes** ONLY where they apply (both default to OMITTED on most tasks): **`humanOnly: true`** = NEVER-for-agents BY NATURE (the NARROWED, de-overloaded DECIDED axis — secrets/release/security; survives even in the pool `work/tasks/todo/`); **`needsAnswers: true`** = unresolved questions block autonomous work (the DISCOVERED axis — list the questions in the task body). Omitted on either means "undeclared"; whether an agent may then auto-build is the _repo's_ `autoBuild` policy. Mark `blockedBy` for ordering. See `WORK-CONTRACT.md` for the two-axis semantics, the predicate, and the `autoBuild` precedence.
+- Set the **two gate axes** ONLY where they apply (both default to OMITTED on most tasks): **`humanOnly: true`** = NEVER-for-agents BY NATURE (the NARROW DECIDED axis — secrets/release/security; survives even in the pool `work/tasks/todo/`); **`needsAnswers: true`** = unresolved questions block autonomous work (the DISCOVERED axis — list the questions in the task body). Omitted on either means "undeclared"; whether an agent may then auto-build is the _repo's_ `autoBuild` policy. Mark `blockedBy` for ordering. See `WORK-CONTRACT.md` for the two-axis semantics, the predicate, and the `autoBuild` precedence.
   - **A task's `humanOnly` is decided from the nature of BUILDING THAT TASK — never inherited from the prd.** Evaluate each task on its own merits (does _building it_ genuinely need to be done by a human BY NATURE — secrets handling, release pipeline, hard security boundary, an AGENTS.md prohibition?), AS IF the prd's `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
-  - **Do NOT stamp `humanOnly` to mean "a human should REVIEW this before the agent builds it"** — that is the POSITION's job, not the flag's. The runner BIRTHS tasks STAGED in `work/tasks/backlog/` (not eligible); a human promotes the approved ones into the pool `work/tasks/todo/`. Review-first is encoded by the staging position; `humanOnly` is reserved for the rare never-by-nature case. (Stamping `humanOnly` for review was the overloaded reading and is RETIRED — see WORK-CONTRACT.md "Task `humanOnly` is NARROW".)
-  - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't guess.** `needsAnswers` is cheap (a human clears it in seconds) and a confidently-underspecified task is expensive (an agent builds the wrong thing, convincingly). Empirically, defects concentrate in TASKING far more than in implementation: an ambiguous premise, an unresolved design fork, a "reuse X" where X's shape is unverified, or a seam you _assume_ exists — each is a `needsAnswers` with the open question written in the body, NOT a guess dressed as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one human glance; a false confidence ships wrong-but-compiling work.
+  - **Do NOT stamp `humanOnly` to mean "a human should REVIEW this before the agent builds it"** — that is the POSITION's job, not the flag's. The runner BIRTHS tasks STAGED in `work/tasks/backlog/` (not eligible); a human promotes the approved ones into the pool `work/tasks/todo/`. Review-first is encoded by the staging position; `humanOnly` is reserved for the rare never-by-nature case. (See WORK-CONTRACT.md "Task `humanOnly` is NARROW".)
+  - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't guess.** `needsAnswers` is cheap (a human clears it in seconds) and a confidently-underspecified task is expensive (an agent builds the wrong thing, convincingly). Defects concentrate in TASKING far more than in implementation: an ambiguous premise, an unresolved design fork, a "reuse X" where X's shape is unverified, or a seam you _assume_ exists — each is a `needsAnswers` with the open question written in the body, NOT a guess dressed as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one human glance; a false confidence ships wrong-but-compiling work.
 - **Prefer file-orthogonal tasks to minimise merge conflicts.** `blockedBy` encodes logical ordering, but two independent tasks that edit the SAME files will conflict when the second integrates after the first. Parallel agents make this real. So: split along file/module boundaries where you can; and when two tasks are known to touch the same module, add a `blockedBy` to **serialize** them even if there's no strict logical dependency. The runner only rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at tasking time is the cheap win.
 
 ### 3b. Prd gate vs task gate are DISJOINT + honour cross-prd `prdAfter`
@@ -65,7 +65,7 @@ The prd is a launch snapshot (see the `to-prd` skill). Now that the work is task
 - The tasks now own _what to build_ (Implementation/Testing detail) — remove those sections from the prd.
 - Any **durable rationale** worth keeping (the _why_ of a decision) is RELOCATED to an ADR (`docs/adr/<slug>.md`), not deleted.
 - The prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to tasks/ADRs.
-- **Move the prd to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/ready/<slug>.md work/prds/tasked/<slug>.md` (residence in `work/prds/tasked/` IS tasked-ness — the build-machine `tasks/done/` analogue for prds, the sole signal). Do NOT add a `tasked:` frontmatter marker: that marker was removed from the protocol; the folder is the source of truth. (On the agent/runner path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
+- **Move the prd to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/ready/<slug>.md work/prds/tasked/<slug>.md` (residence in `work/prds/tasked/` IS tasked-ness — the build-machine `tasks/done/` analogue for prds, the sole signal). Do NOT add a `tasked:` frontmatter marker; the folder is the source of truth. (On the agent/runner path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
 
 This is a hand-off transition, not ongoing maintenance — after this single trim the prd is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → tasks; rationale → ADR.)
 
@@ -98,7 +98,7 @@ Each emitted task file is a markdown document with YAML frontmatter, BORN STAGED
 - **`## What to build`** — a concise description of the vertical task — the end-to-end behaviour (a thin path through every layer: schema → logic → API/UI → tests), NOT a layer-by-layer implementation plan. Avoid specific file paths / code snippets (they go stale).
 - **`## Acceptance criteria`** — a bullet list of verifiable / demoable criteria, ending with the test-coverage line and (where applicable) the shared-write isolation rule from `WORK-CONTRACT.md`.
 - **`## Blocked by`** — prose mirror of the frontmatter `blockedBy:`; `None — can start immediately.` when `blockedBy: []`.
-- **`## Prompt`** — self-contained instructions to paste into a fresh agent context: an AFK agent must be able to start from THIS FILE ALONE. State the goal, the relevant domain vocabulary, where to look (by module/concept, not brittle paths), the seams to test at, and what "done" means. Reference any constraining ADRs / findings.
+- **`## Prompt`** — self-contained instructions to paste into a fresh agent context: an agent must be able to start from THIS FILE ALONE. State the goal, the relevant domain vocabulary, where to look (by module/concept, not brittle paths), the seams to test at, and what "done" means. Reference any constraining ADRs / findings.
 - **`## Open questions`** — present iff `needsAnswers: true`; lists the unresolved questions blocking autonomous build. Stripped by the apply rung on full resolution.
 
 ### Placement rule

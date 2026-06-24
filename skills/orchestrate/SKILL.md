@@ -22,9 +22,9 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 - **Use** when you have a populated `work/` and want the system to do _everything it can autonomously_ and then _ask you only at the real judgement residue_ — in one interactive sitting, with full visibility and agency; to answer "what needs me?" across the whole tree; as the human-driven alternative to the autonomous `advance` loop when you want to watch and steer.
 - **Don't** use it just to build already-ready tasks (that's `drive-tasks` directly), just to task one prd (`to-task`), or just to review one artifact (`review`). Don't use it as the unattended daemon (`run`/`advance`). It is **always main-session and conversational** — its defining job is the live Q&A.
 
-## Relationship to the autonomous `advance` engine (read once)
+## Relationship to the autonomous `advance` engine
 
-`orchestrate` is the **interactive, human-in-the-loop** way to drain a `work/` tree: it asks its questions conversationally, in the session, and you answer live. Its autonomous, file-mediated counterpart is the `advance` capability (the `advance-loop` prd), driven by `run`/CI with `work/questions/` sidecars the human answers whenever they like. Same lifecycle drain, different mode: reach for `orchestrate` when the human is present and wants visibility + agency; the autonomous engine is for unattended draining. They converge on the same rung contract.
+`orchestrate` is the **interactive, human-in-the-loop** way to drain a `work/` tree: it asks its questions conversationally, in the session, and you answer live. Its autonomous, file-mediated counterpart is the `advance` capability, driven by `run`/CI with `work/questions/` sidecars the human answers whenever they like. Same lifecycle drain, different mode: reach for `orchestrate` when the human is present and wants visibility + agency; the autonomous engine is for unattended draining. They share the same rung contract.
 
 ## Core invariant
 
