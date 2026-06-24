@@ -121,7 +121,7 @@ export {
 } from './tasking-eligibility.js';
 
 export type {
-	LedgerTodoItem,
+	LedgerReadyItem,
 	LedgerObservationItem,
 	LedgerPrdItem,
 	LedgerPrdPool,
@@ -158,20 +158,8 @@ export type {
 } from './ledger-write.js';
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
 
-export type {
-	TodoItem,
-	BacklogItem,
-	ScannedItem,
-	RepoReport,
-	ScanReport,
-} from './scan.js';
-export {
-	scan,
-	scanRepoPaths,
-	readTodoItems,
-	readBacklogItems,
-	readDoneSlugs,
-} from './scan.js';
+export type {ReadyItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
+export {scan, scanRepoPaths, readReadyItems, readDoneSlugs} from './scan.js';
 
 export type {
 	SlugNamespace,

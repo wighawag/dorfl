@@ -45,7 +45,7 @@ function seedTask(
 	slug: string,
 	fm: {needsAnswers?: boolean; humanOnly?: boolean} = {},
 ): void {
-	const dir = join(repo, 'work', 'tasks', 'todo');
+	const dir = join(repo, 'work', 'tasks', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');

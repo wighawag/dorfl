@@ -153,7 +153,7 @@ describe('complete — gate', () => {
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
 			false,
 		);
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			true,
 		);
 	});
@@ -198,7 +198,7 @@ describe('complete — done-move + commit', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
 		// The move happened in the tree…
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'beta.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'beta.md'))).toBe(
 			false,
 		);
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
@@ -208,7 +208,7 @@ describe('complete — done-move + commit', () => {
 		// uncommitted file.
 		const files = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo);
 		expect(files).toMatch(/work\/tasks\/done\/beta\.md/);
-		expect(files).toMatch(/work\/tasks\/todo\/beta\.md/);
+		expect(files).toMatch(/work\/tasks\/ready\/beta\.md/);
 		expect(files).toMatch(/src\.txt/);
 		// Working tree is clean afterwards (everything was staged).
 		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
@@ -224,7 +224,7 @@ describe('complete — done-move + commit', () => {
 		// auto-recover routing is folder-gated on `work/tasks/done/<slug>.md`, so this
 		// shape correctly falls through to the existing honest `CompleteRefusal`.
 		const {repo} = await claimAndBranch('empty');
-		gitIn(['rm', '-q', 'work/tasks/todo/empty.md'], repo);
+		gitIn(['rm', '-q', 'work/tasks/ready/empty.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the task (genuinely nothing)'], repo);
 		const result = await performComplete({
 			slug: 'empty',
@@ -244,7 +244,7 @@ describe('complete — done-move + commit', () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['theslug']);
 		const repo = seeded.repo;
 		// Rewrite the task title to the realistic "slug — summary" form.
-		const taskPath = join(repo, 'work', 'tasks', 'todo', 'theslug.md');
+		const taskPath = join(repo, 'work', 'tasks', 'ready', 'theslug.md');
 		const original = readFileSync(taskPath, 'utf8');
 		writeFileSync(
 			taskPath,

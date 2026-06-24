@@ -77,7 +77,7 @@ export {LEDGER_STATUS_FOLDERS, type LedgerStatusFolder} from './work-layout.js';
 const CANONICAL_PRECEDENCE: readonly LedgerStatusFolder[] = [
 	'done',
 	'cancelled',
-	'tasks-todo',
+	'tasks-ready',
 ];
 
 /** One slug found in more than one status folder — the corruption to surface. */

@@ -85,7 +85,7 @@ function drainTaskFromMirror(
 ): void {
 	const src = mirrorSrc(ws, name);
 	const env = gitEnv();
-	git(['rm', '-q', join('work', 'tasks', 'todo', file)], src, {env});
+	git(['rm', '-q', join('work', 'tasks', 'ready', file)], src, {env});
 	git(['commit', '-q', '-m', `drain ${file}`], src, {env});
 	// Sync the bare mirror's local `main` to the source (the advance scan reads the
 	// mirror's COMMITTED `main`, not the source).

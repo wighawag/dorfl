@@ -258,7 +258,7 @@ export interface PerformTaskOptions {
 	 * built-in floor applies (`staging` = `pre-backlog/`, the conservative
 	 * landing that preserves zero behaviour change for the normal path).
 	 */
-	tasksLandIn?: 'pre-backlog' | 'todo';
+	tasksLandIn?: 'pre-backlog' | 'ready';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung). When set, the runner-deterministic resolver lands the tasks HERE
@@ -268,7 +268,7 @@ export interface PerformTaskOptions {
 	 * force-key"). Set ONLY when the operator typed `--tasks-land-in <where>`;
 	 * never when the value came from config.
 	 */
-	explicitTasksLandIn?: 'pre-backlog' | 'todo';
+	explicitTasksLandIn?: 'pre-backlog' | 'ready';
 	/**
 	 * **The tasker review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES prd
 	 * `work/prds/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
@@ -321,25 +321,25 @@ const DEFAULT_ARBITER = 'origin';
  * **The STAGED-TASKS dir** (prd `staging-pool-position-gate-and-trust-model`,
  * task `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The runner
- * lands the tasker's emitted task files HERE, NOT in `work/tasks/todo/`: an item
+ * lands the tasker's emitted task files HERE, NOT in `work/tasks/ready/`: an item
  * born in `pre-backlog/` is durable + readable but NOT in the agent-eligible
- * pool (`work/tasks/todo/` STILL means the pool — every reader is byte-for-byte
+ * pool (`work/tasks/ready/` STILL means the pool — every reader is byte-for-byte
  * unchanged). A runner/human-owned promotion (`promoteFromPreBacklog` in
  * `needs-attention.ts`) moves an approved item `pre-backlog/ → backlog/` to make
- * it claimable. STEP A: ADDITIVE — no `work/tasks/todo/` reader changes here.
+ * it claimable. STEP A: ADDITIVE — no `work/tasks/ready/` reader changes here.
  */
 export const STAGED_TASKS_DIR = workFolderRel('tasks-backlog');
 
 /**
  * The POOL folder tasks land in when the runner-deterministic placement
- * resolver chooses the pool side (`tasksLandIn: 'todo'` and a trusted
- * origin, or an `--tasks-land-in todo` operator override). The agent NEVER
+ * resolver chooses the pool side (`tasksLandIn: 'ready'` and a trusted
+ * origin, or an `--tasks-land-in ready` operator override). The agent NEVER
  * writes here — it always writes to {@link STAGED_TASKS_DIR}; the runner
  * redirects the emitted files to the resolved destination at integrate-stage
  * time. prd US #4 / the governing ADR: the agent cannot self-place into the
  * pool. Task `runner-deterministic-slice-placement-policy-and-precedence`.
  */
-const POOL_TASKS_DIR = workFolderRel('tasks-todo');
+const POOL_TASKS_DIR = workFolderRel('tasks-ready');
 
 /** The placement slots for the TASK lifecycle (folder names). */
 const TASK_PLACEMENT_SLOTS = {
@@ -348,18 +348,18 @@ const TASK_PLACEMENT_SLOTS = {
 } as const;
 
 /**
- * Map the `tasksLandIn` value spelling (`pre-backlog` | `todo`) onto the
+ * Map the `tasksLandIn` value spelling (`pre-backlog` | `ready`) onto the
  * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
  * `undefined` when no value is set, so the resolver's next precedence rung
- * applies (the built-in floor). The legacy `'backlog'` pool spelling is NOT
- * accepted (clean break — the value was renamed `'backlog'` → `'todo'` and the
- * deprecation shim is removed).
+ * applies (the built-in floor). The legacy `'backlog'`/`'todo'` pool spellings
+ * are NOT accepted (clean break — the value was renamed `'backlog'` → `'todo'`
+ * → `'ready'`, ADR `rename-task-pool-folder-todo-to-ready`).
  */
 function landingToSide(
-	landing: 'pre-backlog' | 'todo' | undefined,
+	landing: 'pre-backlog' | 'ready' | undefined,
 ): 'staging' | 'pool' | undefined {
 	if (landing === 'pre-backlog') return 'staging';
-	if (landing === 'todo') return 'pool';
+	if (landing === 'ready') return 'pool';
 	return undefined;
 }
 
@@ -464,13 +464,13 @@ export async function performTask(
 	}
 
 	// 3. INVOKE THE AGENT with the to-task prd. It WRITES
-	//    `work/tasks/backlog/*.md` task files (the STAGED area — NOT `work/tasks/todo/`,
+	//    `work/tasks/backlog/*.md` task files (the STAGED area — NOT `work/tasks/ready/`,
 	//    which is the agent-eligible pool the runner owns the promotion into; task
 	//    `pre-backlog-staging-folder-and-promote-step-a`); it does NO git. We
 	//    snapshot the staged-tasks folder before/after so the runner (not the
 	//    agent) captures + commits exactly what was produced.
 	const before = snapshotStagedTasks(cwd);
-	// Also snapshot the POOL `work/tasks/todo/` BEFORE the agent runs: the runner's
+	// Also snapshot the POOL `work/tasks/ready/` BEFORE the agent runs: the runner's
 	// final commit must scrub any agent writes there (an attempt to self-place into
 	// the pool, prd US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
@@ -967,7 +967,7 @@ async function stageTaskingLifecycle(params: {
 		note(
 			`Untrusted-origin prd '${slug}': forcing the emitted tasks STAGED ` +
 				`(${placementDir}/) regardless of tasksLandIn (a human promotes ` +
-				'them into work/tasks/todo/). Pass --tasks-land-in <where> to override.',
+				'them into work/tasks/ready/). Pass --tasks-land-in <where> to override.',
 		);
 	}
 	// Move the held prd prd/ -> prd-tasked/ (the TASKED resting state — folder =
@@ -980,7 +980,7 @@ async function stageTaskingLifecycle(params: {
 	// **POOL-PLACEMENT FENCE (prd US #4 / governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The
 	// agent ALWAYS writes to the STAGING folder (`work/tasks/backlog/`); the POOL
-	// (`work/tasks/todo/`) is the agent-eligible pool the runner owns the promotion
+	// (`work/tasks/ready/`) is the agent-eligible pool the runner owns the promotion
 	// into. Anything the agent dropped under the pool would otherwise be swept in
 	// by `performIntegration`'s subsequent `git add -A` — a self-placement into
 	// the pool. Scrub it FIRST (before the runner writes its resolved destination
@@ -1012,11 +1012,11 @@ async function stageTaskingLifecycle(params: {
 }
 
 /**
- * Revert any change/addition the agent made to the POOL `work/tasks/todo/` during a
+ * Revert any change/addition the agent made to the POOL `work/tasks/ready/` during a
  * tasking run. The agent's STAGING folder is `work/tasks/backlog/`; a write to the
  * pool is an attempt to self-place into the agent-eligible pool the runner owns
  * the promotion into (prd US #4 / governing ADR). Compared to the `poolBefore`
- * snapshot (the branch-base state of `work/tasks/todo/`, taken BEFORE the agent
+ * snapshot (the branch-base state of `work/tasks/ready/`, taken BEFORE the agent
  * ran), any new file is removed from the worktree and any changed file is
  * checked back out to HEAD — so the subsequent `git add -A` cannot land it. The
  * runner's commit then carries ONLY the explicit `pre-backlog/` placement.
@@ -1026,7 +1026,7 @@ async function scrubPoolDrift(
 	poolBefore: Map<string, string>,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	const dir = workFolderPath(cwd, 'tasks-todo');
+	const dir = workFolderPath(cwd, 'tasks-ready');
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
@@ -1045,7 +1045,7 @@ async function scrubPoolDrift(
 			}
 			// The agent edited a pre-existing pool task — restore it from HEAD.
 			await gitSoft(
-				['checkout', 'HEAD', '--', workItemRel('tasks-todo', name)],
+				['checkout', 'HEAD', '--', workItemRel('tasks-ready', name)],
 				cwd,
 				env,
 			);
@@ -1289,7 +1289,7 @@ function buildTaskingPrd(slug: string, _prd: string | undefined): string {
 		`route the prd to needs-attention with the questions.`,
 		``,
 		`WRITE EVERY emitted task file under \`${STAGED_TASKS_DIR}/\` (the STAGING folder)`,
-		`— NEVER \`work/tasks/todo/\`. \`work/tasks/todo/\` is the agent-eligible POOL and`,
+		`— NEVER \`work/tasks/ready/\`. \`work/tasks/ready/\` is the agent-eligible POOL and`,
 		`the runner owns the runner/human-only promotion into it; the tasker's staging`,
 		`folder is \`work/tasks/backlog/\`. A write outside the staging folder is dropped`,
 		`by the runner-deterministic placement resolver.`,
@@ -1347,7 +1347,7 @@ function snapshotStagedTasks(cwd: string): Map<string, string> {
  * NEWLY created or CHANGED vs the pre-run snapshot — exactly what the runner
  * captures + commits. (An untouched pre-existing staged task is NOT
  * re-committed.) The agent's staging folder is `work/tasks/backlog/`; writes to
- * the pool `work/tasks/todo/` are scrubbed at stage time, never picked up here.
+ * the pool `work/tasks/ready/` are scrubbed at stage time, never picked up here.
  */
 function newOrChangedStagedTasks(
 	cwd: string,
@@ -1364,9 +1364,9 @@ function newOrChangedStagedTasks(
 	return changed.sort();
 }
 
-/** Snapshot the POOL `work/tasks/todo/` (for the agent-write fence at stage time). */
+/** Snapshot the POOL `work/tasks/ready/` (for the agent-write fence at stage time). */
 function snapshotPool(cwd: string): Map<string, string> {
-	const dir = workFolderPath(cwd, 'tasks-todo');
+	const dir = workFolderPath(cwd, 'tasks-ready');
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
 		snap.set(file, readFileSync(join(dir, file), 'utf8'));

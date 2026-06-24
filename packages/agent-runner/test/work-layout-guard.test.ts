@@ -183,21 +183,21 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// matcher fires on the WHOLE nested path because the folder NAME the alternation
 		// carries is itself `prds/ready` etc. `questions` keeps its flat shape.
 		for (const path of [
-			'work/tasks/todo',
+			'work/tasks/ready',
 			'work/prds/proposed',
 			'work/prds/ready/',
-			'work/tasks/todo/',
+			'work/tasks/ready/',
 			'work/tasks/backlog/',
 			'work/tasks/cancelled/',
 			'work/prds/dropped/',
 			'work/notes/observations/',
-			'work/tasks/todo/${slug}.md',
+			'work/tasks/ready/${slug}.md',
 			'work/tasks/done/${slug}.md',
 			'work/prds/tasked/${slug}.md',
 			'work/questions/${type}-${slug}.md',
 			'work/tasks/done/<slug>.md',
 			'${ref}:work/tasks/done',
-			'${ref}:work/tasks/todo',
+			'${ref}:work/tasks/ready',
 			'${arbiter}/main:work/tasks/backlog',
 			// Absolute interpolated-prefix forms: a future regression that
 			// re-scatters a `${root}/work/<folder>/...` literal must also flag.
@@ -211,9 +211,9 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// the CI-template glob — MUST NOT match (they would otherwise red the gate).
 		for (const prose of [
 			"'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ",
-			'work/tasks/todo/${slug}.md (nor work/in-progress/${slug}.md nor ',
+			'work/tasks/ready/${slug}.md (nor work/in-progress/${slug}.md nor ',
 			'Read the source PRD (work/prds/ready/${input.slug}.md) and review the candidate',
-			'(A repo participates iff it has a work/tasks/todo/ with >= 1 .md file.)',
+			'(A repo participates iff it has a work/tasks/ready/ with >= 1 .md file.)',
 			'work/questions/**', // the advance-CI template push-trigger glob
 			'workspace', // a word that merely starts with "work"
 			// A bare interpolated prefix with NO `work/<folder>` body must not be

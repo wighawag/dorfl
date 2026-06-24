@@ -17,7 +17,7 @@ import {workFolderPath, isWorkItemFile} from './work-layout.js';
  * one `.md` file. This is the predicate `remote find` (ADR §1) filters on.
  */
 export function isParticipatingRepo(repoPath: string): boolean {
-	const backlog = workFolderPath(repoPath, 'tasks-todo');
+	const backlog = workFolderPath(repoPath, 'tasks-ready');
 	let entries: string[];
 	try {
 		entries = readdirSync(backlog);

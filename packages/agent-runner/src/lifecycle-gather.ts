@@ -70,7 +70,7 @@ function blockedItemsInPlace(
 ): BlockedItem[] {
 	const out: BlockedItem[] = [];
 	const state = read.resolveLocalState({repoPath});
-	for (const item of state.todo) {
+	for (const item of state.ready) {
 		if (item.needsAnswers === true) {
 			out.push({namespace: 'task', slug: item.slug});
 		}
@@ -86,7 +86,7 @@ function blockedItemsInPlace(
 	// ON, the candidate set ADDITIONALLY enumerates `needsAnswers` items resting
 	// in STAGING (`tasks/backlog/` + `prds/proposed/`), so a tasked item
 	// surfaces its questions BEFORE the human promotes it. BUILD/claim still
-	// reads POOL-only (`scoreItems` over `state.todo`); only the surface polarity
+	// reads POOL-only (`scoreItems` over `state.ready`); only the surface polarity
 	// widens here.
 	if (surfaceStaging) {
 		for (const item of read.resolveLocalTaskStaging({repoPath})) {
@@ -190,7 +190,7 @@ export async function gatherLifecycleMirror(input: {
 		: [[], []];
 
 	const blocked: BlockedItem[] = [];
-	for (const item of state.todo) {
+	for (const item of state.ready) {
 		if (item.needsAnswers === true) {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}

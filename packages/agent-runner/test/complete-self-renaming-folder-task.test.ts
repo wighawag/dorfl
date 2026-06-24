@@ -16,13 +16,13 @@ import {
 /**
  * A SELF-RENAMING FOLDER task (the `folder-taxonomy-reorg-and-rename` migration):
  * a task whose whole job is to `git mv` the very `work/` ledger folders the runner
- * reads its OWN record from — e.g. `done/ -> tasks/done/`, `backlog/ -> tasks/todo/`.
+ * reads its OWN record from — e.g. `done/ -> tasks/done/`, `backlog/ -> tasks/ready/`.
  *
  * The trap this guards against (observed live, drive-backlog Phase 1): the runner's
  * `complete` runs the INSTALLED (pre-rename) binary, whose compiled-in `work-layout`
  * still says `done -> 'done'`, while the task's BRANCH tree has renamed the folder
  * to `tasks/done/` AND the agent has placed its own ledger record there as part of
- * the migration. The pre-fix resolver looked ONLY at the binary's `work/tasks/todo|
+ * the migration. The pre-fix resolver looked ONLY at the binary's `work/tasks/ready|
  * in-progress|needs-attention|done/<slug>.md` paths, found the record at NONE of
  * them, and crashed with `nothing to complete` — surfacing to needs-attention and
  * REAPING the job worktree, discarding the whole build.
@@ -51,7 +51,7 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand up the repo as a task that placed its OWN record in the terminal
- * done-position leaves it: claimed (body rests in the pool `work/tasks/todo/<slug>.md`
+ * done-position leaves it: claimed (body rests in the pool `work/tasks/ready/<slug>.md`
  * on the arbiter — the renamed agent POOL), then on the work branch the agent
  * done-moved its record to `work/tasks/done/<slug>.md` and produced real source
  * work — all committed. The tip is AHEAD of `<arbiter>/main` and never pushed.
@@ -81,12 +81,12 @@ async function seedSelfRenamedDoneBranch(
 	gitIn(['switch', '-q', '-c', branch, `${ARBITER}/main`], repo);
 
 	// The agent's source work (a stand-in) AND the done-move: relocate the record
-	// from the pool `work/tasks/todo/<slug>.md` to the terminal done-position
+	// from the pool `work/tasks/ready/<slug>.md` to the terminal done-position
 	// `work/tasks/done/<slug>.md`, exactly as a finishing agent does.
 	writeFileSync(join(repo, 'feature.txt'), 'the migration work\n');
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
 		repo,
 	);
 	gitIn(['add', '-A'], repo);
@@ -101,12 +101,12 @@ async function seedSelfRenamedDoneBranch(
 	);
 
 	// Sanity: the record is at the terminal done-position, and at NONE of the other
-	// ledger folders. The arbiter still holds the body in the pool (`tasks/todo/`,
+	// ledger folders. The arbiter still holds the body in the pool (`tasks/ready/`,
 	// resolved from the `backlog` status key via `work-layout`).
 	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
 		true,
 	);
-	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+	expect(existsSync(join(repo, 'work', 'tasks', 'ready', `${slug}.md`))).toBe(
 		false,
 	);
 	expect(existsSync(join(repo, 'work', 'done', `${slug}.md`))).toBe(false);
@@ -204,7 +204,7 @@ describe('complete — self-renaming-folder task (record placed in a RENAMED don
 	it('a record stranded in a NON-done, non-pool position (tasks/backlog/ staging) is NOT silently integrated — it still refuses honestly', async () => {
 		// Guard the cut line: the layout-agnostic detection fires ONLY on a `done`
 		// leaf. A record sitting in STAGING (`tasks/backlog/`, the `pre-backlog` key)
-		// is neither the pool `complete` sources from (`tasks/todo/`) NOR a `done`
+		// is neither the pool `complete` sources from (`tasks/ready/`) NOR a `done`
 		// leaf, so the runner must REFUSE rather than mis-integrate an unfinished item
 		// as done. (A record left in the pool itself is a normal completion — the
 		// runner does the pool->done move — so staging is the honest "not finished,
@@ -221,11 +221,11 @@ describe('complete — self-renaming-folder task (record placed in a RENAMED don
 		expect(claim.exitCode).toBe(0);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
-		// Move the record from the pool (`tasks/todo/`, where claim left it) BACK into
+		// Move the record from the pool (`tasks/ready/`, where claim left it) BACK into
 		// staging (`tasks/backlog/`) — a non-done, non-pool durable position.
 		mkdirSync(join(repo, 'work', 'tasks', 'backlog'), {recursive: true});
 		gitIn(
-			['mv', `work/tasks/todo/${slug}.md`, `work/tasks/backlog/${slug}.md`],
+			['mv', `work/tasks/ready/${slug}.md`, `work/tasks/backlog/${slug}.md`],
 			repo,
 		);
 		gitIn(['add', '-A'], repo);

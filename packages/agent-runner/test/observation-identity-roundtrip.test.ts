@@ -96,7 +96,7 @@ async function mintReviewNitsObservation(slug: string): Promise<{
 		cwd: repo,
 		arbiter: ARBITER,
 		slug,
-		source: 'tasks-todo',
+		source: 'tasks-ready',
 		recovering: false,
 		verify: PASS,
 		review: true,

@@ -13,7 +13,7 @@ import {
  * The fixture status words the test call sites speak, mapped to the CURRENT
  * `work-layout` symbolic KEYS. After the symbolic-key vocabulary cutover
  * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) the registry keys
- * read in the new task/prd words (`tasks-todo`, `prds-ready`, …); the fixture
+ * read in the new task/prd words (`tasks-ready`, `prds-ready`, …); the fixture
  * call sites speak the matching current status words (`backlog`, `prd`,
  * `prd-tasked`, `pre-backlog`, `pre-prd`). This is the single seam they route
  * through, so a later folder/key rename is one alias-map flip HERE rather than a
@@ -21,7 +21,7 @@ import {
  */
 const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
 	'pre-backlog': 'tasks-backlog',
-	backlog: 'tasks-todo',
+	backlog: 'tasks-ready',
 	// The PRD staging area (`work/prds/proposed/`).
 	'pre-prd': 'prds-proposed',
 	// The PRD pool (`work/prds/ready/`).
@@ -38,7 +38,7 @@ const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
  * call sites speak to the current registry KEYS (via {@link FIXTURE_WORD_TO_KEY}),
  * then resolves the key to its on-disk name. After the notes-regroup +
  * task-board-rename flip + the symbolic-key cutover these resolve to the NEW layout
- * (`tasks/todo`, `tasks/done`, `prds/ready`, `notes/observations`, …). This is
+ * (`tasks/ready`, `tasks/done`, `prds/ready`, `notes/observations`, …). This is
  * the single seam the parameter-driven fixture helpers (which cannot be statically
  * swept) route through, so a later folder/key rename is a flip HERE too.
  *
@@ -184,7 +184,7 @@ function gx(args: string[], cwd: string): string {
 }
 
 /**
- * Build a throwaway project repo with a `work/tasks/todo/<slug>.md` for each given
+ * Build a throwaway project repo with a `work/tasks/ready/<slug>.md` for each given
  * slug, plus a sibling local `--bare` arbiter the project pushes its `main` to.
  * Returns the working-clone path, the arbiter path, and a `clone()` that makes
  * an additional independent clone of the arbiter (for parallel isolation tests).
@@ -219,7 +219,7 @@ export function seedRepoWithArbiter(
 	mkdirSync(repo, {recursive: true});
 	gx(['init', '-q', '-b', 'main'], repo);
 
-	const backlog = join(repo, 'work', 'tasks', 'todo');
+	const backlog = join(repo, 'work', 'tasks', 'ready');
 	mkdirSync(backlog, {recursive: true});
 	for (const slug of slugs) {
 		writeFileSync(join(backlog, `${slug}.md`), taskFile(slug, opts));

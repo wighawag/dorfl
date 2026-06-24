@@ -8,7 +8,7 @@ import {
 	type LedgerReadStrategy,
 } from '../src/ledger-read.js';
 import * as ledgerReadModule from '../src/ledger-read.js';
-import {scanRepoPaths, readBacklogItems, readDoneSlugs} from '../src/scan.js';
+import {scanRepoPaths, readReadyItems, readDoneSlugs} from '../src/scan.js';
 import {resolveReadiness} from '../src/readiness.js';
 import {mergeConfig} from '../src/config.js';
 import {
@@ -74,8 +74,8 @@ describe('ledger-read seam — local-tree resolve method', () => {
 			repoPath: join(root, 'repo'),
 		});
 
-		expect(state.todo).toHaveLength(1);
-		expect(state.todo[0]).toMatchObject({
+		expect(state.ready).toHaveLength(1);
+		expect(state.ready[0]).toMatchObject({
 			file: 'b.md',
 			slug: 'b',
 			humanOnly: true,
@@ -94,7 +94,7 @@ describe('ledger-read seam — local-tree resolve method', () => {
 		});
 		// Resolved synchronously (a plain object, never a Promise) — no I/O await.
 		expect(result).not.toBeInstanceOf(Promise);
-		expect(result.todo.map((i) => i.slug)).toEqual(['a']);
+		expect(result.ready.map((i) => i.slug)).toEqual(['a']);
 	});
 });
 
@@ -174,8 +174,8 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 });
 
 describe('ledger-read seam — pool noun vocabulary (task `f1-pool-noun-todo-in-surface-and-apply-readers`)', () => {
-	// Asserts the F1 vocabulary cutover: the agent POOL lives at `work/tasks/todo/`
-	// and shows up as `state.todo`; STAGING lives at `work/tasks/backlog/` and is
+	// Asserts the F1 vocabulary cutover: the agent POOL lives at `work/tasks/ready/`
+	// and shows up as `state.ready`; STAGING lives at `work/tasks/backlog/` and is
 	// NOT in the pool (it is surfaced through a separate F2 reader). No touched
 	// reader treats `backlog` as the pool any more.
 	function writeRaw(folderRel: string, file: string, slug: string): void {
@@ -187,37 +187,37 @@ describe('ledger-read seam — pool noun vocabulary (task `f1-pool-noun-todo-in-
 		);
 	}
 
-	it('local resolveLocalState maps `tasks/todo` → the pool (`state.todo`) and IGNORES `tasks/backlog` (staging)', () => {
-		writeRaw('tasks/todo', 'pool-item.md', 'pool-item');
+	it('local resolveLocalState maps `tasks/ready` → the pool (`state.ready`) and IGNORES `tasks/backlog` (staging)', () => {
+		writeRaw('tasks/ready', 'pool-item.md', 'pool-item');
 		writeRaw('tasks/backlog', 'staging-item.md', 'staging-item');
 
 		const state = currentLedgerRead.resolveLocalState({
 			repoPath: join(root, 'repo'),
 		});
 
-		// `state.todo` IS the pool (`work/tasks/todo/`).
-		expect(state.todo.map((i) => i.slug)).toEqual(['pool-item']);
+		// `state.ready` IS the pool (`work/tasks/ready/`).
+		expect(state.ready.map((i) => i.slug)).toEqual(['pool-item']);
 		// Crucially, the staging folder (`work/tasks/backlog/`) is NOT in this pool.
 		// If a stale reader still treated `backlog` as the pool this would fail.
-		expect(state.todo.map((i) => i.slug)).not.toContain('staging-item');
-		// And the shape of LocalLedgerState exposes the pool under the `todo` field
+		expect(state.ready.map((i) => i.slug)).not.toContain('staging-item');
+		// And the shape of LocalLedgerState exposes the pool under the `ready` field
 		// (the F1 rename); there is no `backlog` pool field on the resolved state.
 		expect((state as unknown as {backlog?: unknown}).backlog).toBeUndefined();
 	});
 
-	it('mirror-side resolveMirrorState maps `tasks/todo` → the pool, same as local', async () => {
+	it('mirror-side resolveMirrorState maps `tasks/ready` → the pool, same as local', async () => {
 		const scratch = makeScratch('agent-runner-ledger-read-pool-noun-');
 		try {
 			const ws = join(scratch.root, '.agent-runner');
 			const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-				// The fixture word `backlog` maps to the POOL key `tasks-todo` (the
+				// The fixture word `backlog` maps to the POOL key `tasks-ready` (the
 				// existing fixture-word seam — see `fixtureFolderRel`), exactly the
-				// pool a `state.todo` reader expects.
+				// pool a `state.ready` reader expects.
 				backlog: {
 					'pool-item.md': ['---', 'slug: pool-item', '---', '', ''].join('\n'),
 				},
 				// `pre-backlog` maps to the STAGING key `tasks-backlog` — must NOT show
-				// up in `state.todo`.
+				// up in `state.ready`.
 				'pre-backlog': {
 					'staging-item.md': ['---', 'slug: staging-item', '---', '', ''].join(
 						'\n',
@@ -230,8 +230,8 @@ describe('ledger-read seam — pool noun vocabulary (task `f1-pool-noun-todo-in-
 				env: gitEnv(),
 			});
 
-			expect(state.todo.map((i) => i.slug)).toEqual(['pool-item']);
-			expect(state.todo.map((i) => i.slug)).not.toContain('staging-item');
+			expect(state.ready.map((i) => i.slug)).toEqual(['pool-item']);
+			expect(state.ready.map((i) => i.slug)).not.toContain('staging-item');
 		} finally {
 			scratch.cleanup();
 		}
@@ -239,13 +239,13 @@ describe('ledger-read seam — pool noun vocabulary (task `f1-pool-noun-todo-in-
 });
 
 describe('ledger-read seam — readers route THROUGH it', () => {
-	it('readBacklogItems / readDoneSlugs / scanRepoPaths go through resolveLocalState', () => {
+	it('readReadyItems / readDoneSlugs / scanRepoPaths go through resolveLocalState', () => {
 		writeItem('repo', 'backlog', 'a.md', {slug: 'a'});
 		writeItem('repo', 'done', 'd.md', {slug: 'd'});
 
 		const spy = vi.spyOn(ledgerReadModule.ledgerRead, 'resolveLocalState');
 
-		readBacklogItems(join(root, 'repo'));
+		readReadyItems(join(root, 'repo'));
 		readDoneSlugs(join(root, 'repo'));
 		// The working-tree scan (run / in-place) routes through the local method;
 		// the registry `scan` routes through resolveMirrorState (covered below).
@@ -356,8 +356,8 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 			env: gitEnv(),
 		});
 
-		expect(state.todo).toHaveLength(1);
-		expect(state.todo[0]).toMatchObject({
+		expect(state.ready).toHaveLength(1);
+		expect(state.ready[0]).toMatchObject({
 			file: 'b.md',
 			slug: 'b',
 			humanOnly: true,
@@ -378,7 +378,7 @@ describe('ledger-read seam — mirror-ref resolve method (bare hub mirror)', () 
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(state.todo.map((i) => i.slug)).toEqual(['only']);
+		expect(state.ready.map((i) => i.slug)).toEqual(['only']);
 	});
 
 	it('returns empty sets for folders absent on the ref (no throw)', async () => {

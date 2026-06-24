@@ -554,7 +554,7 @@ function seedMixedReadyAndBlocked(
 		'',
 	].join('\n');
 	writeFileSync(
-		join(dest, 'work', 'tasks', 'todo', `${blockedSlug}.md`),
+		join(dest, 'work', 'tasks', 'ready', `${blockedSlug}.md`),
 		blockedBody,
 	);
 	gitIn(['add', '-A'], dest);

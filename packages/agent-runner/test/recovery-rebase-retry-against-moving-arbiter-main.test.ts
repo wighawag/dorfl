@@ -81,7 +81,7 @@ async function seedStrandedWithFeatureFile(slug: string): Promise<{
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
 		repo,
 	);
 	gitIn(['add', '-A'], repo);
@@ -145,7 +145,7 @@ describe('recoverAlreadyCommitted — moving `<arbiter>/main` (CONTENTION) retry
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -194,7 +194,7 @@ describe('recoverAlreadyCommitted — moving `<arbiter>/main` (CONTENTION) retry
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -248,7 +248,7 @@ describe('recoverAlreadyCommitted — moving `<arbiter>/main` (CONTENTION) retry
 				cwd: repo,
 				arbiter: ARBITER,
 				slug: 'gamma',
-				source: 'tasks-todo',
+				source: 'tasks-ready',
 				recovering: false,
 				committedRecovery: true,
 				mode: 'merge',
@@ -299,7 +299,7 @@ describe('recoverAlreadyCommitted — moving `<arbiter>/main` (CONTENTION) retry
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',

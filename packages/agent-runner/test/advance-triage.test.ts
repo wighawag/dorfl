@@ -476,7 +476,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 			return {
 				outcome: 'promoted',
 				exitCode: 0,
-				newItemPath: 'work/tasks/todo/seamprom.md',
+				newItemPath: 'work/tasks/ready/seamprom.md',
 				message: 'promoted',
 			};
 		};

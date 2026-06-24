@@ -26,7 +26,7 @@ import {
  * It is a `work/`-FOLDER RESIDENCE scan keyed on the parsed `prd:` field — NOT the
  * claim ledger (`ledger-read.ts` resolves claim-STATE, a different concern). It
  * reuses {@link parseFrontmatter} (the `prd:` field) rather than hand-rolling a YAML
- * parse, and scans the task lifecycle folders directly: `work/tasks/todo/`,
+ * parse, and scans the task lifecycle folders directly: `work/tasks/ready/`,
  * `work/in-progress/`, `work/needs-attention/`, and `work/done/`. A task that has
  * NOT yet landed in `work/done/` (still in backlog / in-progress / needs-attention)
  * means the prd is not yet complete.

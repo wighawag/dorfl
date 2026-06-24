@@ -19,9 +19,9 @@
  *
  * LIFECYCLE-GENERIC. The folder names + the configured-default value are
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
- * TASK lifecycle (`tasksLandIn`: `pre-backlog`/`todo` — the POOL value was
- * renamed from `'backlog'` in task
- * `f1-pool-noun-todo-in-surface-and-apply-readers`) AND the PRD-
+ * TASK lifecycle (`tasksLandIn`: `pre-backlog`/`ready` — the POOL value was
+ * renamed `'backlog'` → `'todo'` → `'ready'`, ADR
+ * `rename-task-pool-folder-todo-to-ready`) AND the PRD-
  * placement task (`prdsLandIn`: `pre-proposed`/`ready`) without forking. A future
  * lifecycle (e.g. intake's lone-task) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
@@ -34,7 +34,7 @@
  * - `'staging'` — land in the staging area (tasks: `pre-backlog/`; prds:
  *   `prds/proposed/`). Not in the agent pool; a human/runner promotion is needed to make
  *   the item eligible. Review-without-PR review surface.
- * - `'pool'` — land directly in the agent-eligible pool (tasks: `tasks/todo/`;
+ * - `'pool'` — land directly in the agent-eligible pool (tasks: `tasks/ready/`;
  *   prds: `prds/ready/`). The trusted-fast-path landing.
  */
 export type PlacementSide = 'staging' | 'pool';
@@ -42,7 +42,7 @@ export type PlacementSide = 'staging' | 'pool';
 /**
  * The two folder names a lifecycle uses for its staging/pool split. Supplied by
  * the caller so this resolver stays lifecycle-generic (the TASK caller passes
- * `{staging: 'pre-backlog', pool: 'tasks/todo'}`; the PRD-placement caller passes
+ * `{staging: 'pre-backlog', pool: 'tasks/ready'}`; the PRD-placement caller passes
  * `{staging: 'prds/proposed', pool: 'prds/ready'}`).
  */
 export interface PlacementSlots {

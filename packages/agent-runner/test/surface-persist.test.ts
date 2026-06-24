@@ -39,7 +39,7 @@ function seedBacklogItem(slug = 'foo'): {repo: string; itemPath: string} {
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
-	const itemPath = `work/tasks/todo/${slug}.md`;
+	const itemPath = `work/tasks/ready/${slug}.md`;
 	const itemBody = [
 		'---',
 		`title: ${slug}`,
@@ -52,7 +52,7 @@ function seedBacklogItem(slug = 'foo'): {repo: string; itemPath: string} {
 		'a thing',
 		'',
 	].join('\n');
-	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 	writeFileSync(join(repo, itemPath), itemBody);
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'seed item'], repo);
@@ -101,7 +101,7 @@ describe('persistSurfacedQuestions — first pass (CREATE the sidecar + set need
 		const result = persistSurfacedQuestions({
 			cwd: repo,
 			item: 'task:bar',
-			itemPath, // work/tasks/todo/bar.md
+			itemPath, // work/tasks/ready/bar.md
 			questions: [{question: 'q?'}],
 			env: gitEnv(),
 		});
@@ -267,7 +267,7 @@ describe('persistSurfacedQuestions — usage errors', () => {
 			persistSurfacedQuestions({
 				cwd: dir,
 				item: 'task:foo',
-				itemPath: 'work/tasks/todo/foo.md',
+				itemPath: 'work/tasks/ready/foo.md',
 				questions: [{question: 'q?'}],
 				env: gitEnv(),
 			}),

@@ -78,7 +78,7 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		expect(doc).toMatch(/\bcovers\b/);
 		// The placement rule \u2014 staging vs pool.
 		expect(doc).toMatch(/work\/tasks\/backlog/);
-		expect(doc).toMatch(/work\/tasks\/todo/);
+		expect(doc).toMatch(/work\/tasks\/ready/);
 	});
 
 	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
@@ -223,7 +223,7 @@ describe('buildTaskingPrd \u2014 in-band reference + no re-inlined discipline pr
 
 	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/` remain (the prd\u2019s bonus bug)', () => {
 		expect(builderBody).not.toMatch(/to-tasks/);
-		// `work/backlog/` is the PRE-RENAME pool name (now `work/tasks/todo/`);
+		// `work/backlog/` is the PRE-RENAME pool name (now `work/tasks/ready/`);
 		// guard the bare token without matching the current `work/tasks/backlog/`
 		// staging spelling.
 		expect(builderBody).not.toMatch(/(?<!\/tasks\/)work\/backlog\//);
@@ -231,9 +231,9 @@ describe('buildTaskingPrd \u2014 in-band reference + no re-inlined discipline pr
 		expect(builderBody).not.toMatch(/work\/prd\//);
 	});
 
-	it('uses the CURRENT staged + pool vocabulary (`work/tasks/backlog/` + `work/tasks/todo/`)', () => {
+	it('uses the CURRENT staged + pool vocabulary (`work/tasks/backlog/` + `work/tasks/ready/`)', () => {
 		expect(builderBody).toMatch(/work\/tasks\/backlog/);
-		expect(builderBody).toMatch(/work\/tasks\/todo/);
+		expect(builderBody).toMatch(/work\/tasks\/ready/);
 		// Points the agent at the to-task skill as the user-invoked pointer.
 		expect(builderBody).toMatch(/skills\/to-task\/SKILL\.md/);
 	});

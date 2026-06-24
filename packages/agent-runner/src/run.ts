@@ -924,9 +924,9 @@ async function runOneItem(
 				slug,
 				// Claim no longer moves the body (task
 				// `cutover-claim-body-stays-and-complete-sources-from-backlog`): a
-				// freshly-built task RESTS in `tasks/todo/` on `main`, so the done-move
+				// freshly-built task RESTS in `tasks/ready/` on `main`, so the done-move
 				// sources from there.
-				source: 'tasks-todo',
+				source: 'tasks-ready',
 				recovering: false,
 				// `run` is ALWAYS autonomous → surface every failure on the arbiter's
 				// main AND push the work branch (DATA, not a caller-identity flag).

@@ -74,7 +74,7 @@ export const REPO_ALLOWED_KEYS = [
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
 	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
-	// straight in the agent-eligible POOL (`todo/`, trusted fast-path) is agreed
+	// straight in the agent-eligible POOL (`ready/`, trusted fast-path) is agreed
 	// by all collaborators + travels with the repo. Resolved per-repo through the
 	// SAME chain as `taskingIntegration` (flag > env > per-repo > global > built-in
 	// `pre-backlog`). DISTINCT from intake's per-emitted-type stamps (front door):

@@ -229,7 +229,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
 		mkdirSync(join(completer, 'work', 'tasks', 'done'), {recursive: true});
 		gitIn(
-			['mv', 'work/tasks/todo/epsilon.md', 'work/tasks/done/epsilon.md'],
+			['mv', 'work/tasks/ready/epsilon.md', 'work/tasks/done/epsilon.md'],
 			completer,
 		);
 		gitIn(['add', '-A'], completer);
@@ -274,7 +274,7 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
 		mkdirSync(join(completer, 'work', 'tasks', 'done'), {recursive: true});
 		gitIn(
-			['mv', 'work/tasks/todo/zeta.md', 'work/tasks/done/zeta.md'],
+			['mv', 'work/tasks/ready/zeta.md', 'work/tasks/done/zeta.md'],
 			completer,
 		);
 		gitIn(['add', '-A'], completer);

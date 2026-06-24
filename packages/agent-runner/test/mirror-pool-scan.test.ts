@@ -212,7 +212,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			// Normalise the camelCase fixture key to its work-layout folder KEY, then
 			// resolve to the CURRENT on-disk path so the in-place tree mirrors what the
 			// production scan (and the bare-mirror side) now read after the
-			// notes-regroup + task-board-rename flip (`backlog`->`tasks/todo`, etc.).
+			// notes-regroup + task-board-rename flip (`backlog`->`tasks/ready`, etc.).
 			const dir = join(
 				checkout,
 				'work',

@@ -8,10 +8,10 @@ let root: string;
 
 function makeRepo(rel: string, backlogFiles: string[]): string {
 	const repo = join(root, rel);
-	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 	for (const f of backlogFiles) {
 		writeFileSync(
-			join(repo, 'work', 'tasks', 'todo', f),
+			join(repo, 'work', 'tasks', 'ready', f),
 			'---\nslug: x\n---\n',
 		);
 	}
@@ -27,19 +27,19 @@ afterEach(() => {
 });
 
 describe('isParticipatingRepo', () => {
-	it('is true for a repo with a non-empty work/tasks/todo/', () => {
+	it('is true for a repo with a non-empty work/tasks/ready/', () => {
 		const repo = makeRepo('alpha', ['a.md']);
 		expect(isParticipatingRepo(repo)).toBe(true);
 	});
 
-	it('is false for a repo whose work/tasks/todo/ has no .md files', () => {
+	it('is false for a repo whose work/tasks/ready/ has no .md files', () => {
 		const repo = join(root, 'beta');
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
-		writeFileSync(join(repo, 'work', 'tasks', 'todo', 'notes.txt'), 'hi');
+		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
+		writeFileSync(join(repo, 'work', 'tasks', 'ready', 'notes.txt'), 'hi');
 		expect(isParticipatingRepo(repo)).toBe(false);
 	});
 
-	it('is false for a repo with no work/tasks/todo/ at all', () => {
+	it('is false for a repo with no work/tasks/ready/ at all', () => {
 		const repo = join(root, 'gamma');
 		mkdirSync(repo, {recursive: true});
 		expect(isParticipatingRepo(repo)).toBe(false);
@@ -47,7 +47,7 @@ describe('isParticipatingRepo', () => {
 });
 
 describe('findParticipatingRepos (remote find discovery)', () => {
-	it('finds a repo with a non-empty work/tasks/todo/ and skips one without', () => {
+	it('finds a repo with a non-empty work/tasks/ready/ and skips one without', () => {
 		makeRepo('alpha', ['a.md']);
 		const beta = join(root, 'beta');
 		mkdirSync(beta, {recursive: true});
@@ -57,10 +57,10 @@ describe('findParticipatingRepos (remote find discovery)', () => {
 		expect(repos).not.toContain(beta);
 	});
 
-	it('skips a repo whose work/tasks/todo/ contains no markdown', () => {
+	it('skips a repo whose work/tasks/ready/ contains no markdown', () => {
 		const empty = join(root, 'empty');
-		mkdirSync(join(empty, 'work', 'tasks', 'todo'), {recursive: true});
-		writeFileSync(join(empty, 'work', 'tasks', 'todo', 'README.txt'), 'no md');
+		mkdirSync(join(empty, 'work', 'tasks', 'ready'), {recursive: true});
+		writeFileSync(join(empty, 'work', 'tasks', 'ready', 'README.txt'), 'no md');
 
 		const repos = findParticipatingRepos(root);
 		expect(repos).not.toContain(empty);

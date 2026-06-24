@@ -70,7 +70,10 @@ function seedStrandedWorkBranch(
 	const branch = `work/${entry}`;
 	git(['checkout', '-q', '-b', branch, 'arbiter/main'], repo);
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
-	git(['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`], repo);
+	git(
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
+		repo,
+	);
 	git(
 		['commit', '-q', '-m', `done: ${slug} (kept commit from prior run)`],
 		repo,
@@ -87,7 +90,7 @@ function reclaimOnArbiterMain(repo: string, slug: string): void {
 	git(['pull', '-q', '--ff-only', 'arbiter', 'main'], repo);
 	mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 	git(
-		['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
 		repo,
 	);
 	git(['commit', '-q', '-m', `claim: ${slug}`], repo);
@@ -182,7 +185,7 @@ describe('advance build-task rung: no transient residue across a failing dispatc
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		git(
-			['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+			['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
 			repo,
 		);
 		git(['commit', '-q', '-m', `claim: ${slug}`], repo);
@@ -234,7 +237,7 @@ describe('advance build-task rung: no transient residue across a failing dispatc
 		const {repo} = seedRepoWithArbiter(scratch.root, [slug]);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		git(
-			['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+			['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
 			repo,
 		);
 		git(['commit', '-q', '-m', `claim: ${slug}`], repo);

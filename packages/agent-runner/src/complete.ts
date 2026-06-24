@@ -539,7 +539,7 @@ async function surfaceAutonomousStrand(params: {
  * binary-known ledger folders, walk `work/` and return true iff `<slug>.md` exists
  * directly inside a folder whose LEAF name is `done` (covering BOTH `work/done/`
  * and a renamed `work/tasks/done/`). It deliberately matches ONLY a `done` leaf:
- * a record left in a renamed POOL (`tasks/todo/`) is NOT a finished task and must
+ * a record left in a renamed POOL (`tasks/ready/`) is NOT a finished task and must
  * still refuse, not be mis-integrated as done. When this fires, the slug is treated
  * as already-done-moved by the agent into its terminal position, so the runner
  * SKIPS its own `git mv` (the existing `source: 'done'` / stranded-done path) and
@@ -650,7 +650,7 @@ async function runComplete(
 	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
 	// legacy/bounce surfaces that may still source from it until its folder removal
 	// (9c), and `needs-attention/` for the runner-owned recovery finish.
-	const backlog = workItemPath(cwd, 'tasks-todo', slug);
+	const backlog = workItemPath(cwd, 'tasks-ready', slug);
 	const inProgress = workItemPath(cwd, 'in-progress', slug);
 	const needsAttention = workItemPath(cwd, 'needs-attention', slug);
 	const done = workItemPath(cwd, 'done', slug);
@@ -713,16 +713,16 @@ async function runComplete(
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
 	// task's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
-	const source: 'tasks-todo' | 'in-progress' | 'needs-attention' | 'done' =
+	const source: 'tasks-ready' | 'in-progress' | 'needs-attention' | 'done' =
 		dirtyContinue
 			? 'done'
 			: onBacklog
-				? 'tasks-todo'
+				? 'tasks-ready'
 				: onInProgress
 					? 'in-progress'
 					: 'needs-attention';
 	const sourcePath =
-		source === 'tasks-todo'
+		source === 'tasks-ready'
 			? backlog
 			: source === 'in-progress'
 				? inProgress
@@ -752,7 +752,7 @@ async function runComplete(
 	// anyway, so there is nothing this check needs to protect for that branch.
 	if (!committedRecovery && source !== 'done' && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
-			`work/tasks/todo/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
+			`work/tasks/ready/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
 				'nothing to complete (already done, or wrong slug?).',
 			'source-strand',
 			slug,

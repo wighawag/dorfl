@@ -69,9 +69,9 @@ describe('work-on — in-repo form (work-on <slug>)', () => {
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 
-		// The worktree carries work/tasks/todo/<slug>.md (cut from main, which holds it).
+		// The worktree carries work/tasks/ready/<slug>.md (cut from main, which holds it).
 		expect(
-			existsSync(join(result.dir!, 'work', 'tasks', 'todo', 'alpha.md')),
+			existsSync(join(result.dir!, 'work', 'tasks', 'ready', 'alpha.md')),
 		).toBe(true);
 	});
 });
@@ -102,7 +102,7 @@ describe('work-on — remote form (work-on <remote> <slug>)', () => {
 		// The worktree has the backlog body (claim acquired the lock but did not move
 		// the body; it rests in backlog/ on the arbiter).
 		expect(
-			existsSync(join(result.dir!, 'work', 'tasks', 'todo', 'beta.md')),
+			existsSync(join(result.dir!, 'work', 'tasks', 'ready', 'beta.md')),
 		).toBe(true);
 	});
 

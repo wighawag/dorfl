@@ -382,7 +382,7 @@ function buildRegistrySetAdvanceTick(options: {
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
 				// The TASK-PLACEMENT configured default (`do prd:` tasking output:
-				// `pre-backlog` staged vs `todo` pool). No operator flag on this
+				// `pre-backlog` staged vs `ready` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
 				tasksLandIn: config.tasksLandIn,
@@ -637,13 +637,13 @@ interface CompleteFlags {
  */
 function explicitTasksLandInFromFlag(
 	raw: string | undefined,
-): 'pre-backlog' | 'todo' | undefined {
+): 'pre-backlog' | 'ready' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
-	if (raw !== 'pre-backlog' && raw !== 'todo') {
+	if (raw !== 'pre-backlog' && raw !== 'ready') {
 		throw new Error(
-			`--tasks-land-in must be 'pre-backlog' or 'todo' (got '${raw}').`,
+			`--tasks-land-in must be 'pre-backlog' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -690,7 +690,7 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--tasks-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
+	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
 	tasksLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -1874,7 +1874,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `do prd:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `do prd:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -2408,7 +2408,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `advance prd:<slug>` tasking output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `advance prd:<slug>` tasking output lands: `pre-backlog` (staged) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -3244,7 +3244,7 @@ export function buildProgram(): Command {
 			const dest =
 				namespace === 'prd'
 					? workFolderPrefix('prds-ready')
-					: workFolderPrefix('tasks-todo');
+					: workFolderPrefix('tasks-ready');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
 					namespace === 'prd' ? 'auto-taskable' : 'claimable'

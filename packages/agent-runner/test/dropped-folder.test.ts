@@ -20,7 +20,7 @@ import {LEDGER_STATUS_FOLDERS} from '../src/ledger-lint.js';
  * Pool-eligibility BY RESIDENCE: an item resting in its regime's won't-proceed
  * terminal is OUT of every pool, the SAME way `work/tasks/done/` /
  * `work/prds/tasked/` exclude — the pool readers enumerate ONLY their pool
- * folders (`tasks/todo/` for tasks, `prds/ready/` for prds), so a terminal
+ * folders (`tasks/ready/` for tasks, `prds/ready/` for prds), so a terminal
  * file is invisible to every reader by construction; no reader re-implements the
  * rule.
  *
@@ -76,10 +76,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 	});
 
 	it('a task resting in work/tasks/cancelled/ is OUT of the build (scan) pool (by residence, like work/tasks/done/)', () => {
-		// A live task in work/tasks/todo/ + a cancelled task in
+		// A live task in work/tasks/ready/ + a cancelled task in
 		// work/tasks/cancelled/. The scan enumerates only the pool, so the cancelled
 		// task never appears.
-		writeMd('repo/work/tasks/todo/live.md', {slug: 'live'});
+		writeMd('repo/work/tasks/ready/live.md', {slug: 'live'});
 		writeMd(
 			'repo/work/tasks/cancelled/abandoned.md',
 			{slug: 'abandoned'},
@@ -156,10 +156,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 
 	it('a slug present BOTH in work/tasks/cancelled/ and another task-status folder is a one-slug-one-folder duplicate (the lint covers cancelled)', async () => {
 		// Cross-residence corruption is still detectable: a slug in
-		// `tasks/cancelled/` AND `tasks/todo/` is a duplicate the lint surfaces (the
+		// `tasks/cancelled/` AND `tasks/ready/` is a duplicate the lint surfaces (the
 		// read-side lint covers the full task lifecycle set including the terminal
 		// `tasks/cancelled/`).
-		writeMd('repo/work/tasks/todo/both.md', {slug: 'both'});
+		writeMd('repo/work/tasks/ready/both.md', {slug: 'both'});
 		writeMd(
 			'repo/work/tasks/cancelled/both.md',
 			{slug: 'both'},
@@ -170,6 +170,6 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		const dups = lintLocalLedger(join(root, 'repo'));
 		expect(dups.map((d) => d.slug)).toEqual(['both']);
 		expect(dups[0].folders).toContain('cancelled');
-		expect(dups[0].folders).toContain('tasks-todo');
+		expect(dups[0].folders).toContain('tasks-ready');
 	});
 });

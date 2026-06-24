@@ -191,7 +191,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(true);
 		const {out} = await runPromote(repo, ['task:feature-x']);
 		expect(out).toMatch(/Promoted task 'feature-x' into the pool/);
-		expect(onArbiterMain(repo, 'work/tasks/todo/feature-x.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/feature-x.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/feature-x.md')).toBe(false);
 	});
 
@@ -200,7 +200,7 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		stageTask(repo, 'bare-one');
 		const {out} = await runPromote(repo, ['bare-one']);
 		expect(out).toMatch(/Promoted task 'bare-one' into the pool/);
-		expect(onArbiterMain(repo, 'work/tasks/todo/bare-one.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/bare-one.md')).toBe(true);
 	});
 
 	it('promote prd:<slug> moves pre-prd/ -> prd/ on the arbiter (auto-sliceable)', async () => {

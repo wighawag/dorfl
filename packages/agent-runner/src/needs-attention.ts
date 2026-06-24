@@ -264,7 +264,7 @@ function findSourceFolder(
 	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
 	// the rebase-conflict path (after the done-move) the body is in `done/`.
 	const lookupFolders: readonly WorkFolderKey[] = [
-		'tasks-todo',
+		'tasks-ready',
 		'in-progress',
 		'done',
 		'needs-attention',
@@ -607,7 +607,7 @@ export async function returnToBacklog(
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
-	const backlogRel = workItemRel('tasks-todo', `${slug}.md`);
+	const backlogRel = workItemRel('tasks-ready', `${slug}.md`);
 
 	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
 	// section to the item BODY in `work/backlog/` (where it already rests) before the
@@ -792,7 +792,7 @@ export async function promoteFromPreBacklog(
 	}
 	try {
 		const sourceRel = workItemRel('tasks-backlog', `${slug}.md`);
-		const destRel = workItemRel('tasks-todo', `${slug}.md`);
+		const destRel = workItemRel('tasks-ready', `${slug}.md`);
 
 		// Early-exit message: if NEITHER staged nor already-in-pool, there is
 		// nothing to promote (the per-attempt `plan` is the authoritative

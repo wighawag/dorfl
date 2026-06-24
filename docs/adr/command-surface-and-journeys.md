@@ -29,7 +29,7 @@ There is **no `roots` and no `remotes` config field.** The registered set of tar
 - **`remote add <url> [--local]`** — register a target → create its hub mirror. `--local` registers a local `--bare` arbiter (offline). The hub mirror's `origin` URL is its self-description (scheme gives transport: `git@`/`https`/ `ssh` ⇒ remote host; `file://` ⇒ local-bare) — **no separate stamp needed.**
 - **`remote rm <key|url>`** — delete the mirror. The **only** mirror deleter; `gc` NEVER reaps mirrors (mirrors are precious-ish registry, reconstructible from their origin but not garbage-collected).
 - **`remote ls`** — enumerate mirrors + each origin URL/transport.
-- **`remote find <folder>`** — discover **`work/`-participating** repos in a folder (reuse `isParticipatingRepo`; only repos with a populated `work/tasks/todo/`), find-skills-style multi-select toggle, `remote add` each chosen.
+- **`remote find <folder>`** — discover **`work/`-participating** repos in a folder (reuse `isParticipatingRepo`; only repos with a populated `work/tasks/ready/`), find-skills-style multi-select toggle, `remote add` each chosen.
 
 **Key = `host/org/name`** (today's `encodeRepoKey`, unchanged): collapses ssh/https/scp for one repo onto one mirror (correct), keeps different hosts/projects distinct (no cross-project corruption). **`remote add` guards on the full host/org/name identity:** adding the same project under a _different transport_ (e.g. a `--local` arbiter for a repo already registered remotely) → **error naming the existing transport** (read from the existing mirror's origin URL), unless `--force`. This implements the anti-stranding guard from `work/observations/hub-mirror-key-ignores-transport.md`.
 

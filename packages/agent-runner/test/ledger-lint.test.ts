@@ -42,20 +42,20 @@ function place(folder: string, slug: string, content?: string): void {
 describe('detectDuplicateSlugs (pure)', () => {
 	it('flags a slug present in two status folders, lifecycle-ordered', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['tasks-todo', new Set(['ghost'])],
+			['tasks-ready', new Set(['ghost'])],
 			['done', new Set(['ghost'])],
 		]);
 		const dups = detectDuplicateSlugs(map);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('ghost');
-		// `done/` outranks `tasks-todo/` (most-advanced lifecycle stage first).
-		expect(dups[0].folders).toEqual(['done', 'tasks-todo']);
+		// `done/` outranks `tasks-ready/` (most-advanced lifecycle stage first).
+		expect(dups[0].folders).toEqual(['done', 'tasks-ready']);
 		expect(dups[0].candidateCanonical).toBe('done');
 	});
 
 	it('reports clean (no duplicates) when every slug is in exactly one folder', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['tasks-todo', new Set(['a', 'b'])],
+			['tasks-ready', new Set(['a', 'b'])],
 			['done', new Set(['c'])],
 		]);
 		expect(detectDuplicateSlugs(map)).toEqual([]);
@@ -63,7 +63,7 @@ describe('detectDuplicateSlugs (pure)', () => {
 
 	it('sorts multiple duplicates by slug', () => {
 		const map = new Map<LedgerStatusFolder, Set<string>>([
-			['tasks-todo', new Set(['zebra', 'apple'])],
+			['tasks-ready', new Set(['zebra', 'apple'])],
 			['done', new Set(['zebra', 'apple'])],
 		]);
 		expect(detectDuplicateSlugs(map).map((d) => d.slug)).toEqual([
@@ -80,7 +80,7 @@ describe('lintLocalLedger (over a working tree)', () => {
 		const dups = lintLocalLedger(root);
 		expect(dups).toHaveLength(1);
 		expect(dups[0].slug).toBe('orphan');
-		expect(dups[0].folders).toContain('tasks-todo');
+		expect(dups[0].folders).toContain('tasks-ready');
 		expect(dups[0].folders).toContain('done');
 	});
 
@@ -118,10 +118,10 @@ describe('lintLocalLedger (over a working tree)', () => {
 
 	it('resolves the slug from frontmatter, not the filename', () => {
 		// Two files with DIFFERENT names but the SAME frontmatter slug, in two folders.
-		mkdirSync(join(root, 'work', 'tasks', 'todo'), {recursive: true});
+		mkdirSync(join(root, 'work', 'tasks', 'ready'), {recursive: true});
 		mkdirSync(join(root, 'work', 'tasks', 'done'), {recursive: true});
 		writeFileSync(
-			join(root, 'work', 'tasks', 'todo', 'a.md'),
+			join(root, 'work', 'tasks', 'ready', 'a.md'),
 			'---\nslug: same\n---\n',
 		);
 		writeFileSync(
@@ -170,7 +170,7 @@ describe('formatting', () => {
 		expect(text).toMatch(/one-slug-one-folder VIOLATED/);
 		expect(text).toContain('ghost');
 		expect(text).toContain('work/tasks/done/');
-		expect(text).toContain('work/tasks/todo/');
+		expect(text).toContain('work/tasks/ready/');
 	});
 
 	it('a clean ledger produces NO warning lines (silent)', () => {
@@ -204,7 +204,7 @@ describe('the status-folder set', () => {
 		// ledger file rests only in the durable set; the transient
 		// `in-progress`/`needs-attention` are per-item lock state now.
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
-			'tasks-todo',
+			'tasks-ready',
 			'done',
 			'cancelled',
 		]);

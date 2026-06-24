@@ -33,7 +33,7 @@ import type {WorkFolderKey} from './work-layout.js';
  * lifecycle (callers handle that as the clean-exit `vanished` outcome below).
  */
 const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
+	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
 	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
 	observation: ['observations'],
 };
@@ -441,7 +441,7 @@ export function applyAnsweredQuestions(
 	// `staging-surface-and-apply-promote-safety`): re-resolve the item's CURRENT
 	// path by IDENTITY, mirroring the sidecar's already-folder-agnostic
 	// resolution. The captured `itemPath` is ADVISORY — a concurrent `promote`
-	// (`tasks/backlog → tasks/todo`, `prds/proposed → prds/ready`) may have
+	// (`tasks/backlog → tasks/ready`, `prds/proposed → prds/ready`) may have
 	// moved the item between capture and now, and we MUST write the post-move
 	// path, never the stale one. If the item has vanished entirely, exit CLEAN
 	// (no commit, no ghost file) — the matching benign skip the surface/triage

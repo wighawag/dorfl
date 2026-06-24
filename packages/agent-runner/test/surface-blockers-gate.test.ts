@@ -91,9 +91,9 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		rmSync(root, {recursive: true, force: true});
 	});
 
-	/** A `needsAnswers: true` task in `work/tasks/todo/` (a declared blocker, no sidecar). */
+	/** A `needsAnswers: true` task in `work/tasks/ready/` (a declared blocker, no sidecar). */
 	function seedBlockedTask(slug: string): void {
-		const dir = join(repo, 'work', 'tasks', 'todo');
+		const dir = join(repo, 'work', 'tasks', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),
@@ -234,8 +234,8 @@ describe('surfaceBlockers — explicit naming BYPASSES the selection gate (the r
 		const repo = join(scratch.root, slug);
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
-		const itemPath = `work/tasks/todo/${slug}.md`;
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+		const itemPath = `work/tasks/ready/${slug}.md`;
+		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 		writeFileSync(
 			join(repo, itemPath),
 			[
@@ -346,7 +346,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 	}
 
 	function seedBlockedTask(slug: string): void {
-		const dir = join(repo, 'work', 'tasks', 'todo');
+		const dir = join(repo, 'work', 'tasks', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),

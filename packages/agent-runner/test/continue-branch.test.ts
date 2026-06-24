@@ -166,10 +166,10 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 
 		// The body RESTS in `backlog/` on main (claim no longer moves it, task 9a).
-		// Cut the work branch off main — it inherits the SAME `work/tasks/todo/alpha.md`
+		// Cut the work branch off main — it inherits the SAME `work/tasks/ready/alpha.md`
 		// main has, so there is NO transient-status file unique to the branch.
 		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			true,
 		);
 		writeFileSync(join(repo, 'feature.txt'), 'agent feature\n');
@@ -182,12 +182,12 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		gitIn(['switch', '-q', 'main'], repo);
 		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'tasks', 'todo', 'beta.md'),
+			join(repo, 'work', 'tasks', 'ready', 'beta.md'),
 			'---\nslug: beta\n---\nbeta\n',
 		);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed beta'], repo);
-		gitIn(['mv', 'work/tasks/todo/beta.md', 'work/tasks/done/beta.md'], repo);
+		gitIn(['mv', 'work/tasks/ready/beta.md', 'work/tasks/done/beta.md'], repo);
 		gitIn(['commit', '-q', '-m', 'feat(beta): sibling; done'], repo);
 		writeFileSync(join(repo, 'unrelated.txt'), 'unrelated main change\n');
 		gitIn(['add', '-A'], repo);
@@ -213,7 +213,7 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
 			true,
 		);
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			true,
 		);
 		// No needs-attention / transient move ever existed on the branch to conflict.

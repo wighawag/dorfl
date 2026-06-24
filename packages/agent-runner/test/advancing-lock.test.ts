@@ -322,7 +322,7 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 	it('creates a new backlog item via the CAS (exit 0)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await createItemThroughCas({
-			path: 'work/tasks/todo/promoted.md',
+			path: 'work/tasks/ready/promoted.md',
 			content: '---\ntitle: promoted\nslug: promoted\nblockedBy: []\n---\n',
 			cwd: repo,
 			arbiter: 'arbiter',
@@ -344,14 +344,14 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 
 		const [ra, rb] = await Promise.all([
 			createItemThroughCas({
-				path: 'work/tasks/todo/dup.md',
+				path: 'work/tasks/ready/dup.md',
 				content,
 				cwd: a,
 				arbiter: 'arbiter',
 				env: racerEnv('a'),
 			}),
 			createItemThroughCas({
-				path: 'work/tasks/todo/dup.md',
+				path: 'work/tasks/ready/dup.md',
 				content,
 				cwd: b,
 				arbiter: 'arbiter',
@@ -369,7 +369,7 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 	it('returns "lost" when the target path already exists on the arbiter', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['exists']);
 		const result = await createItemThroughCas({
-			path: 'work/tasks/todo/exists.md',
+			path: 'work/tasks/ready/exists.md',
 			content: '---\ntitle: exists\nslug: exists\n---\n',
 			cwd: repo,
 			arbiter: 'arbiter',

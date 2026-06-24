@@ -117,7 +117,7 @@ class StartRefusal extends Error {}
 
 /** The folder a work item currently lives in on the arbiter's main. */
 type Folder =
-	| 'tasks-todo'
+	| 'tasks-ready'
 	| 'in-progress'
 	| 'needs-attention'
 	| 'done'
@@ -226,7 +226,7 @@ async function dispatchFolder(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<Folder> {
 	const folder = await folderOnArbiterMain(slug, arbiter, cwd, env);
-	if (folder !== 'tasks-todo') {
+	if (folder !== 'tasks-ready') {
 		return folder;
 	}
 	// In `backlog/`: claimed-ness + stuck-ness are the per-item lock, not the folder.
@@ -237,7 +237,7 @@ async function dispatchFolder(
 	if (lock && lock.state === 'active') {
 		return 'in-progress';
 	}
-	return 'tasks-todo';
+	return 'tasks-ready';
 }
 
 /** Dispatch the onboard by the slug's resolved (folder + lock) state. */
@@ -254,7 +254,7 @@ async function onboardFromFolder(
 ): Promise<StartResult> {
 	const {options, slug, arbiter, cwd, env, note} = params;
 	switch (folder) {
-		case 'tasks-todo':
+		case 'tasks-ready':
 			return startFromBacklog({
 				slug,
 				arbiter,
@@ -882,7 +882,7 @@ async function folderOnArbiterMain(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<Folder> {
 	const folders: Exclude<Folder, 'absent'>[] = [
-		'tasks-todo',
+		'tasks-ready',
 		'in-progress',
 		'needs-attention',
 		'done',

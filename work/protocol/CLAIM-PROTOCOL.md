@@ -1,12 +1,12 @@
 # Claim protocol (consumed by the runner — `agent-runner claim`/`do`/`complete`)
 
-This documents how a `work/tasks/todo/<slug>.md` item is **atomically claimed** by one agent (human or autonomous) when several may try at once. The tasking discipline does not perform claims — it only emits files in a shape this protocol can consume. The runner/lifecycle implements the steps here.
+This documents how a `work/tasks/ready/<slug>.md` item is **atomically claimed** by one agent (human or autonomous) when several may try at once. The tasking discipline does not perform claims — it only emits files in a shape this protocol can consume. The runner/lifecycle implements the steps here.
 
 ## The core idea: claim = acquiring the item's per-item LOCK (an atomic create-only ref push)
 
-A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`prd`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/todo/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`).
+A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`prd`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/ready/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`).
 
-The claimable predicate is **"the body is in the pool `tasks/todo/` on `main` AND no lock is held on its ref."**
+The claimable predicate is **"the body is in the pool `tasks/ready/` on `main` AND no lock is held on its ref."**
 
 **Separate the claim from the work.** Acquire the lock first (cheap, collision-detecting); do the work only after the lock is provably held.
 
@@ -47,12 +47,12 @@ Exit codes: `0` claimed · `2` not claimable (not in the pool, or the lock is al
 ```
 CLAIM (acquire the per-item lock; collision-detecting, no body move):
   1. fetch the lock refs from <arbiter> (refs/agent-runner/lock/*)
-  2. confirm the body is still in the pool: work/tasks/todo/<slug>.md on <arbiter>/main
+  2. confirm the body is still in the pool: work/tasks/ready/<slug>.md on <arbiter>/main
   3. build a PARENTLESS lock-entry commit (action: implement, state: active,
      holder/since) with plumbing — never touches the working tree/HEAD
   4. push it create-only to refs/agent-runner/lock/<type>-<slug>   (<type> = task/prd)
      with --force-with-lease=<ref>:   (the EMPTY expected value = "ref must be absent")
-     ├─ ACCEPTED  -> the lock is atomically yours (the body stays in tasks/todo/;
+     ├─ ACCEPTED  -> the lock is atomically yours (the body stays in tasks/ready/;
      |              NOTHING was written to main).
      └─ REJECTED  -> the ref already exists: another writer holds this SAME item's
                     lock. You LOST, definitively (exit 2). No retry budget — pick a
@@ -61,11 +61,11 @@ CLAIM (acquire the per-item lock; collision-detecting, no body move):
      # who/when rides the lock entry, not a frontmatter field (no claimed_by/claimed_at).
 
 WORK (only after the lock is held):
-  5. git switch -c work/<type>-<slug> <arbiter>/main   # the body is still in tasks/todo/ on main
+  5. git switch -c work/<type>-<slug> <arbiter>/main   # the body is still in tasks/ready/ on main
      (use a dedicated worktree/clone for isolation when running in parallel)
   6. do the work; tests green.
   7a. SUCCESS path — the runner, at integration, lands the DURABLE move on main:
-        git mv work/tasks/todo/<slug>.md work/tasks/done/<slug>.md
+        git mv work/tasks/ready/<slug>.md work/tasks/done/<slug>.md
       committed together with the work (completed-task message, see below), then
       RELEASES the lock (delete the ref). Order: durable main-move FIRST, lock
       release SECOND — a crash between leaves a done-on-main item with a stale lock,
@@ -80,7 +80,7 @@ WORK (only after the lock is held):
   8. integrate to <arbiter>/main as normal (PR on GitHub, or ff/rebase push offline).
 ```
 
-> The durable `tasks/todo → tasks/done` / `prds/ready → prds/tasked` / `tasks/todo → tasks/cancelled` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `tasks/done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
+> The durable `tasks/ready → tasks/done` / `prds/ready → prds/tasked` / `tasks/ready → tasks/cancelled` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `tasks/done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
 
 ## The prompt handed to the work agent (the `## Prompt` wrapper)
 
@@ -88,7 +88,7 @@ When a human or an autonomous runner dispatches an agent to do the WORK phase, t
 
 ```
 You are completing one work task in this repo. It has already been claimed for
-you (its per-item lock is held) and lives at work/tasks/todo/<slug>.md — read that
+you (its per-item lock is held) and lives at work/tasks/ready/<slug>.md — read that
 file fully; it is your complete prd (What to build, Acceptance criteria, Prompt).
 Also read its source prd (the task's `prd:` field, at work/prds/ready/<prd>.md)
 for context.
@@ -158,7 +158,7 @@ that reuses the muddled term inherits the debt.
 
 Do NOT perform any git operations on THIS repo — do not stage, commit, push, or
 move any files between work/ folders, and do not touch the item's lock ref or its
-body at work/tasks/todo/<slug>.md. The runner (or human) owns every git-state
+body at work/tasks/ready/<slug>.md. The runner (or human) owns every git-state
 transition (the durable main-moves AND the per-item lock acquire/release/amend).
 (Your TESTS may freely create and operate on their OWN throwaway git repos — that
 is expected.)
@@ -173,7 +173,7 @@ untracked file or editing .gitignore is producing clean WORK, like writing sourc
 
 When the acceptance criteria are met and the repo's build/test/format checks are
 green, STOP and report what you did. The runner handles the durable `git mv` of the
-body tasks/todo/ -> work/tasks/done/, the completion commit, the lock release, and
+body tasks/ready/ -> work/tasks/done/, the completion commit, the lock release, and
 integration.
 ```
 
@@ -189,7 +189,7 @@ The commit that completes a task (the work + the `git mv` to `work/tasks/done/`)
 
 - `<type>` follows conventional-commits (`feat`, `fix`, `docs`, `chore`, …); use `feat` for a task that adds behaviour.
 - `<slug>` is the task slug (its `work/tasks/done/<slug>.md` basename).
-- the trailing **`; done`** marks the durable `tasks/todo→tasks/done` transition landing in this commit (the claim itself has no `main` commit to mirror — it is a lock-ref acquire, not a folder move).
+- the trailing **`; done`** marks the durable `tasks/ready→tasks/done` transition landing in this commit (the claim itself has no `main` commit to mirror — it is a lock-ref acquire, not a folder move).
 
 Example: `feat(scan): cross-repo eligible-work queue (read-only); done`
 

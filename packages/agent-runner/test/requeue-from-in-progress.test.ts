@@ -170,7 +170,7 @@ describe('requeue recovers a task stuck on its per-item lock (releases the lock)
 
 		const fresh = seeded.clone('reader');
 		const body = readFileSync(
-			join(fresh, 'work', 'tasks', 'todo', 'delta.md'),
+			join(fresh, 'work', 'tasks', 'ready', 'delta.md'),
 			'utf8',
 		);
 		expect(body).toMatch(/## Requeue \d{4}-\d{2}-\d{2}/);

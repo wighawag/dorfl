@@ -6,7 +6,7 @@ import {
 	scan,
 	scanRepoPaths,
 	readDoneSlugs,
-	readBacklogItems,
+	readReadyItems,
 } from '../src/scan.js';
 import {formatReport} from '../src/format.js';
 import {mergeConfig} from '../src/config.js';
@@ -109,7 +109,7 @@ describe('readDoneSlugs', () => {
 	});
 });
 
-describe('readBacklogItems', () => {
+describe('readReadyItems', () => {
 	it('reads slug/humanOnly/needsAnswers/blockedBy for each backlog markdown', () => {
 		writeItem('repo', 'backlog', 'a.md', {
 			slug: 'a',
@@ -117,7 +117,7 @@ describe('readBacklogItems', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		const items = readBacklogItems(join(root, 'repo'));
+		const items = readReadyItems(join(root, 'repo'));
 		expect(items).toHaveLength(1);
 		expect(items[0].slug).toBe('a');
 		expect(items[0].humanOnly).toBe(true);
@@ -128,23 +128,23 @@ describe('readBacklogItems', () => {
 
 	it('reads undeclared items (no humanOnly/needsAnswers) as undefined', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
-		const items = readBacklogItems(join(root, 'repo'));
+		const items = readReadyItems(join(root, 'repo'));
 		expect(items[0].humanOnly).toBeUndefined();
 		expect(items[0].needsAnswers).toBeUndefined();
 	});
 
 	it('falls back to filename when slug frontmatter is absent', () => {
-		const dir = join(root, 'repo', 'work', 'tasks', 'todo');
+		const dir = join(root, 'repo', 'work', 'tasks', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(join(dir, 'fallback.md'), '---\nhumanOnly: true\n---');
-		const items = readBacklogItems(join(root, 'repo'));
+		const items = readReadyItems(join(root, 'repo'));
 		expect(items[0].slug).toBe('fallback');
 	});
 
 	it('returns items sorted by slug', () => {
 		writeItem('repo', 'backlog', 'z.md', {slug: 'zebra'});
 		writeItem('repo', 'backlog', 'a.md', {slug: 'apple'});
-		const items = readBacklogItems(join(root, 'repo'));
+		const items = readReadyItems(join(root, 'repo'));
 		expect(items.map((i) => i.slug)).toEqual(['apple', 'zebra']);
 	});
 });

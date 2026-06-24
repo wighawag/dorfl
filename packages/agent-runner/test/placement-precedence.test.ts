@@ -107,7 +107,7 @@ function taskingAgent(file = 'child'): TaskAgentRunner {
 }
 
 /**
- * An agent that ALSO writes a task to `work/tasks/todo/` (the POOL) \u2014 modelling
+ * An agent that ALSO writes a task to `work/tasks/ready/` (the POOL) \u2014 modelling
  * a misbehaving / compromised agent trying to self-place into the
  * agent-eligible pool. The PRD's `placement-is-runner-deterministic-...` ADR
  * forbids this: the runner's scrub fence removes the pool drift before
@@ -117,7 +117,7 @@ function taskingAgent(file = 'child'): TaskAgentRunner {
 function selfPlacingAgent(file = 'child'): TaskAgentRunner {
 	return ({cwd}) => {
 		const staging = join(cwd, 'work', 'tasks', 'backlog');
-		const pool = join(cwd, 'work', 'tasks', 'todo');
+		const pool = join(cwd, 'work', 'tasks', 'ready');
 		mkdirSync(staging, {recursive: true});
 		mkdirSync(pool, {recursive: true});
 		const body = [
@@ -170,7 +170,7 @@ describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 		// The honest reporting: `result.emitted` reflects the runner-resolved
 		// destination, not where the agent wrote it.
 		expect(result.emitted).toEqual(['work/tasks/backlog/child.md']);
@@ -181,7 +181,7 @@ describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted
 // RUNG 3: the configured default \u2014 BOTH landings verified.
 // --------------------------------------------------------------------------
 describe('placement rung 3: tasksLandIn default \u2014 both landings verified', () => {
-	it('tasksLandIn: todo + trusted origin \u21d2 lands in work/tasks/todo/ (the pool)', async () => {
+	it('tasksLandIn: ready + trusted origin \u21d2 lands in work/tasks/ready/ (the pool)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -190,16 +190,16 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		// The trusted-fast-path landing: the task lands STRAIGHT IN the
 		// agent-eligible pool, no human-promotion step needed.
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(result.emitted).toEqual(['work/tasks/todo/child.md']);
+		expect(result.emitted).toEqual(['work/tasks/ready/child.md']);
 	});
 
 	it('tasksLandIn: pre-backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
@@ -217,15 +217,15 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 });
 
 // --------------------------------------------------------------------------
 // RUNG 2: the UNTRUSTED-ORIGIN force.
 // --------------------------------------------------------------------------
-describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandIn: todo repo', () => {
-	it('untrusted PRD + tasksLandIn: todo \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
+describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandIn: ready repo', () => {
+	it('untrusted PRD + tasksLandIn: ready \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performTask({
@@ -236,16 +236,16 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			integration: 'merge',
 			// The repo's configured default would land tasks in the POOL \u2014 but
 			// the PRD is untrusted-origin, so the runner forces STAGING.
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
-	it('a TRUSTED PRD on a tasksLandIn: todo repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
+	it('a TRUSTED PRD on a tasksLandIn: ready repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -254,12 +254,12 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
@@ -272,12 +272,12 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
 	});
 });
 
@@ -285,7 +285,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 // RUNG 1 (top): the EXPLICIT OPERATOR FLAG.
 // --------------------------------------------------------------------------
 describe('placement rung 1: explicit operator flag wins over the untrusted-origin force', () => {
-	it('explicit --tasks-land-in todo + untrusted PRD \u21d2 lands in work/tasks/todo/ (operator override beats the untrusted force)', async () => {
+	it('explicit --tasks-land-in ready + untrusted PRD \u21d2 lands in work/tasks/ready/ (operator override beats the untrusted force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performTask({
@@ -296,19 +296,19 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			integration: 'merge',
 			// A repo whose configured default is staging \u2026
 			tasksLandIn: 'pre-backlog',
-			// \u2026 but the operator EXPLICITLY typed --tasks-land-in todo. The
+			// \u2026 but the operator EXPLICITLY typed --tasks-land-in ready. The
 			// operator is present; CLI always wins (no special force-key), exactly
 			// like `--merge` overriding the untrusted-origin build-propose rule.
-			explicitTasksLandIn: 'todo',
+			explicitTasksLandIn: 'ready',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('explicit --tasks-land-in pre-backlog + tasksLandIn: todo + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
+	it('explicit --tasks-land-in pre-backlog + tasksLandIn: ready + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -317,14 +317,14 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			explicitTasksLandIn: 'pre-backlog',
 			agentRunner: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 });
 
@@ -352,7 +352,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 		// The runner placed the task in STAGING per the configured default; the
 		// agent's pool-drift attempt was scrubbed (not on main).
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
 	it('a SELF-PLACING agent on an UNTRUSTED PRD lands STAGED \u2014 the agent cannot bypass the untrusted-origin force by writing into the pool', async () => {
@@ -367,12 +367,12 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			// Even on a repo that defaults to landing in the pool, the runner
 			// FORCES staging for the untrusted origin and scrubs the agent's
 			// pool write.
-			tasksLandIn: 'todo',
+			tasksLandIn: 'ready',
 			agentRunner: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 });

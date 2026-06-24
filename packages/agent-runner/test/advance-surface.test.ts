@@ -61,8 +61,8 @@ function seedGatedItem(slug = 'foo'): {repo: string; itemPath: string} {
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
-	const itemPath = `work/tasks/todo/${slug}.md`;
-	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+	const itemPath = `work/tasks/ready/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 	writeFileSync(
 		join(repo, itemPath),
 		[

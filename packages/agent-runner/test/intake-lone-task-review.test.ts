@@ -172,7 +172,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 		// Exactly one review round ran (the natural terminator on the first approve).
 		expect(rounds).toBe(1);
 		// The task rode the work/<slug> branch (propose default); main untouched.
@@ -181,7 +181,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -194,7 +194,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 		expect(marker?.kind).toBe('created');
 	});
 
-	it('CONVERGE WITH AN EDIT: a round proposes a replacement body applied IN MEMORY and re-reviewed; the EMITTED task reflects the edit and NO work/tasks/todo write happens before convergence', async () => {
+	it('CONVERGE WITH AN EDIT: a round proposes a replacement body applied IN MEMORY and re-reviewed; the EMITTED task reflects the edit and NO work/tasks/ready write happens before convergence', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 		const editedBody = [
@@ -226,7 +226,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 					// No file may exist on disk yet (no pre-emit write).
 					expect(() =>
 						readFileSync(
-							join(repo, 'work/tasks/todo/add-quiet-flag.md'),
+							join(repo, 'work/tasks/ready/add-quiet-flag.md'),
 							'utf8',
 						),
 					).toThrow();
@@ -256,7 +256,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
 			],
 			repo,
 		);

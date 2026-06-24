@@ -227,12 +227,12 @@ describe('envOverrides — enum coercion', () => {
 		);
 		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, task
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
-		// the `pre-backlog`/`todo` enum, on the
+		// the `pre-backlog`/`ready` enum, on the
 		// SAME flag > env > per-repo > global > built-in chain as
-		// `taskingIntegration`. The legacy `'backlog'` pool spelling is NOT accepted
-		// (clean break — the value rename shim is removed).
-		expect(envOverrides({AGENT_RUNNER_TASKS_LAND_IN: 'todo'})).toEqual({
-			tasksLandIn: 'todo',
+		// `taskingIntegration`. The legacy `'backlog'`/`'todo'` pool spellings are NOT
+		// accepted (clean break — ADR `rename-task-pool-folder-todo-to-ready`).
+		expect(envOverrides({AGENT_RUNNER_TASKS_LAND_IN: 'ready'})).toEqual({
+			tasksLandIn: 'ready',
 		});
 		expect(envOverrides({AGENT_RUNNER_TASKS_LAND_IN: 'pre-backlog'})).toEqual({
 			tasksLandIn: 'pre-backlog',

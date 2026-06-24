@@ -377,10 +377,10 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		expect(result.emitted).toEqual(['work/tasks/backlog/it-first.md']);
 
 		// The produced task landed STAGED on the arbiter (work/tasks/backlog/ — the
-		// agent-eligible pool work/tasks/todo/ is the runner-owned promotion target,
+		// agent-eligible pool work/tasks/ready/ is the runner-owned promotion target,
 		// task `pre-backlog-staging-folder-and-promote-step-a`).
 		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
-		expect(onArbiter(repo, 'work/tasks/todo/it-first.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/ready/it-first.md')).toBe(false);
 		// The lock was released into the TASKED resting state: the prd now resides in
 		// work/prds/tasked/ (the source of truth, like done/), NOT back in prd/; tasking/
 		// is empty.
@@ -838,7 +838,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// No guessed tasks emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiter(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiter(repo, 'work/tasks/ready/child.md')).toBe(false);
 		// The prd's per-item lock is held STUCK, carrying the questions as the reason.
 		const entry = await readItemLock({
 			item: 'prd:it',
@@ -929,7 +929,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		// must be left completely alone (not edited, not needsAnswers-flagged, not
 		// re-committed into the runner-owned tasking release).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['landed']);
-		const landedBefore = showArbiter(repo, 'work/tasks/todo/landed.md');
+		const landedBefore = showArbiter(repo, 'work/tasks/ready/landed.md');
 		seedPrd(repo, 'it');
 		const seenByGate: string[][] = [];
 		// A loop gate that, given the chance, would HIJACK + flag a landed POOL
@@ -943,7 +943,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 				edits: [
 					// Try to overwrite the pre-existing POOL task (must be REFUSED
 					// — outside the pre-backlog/ fence)…
-					{path: 'work/tasks/todo/landed.md', content: 'HIJACKED landed'},
+					{path: 'work/tasks/ready/landed.md', content: 'HIJACKED landed'},
 					// …and improve the run's own task (allowed), keeping valid frontmatter.
 					...input.candidateTasks.map((path) => ({
 						path,
@@ -953,7 +953,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 				],
 				// Also try to flag the pre-existing task directly by name.
 				uncertainTasks: [
-					{path: 'work/tasks/todo/landed.md', questions: ['hijack flag']},
+					{path: 'work/tasks/ready/landed.md', questions: ['hijack flag']},
 					...input.candidateTasks.map((path) => ({
 						path,
 						questions: ['own flag'],
@@ -980,11 +980,11 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		}
 		// The pre-existing landed task on the arbiter is BYTE-FOR-BYTE unchanged:
 		// not hijacked, not needsAnswers-flagged, not re-committed.
-		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).toBe(landedBefore);
-		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).not.toMatch(
+		expect(showArbiter(repo, 'work/tasks/ready/landed.md')).toBe(landedBefore);
+		expect(showArbiter(repo, 'work/tasks/ready/landed.md')).not.toMatch(
 			/HIJACKED/,
 		);
-		expect(showArbiter(repo, 'work/tasks/todo/landed.md')).not.toMatch(
+		expect(showArbiter(repo, 'work/tasks/ready/landed.md')).not.toMatch(
 			/needsAnswers/,
 		);
 		// THIS run's own STAGED task WAS the one flagged needsAnswers (cap hit).

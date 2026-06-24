@@ -457,7 +457,7 @@ export interface ResolvedTask {
 	slug: string;
 	/** Absolute path to the task file that was read. */
 	path: string;
-	/** The folder the task was resolved from (in-progress wins over tasks-todo). */
+	/** The folder the task was resolved from (in-progress wins over tasks-ready). */
 	folder: TaskFolder;
 	/** The task's source prd slug (frontmatter `prd:`), if any. */
 	prd: string | undefined;
@@ -562,14 +562,14 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
  * resolved, so onboard cannot resurrect a finished task (defect 3 / story 5).
  * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
- * is byte-identical to the original `['in-progress','tasks-todo']`-only resolution.
+ * is byte-identical to the original `['in-progress','tasks-ready']`-only resolution.
  */
 export function resolveTask(
 	cwd: string,
 	slug: string,
 	continueGate?: ContinueResolutionGate,
 ): ResolvedTask {
-	const order: TaskFolder[] = ['in-progress', 'tasks-todo'];
+	const order: TaskFolder[] = ['in-progress', 'tasks-ready'];
 	// `done/` is appended ONLY on a continue whose work-branch tip is STRANDED —
 	// the tip-vs-arbiter gate (NEVER folder name alone). A complete task (tip on
 	// the arbiter) leaves the order untouched, so onboard never re-runs it.

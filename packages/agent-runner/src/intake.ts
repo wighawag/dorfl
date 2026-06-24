@@ -1068,7 +1068,7 @@ async function dispatchTask(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	const relPath = workItemRel('tasks-todo', `${slug}.md`);
+	const relPath = workItemRel('tasks-ready', `${slug}.md`);
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):

@@ -306,7 +306,7 @@ export async function promoteObservation(
 			message: `promote ${item}: empty new slug — cannot draft a backlog stub`,
 		};
 	}
-	const newItemPath = workItemRel('tasks-todo', `${newSlug}.md`);
+	const newItemPath = workItemRel('tasks-ready', `${newSlug}.md`);
 	const by = options.by || resolveBy(cwd, env);
 	const content = options.stubContent ?? defaultStub(newSlug, item);
 

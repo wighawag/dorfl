@@ -1658,7 +1658,7 @@ export async function listItemLockEntries(
 
 /**
  * List the TASK slugs currently lock-held on the arbiter — the held-slug set the
- * `todo/` pool readers SUBTRACT (prd `ledger-status-per-item-lock-refs` US #15;
+ * `ready/` pool readers SUBTRACT (prd `ledger-status-per-item-lock-refs` US #15;
  * task `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
  * and keeps only the `task-<slug>` entries (a prd/observation lock does not gate
  * the TASK pool), mapping each to its bare `<slug>`. Best-effort: a fetch

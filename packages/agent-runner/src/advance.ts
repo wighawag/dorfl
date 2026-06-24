@@ -387,7 +387,7 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * only the rung-classifier's frontmatter-source folders widen.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
+	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
 	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
 	observation: ['observations'],
 };

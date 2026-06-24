@@ -122,7 +122,7 @@ describe('the bounce marks the lock stuck and writes NO main', () => {
 		const {repo} = await claimAndBranch('beta');
 		// Emulate the post-done-move state on the work branch.
 		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
-		gitIn(['mv', 'work/tasks/todo/beta.md', 'work/tasks/done/beta.md'], repo);
+		gitIn(['mv', 'work/tasks/ready/beta.md', 'work/tasks/done/beta.md'], repo);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'done-move'], repo);
 

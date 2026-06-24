@@ -159,7 +159,7 @@ describe('requeue — tree-less CAS transition (does not write the cwd tree)', (
 		// Read the moved file from a FRESH clone of the arbiter (the durable home).
 		const fresh = seeded.clone('reader');
 		const body = readFileSync(
-			join(fresh, 'work', 'tasks', 'todo', 'gamma.md'),
+			join(fresh, 'work', 'tasks', 'ready', 'gamma.md'),
 			'utf8',
 		);
 		expect(body).toMatch(/## Requeue \d{4}-\d{2}-\d{2}/);

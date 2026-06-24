@@ -401,14 +401,13 @@ describe('resolveRepoConfig — per-key layering', () => {
 			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
 				.tasksLandIn,
 		).toBe('pre-backlog');
-		// global override: the user's global config sets the POOL value `todo`
-		// (renamed from `'backlog'` in task
-		// `f1-pool-noun-todo-in-surface-and-apply-readers`; staging is still
-		// `'pre-backlog'`).
-		const global = mergeConfig({tasksLandIn: 'todo'});
+		// global override: the user's global config sets the POOL value `ready`
+		// (renamed `'backlog'` → `'todo'` → `'ready'`, ADR
+		// `rename-task-pool-folder-todo-to-ready`; staging is still `'pre-backlog'`).
+		const global = mergeConfig({tasksLandIn: 'ready'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config.tasksLandIn,
-		).toBe('todo');
+		).toBe('ready');
 		// per-repo file overrides the global.
 		writeRepoConfig(repo, {tasksLandIn: 'pre-backlog'});
 		expect(
@@ -419,15 +418,15 @@ describe('resolveRepoConfig — per-key layering', () => {
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_TASKS_LAND_IN: 'todo'},
+				env: {AGENT_RUNNER_TASKS_LAND_IN: 'ready'},
 			}).config.tasksLandIn,
-		).toBe('todo');
+		).toBe('ready');
 		// a flag beats env.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {AGENT_RUNNER_TASKS_LAND_IN: 'todo'},
+				env: {AGENT_RUNNER_TASKS_LAND_IN: 'ready'},
 				flags: {tasksLandIn: 'pre-backlog'},
 			}).config.tasksLandIn,
 		).toBe('pre-backlog');

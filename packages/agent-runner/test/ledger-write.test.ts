@@ -69,7 +69,7 @@ describe('ledger-write seam — a claim-kind transition is dispatched THROUGH it
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		gitIn(['checkout', '-q', '-B', 'claim/beta', 'arbiter/main'], repo);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-		gitIn(['mv', 'work/tasks/todo/beta.md', 'work/in-progress/beta.md'], repo);
+		gitIn(['mv', 'work/tasks/ready/beta.md', 'work/in-progress/beta.md'], repo);
 		gitIn(['commit', '-q', '-m', 'claim: beta'], repo);
 		const base = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
 		const head = gitIn(['rev-parse', 'HEAD'], repo).trim();
@@ -103,7 +103,7 @@ describe('ledger-write seam — a claim-kind transition is dispatched THROUGH it
 		gitIn(['checkout', '-q', '-b', 'claim/gamma', 'arbiter/main'], repo);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		gitIn(
-			['mv', 'work/tasks/todo/gamma.md', 'work/in-progress/gamma.md'],
+			['mv', 'work/tasks/ready/gamma.md', 'work/in-progress/gamma.md'],
 			repo,
 		);
 		gitIn(['commit', '-q', '-m', 'claim: gamma'], repo);
@@ -136,7 +136,7 @@ describe('ledger-write seam — the per-attempt CAS nonce (authoritative for sam
 		gitIn(['checkout', '-q', '-B', branch, 'arbiter/main'], repo);
 		mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 		gitIn(
-			['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+			['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
 			repo,
 		);
 		gitIn(['commit', '-q', '-m', `claim: ${slug}`], repo);
@@ -359,7 +359,7 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 		// there). NO folder move — the body stays in backlog/, no needs-attention/.
 		expect(res.moved).toBe(true);
 		expect(existsSync(`${repo}/work/needs-attention/beta.md`)).toBe(false);
-		expect(existsSync(`${repo}/work/tasks/todo/beta.md`)).toBe(true);
+		expect(existsSync(`${repo}/work/tasks/ready/beta.md`)).toBe(true);
 	});
 
 	it('the return-to-backlog re-queue is dispatched via the seam', async () => {

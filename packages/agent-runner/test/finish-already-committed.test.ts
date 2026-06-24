@@ -78,7 +78,7 @@ async function seedStrandedCommittedDone(
 	// core does just before the push that then failed terminally.
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
 		repo,
 	);
 	gitIn(['add', '-A'], repo);
@@ -90,7 +90,7 @@ async function seedStrandedCommittedDone(
 	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
 		true,
 	);
-	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+	expect(existsSync(join(repo, 'work', 'tasks', 'ready', `${slug}.md`))).toBe(
 		false,
 	);
 	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
@@ -107,7 +107,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -136,7 +136,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -156,7 +156,7 @@ describe('finish-already-committed — recover a stranded committed-but-unpushed
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'propose',
@@ -181,7 +181,7 @@ describe('finish-already-committed — unspoofable detection (already-integrated
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',
@@ -202,7 +202,7 @@ describe('finish-already-committed — unspoofable detection (already-integrated
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			committedRecovery: true,
 			mode: 'merge',

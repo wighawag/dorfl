@@ -254,7 +254,7 @@ describe('parseFrontmatter', () => {
 	});
 
 	it('parses a lone-task `issue: N` link as a number (intake TASK-emit, no prd:)', () => {
-		// `intake`'s TASK outcome writes `issue: N` on the lone `work/tasks/todo/<slug>.md`
+		// `intake`'s TASK outcome writes `issue: N` on the lone `work/tasks/ready/<slug>.md`
 		// (no `prd:`) as the provider-agnostic closure link a future CI close-job reads.
 		const md = [
 			'---',

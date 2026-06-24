@@ -247,7 +247,7 @@ async function runClaim(
 		}
 	}
 
-	const backlog = workItemRel('tasks-todo', `${slug}.md`);
+	const backlog = workItemRel('tasks-ready', `${slug}.md`);
 	const branch = workBranchRef('task', slug);
 
 	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (prd

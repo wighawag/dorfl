@@ -75,7 +75,7 @@ function seedStagedTask(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 }
 
 function seedPoolTask(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'tasks', 'todo');
+	const dir = join(repo, 'work', 'tasks', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
@@ -229,7 +229,7 @@ describe('(d) BUILD/claim eligibility is UNCHANGED in EITHER mode', () => {
 		expect(args).toEqual(['pool-buildable']);
 	});
 
-	it('scan eligibility `items[]` only enumerates the agent pool (tasks/todo), never staging', () => {
+	it('scan eligibility `items[]` only enumerates the agent pool (tasks/ready), never staging', () => {
 		seedStagedTask('staged-task');
 		seedPoolTask('pool-task');
 		const report = scanRepoPaths([repo], cfg());
@@ -345,7 +345,7 @@ describe('(e) end-to-end: surface → answer → apply on a staged needsAnswers 
 			existsSync(join(seeded.repo, 'work/tasks/backlog/born-in-staging.md')),
 		).toBe(true);
 		expect(
-			existsSync(join(seeded.repo, 'work/tasks/todo/born-in-staging.md')),
+			existsSync(join(seeded.repo, 'work/tasks/ready/born-in-staging.md')),
 		).toBe(false);
 		// Sidecar deleted on a clean resolve.
 		expect(existsSync(join(seeded.repo, sidecarRel))).toBe(false);
@@ -420,7 +420,7 @@ describe('(f) F3 precondition: a concurrent promote during apply does NOT split-
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `arbiter/main:work/tasks/todo/${slug}.md`],
+				['cat-file', '-e', `arbiter/main:work/tasks/ready/${slug}.md`],
 				seeded.repo,
 				{env: gitEnv()},
 			).status,

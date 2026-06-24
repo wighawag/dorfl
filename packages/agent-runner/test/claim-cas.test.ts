@@ -81,7 +81,7 @@ describe('performClaim — happy path', () => {
 		expect(entry?.holder).not.toBe('');
 		// The backlog body is untouched — no claimed_by/claimed_at stamped into it.
 		const content = gitIn(
-			['show', 'arbiter/main:work/tasks/todo/alpha.md'],
+			['show', 'arbiter/main:work/tasks/ready/alpha.md'],
 			repo,
 		);
 		expect(content).not.toMatch(/^claimed_by:/m);

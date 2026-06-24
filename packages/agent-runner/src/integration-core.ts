@@ -162,7 +162,7 @@ export interface IntegrationLifecycle {
 
 /**
  * The default LIVENESS CEILING for the merge-mode `${branch}:main` push (the
- * durable promotions `tasks/todo → tasks/done` and, via `lifecycle`, `prds/ready
+ * durable promotions `tasks/ready → tasks/done` and, via `lifecycle`, `prds/ready
  * → prds/tasked`). Task `c2-rebase-until-real-on-durable-main-promotions` turned
  * the previous SMALL FIXED CAP (was 5, the `run-fleet-claim-integrate-and-sibling-
  * rebase-concurrency-safe` Race-1 budget) into rebase-until-real-conflict: a CLEAN
@@ -299,7 +299,7 @@ export interface IntegrationCoreInput {
 	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
 	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source: 'tasks-todo' | 'in-progress' | 'needs-attention' | 'done';
+	source: 'tasks-ready' | 'in-progress' | 'needs-attention' | 'done';
 	/**
 	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
 	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
@@ -2468,7 +2468,7 @@ async function reconcileDivergentDoneMove(params: {
 	slug: string;
 	branch: string;
 	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
-	localSource: 'tasks-todo' | 'in-progress' | 'needs-attention';
+	localSource: 'tasks-ready' | 'in-progress' | 'needs-attention';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<boolean> {

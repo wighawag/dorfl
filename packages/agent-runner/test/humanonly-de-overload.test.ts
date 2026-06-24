@@ -31,11 +31,11 @@ import {run} from '../src/git.js';
  *
  * The three orthogonal axes, each meaning one thing:
  *   - POSITION (folder, runner-deterministic): `work/tasks/backlog/` (staging, not
- *     eligible) vs `work/tasks/todo/` (the agent pool). Carries "review before the
+ *     eligible) vs `work/tasks/ready/` (the agent pool). Carries "review before the
  *     agent acts".
  *   - NATURE (task `humanOnly`, agent judgement, NARROWED): "never-by-nature"
  *     (secrets/release/security) — survives even when the task resides in the
- *     pool `work/tasks/todo/`. PRD `humanOnly` UNCHANGED (gates auto-tasking).
+ *     pool `work/tasks/ready/`. PRD `humanOnly` UNCHANGED (gates auto-tasking).
  *   - DISCOVERED (`needsAnswers`): unchanged.
  */
 
@@ -44,7 +44,7 @@ import {run} from '../src/git.js';
 describe('task `humanOnly` (NARROWED) — never agent-eligible, even in the pool', () => {
 	it('humanOnly:true is not agent-claimable regardless of autoBuild / pool residency', () => {
 		// The predicate operates on already-read frontmatter — the caller reads it
-		// from `work/tasks/todo/` (the pool). `autoBuild:true` simulates the pool path
+		// from `work/tasks/ready/` (the pool). `autoBuild:true` simulates the pool path
 		// (the strongest possible policy); `humanOnly:true` still refuses.
 		expect(resolveGateInputs({humanOnly: true})).toBe(false);
 		const e = resolveEligibility({
@@ -110,7 +110,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
 
 // --- Pool-residency on a real BARE mirror (`--bare file://`, house pattern) -
 
-describe('pool residency — humanOnly task in `work/tasks/todo/` (the pool) is NOT eligible', () => {
+describe('pool residency — humanOnly task in `work/tasks/ready/` (the pool) is NOT eligible', () => {
 	let root: string;
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), 'humanonly-de-overload-'));
@@ -123,7 +123,7 @@ describe('pool residency — humanOnly task in `work/tasks/todo/` (the pool) is 
 		const workspacesDir = join(root, '.agent-runner');
 		registerMirrorWithWork(workspacesDir, 'repo', {
 			backlog: {
-				// Lives in the AGENT POOL `work/tasks/todo/` — even there, the narrowed
+				// Lives in the AGENT POOL `work/tasks/ready/` — even there, the narrowed
 				// `humanOnly: true` survives (never-by-nature guard).
 				'never-by-nature.md': task({
 					slug: 'never-by-nature',

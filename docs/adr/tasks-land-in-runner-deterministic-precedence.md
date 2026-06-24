@@ -9,6 +9,12 @@ superseded_by:
 
 # ADR: tasksLandIn (the task-placement default) + the fixed staging/pool precedence
 
+> **AMENDMENT (2026-06-24, ADR `rename-task-pool-folder-todo-to-ready`).** The pool
+> VALUE spelling was renamed `'todo'` → `'ready'` (a clean break, matching the on-disk
+> folder `tasks/ready/` and the brief-side `'ready'` pool value). The precedence SHAPE
+> and reasoning below are unchanged; read every `'todo'` value spelling in this ADR as
+> `'ready'`.
+
 ## Context
 
 The task `runner-deterministic-slice-placement-policy-and-precedence` generalises

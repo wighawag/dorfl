@@ -163,8 +163,8 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		const emitted = wrapper('my-slug', 'my-prd');
 		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), now
 		// cut over to the new layout/vocabulary by the protocol-docs/skills/setup
-		// vocabulary task. The emitted task-body path is `work/tasks/todo/<slug>.md`.
-		expect(emitted).toContain('work/tasks/todo/my-slug.md');
+		// vocabulary task. The emitted task-body path is `work/tasks/ready/<slug>.md`.
+		expect(emitted).toContain('work/tasks/ready/my-slug.md');
 		expect(emitted).not.toContain('<slug>');
 	});
 
@@ -274,7 +274,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			cwd: scratch.root,
 		});
-		expect(out).toContain('work/tasks/todo/example.md');
+		expect(out).toContain('work/tasks/ready/example.md');
 		expect(out).toContain('TASK-BODY');
 		expect(out).not.toContain('<slug>');
 	});
@@ -659,12 +659,12 @@ describe('resolveTask — in-progress over backlog', () => {
 		expect(task.prd).toBe('my-prd');
 	});
 
-	it('falls back to work/tasks/todo/ when not in-progress', () => {
+	it('falls back to work/tasks/ready/ when not in-progress', () => {
 		seedTask(scratch.root, 'backlog', 'bar', '> backlog body');
 		// `resolveTask` returns the resolved folder by its symbolic KEY, which now
-		// reads in the new task vocabulary (`tasks-todo`).
+		// reads in the new task vocabulary (`tasks-ready`).
 		const task = resolveTask(scratch.root, 'bar');
-		expect(task.folder).toBe('tasks-todo');
+		expect(task.folder).toBe('tasks-ready');
 		expect(task.taskPrompt).toContain('backlog body');
 	});
 
@@ -809,7 +809,7 @@ describe('renderPrompt — slug given', () => {
 	it('renders the wrapper + task prompt for an explicit slug', () => {
 		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/tasks/todo/given.md');
+		expect(out).toContain('work/tasks/ready/given.md');
 		expect(out).toContain('the-prd');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
@@ -824,7 +824,7 @@ describe('renderPrompt — slug given', () => {
 		gitIn(['switch', '-q', '-c', 'work/other'], scratch.root);
 		seedTask(scratch.root, 'backlog', 'given', '> GIVEN-BODY');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/tasks/todo/given.md');
+		expect(out).toContain('work/tasks/ready/given.md');
 		expect(out).toContain('GIVEN-BODY');
 	});
 });
@@ -850,7 +850,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 		initRepoOnBranch('work/inferred');
 		seedTask(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
 		const out = renderPrompt({cwd: scratch.root, env: gitEnv()});
-		expect(out).toContain('work/tasks/todo/inferred.md');
+		expect(out).toContain('work/tasks/ready/inferred.md');
 		expect(out).toContain('INFERRED-BODY');
 	});
 
@@ -1061,7 +1061,7 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 			prdTestFirst?: boolean;
 		},
 	): void {
-		const taskDir = join(root, 'work', 'tasks', 'todo');
+		const taskDir = join(root, 'work', 'tasks', 'ready');
 		mkdirSync(taskDir, {recursive: true});
 		const t = ['---', `slug: ${slug}`];
 		if (opts.prd !== undefined) {

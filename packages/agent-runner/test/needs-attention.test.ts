@@ -98,7 +98,7 @@ describe('routeToNeedsAttention — saves wip + pushes the branch (no folder mov
 		expect(result.moved).toBe(true);
 		// NO folder move: the body still rests in backlog/ (claim never moved it),
 		// and NO needs-attention/ folder file exists.
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			true,
 		);
 		expect(existsSync(join(repo, 'work', 'needs-attention', 'alpha.md'))).toBe(

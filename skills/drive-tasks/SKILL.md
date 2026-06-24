@@ -37,7 +37,7 @@ The loop, selection, freshness check, Gate-3 review, and stuck-set are exactly a
 
 ## When to use vs. not
 
-- **Use** to take a `work/tasks/todo/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the agent-runner worker through a phase of task-building; as the building engine `orchestrate` delegates to.
+- **Use** to take a `work/tasks/ready/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the agent-runner worker through a phase of task-building; as the building engine `orchestrate` delegates to.
 - **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-tasks` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _task prds / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
 
 ## The golden rules (do not violate)
@@ -70,7 +70,7 @@ Either way the discipline is the same: do as much as can be done, then surface t
 
 When a task has routed to needs-attention (a red gate / Gate-2 block / rebase conflict / a build-time STOP marks its per-item lock `state: stuck`), its body carries the reason and its `work/<type>-<slug>` branch is **preserved on the arbiter** — nothing is lost. Whether you can re-drive it depends on the reason:
 
-- **A fixable problem the agent can resolve on a retry** — a real bug the gate caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human question. Recover it with **`agent-runner requeue <slug> --arbiter origin`** (DEFAULT = keep + continue: releases the stuck lock; the body is already resting in the pool `tasks/todo/`, and the branch is left UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise handoff with **`-m "<what to fix>"`** (appended to the body). Then `do task:<slug>` again: the re-claim CONTINUES from the kept branch, and the merged `agent-prompt-continue-context` puts the prior work + the needs-attention reason
+- **A fixable problem the agent can resolve on a retry** — a real bug the gate caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human question. Recover it with **`agent-runner requeue <slug> --arbiter origin`** (DEFAULT = keep + continue: releases the stuck lock; the body is already resting in the pool `tasks/ready/`, and the branch is left UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise handoff with **`-m "<what to fix>"`** (appended to the body). Then `do task:<slug>` again: the re-claim CONTINUES from the kept branch, and the merged `agent-prompt-continue-context` puts the prior work + the needs-attention reason
   - your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes the gap rather than restarting.
 - **A genuine human-decision block** — the task is ambiguous / drifted / rests on an unresolved fork — is NOT something a retry fixes. Leave it parked; it is a stuck-set question (ask it if a human is present, else report it). Do NOT requeue a task whose premise is wrong — re-scope it first (that is `orchestrate`/human work).
 - **`requeue --reset`** (DISCARD + fresh: deletes the remote branch first, then releases the lock so the next claim starts CLEAN) is for when the kept work is worthless. It is guarded and NEVER the default — only on an explicit human call; the conductor's default recovery is keep+continue.
@@ -83,27 +83,27 @@ AFTER any requeue, re-sync (`git fetch && pull --rebase`) so the re-`do` claims 
 
 ### 0. ANALYSE the task set + dependency graph
 
-Read every `work/tasks/todo/*.md` frontmatter (`slug`, `blockedBy`/`deps`, `needsAnswers`, `humanOnly`, `prd`, `covers`) and the `work/tasks/done/` set. Build the graph:
+Read every `work/tasks/ready/*.md` frontmatter (`slug`, `blockedBy`/`deps`, `needsAnswers`, `humanOnly`, `prd`, `covers`) and the `work/tasks/done/` set. Build the graph:
 
 - **READY** = every `blockedBy` is in `work/tasks/done/` AND `needsAnswers !== true` AND `humanOnly !== true`. (BOTH gate fields exclude a task from READY: `needsAnswers` means open questions a human must answer first; `humanOnly` means a human must DRIVE it. Check BOTH in the frontmatter scan, not just `needsAnswers`. A `humanOnly` task dispatched to `do` will rightly STOP at build time, wasting a claim/surface cycle, so catch it UP FRONT.)
-- **BLOCKED** = a `blockedBy` is still in the pool `tasks/todo/`, held (in-progress on its lock), or stuck (needs-attention on its lock).
+- **BLOCKED** = a `blockedBy` is still in the pool `tasks/ready/`, held (in-progress on its lock), or stuck (needs-attention on its lock).
 - **GATED** = `needsAnswers: true` OR `humanOnly: true` (needs a human first, by question or by drive-ownership; NEVER agent-buildable; list it but do not build it, even once its deps land). The agent-buildable READY set is the tasks that are neither blocked nor gated by EITHER field.
 
-(A task in the STAGING slot `tasks/backlog/` is review-first, awaiting a human's promotion into the pool `tasks/todo/`; it is NOT in the READY set — surface it, don't build it.) Note which tasks **unlock the most downstream work** when they land — those go first.
+(A task in the STAGING slot `tasks/backlog/` is review-first, awaiting a human's promotion into the pool `tasks/ready/`; it is NOT in the READY set — surface it, don't build it.) Note which tasks **unlock the most downstream work** when they land — those go first.
 
-> **This is the DEFAULT and it does NOT change:** the READY set is computed from the agent POOL `work/tasks/todo/`, and `work/tasks/backlog/` is review-first STAGING the conductor does NOT build (it surfaces those, it never dispatches `do` against them). Unless the caller explicitly opts into the drive-from-backlog mode below, behave exactly as documented above.
+> **This is the DEFAULT and it does NOT change:** the READY set is computed from the agent POOL `work/tasks/ready/`, and `work/tasks/backlog/` is review-first STAGING the conductor does NOT build (it surfaces those, it never dispatches `do` against them). Unless the caller explicitly opts into the drive-from-backlog mode below, behave exactly as documented above.
 
 #### Opt-in: drive tasks from `tasks/backlog/` (the staging folder)
 
 **OPT-IN ONLY — never the default.** When, and ONLY when, the **caller EXPLICITLY instructs** this skill to drive tasks from the staging folder `work/tasks/backlog/` (e.g. "drive the tasks in backlog/", "build the backlog tasks <slugs>", an explicit drive-from-backlog mode), the conductor builds those staged tasks too, using the **identical** loop, selection, freshness check, Gate-3 review, requeue recovery, and stuck-set discipline described in this whole skill — the ONLY change is WHERE the READY set is read from. Absent that explicit instruction, `tasks/backlog/` stays review-first staging you surface but do NOT build (the default above). If you are unsure whether the caller meant this, do NOT assume it — treat the staging folder as review-first and ask.
 
-In this mode the READY computation reads **`work/tasks/backlog/`** instead of `work/tasks/todo/` (or, if the caller explicitly says to drive BOTH, the UNION of `tasks/backlog/` + `tasks/todo/`). Everything else is unchanged:
+In this mode the READY computation reads **`work/tasks/backlog/`** instead of `work/tasks/ready/` (or, if the caller explicitly says to drive BOTH, the UNION of `tasks/backlog/` + `tasks/ready/`). Everything else is unchanged:
 
-- **READY** = every `blockedBy` is in `work/tasks/done/` AND `needsAnswers !== true` AND `humanOnly !== true` — the SAME gating, just over the staging set (and, when the caller scopes the run to specific slugs, restricted to those). `blockedBy` still resolves against `work/tasks/done/` exactly as in the default; deps held in `tasks/backlog/` (or `tasks/todo/`) that are not yet `done/` are BLOCKED, so honour the same dependency ordering.
+- **READY** = every `blockedBy` is in `work/tasks/done/` AND `needsAnswers !== true` AND `humanOnly !== true` — the SAME gating, just over the staging set (and, when the caller scopes the run to specific slugs, restricted to those). `blockedBy` still resolves against `work/tasks/done/` exactly as in the default; deps held in `tasks/backlog/` (or `tasks/ready/`) that are not yet `done/` are BLOCKED, so honour the same dependency ordering.
 - **GATED** (`needsAnswers`/`humanOnly`) and **BLOCKED** mean exactly what they mean above; a `humanOnly`/`needsAnswers` staged task is NEVER agent-buildable here either.
 - The build is the SAME `agent-runner do task:<slug> --isolated`, the SAME Gate-3 diff-vs-criteria review, the SAME merge-via-PR-comment, and the SAME accumulate-don't-block stuck-set. (The staged task must be on the arbiter's `main` for the isolated build to see it — per [Selection + isolation](#selection--isolation), push it and its deps first if they are local-only.)
 
-This mode exists so a caller who has already decided a set of staged tasks is good can have the conductor build them straight from `tasks/backlog/` without first promoting them into `tasks/todo/`. It does NOT relax the review-first nature of staging for any OTHER caller or run; it is a per-invocation, explicitly-requested override of the read location only.
+This mode exists so a caller who has already decided a set of staged tasks is good can have the conductor build them straight from `tasks/backlog/` without first promoting them into `tasks/ready/`. It does NOT relax the review-first nature of staging for any OTHER caller or run; it is a per-invocation, explicitly-requested override of the read location only.
 
 ### 1. CHECK freshness / up-to-dateness of each ready task
 
@@ -209,7 +209,7 @@ The conductor is **tick-agnostic**: today the per-item action is `agent-runner d
 
 ## Pitfalls
 
-- **The interrupt footgun.** Aborting your `do` wrapper does NOT kill the spawned agent — it keeps editing files in the background. After any interrupt, `ps`-find + kill the `do`/agent/`tsc` tree, discard its partial edits, and release the claim (the runner reverts the lock; the body is already resting in the pool `tasks/todo/`) before redoing.
+- **The interrupt footgun.** Aborting your `do` wrapper does NOT kill the spawned agent — it keeps editing files in the background. After any interrupt, `ps`-find + kill the `do`/agent/`tsc` tree, discard its partial edits, and release the claim (the runner reverts the lock; the body is already resting in the pool `tasks/ready/`) before redoing.
 - **Flaky tests red a good gate.** If a task's gate fails ONLY on a known-flaky test with everything else green, re-run before treating it as a real block (and the flake itself is a `notes/observations/` note, not a task fix).
 - **A `do` that delivers no code is NOT a success** (nothing changed → the gate passes vacuously). The runner catches this two ways — an agent STOP (drift) routes to needs-attention before the gate, and Gate-2 (plus your Gate-3) check the _diff against the criteria_, not just the gate. Trust the block; never merge an empty-or-criteria-unmet diff.
 - **Don't sum two freshness models.** When reporting cross-repo + local state, keep them distinct.

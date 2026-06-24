@@ -24,14 +24,14 @@ import {buildProgram} from '../src/cli.js';
  * (house pattern via `test/helpers/gitRepo.ts`):
  *
  *   (a) the tasking path's emitted tasks land STAGED in `work/tasks/backlog/`,
- *       NOT in `work/tasks/todo/`;
- *   (b) `work/tasks/todo/` STILL means the agent-eligible pool — the claim CAS reads
- *       `work/tasks/todo/` byte-for-byte unchanged and refuses a STAGED slug;
+ *       NOT in `work/tasks/ready/`;
+ *   (b) `work/tasks/ready/` STILL means the agent-eligible pool — the claim CAS reads
+ *       `work/tasks/ready/` byte-for-byte unchanged and refuses a STAGED slug;
  *   (c) the runner-owned promotion (`promoteFromPreBacklog`) moves the staged
  *       task `pre-backlog/ → backlog/` on the arbiter and the same slug
  *       becomes claimable;
  *   (d) the agent cannot self-place into the pool — a tasking agent that writes
- *       directly into `work/tasks/todo/` has its writes scrubbed by the
+ *       directly into `work/tasks/ready/` has its writes scrubbed by the
  *       pool-placement fence, so the final arbiter carries nothing in the pool
  *       for that slug (only the legitimately staged file). There is no
  *       agent-facing API that performs the promotion: it is a separate
@@ -100,7 +100,7 @@ function stagingAgent(file = 'child'): TaskAgentRunner {
 /**
  * A MISBEHAVING agent that writes BOTH:
  *  - a legitimate staged task under `work/tasks/backlog/<legit>.md`, AND
- *  - a self-placement attempt directly under `work/tasks/todo/<hijack>.md`
+ *  - a self-placement attempt directly under `work/tasks/ready/<hijack>.md`
  *    (an attempt to self-promote into the agent-eligible pool, PRD US #4 / ADR).
  * The runner's pool-placement fence must scrub the second.
  */
@@ -112,7 +112,7 @@ function selfPlacingAgent(legit: string, hijack: string): TaskAgentRunner {
 			join(staged, `${legit}.md`),
 			`---\nslug: ${legit}\nprd: it\n---\n\n## Prompt\n\n> ${legit}\n`,
 		);
-		const pool = join(cwd, 'work', 'tasks', 'todo');
+		const pool = join(cwd, 'work', 'tasks', 'ready');
 		mkdirSync(pool, {recursive: true});
 		writeFileSync(
 			join(pool, `${hijack}.md`),
@@ -155,14 +155,14 @@ describe('STEP A — tasker output lands STAGED in pre-backlog/, not backlog/', 
 		expect(result.emitted).toEqual(['work/tasks/backlog/child.md']);
 		// The task landed in the STAGING folder, not the pool.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 		// PRD lifecycle move still happens (the staging split is orthogonal).
 		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
 	});
 });
 
-describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (readers unchanged)', () => {
-	it('a STAGED slug is NOT claimable (the claim CAS reads work/tasks/todo/ only)', async () => {
+describe('STEP A — work/tasks/ready/ STILL means the agent-eligible pool (readers unchanged)', () => {
+	it('a STAGED slug is NOT claimable (the claim CAS reads work/tasks/ready/ only)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		await performTask({
@@ -176,7 +176,7 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 		});
 		// The task is staged on the arbiter…
 		expect(onArbiterMain(repo, 'work/tasks/backlog/staged-only.md')).toBe(true);
-		// …but the claim CAS (which reads work/tasks/todo/<slug>.md) refuses it: there
+		// …but the claim CAS (which reads work/tasks/ready/<slug>.md) refuses it: there
 		// is no such pool item.
 		const claim = await performClaim({
 			slug: 'staged-only',
@@ -187,9 +187,9 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 		expect(claim.outcome).not.toBe('claimed');
 	});
 
-	it('a slug that IS in work/tasks/todo/ (seeded directly) is claimable (the pool reader is unchanged)', async () => {
+	it('a slug that IS in work/tasks/ready/ (seeded directly) is claimable (the pool reader is unchanged)', async () => {
 		// Seed a task directly into the pool (modelling something a human / a future
-		// promotion has already moved into work/tasks/todo/).
+		// promotion has already moved into work/tasks/ready/).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['inpool']);
 		const claim = await performClaim({
 			slug: 'inpool',
@@ -202,7 +202,7 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 });
 
 describe('STEP A — the runner-owned promotion makes a staged task claimable', () => {
-	it('promoteFromPreBacklog moves work/tasks/backlog/<slug>.md -> work/tasks/todo/<slug>.md on the arbiter; afterwards the slug claims', async () => {
+	it('promoteFromPreBacklog moves work/tasks/backlog/<slug>.md -> work/tasks/ready/<slug>.md on the arbiter; afterwards the slug claims', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		await performTask({
@@ -216,7 +216,7 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 		});
 		// Precondition: staged, NOT in the pool — and not claimable.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/to-promote.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/to-promote.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/to-promote.md')).toBe(false);
 		const before = await performClaim({
 			slug: 'to-promote',
 			cwd: repo,
@@ -239,7 +239,7 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 
 		// Postcondition: in the pool, no longer staged — and now claimable.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/to-promote.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/tasks/todo/to-promote.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/to-promote.md')).toBe(true);
 		const after = await performClaim({
 			slug: 'to-promote',
 			cwd: repo,
@@ -263,7 +263,7 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 });
 
 describe('STEP A — the agent cannot self-place into the pool (pool-placement fence)', () => {
-	it('an agent that writes work/tasks/todo/<hijack>.md during tasking has its write scrubbed; only work/tasks/backlog/<legit>.md lands', async () => {
+	it('an agent that writes work/tasks/ready/<hijack>.md during tasking has its write scrubbed; only work/tasks/backlog/<legit>.md lands', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const result = await performTask({
@@ -279,19 +279,19 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 		// The legitimate STAGED placement landed (the agent's pre-backlog/ write).
 		expect(onArbiterMain(repo, 'work/tasks/backlog/legit.md')).toBe(true);
 		// The self-placement attempt did NOT reach the pool: the runner's fence
-		// scrubbed the agent's `work/tasks/todo/<hijack>.md` write before the
+		// scrubbed the agent's `work/tasks/ready/<hijack>.md` write before the
 		// integrate's `git add -A` could land it.
-		expect(onArbiterMain(repo, 'work/tasks/todo/hijack.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/hijack.md')).toBe(false);
 		// And — crucially — the agent cannot promote the legit task into the pool
-		// either: nothing the tasking path emits puts an item into work/tasks/todo/.
+		// either: nothing the tasking path emits puts an item into work/tasks/ready/.
 		// The promotion is a separate runner-owned move (`promoteFromPreBacklog`).
-		expect(onArbiterMain(repo, 'work/tasks/todo/legit.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/legit.md')).toBe(false);
 	});
 
 	it('a pool-edit attempt (the agent overwrites a PRE-EXISTING pool task during tasking) is also reverted (HEAD content preserved)', async () => {
 		// Seed a pool task on the arbiter first.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['poolitem']);
-		const poolBefore = showArbiterMain(repo, 'work/tasks/todo/poolitem.md');
+		const poolBefore = showArbiterMain(repo, 'work/tasks/ready/poolitem.md');
 		seedPrd(repo, 'it');
 		// Agent writes a legit staged task AND tampers with the pre-existing pool task.
 		const tamperingAgent: TaskAgentRunner = ({cwd}) => {
@@ -302,7 +302,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 				'---\nslug: fresh\nprd: it\n---\n\n## Prompt\n\n> fresh\n',
 			);
 			writeFileSync(
-				join(cwd, 'work', 'tasks', 'todo', 'poolitem.md'),
+				join(cwd, 'work', 'tasks', 'ready', 'poolitem.md'),
 				'TAMPERED CONTENT',
 			);
 			return {ok: true};
@@ -318,7 +318,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 		});
 		expect(result.outcome).toBe('tasked');
 		// The pre-existing pool task is BYTE-FOR-BYTE unchanged on the arbiter.
-		expect(showArbiterMain(repo, 'work/tasks/todo/poolitem.md')).toBe(
+		expect(showArbiterMain(repo, 'work/tasks/ready/poolitem.md')).toBe(
 			poolBefore,
 		);
 		// The legitimately staged task landed.
@@ -332,7 +332,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
  * in isolation, but `config.tasksLandIn` and the `--tasks-land-in` flag were
  * NEVER threaded from `cli.ts` into the `DoOptions` the `do prd:` path builds, so
  * the configured-default + explicit-flag rungs were dead from the shipped binary
- * (a user setting `tasksLandIn: 'todo'` saw the built-in `pre-backlog` floor).
+ * (a user setting `tasksLandIn: 'ready'` saw the built-in `pre-backlog` floor).
  * These tests drive the REAL `buildProgram()` `do prd:` path end-to-end on a
  * `--bare file://` arbiter, with the tasker STUBBED by a trivial `agentCmd` bash
  * command (the null harness shells `bash -c <agentCmd>` in the worktree), and
@@ -420,11 +420,11 @@ async function runDo(
 }
 
 describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the tasker (the wire)', () => {
-	it('a per-repo `tasksLandIn: todo` reaches performTask via `do prd:` (task lands in the POOL, not pre-backlog/)', async () => {
+	it('a per-repo `tasksLandIn: ready` reaches performTask via `do prd:` (task lands in the POOL, not pre-backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		// The key under test: a per-repo configured default of `todo` (the pool).
-		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
+		// The key under test: a per-repo configured default of `ready` (the pool).
+		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'ready'});
 		const {code, captured} = await runDo(repo, [
 			'prd:it',
 			'--arbiter',
@@ -434,7 +434,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		]);
 		expect(code, captured).toBe(0);
 		// The configured default REACHED the tasker: the task landed in the POOL.
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
@@ -452,13 +452,13 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		]);
 		expect(code, captured).toBe(0);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
-	it('the explicit `--tasks-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: todo` config (operator flag wins)', async () => {
+	it('the explicit `--tasks-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: ready` config (operator flag wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
-		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
+		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'ready'});
 		const {code, captured} = await runDo(repo, [
 			'prd:it',
 			'--arbiter',
@@ -469,9 +469,9 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 			'pre-backlog',
 		]);
 		expect(code, captured).toBe(0);
-		// The flag beat the config: STAGED despite `tasksLandIn: todo`.
+		// The flag beat the config: STAGED despite `tasksLandIn: ready`.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
 	it('`--tasks-land-in <bad>` FAILS LOUDLY (a usage error, never a silent drop)', async () => {
@@ -493,6 +493,6 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		expect(code === undefined || code !== 0).toBe(true);
 		expect(captured).toMatch(/tasks-land-in/i);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 });

@@ -118,9 +118,9 @@ describe('do <slug> — in-place happy path → exit', () => {
 			expect(currentBranch(cwd)).toBe(`work/task-${slug}`);
 			// The body RESTS in backlog/ in the tree (claim acquired the lock but
 			// never moved the body); the agent never did any git.
-			expect(existsSync(join(cwd, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
-				true,
-			);
+			expect(
+				existsSync(join(cwd, 'work', 'tasks', 'ready', `${slug}.md`)),
+			).toBe(true);
 			expect(existsSync(join(cwd, 'work', 'in-progress', `${slug}.md`))).toBe(
 				false,
 			);
@@ -207,7 +207,7 @@ describe('do <slug> — UNTRUSTED-ORIGIN build forces propose (untrusted-origin-
 	// Stamp the backlog task as untrusted-origin + push it to main (a task born
 	// from an untrusted issue, propagated by the tasker onto the backlog file).
 	const stampTaskUntrusted = (repo: string, slug: string): void => {
-		const path = join(repo, 'work', 'tasks', 'todo', `${slug}.md`);
+		const path = join(repo, 'work', 'tasks', 'ready', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
 		writeFileSync(
 			path,
@@ -486,9 +486,9 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 	 */
 
 	/** A stubbed agent that COMMITS a deletion of the task's body (now resting in
-	 * `work/tasks/todo/`, since claim no longer moves it) from the work branch — the
+	 * `work/tasks/ready/`, since claim no longer moves it) from the work branch — the
 	 * source-strand state `complete.ts` refuses with `nothing to complete (already
-	 * done, or wrong slug?)`. The arbiter still holds the body in `work/tasks/todo/`,
+	 * done, or wrong slug?)`. The arbiter still holds the body in `work/tasks/ready/`,
 	 * so `do` should bounce it to needs-attention on the arbiter, not silently
 	 * strand it.
 	 */
@@ -497,7 +497,7 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		// fire — we WANT the run to reach `performComplete`, where source-resolution
 		// refuses with `nothing to complete` (the source-strand class).
 		writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
-		gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], cwd);
+		gitIn(['rm', '-q', `work/tasks/ready/${slug}.md`], cwd);
 		gitIn(['add', '-A'], cwd);
 		gitIn(['commit', '-q', '-m', 'drop the task (source strand)'], cwd);
 		return {ok: true};

@@ -69,7 +69,7 @@ function onWorkBranchWithInProgress(repo: string, slug: string): void {
 	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/in-progress/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
 		repo,
 	);
 	writeFileSync(join(repo, 'agent-output.txt'), 'work\n');

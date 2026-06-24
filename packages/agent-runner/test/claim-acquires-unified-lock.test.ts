@@ -259,7 +259,7 @@ describe('releasing the lock returns the item to the pool so a re-claim succeeds
 
 describe('held-slug subtraction in the pool readers', () => {
 	const state = {
-		todo: [
+		ready: [
 			{
 				file: 'alpha.md',
 				slug: 'alpha',

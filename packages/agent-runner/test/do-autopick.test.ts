@@ -34,12 +34,12 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-/** Seed a `work/tasks/todo/<slug>.md` task with the given gate frontmatter. */
+/** Seed a `work/tasks/ready/<slug>.md` task with the given gate frontmatter. */
 function seedTask(
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean; blockedBy?: string[]} = {},
 ): void {
-	const dir = join(repo, 'work', 'tasks', 'todo');
+	const dir = join(repo, 'work', 'tasks', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');

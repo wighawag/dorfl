@@ -79,7 +79,7 @@ async function seedStrandedWorktree(
 	// remote is `origin` (the mirror's clone); the body rests in backlog/ there.
 	mkdirSync(join(dir, 'work', 'tasks', 'done'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
 		dir,
 	);
 	gitIn(['add', '-A'], dir);

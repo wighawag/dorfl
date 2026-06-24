@@ -14,7 +14,7 @@ import {join} from 'node:path';
  *
  * The whole point of the seam: the LATER rename tasks flip the VALUES in
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
- * Call sites reference folders by their SYMBOLIC key (`'tasks-todo'`,
+ * Call sites reference folders by their SYMBOLIC key (`'tasks-ready'`,
  * `'prds-ready'`, …), never by a raw string, so renaming a folder never
  * re-touches a single call site.
  *
@@ -44,7 +44,7 @@ export const WORK_ROOT = 'work' as const;
  *
  * Folder kinds (kept here as a single registry, but their distinct roles matter):
  *   - TASK lifecycle, the `tasks/` Kanban board: `tasks/backlog` (staging, key
- *     `tasks-backlog`) → `tasks/todo` (the agent pool, key `tasks-todo`) →
+ *     `tasks-backlog`) → `tasks/ready` (the agent pool, key `tasks-ready`) →
  *     `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed terminal, key
  *     `cancelled`).
  *   - PRD lifecycle, the `prds/` regime: `prds/proposed` (staging, key
@@ -66,17 +66,17 @@ export const WORK_ROOT = 'work' as const;
  *
  * NOTE on the symbolic-key vocabulary cutover
  * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`): the KEYS below now
- * read in the NEW task/prd vocabulary (`tasks-backlog`/`tasks-todo`,
+ * read in the NEW task/prd vocabulary (`tasks-backlog`/`tasks-ready`,
  * `prds-proposed`/`prds-ready`/`prds-tasked`). This is a PURE in-code symbol
  * rename — the VALUE strings are byte-identical to before, so no on-disk folder
  * moved. An earlier sibling task (`folder-taxonomy-reorg-and-rename` Phase 1)
- * flipped the VALUES (`tasks/todo`, `prds/ready`, …) while deliberately leaving
+ * flipped the VALUES (`tasks/ready`, `prds/ready`, …) while deliberately leaving
  * the KEYS on the old words; this task flips only the KEYS so the registry reads
  * coherently. The folder-as-status invariant and every resolved path are unchanged.
  */
 export const WORK_FOLDER_NAME = {
 	'tasks-backlog': 'tasks/backlog',
-	'tasks-todo': 'tasks/todo',
+	'tasks-ready': 'tasks/ready',
 	'in-progress': 'in-progress',
 	'needs-attention': 'needs-attention',
 	done: 'tasks/done',
@@ -185,13 +185,13 @@ export function isWorkItemFile(name: string): boolean {
 
 /**
  * The TASK-RESOLUTION folders `resolveTask` (prompt.ts) walks, in precedence
- * order: `in-progress` over `tasks-todo`, with `done` appended only behind the
+ * order: `in-progress` over `tasks-ready`, with `done` appended only behind the
  * stranded-continue gate. Order is load-bearing — kept exactly as the original
  * union/array.
  */
 export const TASK_RESOLUTION_FOLDERS = [
 	'in-progress',
-	'tasks-todo',
+	'tasks-ready',
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
@@ -200,11 +200,11 @@ export type TaskResolutionFolder = (typeof TASK_RESOLUTION_FOLDERS)[number];
 
 /**
  * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
- * in (prd-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
+ * in (prd-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-ready`, `in-progress`,
  * `needs-attention`, `done`.
  */
 export const TASK_LIFECYCLE_FOLDERS = [
-	'tasks-todo',
+	'tasks-ready',
 	'in-progress',
 	'needs-attention',
 	'done',
@@ -215,7 +215,7 @@ export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
 
 /**
  * The DURABLE task-status folders the ledger lint / integration core treat as the
- * one-slug-one-folder state machine: `tasks-todo`, `done`, `cancelled`
+ * one-slug-one-folder state machine: `tasks-ready`, `done`, `cancelled`
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
  * `in-progress`/`needs-attention`/`tasking` are NOT here (they are lock-ref state).
  * `cancelled` is the task regime's won't-proceed terminal (the per-regime split
@@ -224,7 +224,7 @@ export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
  * and a prd never co-resides with a task on the tasks board).
  */
 export const LEDGER_STATUS_FOLDERS = [
-	'tasks-todo',
+	'tasks-ready',
 	'done',
 	'cancelled',
 ] as const satisfies readonly WorkFolderKey[];

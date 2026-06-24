@@ -167,7 +167,7 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		});
 		expect(result.outcome).toBe('promoted');
 		expect(result.exitCode).toBe(0);
-		expect(result.newItemPath).toBe('work/tasks/todo/prom.md');
+		expect(result.newItemPath).toBe('work/tasks/ready/prom.md');
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'prom')).toBe(true);
 		// The observation resolved locally (sidecar gone, needsAnswers cleared).
 		expect(

@@ -22,7 +22,7 @@ describe('work-layout — the single source of every work/ path + folder union',
 		// The key-vocabulary cutover task
 		// (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) flips only the
 		// KEYS to the new task/prd words (`pre-backlog` -> `tasks-backlog`,
-		// `backlog` -> `tasks-todo`, `pre-prd` -> `prds-proposed`,
+		// `backlog` -> `tasks-ready`, `pre-prd` -> `prds-proposed`,
 		// `prd` -> `prds-ready`, `prd-tasked` -> `prds-tasked`). It is a PURE in-code
 		// symbol rename: every VALUE string below is byte-identical to before the task,
 		// so NO on-disk folder moved. The already-clean keys (`done`/`cancelled`/
@@ -31,7 +31,7 @@ describe('work-layout — the single source of every work/ path + folder union',
 		expect(WORK_ROOT).toBe('work');
 		expect(WORK_FOLDER_NAME).toEqual({
 			'tasks-backlog': 'tasks/backlog',
-			'tasks-todo': 'tasks/todo',
+			'tasks-ready': 'tasks/ready',
 			'in-progress': 'in-progress',
 			'needs-attention': 'needs-attention',
 			done: 'tasks/done',
@@ -60,13 +60,13 @@ describe('work-layout — the single source of every work/ path + folder union',
 	});
 
 	it('workFolderName resolves a symbolic key to its on-disk name', () => {
-		expect(workFolderName('tasks-todo')).toBe('tasks/todo');
+		expect(workFolderName('tasks-ready')).toBe('tasks/ready');
 		expect(workFolderName('prds-tasked')).toBe('prds/tasked');
 	});
 
 	it('workFolderPath builds <root>/work/<folder>', () => {
-		expect(workFolderPath('/repo', 'tasks-todo')).toBe(
-			join('/repo', 'work', 'tasks', 'todo'),
+		expect(workFolderPath('/repo', 'tasks-ready')).toBe(
+			join('/repo', 'work', 'tasks', 'ready'),
 		);
 		expect(workFolderPath('/repo', 'prds-ready')).toBe(
 			join('/repo', 'work', 'prds', 'ready'),
@@ -103,10 +103,10 @@ describe('work-layout — the single source of every work/ path + folder union',
 	});
 
 	it('stripWorkFolderPrefix returns undefined when the path is not under the folder', () => {
-		expect(stripWorkFolderPrefix('work/tasks/todo/x.md', 'tasks-backlog')).toBe(
-			undefined,
-		);
-		expect(stripWorkFolderPrefix('src/foo.ts', 'tasks-todo')).toBe(undefined);
+		expect(
+			stripWorkFolderPrefix('work/tasks/ready/x.md', 'tasks-backlog'),
+		).toBe(undefined);
+		expect(stripWorkFolderPrefix('src/foo.ts', 'tasks-ready')).toBe(undefined);
 	});
 
 	it('isWorkItemFile is the single item-scan predicate (case-insensitive .md)', () => {
@@ -119,17 +119,17 @@ describe('work-layout — the single source of every work/ path + folder union',
 	it('the folder unions/arrays match their original scattered definitions', () => {
 		expect([...TASK_RESOLUTION_FOLDERS]).toEqual([
 			'in-progress',
-			'tasks-todo',
+			'tasks-ready',
 			'done',
 		]);
 		expect([...TASK_LIFECYCLE_FOLDERS]).toEqual([
-			'tasks-todo',
+			'tasks-ready',
 			'in-progress',
 			'needs-attention',
 			'done',
 		]);
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
-			'tasks-todo',
+			'tasks-ready',
 			'done',
 			'cancelled',
 		]);

@@ -12,11 +12,11 @@ It writes a **file** (no issue tracker), and the prd is a **launch snapshot**, n
 
 ## A prd here is a LAUNCH SNAPSHOT (not maintained)
 
-Write it once, fully, at launch. It captures intent + decisions _at creation time_. It is **not kept in sync** afterwards — current truth lives in `docs/adr/` (decisions) and the code; remaining work lives in `work/tasks/todo/` tasks. Every prd WILL be outrun by the work; that is normal and fine — do not fight it with ongoing prd maintenance. (The `to-task` skill performs a ONE-TIME trim at tasking-time, moving the now-redundant technical detail into tasks/ADRs so the prd settles to its durable framing — see that skill. After that, the prd is stable _because_ the stale-prone part was relocated, not because it is maintained.)
+Write it once, fully, at launch. It captures intent + decisions _at creation time_. It is **not kept in sync** afterwards — current truth lives in `docs/adr/` (decisions) and the code; remaining work lives in `work/tasks/ready/` tasks. Every prd WILL be outrun by the work; that is normal and fine — do not fight it with ongoing prd maintenance. (The `to-task` skill performs a ONE-TIME trim at tasking-time, moving the now-redundant technical detail into tasks/ADRs so the prd settles to its durable framing — see that skill. After that, the prd is stable _because_ the stale-prone part was relocated, not because it is maintained.)
 
 Put a one-line banner at the top of every prd you write:
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` + code; remaining work: `work/tasks/todo/`.
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` + code; remaining work: `work/tasks/ready/`.
 
 ## Process
 

@@ -372,7 +372,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 	});
 
 	function seedTask(slug: string): void {
-		const dir = join(repo, 'work', 'tasks', 'todo');
+		const dir = join(repo, 'work', 'tasks', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),

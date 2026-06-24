@@ -19,7 +19,7 @@ An item's autonomy is governed by THREE orthogonal axes, each OWNED by the side 
 produce it:
 
 - **POSITION (a folder, RUNNER-deterministic, STRUCTURAL).** A staging vs pool split, `pre-backlog/`
-  (staging, not agent-eligible) vs `tasks/todo/` (the agent pool) for tasks; `prds/proposed/` (staging) vs
+  (staging, not agent-eligible) vs `tasks/ready/` (the agent pool) for tasks; `prds/proposed/` (staging) vs
   `prds/ready/` (auto-tasking pool) for prds. WHICH folder an item's output lands in is COMPUTED by the
   RUNNER from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit
   operator flags) via a fixed precedence chain. No judgement; a pure function the agent cannot
@@ -27,7 +27,7 @@ produce it:
 - **NATURE (`humanOnly`, AGENT/human judgement, ADVISORY).** "An agent must NEVER auto-take this by
   nature", decided by reasoning about the work (does building/tasking it need human
   judgement/security/secrets?). Non-deterministic, content-derived, advisory (a human can override).
-  Task `humanOnly` gates BUILDING (survives even in `tasks/todo/`); prd `humanOnly` gates TASKING.
+  Task `humanOnly` gates BUILDING (survives even in `tasks/ready/`); prd `humanOnly` gates TASKING.
 - **DISCOVERED (`needsAnswers`, AGENT judgement, ADVISORY).** "Blocked on an open question" , 
   unchanged.
 

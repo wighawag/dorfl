@@ -25,7 +25,7 @@ function config() {
 	return mergeConfig({workspacesDir: workspacesDir(), autoBuild: true});
 }
 
-/** A minimal task body for `work/tasks/todo/<slug>.md`. */
+/** A minimal task body for `work/tasks/ready/<slug>.md`. */
 function task(slug: string, extra: Record<string, string> = {}): string {
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	for (const [k, v] of Object.entries(extra)) {
@@ -45,10 +45,10 @@ function seedCwdRepo(
 	opts: {dir?: string} = {},
 ): {repo: string; arbiter: string} {
 	const repo = join(scratch.root, opts.dir ?? 'project');
-	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 	for (const [file, content] of Object.entries(backlog)) {
-		writeFileSync(join(repo, 'work', 'tasks', 'todo', file), content);
+		writeFileSync(join(repo, 'work', 'tasks', 'ready', file), content);
 	}
 	writeFileSync(join(repo, 'README.md'), '# project\n');
 	gitIn(['add', '-A'], repo);

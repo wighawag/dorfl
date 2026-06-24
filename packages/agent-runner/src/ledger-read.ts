@@ -28,8 +28,8 @@ import {
  * The seam is honest about the real read sources rather than pretending they are
  * one (per the ADR — do not collapse them):
  *
- *   - **local working tree** — a working clone reads `work/tasks/todo|tasks/done`
- *     from its checkout (pool = `tasks/todo`; staging = `tasks/backlog`, surfaced
+ *   - **local working tree** — a working clone reads `work/tasks/ready|tasks/done`
+ *     from its checkout (pool = `tasks/ready`; staging = `tasks/backlog`, surfaced
  *     elsewhere). OFFLINE. (Pre-registry `scan`/`status` used this; `run`'s in-place
  *     checkouts still do.)
  *   - **arbiter `main`** — the human claim guard (`readiness`) and the claim CAS
@@ -54,12 +54,12 @@ import {
 
 /**
  * One agent-POOL task's parsed gate/deps, as resolved from the live `work/`
- * state. The pool lives in `work/tasks/todo/` in the new layout (staging is
- * `work/tasks/backlog/`); the type name follows the pool noun (`todo`) so a
+ * state. The pool lives in `work/tasks/ready/` in the new layout (staging is
+ * `work/tasks/backlog/`); the type name follows the pool noun (`ready`) so a
  * later reader cannot misread `backlog` as the pool.
  */
-export interface LedgerTodoItem {
-	/** Filename within `work/tasks/todo/` (e.g. `scan.md`). */
+export interface LedgerReadyItem {
+	/** Filename within `work/tasks/ready/` (e.g. `scan.md`). */
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
 	slug: string;
@@ -170,8 +170,8 @@ export interface LedgerObservationItem {
  * files on disk".
  */
 export interface LocalLedgerState {
-	/** Parsed `work/tasks/todo/*.md` (the agent POOL), sorted by slug. */
-	todo: LedgerTodoItem[];
+	/** Parsed `work/tasks/ready/*.md` (the agent POOL), sorted by slug. */
+	ready: LedgerReadyItem[];
 	/** Slugs present in `work/done/` (per-repo; resolves `blockedBy`). */
 	doneSlugs: Set<string>;
 	/**
@@ -187,7 +187,7 @@ export interface LocalLedgerState {
 export interface ArbiterLedgerState {
 	/**
 	 * The requested task's raw file contents from the arbiter (it may live in
-	 * the POOL `tasks/todo/` or in `in-progress/`), or `undefined` when not found
+	 * the POOL `tasks/ready/` or in `in-progress/`), or `undefined` when not found
 	 * there.
 	 */
 	task: string | undefined;
@@ -321,7 +321,7 @@ export interface LedgerReadStrategy {
 	resolvePrdPool(input: ResolvePrdPoolInput): LedgerPrdPool;
 	/**
 	 * Enumerate `work/tasks/backlog/*.md` (the TASK STAGING folder) into the SAME
-	 * {@link LedgerTodoItem} shape `resolveLocalState().todo` returns for the pool
+	 * {@link LedgerReadyItem} shape `resolveLocalState().ready` returns for the pool
 	 * — the SURFACE-on-staging widening (prd
 	 * `staging-surface-and-apply-promote-safety` F2). Synchronous + OFFLINE
 	 * (working-tree read), like {@link resolveLocalState}. The pool / staging
@@ -329,9 +329,9 @@ export interface LedgerReadStrategy {
 	 * is in at most one), so the two reads compose without de-duplication
 	 * gymnastics. Missing folder reads as empty. CONSUMED ONLY by the lifecycle
 	 * GATHER under the `surfaceStaging` gate — the BUILD/claim pool stays
-	 * pool-only (`resolveLocalState().todo`), untouched by this read.
+	 * pool-only (`resolveLocalState().ready`), untouched by this read.
 	 */
-	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerTodoItem[];
+	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerReadyItem[];
 	/**
 	 * Enumerate `work/prds/proposed/*.md` (the PRD STAGING folder) into the
 	 * SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns for the
@@ -346,7 +346,7 @@ export interface LedgerReadStrategy {
 	 */
 	resolveMirrorTaskStaging(
 		input: ResolveMirrorStateInput,
-	): Promise<LedgerTodoItem[]>;
+	): Promise<LedgerReadyItem[]>;
 	/**
 	 * Mirror-ref counterpart of {@link resolveLocalPrdStaging}: read
 	 * `<ref>:work/prds/proposed/*.md` from a bare mirror.
@@ -375,18 +375,18 @@ function slugForFile(dir: string, file: string): string {
 }
 
 /**
- * Read a folder of TASK items (`tasks-todo` or `tasks-backlog`) from the local
- * tree into the {@link LedgerTodoItem[]} shape. Factored so the POOL reader
- * (`tasks/todo`) and the STAGING reader (`tasks/backlog`, the `surfaceStaging`
+ * Read a folder of TASK items (`tasks-ready` or `tasks-backlog`) from the local
+ * tree into the {@link LedgerReadyItem[]} shape. Factored so the POOL reader
+ * (`tasks/ready`) and the STAGING reader (`tasks/backlog`, the `surfaceStaging`
  * widening) share one parse path — the two folders carry the SAME item shape
  * (frontmatter + body), only the trust polarity differs.
  */
 function readLocalTaskFolder(
 	repoPath: string,
-	folder: 'tasks-todo' | 'tasks-backlog',
-): LedgerTodoItem[] {
+	folder: 'tasks-ready' | 'tasks-backlog',
+): LedgerReadyItem[] {
 	const dir = workFolderPath(repoPath, folder);
-	const items: LedgerTodoItem[] = [];
+	const items: LedgerReadyItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -401,18 +401,18 @@ function readLocalTaskFolder(
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-/** Read `work/tasks/todo/*.md` (the agent POOL) from the local tree, parsed and sorted by slug. */
-function readLocalTodo(repoPath: string): LedgerTodoItem[] {
-	return readLocalTaskFolder(repoPath, 'tasks-todo');
+/** Read `work/tasks/ready/*.md` (the agent POOL) from the local tree, parsed and sorted by slug. */
+function readLocalReady(repoPath: string): LedgerReadyItem[] {
+	return readLocalTaskFolder(repoPath, 'tasks-ready');
 }
 
 /**
  * Read `work/tasks/backlog/*.md` (the TASK STAGING folder, prd
  * `staging-surface-and-apply-promote-safety` F2) from the local tree. Same
- * {@link LedgerTodoItem} shape as the pool reader — the SURFACE-on-staging
+ * {@link LedgerReadyItem} shape as the pool reader — the SURFACE-on-staging
  * widening only enumerates items; it does NOT promote them.
  */
-function readLocalTaskStaging(repoPath: string): LedgerTodoItem[] {
+function readLocalTaskStaging(repoPath: string): LedgerReadyItem[] {
 	return readLocalTaskFolder(repoPath, 'tasks-backlog');
 }
 
@@ -565,7 +565,7 @@ async function readTaskOnArbiter(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<string | undefined> {
-	for (const folder of ['tasks-todo', 'in-progress'] as const) {
+	for (const folder of ['tasks-ready', 'in-progress'] as const) {
 		const object = `${arbiter}/main:${workFolderRel(folder)}/${slug}.md`;
 		const show = await gitSoft(['show', object], cwd, env);
 		if (show.status === 0) {
@@ -644,17 +644,17 @@ async function readDoneSlugsFromTree(
 
 /**
  * Parse `<ref>:work/tasks/<folder>/*.md` from a committed tree into
- * {@link LedgerTodoItem[]}, sorted by slug. Factored so the POOL + STAGING
+ * {@link LedgerReadyItem[]}, sorted by slug. Factored so the POOL + STAGING
  * mirror reads share ONE parse path (mirrors `readLocalTaskFolder`).
  */
 async function readTaskFolderFromTree(
-	folder: 'tasks-todo' | 'tasks-backlog',
+	folder: 'tasks-ready' | 'tasks-backlog',
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerTodoItem[]> {
+): Promise<LedgerReadyItem[]> {
 	const base = `${ref}:${workFolderRel(folder)}`;
-	const items: LedgerTodoItem[] = [];
+	const items: LedgerReadyItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
 		if (content === undefined) {
@@ -672,13 +672,13 @@ async function readTaskFolderFromTree(
 	return items.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-/** Parse `<ref>:work/tasks/todo/*.md` into pool items, sorted by slug. */
-async function readTodoFromTree(
+/** Parse `<ref>:work/tasks/ready/*.md` into pool items, sorted by slug. */
+async function readReadyFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerTodoItem[]> {
-	return readTaskFolderFromTree('tasks-todo', ref, cwd, env);
+): Promise<LedgerReadyItem[]> {
+	return readTaskFolderFromTree('tasks-ready', ref, cwd, env);
 }
 
 /** Parse `<ref>:work/tasks/backlog/*.md` (TASK STAGING) into items, sorted by slug. */
@@ -686,7 +686,7 @@ async function readTaskStagingFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerTodoItem[]> {
+): Promise<LedgerReadyItem[]> {
 	return readTaskFolderFromTree('tasks-backlog', ref, cwd, env);
 }
 
@@ -798,7 +798,7 @@ async function readObservationsFromTree(
 export const currentLedgerRead: LedgerReadStrategy = {
 	resolveLocalState({repoPath}) {
 		return {
-			todo: readLocalTodo(repoPath),
+			ready: readLocalReady(repoPath),
 			doneSlugs: readLocalDoneSlugs(repoPath),
 			observations: readLocalObservations(repoPath),
 		};
@@ -836,12 +836,12 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
 		// `<ref>:work/...` tree, running git INSIDE the mirror (`git -C <mirror>`).
 		// The ref is mirror-LOCAL (`main`), never `origin/main`.
-		const [todo, doneSlugs, observations] = await Promise.all([
-			readTodoFromTree(ref, mirrorPath, env),
+		const [ready, doneSlugs, observations] = await Promise.all([
+			readReadyFromTree(ref, mirrorPath, env),
 			readDoneSlugsFromTree(ref, mirrorPath, env),
 			readObservationsFromTree(ref, mirrorPath, env),
 		]);
-		return {todo, doneSlugs, observations};
+		return {ready, doneSlugs, observations};
 	},
 	async resolveMirrorPrdPool({mirrorPath, ref = 'main', env}) {
 		// The prd pool from the bare mirror's committed `<ref>:work/prds*` tree — the

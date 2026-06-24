@@ -150,7 +150,7 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(existsSync(join(human, 'work', 'tasks', 'done', 'beta.md'))).toBe(
 			true,
 		);
-		expect(existsSync(join(human, 'work', 'tasks', 'todo', 'beta.md'))).toBe(
+		expect(existsSync(join(human, 'work', 'tasks', 'ready', 'beta.md'))).toBe(
 			false,
 		);
 	});

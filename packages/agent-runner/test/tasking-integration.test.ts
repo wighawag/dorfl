@@ -15,7 +15,7 @@ import {run} from '../src/git.js';
 /**
  * `do prd:<slug>` TASK-OUTPUT-THROUGH-INTEGRATION tests (task
  * `task-output-through-integration`). The KEYSTONE behaviour: the produced
- * `work/tasks/todo/*` tasks integrate through the SHARED `performIntegration` core
+ * `work/tasks/ready/*` tasks integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
  * committing straight to `main` via the lock's `emitTasks`.
  *

@@ -36,7 +36,7 @@ import {run} from '../src/git.js';
  *   (b) the prd-symmetric case (`promoteFromPrePrd` against a held
  *       `prd:<slug>` advance lock) behaves the same — the prd promote path
  *       is covered too per PRD q4 (the prds/proposed → prds/ready promote
- *       is symmetric with tasks/backlog → tasks/todo).
+ *       is symmetric with tasks/backlog → tasks/ready).
  *   (c) the lock is RELEASED on the happy path too: after a successful promote
  *       there is no held lock left behind for the next transition.
  *
@@ -126,7 +126,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(onArbiterMain(seeded.repo, 'work/tasks/backlog/race-me.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(seeded.repo, 'work/tasks/todo/race-me.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/tasks/ready/race-me.md')).toBe(
 			false,
 		);
 
@@ -206,7 +206,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 
 		// The body landed in the pool, and the lock is GONE (no leftover `advance`
 		// hold blocking a subsequent claim/apply on the same item).
-		expect(onArbiterMain(seeded.repo, 'work/tasks/todo/happy.md')).toBe(true);
+		expect(onArbiterMain(seeded.repo, 'work/tasks/ready/happy.md')).toBe(true);
 		expect(onArbiterMain(seeded.repo, 'work/tasks/backlog/happy.md')).toBe(
 			false,
 		);

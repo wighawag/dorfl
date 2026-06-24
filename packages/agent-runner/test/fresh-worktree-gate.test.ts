@@ -90,7 +90,7 @@ describe('fresh-worktree gate — the gate tests the REBASED tip, not the pre-re
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'leak',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			// The gate depends on the cwd-only file existing; it must NOT exist in the
@@ -119,7 +119,7 @@ describe('fresh-worktree gate — the gate tests the REBASED tip, not the pre-re
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'leak-off',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			// OFF: gate runs in cwd (the pre-rebase tree), which HAS the file.
 			freshWorktreeGate: false,
@@ -151,7 +151,7 @@ describe('fresh-worktree gate — the gate tests the REBASED tip, not the pre-re
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'rebased',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			// The gate REQUIRES the rebase-introduced file — it can only pass on the
@@ -179,7 +179,7 @@ describe('fresh-worktree gate — prepare runs in the fresh worktree before veri
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			prepare: 'touch prepared.marker',
@@ -204,7 +204,7 @@ describe('fresh-worktree gate — prepare runs in the fresh worktree before veri
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-fail',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			prepare: 'exit 7',
@@ -237,7 +237,7 @@ describe('fresh-worktree gate — reaped after the gate (pass OR fail), never le
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'reap-pass',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'exit 0',
@@ -262,7 +262,7 @@ describe('fresh-worktree gate — reaped after the gate (pass OR fail), never le
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'reap-fail',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'exit 1',
@@ -285,7 +285,7 @@ describe('fresh-worktree gate — failure routing is unchanged (only the gate TR
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'route',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'exit 3',
@@ -321,7 +321,7 @@ describe('fresh-worktree gate — failure routing is unchanged (only the gate TR
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'conflict',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			// If the gate ever ran, this would pass — but a rebase conflict must
@@ -363,7 +363,7 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'vtr',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'touch verify-ran.marker',
@@ -410,7 +410,7 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'vtr-rebased',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'exit 0',
@@ -436,7 +436,7 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'vtr-block',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'touch verify-ran.marker',
@@ -470,7 +470,7 @@ describe('fresh-worktree gate ON + review ON — verify-THEN-review, both on the
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'vtr-redverify',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: true,
 			verify: 'exit 1',
@@ -495,7 +495,7 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'off-green',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: false,
 			verify: 'exit 0',
@@ -519,7 +519,7 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'off-unset',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			// freshWorktreeGate UNSET — the core treats absence as OFF (the CLI resolves
 			// the user-facing default to ON via config; the band honours the value it is
@@ -540,7 +540,7 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'off-red',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			freshWorktreeGate: false,
 			verify: 'exit 1',
@@ -552,7 +552,7 @@ describe('fresh-worktree gate — OFF is byte-for-byte the pre-rebase gate', () 
 		expect(core.routedToNeedsAttention).toBe(true);
 		// The bounce is a pure lock amend now (no folder move); the body stays in
 		// backlog/ and no needs-attention/ folder is written (local-only).
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'off-red.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'off-red.md'))).toBe(
 			true,
 		);
 		expect(

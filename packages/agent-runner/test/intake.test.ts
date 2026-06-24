@@ -206,7 +206,7 @@ const TASK_VERDICT: IntakeVerdict = {
 };
 
 describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
-	it('a stubbed `task` verdict writes work/tasks/todo/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
+	it('a stubbed `task` verdict writes work/tasks/ready/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 
@@ -224,7 +224,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.emittedSlug).toBe('add-quiet-flag');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 
 		// PROPOSE (default): the task rides the work/<slug> branch on the arbiter,
 		// and main is NOT touched (no done/backlog task landed on main).
@@ -247,7 +247,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -271,7 +271,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -389,7 +389,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 	});
 
 	it('the AGENT does no git and no seam side-effects: the runner posts nothing and the decider sees no git', async () => {
@@ -510,7 +510,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 // (`intake-propose-title-from-drafted-slice`). The bug: `integration-core`
 // read the title from `lifecycle.titlePath` BEFORE `dispatchTask`'s `stage()`
 // WROTE that file, so for the intake lone-task path the output
-// `work/tasks/todo/<slug>.md` did not exist yet at read time → the commit subject
+// `work/tasks/ready/<slug>.md` did not exist yet at read time → the commit subject
 // degraded to `complete work task` and the propose-PR title to a generic
 // `feat(<slug>)`. The fix threads the drafted title EXPLICITLY (no file read).
 // Nothing asserted either string before — the missing coverage that let the bug
@@ -599,7 +599,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/todo/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -1113,7 +1113,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		// The run PROCEEDS (the task is emitted) without a lock — no crash, no back-off.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 		// No label op happened (the provider has none) and the degrade is SURFACED.
 		expect(issueProvider.labelOps).toEqual([]);
 		expect(notes.some((n) => /lock degraded/i.test(n))).toBe(true);
@@ -1260,7 +1260,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		// MERGE: the task landed on arbiter main (no PR; main advanced).
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
 		const onMain = gitIn(
-			['show', `${ARBITER}/main:work/tasks/todo/add-quiet-flag.md`],
+			['show', `${ARBITER}/main:work/tasks/ready/add-quiet-flag.md`],
 			repo,
 		);
 		// The merged task carries the `issue: N` closure link, not `Fixes #N` (which
@@ -2180,7 +2180,7 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + tasks.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 	});
 });
 
@@ -2411,7 +2411,7 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 		// The success outcome is UNCHANGED by the degrade.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/todo/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
 		// `commented` reflects the failed post (advisory), but the run still succeeded.
 		expect(result.commented).toBe(false);
 	});

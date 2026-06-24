@@ -104,7 +104,7 @@ Once description + gate are confirmed: create the missing `work/` folders in the
 ```
 work/
   notes/{observations,ideas,findings}/   # capture buckets (do not flow; leave by deletion)
-  tasks/{backlog,todo,done,cancelled}/    # the build board: backlog=staging, todo=pool, done, cancelled=terminal
+  tasks/{backlog,ready,done,cancelled}/    # the build board: backlog=staging, ready=pool, done, cancelled=terminal
   prds/{proposed,ready,tasked,dropped}/ # prd lifecycle: proposed=staging, ready=pool, tasked, dropped=terminal
   questions/                              # the "what needs me?" queue (TOP-LEVEL, not under notes/)
   protocol/                               # the propagated protocol docs (copied below)
@@ -125,7 +125,7 @@ work/observations/   -> work/notes/observations/
 work/ideas/          -> work/notes/ideas/
 work/findings/       -> work/notes/findings/
 work/pre-backlog/    -> work/tasks/backlog/        # staging takes the freed name
-work/backlog/        -> work/tasks/todo/           # the pool keeps being the pool, new name
+work/backlog/        -> work/tasks/ready/          # the pool keeps being the pool, new name
 work/in-progress/    -> (GONE: transient status is now a per-item lock ref, not a folder)
 work/done/           -> work/tasks/done/
 work/pre-prd/        -> work/prds/proposed/
@@ -202,7 +202,7 @@ Phase B finishes with TWO mandatory checkpoints (a flat report bullet is too eas
 
 - It does NOT install or require `agent-runner` (the contract is runner-agnostic).
 - It does NOT register an arbiter / configure CI (those are runner/CI concerns).
-- It does NOT BUILD or claim work (that is the runner). A converted task is just another `tasks/todo/` (or staged `tasks/backlog/`) item the engine then advances.
+- It does NOT BUILD or claim work (that is the runner). A converted task is just another `tasks/ready/` (or staged `tasks/backlog/`) item the engine then advances.
 - It NEVER writes an ADR whose _why_ it inferred from code (the discipline above); NEVER puts a description of our own code in `findings/` (that is `CONTEXT.md`/`docs/`); NEVER writes a vague wish into the task board `tasks/backlog/` (that is an `idea`); NEVER enumerates items into `CONTEXT.md` (the folder is the index); NEVER auto-commits or silently deletes.
 
 ## Templates

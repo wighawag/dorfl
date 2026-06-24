@@ -94,12 +94,12 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	taskingIntegration: {enum: ['propose', 'merge']},
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — prd
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
-	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_TASKS_LAND_IN=todo` works and a
+	// `pre-backlog`/`ready` enum, so `AGENT_RUNNER_TASKS_LAND_IN=ready` works and a
 	// typo FAILS LOUDLY. Same
 	// precedence chain as `taskingIntegration` (flag > env > per-repo > global >
 	// built-in `pre-backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
-	tasksLandIn: {enum: ['pre-backlog', 'todo']},
+	tasksLandIn: {enum: ['pre-backlog', 'ready']},
 	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — prd
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
 	// `pre-proposed`/`ready` enum, so `AGENT_RUNNER_PRDS_LAND_IN=ready` works and a typo

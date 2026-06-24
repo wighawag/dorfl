@@ -423,7 +423,7 @@ describe('advance in-place — promote-apply is a harmless no-op (mirrors the ex
 				env: gitEnv(),
 			},
 		);
-		const backlog = join(side, 'work', 'tasks', 'todo');
+		const backlog = join(side, 'work', 'tasks', 'ready');
 		mkdirSync(backlog, {recursive: true});
 		writeFileSync(
 			join(backlog, `${promotedSlug}.md`),

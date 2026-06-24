@@ -117,7 +117,7 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		const inBacklog = run(
 			'git',
-			['cat-file', '-e', `${ARBITER}/main:work/tasks/todo/stuck.md`],
+			['cat-file', '-e', `${ARBITER}/main:work/tasks/ready/stuck.md`],
 			repo,
 			{env: gitEnv()},
 		);
@@ -402,7 +402,7 @@ describe('absent lock ref = "no locks held" ([]) — deletion is recoverable', (
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/tasks/todo/recoverable.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/tasks/ready/recoverable.md`],
 				repo,
 				{env: gitEnv()},
 			).status,

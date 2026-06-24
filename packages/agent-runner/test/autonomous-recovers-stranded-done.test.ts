@@ -48,9 +48,9 @@ const ARBITER = 'arbiter';
 
 /**
  * Stand the repo up EXACTLY as the CI incident left it: the slug was claimed (the
- * body RESTS in `work/tasks/todo/<slug>.md` on the arbiter, since claim no longer
+ * body RESTS in `work/tasks/ready/<slug>.md` on the arbiter, since claim no longer
  * moves it), the work was built + committed + done-moved on the work branch (so
- * the BRANCH tree holds `work/tasks/done/<slug>.md` and NOT `work/tasks/todo/<slug>.md`),
+ * the BRANCH tree holds `work/tasks/done/<slug>.md` and NOT `work/tasks/ready/<slug>.md`),
  * but the tip was NEVER pushed / merged — it is genuinely AHEAD of `<arbiter>/main`.
  * HEAD is on the work branch (where the autonomous integrate path runs).
  */
@@ -74,7 +74,7 @@ async function seedStrandedDoneBranch(
 	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
 	mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
 	gitIn(
-		['mv', `work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`],
+		['mv', `work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`],
 		repo,
 	);
 	gitIn(['add', '-A'], repo);
@@ -85,7 +85,7 @@ async function seedStrandedDoneBranch(
 	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(
 		true,
 	);
-	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+	expect(existsSync(join(repo, 'work', 'tasks', 'ready', `${slug}.md`))).toBe(
 		false,
 	);
 	expect(existsSync(join(repo, 'work', 'needs-attention', `${slug}.md`))).toBe(
@@ -280,9 +280,9 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 		// Remove the task body from backlog/ on the branch tree WITHOUT moving it to
 		// done/ — the "genuinely nothing here" state.
-		gitIn(['rm', '-q', 'work/tasks/todo/gamma.md'], repo);
+		gitIn(['rm', '-q', 'work/tasks/ready/gamma.md'], repo);
 		gitIn(['commit', '-q', '-m', 'drop the task (genuinely nothing)'], repo);
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'gamma.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'gamma.md'))).toBe(
 			false,
 		);
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'gamma.md'))).toBe(

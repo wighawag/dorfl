@@ -39,7 +39,7 @@ function buildAndPushViaHandle(tree: IsolatedTree, slug: string): void {
 	// 1. "Build": edit a file so the commit is non-empty.
 	writeFileSync(join(tree.dir, 'agent-output.txt'), 'work done\n');
 	// 2. Done-move + completion commit (runner-owned), reading the handle dir.
-	gitMv(`work/tasks/todo/${slug}.md`, `work/tasks/done/${slug}.md`, tree.dir);
+	gitMv(`work/tasks/ready/${slug}.md`, `work/tasks/done/${slug}.md`, tree.dir);
 	gitIn(['add', '-A'], tree.dir);
 	gitIn(['commit', '-q', '-m', `feat(${slug}): complete; done`], tree.dir);
 	// 3. Integrate (merge): push the branch to the handle's arbiter remote main.
@@ -81,7 +81,7 @@ describe('jobWorktreeStrategy — the existing run isolation, extracted', () => 
 			// The work item is on this branch — the body RESTS in backlog/ (claim no
 			// longer moves it), proving the worktree was cut from the freshly-fetched main.
 			expect(
-				existsSync(join(tree.dir, 'work', 'tasks', 'todo', 'feat.md')),
+				existsSync(join(tree.dir, 'work', 'tasks', 'ready', 'feat.md')),
 			).toBe(true);
 		} finally {
 			tree.teardown();
@@ -330,7 +330,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 		expect(tip).toBe(arbiterMain);
 		expect(tree.branch).toBe('work/task-feat');
 		// And the body is present locally in backlog/ (so the done-move can find it).
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'feat.md'))).toBe(
 			true,
 		);
 	});
@@ -341,7 +341,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 		// prior run / an intake on a shared name).
 		const preClaim = gitIn(['rev-parse', 'HEAD'], repo).trim();
 		gitIn(['branch', 'work/task-feat', preClaim], repo);
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'feat.md'))).toBe(
 			true,
 		);
 
@@ -364,7 +364,7 @@ describe('inPlaceStrategy — onboarding cuts the work branch off <arbiter>/main
 		// local branch. The body is the backlog body on `<arbiter>/main` (it never
 		// moved), so the slug is present in backlog/ on the branch.
 		expect(tree.branch).toBe('work/task-feat');
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'feat.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'feat.md'))).toBe(
 			true,
 		);
 		expect(existsSync(join(repo, 'work', 'in-progress', 'feat.md'))).toBe(

@@ -654,7 +654,7 @@ export function buildTaskReviewPrompt(input: TaskReviewGateInput): string {
 		`TASK \`humanOnly\` IS NARROW. Only edit a task to add \`humanOnly: true\``,
 		`when building THAT task is genuinely never-for-agents BY NATURE (secrets/`,
 		`release/security/AGENTS.md prohibition) — a \`humanOnly\` task is not agent-`,
-		`claimable EVEN from the pool \`work/tasks/todo/\`. Do NOT stamp \`humanOnly\` to`,
+		`claimable EVEN from the pool \`work/tasks/ready/\`. Do NOT stamp \`humanOnly\` to`,
 		`mean "a human should review this first": that is the POSITION's job — every`,
 		`candidate task is BIRTHED STAGED in \`work/tasks/backlog/\` (not eligible) and a`,
 		`human promotes the approved ones into the pool.`,

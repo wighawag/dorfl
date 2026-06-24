@@ -413,10 +413,10 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 
 	it('throws when there is no sidecar (the apply rung needs an answered sidecar)', () => {
 		const repo = join(scratch.root, 'no-sidecar');
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
 		writeFileSync(
-			join(repo, 'work', 'tasks', 'todo', 'foo.md'),
+			join(repo, 'work', 'tasks', 'ready', 'foo.md'),
 			'---\nslug: foo\nneedsAnswers: true\n---\n\nbody\n',
 		);
 		gitIn(['add', '-A'], repo);
@@ -425,7 +425,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 			applyAnsweredQuestions({
 				cwd: repo,
 				item: 'task:foo',
-				itemPath: 'work/tasks/todo/foo.md',
+				itemPath: 'work/tasks/ready/foo.md',
 				env: gitEnv(),
 			}),
 		).toThrow(ApplyPersistError);
@@ -605,7 +605,7 @@ describe('applyAnsweredQuestions — only the repo it is pointed at is touched',
  * exits clean (the `vanished` outcome, no commit, no ghost file).
  */
 describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time (F3a, folder-agnostic)', () => {
-	it('TASK: a concurrent promote `tasks/backlog → tasks/todo` between capture and write — apply commits at the POST-MOVE path, no ghost at the stale path', () => {
+	it('TASK: a concurrent promote `tasks/backlog → tasks/ready` between capture and write — apply commits at the POST-MOVE path, no ghost at the stale path', () => {
 		// Seed in STAGING (fixture word `pre-backlog` → `tasks-backlog`).
 		const {repo, itemPath, sidecarPath} = seed({
 			folder: 'pre-backlog',
@@ -617,8 +617,8 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		// Simulate a concurrent `promote` happening AFTER the caller captured the
 		// staging path but BEFORE apply writes: a `git mv` from staging into the
 		// pool, committed on the same `main`.
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
-		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/todo/foo.md'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
+		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/ready/foo.md'], repo);
 		gitIn(['commit', '-q', '-m', 'promote: foo backlog → todo'], repo);
 
 		// Apply is called with the STALE captured path — it MUST re-resolve to the
@@ -631,10 +631,10 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		});
 
 		expect(result.outcome).toBe('resolved');
-		expect(result.itemPath).toBe('work/tasks/todo/foo.md');
+		expect(result.itemPath).toBe('work/tasks/ready/foo.md');
 		// The rewrite landed at the POST-MOVE path.
 		const touched = filesInHeadCommit(repo);
-		expect(touched).toContain('work/tasks/todo/foo.md');
+		expect(touched).toContain('work/tasks/ready/foo.md');
 		expect(touched).toContain(sidecarPath);
 		// NO ghost file at the stale path — neither in the index nor on disk.
 		expect(existsSync(join(repo, 'work/tasks/backlog/foo.md'))).toBe(false);
@@ -642,7 +642,7 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		// The invariant: needsAnswers cleared + sidecar deleted in the same commit.
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		const fm = parseFrontmatter(
-			readFileSync(join(repo, 'work/tasks/todo/foo.md'), 'utf8'),
+			readFileSync(join(repo, 'work/tasks/ready/foo.md'), 'utf8'),
 		);
 		expect(fm.needsAnswers).toBe(false);
 	});
@@ -719,14 +719,14 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 			'work/tasks/backlog/foo.md',
 		);
 		// After a promote, it resolves to the pool path — the resolver is folder-agnostic.
-		mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
-		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/todo/foo.md'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
+		gitIn(['mv', 'work/tasks/backlog/foo.md', 'work/tasks/ready/foo.md'], repo);
 		gitIn(['commit', '-q', '-m', 'promote'], repo);
 		expect(resolveItemPathByIdentity(repo, 'task:foo')).toBe(
-			'work/tasks/todo/foo.md',
+			'work/tasks/ready/foo.md',
 		);
 		// After a full remove, it returns undefined.
-		gitIn(['rm', '-q', 'work/tasks/todo/foo.md'], repo);
+		gitIn(['rm', '-q', 'work/tasks/ready/foo.md'], repo);
 		gitIn(['commit', '-q', '-m', 'remove'], repo);
 		expect(resolveItemPathByIdentity(repo, 'task:foo')).toBeUndefined();
 	});

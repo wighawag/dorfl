@@ -24,18 +24,18 @@ export type IntegrationMode = 'propose' | 'merge';
  * folder the runner lands the tasker's emitted task files in BY DEFAULT —
  * `'pre-backlog'` (staging — durable + readable but NOT in the agent-eligible
  * POOL; a runner/human promotion is needed to make an item claimable; the on-disk
- * folder for this value is `work/tasks/backlog/`) or `'todo'` (the agent-eligible
- * POOL — the trusted fast-path landing, on-disk `work/tasks/todo/`). The pool
- * value was RENAMED from `'backlog'` to `'todo'` (task
- * `f1-pool-noun-todo-in-surface-and-apply-readers`) so `backlog` stops meaning two
- * things in the readers. The runner-deterministic
+ * folder for this value is `work/tasks/backlog/`) or `'ready'` (the agent-eligible
+ * POOL — the trusted fast-path landing, on-disk `work/tasks/ready/`). The pool
+ * value was renamed `'backlog'` → `'todo'` → `'ready'` (ADR
+ * `rename-task-pool-folder-todo-to-ready`, a CLEAN BREAK matching the on-disk
+ * folder `tasks/ready/` and the brief-side `'ready'` pool spelling). The runner-deterministic
  * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
  * > untrusted-origin ⇒ pre-backlog > tasksLandIn default > built-in
  * (pre-backlog)`. An untrusted-origin tasker output is FORCED to staging even in
- * a `'todo'` repo (the positional analogue of the existing
+ * a `'ready'` repo (the positional analogue of the existing
  * `untrusted-origin-forces-build-propose` rule).
  */
-export type TasksLandIn = 'pre-backlog' | 'todo';
+export type TasksLandIn = 'pre-backlog' | 'ready';
 
 /**
  * **Per-repo PRD-PLACEMENT default** (prd
@@ -648,7 +648,7 @@ export const DEFAULT_CONFIG: Config = {
 	// conservative landing that preserves the tracer task's behaviour: an item is
 	// durable + readable but NOT in the agent-eligible pool until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `tasksLandIn:
-	// 'todo'` (or `--tasks-land-in todo` / `AGENT_RUNNER_TASKS_LAND_IN=todo`).
+	// 'ready'` (or `--tasks-land-in ready` / `AGENT_RUNNER_TASKS_LAND_IN=ready`).
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	tasksLandIn: 'pre-backlog',

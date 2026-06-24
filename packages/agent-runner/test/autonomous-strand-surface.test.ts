@@ -54,11 +54,11 @@ afterEach(() => {
 const ARBITER = 'arbiter';
 
 /**
- * Stand the CI repro: claim the slug (the body RESTS in `work/tasks/todo/<slug>.md`
+ * Stand the CI repro: claim the slug (the body RESTS in `work/tasks/ready/<slug>.md`
  * on the arbiter, since claim no longer moves it), put HEAD on the work branch,
  * and remove the task body from the BRANCH tree WITHOUT done-moving it — the
  * source-strand state the autonomous source-resolution refuses with "nothing to
- * complete". The arbiter still holds the body in `work/tasks/todo/`.
+ * complete". The arbiter still holds the body in `work/tasks/ready/`.
  */
 async function seedSourceStrand(slug: string): Promise<string> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
@@ -72,9 +72,9 @@ async function seedSourceStrand(slug: string): Promise<string> {
 	expect(claim.exitCode).toBe(0);
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
-	gitIn(['rm', '-q', `work/tasks/todo/${slug}.md`], repo);
+	gitIn(['rm', '-q', `work/tasks/ready/${slug}.md`], repo);
 	gitIn(['commit', '-q', '-m', 'drop the task (genuinely nothing)'], repo);
-	expect(existsSync(join(repo, 'work', 'tasks', 'todo', `${slug}.md`))).toBe(
+	expect(existsSync(join(repo, 'work', 'tasks', 'ready', `${slug}.md`))).toBe(
 		false,
 	);
 	expect(existsSync(join(repo, 'work', 'tasks', 'done', `${slug}.md`))).toBe(

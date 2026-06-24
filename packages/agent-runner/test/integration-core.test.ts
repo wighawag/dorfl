@@ -89,7 +89,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'alpha',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -103,7 +103,7 @@ describe('integration-core — approve ⇒ completed', () => {
 		// The integration result carries the EFFECTIVE mode (the tail reads it here).
 		expect(core.integration?.mode).toBe('propose');
 		// The done-move happened in the tree (the band moved backlog → done + commit).
-		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			false,
 		);
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
@@ -120,7 +120,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'beta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -143,7 +143,7 @@ describe('integration-core — approve ⇒ completed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'gamma',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -161,14 +161,14 @@ describe('integration-core — approve ⇒ completed', () => {
 describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-origin-forces-build-propose)', () => {
 	// Stamp `originTrust` onto the backlog task the build is about to integrate
 	// (the tasker would have propagated it; here we set it directly to drive the
-	// rule). The build-propose rule reads it from `work/tasks/todo/<slug>.md` (the body
+	// rule). The build-propose rule reads it from `work/tasks/ready/<slug>.md` (the body
 	// rests there now — claim no longer moves it).
 	const stampOriginTrust = (
 		repo: string,
 		slug: string,
 		value: 'trusted' | 'untrusted',
 	): void => {
-		const path = join(repo, 'work', 'tasks', 'todo', `${slug}.md`);
+		const path = join(repo, 'work', 'tasks', 'ready', `${slug}.md`);
 		const content = readFileSync(path, 'utf8');
 		writeFileSync(
 			path,
@@ -184,7 +184,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-merge',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			// The build-transition config mode is `merge`, but no operator flag is present
@@ -208,7 +208,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-explicit',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -231,7 +231,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'trusted-merge',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -251,7 +251,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'unstamped-merge',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -271,7 +271,7 @@ describe('integration-core — UNTRUSTED-ORIGIN build-propose rule (untrusted-or
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'untrusted-propose',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -293,7 +293,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-alpha',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			// prepare appends `prepare`, verify appends `verify` — the file proves order.
 			prepare: `echo prepare >> ${JSON.stringify(order)}`,
@@ -317,7 +317,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-beta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			prepare: 'exit 4',
 			// If verify ever ran it would create this file — it must NOT.
@@ -352,7 +352,7 @@ describe('integration-core — prepare runs BEFORE verify (env-prep sequencing)'
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'prep-gamma',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			// prepare UNSET — a repo with no deps step is unaffected.
 			verify: PASS,
@@ -375,7 +375,7 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'delta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: FAIL,
 			mode: 'propose',
@@ -408,7 +408,7 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'epsilon',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			review: true,
@@ -456,7 +456,7 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'theta',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'propose',
@@ -555,7 +555,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			cwd,
 			arbiter: ARBITER,
 			slug,
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -709,10 +709,10 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 
 	// C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
 	// promotions`): N>5 (above the OLD fixed Race-1 cap of 5) DIFFERENT items
-	// promoting `tasks/todo → tasks/done` in parallel must ALL land. Pre-C2 the
+	// promoting `tasks/ready → tasks/done` in parallel must ALL land. Pre-C2 the
 	// last loser would have exhausted its tiny budget on false contention; post-C2
 	// a clean re-rebase no longer counts, so the herd serialises and each lands.
-	it('N=7 DIFFERENT items promoting tasks/todo → tasks/done in parallel ALL land (no false-contention cap exhaustion)', async () => {
+	it('N=7 DIFFERENT items promoting tasks/ready → tasks/done in parallel ALL land (no false-contention cap exhaustion)', async () => {
 		const N = 7;
 		const slugs = Array.from({length: N}, (_, i) => `p${i}`);
 		const seeded = seedRepoWithArbiter(scratch.root, slugs);
@@ -748,7 +748,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 					cwd,
 					arbiter: ARBITER,
 					slug: slugs[i],
-					source: 'tasks-todo',
+					source: 'tasks-ready',
 					recovering: false,
 					verify: PASS,
 					mode: 'merge',
@@ -812,7 +812,7 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 					cwd,
 					arbiter: ARBITER,
 					slug: slugs[i],
-					source: 'tasks-todo',
+					source: 'tasks-ready',
 					recovering: false,
 					verify: PASS,
 					mode: 'merge',
@@ -899,7 +899,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 	it('a conflict confined to a SIBLING slug ledger file (work/tasks/done/sb.md) is reconciled and the job LANDS', async () => {
 		const {seeded, repo} = await siblingLedgerConflictJob({
 			// Our branch modifies the SIBLING's backlog ledger (a benign touch).
-			touch: 'work/tasks/todo/sb.md',
+			touch: 'work/tasks/ready/sb.md',
 			branchContent: 'sb ledger — our branch view\n',
 			// The arbiter MOVES sb from backlog to done with different content (the
 			// sibling job's done-move): replaying our touch onto it conflicts on sb's
@@ -907,7 +907,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			landOnArbiter: (mainCwd) => {
 				mkdirSync(join(mainCwd, 'work', 'tasks', 'done'), {recursive: true});
 				gitIn(
-					['mv', 'work/tasks/todo/sb.md', 'work/tasks/done/sb.md'],
+					['mv', 'work/tasks/ready/sb.md', 'work/tasks/done/sb.md'],
 					mainCwd,
 				);
 				writeFileSync(
@@ -921,7 +921,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -955,7 +955,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',
@@ -977,11 +977,11 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// route (it is NOT the divergent-base case the #86 recovery handles, since the
 		// arbiter still holds sa in backlog — the same folder we move from).
 		const {repo} = await siblingLedgerConflictJob({
-			touch: 'work/tasks/todo/sa.md',
+			touch: 'work/tasks/ready/sa.md',
 			branchContent: 'sa ledger — our branch view\n',
 			landOnArbiter: (mainCwd) => {
 				writeFileSync(
-					join(mainCwd, 'work', 'tasks', 'todo', 'sa.md'),
+					join(mainCwd, 'work', 'tasks', 'ready', 'sa.md'),
 					'sa ledger — arbiter view\n',
 				);
 			},
@@ -991,7 +991,7 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 			cwd: repo,
 			arbiter: ARBITER,
 			slug: 'sa',
-			source: 'tasks-todo',
+			source: 'tasks-ready',
 			recovering: false,
 			verify: PASS,
 			mode: 'merge',

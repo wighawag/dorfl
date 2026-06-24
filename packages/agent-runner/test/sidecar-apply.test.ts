@@ -34,7 +34,7 @@ function seedItemWithSidecar(slug = 'foo'): {
 	mkdirSync(repo, {recursive: true});
 	gitIn(['init', '-q', '-b', 'main'], repo);
 
-	const itemPath = `work/tasks/todo/${slug}.md`;
+	const itemPath = `work/tasks/ready/${slug}.md`;
 	const itemBody = [
 		'---',
 		`title: ${slug}`,
@@ -48,7 +48,7 @@ function seedItemWithSidecar(slug = 'foo'): {
 		'a thing',
 		'',
 	].join('\n');
-	mkdirSync(join(repo, 'work', 'tasks', 'todo'), {recursive: true});
+	mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 	writeFileSync(join(repo, itemPath), itemBody);
 
 	// A sidecar with two open questions.
