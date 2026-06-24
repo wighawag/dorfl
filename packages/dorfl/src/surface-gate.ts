@@ -129,6 +129,7 @@ export function parseSurfaceEmit(output: string): SurfaceEmit {
 
 const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
 	'promote-task',
+	'promote-prd',
 	'promote-adr',
 	'keep',
 	'delete',
@@ -237,7 +238,7 @@ export function buildSurfacePrompt(item: string): string {
 		`   {"question": "…",`,
 		`    "context": "…",`,
 		`    "default": "… (optional; omit if none)",`,
-		`    "disposition": "promote-task|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
+		`    "disposition": "promote-task|promote-prd|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
 		` ]}`,
 		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement);`,
 		`absence of the field is NOT. It is plain text inside the JSON string`,
