@@ -176,7 +176,28 @@ export function rebaseContinuedBranchOntoMain(
 	mainRef: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): ContinueRebaseResult {
-	const rebase = gitSoft(['rebase', mainRef], cwd, env);
+	// Disable git's rename-detection heuristic on this rebase (`-Xno-renames`, a
+	// merge-strategy option scoped to THIS invocation — the repo's persistent git
+	// config is untouched, so a user's interactive `git rebase` is unaffected).
+	//
+	// Why: a kept work branch may carry a single durable folder-transition
+	// `git mv work/<from>/<slug>.md → work/<to>/<slug>.md` made when the SOURCE
+	// folder held essentially only that one item. Git's rename heuristic then
+	// infers a whole-DIRECTORY rename `work/<from>/ → work/<to>/`, and when we
+	// rebase onto a main that ADDED new files into `work/<from>/` (sibling slices)
+	// git applies the inferred directory rename and flags each added file as a
+	// SPURIOUS `CONFLICT (file location): … added in HEAD inside a directory that
+	// was renamed …`. Those conflicts are byte-identical no-ops; the runner
+	// (correctly) aborts and stuck-locks the branch as a FALSE needs-attention.
+	// Turning off rename detection makes the replay treat the `git mv` as a
+	// delete+add and the new files in the source folder land where main put them
+	// — clean. A GENUINE same-path content conflict still conflicts.
+	//
+	// We picked `-Xno-renames` over a per-folder sentinel (`README.md`/`.gitkeep`
+	// in each work/ folder) because the sentinel scheme fights the case where a
+	// user prefers genuinely-empty/deleted folders and forces every item-scan
+	// predicate to learn to exclude a non-`*.md` companion file.
+	const rebase = gitSoft(['rebase', '-Xno-renames', mainRef], cwd, env);
 	if (rebase.status === 0) {
 		return {kind: 'clean'};
 	}

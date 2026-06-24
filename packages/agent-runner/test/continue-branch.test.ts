@@ -221,6 +221,128 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		expect(subjects).not.toMatch(/route to needs-attention/);
 		expect(subjects).toMatch(/wip\(alpha\): agent feature/);
 	});
+
+	// --- Regression: sparse-folder single `git mv` + main adds files into the
+	// SAME folder must NOT spuriously conflict (task
+	// `disable-rename-detection-on-continue-rebase`).
+	//
+	// Failure shape this guards against: a kept work branch carries a single
+	// durable folder-transition `git mv work/<from>/<slug>.md → work/<to>/<slug>.md`
+	// made when `work/<from>/` held essentially only that one item. Git's RENAME
+	// DETECTION heuristic then infers a whole-DIRECTORY rename
+	// `work/<from>/ → work/<to>/` for that commit. When the runner later replays
+	// the branch onto a `main` that ADDED new files into `work/<from>/` (sibling
+	// slices), git applies the inferred directory rename and flags each added file
+	// as `CONFLICT (file location): … added in HEAD inside a directory that was
+	// renamed …` — a SPURIOUS conflict (the added files are byte-identical to
+	// main's; the branch never touched them) that turns a clean continue-rebase
+	// into a FALSE needs-attention. `rebaseContinuedBranchOntoMain` now passes
+	// `-Xno-renames` to disable rename detection on this rebase, scoped to THIS
+	// invocation (the repo's persistent git config is untouched).
+	it('does NOT spuriously conflict when the branch done-moves the SOLE item out of a sparse folder and main added sibling files into that same folder', () => {
+		// Seed a repo whose `work/tasks/todo/` holds ONLY `alpha.md` — a SPARSE source
+		// folder, the precondition that makes git infer a whole-directory rename.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// Branch: a single durable folder-transition `git mv` of that SOLE item.
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(['mv', 'work/tasks/todo/alpha.md', 'work/tasks/done/alpha.md'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(alpha): done'], repo);
+
+		// Main advances: TWO sibling slices land NEW files into the SAME source
+		// folder `work/tasks/todo/`. These are byte-additive — the branch never
+		// touched them — so a clean replay must keep them where main put them.
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'todo', 'beta.md'),
+			'---\nslug: beta\n---\nbeta\n',
+		);
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'todo', 'gamma.md'),
+			'---\nslug: gamma\n---\ngamma\n',
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(
+			['commit', '-q', '-m', 'seed beta + gamma into work/tasks/todo/'],
+			repo,
+		);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// The replay must be CLEAN — no spurious `CONFLICT (file location)`.
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result.kind).toBe('clean');
+
+		// alpha's body landed in its TARGET folder (the branch's `git mv` replayed),
+		// and main's new sibling files landed in their INTENDED source folder — NOT
+		// relocated to the target folder by an inferred directory rename.
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'alpha.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'beta.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'todo', 'gamma.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'gamma.md'))).toBe(
+			false,
+		);
+	});
+
+	// Companion to the regression above: rename-off must NOT mask a GENUINE
+	// same-path content conflict. The branch and main each edit the SAME file
+	// differently, AND the branch also carries a sparse-folder `git mv` (so the
+	// directory-rename heuristic would also fire). The rebase must still conflict
+	// and route to needs-attention via `{kind: 'conflict'}` — proving
+	// `-Xno-renames` strips ONLY the rename inference, not real clashes.
+	it('still conflicts on a GENUINE same-path content conflict even with rename-off (real clashes are NOT masked)', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// Branch: sparse-folder `git mv` AND a content edit to a shared file.
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(['mv', 'work/tasks/todo/alpha.md', 'work/tasks/done/alpha.md'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(alpha): done'], repo);
+		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'wip(alpha): edit shared'], repo);
+
+		// Main edits the SAME file differently.
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(join(repo, 'shared.txt'), 'main version\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'main edits shared'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result.kind).toBe('conflict');
+		// The rebase was aborted: clean worktree, still on the branch tip.
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
+			'work/task-alpha',
+		);
+	});
 });
 
 /**

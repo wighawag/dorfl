@@ -1024,7 +1024,24 @@ export async function performIntegration(
 			// rebases are the same plain replay onto `<arbiter>/main`.
 			void recovering;
 			void lifecycle;
-			const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+			// `-Xno-renames`: disable git rename detection on this rebase, scoped to THIS
+			// invocation only (the repo's persistent git config is untouched). A kept work
+			// branch may carry a single durable folder-transition `git mv` out of a sparse
+			// `work/<from>/` folder; git's rename heuristic would otherwise infer a whole-
+			// directory rename `work/<from>/ → work/<to>/` and flag any files main added
+			// into `work/<from>/` (sibling slices) as a SPURIOUS `CONFLICT (file location)`,
+			// turning a clean continue-rebase into a FALSE needs-attention. Turning rename
+			// detection off makes the replay treat the `git mv` as a delete+add; a GENUINE
+			// same-path content conflict still conflicts and still routes via
+			// `rebaseConflictRoute()`. (See the same scoping on `continue-branch.ts`'s
+			// `rebaseContinuedBranchOntoMain` and on the recovery integrate-tail rebase
+			// below — the three rebase invocations on the continue/integration path all
+			// carry `-Xno-renames`.)
+			const rebase = await gitSoft(
+				['rebase', '-Xno-renames', `${arbiter}/main`],
+				cwd,
+				env,
+			);
 			if (rebase.status !== 0) {
 				// NEVER auto-resolve a genuine CODE conflict. But FIRST, a SIBLING-SLUG
 				// LEDGER conflict (the replay conflicts ONLY on OTHER slugs'
@@ -1573,7 +1590,16 @@ async function recoverAlreadyCommitted(params: {
 	note(
 		`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main…`,
 	);
-	const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+	// `-Xno-renames`: see the matching note on the step-4 rebase above — same
+	// rationale (sparse-folder single `git mv` would otherwise be inferred as a
+	// whole-directory rename and turn a clean replay into a SPURIOUS
+	// `CONFLICT (file location)`), same scope (this invocation only; repo config
+	// untouched), same conflict-routing preserved.
+	const rebase = await gitSoft(
+		['rebase', '-Xno-renames', `${arbiter}/main`],
+		cwd,
+		env,
+	);
 	if (rebase.status !== 0) {
 		await gitSoft(['rebase', '--abort'], cwd, env);
 		const message =
