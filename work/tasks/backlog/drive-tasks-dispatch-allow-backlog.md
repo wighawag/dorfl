@@ -45,12 +45,17 @@ End-to-end behaviour (skill-doc only):
 > flag, per the PRD `do-allow-backlog-drive-staged-tasks-without-promotion`
 > (US #5, Resolved decision 6 — the mode is a spec without a mechanism today).
 >
-> Where to look: the `drive-tasks` SKILL.md section "Opt-in: drive tasks from
-> `tasks/backlog/`" (it dispatches `do ... --isolated`). Change the dispatch to
-> add `--allow-backlog`, and add the drive-in-place-beats-promote-then-drive
-> rationale (the competition window: promoting to `ready/` exposes the task to
-> CI `advance` / a local `run` daemon).
+> Where to look: `skills/drive-tasks/SKILL.md` IN THIS REPO, the section
+> "Opt-in: drive tasks from `tasks/backlog/`" (it dispatches `do ... --isolated`).
+> Change the dispatch to add `--allow-backlog`, and add the
+> drive-in-place-beats-promote-then-drive rationale (the competition window:
+> promoting to `ready/` exposes the task to CI `advance` / a local `run` daemon).
 >
-> Note: `drive-tasks` is a user-scoped operator skill (under the agents skills
-> dir), NOT a protocol doc — there is no source/mirror pair to keep in sync here
-> (unlike WORK-CONTRACT.md). Edit the one skill file.
+> Note on the file: `skills/drive-tasks/SKILL.md` is this repo's OWN copy of the
+> skill, versioned with the code (the user-scoped `~/.agents/skills/drive-tasks/`
+> path resolves to the SAME git repo, so editing the repo file IS the edit — do
+> NOT hunt for a separate external copy). This is NOT the protocol source/mirror
+> pair (`skills/setup/protocol/` ↔ `work/protocol/`) that WORK-CONTRACT.md edits
+> need; `skills/drive-tasks/` is a single tracked file. FIRST confirm the current
+> path/section by reading it (the rename history shows these skill files move),
+> then edit it in place. Skill-doc only; no code change.
