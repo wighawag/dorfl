@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'allow-backlog-leak-fence-assertions' (
 date: 2026-06-24
 status: open
 reviewOf: allow-backlog-leak-fence-assertions
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
