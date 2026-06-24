@@ -499,7 +499,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 
 	it('resolves `promptGuidance.testFirst` flag > env > per-repo > global > default false (like autoBuild)', () => {
 		// The NUDGE namespace rides the SAME precedence chain as the gate family
-		// (the brief's acceptance criterion). default false; bare global ⇒ default.
+		// (the prd's acceptance criterion). default false; bare global ⇒ default.
 		expect(
 			resolveRepoConfig({repoPath: repo, global: mergeConfig({}), env: {}})
 				.config.promptGuidance.testFirst,

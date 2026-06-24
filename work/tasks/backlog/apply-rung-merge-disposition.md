@@ -1,7 +1,7 @@
 ---
 title: Apply-rung — answered `merge` disposition invokes the land primitive (conditional, refuses on red re-verify)
 slug: apply-rung-merge-disposition
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: true
 blockedBy: [merge-question-surfacer]
 covers: [15, 16]
@@ -28,11 +28,11 @@ Two non-negotiable behaviours:
 
 ## Open questions (needsAnswers)
 
-Brief OQ6 (still open): when `main` moved between the human's answer
+Prd OQ6 (still open): when `main` moved between the human's answer
 and the apply step but the rebased tip STILL verifies GREEN, does apply
 
   (a) HONOUR the prior approval and land — cheap; trusts that a green
-      re-verify is sufficient (the brief calls this the likely default);
+      re-verify is sufficient (the prd calls this the likely default);
       or
   (b) RE-SURFACE the question because the merge-base CHANGED — the
       host-agnostic analogue of GitHub's "dismiss stale approvals when
@@ -69,7 +69,7 @@ WHETHER the surfacer runs, not what the dispatch does.)
 ## Prompt
 
 > Do NOT build until OQ6 is answered. Once answered: read Stories 15-16,
-> the relevant Implementation Decision in the brief, and the apply-rung
+> the relevant Implementation Decision in the prd, and the apply-rung
 > code (`advance-rung-apply.md` in `tasks/done/` will point to it).
 > Mirror the `promote-slice`/`dropped` dispatch pattern in `triage-
 > persist.ts`. Invoke the LAND primitive via the existing

@@ -99,19 +99,19 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS taskable BRIEFS into the matrix as ' +
-			'`brief:<slug>` legs alongside the task legs (the ' +
+		'the propose `enumerate` `jq` UNIONS taskable PRDS into the matrix as ' +
+			'`prd:<slug>` legs alongside the task legs (the ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
 		() => {
 			const text = loadAdvanceCiTemplate();
 			// The task-only jq this fix replaced left `AGENT_RUNNER_AUTO_TASK` dead on
-			// the hourly cron — a ready ungated BRIEF never became a matrix leg. The new jq
-			// must read `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` +
-			// `cwd.repo.briefs[]`) and emit `brief:<slug>` legs alongside `task:<slug>`.
+			// the hourly cron — a ready ungated PRD never became a matrix leg. The new jq
+			// must read `scan --json`'s taskable-PRD pool (`repos[].prds[]` +
+			// `cwd.repo.prds[]`) and emit `prd:<slug>` legs alongside `task:<slug>`.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
-			expect(/\.repos\[\]\.briefs\[\]\?/.test(text)).toBe(true);
-			expect(/\.cwd\.repo\.briefs\[\]\?/.test(text)).toBe(true);
+			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
 		},
 	);
 
@@ -196,15 +196,15 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		});
 
 		it(
-			'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the ' +
-				'taskable-BRIEF pool must be enumerated',
+			'flags a regression to a TASK-ONLY `jq` (no `prd:` legs) — the ' +
+				'taskable-PRD pool must be enumerated',
 			() => {
-				// Strip the BRIEF union from the jq: a task-only enumerator would silently
+				// Strip the PRD union from the jq: a task-only enumerator would silently
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
 				const broken = base
-					.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
-					.replace(/\.repos\[\]\.briefs\[\]\?/g, '.repos[].items[]?')
-					.replace(/\.cwd\.repo\.briefs\[\]\?/g, '.cwd.repo.items[]?');
+					.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
+					.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
+					.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
 				const result = withTmpTemplate(broken);
 				expect(result.ok).toBe(false);
 				expect(result.problems.map((p) => p.id)).toContain(

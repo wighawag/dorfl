@@ -25,7 +25,7 @@ import {
 
 /**
  * `run` routed through the SHARED `performIntegration` core (the run/do
- * convergence — `work/briefs/ready/run-do-integrate-convergence.md`, Task 2). These are
+ * convergence — `work/prds/ready/run-do-integrate-convergence.md`, Task 2). These are
  * the FOUR acceptance proofs the fleet now inherits from the converged back-half
  * (which it forked, and so LACKED, before): the review gate (Gate 2), the PR
  * title + body, and the per-repo language-agnostic `verify` gate — PLUS the
@@ -331,7 +331,7 @@ describe('run through performIntegration — per-repo, language-agnostic gate', 
 
 describe('run through performIntegration — one-slug-one-folder invariant FAILS LOUD', () => {
 	/**
-	 * The ledger-integrity hardening (PRD `work/briefs/tasked/ledger-integrity.md`):
+	 * The ledger-integrity hardening (PRD `work/prds/tasked/ledger-integrity.md`):
 	 * when the core's one-slug-one-folder guard fires it returns the
 	 * `invariant-violation` outcome and integrates NOTHING (a corrupt ledger — the
 	 * arbiter already holds the slug in >1 status folder). On the LEAST-supervised

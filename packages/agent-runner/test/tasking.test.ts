@@ -21,7 +21,7 @@ import type {
 } from '../src/tasker-review-loop.js';
 
 /**
- * `do brief:<slug>` tasking-path tests (`performTask`, task `autoslice-command`).
+ * `do prd:<slug>` tasking-path tests (`performTask`, task `autoslice-command`).
  *
  * House style: a throwaway checkout + a local `--bare` arbiter + a STUBBED agent
  * (the injected `agentRunner` writes task files directly, never a real harness).
@@ -45,36 +45,31 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) with frontmatter. */
-function seedBrief(
+/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter) with frontmatter. */
+function seedPrd(
 	repo: string,
 	slug: string,
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		briefAfter?: string[];
+		prdAfter?: string[];
 		/**
 		 * Emit an INERT `tasked:` line (the marker was removed in
 		 * remove-tasked-marker-step-b — the parser ignores it). Only used to PROVE a
 		 * leftover marker does NOT count toward tasked-ness (residence does).
 		 */
 		tasked?: string;
-		/** Seed into `work/briefs/tasked/` (the tasked resting state) instead of `brief/`. */
-		inBriefTasked?: boolean;
+		/** Seed into `work/prds/tasked/` (the tasked resting state) instead of `prd/`. */
+		inPrdTasked?: boolean;
 	} = {},
 ): void {
-	const dir = join(
-		repo,
-		'work',
-		'briefs',
-		fm.inBriefTasked ? 'tasked' : 'ready',
-	);
+	const dir = join(repo, 'work', 'prds', fm.inPrdTasked ? 'tasked' : 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.briefAfter && fm.briefAfter.length > 0) {
-		lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
+	if (fm.prdAfter && fm.prdAfter.length > 0) {
+		lines.push(`prdAfter: [${fm.prdAfter.join(', ')}]`);
 	}
 	if (fm.tasked) lines.push(`tasked: ${fm.tasked}`);
 	lines.push(
@@ -87,7 +82,7 @@ function seedBrief(
 	);
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -102,7 +97,7 @@ function taskingAgent(file = 'child', extra?: () => void): TaskAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'brief: it',
+				'prd: it',
 				'---',
 				'',
 				'## Prompt',
@@ -142,7 +137,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('refuses a humanOnly PRD (names humanOnly), no agent, no lock', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {humanOnly: true});
+		seedPrd(repo, 'it', {humanOnly: true});
 		let agentRan = false;
 		const result = await performTask({
 			slug: 'it',
@@ -164,7 +159,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('refuses a needsAnswers PRD (names needsAnswers)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {needsAnswers: true});
+		seedPrd(repo, 'it', {needsAnswers: true});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -180,10 +175,10 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('refuses when autoTask is off on the AUTO-PICK pool path (names autoTask)', async () => {
 		// The NON-explicit (pool) dispatch: `explicit` unset ⇒ the `autoTask` POLICY
-		// still gates. (The pool itself never selects such a brief; this asserts the
+		// still gates. (The pool itself never selects such a prd; this asserts the
 		// per-invocation gate's policy term survives for the pool path.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -199,12 +194,12 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('an EXPLICITLY-named PRD tasks with autoTask OFF (no config, no env) — naming IS the authorization', async () => {
 		// The task-path mirror of `do <task>` building regardless of `autoBuild`:
-		// `explicit: true` (the `do brief:<slug>` dispatch) drops the `autoTask` POLICY
+		// `explicit: true` (the `do prd:<slug>` dispatch) drops the `autoTask` POLICY
 		// term, so an explicit task-now proceeds to the lock/agent with the policy
 		// unset. (A real lock is taken here — the gate does NOT refuse, so the noLock
 		// stub would throw; we let the real CAS run and assert it tasked.)
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		let agentRan = false;
 		const result = await performTask({
 			slug: 'it',
@@ -225,7 +220,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('EXPLICIT still refuses a humanOnly PRD (the readiness axis binds regardless of explicit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {humanOnly: true});
+		seedPrd(repo, 'it', {humanOnly: true});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -241,7 +236,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('EXPLICIT still refuses a needsAnswers PRD (the readiness axis binds regardless of explicit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {needsAnswers: true});
+		seedPrd(repo, 'it', {needsAnswers: true});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -255,10 +250,10 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).toMatch(/needsAnswers/);
 	});
 
-	it('EXPLICIT still refuses an unsatisfied briefAfter (ordering binds regardless of explicit)', async () => {
+	it('EXPLICIT still refuses an unsatisfied prdAfter (ordering binds regardless of explicit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'dep');
-		seedBrief(repo, 'it', {briefAfter: ['dep']});
+		seedPrd(repo, 'dep');
+		seedPrd(repo, 'it', {prdAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -270,16 +265,16 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/briefAfter/);
+		expect(result.message).toMatch(/prdAfter/);
 		// The autoTask policy is NEVER the named reason on the explicit path.
 		expect(result.message).not.toMatch(/autoTask/);
 	});
 
-	it('refuses when a briefAfter PRD is not yet tasked (names it)', async () => {
+	it('refuses when a prdAfter PRD is not yet tasked (names it)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` exists but is NOT tasked; `it` briefAfter: [dep].
-		seedBrief(repo, 'dep');
-		seedBrief(repo, 'it', {briefAfter: ['dep']});
+		// `dep` exists but is NOT tasked; `it` prdAfter: [dep].
+		seedPrd(repo, 'dep');
+		seedPrd(repo, 'it', {prdAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -291,16 +286,16 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/briefAfter/);
+		expect(result.message).toMatch(/prdAfter/);
 	});
 
-	it('passes the gate once the briefAfter PRD IS tasked', async () => {
+	it('passes the gate once the prdAfter PRD IS tasked', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` is TASKED — it RESIDES in work/briefs/tasked/ (the source of truth), not
-		// a `tasked:` marker in work/briefs/ready/. `it`'s briefAfter resolves against that
+		// `dep` is TASKED — it RESIDES in work/prds/tasked/ (the source of truth), not
+		// a `tasked:` marker in work/prds/ready/. `it`'s prdAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
-		seedBrief(repo, 'dep', {inBriefTasked: true});
-		seedBrief(repo, 'it', {briefAfter: ['dep']});
+		seedPrd(repo, 'dep', {inPrdTasked: true});
+		seedPrd(repo, 'it', {prdAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -312,14 +307,14 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.outcome).toBe('tasked');
 	});
 
-	it('STILL refuses when the briefAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
+	it('STILL refuses when the prdAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` sits in work/briefs/ready/ with a leftover (INERT) `tasked:` line but is NOT in
-		// brief-tasked/. Folder residence is the SOLE source of truth — the marker was
+		// `dep` sits in work/prds/ready/ with a leftover (INERT) `tasked:` line but is NOT in
+		// prd-tasked/. Folder residence is the SOLE source of truth — the marker was
 		// removed in remove-tasked-marker-step-b, so the line is ignored and does NOT
-		// satisfy briefAfter.
-		seedBrief(repo, 'dep', {tasked: '2026-06-01'});
-		seedBrief(repo, 'it', {briefAfter: ['dep']});
+		// satisfy prdAfter.
+		seedPrd(repo, 'dep', {tasked: '2026-06-01'});
+		seedPrd(repo, 'it', {prdAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -335,7 +330,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('the HUMAN path is unbound by the gate (tasks a humanOnly PRD, no lock)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {humanOnly: true});
+		seedPrd(repo, 'it', {humanOnly: true});
 		let acquired = false;
 		const result = await performTask({
 			slug: 'it',
@@ -365,7 +360,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 describe('performTask — tasks + commits the runner-owned transition', () => {
 	it('takes the lock, runs the agent, lands tasks in pre-backlog/ (STAGED), rests PRD in prd-tasked/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -386,23 +381,23 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		// task `pre-backlog-staging-folder-and-promote-step-a`).
 		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
 		expect(onArbiter(repo, 'work/tasks/todo/it-first.md')).toBe(false);
-		// The lock was released into the TASKED resting state: the brief now resides in
-		// work/briefs/tasked/ (the source of truth, like done/), NOT back in brief/; tasking/
+		// The lock was released into the TASKED resting state: the prd now resides in
+		// work/prds/tasked/ (the source of truth, like done/), NOT back in prd/; tasking/
 		// is empty.
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
-		// Tasked-ness is RESIDENCE in brief-tasked/ (asserted above). The `tasked:` marker
-		// was removed in remove-tasked-marker-step-b, so the resting brief carries NO
+		// Tasked-ness is RESIDENCE in prd-tasked/ (asserted above). The `tasked:` marker
+		// was removed in remove-tasked-marker-step-b, so the resting prd carries NO
 		// tasked: line.
-		expect(showArbiter(repo, 'work/briefs/tasked/it.md')).not.toMatch(
+		expect(showArbiter(repo, 'work/prds/tasked/it.md')).not.toMatch(
 			/^tasked:/m,
 		);
 	});
 
 	it('the RUNNER (not the agent) authored the commits/moves', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		// An agent that ASSERTS it does no git: the tree must NOT already be
 		// committed by it — it only writes the file; the runner commits.
 		const result = await performTask({
@@ -412,7 +407,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			autoTask: true,
 			integration: 'merge',
 			agentRunner: ({cwd}) => {
-				// The lock already moved the brief to tasking/ on the arbiter; the agent
+				// The lock already moved the prd to tasking/ on the arbiter; the agent
 				// must not have committed anything itself.
 				const dir = join(cwd, 'work', 'tasks', 'backlog');
 				mkdirSync(dir, {recursive: true});
@@ -427,7 +422,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		expect(result.outcome).toBe('tasked');
 
 		// The completing commit on the arbiter is the runner's tasking INTEGRATE
-		// commit (it carries BOTH the backlog task AND the tasking→brief-tasked move),
+		// commit (it carries BOTH the backlog task AND the tasking→prd-tasked move),
 		// now landed through the shared core (`tasking(<slug>): …; tasked`).
 		const subject = run(
 			'git',
@@ -438,8 +433,8 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		expect(subject).toMatch(/^tasking\(it\):/);
 		expect(subject).toMatch(/; tasked$/);
 		// The completing commit carries BOTH the emitted backlog task AND the
-		// tasking→brief-tasked move (a rename), in ONE runner-owned commit (rename
-		// detection shows the move as `work/briefs/tasked/it.md`; tasking/ verified empty).
+		// tasking→prd-tasked move (a rename), in ONE runner-owned commit (rename
+		// detection shows the move as `work/prds/tasked/it.md`; tasking/ verified empty).
 		const files = run(
 			'git',
 			['show', '--name-status', '--format=', `${ARBITER}/main`],
@@ -447,24 +442,24 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			{env: gitEnv()},
 		).stdout;
 		expect(files).toMatch(/work\/tasks\/backlog\/it-a\.md/);
-		expect(files).toMatch(/work\/briefs\/tasked\/it\.md/);
-		// The brief is no longer held in tasking/ (the lock was released in this commit)
-		// and now rests in brief-tasked/ (the source of truth), NOT back in brief/.
+		expect(files).toMatch(/work\/prds\/tasked\/it\.md/);
+		// The prd is no longer held in tasking/ (the lock was released in this commit)
+		// and now rests in prd-tasked/ (the source of truth), NOT back in prd/.
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
 	});
 
 	it('REGRESSION (`do prd:` titlePath read): the commit subject carries the PRD `title:` (read from titlePath, NOT the generic fallback)', async () => {
 		// The intake lone-task fix threads its drafted title EXPLICITLY (its output
-		// file does not exist at title-read time). The `do brief:` TASKING path is
-		// UNCHANGED: its `titlePath` is the already-existing held brief, so the core still
+		// file does not exist at title-read time). The `do prd:` TASKING path is
+		// UNCHANGED: its `titlePath` is the already-existing held prd, so the core still
 		// READS the title from the file. This guards that read path keeps deriving the
-		// subject from the brief `title:` (never degrading to `complete work task`).
+		// subject from the prd `title:` (never degrading to `complete work task`).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// A DISTINCT multi-word title (not just the slug) so the subject is provably
-		// derived from the brief title, not a generic fallback.
-		const dir = join(repo, 'work', 'briefs', 'ready');
+		// derived from the prd title, not a generic fallback.
+		const dir = join(repo, 'work', 'prds', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, 'it.md'),
@@ -481,7 +476,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			].join('\n'),
 		);
 		run('git', ['add', '-A'], repo, {env: gitEnv()});
-		run('git', ['commit', '-q', '-m', 'brief: it'], repo, {env: gitEnv()});
+		run('git', ['commit', '-q', '-m', 'prd: it'], repo, {env: gitEnv()});
 		run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 
 		const result = await performTask({
@@ -522,7 +517,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		// writer, under the lock) must make the tasking STALE — fail loud, touch
 		// NOTHING (the lock stays held; no tasks land).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -532,27 +527,27 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			agentRunner: ({cwd}) => {
 				// Write a task (as normal)…
 				taskingAgent('child')({cwd, prompt: '', slug: 'it'});
-				// …then, from a throwaway clone, EDIT the held brief body on the arbiter
+				// …then, from a throwaway clone, EDIT the held prd body on the arbiter
 				// while the lock is held (the concurrent-edit the backstop must catch).
-				editHeldBriefOnArbiter(scratch.root, 'it');
+				editHeldPrdOnArbiter(scratch.root, 'it');
 				return {ok: true};
 			},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(4);
 		expect(result.outcome).toBe('stale');
-		// The arbiter was NOT modified by the tasking: the brief body stays in brief/ (the
-		// lock is still held on the ref), and no backlog task landed on main. The brief
-		// did NOT move to brief-tasked/.
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
+		// The arbiter was NOT modified by the tasking: the prd body stays in prd/ (the
+		// lock is still held on the ref), and no backlog task landed on main. The prd
+		// did NOT move to prd-tasked/.
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
 	it('RE-TASK round-trip: prd-tasked/ -> prd/ reopens a tasked PRD into the task pool', async () => {
-		// Task `it` ONCE: it lands in work/briefs/tasked/ (the tasked resting state).
+		// Task `it` ONCE: it lands in work/prds/tasked/ (the tasked resting state).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const first = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -563,24 +558,24 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			env: gitEnv(),
 		});
 		expect(first.outcome).toBe('tasked');
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
 
-		// REOPEN-TO-READY: git mv work/briefs/tasked/it.md -> work/briefs/ready/it.md (mirroring
-		// done/ -> backlog/), so the reshaped brief re-enters the task pool with no
+		// REOPEN-TO-READY: git mv work/prds/tasked/it.md -> work/prds/ready/it.md (mirroring
+		// done/ -> backlog/), so the reshaped prd re-enters the task pool with no
 		// special case. Do it on a throwaway clone + push (the runner owns git; this is
 		// a test's own throwaway repo).
-		reopenTaskedBrief(scratch.root, 'it');
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
+		reopenTaskedPrd(scratch.root, 'it');
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
 		// Sync the local checkout to the reopened arbiter main so its working tree has
-		// work/briefs/ready/it.md (the to-task source `performTask` reads at step 0).
+		// work/prds/ready/it.md (the to-task source `performTask` reads at step 0).
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		run('git', ['reset', '-q', '--hard', `${ARBITER}/main`], repo, {
 			env: gitEnv(),
 		});
 
-		// Task it AGAIN: it is back in the pool (the gate sees it in brief/), so the
-		// agent path tasks it once more, landing it back in brief-tasked/.
+		// Task it AGAIN: it is back in the pool (the gate sees it in prd/), so the
+		// agent path tasks it once more, landing it back in prd-tasked/.
 		const second = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -592,17 +587,17 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		});
 		expect(second.outcome).toBe('tasked');
 		expect(onArbiter(repo, 'work/tasks/backlog/it-second.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
 	});
 });
 
 /**
- * REOPEN a tasked brief to ready: from a throwaway clone of the arbiter,
- * `git mv work/briefs/tasked/<slug>.md -> work/briefs/ready/<slug>.md` and push it to `main`
+ * REOPEN a tasked prd to ready: from a throwaway clone of the arbiter,
+ * `git mv work/prds/tasked/<slug>.md -> work/prds/ready/<slug>.md` and push it to `main`
  * (the re-task / reopen-to-ready move, mirroring done/ -> backlog/).
  */
-function reopenTaskedBrief(root: string, slug: string): void {
+function reopenTaskedPrd(root: string, slug: string): void {
 	const dest = join(root, `reopen-${slug}`);
 	run(
 		'git',
@@ -614,10 +609,10 @@ function reopenTaskedBrief(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'reopen', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	mkdirSync(join(dest, 'work', 'briefs', 'ready'), {recursive: true});
+	mkdirSync(join(dest, 'work', 'prds', 'ready'), {recursive: true});
 	run(
 		'git',
-		['mv', `work/briefs/tasked/${slug}.md`, `work/briefs/ready/${slug}.md`],
+		['mv', `work/prds/tasked/${slug}.md`, `work/prds/ready/${slug}.md`],
 		dest,
 		{env: gitEnv()},
 	);
@@ -628,12 +623,12 @@ function reopenTaskedBrief(root: string, slug: string): void {
 }
 
 /**
- * From a throwaway clone of the arbiter, EDIT the held `work/briefs/ready/<slug>.md` body
- * and push it to `main` — simulating a concurrent writer editing the brief under the
- * tasking lock (the body stays in `work/briefs/ready/` now; the read-stability backstop must
+ * From a throwaway clone of the arbiter, EDIT the held `work/prds/ready/<slug>.md` body
+ * and push it to `main` — simulating a concurrent writer editing the prd under the
+ * tasking lock (the body stays in `work/prds/ready/` now; the read-stability backstop must
  * detect the changed blob and fail the integrate as `stale`).
  */
-function editHeldBriefOnArbiter(root: string, slug: string): void {
+function editHeldPrdOnArbiter(root: string, slug: string): void {
 	const dest = join(root, `concurrent-edit-${slug}`);
 	run(
 		'git',
@@ -645,7 +640,7 @@ function editHeldBriefOnArbiter(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'edit', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	const held = join(dest, 'work', 'briefs', 'ready', `${slug}.md`);
+	const held = join(dest, 'work', 'prds', 'ready', `${slug}.md`);
 	writeFileSync(
 		held,
 		readFileSync(held, 'utf8') + '\nCONCURRENT EDIT under the lock.\n',
@@ -660,7 +655,7 @@ function editHeldBriefOnArbiter(root: string, slug: string): void {
 describe('performTask — lock lost / agent failed', () => {
 	it('a lost lock is reported (lock-lost), the agent never runs', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		let agentRan = false;
 		const result = await performTask({
 			slug: 'it',
@@ -690,7 +685,7 @@ describe('performTask — lock lost / agent failed', () => {
 
 	it('an agent failure is reported (agent-failed); the lock is NOT released', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		let released = false;
 		const result = await performTask({
 			slug: 'it',
@@ -735,7 +730,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 
 	it('a converging loop (findings → edits → clean) LANDS the IMPROVED tasks', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -769,16 +764,16 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		expect(showArbiter(repo, 'work/tasks/backlog/child.md')).toMatch(
 			/IMPROVED by the loop/,
 		);
-		// The lock was released + the brief now rests in brief-tasked/ (residence = the SOLE
+		// The lock was released + the prd now rests in prd-tasked/ (residence = the SOLE
 		// tasked-ness signal; the `tasked:` marker was removed in
 		// remove-tasked-marker-step-b).
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
 	});
 
 	it('a persistent block hits taskerLoopMax → emits the uncertain task needsAnswers + questions', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -812,7 +807,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 
 	it('decomposition-unclear → routes the PRD to needs-attention, emits NO tasks', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -834,19 +829,19 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		expect(result.outcome).toBe('needs-attention');
 		expect(result.exitCode).toBe(1);
 		// The needs-attention surface is the per-item lock `state: stuck` now (task
-		// `cutover-...-trim-folder-sets`), NOT a folder move: the brief body STAYS in
-		// work/briefs/ready/ (it never moved under the lock), and NO needs-attention/ or
+		// `cutover-...-trim-folder-sets`), NOT a folder move: the prd body STAYS in
+		// work/prds/ready/ (it never moved under the lock), and NO needs-attention/ or
 		// tasking/ folder file is written.
-		expect(onArbiter(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/briefs/tasked/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// No guessed tasks emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/todo/child.md')).toBe(false);
-		// The brief's per-item lock is held STUCK, carrying the questions as the reason.
+		// The prd's per-item lock is held STUCK, carrying the questions as the reason.
 		const entry = await readItemLock({
-			item: 'brief:it',
+			item: 'prd:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -857,7 +852,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 
 	it('M>1 runs the loop in fresh contexts (the loop seam is invoked per execution)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const executions: number[] = [];
 		const gate: TaskReviewGate = async (input) => {
 			executions.push(input.execution);
@@ -889,7 +884,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 
 	it('the HUMAN path is UNAFFECTED by the loop (no loop runs even when a gate is wired)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it', {humanOnly: true});
+		seedPrd(repo, 'it', {humanOnly: true});
 		let loopRan = false;
 		const result = await performTask({
 			slug: 'it',
@@ -912,7 +907,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 
 	it('no loop seam wired ⇒ the candidate tasks land as-is (pre-loop behaviour)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -935,7 +930,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		// re-committed into the runner-owned tasking release).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['landed']);
 		const landedBefore = showArbiter(repo, 'work/tasks/todo/landed.md');
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const seenByGate: string[][] = [];
 		// A loop gate that, given the chance, would HIJACK + flag a landed POOL
 		// task — only the pre-backlog/ prefix fence stops it. The agent's own task
@@ -1000,7 +995,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 });
 
 describe('performTask — usage', () => {
-	it('errors when the brief does not exist', async () => {
+	it('errors when the prd does not exist', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performTask({
 			slug: 'nope',
@@ -1012,6 +1007,6 @@ describe('performTask — usage', () => {
 		});
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toMatch(/no brief/);
+		expect(result.message).toMatch(/no prd/);
 	});
 });

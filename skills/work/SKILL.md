@@ -1,7 +1,7 @@
 ---
 name: work
 disable-model-invocation: true
-description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-brief / to-task / drive-tasks / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
+description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-prd / to-task / drive-tasks / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
 ---
 
 # Work (the router)
@@ -12,33 +12,33 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 ## The main flow: idea to built
 
-1. **`setup`** (onboard / adopt the contract): onboard ANY repo onto the `work/` contract (scaffold an empty one OR migrate a populated one — auto-detected depth). Run once per repo, before the rest of the flow. Composes `to-brief` / `to-task` to convert existing material. **NOTE the boundary with `from-idea`:** `setup` is the bare "put this repo on the contract" act with no specific idea in hand; if you are starting **from a raw idea** you want captured as a brief, reach for the **`from-idea`** on-ramp instead (it RUNS `setup` for you, then `to-brief`). Empty-vs-populated is NOT the discriminator (setup handles both) — the discriminator is whether you are holding an idea to brief.
-2. **`to-brief`**: turn the current conversation plus codebase understanding into a brief file in `work/briefs/ready/`. The LAUNCH snapshot, not maintained.
-3. **`to-task`**: task a brief (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
+1. **`setup`** (onboard / adopt the contract): onboard ANY repo onto the `work/` contract (scaffold an empty one OR migrate a populated one — auto-detected depth). Run once per repo, before the rest of the flow. Composes `to-prd` / `to-task` to convert existing material. **NOTE the boundary with `from-idea`:** `setup` is the bare "put this repo on the contract" act with no specific idea in hand; if you are starting **from a raw idea** you want captured as a prd, reach for the **`from-idea`** on-ramp instead (it RUNS `setup` for you, then `to-prd`). Empty-vs-populated is NOT the discriminator (setup handles both) — the discriminator is whether you are holding an idea to prd.
+2. **`to-prd`**: turn the current conversation plus codebase understanding into a prd file in `work/prds/ready/`. The LAUNCH snapshot, not maintained.
+3. **`to-task`**: task a prd (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
 4. **Build the ready tasks. Pick the conductor:**
    - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `agent-runner do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the agent-runner CLI. You are present.
-   - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / briefs / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".
+   - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / prds / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".
 
 ## On-ramps
 
 A starting situation that generates work, then merges onto the main flow.
 
-- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be brief-worthy, then sequence `setup` (onboard the `work/` contract) and `to-brief` (synthesize the idea into a brief in `work/briefs/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the brief-producer (it calls `to-brief`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
-- **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend a disposition, the human decides, execute. Promotes notes into tasks/briefs/ADRs (composes `to-task`) or deletes them.
+- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be prd-worthy, then sequence `setup` (onboard the `work/` contract) and `to-prd` (synthesize the idea into a prd in `work/prds/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the prd-producer (it calls `to-prd`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
+- **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend a disposition, the human decides, execute. Promotes notes into tasks/prds/ADRs (composes `to-task`) or deletes them.
 
 ## Cross-cutting disciplines (model-invoked, so the agent may also reach for these itself)
 
 - **`capture-signal`**: the REFLEX. The moment you NOTICE something off the current task's path (drift, a recurring failure, surprising external behaviour, an out-of-scope opportunity, a decision worth recording), record it into the right `work/` bucket before it evaporates. The INVERSE of `triage-observations`.
-- **`review`**: the adversarial review discipline for any `work/`-protocol artifact (task, brief, code-vs-its-task, captured note). Emits a verdict; the caller routes it. Composed by `drive-tasks` / `orchestrate` / the review gate.
+- **`review`**: the adversarial review discipline for any `work/`-protocol artifact (task, prd, code-vs-its-task, captured note). Emits a verdict; the caller routes it. Composed by `drive-tasks` / `orchestrate` / the review gate.
 - **`surface-questions`**: GATHER the open-judgement residue for ONE item and EMIT questions; write nothing. The advance engine's surface-question rung (or the no-runner manual path). Composes `review` / `to-task` unchanged.
-- **`promote`** (human-invoked): the pre-promotion checklist. Judge ONE staged item (`tasks/backlog/` / `briefs/proposed/`) — review + freshness + pool-readiness — and emit promote / keep-staged / drop. Writes/moves nothing; the human or the runner's `promote` verb does the move. The staging→pool review-gate discipline.
+- **`promote`** (human-invoked): the pre-promotion checklist. Judge ONE staged item (`tasks/backlog/` / `prds/proposed/`) — review + freshness + pool-readiness — and emit promote / keep-staged / drop. Writes/moves nothing; the human or the runner's `promote` verb does the move. The staging→pool review-gate discipline.
 - **`answer-questions`** (human-invoked): the read-side mirror of `surface-questions`. Walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify (cited to evidence), DEFER the genuine-judgement ones with context + a suggested default. Proposes; never finalises — the human is the clock.
 
 ## What this repo deliberately does NOT have
 
 Matt Pocock's tracker-coupled skills have no place here. Their JOB is done by file-based equivalents, not disregarded:
 
-- **`to-prd` becomes `to-brief`**, **`to-issues` becomes `to-task`** (write `work/` files instead of tracker issues).
+- **`to-prd` becomes `to-prd`**, **`to-issues` becomes `to-task`** (write `work/` files instead of tracker issues).
 - **`triage` (label state-machine) becomes `triage-observations`** plus folders-as-status plus the autonomy gate.
 - **`setup-matt-pocock-skills` becomes `setup`.**
 

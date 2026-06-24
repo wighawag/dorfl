@@ -30,7 +30,7 @@ import {
 
 /**
  * The **needs-attention mechanism** (ADR `ledger-status-on-per-item-lock-refs`;
- * brief `ledger-status-per-item-lock-refs`; ADR §12 for the original folder model).
+ * prd `ledger-status-per-item-lock-refs`; ADR §12 for the original folder model).
  * Every "couldn't finish, a human must look" outcome (a failed acceptance gate
  * (red `verify`), a rebase/merge conflict (ADR §10), a task the agent reported
  * too ambiguous to build, a timeout, or a rejected review) resolves to ONE
@@ -81,7 +81,7 @@ export interface RouteToNeedsAttentionOptions {
 	/**
 	 * The work branch to push to the arbiter (the RECOVERABLE half — see the seam
 	 * docstring). DEFAULT `work/<slug>`: the build-bounce branch the wip/move
-	 * commits landed on. A tasking bounce passes its own branch (`work/briefs/
+	 * commits landed on. A tasking bounce passes its own branch (`work/prds/
 	 * ready-<slug>`). The supplied branch MUST be the one HEAD is on (the branch the
 	 * wip/move commits landed on) — NEVER a default that differs from HEAD; a
 	 * caller NOT checked out on the work branch (e.g. a temp branch off main) must
@@ -301,7 +301,7 @@ function findSourceFolder(
  *      (an unreachable arbiter leaves the local branch standing — recovery
  *      degrades, never crashes the bounce; retried with bounded backoff on an
  *      outage), BRANCH-PARAMETERISED (default `work/<slug>`; an explicit `branch`
- *      overrides — the tasking bounce passes `work/briefs/ready-<slug>`; `pushBranch: false`
+ *      overrides — the tasking bounce passes `work/prds/ready-<slug>`; `pushBranch: false`
  *      ⇒ push NOTHING), and EMPTINESS-GUARDED (a branch with no commits beyond
  *      main, or an absent branch, is skipped). The branch MUST be the one HEAD is
  *      on. The work-branch push is NOT a `main` write.
@@ -358,7 +358,7 @@ export async function routeToNeedsAttention(
 	let pushError: string | undefined;
 	if (options.arbiter && options.pushBranch !== false) {
 		// DEFAULT to the task-namespaced build-bounce branch; a non-task caller
-		// (the tasking bounce) passes its own `work/briefs/ready-<slug>` via `branch`.
+		// (the tasking bounce) passes its own `work/prds/ready-<slug>` via `branch`.
 		const branch = options.branch ?? workBranchRef('task', slug);
 		if (branchAheadOf(cwd, branch, 'main', env)) {
 			const arbiter = options.arbiter;
@@ -678,7 +678,7 @@ export async function returnToBacklog(
 }
 
 /**
- * **Promote a STAGED task into the agent-eligible pool** (brief
+ * **Promote a STAGED task into the agent-eligible pool** (prd
  * `staging-pool-position-gate-and-trust-model`, task
  * `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Moves
@@ -759,7 +759,7 @@ export async function promoteFromPreBacklog(
 	// arbiter's TRUTH. A fetch, not a checkout — the working tree is untouched.
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
-	// UNIFIED PER-ITEM LOCK around the CAS window (brief
+	// UNIFIED PER-ITEM LOCK around the CAS window (prd
 	// `staging-surface-and-apply-promote-safety`, task
 	// `f3b-promote-takes-per-item-advancing-lock`): promote and apply BOTH key onto
 	// the item's `refs/agent-runner/lock/<entry>` ref with `action: advance` (the
@@ -876,34 +876,34 @@ export async function promoteFromPreBacklog(
 }
 
 /**
- * **Promote a STAGED brief into the auto-task pool** (brief
+ * **Promote a STAGED prd into the auto-task pool** (prd
  * `staging-pool-position-gate-and-trust-model`, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
- * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The brief
+ * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The prd
  * twin of {@link promoteFromPreBacklog}: moves
- * `work/briefs/proposed/<slug>.md → work/briefs/ready/<slug>.md` as a durable `main` move
+ * `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md` as a durable `main` move
  * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
- * the brief is in the auto-task POOL and eligible to be auto-tasked (subject
- * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`briefAfter` gates,
+ * the prd is in the auto-task POOL and eligible to be auto-tasked (subject
+ * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`prdAfter` gates,
  * which are UNCHANGED — the staging/pool split changes only WHICH folder is
  * the auto-task pool, not the gates).
  *
  * **RUNNER/human-owned.** There is no agent-facing path that performs this:
- * `intake`'s `prd` dispatch lands the brief STAGED in `work/briefs/proposed/` (the
+ * `intake`'s `prd` dispatch lands the prd STAGED in `work/prds/proposed/` (the
  * runner's deterministic placement decision), and only a runner/human
  * invocation moves it into the pool. The agent does no git here, as
  * everywhere; this function is not reachable from any agent surface.
  *
  * Storage-agnostic + tree-less, exactly like {@link promoteFromPreBacklog}:
  * cwd index/HEAD/working tree are never touched, an arbiter remote is
- * REQUIRED, and "not in briefs/proposed/" / contention-exhausted cases are returned
+ * REQUIRED, and "not in prds/proposed/" / contention-exhausted cases are returned
  * (NEVER thrown) via `{moved: false, reasonNotMoved}` so callers branch
  * cleanly. Idempotent: re-running after the move LANDED is a no-op success.
  */
-export interface PromoteFromPreBriefOptions {
+export interface PromoteFromPrePrdOptions {
 	/** The working clone the move is originated from (origin source only; never written). */
 	cwd: string;
-	/** The slug of the staged brief to promote into the pool. */
+	/** The slug of the staged prd to promote into the pool. */
 	slug: string;
 	/** The arbiter remote the promotion is CAS-published to. REQUIRED. */
 	arbiter: string;
@@ -913,18 +913,18 @@ export interface PromoteFromPreBriefOptions {
 	note?: (message: string) => void;
 }
 
-export interface PromoteFromPreBriefResult {
-	/** True iff the staged brief was moved into the pool + committed. */
+export interface PromoteFromPrePrdResult {
+	/** True iff the staged prd was moved into the pool + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
-	/** When NOT moved, why (no such briefs/proposed item, already in briefs/ready/, contention). */
+	/** When NOT moved, why (no such prds/proposed item, already in prds/ready/, contention). */
 	reasonNotMoved?: string;
 }
 
-export async function promoteFromPreBrief(
-	options: PromoteFromPreBriefOptions,
-): Promise<PromoteFromPreBriefResult> {
+export async function promoteFromPrePrd(
+	options: PromoteFromPrePrdOptions,
+): Promise<PromoteFromPrePrdResult> {
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
@@ -953,15 +953,15 @@ export async function promoteFromPreBrief(
 	await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
 
 	// UNIFIED PER-ITEM LOCK around the CAS window — symmetric with
-	// {@link promoteFromPreBacklog} (brief `staging-surface-and-apply-promote-safety`,
-	// task `f3b-promote-takes-per-item-advancing-lock`, decisive brief q4 answer:
-	// briefs share the apply×promote mutual-exclusion fix with tasks). The lock
-	// keys on `brief:${slug}` (a distinct ref from a task with the same slug, via
+	// {@link promoteFromPreBacklog} (prd `staging-surface-and-apply-promote-safety`,
+	// task `f3b-promote-takes-per-item-advancing-lock`, decisive prd q4 answer:
+	// prds share the apply×promote mutual-exclusion fix with tasks). The lock
+	// keys on `prd:${slug}` (a distinct ref from a task with the same slug, via
 	// {@link lockEntryFor}'s `<type>-<slug>` encoding), with `action: advance` —
-	// the SAME action an apply for a brief would take — so brief promote and brief
+	// the SAME action an apply for a prd would take — so prd promote and prd
 	// apply on the same item are mutually exclusive by construction. Loss / crash
 	// semantics mirror the task case.
-	const item = `brief:${slug}`;
+	const item = `prd:${slug}`;
 	const acquired = await acquireItemLock({
 		item,
 		action: 'advance',
@@ -978,8 +978,8 @@ export async function promoteFromPreBrief(
 		return {moved: false, reasonNotMoved: message};
 	}
 	try {
-		const sourceRel = workItemRel('briefs-proposed', `${slug}.md`);
-		const destRel = workItemRel('briefs-ready', `${slug}.md`);
+		const sourceRel = workItemRel('prds-proposed', `${slug}.md`);
+		const destRel = workItemRel('prds-ready', `${slug}.md`);
 
 		const hasSource =
 			(
@@ -999,16 +999,16 @@ export async function promoteFromPreBrief(
 			).status === 0;
 		if (!hasSource && !hasDest) {
 			const message =
-				`'${slug}' is not staged in ${workFolderPrefix('briefs-proposed')} on ${arbiter}/main ` +
-				`(and not already in ${workFolderPrefix('briefs-ready')}) — nothing to promote ` +
+				`'${slug}' is not staged in ${workFolderPrefix('prds-proposed')} on ${arbiter}/main ` +
+				`(and not already in ${workFolderPrefix('prds-ready')}) — nothing to promote ` +
 				'(wrong slug, or never staged?).';
 			note(message);
 			return {moved: false, reasonNotMoved: message};
 		}
 
 		const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
-			'briefs-proposed',
-		)} -> ${workFolderPrefix('briefs-ready')}`;
+			'prds-proposed',
+		)} -> ${workFolderPrefix('prds-ready')}`;
 		const moved = await runTreelessLedgerMove({
 			cwd,
 			slug,
@@ -1031,7 +1031,7 @@ export async function promoteFromPreBrief(
 					base,
 					sourceRel,
 					destRel,
-					// The body is carried byte-for-byte from briefs/proposed into the pool —
+					// The body is carried byte-for-byte from prds/proposed into the pool —
 					// promotion is a placement decision, not a content transform.
 					transformBody: (body) => body,
 					commitMessage,
@@ -1042,14 +1042,14 @@ export async function promoteFromPreBrief(
 		});
 		if (moved) {
 			note(
-				`Promoted brief '${slug}' from briefs/proposed to briefs/ready (auto-taskable).`,
+				`Promoted prd '${slug}' from prds/proposed to prds/ready (auto-taskable).`,
 			);
 			return {moved: true, commitMessage};
 		}
 
 		const message =
 			`promote for '${slug}': the arbiter's main kept moving (contended) ` +
-			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in briefs/proposed ` +
+			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in prds/proposed ` +
 			'(no move). Try again shortly.';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
@@ -1058,10 +1058,10 @@ export async function promoteFromPreBrief(
 	}
 }
 
-/** One staged item awaiting promotion (a task in `pre-backlog/` or a brief in `briefs/proposed/`). */
+/** One staged item awaiting promotion (a task in `pre-backlog/` or a prd in `prds/proposed/`). */
 export interface PromotableItem {
-	/** `'task'` (staged in `work/pre-backlog/`) or `'brief'` (staged in `work/briefs/proposed/`). */
-	namespace: 'task' | 'brief';
+	/** `'task'` (staged in `work/pre-backlog/`) or `'prd'` (staged in `work/prds/proposed/`). */
+	namespace: 'task' | 'prd';
 	/** The slug (filename minus `.md`). */
 	slug: string;
 }
@@ -1076,7 +1076,7 @@ export interface ListPromotableOptions {
 }
 
 export interface ListPromotableResult {
-	/** Every staged item awaiting promotion, tasks then briefs, each sorted by slug. */
+	/** Every staged item awaiting promotion, tasks then prds, each sorted by slug. */
 	items: PromotableItem[];
 	/** When the listing could not run (no such remote), why. */
 	error?: string;
@@ -1084,7 +1084,7 @@ export interface ListPromotableResult {
 
 /**
  * LIST every staged item awaiting a runner/human promotion — the tasks in
- * `work/pre-backlog/` and the briefs in `work/briefs/proposed/` on `<arbiter>/main` (the
+ * `work/pre-backlog/` and the prds in `work/prds/proposed/` on `<arbiter>/main` (the
  * discovery half of the `promote` verb, so `promote` with no argument answers
  * "what is staged waiting for me?"). It reads the ARBITER's truth (a fetch + a
  * tree read), NOT the local working tree (which may be stale) — the same source
@@ -1112,15 +1112,15 @@ export async function listPromotable(
 		cwd,
 		env,
 	);
-	const briefs = await listMarkdownSlugsInTree(
-		`${arbiter}/main:${workFolderRel('briefs-proposed')}`,
+	const prds = await listMarkdownSlugsInTree(
+		`${arbiter}/main:${workFolderRel('prds-proposed')}`,
 		cwd,
 		env,
 	);
 	return {
 		items: [
 			...tasks.map((slug) => ({namespace: 'task' as const, slug})),
-			...briefs.map((slug) => ({namespace: 'brief' as const, slug})),
+			...prds.map((slug) => ({namespace: 'prd' as const, slug})),
 		],
 	};
 }

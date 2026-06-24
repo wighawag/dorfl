@@ -38,15 +38,15 @@ function trackedOnArbiter(cwd: string, folder: string, slug: string): boolean {
 		).status === 0
 	);
 }
-const briefOnArbiter = (cwd: string, slug: string): boolean =>
-	trackedOnArbiter(cwd, 'brief', slug);
+const prdOnArbiter = (cwd: string, slug: string): boolean =>
+	trackedOnArbiter(cwd, 'prd', slug);
 const taskingFolderOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'tasking', slug);
-/** Does the arbiter HOLD the per-item lock ref for the brief `slug`? */
+/** Does the arbiter HOLD the per-item lock ref for the prd `slug`? */
 function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 	const r = run(
 		'git',
-		['ls-remote', `file://${arbiter}`, itemLockRef(`brief-${slug}`)],
+		['ls-remote', `file://${arbiter}`, itemLockRef(`prd-${slug}`)],
 		scratch.root,
 		{env: gitEnv()},
 	);
@@ -56,16 +56,16 @@ function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 /**
  * The tasking lock is the UNIFIED per-item lock now (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
- * `git mv work/briefs/ready/ → work/tasking/` marker is RETIRED, so the brief body STAYS in
- * `work/briefs/ready/` while it is being tasked (the lock is the `brief:<slug>` ref,
- * `action: task`). The durable `brief → brief-tasked` success move + the read-stability
+ * `git mv work/prds/ready/ → work/tasking/` marker is RETIRED, so the prd body STAYS in
+ * `work/prds/ready/` while it is being tasked (the lock is the `prd:<slug>` ref,
+ * `action: task`). The durable `prd → prd-tasked` success move + the read-stability
  * stale check live at the integrate seam (`tasking.ts`), not in the lock.
  */
 
 describe('acquireTaskingLock — happy path', () => {
 	it('takes the prd:<slug> unified lock; the PRD body STAYS in prd/ (no tasking/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			briefs: ['alpha'],
+			prds: ['alpha'],
 		});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
@@ -76,12 +76,12 @@ describe('acquireTaskingLock — happy path', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('acquired');
 		// The unified lock (action: task) is held; the retired tasking/ marker is
-		// never written; the body stays in brief/.
+		// never written; the body stays in prd/.
 		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(true);
 		expect(taskingFolderOnArbiter(repo, 'alpha')).toBe(false);
-		expect(briefOnArbiter(repo, 'alpha')).toBe(true);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'brief:alpha',
+			item: 'prd:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -91,7 +91,7 @@ describe('acquireTaskingLock — happy path', () => {
 	});
 
 	it('returns the acquire-time lockedBlob (the prd/ body snapshot)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -99,10 +99,10 @@ describe('acquireTaskingLock — happy path', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		// The lockedBlob is the blob of work/briefs/ready/alpha.md on the arbiter.
+		// The lockedBlob is the blob of work/prds/ready/alpha.md on the arbiter.
 		const blob = run(
 			'git',
-			['rev-parse', 'arbiter/main:work/briefs/ready/alpha.md'],
+			['rev-parse', 'arbiter/main:work/prds/ready/alpha.md'],
 			repo,
 			{env: gitEnv()},
 		).stdout.trim();
@@ -111,7 +111,7 @@ describe('acquireTaskingLock — happy path', () => {
 
 	it('dry-run reports the lockable snapshot and does NOT take the lock', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			briefs: ['alpha'],
+			prds: ['alpha'],
 		});
 		const notes: string[] = [];
 		const result = await acquireTaskingLock({
@@ -126,13 +126,13 @@ describe('acquireTaskingLock — happy path', () => {
 		expect(notes.some((n) => n.includes('[dry-run]'))).toBe(true);
 		expect(result.lockedBlob).toBeDefined();
 		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(false);
-		expect(briefOnArbiter(repo, 'alpha')).toBe(true);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 	});
 });
 
 describe('acquireTaskingLock — not lockable (exit 2)', () => {
 	it('returns "lost" when there is no such PRD', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'nope',
 			cwd: repo,
@@ -144,7 +144,7 @@ describe('acquireTaskingLock — not lockable (exit 2)', () => {
 	});
 
 	it('returns "lost" when the PRD is already held (unified lock taken)', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const other = seeded.clone('other');
 		const first = await acquireTaskingLock({
 			slug: 'alpha',
@@ -166,7 +166,7 @@ describe('acquireTaskingLock — not lockable (exit 2)', () => {
 
 describe('acquireTaskingLock — usage / env errors (exit 1)', () => {
 	it('errors when the arbiter remote does not exist', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -180,7 +180,7 @@ describe('acquireTaskingLock — usage / env errors (exit 1)', () => {
 
 describe('tasking-lock race — exactly one winner', () => {
 	it('two simultaneous taskers ⇒ one acquires, the loser gets exit-2', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {briefs: ['solo']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['solo']});
 		// Distinct committer identity per racer so the two lock commits get DISTINCT
 		// shas (as two real taskers would) and the loser loses through the genuine
 		// create-only ref CAS, not a fixture sha-collision. See racerEnv.
@@ -206,20 +206,20 @@ describe('tasking-lock race — exactly one winner', () => {
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
-		// The arbiter agrees: the lock is held exactly once; the brief never moved.
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['brief-solo']);
-		expect(briefOnArbiter(a, 'solo')).toBe(true);
+		// The arbiter agrees: the lock is held exactly once; the prd never moved.
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['prd-solo']);
+		expect(prdOnArbiter(a, 'solo')).toBe(true);
 		expect(taskingFolderOnArbiter(a, 'solo')).toBe(false);
 	});
 });
 
 describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 	it('a held tasking lock and a build claim share the SAME prd: vs task: ref namespaces (no collision)', async () => {
-		// A brief `dual` and a TASK `dual` are DISTINCT entries (`brief-dual` vs
-		// `task-dual`), so a tasking lock on the brief and a build claim on the task
+		// A prd `dual` and a TASK `dual` are DISTINCT entries (`prd-dual` vs
+		// `task-dual`), so a tasking lock on the prd and a build claim on the task
 		// do NOT collide — they are different items.
 		const seeded = seedRepoWithArbiter(scratch.root, ['dual'], {
-			briefs: ['dual'],
+			prds: ['dual'],
 		});
 		const tasking = await acquireTaskingLock({
 			slug: 'dual',
@@ -236,16 +236,16 @@ describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		// Both locks are held on DISTINCT refs.
-		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // brief-dual
+		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // prd-dual
 		const slugs = await listItemLocks(seeded.repo, 'arbiter', gitEnv());
-		expect(slugs.sort()).toEqual(['brief-dual', 'task-dual']);
+		expect(slugs.sort()).toEqual(['prd-dual', 'task-dual']);
 	});
 });
 
 describe('releaseTaskingLock — deletes the unified lock', () => {
 	it('deletes the prd: lock ref on a clean release (exit 0); the PRD stays in prd/', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			briefs: ['alpha'],
+			prds: ['alpha'],
 		});
 		const acquired = await acquireTaskingLock({
 			slug: 'alpha',
@@ -264,11 +264,11 @@ describe('releaseTaskingLock — deletes the unified lock', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('released');
 		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(false);
-		expect(briefOnArbiter(repo, 'alpha')).toBe(true);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 	});
 
 	it('an already-absent lock is an idempotent "released"', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await releaseTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -283,7 +283,7 @@ describe('releaseTaskingLock — deletes the unified lock', () => {
 describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', () => {
 	it('amends the prd: lock active → stuck with the reason (no folder write)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			briefs: ['alpha'],
+			prds: ['alpha'],
 		});
 		const acquired = await acquireTaskingLock({
 			slug: 'alpha',
@@ -305,9 +305,9 @@ describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', ()
 		// The lock is STILL held — but stuck, carrying the reason. NO folder write.
 		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(true);
 		expect(trackedOnArbiter(repo, 'needs-attention', 'alpha')).toBe(false);
-		expect(briefOnArbiter(repo, 'alpha')).toBe(true);
+		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'brief:alpha',
+			item: 'prd:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -317,7 +317,7 @@ describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', ()
 	});
 
 	it('returns "lost" when there is no held lock to mark stuck', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {briefs: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
 		const result = await releaseTaskingLock({
 			slug: 'alpha',
 			cwd: repo,

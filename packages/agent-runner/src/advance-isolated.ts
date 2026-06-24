@@ -21,7 +21,7 @@ import type {Config} from './config.js';
 import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
 
 /**
- * The **ISOLATED advance-tick RUNNER** + its sequential drivers (brief
+ * The **ISOLATED advance-tick RUNNER** + its sequential drivers (prd
  * `advance-loop`, task `advance-isolated-one-shot`, US #25/26) — the "isolated
  * one-shot" cell `advance` was missing. It gives `advance` the SAME isolation
  * ergonomic `do --isolated` has: run the advance TICK ({@link performAdvance}) in
@@ -48,7 +48,7 @@ import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
  * **Why an isolated cwd composes with all five rungs (only the runner is new).**
  * The advance tick threads a `cwd` + `arbiter` + a build/task `doDriver`:
  *
- *   - the **build-task / task-brief** rungs ORCHESTRATE `do`/`do brief:` via the
+ *   - the **build-task / task-prd** rungs ORCHESTRATE `do`/`do prd:` via the
  *     `doDriver` seam — we inject {@link jobWorktreeDoDriver} (off the cwd-resolved
  *     arbiter), so they build/task ISOLATED in their OWN job worktree (the SAME
  *     isolation `do --isolated` gives the build tick) instead of in `process.cwd()`;
@@ -83,7 +83,7 @@ export interface IsolatedAdvanceContext extends Omit<AdvanceContext, 'cwd'> {
 
 /** Options for {@link performAdvanceIsolated} — the per-item isolated tick. */
 export interface PerformAdvanceIsolatedOptions extends IsolatedAdvanceContext {
-	/** The raw advance arg: bare (= task), `brief:<slug>`, or `obs:<slug>`. */
+	/** The raw advance arg: bare (= task), `prd:<slug>`, or `obs:<slug>`. */
 	arg: string;
 	/** The read seam (slug resolution / pool); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
@@ -285,7 +285,7 @@ export interface PerformAdvanceIsolatedMultiOptions extends SharedIsolatedContex
  *      SAME mirror idempotently — a fetch, never a re-clone);
  *   2. {@link scanMirrorPool} over the bare hub mirror's committed `main` (the
  *      isolated counterpart of the in-place pool scan, gated per-action);
- *   3. {@link selectPrioritised} (tasks-first / briefs-first per `selectionOrder`, bounded by `count`);
+ *   3. {@link selectPrioritised} (tasks-first / prds-first per `selectionOrder`, bounded by `count`);
  *   4. a SEQUENTIAL loop over the FROZEN selected set (selected ONCE in 2–3, NEVER
  *      re-scanned) where each per-item {@link performAdvanceIsolated} re-fetches the
  *      SAME mirror, so item N's clone branches off a `main` that contains item N-1's
@@ -325,7 +325,7 @@ export async function performAdvanceIsolatedAuto(
 	}
 
 	// Scan the mirror's committed `main` for the SAME pools the in-place scan
-	// enumerates (eligible tasks gated on `autoBuild`, taskable briefs gated on
+	// enumerates (eligible tasks gated on `autoBuild`, taskable prds gated on
 	// `autoTask`, + the lifecycle sub-pools), through the SHARED mirror-pool scan.
 	const scan = await scanMirrorPool({
 		mirrorPath: mirror.path,
@@ -345,7 +345,7 @@ export async function performAdvanceIsolatedAuto(
 			maxParallel: Number.MAX_SAFE_INTEGER,
 			perRepoMax: Number.MAX_SAFE_INTEGER,
 		},
-		briefs: scan.briefs,
+		prds: scan.prds,
 		selectionOrder: options.config.selectionOrder,
 		lifecycle: scan.lifecycle,
 		count,
@@ -354,7 +354,7 @@ export async function performAdvanceIsolatedAuto(
 	if (selected.length === 0) {
 		const message =
 			'Nothing eligible to advance on the remote (no eligible tasks and no ' +
-			'taskable briefs under the per-action gates).';
+			'taskable prds under the per-action gates).';
 		note(message);
 		return {results: [], exitCode: 0, message};
 	}
@@ -373,7 +373,7 @@ export async function performAdvanceIsolatedAuto(
  * Run the EXPLICIT multi-arg form (`advance --isolated <a> <b> …`): the NAMED items
  * in the GIVEN order (no pool/priority — the operator chose them), each through the
  * ISOLATED advance-tick runner, SEQUENTIALLY. No mirror scan is needed (the args
- * are explicit); the per-item tick resolves each bare/`brief:`/`obs:` arg itself.
+ * are explicit); the per-item tick resolves each bare/`prd:`/`obs:` arg itself.
  */
 export async function performAdvanceIsolatedArgs(
 	args: string[],
@@ -393,7 +393,7 @@ function argForSelected(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	return item.namespace === 'brief' ? `brief:${item.slug}` : item.slug;
+	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
 }
 
 /** Build the per-item {@link PerformAdvanceIsolatedOptions} for one arg. */

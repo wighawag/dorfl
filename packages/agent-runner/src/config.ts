@@ -17,7 +17,7 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
- * **Per-repo TASK-PLACEMENT default** (brief
+ * **Per-repo TASK-PLACEMENT default** (prd
  * `staging-pool-position-gate-and-trust-model`, task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
@@ -38,26 +38,26 @@ export type IntegrationMode = 'propose' | 'merge';
 export type TasksLandIn = 'pre-backlog' | 'todo';
 
 /**
- * **Per-repo BRIEF-PLACEMENT default** (brief
+ * **Per-repo PRD-PLACEMENT default** (prd
  * `staging-pool-position-gate-and-trust-model`, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
- * folder the runner lands `intake`-authored brief files in BY DEFAULT —
+ * folder the runner lands `intake`-authored prd files in BY DEFAULT —
  * `'pre-proposed'` (staging — durable + readable but NOT in the auto-tasking
- * POOL; a runner/human promotion is needed to make the brief auto-taskable; the
- * on-disk folder for this value is `work/briefs/proposed/`) or `'ready'` (the
+ * POOL; a runner/human promotion is needed to make the prd auto-taskable; the
+ * on-disk folder for this value is `work/prds/proposed/`) or `'ready'` (the
  * auto-tasking POOL — the trusted fast-path landing, on-disk
- * `work/briefs/ready/`). The same runner-deterministic placement RESOLVER
+ * `work/prds/ready/`). The same runner-deterministic placement RESOLVER
  * (`src/placement.ts`) layers on top:
- * `explicit operator flag > untrusted-origin ⇒ pre-proposed > briefsLandIn
- * default > built-in (pre-proposed)`. An untrusted-origin intake brief is FORCED
+ * `explicit operator flag > untrusted-origin ⇒ pre-proposed > prdsLandIn
+ * default > built-in (pre-proposed)`. An untrusted-origin intake prd is FORCED
  * to staging even in a `'ready'` repo (the positional analogue of the existing
- * `untrusted-origin-forces-build-propose` rule). The BRIEF twin of
+ * `untrusted-origin-forces-build-propose` rule). The PRD twin of
  * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
- * spellings mirror the live brief folders (`briefs/proposed/` staging,
- * `briefs/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
+ * spellings mirror the live prd folders (`prds/proposed/` staging,
+ * `prds/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
-export type BriefsLandIn = 'pre-proposed' | 'ready';
+export type PrdsLandIn = 'pre-proposed' | 'ready';
 
 /**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
@@ -173,11 +173,11 @@ export interface Config {
 	promptGuidance: PromptGuidance;
 	/**
 	 * Per-repo policy: may an agent auto-task *undeclared* (not `humanOnly`,
-	 * no open questions) briefs in this repo? `false` (default, strict, human-first)
-	 * ⇒ a human must drive every brief's tasking; `true` ⇒ an agent may auto-task
-	 * any brief that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
+	 * no open questions) prds in this repo? `false` (default, strict, human-first)
+	 * ⇒ a human must drive every prd's tasking; `true` ⇒ an agent may auto-task
+	 * any prd that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
 	 * `autoBuild`: flag > `AGENT_RUNNER_AUTO_TASK` env > per-repo > global >
-	 * default. The two-axis tasking gate (`work/briefs/auto-task.md`), one level up
+	 * default. The two-axis tasking gate (`work/prds/auto-task.md`), one level up
 	 * from the build gate's `autoBuild`.
 	 */
 	autoTask: boolean;
@@ -202,7 +202,7 @@ export interface Config {
 	 * Per-repo policy governing DECLARED blocked work — the BOOLEAN member of the
 	 * question-surfacing gate family (its orthogonal PEER is `observationTriage`,
 	 * which governs the raw observation INBOX; ADR `ci-config-policy-and-gate-family`
-	 * §2). It gates whether a task/brief carrying `needsAnswers: true` is rendered
+	 * §2). It gates whether a task/prd carrying `needsAnswers: true` is rendered
 	 * into an answerable question sidecar (`on`) or left silently blocked in the
 	 * backlog (`off`). `false` (default, calm) ⇒ the `needsAnswers`-blocked pool is
 	 * dropped from the auto-pick SELECTION, so a bare `advance` does NOT proactively
@@ -222,11 +222,11 @@ export interface Config {
 	/**
 	 * Per-repo policy governing whether SURFACING (the question-minting polarity)
 	 * inspects STAGING in addition to the agent pool — the BOOLEAN gate-family
-	 * member added by brief `staging-surface-and-apply-promote-safety` (F2). The
+	 * member added by prd `staging-surface-and-apply-promote-safety` (F2). The
 	 * BUILD polarity is UNCHANGED in either mode: staging items stay non-claimable,
 	 * the trust model is untouched. `true` (default) ⇒ the SURFACE candidate set
-	 * draws from STAGING (`tasks/backlog/`, `briefs/proposed/`) PLUS the pool, so
-	 * a `needsAnswers` task/brief in staging surfaces its questions BEFORE a human
+	 * draws from STAGING (`tasks/backlog/`, `prds/proposed/`) PLUS the pool, so
+	 * a `needsAnswers` task/prd in staging surfaces its questions BEFORE a human
 	 * promotes it (you promote an already-clarified item, not blind and then get
 	 * asked after); `false` ⇒ the legacy POOL-ONLY behaviour (staging is not
 	 * inspected for questions). Resolved like `surfaceBlockers`/`autoBuild`:
@@ -239,7 +239,7 @@ export interface Config {
 	surfaceStaging: boolean;
 	/**
 	 * Per-repo SELECTION ORDER across the four ORDERABLE auto-pick pools (`build` =
-	 * eligible tasks, `task` = taskable briefs, `surface` = `needsAnswers`
+	 * eligible tasks, `task` = taskable prds, `surface` = `needsAnswers`
 	 * blockers, `triage` = untriaged observations). `apply` (consume a committed
 	 * answer) is PINNED FIRST and is NOT orderable (consume-always-wins). The value
 	 * is EITHER a PRESET keyword (`drain` (default) ⇒ `[build, task, surface,
@@ -291,24 +291,24 @@ export interface Config {
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
-	 * **Per-TRANSITION override for the brief→tasks (TASKING) transition only.** When
-	 * set, the tasking transition (a `do brief:<slug>` run: emit `work/tasks/backlog/*.md` +
-	 * the `work/briefs/ready/ → work/briefs/tasked/` lifecycle move) integrates with THIS
+	 * **Per-TRANSITION override for the prd→tasks (TASKING) transition only.** When
+	 * set, the tasking transition (a `do prd:<slug>` run: emit `work/tasks/backlog/*.md` +
+	 * the `work/prds/ready/ → work/prds/tasked/` lifecycle move) integrates with THIS
 	 * mode instead of the flat {@link integration}; the task-BUILD transition is
 	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ tasking
 	 * falls back to {@link integration} — byte-for-byte today's behaviour for any repo
 	 * that does not set it. The maintainer's target is `integration: 'propose'` +
-	 * `taskingIntegration: 'merge'`: task a brief straight onto `main` (the task FILES
+	 * `taskingIntegration: 'merge'`: task a prd straight onto `main` (the task FILES
 	 * land, no PR) but build each task as a reviewable PR. Resolved per-repo like
 	 * {@link integration}: flag (`--merge`/`--propose`) > env
 	 * (`AGENT_RUNNER_TASKING_INTEGRATION`) > per-repo > global > (fall back to)
 	 * `integration` > default `propose`. DISTINCT from intake's per-EMITTED-TYPE
-	 * `{task, brief}` resolver (front door, author-trust-resolved): this is a
+	 * `{task, prd}` resolver (front door, author-trust-resolved): this is a
 	 * per-LIFECYCLE-TRANSITION knob, inside the trust boundary, operator/config-only.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (brief
+	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (prd
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
 	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--tasks-land-in`
@@ -317,27 +317,27 @@ export interface Config {
 	 * CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
-	 * tasker NEVER sets placement itself. Brief US #6 / the governing ADR: the
+	 * tasker NEVER sets placement itself. Prd US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it.
 	 */
 	tasksLandIn: TasksLandIn;
 	/**
-	 * **Per-repo DEFAULT landing for `intake`-authored brief files** (brief
+	 * **Per-repo DEFAULT landing for `intake`-authored prd files** (prd
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, task
-	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The BRIEF twin of
+	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The PRD twin of
 	 * {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
-	 * `--briefs-land-in` > env `AGENT_RUNNER_BRIEFS_LAND_IN` > per-repo > global >
-	 * built-in `'pre-proposed'`). `intake`'s brief dispatch reads it and passes it as
+	 * `--prds-land-in` > env `AGENT_RUNNER_PRDS_LAND_IN` > per-repo > global >
+	 * built-in `'pre-proposed'`). `intake`'s prd dispatch reads it and passes it as
 	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
-	 * `intake` NEVER sets placement itself. Brief US #6 / the governing ADR: the
+	 * `intake` NEVER sets placement itself. Prd US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
 	 */
-	briefsLandIn: BriefsLandIn;
+	prdsLandIn: PrdsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -431,7 +431,7 @@ export interface Config {
 	 */
 	verify?: VerifyConfig;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`): run the
+	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`): run the
 	 * `review` SKILL as a fresh-context judgement gate ON TOP of the deterministic
 	 * `verify` floor, AFTER `verify` passes and BEFORE the done-move, on the
 	 * `do`/`complete` path. Default **OFF** (it puts a model on the merge path —
@@ -467,7 +467,7 @@ export interface Config {
 	reviewMaxRounds: number;
 	/**
 	 * **The tasker IMPROVER loop on/off toggle** (`--tasker-loop` /
-	 * `--no-tasker-loop`). On the `do brief:<slug>` tasking path the improver loop is
+	 * `--no-tasker-loop`). On the `do prd:<slug>` tasking path the improver loop is
 	 * the task path's quality engine (auto-tasking has no `verify` floor), so it is
 	 * ON by default; setting this false gates wiring the loop seam (the candidate
 	 * tasks land as-is). Resolved per-repo like `integration`: flag
@@ -477,8 +477,8 @@ export interface Config {
 	taskerLoop: boolean;
 	/**
 	 * **The tasker IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
-	 * GATES brief `work/briefs/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
-	 * A). On the `do brief:<slug>` tasking path, AFTER the agent produces candidate
+	 * GATES prd `work/prds/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
+	 * A). On the `do prd:<slug>` tasking path, AFTER the agent produces candidate
 	 * tasks the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
 	 * until a pass finds no NEW blocking issue (the natural terminator).
 	 * `taskerLoopMax` is the HARD CAP on the in-context review passes (N) so the
@@ -620,16 +620,16 @@ export const DEFAULT_CONFIG: Config = {
 	// (a stuck build) is separate + always-on. ADR `ci-config-policy-and-gate-family` §3.
 	surfaceBlockers: false,
 	// SURFACING widens to STAGING by default (`true`) — a `needsAnswers` task in
-	// `tasks/backlog/` or a `needsAnswers` brief in `briefs/proposed/` surfaces
+	// `tasks/backlog/` or a `needsAnswers` prd in `prds/proposed/` surfaces
 	// its questions BEFORE promotion, so a human promotes an already-clarified
-	// item. Brief `staging-surface-and-apply-promote-safety` (F2). BUILD/claim
+	// item. Prd `staging-surface-and-apply-promote-safety` (F2). BUILD/claim
 	// stays pool-only + trust-gated regardless: this widens ONLY the surface
 	// polarity, not the build polarity. Set `false` to restore the legacy
 	// pool-only surface behaviour.
 	surfaceStaging: true,
 	// The `drain` selection-order preset by default (ADR `ci-config-policy-and-gate-
 	// family`, selection-order section): drain ready work (build eligible tasks →
-	// task taskable briefs) before creating/asking (surface → triage); `apply` is
+	// task taskable prds) before creating/asking (surface → triage); `apply` is
 	// always first. Reproduces today's tasks-first two-pool default. Subsumes the
 	// removed `prdsFirst` boolean (`[task, build, ...]` reproduces `prdsFirst: true`).
 	selectionOrder: DEFAULT_SELECTION_ORDER,
@@ -652,14 +652,14 @@ export const DEFAULT_CONFIG: Config = {
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	tasksLandIn: 'pre-backlog',
-	// `intake`-authored briefs land STAGED (`pre-proposed/`) by default — the
-	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a brief is
+	// `intake`-authored prds land STAGED (`pre-proposed/`) by default — the
+	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a prd is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner
-	// promotes it. A repo opts into the trusted fast-path with `briefsLandIn: 'ready'`
-	// (or `--briefs-land-in ready` / `AGENT_RUNNER_BRIEFS_LAND_IN=ready`). The same
+	// promotes it. A repo opts into the trusted fast-path with `prdsLandIn: 'ready'`
+	// (or `--prds-land-in ready` / `AGENT_RUNNER_PRDS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	briefsLandIn: 'pre-proposed',
+	prdsLandIn: 'pre-proposed',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically

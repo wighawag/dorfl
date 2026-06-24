@@ -17,7 +17,7 @@ import {
 import type {TriageAutoKind} from './triage-gate.js';
 
 /**
- * The engine-owned TRIAGE PERSIST (brief `advance-loop`, task `advance-rung-triage`,
+ * The engine-owned TRIAGE PERSIST (prd `advance-loop`, task `advance-rung-triage`,
  * US #16/17/24/30) — the half of the observation-triage rung the ENGINE owns (the
  * triage gate JUDGES, the engine ACTS). It is the SIBLING of `surface-persist.ts`
  * (the surface rung's persist) and `apply-persist.ts` (the apply rung's persist),

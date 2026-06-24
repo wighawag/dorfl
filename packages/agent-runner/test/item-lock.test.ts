@@ -68,7 +68,7 @@ describe('item-lock — identity seam (reuses resolveSidecarIdentity)', () => {
 	it('derives the type-encoded <entry> from the namespaced identity', () => {
 		// The SAME single-source-of-truth resolver the sidecar / advancing marker use.
 		expect(lockEntryFor('task:alpha')).toBe('task-alpha');
-		expect(lockEntryFor('brief:autotask')).toBe('brief-autotask');
+		expect(lockEntryFor('prd:autotask')).toBe('prd-autotask');
 		expect(lockEntryFor('observation:beta')).toBe('observation-beta');
 		expect(lockEntryFor('obs:beta')).toBe('observation-beta'); // alias → canonical
 		expect(lockEntryFor('bare-slug')).toBe('task-bare-slug'); // bare = task
@@ -78,7 +78,7 @@ describe('item-lock — identity seam (reuses resolveSidecarIdentity)', () => {
 		const slug = 'shared';
 		const refs = new Set([
 			itemLockRef(lockEntryFor(`task:${slug}`)),
-			itemLockRef(lockEntryFor(`brief:${slug}`)),
+			itemLockRef(lockEntryFor(`prd:${slug}`)),
 			itemLockRef(lockEntryFor(`observation:${slug}`)),
 		]);
 		expect(refs.size).toBe(3);
@@ -101,7 +101,7 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 
 	it('a stuck entry round-trips WITH its reason (the two-axis state)', () => {
 		const e: LockEntry = {
-			entry: 'brief-autotask',
+			entry: 'prd-autotask',
 			action: 'task',
 			state: 'stuck',
 			holder: 'tester',

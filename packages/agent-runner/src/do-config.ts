@@ -109,7 +109,7 @@ export function doFlagOverrides(
 	if (integration !== undefined) {
 		// An explicit `--merge`/`--propose` flag ALWAYS wins for the transition this
 		// command runs. `do` runs EITHER the build transition (a task) OR the tasking
-		// transition (a `do brief:`) per invocation, and the typed flag is
+		// transition (a `do prd:`) per invocation, and the typed flag is
 		// transition-AGNOSTIC, so it must override BOTH the build mode (`integration`)
 		// AND the tasking mode (`taskingIntegration`). Setting both at the top of the
 		// precedence chain means a `--propose` on a `taskingIntegration:'merge'` repo
@@ -325,7 +325,7 @@ export function observationTriageFlagOverrides(
 /**
  * The surface-blockers CLI flag (`advance`): `--surface-blockers` /
  * `--no-surface-blockers`, the BOOLEAN gate over DECLARED blocked work (whether a
- * `needsAnswers:true` task/brief is rendered into a question sidecar; ADR
+ * `needsAnswers:true` task/prd is rendered into a question sidecar; ADR
  * `ci-config-policy-and-gate-family`). The orthogonal PEER of
  * `--observation-triage`. Resolved through the SAME
  * `flag > env > per-repo > global > default` chain as the other gate flags.

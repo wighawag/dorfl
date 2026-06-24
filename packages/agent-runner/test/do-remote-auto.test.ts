@@ -45,7 +45,7 @@ function task(frontmatter: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-function brief(frontmatter: Record<string, string>): string {
+function prd(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -71,7 +71,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 	it('auto-picks ONE eligible item (a task) from the bare mirror', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
-			brief: {'gamma.md': brief({slug: 'gamma'})},
+			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await performDoRemoteAuto({
@@ -88,9 +88,9 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 	it('-n <x> takes x items, tasks-first then PRDs, IN SEQUENCE', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
-			brief: {
-				'gamma.md': brief({slug: 'gamma'}),
-				'delta.md': brief({slug: 'delta'}),
+			prd: {
+				'gamma.md': prd({slug: 'gamma'}),
+				'delta.md': prd({slug: 'delta'}),
 			},
 		});
 		const {run, args} = recordingRunner();
@@ -104,13 +104,13 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 		});
 		expect(result.exitCode).toBe(0);
 		// the eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
+		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
 	});
 
 	it('honours the per-action GATES via the mirror scan: gates off ⇒ nothing selected', async () => {
 		const {originUrl} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
-			brief: {'gamma.md': brief({slug: 'gamma'})},
+			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await performDoRemoteAuto({

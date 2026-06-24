@@ -3,7 +3,7 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
- * The CI-integration deliverable for the `advance` loop (brief `advance-loop`,
+ * The CI-integration deliverable for the `advance` loop (prd `advance-loop`,
  * task `advance-install-ci`, US #27/28): the advance-loop CAPABILITY as a
  * DOCUMENTED workflow TEMPLATE (not a CLI subcommand; see the task's `##
  * Decisions`). The template at `docs/ci/advance-loop.yml.template` wires "on cron
@@ -11,8 +11,8 @@ import {fileURLToPath} from 'node:url';
  * `advance` driver; it is NOT entangled with the tick.
  *
  * The unified, per-capability `install-ci` CLI (auth/secrets wizard + GitHub
- * adapter) is owned by the separate `runner-in-ci` brief
- * (`work/briefs/tasked/runner-in-ci.md`); when built it EMITS this template as its
+ * adapter) is owned by the separate `runner-in-ci` prd
+ * (`work/prds/tasked/runner-in-ci.md`); when built it EMITS this template as its
  * advance-loop capability. This module's job is unchanged either way: locate +
  * STRUCTURALLY VALIDATE the template, so its shape is a contract the CLI can
  * safely emit (see `docs/ci/README.md` "Relationship to the `install-ci` CLI").
@@ -130,18 +130,18 @@ export function validateAdvanceCiTemplate(
 		text,
 	), 'the matrix items must be ENUMERATED via the mirror-side pool scan ' +
 		'(`agent-runner scan --json`).');
-	// The `enumerate` `jq` must UNION taskable briefs into the matrix
+	// The `enumerate` `jq` must UNION taskable prds into the matrix
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK` dead on the hourly
-	// cron — a ready ungated BRIEF would never become a matrix leg. The `jq` must
-	// read `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
-	// and emit `brief:<slug>` legs alongside the `task:<slug>` legs.
-	require('propose-enumerates-taskable-prds', /"brief:" \+ \.slug/.test(text) &&
-		/\.briefs\[\]/.test(
+	// cron — a ready ungated PRD would never become a matrix leg. The `jq` must
+	// read `scan --json`'s taskable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+	// and emit `prd:<slug>` legs alongside the `task:<slug>` legs.
+	require('propose-enumerates-taskable-prds', /"prd:" \+ \.slug/.test(text) &&
+		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +
-		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].briefs[]` " +
-		'+ `cwd.repo.briefs[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable prds into the ' +
+		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-task ' +
 		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 	require('propose-one-advance-per-item', /agent-runner advance "?\$\{\{\s*matrix\./.test(

@@ -6,15 +6,15 @@ This is the shared contract between the **to-task** skill (producer) and the **l
 
 `work/` lives **inside the target project repo**, versioned with that repo's code (the same place the `tasks/` convention uses today). Tasks reference that repo's code; AFK work happens in clones/worktrees of that repo.
 
-## Layout — three REGIME umbrellas: notes/ (capture) + tasks/ (build) + briefs/ (brief lifecycle), plus questions/ + protocol/
+## Layout — three REGIME umbrellas: notes/ (capture) + tasks/ (build) + prds/ (prd lifecycle), plus questions/ + protocol/
 
-The top level groups every tree by its GOVERNANCE REGIME, so a reader can tell what a folder MEANS without reading further: `notes/` are capture buckets (do not flow), `tasks/` is the build board (status = folder), `briefs/` is the brief lifecycle (status = folder), and `questions/` + `protocol/` are standalone top-level surfaces.
+The top level groups every tree by its GOVERNANCE REGIME, so a reader can tell what a folder MEANS without reading further: `notes/` are capture buckets (do not flow), `tasks/` is the build board (status = folder), `prds/` is the prd lifecycle (status = folder), and `questions/` + `protocol/` are standalone top-level surfaces.
 
 ```
 work/
   # ---- notes/ — CAPTURE BUCKETS: NOT status-governed; they do NOT flow/move ----
   notes/
-    ideas/<slug>.md        # proposed, pre-brief ideas — EDITABLE, deletable
+    ideas/<slug>.md        # proposed, pre-prd ideas — EDITABLE, deletable
     observations/<slug>.md # spotted, unverified signals — APPEND-ONLY, deletable
     findings/<slug>.md     # VERIFIED external/domain ground truth — durable
 
@@ -29,15 +29,15 @@ work/
                            #   the REASON (out-of-scope / superseded by <x> / duplicate /
                            #   abandoned) lives in the item body as `reason:`
 
-  # ---- briefs/ — the BRIEF lifecycle: DURABLE status IS the folder; FLOW via `git mv` on `main` ----
-  # Brief lifecycle (staging → pool → tasked / terminal):
-  briefs/
-    proposed/<slug>.md     # STAGING: a brief not yet admitted to the auto-task pool
+  # ---- prds/ — the PRD lifecycle: DURABLE status IS the folder; FLOW via `git mv` on `main` ----
+  # Prd lifecycle (staging → pool → tasked / terminal):
+  prds/
+    proposed/<slug>.md     # STAGING: a prd not yet admitted to the auto-task pool
                            #   (untrusted/agent-authored output lands here; a human promotes)
-    ready/<slug>.md        # the AUTO-TASK POOL: briefs eligible to be tasked into tasks
-    tasked/<slug>.md       # TASKED, resting briefs — the brief `done/` analogue; the
+    ready/<slug>.md        # the AUTO-TASK POOL: prds eligible to be tasked into tasks
+    tasked/<slug>.md       # TASKED, resting prds — the prd `done/` analogue; the
                            #   SOURCE OF TRUTH for tasked-ness (see note below)
-    dropped/<slug>.md      # the brief regime's "won't-proceed" terminal (REASON in the body)
+    dropped/<slug>.md      # the prd regime's "won't-proceed" terminal (REASON in the body)
 
   # ---- questions/ — the "what needs me?" queue, kept TOP-LEVEL (NOT under notes/) ----
   questions/<slug>.md      # surfaced blockers a human must look at — glance-able top-level
@@ -46,7 +46,7 @@ work/
   protocol/                # WORK-CONTRACT.md, CLAIM-PROTOCOL.md, the templates, VERSION
 
   # ---- TRANSIENT STATUS + LOCKS: NOT on `main` — on per-item lock refs ----
-  # `in-progress` (claimed/building), `needs-attention` (stuck), `tasking` (a brief
+  # `in-progress` (claimed/building), `needs-attention` (stuck), `tasking` (a prd
   # being tasked), and `advancing` (a tick holding an item) are NOT `main` folders.
   # They collapse into ONE per-item lock on a hidden
   # `refs/agent-runner/lock/<type>-<slug>` ref (ADR `ledger-status-on-per-item-lock-refs`):
@@ -56,12 +56,12 @@ work/
   # `agent-runner status`/`scan` (which read the lock refs), NOT by `ls`-ing a folder.
 ```
 
-> **The two won't-proceed terminals use DIFFERENT words ON PURPOSE — `tasks/cancelled/` vs `briefs/dropped/` — and it is a CORRECTNESS fix, not taste.** A task and a brief can share a slug, and a single shared bare-slug terminal (`work/dropped/<slug>.md`) would COLLIDE a dropped task and a dropped brief on the same path. Namespacing each regime's terminal under its own umbrella (`tasks/cancelled/<slug>.md`, `briefs/dropped/<slug>.md`) gives each its own slug space, so the collision cannot happen. A dropped OBSERVATION needs no terminal — notes leave by deletion. (Every reader keys by `(umbrella, slug)`, never a bare slug, so `tasks/todo/foo.md` and `briefs/ready/foo.md` legitimately co-exist.)
+> **The two won't-proceed terminals use DIFFERENT words ON PURPOSE — `tasks/cancelled/` vs `prds/dropped/` — and it is a CORRECTNESS fix, not taste.** A task and a prd can share a slug, and a single shared bare-slug terminal (`work/dropped/<slug>.md`) would COLLIDE a dropped task and a dropped prd on the same path. Namespacing each regime's terminal under its own umbrella (`tasks/cancelled/<slug>.md`, `prds/dropped/<slug>.md`) gives each its own slug space, so the collision cannot happen. A dropped OBSERVATION needs no terminal — notes leave by deletion. (Every reader keys by `(umbrella, slug)`, never a bare slug, so `tasks/todo/foo.md` and `prds/ready/foo.md` legitimately co-exist.)
 
 ### Three governance regimes + the substrate split (the key distinctions)
 
-- **Work items' DURABLE positions are the folder** (briefs: `briefs/proposed`/`briefs/ready`/`briefs/tasked`/`briefs/dropped`; tasks: `tasks/backlog`/`tasks/todo`/`tasks/done`/`tasks/cancelled`): **status = the folder**, transitions are `git mv` on `main`, each has one destiny. This is the conflict-safe core for the durable resting records. The ONLY moves ever made on `main` are these durable resting transitions: `tasks/todo → tasks/done`, `briefs/ready → briefs/tasked`, `tasks/todo → tasks/cancelled` (and `briefs/ready → briefs/dropped`). The per-regime terminals (`tasks/cancelled/`, `briefs/dropped/`) are where an item that will not proceed for ANY reason (superseded, out-of-scope, duplicate, abandoned/obsolete) rests, with the REASON in the body (`reason:` line). They are deliberately NAMED differently per regime — see the slug-collision note above.
-- **Transient status + locks are NOT on `main`** — they are per-item lock refs (ADR `ledger-status-on-per-item-lock-refs`). `in-progress`/`needs-attention`/`tasking`/`advancing` are lock-ref state, not folders. A work branch cut from `main` therefore inherits NO transient status (this dissolved the old rename/rename rebase-conflict class and retired the `drop-bookkeeping-rebase` machinery). Eligibility/dependency resolution stay OFFLINE on `main` (`blockedBy → tasks/done/`, `briefAfter → briefs/tasked/`); only the operational "what's in flight" view (`status`/`scan`) reads the lock refs.
+- **Work items' DURABLE positions are the folder** (prds: `prds/proposed`/`prds/ready`/`prds/tasked`/`prds/dropped`; tasks: `tasks/backlog`/`tasks/todo`/`tasks/done`/`tasks/cancelled`): **status = the folder**, transitions are `git mv` on `main`, each has one destiny. This is the conflict-safe core for the durable resting records. The ONLY moves ever made on `main` are these durable resting transitions: `tasks/todo → tasks/done`, `prds/ready → prds/tasked`, `tasks/todo → tasks/cancelled` (and `prds/ready → prds/dropped`). The per-regime terminals (`tasks/cancelled/`, `prds/dropped/`) are where an item that will not proceed for ANY reason (superseded, out-of-scope, duplicate, abandoned/obsolete) rests, with the REASON in the body (`reason:` line). They are deliberately NAMED differently per regime — see the slug-collision note above.
+- **Transient status + locks are NOT on `main`** — they are per-item lock refs (ADR `ledger-status-on-per-item-lock-refs`). `in-progress`/`needs-attention`/`tasking`/`advancing` are lock-ref state, not folders. A work branch cut from `main` therefore inherits NO transient status (this dissolved the old rename/rename rebase-conflict class and retired the `drop-bookkeeping-rebase` machinery). Eligibility/dependency resolution stay OFFLINE on `main` (`blockedBy → tasks/done/`, `prdAfter → prds/tasked/`); only the operational "what's in flight" view (`status`/`scan`) reads the lock refs.
 - **Capture buckets** (`notes/ideas`/`notes/observations`/`notes/findings`) are **NOT work items** and are **exempt from status = folder** — they are _notes_, not units of work. They do not move through statuses; they sit in their bucket, and the folder is the inbox (`ls work/notes/observations/` = the live signal list). They leave only by **deletion** (git history is the archive). A note may _spawn_ work (a task, an idea, an ADR) created independently — the note does not "become" or `git mv` into that work; it is simply deleted once it is no longer a useful signal. **Operational discharge test for a promoted note:** a note is dischargeable (deletable) the moment a **self-contained** artifact carries its signal — verify the spawned task/ADR actually contains the mechanism + fix shape (not just a back-pointer), then delete the note. Do NOT keep it until the spawned work lands in `tasks/done/`: "delete once the task lands" is itself the resolved-but-kept contradiction (the note stops being a live _signal_ the moment it is captured into actionable work, not when that work completes). If the spawned artifact is NOT self-contained, the bug is the artifact (fix it to carry the signal), not a reason to keep the note.
 
 > **Every capture-bucket note and every work item has a DIRECTION and a LIVENESS — never manufacture a backward artifact to look compliant.** Forward artifacts — a `tasks/todo/` task, an _open_ `notes/observations/` signal — describe work that is **pending or currently-signalled**, never the past. So: work that is **already done** does NOT get a task or observation back-filled to narrate it (a `tasks/todo/` task with pre-ticked acceptance criteria is a changelog wearing a spec's shape); completed work is recorded as a `tasks/done/` record landed _with_ the code plus the commit message, owned by whoever does the git transition. And a captured note is LIVE: it leaves the inbox **by deletion** the moment it stops being a live signal — a note annotated "resolved" and kept is a contradiction (there is no `resolved` status; discharge it by deleting it, its lasting product being the task/ADR/commit it spawned). This binds an agent invoked **outside** the runner too: building directly is fine when asked, but do not retroactively mint forward artifacts for it afterward.
@@ -70,7 +70,7 @@ work/
 
 | Bucket | What | Mutability | Leaves by |
 | --- | --- | --- | --- |
-| `notes/ideas/` | a _proposed_, pre-brief opportunity ("we might want to build this") | **editable** (refine the proposal in place) | deletion (when built/abandoned) |
+| `notes/ideas/` | a _proposed_, pre-prd opportunity ("we might want to build this") | **editable** (refine the proposal in place) | deletion (when built/abandoned) |
 | `notes/observations/` | an _observed, unverified_ signal ("I noticed something maybe wrong") | **append-only** (add `## Update` notes; don't rewrite what was seen) | deletion (when no longer a useful signal) |
 | `notes/findings/` | _verified external/domain_ ground truth (a reverse-engineered protocol, an external API's real behaviour) | accumulates; durable | rarely — it is reference knowledge |
 
@@ -87,15 +87,15 @@ work/
 
 **For work items, DURABLE status is the folder a file lives in — never a frontmatter field.** Finishing / dropping / tasking-complete = moving the file between durable folders with `git mv` on `main`. This is what makes concurrent durable updates safe: two agents moving _different_ files never conflict. (Transient status — claimed/stuck/being-tasked — is NOT a folder move; it is a per-item lock ref, see above. Capture buckets are exempt too.)
 
-### The brief lifecycle: `briefs/ready/` (pool) → `briefs/tasked/` on `main`; the tasking HOLD is a lock ref
+### The prd lifecycle: `prds/ready/` (pool) → `prds/tasked/` on `main`; the tasking HOLD is a lock ref
 
-A brief rests in `work/briefs/ready/` (the auto-task pool) and, when tasked into tasks, moves durably to `work/briefs/tasked/` on `main`. The **folder is the source of truth for tasked-ness**, exactly as `work/tasks/done/` is for tasks (and as `tasks/done/` carries no `done:` marker). Re-tasking a reshaped brief is `work/briefs/tasked/ → work/briefs/ready/` (reopen-to-ready, mirroring `tasks/done/ → tasks/todo/`).
+A prd rests in `work/prds/ready/` (the auto-task pool) and, when tasked into tasks, moves durably to `work/prds/tasked/` on `main`. The **folder is the source of truth for tasked-ness**, exactly as `work/tasks/done/` is for tasks (and as `tasks/done/` carries no `done:` marker). Re-tasking a reshaped prd is `work/prds/tasked/ → work/prds/ready/` (reopen-to-ready, mirroring `tasks/done/ → tasks/todo/`).
 
-**The tasking HOLD is a per-item lock, NOT a `work/tasking/` folder.** Tasking a brief acquires the unified per-item lock with `action: task` on `refs/agent-runner/lock/brief-<slug>` (ADR `ledger-status-on-per-item-lock-refs`) — a create-only ref push that is self-arbitrating (winner creates it; a concurrent tasker loses the same CAS definitively, no retry budget), so a brief is never double-tasked. The brief body STAYS in `work/briefs/ready/` while held (it does not move to a `tasking/` folder). On a **successful tasking** the release performs the durable `work/briefs/ready/ → work/briefs/tasked/` move on `main` in the SAME runner-owned commit that emits the `tasks/` items, then releases the lock. On an **aborted / unclear** tasking the lock is released with no `main` move (the brief already rests in `briefs/ready/`), or the lock is marked `stuck` for a human.
+**The tasking HOLD is a per-item lock, NOT a `work/tasking/` folder.** Tasking a prd acquires the unified per-item lock with `action: task` on `refs/agent-runner/lock/prd-<slug>` (ADR `ledger-status-on-per-item-lock-refs`) — a create-only ref push that is self-arbitrating (winner creates it; a concurrent tasker loses the same CAS definitively, no retry budget), so a prd is never double-tasked. The prd body STAYS in `work/prds/ready/` while held (it does not move to a `tasking/` folder). On a **successful tasking** the release performs the durable `work/prds/ready/ → work/prds/tasked/` move on `main` in the SAME runner-owned commit that emits the `tasks/` items, then releases the lock. On an **aborted / unclear** tasking the lock is released with no `main` move (the prd already rests in `prds/ready/`), or the lock is marked `stuck` for a human.
 
-- **Tasked-ness is RESIDENCE in `work/briefs/tasked/` — the FOLDER, the SOLE signal.** There is no `tasked:` frontmatter marker (the `tasked:` marker was removed in `remove-sliced-marker-step-b`); the folder is canonical. A brief whose lock is held `action: task` is _being tasked right now_; a brief in `briefs/tasked/` _has been tasked_; a brief in `briefs/ready/` is _to-task_.
-- **Edit a brief when its tasking-lock is NOT held.** While the tasking lock is held the brief is mid-tasking; edit it before tasking starts or after it lands (in `briefs/ready/` or `briefs/tasked/`), not while the lock is held. (A human on a stale local checkout won't see the durable `git mv` until they fetch — the protocol guarantees no _silent corruption_, not no _human surprise_.)
-- **Release fails loud on a concurrent edit (never a silent stale tasking).** If the held brief body was edited while the lock was held, the release detects it (the held content no longer matches the snapshot the lock took) and FAILS LOUD: the tasking is stale → re-task from the edited brief or mark the lock stuck. The release NEVER force-restores over the edit or emits tasks cut from a stale snapshot.
+- **Tasked-ness is RESIDENCE in `work/prds/tasked/` — the FOLDER, the SOLE signal.** There is no `tasked:` frontmatter marker (the `tasked:` marker was removed in `remove-sliced-marker-step-b`); the folder is canonical. A prd whose lock is held `action: task` is _being tasked right now_; a prd in `prds/tasked/` _has been tasked_; a prd in `prds/ready/` is _to-task_.
+- **Edit a prd when its tasking-lock is NOT held.** While the tasking lock is held the prd is mid-tasking; edit it before tasking starts or after it lands (in `prds/ready/` or `prds/tasked/`), not while the lock is held. (A human on a stale local checkout won't see the durable `git mv` until they fetch — the protocol guarantees no _silent corruption_, not no _human surprise_.)
+- **Release fails loud on a concurrent edit (never a silent stale tasking).** If the held prd body was edited while the lock was held, the release detects it (the held content no longer matches the snapshot the lock took) and FAILS LOUD: the tasking is stale → re-task from the edited prd or mark the lock stuck. The release NEVER force-restores over the edit or emits tasks cut from a stale snapshot.
 - **The human path needs no lock.** A human tasking locally with no agent running has no contention and may task on `main` directly — the lock is mandatory for the agent, optional for the human (parallel to "the runner never skips verify; the human may").
 
 ### `needs-attention` — the post-claim "stuck" state (the lock `state: stuck`)
@@ -110,25 +110,25 @@ An item that was claimed and _attempted_ but could not complete is marked **stuc
 
 ### Drift is a needs-attention signal (check the doc against reality first)
 
-A brief and a task are **launch snapshots** — they capture intent at creation and are deliberately NOT kept in sync (current truth lives in `docs/adr/` + the code in `tasks/done/`). So by the time you act on one, it MAY have **drifted**: a dependency landed differently than the doc assumed, an ADR superseded a decision the doc relies on, a sibling task changed the seam it builds against. (Real example: the `watch` task predated the ledger-transition seam and still described the old direct-`main` failure-surfacing.)
+A prd and a task are **launch snapshots** — they capture intent at creation and are deliberately NOT kept in sync (current truth lives in `docs/adr/` + the code in `tasks/done/`). So by the time you act on one, it MAY have **drifted**: a dependency landed differently than the doc assumed, an ADR superseded a decision the doc relies on, a sibling task changed the seam it builds against. (Real example: the `watch` task predated the ledger-transition seam and still described the old direct-`main` failure-surfacing.)
 
 **Discipline (applies whenever you investigate / task / claim / build):** before acting, **check the doc against reality** — the code in `tasks/done/`, the relevant ADRs, and sibling tasks it depends on. If you find a discrepancy that would make you build/task against a false premise, that is a **needs-attention candidate — do NOT silently proceed on the stale spec.** Route it per the item's kind:
 
 - **A TASK that contradicts current reality** → route to needs-attention (mark its lock `state: stuck`) with the discrepancy as the reason (the same mechanism as a red gate), rather than building on a stale assumption. A human reconciles the task, then returns it to the pool `tasks/todo/`. (Building on a stale task produces wrong-but-compiling work — the worst outcome.)
-- **A BRIEF that has drifted** (before tasking) → do NOT task it as-is. Set `needsAnswers: true` on the brief with the discrepancy in its body (or, if it is a small factual correction you are certain of, fix the brief first), so the tasker never emits tasks from a stale spec. A human reconciles, clears the flag, then it is tasked.
+- **A PRD that has drifted** (before tasking) → do NOT task it as-is. Set `needsAnswers: true` on the prd with the discrepancy in its body (or, if it is a small factual correction you are certain of, fix the prd first), so the tasker never emits tasks from a stale spec. A human reconciles, clears the flag, then it is tasked.
 
-The rule is symmetric: _a discrepancy between a doc and reality is not something to paper over — it is exactly the "a human must look" signal `needs-attention` (tasks) / `needsAnswers` (briefs) exists to carry._ Cheap to honour, and it stops drift from silently propagating into built work.
+The rule is symmetric: _a discrepancy between a doc and reality is not something to paper over — it is exactly the "a human must look" signal `needs-attention` (tasks) / `needsAnswers` (prds) exists to carry._ Cheap to honour, and it stops drift from silently propagating into built work.
 
 ## Conflict-safety rules (non-negotiable)
 
 1. **One file per item.** Never put two work items in one file. Disjoint files merge trivially.
 2. **No shared index / manifest.** Do not maintain a `work/INDEX.md`, `work/list.json`, or any file every item touches — it is a guaranteed conflict point. Derive lists on demand with `ls work/tasks/todo/` / `grep`. (Same reasoning as the existing `tasks/README`: "no hand-maintained index — it just goes stale".)
-3. **An empty lifecycle folder is OPTIONAL — absence means "empty", never "broken".** The folders in the layout above (`tasks/backlog`/`todo`/`done`/`cancelled`, `briefs/proposed`/`ready`/`tasked`/`dropped`, the `notes/*` buckets) describe the POSITIONS an item MAY rest in, not directories that must all exist at rest. Git does not track empty directories, so a position with no items in it simply has no folder on disk, and a reader/conductor MUST treat a missing lifecycle folder as the empty set (e.g. no `briefs/proposed/` ⇒ "nothing awaiting promotion"), NOT as a misconfigured tree. A folder is CREATED implicitly the first time an item lands in it (the `git mv`/write that places the item), and may VANISH again when its last item leaves. So: never fail, warn, or auto-create-as-a-fixup on a missing lifecycle folder; derive each position's contents on demand (rule 2) and let an empty position be a no-op. (`setup` may scaffold a starter set for ergonomics, but the contract does not REQUIRE their continued existence — emptiness and absence are the same state.)
+3. **An empty lifecycle folder is OPTIONAL — absence means "empty", never "broken".** The folders in the layout above (`tasks/backlog`/`todo`/`done`/`cancelled`, `prds/proposed`/`ready`/`tasked`/`dropped`, the `notes/*` buckets) describe the POSITIONS an item MAY rest in, not directories that must all exist at rest. Git does not track empty directories, so a position with no items in it simply has no folder on disk, and a reader/conductor MUST treat a missing lifecycle folder as the empty set (e.g. no `prds/proposed/` ⇒ "nothing awaiting promotion"), NOT as a misconfigured tree. A folder is CREATED implicitly the first time an item lands in it (the `git mv`/write that places the item), and may VANISH again when its last item leaves. So: never fail, warn, or auto-create-as-a-fixup on a missing lifecycle folder; derive each position's contents on demand (rule 2) and let an empty position be a no-op. (`setup` may scaffold a starter set for ergonomics, but the contract does not REQUIRE their continued existence — emptiness and absence are the same state.)
 4. **Status = location, not a field.** See above.
 5. **Content-derived slugs, never counters.** Use a URL-safe slug from the title (e.g. "Historical store schema" → `historical-store-schema`). NO monotonic integer IDs — two agents would both grab "next = 43". A short hash or date prefix is fine if disambiguation is needed (`historical-store-schema` or `2026-06-03-historical-store-schema`).
 6. **Dependencies by slug, read-only.** `blockedBy: [other-slug]` references other items; an item never writes another item's file. The blocker owns its own status (its folder).
 7. **Claim state is the per-item LOCK, never a frontmatter field (and no longer a folder move).** Claiming an item acquires its per-item lock (`refs/agent-runner/lock/<type>-<slug>`, `action: implement`) — a create-only ref push that is self-arbitrating (the loser is definitively told "lost", no retry budget); the body STAYS in `tasks/todo/` (claim writes nothing to `main`, so an agent can claim even on a protected `main`). The holder/since ride the lock entry; `git` (the ref + its parentless commit) holds the authoritative record. There is NO `claimed_by` / `claimed_at` frontmatter, and no `git mv` into an `in-progress/` folder — the claimable predicate is "in the pool `tasks/todo/` on `main` AND no lock held on its ref".
-8. **An item MAY carry a co-located `<slug>/` asset sidecar folder.** The item is ALWAYS the `<slug>.md` file (that is its identity and the only thing scanned). When an item needs companion resources — a `.patch`, a mockup image, a diagram, a sample payload — put them in a sibling folder of the SAME slug, `<umbrella>/<slug>/` (e.g. `notes/ideas/my-idea.md` + `notes/ideas/my-idea/fix.patch`). This is safe and disturbs NOTHING because every scanner lists a bucket by `isWorkItemFile` (= name ends in `.md`), so a sidecar folder is silently skipped — it is never mistaken for an item, and `(umbrella, slug)` addressing is unchanged. Rules: the sidecar is OPTIONAL and most items have none; it is OWNED by its `<slug>.md` (the markdown references its assets by relative path, e.g. `[the patch](<slug>/fix.patch)`); it shares the item's lifecycle (when the item is deleted, delete its sidecar too — a note leaves by deletion, and an orphaned sidecar is litter); and it is NOT a second item, so never put another item's `<slug>.md` inside it (that would hide it from scanning). This applies to ANY bucket (`notes/*`, `tasks/*`, `briefs/*`), not just ideas, though ideas are the common case. It does NOT violate rule 1 (one file per ITEM) or rule 2 (no shared index) — the sidecar holds an item's OWN assets, not a manifest over many items.
+8. **An item MAY carry a co-located `<slug>/` asset sidecar folder.** The item is ALWAYS the `<slug>.md` file (that is its identity and the only thing scanned). When an item needs companion resources — a `.patch`, a mockup image, a diagram, a sample payload — put them in a sibling folder of the SAME slug, `<umbrella>/<slug>/` (e.g. `notes/ideas/my-idea.md` + `notes/ideas/my-idea/fix.patch`). This is safe and disturbs NOTHING because every scanner lists a bucket by `isWorkItemFile` (= name ends in `.md`), so a sidecar folder is silently skipped — it is never mistaken for an item, and `(umbrella, slug)` addressing is unchanged. Rules: the sidecar is OPTIONAL and most items have none; it is OWNED by its `<slug>.md` (the markdown references its assets by relative path, e.g. `[the patch](<slug>/fix.patch)`); it shares the item's lifecycle (when the item is deleted, delete its sidecar too — a note leaves by deletion, and an orphaned sidecar is litter); and it is NOT a second item, so never put another item's `<slug>.md` inside it (that would hide it from scanning). This applies to ANY bucket (`notes/*`, `tasks/*`, `prds/*`), not just ideas, though ideas are the common case. It does NOT violate rule 1 (one file per ITEM) or rule 2 (no shared index) — the sidecar holds an item's OWN assets, not a manifest over many items.
 
 ## Task quality rule — tests must not touch the real environment
 
@@ -138,7 +138,7 @@ This is the generalisation of the git-config isolation tests already do (`GIT_CO
 
 ## Field-naming convention
 
-All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `briefAfter`, `autoBuild`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
+All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `prdAfter`, `autoBuild`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
 
 ## Frontmatter (YAML)
 
@@ -148,27 +148,27 @@ All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAns
 ---
 title: Human Readable Title
 slug: historical-store-schema
-brief: historical-store # slug of the work/briefs/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
+prd: historical-store # slug of the work/prds/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
 humanOnly: true # gate axis 1 (DECIDED): a human must drive this. true | omitted. MOST OMIT IT.
 needsAnswers: true # gate axis 2 (DISCOVERED): open questions block autonomous work. true | omitted.
 blockedBy: [] # list of slugs that must reach tasks/done/ first; [] = startable now
-covers: [] # optional: user-story numbers (within `brief`) this task covers
-promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for THIS task, regardless of the repo's resolved `promptGuidance.testFirst` policy. true | false | omitted (= inherit brief, else repo policy). NEVER an acceptance criterion — `verify` still decides pass/fail. See "`promptGuidance.*` per-item override" below.
+covers: [] # optional: user-story numbers (within `prd`) this task covers
+promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for THIS task, regardless of the repo's resolved `promptGuidance.testFirst` policy. true | false | omitted (= inherit prd, else repo policy). NEVER an acceptance criterion — `verify` still decides pass/fail. See "`promptGuidance.*` per-item override" below.
 ---
 ```
 
-### Brief frontmatter
+### Prd frontmatter
 
 ```yaml
 ---
 title: Human Readable Title
 slug: historical-store
-issue: 123 # optional: the issue this brief was spawned from (the surviving thread)
-humanOnly: true # optional: a human must drive the TASKING of this brief. true | omitted.
-needsAnswers: true # optional: open questions block AUTO-tasking this brief. true | omitted.
-briefAfter: [] # optional: brief slugs that must be TASKED first (see below). [] = taskable now.
-promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for every task this brief fans out, regardless of the repo's resolved policy. A per-task override still wins over this. true | false | omitted (= inherit repo policy). See "`promptGuidance.*` per-item override" below.
-# tasked-ness has NO frontmatter marker: it is RESIDENCE in work/briefs/tasked/ (the release transition moves the brief there).
+issue: 123 # optional: the issue this prd was spawned from (the surviving thread)
+humanOnly: true # optional: a human must drive the TASKING of this prd. true | omitted.
+needsAnswers: true # optional: open questions block AUTO-tasking this prd. true | omitted.
+prdAfter: [] # optional: prd slugs that must be TASKED first (see below). [] = taskable now.
+promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for every task this prd fans out, regardless of the repo's resolved policy. A per-task override still wins over this. true | false | omitted (= inherit repo policy). See "`promptGuidance.*` per-item override" below.
+# tasked-ness has NO frontmatter marker: it is RESIDENCE in work/prds/tasked/ (the release transition moves the prd there).
 ---
 ```
 
@@ -189,9 +189,9 @@ source: 'derived from packages/rocketh-verifier/src/etherscan.ts @ <commit>' # R
 
 ### The two autonomy axes: `humanOnly` (decided) × `needsAnswers` (discovered)
 
-The autonomy gate is TWO orthogonal binary fields (both default to omitted = false), present on BOTH tasks and briefs, plus the repo's `autoBuild` policy (see `docs/adr/methodology-and-skills.md` §4, authoritative):
+The autonomy gate is TWO orthogonal binary fields (both default to omitted = false), present on BOTH tasks and prds, plus the repo's `autoBuild` policy (see `docs/adr/methodology-and-skills.md` §4, authoritative):
 
-- **`humanOnly: true` — the DECIDED axis (DE-OVERLOADED — see below).** _Should a human drive this, regardless of how complete the spec is?_ A product/design/security/judgement call, or an `AGENTS.md`-type rule. Driven by a decision (in the brief conversation, or the tasker's own judgement). On a BRIEF it means "a human must drive the tasking" (UNCHANGED — no folder substitute); on a TASK it is now NARROWED to the rare "never-for-agents BY NATURE" guard (secrets/release/security) that **survives even when the task resides in the agent pool `work/tasks/todo/`**. Task `humanOnly` is NOT the tool for ordinary "a human should review this before the agent builds it" — that job belongs to POSITION (the runner births the task STAGED in `work/tasks/backlog/`; a human promotes the approved ones into the pool `work/tasks/todo/`). See "Task `humanOnly` is NARROW" below.
+- **`humanOnly: true` — the DECIDED axis (DE-OVERLOADED — see below).** _Should a human drive this, regardless of how complete the spec is?_ A product/design/security/judgement call, or an `AGENTS.md`-type rule. Driven by a decision (in the prd conversation, or the tasker's own judgement). On a PRD it means "a human must drive the tasking" (UNCHANGED — no folder substitute); on a TASK it is now NARROWED to the rare "never-for-agents BY NATURE" guard (secrets/release/security) that **survives even when the task resides in the agent pool `work/tasks/todo/`**. Task `humanOnly` is NOT the tool for ordinary "a human should review this before the agent builds it" — that job belongs to POSITION (the runner births the task STAGED in `work/tasks/backlog/`; a human promotes the approved ones into the pool `work/tasks/todo/`). See "Task `humanOnly` is NARROW" below.
 - **`needsAnswers: true` — the DISCOVERED axis.** _Are there unresolved questions blocking autonomous progress?_ The spec is incomplete; **the open questions live in the body**. Once answered, the flag is cleared and an agent may proceed.
 - They are **orthogonal** — four honest states. e.g. `humanOnly:true, needsAnswers:false` = fully specified but a human must own it; `humanOnly:false, needsAnswers:true` = anyone can do it once the questions are answered.
 - **Repo policy `autoBuild`** answers the question the _repo_ owns: _may agents auto-build undeclared items here?_ The build member of the symmetric per-action gate family (`autoBuild`/`autoTask`/`observationTriage`; the triage gate's old boolean name `autoTriage` is now the 3-state `observationTriage`). Per-repo config key (`.agent-runner.json`), resolved like `integration`: \*\*CLI flag (`--auto-build` / `--no-auto-build`)
@@ -205,13 +205,13 @@ The autonomy gate is TWO orthogonal binary fields (both default to omitted = fal
 
 The `promptGuidance` NAMESPACE is a per-repo + per-item layer of PROMPT-TEXT NUDGES the runner folds into the worker's in-band prompt (currently one member, `testFirst`; the namespace is designed to grow). It is CATEGORICALLY SEPARATE from the gate family (`verify`/`autoBuild`/`humanOnly`): a nudge changes the agent's DISPOSITION, never the acceptance bar — the `verify` gate still decides pass/fail regardless of any value here.
 
-The repo policy resolves like every other gate-family field: **CLI flag > env (`AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST`) > per-repo config > global config > built-in default (`false`)**. On top of THAT, a single task or brief may OVERRIDE the resolved repo policy for THAT item only by setting `promptGuidance.<member>: true | false` in its frontmatter — the same repo-default-plus-item-override shape `humanOnly`/`autoBuild` use. The per-item precedence chain (highest → lowest) is:
+The repo policy resolves like every other gate-family field: **CLI flag > env (`AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST`) > per-repo config > global config > built-in default (`false`)**. On top of THAT, a single task or prd may OVERRIDE the resolved repo policy for THAT item only by setting `promptGuidance.<member>: true | false` in its frontmatter — the same repo-default-plus-item-override shape `humanOnly`/`autoBuild` use. The per-item precedence chain (highest → lowest) is:
 
 1. **Per-task frontmatter** — the task's own `promptGuidance.<member>` line (when present).
-2. **Per-brief frontmatter** — the brief's `promptGuidance.<member>` line, consulted ONLY when the task carries a `brief:` and the brief file is found in `work/briefs/ready/` or `work/briefs/tasked/`.
+2. **Per-prd frontmatter** — the prd's `promptGuidance.<member>` line, consulted ONLY when the task carries a `prd:` and the prd file is found in `work/prds/ready/` or `work/prds/tasked/`.
 3. **Repo-resolved policy** — the value the chain above resolves to, with the built-in default `false`.
 
-Each nudge member resolves INDEPENDENTLY — a task's `promptGuidance.testFirst` override never bleeds into a sibling member. A task with no `brief:` (a self-contained chore) MAY still carry the override; the brief layer is simply absent and the chain reads task ⇒ repo. A missing brief file is NOT an error: the override is OPTIONAL by design, so the chain silently falls through to the repo policy. Form: the frontmatter parser reads the DOTTED scalar form `promptGuidance.<member>: <bool>` (a single line, mirroring the flat shape `humanOnly`/`needsAnswers` use at the item level); a mistyped value (e.g. `"yes"`) reads as undefined — the same silent-on-malformed behaviour `humanOnly` has — never a silent coerce.
+Each nudge member resolves INDEPENDENTLY — a task's `promptGuidance.testFirst` override never bleeds into a sibling member. A task with no `prd:` (a self-contained chore) MAY still carry the override; the prd layer is simply absent and the chain reads task ⇒ repo. A missing prd file is NOT an error: the override is OPTIONAL by design, so the chain silently falls through to the repo policy. Form: the frontmatter parser reads the DOTTED scalar form `promptGuidance.<member>: <bool>` (a single line, mirroring the flat shape `humanOnly`/`needsAnswers` use at the item level); a mistyped value (e.g. `"yes"`) reads as undefined — the same silent-on-malformed behaviour `humanOnly` has — never a silent coerce.
 
 Authority: a per-item override binds the AGENT exactly like the gate-family overrides do. A human may always ignore it on a manual run (the prompt is generated; the human decides what to type).
 
@@ -220,7 +220,7 @@ Authority: a per-item override binds the AGENT exactly like the gate-family over
 Three orthogonal axes, each meaning EXACTLY one thing (governing ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`):
 
 - **POSITION (folder, runner-deterministic, STRUCTURAL).** Whether a task is in the agent POOL (`work/tasks/todo/`) or in STAGING (`work/tasks/backlog/`) is computed by the runner from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit operator flags). "A human should review this before an agent acts on it" is encoded HERE — the task is BIRTHED in `work/tasks/backlog/` (not eligible) and a human promotes the approved ones into `work/tasks/todo/`. The agent CREATES only in the staging folder; the runner OWNS every move + promotion.
-- **NATURE (`humanOnly`, agent/human judgement, ADVISORY).** Task `humanOnly: true` means "an agent must NEVER auto-take this BY NATURE" — the rare hard case (release/secrets/security/AGENTS.md-rule) that **survives even when the task resides in the pool `work/tasks/todo/`**. The autonomy gate predicate above is exactly this: a `humanOnly: true` task is never agent-claimable, even from `work/tasks/todo/`. Brief `humanOnly` is UNCHANGED (gates auto-tasking; no folder substitute, because the tasker's input is a single brief — it must be flagged in-band).
+- **NATURE (`humanOnly`, agent/human judgement, ADVISORY).** Task `humanOnly: true` means "an agent must NEVER auto-take this BY NATURE" — the rare hard case (release/secrets/security/AGENTS.md-rule) that **survives even when the task resides in the pool `work/tasks/todo/`**. The autonomy gate predicate above is exactly this: a `humanOnly: true` task is never agent-claimable, even from `work/tasks/todo/`. Prd `humanOnly` is UNCHANGED (gates auto-tasking; no folder substitute, because the tasker's input is a single prd — it must be flagged in-band).
 - **DISCOVERED (`needsAnswers`, agent judgement, ADVISORY).** Unchanged.
 
 Consequences for the tasker heuristic (the `to-task` skill / the tasker review loop):
@@ -228,15 +228,15 @@ Consequences for the tasker heuristic (the `to-task` skill / the tasker review l
 - For the COMMON "a human should review this task first" case, the tasker does NOT stamp `humanOnly: true` — it lets the runner birth the task STAGED in `work/tasks/backlog/` (the position carries the review-first signal). Stamping `humanOnly` for review was the overloaded reading and is RETIRED.
 - The tasker flags `humanOnly: true` on a task ONLY when building THAT task is genuinely never-for-agents-by-nature (release pipeline, secrets handling, hard security boundaries, AGENTS.md prohibitions). If in doubt, leave `humanOnly` off and rely on the position — a human can always refuse to promote.
 
-### Three honest integration modes for tasker output (`do brief:<slug>`)
+### Three honest integration modes for tasker output (`do prd:<slug>`)
 
 The tasker-output integration combines `--propose`/`--merge` with the `tasksLandIn` placement default into three explicit, named modes (no new flag; the three modes are the existing combinations made explicit):
 
 | Mode | How to invoke | What lands where | When to use |
 | --- | --- | --- | --- |
-| **`--propose`** (PR path) | `do brief:<slug> --propose` (or the configured default) | A work branch pushed; a PR opened against `main`. Tasks land in the PR's tree (typically `work/tasks/backlog/`); review is the PR diff. | A repo with a host (GitHub, …) and a PR-based review culture. Code/implementation review ALWAYS uses this path — a diff cannot be folder-gated (brief US #9). |
-| **`--merge` + land-in-staging** (PR-free review) | `do brief:<slug> --merge` with `tasksLandIn: pre-backlog` (or `--tasks-land-in pre-backlog`) | Tasks land DURABLY on `main` under `work/tasks/backlog/` (the staging folder, NOT eligible). A human promotes the approved ones `work/tasks/backlog/ → work/tasks/todo/`. | A bare / no-host / protected-`main` repo that still wants human review of ledger-file output. Review is a LEDGER POSITION a human moves, not an out-of-band PR. |
-| **`--merge` + land-in-pool** (trusted no-review fast path) | `do brief:<slug> --merge` with `tasksLandIn: todo` (or `--tasks-land-in todo`) and a trusted origin | Tasks land on `main` directly in the agent POOL `work/tasks/todo/` — immediately eligible for `do` / auto-pick. | A trusted, fast-iteration repo where the tasker's output is trusted to enter the pool without ledger-position review. The runner-deterministic placement precedence still forces STAGING for an untrusted origin (`untrusted-origin-forces-build-propose` style). |
+| **`--propose`** (PR path) | `do prd:<slug> --propose` (or the configured default) | A work branch pushed; a PR opened against `main`. Tasks land in the PR's tree (typically `work/tasks/backlog/`); review is the PR diff. | A repo with a host (GitHub, …) and a PR-based review culture. Code/implementation review ALWAYS uses this path — a diff cannot be folder-gated (prd US #9). |
+| **`--merge` + land-in-staging** (PR-free review) | `do prd:<slug> --merge` with `tasksLandIn: pre-backlog` (or `--tasks-land-in pre-backlog`) | Tasks land DURABLY on `main` under `work/tasks/backlog/` (the staging folder, NOT eligible). A human promotes the approved ones `work/tasks/backlog/ → work/tasks/todo/`. | A bare / no-host / protected-`main` repo that still wants human review of ledger-file output. Review is a LEDGER POSITION a human moves, not an out-of-band PR. |
+| **`--merge` + land-in-pool** (trusted no-review fast path) | `do prd:<slug> --merge` with `tasksLandIn: todo` (or `--tasks-land-in todo`) and a trusted origin | Tasks land on `main` directly in the agent POOL `work/tasks/todo/` — immediately eligible for `do` / auto-pick. | A trusted, fast-iteration repo where the tasker's output is trusted to enter the pool without ledger-position review. The runner-deterministic placement precedence still forces STAGING for an untrusted origin (`untrusted-origin-forces-build-propose` style). |
 
 Key rules:
 
@@ -244,22 +244,22 @@ Key rules:
 - **Code/implementation review is unchanged** — it stays on the branch/PR path (a code diff cannot be folder-gated). The position gate above is SCOPED to LEDGER-FILE output (tasking); the existing branch-based build review is unaffected.
 - **`humanOnly` survives every mode.** A `humanOnly: true` task in the pool is still not agent-claimable — the position gate and the `humanOnly` gate are orthogonal.
 
-### `briefAfter` — brief tasking-order (enforced against `work/briefs/tasked/`, NOT `tasks/done/`)
+### `prdAfter` — prd tasking-order (enforced against `work/prds/tasked/`, NOT `tasks/done/`)
 
-`briefAfter: [other-brief]` on a brief is **distinct from** task `blockedBy`, and deliberately named differently because it gates a different verb against a different signal:
+`prdAfter: [other-prd]` on a prd is **distinct from** task `blockedBy`, and deliberately named differently because it gates a different verb against a different signal:
 
 - **task `blockedBy`** gates **building** a task, resolved against `tasks/done/`.
-- **brief `briefAfter`** gates **tasking** a brief, resolved against `work/briefs/tasked/` residence (i.e. the listed briefs must already be tasked — reside in `work/briefs/tasked/` — so this brief's emitted tasks can reference the real slugs of those briefs' tasks in their `blockedBy`). This mirrors `blockedBy` → `tasks/done/` exactly: ordering resolves against folder residence, not a frontmatter marker.
+- **prd `prdAfter`** gates **tasking** a prd, resolved against `work/prds/tasked/` residence (i.e. the listed prds must already be tasked — reside in `work/prds/tasked/` — so this prd's emitted tasks can reference the real slugs of those prds' tasks in their `blockedBy`). This mirrors `blockedBy` → `tasks/done/` exactly: ordering resolves against folder residence, not a frontmatter marker.
 
-It waits on **tasked-ness (`work/briefs/tasked/`), not `tasks/done/`** on purpose: the reason B waits for A is that B's tasks need A's slugs to _exist_, which happens the moment A is tasked — not when A is fully built. Build-ordering between A's and B's actual work is then expressed where it belongs, in B's individual tasks' `blockedBy` (against `tasks/done/`). Enforced for the auto-tasker (it skips a brief whose `briefAfter` briefs do not yet reside in `work/briefs/tasked/`); a human may task anyway.
+It waits on **tasked-ness (`work/prds/tasked/`), not `tasks/done/`** on purpose: the reason B waits for A is that B's tasks need A's slugs to _exist_, which happens the moment A is tasked — not when A is fully built. Build-ordering between A's and B's actual work is then expressed where it belongs, in B's individual tasks' `blockedBy` (against `tasks/done/`). Enforced for the auto-tasker (it skips a prd whose `prdAfter` prds do not yet reside in `work/prds/tasked/`); a human may task anyway.
 
-### The `brief` link (required _when `covers` is set_)
+### The `prd` link (required _when `covers` is set_)
 
-`brief` names the source document this task was tasked from — the slug of a `work/briefs/ready/<slug>.md` in the same repo. Its load-bearing job is to make `covers` unambiguous: `covers: [4]` means nothing without knowing _which_ brief's story 4. So the requirement tracks that job:
+`prd` names the source document this task was tasked from — the slug of a `work/prds/ready/<slug>.md` in the same repo. Its load-bearing job is to make `covers` unambiguous: `covers: [4]` means nothing without knowing _which_ prd's story 4. So the requirement tracks that job:
 
-- **`brief` is REQUIRED iff `covers` is non-empty.** Any task that points into brief user stories MUST name the brief those numbers belong to (a task spanning multiple briefs names its primary one in `brief` and references the others in prose).
-- **`brief` MAY be omitted for a self-contained task** — a refactor, chore, build fix, or dependency bump that derives from no brief and covers no user stories (`covers: []`). Such a task MUST instead carry a clear, standalone _What to build_ + _Prompt_ (it is its own source of truth). This is **in contract** — not all work is feature work; only _feature_ work flows from a brief.
+- **`prd` is REQUIRED iff `covers` is non-empty.** Any task that points into prd user stories MUST name the prd those numbers belong to (a task spanning multiple prds names its primary one in `prd` and references the others in prose).
+- **`prd` MAY be omitted for a self-contained task** — a refactor, chore, build fix, or dependency bump that derives from no prd and covers no user stories (`covers: []`). Such a task MUST instead carry a clear, standalone _What to build_ + _Prompt_ (it is its own source of truth). This is **in contract** — not all work is feature work; only _feature_ work flows from a prd.
 
-(Consequence, by design: a brief-less chore task is part of no brief's completion set — the `issue-to-brief` "brief complete?" query counts only `brief:<slug>` tasks — which is correct, since a chore is not part of any feature's traceability.)
+(Consequence, by design: a prd-less chore task is part of no prd's completion set — the `issue-to-prd` "prd complete?" query counts only `prd:<slug>` tasks — which is correct, since a chore is not part of any feature's traceability.)
 
 The body uses [task-template.md](task-template.md): What to build (end-to-end), Acceptance criteria (checkboxes), Blocked by (prose mirror of frontmatter), and a **Prompt** section — a self-contained instruction block that can be pasted into a fresh agent context (the existing `tasks/` convention), so an AFK agent needs nothing but the file to start.

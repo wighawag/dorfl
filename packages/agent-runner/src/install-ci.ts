@@ -1,5 +1,5 @@
 /**
- * The `install-ci` orchestrator (brief `runner-in-ci`, task
+ * The `install-ci` orchestrator (prd `runner-in-ci`, task
  * `install-ci-core-and-github-adapter`): ties the provider-agnostic core
  * (`install-ci-core.ts`) to a CI-provider adapter (the first being GitHub,
  * `install-ci-github.ts`) through the {@link CIProviderContext} seam. It drives

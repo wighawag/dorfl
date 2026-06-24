@@ -54,8 +54,8 @@ import {isAncestor} from './gc.js';
  * integrates), so verify-then-review holds on the merged tree, never split across
  * two trees. Any failure routes to needs-attention.
  *
- * It is the CORE in the head / core / tail decomposition (brief
- * `work/briefs/tasked/run-do-integrate-convergence.md`): the caller-specific HEAD
+ * It is the CORE in the head / core / tail decomposition (prd
+ * `work/prds/tasked/run-do-integrate-convergence.md`): the caller-specific HEAD
  * (repo/arbiter/branch checks, source resolution, the `recovering` flag) and TAIL
  * (switch-to-main / `syncLocalMain` / delete-local-branch / `--no-switch` / the
  * propose next-step block, or — for `run` — the job-record + worktree reap) stay
@@ -94,7 +94,7 @@ export type IntegrationCoreOutcome =
 /**
  * The CORE's input — everything the band needs, nothing caller-shaped. Every
  * divergence between the human `complete` path and the autonomous `do`/`run` path
- * maps to a FIELD VALUE here, not an `if (caller === …)` branch (brief: "zero
+ * maps to a FIELD VALUE here, not an `if (caller === …)` branch (prd: "zero
  * caller-identity leakage"). In-place vs worktree = `cwd`; arbiter name =
  * `arbiter`; human vs autonomous surfacing = `surfaceArbiter`; do's recovery =
  * `source` + `recovering`; per-repo/lang gate = `verify`.
@@ -104,9 +104,9 @@ export type IntegrationCoreOutcome =
  * task-shaped done-move + title source. The shared band
  * (verify→review→commit→rebase→integrate→propose-PR-with-title/body) is
  * IDENTICAL; only the "which item move + which file to read the title from" step
- * is caller-supplied. This is the seam the `do brief:<slug>` TASKING transition
- * rides (task `slice-output-through-integration`): its "item move" is the brief
- * LIFECYCLE move (`work/briefs/ready/<slug>.md → work/briefs/tasked/<slug>.md`, residence =
+ * is caller-supplied. This is the seam the `do prd:<slug>` TASKING transition
+ * rides (task `slice-output-through-integration`): its "item move" is the prd
+ * LIFECYCLE move (`work/prds/ready/<slug>.md → work/prds/tasked/<slug>.md`, residence =
  * tasked-ness) plus its EMITTED backlog files — NOT a task done-move. Supplying it
  * makes every integrate-time arg (`--propose`/`--merge`, provider, title/body)
  * apply to tasking BY CONSTRUCTION, because they resolve ONCE here.
@@ -123,7 +123,7 @@ export interface IntegrationLifecycle {
 	/**
 	 * Absolute path to the item file whose `title:` frontmatter seeds the default
 	 * commit summary AND the synthesised propose-mode PR title. For the tasking
-	 * transition this is the held brief (`work/briefs/ready/<slug>.md`) — read BEFORE
+	 * transition this is the held prd (`work/prds/ready/<slug>.md`) — read BEFORE
 	 * {@link stage} moves it. IGNORED when {@link title} is supplied (the explicit
 	 * title wins — no file read).
 	 */
@@ -133,16 +133,16 @@ export interface IntegrationLifecycle {
 	 * uses THIS as the title source for the default commit summary AND the synthesised
 	 * propose-mode PR title, INSTEAD of reading {@link titlePath}. This is the seam for
 	 * a lifecycle whose output file does NOT yet exist at title-read time — the intake
-	 * lone-task / brief path WRITES `work/backlog/<slug>.md` / `work/briefs/ready/<slug>.md` in
+	 * lone-task / prd path WRITES `work/backlog/<slug>.md` / `work/prds/ready/<slug>.md` in
 	 * {@link stage}, which runs AFTER the title read, so a `titlePath` read would race
-	 * the write and fall back to a generic subject. The `do brief:` tasking transition
-	 * leaves this unset (its `titlePath` is an already-existing held brief, read fine).
+	 * the write and fall back to a generic subject. The `do prd:` tasking transition
+	 * leaves this unset (its `titlePath` is an already-existing held prd, read fine).
 	 */
 	title?: string;
 	/**
 	 * STAGE the lifecycle move + emitted files into the index on the current work
 	 * branch (runner-owned git; the agent never does git). For the tasking
-	 * transition: `git mv work/briefs/ready/<slug>.md → work/briefs/tasked/<slug>.md`
+	 * transition: `git mv work/prds/ready/<slug>.md → work/prds/tasked/<slug>.md`
 	 * (residence = tasked-ness; no marker), and write+`git add` the produced
 	 * `work/backlog/*.md` files. The band's subsequent `git add -A` + atomic commit
 	 * folds this staging
@@ -161,8 +161,8 @@ export interface IntegrationLifecycle {
 
 /**
  * The default LIVENESS CEILING for the merge-mode `${branch}:main` push (the
- * durable promotions `tasks/todo → tasks/done` and, via `lifecycle`, `briefs/ready
- * → briefs/tasked`). Task `c2-rebase-until-real-on-durable-main-promotions` turned
+ * durable promotions `tasks/todo → tasks/done` and, via `lifecycle`, `prds/ready
+ * → prds/tasked`). Task `c2-rebase-until-real-on-durable-main-promotions` turned
  * the previous SMALL FIXED CAP (was 5, the `run-fleet-claim-integrate-and-sibling-
  * rebase-concurrency-safe` Race-1 budget) into rebase-until-real-conflict: a CLEAN
  * re-rebase no longer counts against a tiny give-up budget — only a GENUINE
@@ -225,7 +225,7 @@ export interface IntegrationCoreInput {
 	 * `work/<type>-<slug>` identity. When omitted, the core derives it from the
 	 * branch HEAD is on (the robust default — the type is encoded IN the name). A
 	 * caller that knows the type explicitly may pass it (e.g. the tasking path
-	 * passes its `work/briefs/ready-<slug>`).
+	 * passes its `work/prds/ready-<slug>`).
 	 */
 	branch?: string;
 	/**
@@ -265,7 +265,7 @@ export interface IntegrationCoreInput {
 	 */
 	recovering: boolean;
 	/**
-	 * **RECOVER an already-committed, already-done-moved STRANDED branch** (brief
+	 * **RECOVER an already-committed, already-done-moved STRANDED branch** (prd
 	 * `ledger-integrity` story 6, the `finish-already-committed-branch` task). When
 	 * `true`, the work is ALREADY committed on the work branch with the task already
 	 * `git mv`'d into `work/done/` (a terminal push failed AFTER steps 2–3, leaving
@@ -467,7 +467,7 @@ export interface IntegrationCoreInput {
 	 * `slice-output-through-integration`). When set, the band reads the title from
 	 * its {@link IntegrationLifecycle.titlePath}, calls its
 	 * {@link IntegrationLifecycle.stage} INSTEAD of the task `git mv → work/done/`,
-	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do brief:`
+	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do prd:`
 	 * TASKING transition supplies it; `do`/`complete`/`run` leave it unset (the
 	 * task done-move is unchanged).
 	 */
@@ -509,8 +509,8 @@ export interface IntegrationCoreResult {
 	 * needs-attention routing can record the findings as the item-body prose. The
 	 * tasking path (task `slice-acceptance-gate`) reads this: the core's build
 	 * `applyNeedsAttentionTransition` is keyed on a TASK lock, so the tasking path
-	 * routes the brief itself via the lock release's needs-attention redirect (amend the
-	 * `brief:<slug>` unified lock `active -> stuck`, no folder move), using THIS
+	 * routes the prd itself via the lock release's needs-attention redirect (amend the
+	 * `prd:<slug>` unified lock `active -> stuck`, no folder move), using THIS
 	 * findings text as the body. Absent on every non-`review-blocked` outcome. (The
 	 * build path ignores it — its routing already records the findings in-body.)
 	 */
@@ -570,7 +570,7 @@ export async function performIntegration(
 	// in the `run` caller, not here.
 	const freshWorktreeGate = input.freshWorktreeGate === true;
 
-	// RECOVER an already-committed, already-done-moved STRANDED branch (brief
+	// RECOVER an already-committed, already-done-moved STRANDED branch (prd
 	// `ledger-integrity` story 6). The work + the done-move are ALREADY committed on
 	// the work branch (a terminal push failed AFTER steps 2–3); SKIP steps 0–3
 	// (prepare / gate / review / done-move / commit) and run ONLY the
@@ -592,7 +592,7 @@ export async function performIntegration(
 	}
 
 	// The file whose `title:` seeds the commit summary + PR title. For a TASKING
-	// transition (a non-task `lifecycle`) this is the held brief it supplies; for a
+	// transition (a non-task `lifecycle`) this is the held prd it supplies; for a
 	// build it is the task in its source folder. Read BEFORE any move.
 	const lifecycle = input.lifecycle;
 	// CONTINUE-BUILD (`source: 'done'`, task
@@ -619,7 +619,7 @@ export async function performIntegration(
 	// passes no flag, so there an untrusted-origin task RELIABLY forces propose.
 	//
 	// SCOPE: the task BUILD transition ONLY. It NEVER fires for a `lifecycle`
-	// transition (tasking / intake-emit — a brief/task FILE landing on main is inert;
+	// transition (tasking / intake-emit — a prd/task FILE landing on main is inert;
 	// intake's OWN per-emit resolver already decided that mode), and the source file
 	// here is the task being built. A `trusted`/unset task ⇒ untouched (zero
 	// behaviour change for the normal human path).
@@ -783,7 +783,7 @@ export async function performIntegration(
 		}
 	}
 
-	// 1b. Gate 2 — the PR/code REVIEW gate (GATES brief `work/briefs/tasked/review.md`). It is a
+	// 1b. Gate 2 — the PR/code REVIEW gate (GATES prd `work/prds/tasked/review.md`). It is a
 	//     JUDGEMENT gate layered ON TOP of the deterministic `verify` floor (ADR §8)
 	//     — NEVER a replacement, and ALWAYS verify-THEN-review on the SAME tree.
 	//
@@ -838,10 +838,10 @@ export async function performIntegration(
 	// never be the multi-line commit-subject run-on `--fill` would derive.
 	//
 	// When the lifecycle supplies an EXPLICIT `title`, use it DIRECTLY (no file read):
-	// the intake lone-task / brief path writes its output file in `stage()`, which runs
+	// the intake lone-task / prd path writes its output file in `stage()`, which runs
 	// AFTER this point, so a `titlePath` read would race the write and degrade the
-	// subject/PR title to the generic fallback. The `do brief:` tasking path leaves
-	// `title` unset and keeps reading its already-existing held brief (unchanged).
+	// subject/PR title to the generic fallback. The `do prd:` tasking path leaves
+	// `title` unset and keeps reading its already-existing held prd (unchanged).
 	const explicitTitle = lifecycle?.title;
 	const taskTitle =
 		explicitTitle !== undefined ? explicitTitle : readTaskTitle(sourcePath);
@@ -857,7 +857,7 @@ export async function performIntegration(
 
 	// 2. STAGE the item move into the index. For a build that is the task done-move
 	//    (`work/<source>/<slug>.md → work/done/<slug>.md`); for a TASKING
-	//    transition (a non-task `lifecycle`) it is the caller-supplied brief
+	//    transition (a non-task `lifecycle`) it is the caller-supplied prd
 	//    lifecycle move + emitted backlog files (the runner stages them, the agent
 	//    never does git). Either way the subsequent `git add -A` folds the agent's
 	//    uncommitted work + this staging into ONE atomic commit.
@@ -915,7 +915,7 @@ export async function performIntegration(
 	// they are TRACKED, not dropped/untracked. Rule B is extended HERE: the runner REPORTS
 	// exactly which note files landed (honest reporting — what actually reached the commit,
 	// read from the staged set, not assumed). This is the ONE shared place — BOTH the build
-	// path (`do <task>`/`run`/`complete`) and the tasking path (`do brief:`, via the
+	// path (`do <task>`/`run`/`complete`) and the tasking path (`do prd:`, via the
 	// `lifecycle` seam) route through it, so the channel is NOT forked. Zero notes ⇒ no
 	// report (the no-note case is byte-for-byte unchanged).
 	await reportScoopedNotes(cwd, env, note);
@@ -1013,7 +1013,7 @@ export async function performIntegration(
 					};
 				}
 			}
-			// PLAIN rebase. After the per-item-lock cut-over (brief
+			// PLAIN rebase. After the per-item-lock cut-over (prd
 			// `ledger-status-per-item-lock-refs`, tasks 9a–9d) no transient status
 			// lands on a work branch: needs-attention is the lock `state: stuck` (not a
 			// `git mv` to `needs-attention/`), the body rests in `backlog/` while
@@ -1490,7 +1490,7 @@ export async function performIntegration(
 }
 
 /**
- * RECOVER an already-committed, already-done-moved STRANDED branch (brief
+ * RECOVER an already-committed, already-done-moved STRANDED branch (prd
  * `ledger-integrity` story 6, the `finish-already-committed-branch` task). The
  * green work AND the `git mv → work/done/` are ALREADY committed on the work
  * branch (a terminal push failed AFTER `performIntegration`'s steps 2–3), and the
@@ -2044,7 +2044,7 @@ async function stagedCaptureNotes(
  * The DURABLE `work/` status folders a slug's ledger file can resting-live in (the
  * one-slug-one-folder set the invariant is asserted over). After the capstone
  * cut-over (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`,
- * brief `ledger-status-per-item-lock-refs`) the ONLY `work/` moves on `main` are the
+ * prd `ledger-status-per-item-lock-refs`) the ONLY `work/` moves on `main` are the
  * durable resting transitions, so the source a build completes FROM is `backlog/`
  * (claim no longer moves the body, task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`) and the canonical

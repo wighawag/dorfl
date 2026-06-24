@@ -88,7 +88,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			briefAfter: [],
+			prdAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});
@@ -100,7 +100,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: true,
-			briefAfter: [],
+			prdAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});
@@ -158,15 +158,15 @@ describe('tasker heuristic — review-first is staging-birth, NOT a `humanOnly` 
 		scratch.cleanup();
 	});
 
-	it('the tasking brief tells the agent to BIRTH tasks in STAGING (`work/tasks/backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
+	it('the tasking prd tells the agent to BIRTH tasks in STAGING (`work/tasks/backlog/`) and reserves `humanOnly` for never-by-nature', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed a PRD.
 		run('git', ['fetch', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
-		seedBriefRaw(repo, 'it');
+		seedPrdRaw(repo, 'it');
 		let capturedPrompt = '';
 		const agentRunner: TaskAgentRunner = ({cwd, prompt}) => {
 			capturedPrompt = prompt;
-			// Honour the brief: birth in STAGING, do not stamp humanOnly for review.
+			// Honour the prd: birth in STAGING, do not stamp humanOnly for review.
 			const dir = join(cwd, 'work', 'tasks', 'backlog');
 			mkdirSync(dir, {recursive: true});
 			writeFileSync(
@@ -232,8 +232,8 @@ function task(frontmatter: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-function seedBriefRaw(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+function seedPrdRaw(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -250,6 +250,6 @@ function seedBriefRaw(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', 'arbiter', 'main'], repo, {env: gitEnv()});
 }

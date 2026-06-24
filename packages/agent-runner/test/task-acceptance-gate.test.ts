@@ -20,11 +20,11 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `do brief:<slug>` TASK-SET ACCEPTANCE GATE tests (task `task-acceptance-gate`).
+ * `do prd:<slug>` TASK-SET ACCEPTANCE GATE tests (task `task-acceptance-gate`).
  * The task-path mirror of the build Gate-2: a FRESH-CONTEXT review of the
  * produced task SET runs BEFORE the tasks integrate (riding
  * `performIntegration`'s review-before-integrate block). `--review` on (default)
- * runs it; `--no-review` skips it; `block` routes the brief to needs-attention (no
+ * runs it; `--no-review` skips it; `block` routes the prd to needs-attention (no
  * tasks land); `approve` lets the set integrate. It is ONE-SHOT (no rounds; it
  * does NOT consult `--review-max-rounds`) and is independently controllable from
  * the tasker improver loop.
@@ -49,9 +49,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
-function seedBrief(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter). */
+function seedPrd(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -68,7 +68,7 @@ function seedBrief(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -83,7 +83,7 @@ function taskingAgent(file = 'child'): TaskAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'brief: it',
+				'prd: it',
 				'---',
 				'',
 				'## Prompt',
@@ -153,7 +153,7 @@ const showArbiterMain = (repo: string, path: string): string => {
 describe('task acceptance gate — APPROVE lets the set integrate (default --merge)', () => {
 	it('review on + APPROVE ⇒ the gate runs once, then the tasks land on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(APPROVE);
 		const result = await performTask({
 			slug: 'it',
@@ -170,12 +170,12 @@ describe('task acceptance gate — APPROVE lets the set integrate (default --mer
 		expect(result.outcome).toBe('tasked');
 		// The gate ran (before the integrate) exactly ONCE — it is one-shot.
 		expect(gate.calls).toBe(1);
-		// The approved set integrated onto main (task + brief tasking/ -> brief-tasked/
-		// move). The brief rests in brief-tasked/ (residence = source of truth for
-		// tasked-ness, no marker), not brief/.
+		// The approved set integrated onto main (task + prd tasking/ -> prd-tasked/
+		// move). The prd rests in prd-tasked/ (residence = source of truth for
+		// tasked-ness, no marker), not prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 	});
 });
@@ -183,7 +183,7 @@ describe('task acceptance gate — APPROVE lets the set integrate (default --mer
 describe('task acceptance gate — --no-review skips it (mirror the build Gate-2 off test)', () => {
 	it('review off ⇒ the gate is NEVER invoked and the set still integrates', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK); // would block — but must never run
 		const result = await performTask({
 			slug: 'it',
@@ -203,7 +203,7 @@ describe('task acceptance gate — --no-review skips it (mirror the build Gate-2
 
 	it('review undefined (no gate wired) ⇒ default behaviour unchanged (no gate runs)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -222,7 +222,7 @@ describe('task acceptance gate — --no-review skips it (mirror the build Gate-2
 describe('task acceptance gate — BLOCK routes the set to needs-attention (not integrated)', () => {
 	it('review on + BLOCK ⇒ needs-attention, NO tasks land, exit 1, findings in the body', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK);
 		const result = await performTask({
 			slug: 'it',
@@ -239,17 +239,17 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(result.outcome).toBe('needs-attention');
 		expect(gate.calls).toBe(1);
 		// The task-path block route is a per-item lock `active → stuck` amend now
-		// (task `cutover-...-trim-folder-sets`), NOT a folder move: the brief body STAYS
-		// in work/briefs/ready/, the tasks did NOT land, and NO needs-attention/ or tasking/
+		// (task `cutover-...-trim-folder-sets`), NOT a folder move: the prd body STAYS
+		// in work/prds/ready/, the tasks did NOT land, and NO needs-attention/ or tasking/
 		// folder file is written.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
 		const entry = await readItemLock({
-			item: 'brief:it',
+			item: 'prd:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -260,7 +260,7 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 
 	it('a BLOCK on the --propose path also routes to needs-attention (no PR of a blocked set)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK);
 		const result = await performTask({
 			slug: 'it',
@@ -274,12 +274,12 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
-		// The block route is the stuck lock; the brief body stays in brief/, no PR opened.
+		// The block route is the stuck lock; the prd body stays in prd/, no PR opened.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		const entry = await readItemLock({
-			item: 'brief:it',
+			item: 'prd:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -291,7 +291,7 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 describe('task acceptance gate — ONE-SHOT (single invocation, no rounds)', () => {
 	it('a persistent BLOCK is NOT re-reviewed: the gate runs exactly ONCE (round 1), no --review-max-rounds loop', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK); // always blocks
 		const result = await performTask({
 			slug: 'it',
@@ -325,7 +325,7 @@ describe('task acceptance gate — ONE-SHOT (single invocation, no rounds)', () 
 describe('task acceptance gate — --review-model de-correlates the reviewer', () => {
 	it('the acceptanceReviewModel override reaches the gate (the launch seam)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(APPROVE);
 		await performTask({
 			slug: 'it',
@@ -355,7 +355,7 @@ describe('task acceptance gate — independent of the tasker improver loop', () 
 
 	it('the gate runs even when the improver loop is wired (toggling one does not affect the other)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(APPROVE);
 		const result = await performTask({
 			slug: 'it',
@@ -378,7 +378,7 @@ describe('task acceptance gate — independent of the tasker improver loop', () 
 
 	it('the gate is OFF independently while the improver loop is ON (review off, loop on)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK); // would block — but review is off so it never runs
 		const result = await performTask({
 			slug: 'it',
@@ -419,7 +419,7 @@ describe('task acceptance gate — the prompt is a task-SET prompt (distinct fro
 		const buildPrompt = buildReviewPrompt('it');
 		expect(setPrompt).not.toBe(buildPrompt);
 		// The build prompt reviews a code DIFF against ONE task; the set prompt
-		// reviews the SET of tasks against the brief.
+		// reviews the SET of tasks against the prd.
 		expect(buildPrompt).toMatch(/code changes/);
 		expect(setPrompt).not.toMatch(/review the code changes/);
 		expect(setPrompt).toMatch(/candidate tasks/);

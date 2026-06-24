@@ -126,13 +126,13 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', 
 	}
 
 	it('resume rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
-		const out = await runReject(['resume', 'brief:some-prd']);
-		expect(out).toMatch(/tasks, not briefs/);
+		const out = await runReject(['resume', 'prd:some-prd']);
+		expect(out).toMatch(/tasks, not prds/);
 	});
 
 	it('work-on rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
-		const out = await runReject(['work-on', 'brief:some-prd']);
-		expect(out).toMatch(/tasks, not briefs/);
+		const out = await runReject(['work-on', 'prd:some-prd']);
+		expect(out).toMatch(/tasks, not prds/);
 	});
 });
 

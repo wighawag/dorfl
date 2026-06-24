@@ -55,17 +55,17 @@ function seedTask(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
-function seedBrief(
+/** Seed a `work/prds/ready/<slug>.md` PRD with the given gate frontmatter. */
+function seedPrd(
 	slug: string,
-	fm: {humanOnly?: boolean; needsAnswers?: boolean; briefAfter?: string[]} = {},
+	fm: {humanOnly?: boolean; needsAnswers?: boolean; prdAfter?: string[]} = {},
 ): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.briefAfter) lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
+	if (fm.prdAfter) lines.push(`prdAfter: [${fm.prdAfter.join(', ')}]`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
@@ -147,7 +147,7 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 	it('auto-picks the first eligible TASK when tasks exist', async () => {
 		seedTask('alpha');
 		seedTask('beta');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -157,11 +157,11 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 
 	it('auto-picks a PRD (advance prd:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
-		expect(args).toEqual(['brief:gamma']);
+		expect(args).toEqual(['prd:gamma']);
 	});
 
 	it('an empty backlog + no taskable PRD is calm-at-rest (exit 0, nothing run)', async () => {
@@ -176,8 +176,8 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () => {
 	it('takes x items, tasks first then PRDs, in order', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
-		seedBrief('delta');
+		seedPrd('gamma');
+		seedPrd('delta');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,
@@ -187,7 +187,7 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
+		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
 	});
 
 	it('-n runs the ticks SEQUENTIALLY (no overlap) — a serialised in-flight count', async () => {
@@ -220,7 +220,7 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 	it('-n bounds the count (does not over-take)', async () => {
 		seedTask('alpha');
 		seedTask('beta');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({cwd: repo, run, config: cfg(), count: 2});
 		expect(args).toHaveLength(2);
@@ -231,12 +231,12 @@ describe('advance <a> <b> — explicit named items, IN SEQUENCE', () => {
 	it('advances the NAMED items in the given order (no pool/priority)', async () => {
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceArgs(
-			['obs:stray', 'brief:thing', 'feature'],
+			['obs:stray', 'prd:thing', 'feature'],
 			{cwd: repo, run, config: cfg()},
 		);
 		expect(result.exitCode).toBe(0);
 		// verbatim, in the operator's order — the tick resolves each namespace.
-		expect(args).toEqual(['obs:stray', 'brief:thing', 'feature']);
+		expect(args).toEqual(['obs:stray', 'prd:thing', 'feature']);
 	});
 });
 
@@ -257,8 +257,8 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 	});
 
 	it('with autoTask OFF, the bare/-n selection picks NO PRD (task gated)', async () => {
-		seedBrief('gamma');
-		seedBrief('delta');
+		seedPrd('gamma');
+		seedPrd('delta');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -272,7 +272,7 @@ describe('advance — the FLAT per-action gate family (US #23) by SELECTION', ()
 
 	it('with EVERY gate off, the bare selection is empty (zero autonomy) BUT a NAMED surface/apply still runs (always-allowed)', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		// Bare form with all flags off: the "question loop with ZERO autonomy" case
 		// — nothing autonomous is selected.
 		const {run: bareRun, args: bareArgs} = recordingRunner();

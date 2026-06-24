@@ -6,7 +6,7 @@ import {
 } from './intake-marker.js';
 
 /**
- * **The intake TRIAGE GATE** (task `intake-self-awareness-resumption-tracking`, brief
+ * **The intake TRIAGE GATE** (task `intake-self-awareness-resumption-tracking`, prd
  * `issue-intake` US #2/#10): a DETERMINISTIC pre-decision gate that runs UNDER the
  * processing lock, BEFORE the decision prompt, deciding whether intake should run
  * the prompt at all. Built ENTIRELY on the thread MARKER (no sidecar, no cursor, no
@@ -55,7 +55,7 @@ export type IntakeTriageDecision =
 
 /**
  * Run the TRIAGE over the issue's full comment thread (oldest-first, as
- * `listComments` returns it). The canonical branches (brief `issue-intake`):
+ * `listComments` returns it). The canonical branches (prd `issue-intake`):
  *
  * 1. **Last comment is INTAKE's** (carries a marker). Build `seenSet` = the UNION of
  *    every intake marker's `seen=` id-list, then:

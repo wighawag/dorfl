@@ -9,7 +9,7 @@ import {workItemRel} from './work-layout.js';
  * `scripts/CLAIM-PROTOCOL.md`. This is the first-class `agent-runner claim`
  * command (ADR §9: agent-runner is the PRIMARY implementation of the claim
  * protocol; `scripts/claim.sh` is retained as the portable, zero-dependency
- * bootstrap / reference). The lock-substrate cut-over (brief
+ * bootstrap / reference). The lock-substrate cut-over (prd
  * `ledger-status-per-item-lock-refs`) has since diverged it from `claim.sh`'s
  * body-move semantics — see the lock note below — but the exit codes are the same.
  *
@@ -24,7 +24,7 @@ import {workItemRel} from './work-layout.js';
  *   3  (legacy) push contention — no longer reachable: the per-item lock never
  *      falsely contends, so there is no retry budget to exhaust
  *
- * UNIFIED PER-ITEM LOCK (brief `ledger-status-per-item-lock-refs` US #1/#15/#16,
+ * UNIFIED PER-ITEM LOCK (prd `ledger-status-per-item-lock-refs` US #1/#15/#16,
  * ADR `ledger-status-on-per-item-lock-refs`): a claim ACQUIRES the item's
  * per-item lock (`action: implement`) via the lock module and writes NOTHING to
  * `main` — the body STAYS at `work/backlog/<slug>.md`. The claimable predicate is
@@ -250,7 +250,7 @@ async function runClaim(
 	const backlog = workItemRel('tasks-todo', `${slug}.md`);
 	const branch = workBranchRef('task', slug);
 
-	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (brief
+	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (prd
 	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
 	// `ledger-status-on-per-item-lock-refs`). The interim dual-write is GONE: claim
 	// acquires the item's per-item lock (`action: implement`) and writes NOTHING to

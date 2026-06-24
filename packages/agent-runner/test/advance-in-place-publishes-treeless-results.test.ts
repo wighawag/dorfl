@@ -72,7 +72,7 @@ function seedPlainRepo(slug: string): SeededRepo {
 /** Commit an ANSWERED sidecar for `<namespace>:<slug>` to the repo's `main`. */
 function commitAnsweredSidecar(
 	repo: string,
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	answer = 'yes',
 ): void {

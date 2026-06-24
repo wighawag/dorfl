@@ -101,8 +101,8 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 
 describe('buildSurfacePrompt — frames the fresh-context surface + the required output', () => {
 	it('names the item, references the in-band SURFACE-PROTOCOL doc, demands the JSON {questions}', () => {
-		const p = buildSurfacePrompt('brief:autotask');
-		expect(p).toContain('brief:autotask');
+		const p = buildSurfacePrompt('prd:autotask');
+		expect(p).toContain('prd:autotask');
 		// Points at the protocol doc (in-band discipline), not at a host-installed skill.
 		expect(p).toMatch(/work\/protocol\/SURFACE-PROTOCOL\.md/);
 		expect(p).toMatch(/"questions"/);

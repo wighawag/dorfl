@@ -207,9 +207,9 @@ describe('the BUILD path (shared core) scoops + reports agent-authored captured 
 	});
 });
 
-/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter) for the tasking path. */
-function seedBrief(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter) for the tasking path. */
+function seedPrd(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -226,7 +226,7 @@ function seedBrief(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -241,7 +241,7 @@ function taskingAgentWithNote(note: string | undefined): TaskAgentRunner {
 				'---',
 				'title: child',
 				'slug: child',
-				'brief: it',
+				'prd: it',
 				'---',
 				'',
 				'## Prompt',
@@ -260,7 +260,7 @@ function taskingAgentWithNote(note: string | undefined): TaskAgentRunner {
 describe('the TASK path (do prd:) scoops + reports agent-authored captured notes', () => {
 	it('a note the tasker wrote during tasking lands in the task commit and is REPORTED (--merge)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 
 		const sink = noteSink();
 		const result = await performTask({
@@ -294,7 +294,7 @@ describe('the TASK path (do prd:) scoops + reports agent-authored captured notes
 
 	it('a note the tasker wrote rides the PROPOSE work branch and is REPORTED (--propose)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 
 		const sink = noteSink();
 		const result = await performTask({
@@ -319,7 +319,7 @@ describe('the TASK path (do prd:) scoops + reports agent-authored captured notes
 		expect(
 			onArbiterBranch(
 				repo,
-				'work/brief-it',
+				'work/prd-it',
 				'work/notes/findings/tasker-external-fact.md',
 			),
 		).toBe(true);
@@ -331,7 +331,7 @@ describe('the TASK path (do prd:) scoops + reports agent-authored captured notes
 
 	it('a tasking run that writes NO captured note ⇒ no scoop report', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 
 		const sink = noteSink();
 		const result = await performTask({

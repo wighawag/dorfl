@@ -1,13 +1,13 @@
 /**
  * Builds the prompt the runner hands to `agentCmd`: a small CONSTANT wrapper
- * (only the `<slug>` / source-brief path vary) around the claimed task's own
+ * (only the `<slug>` / source-prd path vary) around the claimed task's own
  * `## Prompt` section. This is dual-use — the SAME assembly the autonomous
  * runner feeds `agentCmd` and the human `agent-runner prompt [<slug>]` command.
  *
  * The wrapper is NOT hardcoded here: it is read VERBATIM from the work-contract
  * (`skills/setup/protocol/CLAIM-PROTOCOL.md` → "The prompt handed to the work agent"),
  * so the emitted text can never silently diverge from the canonical contract.
- * We only substitute the per-task placeholders (`<slug>`, `<brief>`).
+ * We only substitute the per-task placeholders (`<slug>`, `<prd>`).
  *
  * The wrapper draws the git boundary IN-BAND — the spawned agent does NO git ops
  * on the repo (no commit/push, no moving `work/` files); the RUNNER owns every
@@ -137,7 +137,7 @@ export function resolveProtocolDoc(
 /**
  * Pull the canonical wrapper TEMPLATE out of CLAIM-PROTOCOL.md: the first fenced
  * code block following the "The prompt handed to the work agent" heading. The
- * returned text still contains the `<slug>` / `<brief>` placeholders verbatim — it
+ * returned text still contains the `<slug>` / `<prd>` placeholders verbatim — it
  * is the single source of truth for the wrapper.
  */
 export function extractCanonicalWrapperTemplate(protocol: string): string {
@@ -208,7 +208,7 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
  *
  * Pure string transform; runs AFTER `extractCanonicalWrapperTemplate` (a pure
  * verbatim extractor stays a pure verbatim extractor) and BEFORE the
- * `<slug>`/`<brief>` substitution.
+ * `<slug>`/`<prd>` substitution.
  */
 export function applyPromptGuidance(
 	template: string,
@@ -227,17 +227,17 @@ export function applyPromptGuidance(
 }
 
 /**
- * The constant wrapper, parameterised only by the task slug, its source brief
+ * The constant wrapper, parameterised only by the task slug, its source prd
  * slug, and (optionally) the resolved {@link PromptGuidance} nudges. Read
  * verbatim from the work-contract and substituted — never a divergent hardcoded
- * copy. `brief` may be `undefined` when the task has no `brief:` field. When
+ * copy. `prd` may be `undefined` when the task has no `prd:` field. When
  * `promptGuidance` is omitted (or every member resolves false) the output is
  * BYTE-IDENTICAL to today's wrapper (the ELSE-branch of every conditional is
  * the historic text).
  */
 export function wrapper(
 	slug: string,
-	brief: string | undefined,
+	prd: string | undefined,
 	options: {
 		protocolPath?: string;
 		cwd?: string;
@@ -252,9 +252,7 @@ export function wrapper(
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
 	const resolved = applyPromptGuidance(template, options.promptGuidance);
-	return resolved
-		.replace(/<slug>/g, slug)
-		.replace(/<brief>/g, brief ?? '<brief>');
+	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
 }
 
 /**
@@ -418,7 +416,7 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
 }
 
 /**
- * Build the full prompt: the canonical wrapper for `slug` (with its source brief
+ * Build the full prompt: the canonical wrapper for `slug` (with its source prd
  * substituted) followed by the task's own `## Prompt` body, appended verbatim.
  *
  * In CONTINUE-mode (a {@link ContinueContext} is supplied), a CONTINUE block is
@@ -429,7 +427,7 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
  */
 export function buildAgentPrompt(
 	slug: string,
-	brief: string | undefined,
+	prd: string | undefined,
 	taskPrompt: string,
 	options: {
 		protocolPath?: string;
@@ -438,7 +436,7 @@ export function buildAgentPrompt(
 		promptGuidance?: {testFirst?: boolean};
 	} = {},
 ): string {
-	const head = wrapper(slug, brief, options);
+	const head = wrapper(slug, prd, options);
 	if (options.continueContext) {
 		const block = buildContinueBlock(slug, options.continueContext);
 		return `${head}\n\n${block}\n\n${taskPrompt}\n`;
@@ -461,8 +459,8 @@ export interface ResolvedTask {
 	path: string;
 	/** The folder the task was resolved from (in-progress wins over tasks-todo). */
 	folder: TaskFolder;
-	/** The task's source brief slug (frontmatter `brief:`), if any. */
-	brief: string | undefined;
+	/** The task's source prd slug (frontmatter `prd:`), if any. */
+	prd: string | undefined;
 	/** The extracted `## Prompt` body. */
 	taskPrompt: string;
 }
@@ -492,7 +490,7 @@ export class PromptError extends Error {}
 /**
  * The CONTINUE-only gate that lets {@link resolveTask} reach a task that has
  * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
- * brief (defect 3). A continue/re-claim can legitimately land on a branch whose
+ * prd (defect 3). A continue/re-claim can legitimately land on a branch whose
  * task was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
  * onboard must find it; but a `done/` task is folder-indistinguishable between
  * two states and re-onboarding a genuinely-finished one would RE-RUN it. So
@@ -554,7 +552,7 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
 
 /**
  * Resolve a task's file: prefer `work/in-progress/<slug>.md`, fall back to
- * `work/backlog/<slug>.md`. Returns the parsed brief + extracted `## Prompt` body.
+ * `work/backlog/<slug>.md`. Returns the parsed prd + extracted `## Prompt` body.
  * Throws {@link PromptError} when neither file exists or it has no prompt body.
  *
  * On a CONTINUE (a {@link ContinueResolutionGate} is supplied), `work/done/` is
@@ -591,7 +589,7 @@ export function resolveTask(
 			);
 		}
 		const fm = parseFrontmatter(content);
-		return {slug, path, folder, brief: fm.brief, taskPrompt};
+		return {slug, path, folder, prd: fm.prd, taskPrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no task '${slug}' found in ${searched}`);
@@ -624,43 +622,40 @@ export function inferSlugFromBranch(
  */
 /**
  * Resolve the EFFECTIVE `promptGuidance` for an item by walking the precedence
- * chain (highest → lowest): the per-task frontmatter override, the per-brief
- * frontmatter override (only when the task carries a `brief:`), then the
+ * chain (highest → lowest): the per-task frontmatter override, the per-prd
+ * frontmatter override (only when the task carries a `prd:`), then the
  * already-resolved repo policy. Each nudge member resolves independently — a
  * task's `promptGuidance.testFirst` override never bleeds into a sibling
  * member — mirroring the `humanOnly`/`autoBuild` per-item override shape.
  *
- * A task may carry the override even when it has NO `brief:` (a self-contained
- * chore), by symmetry with `humanOnly` at the item level; `briefFrontmatter`
+ * A task may carry the override even when it has NO `prd:` (a self-contained
+ * chore), by symmetry with `humanOnly` at the item level; `prdFrontmatter`
  * is then simply absent and the chain reads task ⇒ repo.
  */
 export function resolveItemPromptGuidance(
 	repoResolved: PromptGuidance,
 	taskFrontmatter?: Frontmatter,
-	briefFrontmatter?: Frontmatter,
+	prdFrontmatter?: Frontmatter,
 ): PromptGuidance {
 	const taskTestFirst = taskFrontmatter?.promptGuidance.testFirst;
-	const briefTestFirst = briefFrontmatter?.promptGuidance.testFirst;
+	const prdTestFirst = prdFrontmatter?.promptGuidance.testFirst;
 	return {
-		testFirst: taskTestFirst ?? briefTestFirst ?? repoResolved.testFirst,
+		testFirst: taskTestFirst ?? prdTestFirst ?? repoResolved.testFirst,
 	};
 }
 
 /**
- * Locate a brief's file on disk: prefer `work/briefs/ready/<slug>.md` (the
- * auto-slice pool), then fall back to `work/briefs/tasked/<slug>.md` (tasked,
+ * Locate a prd's file on disk: prefer `work/prds/ready/<slug>.md` (the
+ * auto-slice pool), then fall back to `work/prds/tasked/<slug>.md` (tasked,
  * resting). Returns `undefined` when neither exists — the caller treats that
- * as "no brief-level override available" and the precedence chain falls
- * through to the repo policy (a missing brief is NOT an error at this seam;
+ * as "no prd-level override available" and the precedence chain falls
+ * through to the repo policy (a missing prd is NOT an error at this seam;
  * the per-item override is OPTIONAL by design).
  */
-export function findBriefPath(
-	cwd: string,
-	briefSlug: string,
-): string | undefined {
+export function findPrdPath(cwd: string, prdSlug: string): string | undefined {
 	const candidates = [
-		workItemPath(cwd, 'briefs-ready', briefSlug),
-		workItemPath(cwd, 'briefs-tasked', briefSlug),
+		workItemPath(cwd, 'prds-ready', prdSlug),
+		workItemPath(cwd, 'prds-tasked', prdSlug),
 	];
 	for (const path of candidates) {
 		if (existsSync(path)) {
@@ -673,7 +668,7 @@ export function findBriefPath(
 /**
  * The convenience seam every caller of {@link buildAgentPrompt} reuses to
  * resolve the per-item override: load the task frontmatter from its file +
- * (when the task carries `brief:`) the brief frontmatter, then walk
+ * (when the task carries `prd:`) the prd frontmatter, then walk
  * {@link resolveItemPromptGuidance}. Pure-ish (reads at most two files);
  * returns the repo policy verbatim when neither item layer overrides anything.
  */
@@ -683,14 +678,14 @@ export function resolvePromptGuidanceForItem(options: {
 	taskContent: string;
 }): PromptGuidance {
 	const taskFm = parseFrontmatter(options.taskContent);
-	let briefFm: Frontmatter | undefined;
-	if (taskFm.brief !== undefined) {
-		const briefPath = findBriefPath(options.cwd, taskFm.brief);
-		if (briefPath !== undefined) {
-			briefFm = parseFrontmatter(readFileSync(briefPath, 'utf8'));
+	let prdFm: Frontmatter | undefined;
+	if (taskFm.prd !== undefined) {
+		const prdPath = findPrdPath(options.cwd, taskFm.prd);
+		if (prdPath !== undefined) {
+			prdFm = parseFrontmatter(readFileSync(prdPath, 'utf8'));
 		}
 	}
-	return resolveItemPromptGuidance(options.repoResolved, taskFm, briefFm);
+	return resolveItemPromptGuidance(options.repoResolved, taskFm, prdFm);
 }
 
 export function renderPrompt(options: PromptOptions): string {
@@ -702,7 +697,7 @@ export function renderPrompt(options: PromptOptions): string {
 		);
 	}
 	const task = resolveTask(options.cwd, slug);
-	// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
+	// Per-item override layer: a task or prd may pin `promptGuidance.testFirst`
 	// in its frontmatter, superseding the resolved repo policy for THIS item.
 	// We ALWAYS walk the resolver (even when no repo policy was threaded), so a
 	// task can opt IN to the strengthened nudge even on a repo whose default is
@@ -712,7 +707,7 @@ export function renderPrompt(options: PromptOptions): string {
 		repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 		taskContent: readFileSync(task.path, 'utf8'),
 	});
-	return buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
+	return buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
 		promptGuidance: resolvedGuidance,

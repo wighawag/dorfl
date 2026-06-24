@@ -1,7 +1,7 @@
 ---
 title: Test — in-process concurrent land via `integrateLock` (one lands, the loser re-gates + lands or routes)
 slug: test-in-process-concurrent-land
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [13]
 ---

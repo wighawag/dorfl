@@ -1,14 +1,14 @@
 /**
- * **`intake`'s PURE event-classification** (task `intake-event-classification`, brief
+ * **`intake`'s PURE event-classification** (task `intake-event-classification`, prd
  * `issue-intake` US #2 — the resume-on-thread-change behaviour).
  *
  * `intake` is a CONVERSATION on an issue thread: a run may ASK a clarifying question
- * and STOP, expecting a LATER run to resume from the updated thread (brief "Loop
+ * and STOP, expecting a LATER run to resume from the updated thread (prd "Loop
  * closure" / the decision table's ASK row). This module is the PURE CONTROL-PATH
  * classifier the re-run depends on: given an issue EVENT, it decides whether `intake`
  * should RE-EVALUATE the whole thread or IGNORE the event.
  *
- * THE CANONICAL RULE (from brief `issue-intake`, "The engine shape"): *"The loop
+ * THE CANONICAL RULE (from prd `issue-intake`, "The engine shape"): *"The loop
  * re-runs on a new comment OR an issue-body edit (re-evaluate the whole thread); a
  * buried prior-comment edit is IGNORED."*
  *
@@ -23,7 +23,7 @@
  * distinction the rule turns on is "a NEW turn vs an edit of a BURIED prior turn",
  * NOT "edit vs reply".
  *
- * SCOPE FENCE (brief "Scope: the engine only"): this is ONLY the pure classifier. It is
+ * SCOPE FENCE (prd "Scope: the engine only"): this is ONLY the pure classifier. It is
  * NOT CI's TRIGGER POLICY (command/every-issue, maintainer/anyone) — that is
  * `runner-in-ci`'s. CI's trigger LATER CONSULTS this classifier, but the policy of
  * WHO/WHAT may trigger lives in CI, not here. This module touches no seam, no git, no
@@ -69,10 +69,10 @@ export interface IntakeEvent {
 
 /**
  * Classify an issue EVENT into the CONTROL-PATH decision: RE-EVALUATE the whole
- * thread, or IGNORE the event. The PURE realisation of the brief's canonical rule
+ * thread, or IGNORE the event. The PURE realisation of the prd's canonical rule
  * (no seam, no git, no `gh`).
  *
- * The table (brief `issue-intake` US #2):
+ * The table (prd `issue-intake` US #2):
  *
  * | event kind              | decision      | why                                          |
  * | ----------------------- | ------------- | -------------------------------------------- |

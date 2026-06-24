@@ -1,8 +1,8 @@
 import {describe, it, expect} from 'vitest';
 import {
 	selectPrioritised,
-	taskableBriefs,
-	type BriefCandidate,
+	taskablePrds,
+	type PrdCandidate,
 	type SelectedLifecyclePools,
 } from '../src/select-priority.js';
 import {selectCandidates} from '../src/select.js';
@@ -37,16 +37,13 @@ function report(path: string, items: ScannedItem[]): ScanReport {
 
 const CAPS = {maxParallel: 100, perRepoMax: 100};
 
-function brief(
-	slug: string,
-	extra: Partial<BriefCandidate> = {},
-): BriefCandidate {
+function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
 	return {
 		repoPath: '/repo',
 		slug,
 		humanOnly: undefined,
 		needsAnswers: undefined,
-		briefAfter: [],
+		prdAfter: [],
 		...extra,
 	};
 }
@@ -54,11 +51,11 @@ function brief(
 describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', () => {
 	it('keeps only PRDs the gate passes (autoTask on, not humanOnly/needsAnswers)', () => {
 		const candidates = [
-			brief('ok'),
-			brief('human', {humanOnly: true}),
-			brief('asks', {needsAnswers: true}),
+			prd('ok'),
+			prd('human', {humanOnly: true}),
+			prd('asks', {needsAnswers: true}),
 		];
-		const out = taskableBriefs({
+		const out = taskablePrds({
 			candidates,
 			taskedSlugs: new Set(),
 			autoTask: true,
@@ -67,23 +64,23 @@ describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', 
 	});
 
 	it('autoTask off ⇒ nothing is taskable (mirrors autoBuild off)', () => {
-		const out = taskableBriefs({
-			candidates: [brief('ok')],
+		const out = taskablePrds({
+			candidates: [prd('ok')],
 			taskedSlugs: new Set(),
 			autoTask: false,
 		});
 		expect(out).toEqual([]);
 	});
 
-	it('briefAfter gates against the TASKED markers, not done/', () => {
-		const candidates = [brief('beta', {briefAfter: ['alpha']})];
+	it('prdAfter gates against the TASKED markers, not done/', () => {
+		const candidates = [prd('beta', {prdAfter: ['alpha']})];
 		// alpha not yet tasked ⇒ beta not taskable.
 		expect(
-			taskableBriefs({candidates, taskedSlugs: new Set(), autoTask: true}),
+			taskablePrds({candidates, taskedSlugs: new Set(), autoTask: true}),
 		).toEqual([]);
 		// alpha tasked ⇒ beta becomes taskable.
 		expect(
-			taskableBriefs({
+			taskablePrds({
 				candidates,
 				taskedSlugs: new Set(['alpha']),
 				autoTask: true,
@@ -98,7 +95,7 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			count: 1,
 		});
 		expect(picked).toEqual([{repoPath: '/repo', slug: 'a', namespace: 'task'}]);
@@ -109,12 +106,10 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1'), brief('p2')],
+			prds: [prd('p1'), prd('p2')],
 			count: 1,
 		});
-		expect(picked).toEqual([
-			{repoPath: '/repo', slug: 'p1', namespace: 'brief'},
-		]);
+		expect(picked).toEqual([{repoPath: '/repo', slug: 'p1', namespace: 'prd'}]);
 	});
 
 	it('orders ALL tasks before ANY PRD (drain ready work first)', () => {
@@ -122,13 +117,13 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1'), brief('p2')],
+			prds: [prd('p1'), prd('p2')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
 			'task:b',
-			'brief:p1',
-			'brief:p2',
+			'prd:p1',
+			'prd:p2',
 		]);
 	});
 
@@ -137,13 +132,13 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1'), brief('p2')],
+			prds: [prd('p1'), prd('p2')],
 			count: 2,
 		});
 		// one task drains, then the first PRD.
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'brief:p1',
+			'prd:p1',
 		]);
 	});
 
@@ -152,7 +147,7 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			count: 99,
 		});
 		expect(picked).toHaveLength(2);
@@ -161,7 +156,7 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 	it('returns empty when nothing is eligible in either pool', () => {
 		const r = report('/repo', [taskItem('a', false)]);
 		expect(
-			selectPrioritised({report: r, caps: CAPS, briefs: [], count: 1}),
+			selectPrioritised({report: r, caps: CAPS, prds: [], count: 1}),
 		).toEqual([]);
 	});
 });
@@ -174,17 +169,17 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'brief:p1',
+			'prd:p1',
 		]);
 		// And an EXPLICIT `drain` preset gives the same as omitting it.
 		const viaPreset = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			selectionOrder: 'drain',
 		});
 		expect(viaPreset).toEqual(picked);
@@ -195,11 +190,11 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			selectionOrder: ['task', 'build', 'surface', 'triage'],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'brief:p1',
+			'prd:p1',
 			'task:a',
 		]);
 	});
@@ -209,18 +204,18 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		const tasksFirst = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			count: 1,
 		});
-		const briefsFirst = selectPrioritised({
+		const prdsFirst = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 			selectionOrder: ['task', 'build', 'surface', 'triage'],
 			count: 1,
 		});
 		expect(tasksFirst[0]).toMatchObject({namespace: 'task', slug: 'a'});
-		expect(briefsFirst[0]).toMatchObject({namespace: 'brief', slug: 'p1'});
+		expect(prdsFirst[0]).toMatchObject({namespace: 'prd', slug: 'p1'});
 	});
 
 	it('the `groom` preset puts surface+triage AHEAD of build+task', () => {
@@ -228,19 +223,19 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p')],
+			prds: [prd('p')],
 			selectionOrder: 'groom',
 			lifecycle: {
 				apply: [],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'brief'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			},
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'brief:su', // surface
+			'prd:su', // surface
 			'observation:tr', // triage
 			'task:s', // build
-			'brief:p', // task (PRD)
+			'prd:p', // task (PRD)
 		]);
 	});
 
@@ -250,7 +245,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectPrioritised({
 				report: r,
 				caps: CAPS,
-				briefs: [brief('p1')],
+				prds: [prd('p1')],
 				selectionOrder: ['build', 'nope'],
 			}),
 		).toThrow(/unknown pool 'nope'/);
@@ -272,11 +267,11 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p1')],
+			prds: [prd('p1')],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'brief:p1',
+			'prd:p1',
 		]);
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
 	});
@@ -286,18 +281,18 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p')],
+			prds: [prd('p')],
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'brief'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply: PINNED FIRST (consume-always-wins)
 			'task:s', // build: eligible task
-			'brief:p', // task: taskable PRD
-			'brief:su', // surface
+			'prd:p', // task: taskable PRD
+			'prd:su', // surface
 			'observation:tr', // triage
 		]);
 	});
@@ -307,7 +302,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [],
+			prds: [],
 			count: 2,
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
@@ -326,7 +321,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [],
+			prds: [],
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
 				surface: [{repoPath: '/repo', slug: 'su', namespace: 'task'}],
@@ -345,7 +340,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [brief('p')],
+			prds: [prd('p')],
 			selectionOrder: ['task', 'build', 'surface', 'triage'],
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
@@ -354,7 +349,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply STILL first (not orderable)
-			'brief:p', // task (PRD) flipped ahead of build
+			'prd:p', // task (PRD) flipped ahead of build
 			'task:s', // build
 			'observation:tr', // triage (still last)
 		]);
@@ -367,7 +362,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		const picked = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [],
+			prds: [],
 			selectionOrder: ['triage', 'build', 'task', 'surface'],
 			// triage pool EMPTY (gated off); naming it is a no-op, never an error.
 			lifecycle: lifecycle({triage: []}),
@@ -387,7 +382,7 @@ describe('selectPrioritised — the TASK pool IS selectCandidates (shared primit
 		const viaHelper = selectPrioritised({
 			report: r,
 			caps: CAPS,
-			briefs: [],
+			prds: [],
 		}).map((s) => ({repoPath: s.repoPath, slug: s.slug}));
 		const viaRun = selectCandidates(r, CAPS);
 		// The helper's task pool is byte-identical to what `run` selects: they
@@ -409,7 +404,7 @@ describe('selectPrioritised — the TASK pool IS selectCandidates (shared primit
 			totalEligible: 3,
 		};
 		const caps = {maxParallel: 2, perRepoMax: 1};
-		const picked = selectPrioritised({report: r, caps, briefs: []});
+		const picked = selectPrioritised({report: r, caps, prds: []});
 		// perRepoMax 1 + maxParallel 2 ⇒ one from each repo, exactly selectCandidates.
 		expect(picked.map((s) => s.slug).sort()).toEqual(['a1', 'b1']);
 		expect(picked.map((s) => ({repoPath: s.repoPath, slug: s.slug}))).toEqual(

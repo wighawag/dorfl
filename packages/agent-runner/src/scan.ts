@@ -4,7 +4,7 @@ import {resolveEligibility, type EligibilityResult} from './eligibility.js';
 import {
 	ledgerRead,
 	type LedgerTodoItem,
-	type LedgerBriefPool,
+	type LedgerPrdPool,
 	type LocalLedgerState,
 } from './ledger-read.js';
 import {listMirrors} from './registry.js';
@@ -13,7 +13,7 @@ import {
 	resolveRepoConfigFromMirror,
 } from './repo-mirror.js';
 import {resolveRepoConfig} from './repo-config.js';
-import {taskableBriefs} from './select-priority.js';
+import {taskablePrds} from './select-priority.js';
 import {
 	lintLocalLedger,
 	lintRefLedger,
@@ -52,8 +52,8 @@ export function lifecycleGatesFrom(config: {
 	observationTriage: string;
 	surfaceBlockers: boolean;
 	/**
-	 * Brief `staging-surface-and-apply-promote-safety` F2 — the gate that widens
-	 * the SURFACE candidate set into STAGING (`tasks/backlog/` + `briefs/proposed/`).
+	 * Prd `staging-surface-and-apply-promote-safety` F2 — the gate that widens
+	 * the SURFACE candidate set into STAGING (`tasks/backlog/` + `prds/proposed/`).
 	 * Threaded here so the `scan --json` `lifecycle.surface[]` reflects the
 	 * expanded pool and the CI matrix enumerates staging surface legs. BUILD/claim
 	 * stays pool-only — only this lifecycle path widens.
@@ -70,28 +70,28 @@ export function lifecycleGatesFrom(config: {
 /**
  * A lifecycle item as it appears on a {@link RepoReport.lifecycle} sub-pool: the
  * bare `slug` plus, for surface/apply, the `namespace` discriminator (`'task'` /
- * `'brief'`) the matrix `jq` projects into a `task:`/`brief:` prefix. Triage items
+ * `'prd'`) the matrix `jq` projects into a `task:`/`prd:` prefix. Triage items
  * carry only `{slug}` — the `obs:` prefix is fixed in the matrix `jq` (an
- * observation has no task/brief namespace), so a consumer never needs a
+ * observation has no task/prd namespace), so a consumer never needs a
  * `namespace: 'observation'` here.
  */
 export interface ScannedTriageItem {
 	slug: string;
 }
-/** A surface/apply lifecycle item: a `needsAnswers` task/brief, with its namespace. */
+/** A surface/apply lifecycle item: a `needsAnswers` task/prd, with its namespace. */
 export interface ScannedBlockedItem {
-	namespace: 'task' | 'brief';
+	namespace: 'task' | 'prd';
 	slug: string;
 }
 
 /**
  * The per-repo LIFECYCLE pool on `scan --json` (the `triage`/`surface`/`apply`
- * companion of `items[]`/`briefs[]`), gated by the per-repo question-surfacing
+ * companion of `items[]`/`prds[]`), gated by the per-repo question-surfacing
  * config and computed by REUSING `lifecycle-gather.ts` → {@link buildLifecyclePools}
  * (NOT a forked predicate) so it AGREES with the `advance -n` / `run` selection.
  * This is what makes the propose-mode CI matrix enumerate the WHOLE answer-loop —
- * `obs:<slug>` triage legs, `task:`/`brief:<slug>` surface legs (`needsAnswers`, no
- * answered sidecar) AND `task:`/`brief:<slug>` apply legs (`needsAnswers`, answered
+ * `obs:<slug>` triage legs, `task:`/`prd:<slug>` surface legs (`needsAnswers`, no
+ * answered sidecar) AND `task:`/`prd:<slug>` apply legs (`needsAnswers`, answered
  * sidecar) — not only build/task legs
  * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert by default: with
  * `observationTriage:off` + `surfaceBlockers:false` (the calm defaults) triage +
@@ -129,18 +129,18 @@ export interface ScannedItem extends TodoItem {
 }
 
 /**
- * A BRIEF entry in `scan --json`'s taskable-brief pool — the SAME shape an eligible
+ * A PRD entry in `scan --json`'s taskable-prd pool — the SAME shape an eligible
  * task carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
- * | "brief:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
- * gate + the `humanOnly`/`needsAnswers`/`briefAfter` predicates of `taskableBriefs`
- * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.briefs} (and
- * the cwd section's `repo.briefs`), DISTINCT from the task-only `items[]` because
- * tasks and briefs are different verbs and project to different `task:`/`brief:`
+ * | "prd:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
+ * gate + the `humanOnly`/`needsAnswers`/`prdAfter` predicates of `taskablePrds`
+ * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
+ * the cwd section's `repo.prds`), DISTINCT from the task-only `items[]` because
+ * tasks and prds are different verbs and project to different `task:`/`prd:`
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
  * already consume.
  */
-export interface ScannedBrief {
+export interface ScannedPrd {
 	slug: string;
 	eligibility: {eligible: boolean};
 }
@@ -155,32 +155,32 @@ export interface RepoReport {
 	path: string;
 	items: ScannedItem[];
 	/**
-	 * The TASKABLE-BRIEF pool for this repo (the `briefs[]` companion of `items[]`):
-	 * every brief in `work/briefs/ready/` not already in `work/briefs/tasked/`, each tagged with
-	 * `eligibility.eligible` from {@link taskableBriefs} (the SAME `autoslice-gate`
+	 * The TASKABLE-PRD pool for this repo (the `prds[]` companion of `items[]`):
+	 * every prd in `work/prds/ready/` not already in `work/prds/tasked/`, each tagged with
+	 * `eligibility.eligible` from {@link taskablePrds} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
-	 * what makes the propose-mode CI matrix enumerate `brief:<slug>` legs for ready
-	 * ungated briefs alongside `task:<slug>` legs for eligible tasks (the
+	 * what makes the propose-mode CI matrix enumerate `prd:<slug>` legs for ready
+	 * ungated prds alongside `task:<slug>` legs for eligible tasks (the
 	 * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` task): the
 	 * propose `enumerate` `jq` unions both pools and emits one matrix leg per item.
 	 * The `autoTask` gate still BINDS — a repo with `autoTask` off yields an
-	 * all-`eligible:false` pool (so no `brief:` legs).
+	 * all-`eligible:false` pool (so no `prd:` legs).
 	 */
-	briefs: ScannedBrief[];
+	prds: ScannedPrd[];
 	/**
 	 * The per-repo LIFECYCLE pool (the `triage`/`surface`/`apply` companion of
-	 * `items[]`/`briefs[]`): untriaged observations + `needsAnswers` tasks/briefs split
+	 * `items[]`/`prds[]`): untriaged observations + `needsAnswers` tasks/prds split
 	 * by sidecar answered-state, gated by this repo's `observationTriage` /
 	 * `surfaceBlockers` config and computed by REUSING `lifecycle-gather.ts` (NOT a
 	 * forked predicate). Surfaced on BOTH `repos[]` (mirror) and `cwd.repo`
-	 * (in-place), the same dual-surface `items`/`briefs` use, so the propose-mode CI
+	 * (in-place), the same dual-surface `items`/`prds` use, so the propose-mode CI
 	 * matrix can enumerate the WHOLE answer-loop
 	 * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert with the calm-default
 	 * gates (empty triage/surface; apply is the always-on consume pool).
 	 */
 	lifecycle: ScannedLifecycle;
 	/**
-	 * The one-slug-one-folder LINT result (brief `ledger-integrity` story 3): any
+	 * The one-slug-one-folder LINT result (prd `ledger-integrity` story 3): any
 	 * slug present in MORE THAN ONE `work/` status folder in THIS repo's ledger.
 	 * Empty ⇒ a clean ledger. Non-empty ⇒ a corrupt ledger the formatter WARNS
 	 * about loudly and a human must resolve (never auto-fixed). Derived by listing
@@ -188,7 +188,7 @@ export interface RepoReport {
 	 */
 	ledgerDuplicates: DuplicateSlug[];
 	/**
-	 * The PER-ITEM LOCK in-flight view for this repo (brief
+	 * The PER-ITEM LOCK in-flight view for this repo (prd
 	 * `ledger-status-per-item-lock-refs` US #8; task
 	 * `needs-attention-as-stuck-lock-state`): the held lock entries read from the
 	 * repo's `refs/agent-runner/lock/*` refs — `active` holds (in-progress) and
@@ -246,33 +246,33 @@ export function readBacklogItems(repoPath: string): TodoItem[] {
  * through the EXACT same eligibility path as in-place (`do-autopick`), not a fork.
  */
 /**
- * Score a brief pool down to its TASKABLE subset, then label every brief with
- * `eligibility.eligible` (true ⇔ taskable). REUSES {@link taskableBriefs} —
+ * Score a prd pool down to its TASKABLE subset, then label every prd with
+ * `eligibility.eligible` (true ⇔ taskable). REUSES {@link taskablePrds} —
  * the SAME `autoslice-gate` predicate the mirror-side `scanMirrorPool` + the
  * in-place `do-autopick` pool already run — so what is taskable does not
  * fork between the autopick paths and the propose-matrix `scan --json` pool.
  * The `autoTask` gate BINDS through that predicate; a config-less repo with
- * `autoTask` off yields an all-`eligible:false` pool (no `brief:` legs).
+ * `autoTask` off yields an all-`eligible:false` pool (no `prd:` legs).
  */
-export function scoreBriefs(
+export function scorePrds(
 	repoPath: string,
-	pool: LedgerBriefPool,
+	pool: LedgerPrdPool,
 	autoTask: boolean,
-): ScannedBrief[] {
+): ScannedPrd[] {
 	const taskable = new Set(
-		taskableBriefs({
-			candidates: pool.briefs.map((p) => ({
+		taskablePrds({
+			candidates: pool.prds.map((p) => ({
 				repoPath,
 				slug: p.slug,
 				humanOnly: p.humanOnly,
 				needsAnswers: p.needsAnswers,
-				briefAfter: p.briefAfter,
+				prdAfter: p.prdAfter,
 			})),
 			taskedSlugs: pool.taskedSlugs,
 			autoTask,
 		}).map((p) => p.slug),
 	);
-	return pool.briefs.map((p) => ({
+	return pool.prds.map((p) => ({
 		slug: p.slug,
 		eligibility: {eligible: taskable.has(p.slug)},
 	}));
@@ -282,13 +282,13 @@ export function scoreBriefs(
  * Project the shared {@link buildLifecyclePools} result (via `gatherLifecycle*`)
  * onto the `scan --json` {@link ScannedLifecycle} shape: triage items keep only
  * their `slug` (the `obs:` prefix is fixed in the matrix `jq`), surface/apply keep
- * `{namespace, slug}` so the `jq` projects the right `task:`/`brief:` prefix. NOT a
+ * `{namespace, slug}` so the `jq` projects the right `task:`/`prd:` prefix. NOT a
  * re-enumeration — a pure shape map over the already-gated pools.
  *
  * The pool items' `namespace` is the wider {@link SelectedNamespace} (which also
  * admits `'observation'`), but by CONSTRUCTION the surface/apply sub-pools only
- * ever carry `'task'`/`'brief'` items (observations flow ONLY through `triage`,
- * which has no namespace field here), so we narrow + drop any non-task/brief
+ * ever carry `'task'`/`'prd'` items (observations flow ONLY through `triage`,
+ * which has no namespace field here), so we narrow + drop any non-task/prd
  * defensively rather than widening {@link ScannedBlockedItem}.
  */
 export function toScannedLifecycle(pools: {
@@ -300,8 +300,8 @@ export function toScannedLifecycle(pools: {
 		items: {namespace: string; slug: string}[],
 	): ScannedBlockedItem[] =>
 		items
-			.filter((i) => i.namespace === 'task' || i.namespace === 'brief')
-			.map((i) => ({namespace: i.namespace as 'task' | 'brief', slug: i.slug}));
+			.filter((i) => i.namespace === 'task' || i.namespace === 'prd')
+			.map((i) => ({namespace: i.namespace as 'task' | 'prd', slug: i.slug}));
 	return {
 		triage: pools.triage.map((t) => ({slug: t.slug})),
 		surface: asBlocked(pools.surface),
@@ -315,7 +315,7 @@ export function scoreItems(
 	counts: {totalItems: number; totalEligible: number},
 	heldSlugs: Set<string> = new Set(),
 ): ScannedItem[] {
-	// HELD-SLUG SUBTRACTION (brief `ledger-status-per-item-lock-refs` US #15; task
+	// HELD-SLUG SUBTRACTION (prd `ledger-status-per-item-lock-refs` US #15; task
 	// `claim-acquires-unified-lock-no-body-move`): exclude any pool slug whose
 	// per-item lock is currently held — the eligible pool is "in `tasks/todo/` on
 	// `main` AND no lock held". While the body still moves to `in-progress/` on
@@ -416,7 +416,7 @@ export async function scan(
 		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
 		// so the read-only scan degrades gracefully exactly as its config reads do.
 		const heldSlugs = await heldTaskSlugs(mirror.path, 'origin', options.env);
-		// The PER-ITEM LOCK in-flight view (brief US #8; task
+		// The PER-ITEM LOCK in-flight view (prd US #8; task
 		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the full held
 		// lock entries (action × state + reason) from the mirror's lock refs, so the
 		// scan surfaces held (in-progress) + stuck (needs-attention) items. Read from
@@ -429,7 +429,7 @@ export async function scan(
 			'origin',
 			options.env,
 		);
-		// Brief pool — the TASKABLE-BRIEF companion of the task pool above
+		// Prd pool — the TASKABLE-PRD companion of the task pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
 		// `autoTask` PER REPO from the mirror's COMMITTED `.agent-runner.json`
 		// (exactly as the mirror-side pool scan does — NOT forked); a read fault is
@@ -450,11 +450,11 @@ export async function scan(
 					`resolving autoTask from global + default. ${reason}`,
 			);
 		}
-		const briefPool = await ledgerRead.resolveMirrorBriefPool({
+		const prdPool = await ledgerRead.resolveMirrorPrdPool({
 			mirrorPath: mirror.path,
 			env: options.env,
 		});
-		const briefs = scoreBriefs(mirror.path, briefPool, repoAutoTask);
+		const prds = scorePrds(mirror.path, prdPool, repoAutoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this mirror's question-surfacing config (resolved from its committed
 		// `.agent-runner.json`, with the same non-fatal global fall-back as `autoTask`
@@ -489,14 +489,14 @@ export async function scan(
 				env: options.env,
 			}),
 		);
-		// The one-slug-one-folder LINT (brief story 3): derive any slug residing in >1
+		// The one-slug-one-folder LINT (prd story 3): derive any slug residing in >1
 		// status folder from the mirror's committed `main` tree (the SAME `ls-tree`
 		// read the seam uses), so a corrupt ledger is surfaced LOUDLY by the formatter.
 		const ledgerDuplicates = lintRefLedger('main', mirror.path, options.env);
 		repos.push({
 			path: mirror.path,
 			items: scoreItems(state, autoBuild, counts, heldSlugs),
-			briefs,
+			prds,
 			lifecycle,
 			ledgerDuplicates,
 			lockHeld,
@@ -524,7 +524,7 @@ export function scanRepoPaths(
 	repoPaths: string[],
 	config: Config,
 	/**
-	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/todo/`) (brief
+	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/todo/`) (prd
 	 * `ledger-status-per-item-lock-refs` US #15). This is a WORKING-TREE, OFFLINE
 	 * scan (it has no arbiter handle to fetch the lock refs from — that is the
 	 * registry `scan`'s job), so the held set is supplied by the in-place CALLER
@@ -550,14 +550,14 @@ export function scanRepoPaths(
 			global: config,
 			override,
 		}).config;
-		// Brief pool — the TASKABLE-BRIEF companion of the task pool. Resolve
+		// Prd pool — the TASKABLE-PRD companion of the task pool. Resolve
 		// `autoTask` PER REPO from the working-tree `.agent-runner.json` (the same
-		// way `autoBuild` is resolved); `taskableBriefs` (the SAME `autoslice-gate`
+		// way `autoBuild` is resolved); `taskablePrds` (the SAME `autoslice-gate`
 		// predicate the autopick paths run) decides what is taskable — no forked
-		// predicate. This is what makes the propose-mode CI matrix enumerate `brief:`
+		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
-		const briefPool = ledgerRead.resolveBriefPool({repoPath: path});
-		const briefs = scoreBriefs(path, briefPool, resolved.autoTask);
+		const prdPool = ledgerRead.resolvePrdPool({repoPath: path});
+		const prds = scorePrds(path, prdPool, resolved.autoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
 		// the same way as `autoBuild`/`autoTask`) and computed by REUSING
@@ -578,7 +578,7 @@ export function scanRepoPaths(
 		repos.push({
 			path,
 			items: scoreItems(state, resolved.autoBuild, counts, heldSlugs),
-			briefs,
+			prds,
 			lifecycle,
 			ledgerDuplicates,
 		});

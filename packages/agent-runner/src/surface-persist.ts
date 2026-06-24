@@ -13,7 +13,7 @@ import {
 } from './sidecar.js';
 
 /**
- * The engine-owned SURFACE PERSIST (brief `advance-loop`, task
+ * The engine-owned SURFACE PERSIST (prd `advance-loop`, task
  * `advance-rung-surface`, US #15/33) — the half of the surface rung the ENGINE
  * owns (the skill JUDGES, the engine PERSISTS). Given the questions the
  * `surface-questions` skill EMITTED (gathered by `surface-gate.ts`'s spawn), the
@@ -53,7 +53,7 @@ import {
 export interface SurfacePersistOptions {
 	/** Working clone/worktree the persist commits in. */
 	cwd: string;
-	/** The namespaced item identity (`task:foo` / `brief:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `prd:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The

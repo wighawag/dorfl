@@ -1,7 +1,7 @@
 ---
 title: CI template — parallel merge fan-out (parallel build/gate/review, serialised land)
 slug: ci-template-parallel-merge-fanout
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [4, 6]
 ---
@@ -53,7 +53,7 @@ slice).
 
 ## Prompt
 
-> Read Stories 4 and 6 of the brief, and Applied Answer q1 (the cross-job
+> Read Stories 4 and 6 of the prd, and Applied Answer q1 (the cross-job
 > serialiser decision: scaled CAS-retry as the floor, optional ref-lock as
 > the accelerator, GitHub `concurrency:` only as optional sugar). Read
 > `docs/ci/README.md`, `src/advance-ci-template.ts`, and

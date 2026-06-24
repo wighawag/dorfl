@@ -2,7 +2,7 @@
 title: Disable git rename detection on the runner's continue/integration rebase
 slug: disable-rename-detection-on-continue-rebase
 blockedBy: [] # startable now
-covers: [] # self-contained chore; no brief
+covers: [] # self-contained chore; no prd
 ---
 
 ## What to build
@@ -51,12 +51,12 @@ current main, where the source folder is no longer sparse so the whole-dir-renam
 heuristic no longer fires).
 
 This bites ANY branch carrying a durable folder transition
-(`tasks/todo → tasks/done`, `briefs/ready → briefs/tasked`,
-`tasks/todo → tasks/cancelled`, `briefs/ready → briefs/dropped`) WHEN the SOURCE
+(`tasks/todo → tasks/done`, `prds/ready → prds/tasked`,
+`tasks/todo → tasks/cancelled`, `prds/ready → prds/dropped`) WHEN the SOURCE
 folder is sparse (0-1 items) at branch time AND `main` later adds files into that
 same folder. It is a latent FALSE needs-attention source. The taxonomy reorg makes
 it MORE likely, not less: more folders, several often holding 0-1 files
-(`tasks/cancelled/`, `briefs/dropped/`, `briefs/proposed/`).
+(`tasks/cancelled/`, `prds/dropped/`, `prds/proposed/`).
 
 ### Approach decision: rename-off, NOT a per-folder sentinel (maintainer, 2026-06-20)
 

@@ -13,7 +13,7 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * `do brief:<slug>` TASK-OUTPUT-THROUGH-INTEGRATION tests (task
+ * `do prd:<slug>` TASK-OUTPUT-THROUGH-INTEGRATION tests (task
  * `task-output-through-integration`). The KEYSTONE behaviour: the produced
  * `work/tasks/todo/*` tasks integrate through the SHARED `performIntegration` core
  * (`src/integration-core.ts`) honoring `--propose`/`--merge`, instead of
@@ -39,9 +39,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/briefs/ready/<slug>.md` (committed onto the arbiter). */
-function seedBrief(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter). */
+function seedPrd(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -58,21 +58,21 @@ function seedBrief(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
 /**
- * Seed a `work/briefs/ready/<slug>.md` STAMPED with origin-trust provenance (task
- * `untrusted-origin-forces-build-propose`) — an intake-born brief whose stamp the
+ * Seed a `work/prds/ready/<slug>.md` STAMPED with origin-trust provenance (task
+ * `untrusted-origin-forces-build-propose`) — an intake-born prd whose stamp the
  * tasker must PROPAGATE onto every emitted task.
  */
-function seedBriefWithOrigin(
+function seedPrdWithOrigin(
 	repo: string,
 	slug: string,
 	originTrust: 'trusted' | 'untrusted',
 ): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -91,7 +91,7 @@ function seedBriefWithOrigin(
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -106,7 +106,7 @@ function taskingAgent(file = 'child'): TaskAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'brief: it',
+				'prd: it',
 				'---',
 				'',
 				'## Prompt',
@@ -152,7 +152,7 @@ const onArbiterBranch = (
 describe('do prd: output through performIntegration — --merge lands on main', () => {
 	it('integrates the tasks + the PRD lifecycle move onto arbiter main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -164,24 +164,24 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		// The produced task + the brief lifecycle move (tasking/ -> brief-tasked/) all
+		// The produced task + the prd lifecycle move (tasking/ -> prd-tasked/) all
 		// landed on the arbiter main, through the shared core (not the lock's direct
-		// commit). The brief now rests in brief-tasked/ (the source of truth for
-		// tasked-ness — residence, no marker), NOT back in brief/.
+		// commit). The prd now rests in prd-tasked/ (the source of truth for
+		// tasked-ness — residence, no marker), NOT back in prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
-		const brief = run(
+		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/briefs/tasked/it.md`],
+			['show', `${ARBITER}/main:work/prds/tasked/it.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		// Tasked-ness is RESIDENCE in brief-tasked/ (asserted above); the `tasked:` marker
-		// was removed entirely in remove-tasked-marker-step-b, so the resting brief carries
+		// Tasked-ness is RESIDENCE in prd-tasked/ (asserted above); the `tasked:` marker
+		// was removed entirely in remove-tasked-marker-step-b, so the resting prd carries
 		// NO tasked: line.
-		expect(brief).not.toMatch(/^tasked:/m);
+		expect(prd).not.toMatch(/^tasked:/m);
 		// It is the shared core's integrate commit (`tasking(<slug>): …; tasked`),
 		// not the lock's `tasking: release …` direct commit.
 		expect(arbiterHeadSubject(repo)).toMatch(/^tasking\(it\):/);
@@ -191,7 +191,7 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 describe('do prd: output through performIntegration — --propose opens a PR, main untouched', () => {
 	it('pushes the work branch + opens a PR carrying the tasks; does NOT touch main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 
 		// A recording `gh` stub (no real GitHub), injected as the GitHub provider
 		// INSTANCE (the provider is arbiter-derived now — the instance seam drives it).
@@ -223,27 +223,27 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 
-		// The tasks are NOT on main (propose does not land them); the brief body STAYS
-		// in brief/ on main (the lock is a ref now — it never moves the body; the PR
-		// carries the brief → brief-tasked move). NO tasking/ marker.
+		// The tasks are NOT on main (propose does not land them); the prd body STAYS
+		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
+		// carries the prd → prd-tasked move). NO tasking/ marker.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/briefs/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
 		// and propose does not land the tasks — main is still the seed commit.
 		expect(arbiterHeadSubject(repo)).not.toMatch(/tasked/);
 
-		// The work branch was PUSHED carrying the tasks + the brief restore.
+		// The work branch was PUSHED carrying the tasks + the prd restore.
 		expect(
-			onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
+			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
-		expect(
-			onArbiterBranch(repo, 'work/brief-it', 'work/briefs/tasked/it.md'),
-		).toBe(true);
-		expect(
-			onArbiterBranch(repo, 'work/brief-it', 'work/briefs/ready/it.md'),
-		).toBe(false);
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prds/tasked/it.md')).toBe(
+			true,
+		);
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prds/ready/it.md')).toBe(
+			false,
+		);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
 		const args = readFileSync(argsFile, 'utf8');
@@ -254,7 +254,7 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 });
 
 describe('do prd: arg parity with do task: (the SAME integrate-time args resolve)', () => {
-	// Arg PARITY by construction (AC #4): because `do brief:`'s output integrates
+	// Arg PARITY by construction (AC #4): because `do prd:`'s output integrates
 	// THROUGH the SAME `performIntegration` core `do task:` uses, every
 	// integrate-time arg resolves IDENTICALLY on both paths — there is no duplicated
 	// parser. A table over the integrate-MODE flag (`propose`/`merge`) proves the
@@ -273,7 +273,7 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 	for (const row of PARITY_TABLE) {
 		it(`--${row.mode} resolves to ${row.landsOnMain ? 'land-on-main' : 'no-main-touch'} on the do prd: path (shared core)`, async () => {
 			const {repo} = seedRepoWithArbiter(scratch.root, []);
-			seedBrief(repo, 'it');
+			seedPrd(repo, 'it');
 			const result = await performTask({
 				slug: 'it',
 				cwd: repo,
@@ -296,7 +296,7 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 				// Propose pushed the work branch carrying the tasks (the SAME branch
 				// `performIntegration` integrates on the build path).
 				expect(
-					onArbiterBranch(repo, 'work/brief-it', 'work/tasks/backlog/child.md'),
+					onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 				).toBe(true);
 			}
 		});
@@ -306,7 +306,7 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-forces-build-propose)', () => {
 	it('tasking an UNTRUSTED-origin PRD stamps every emitted task originTrust: untrusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBriefWithOrigin(repo, 'it', 'untrusted');
+		seedPrdWithOrigin(repo, 'it', 'untrusted');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -326,16 +326,16 @@ describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-f
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		// The agent's task carried NO origin stamp; the runner PROPAGATED the brief's.
+		// The agent's task carried NO origin stamp; the runner PROPAGATED the prd's.
 		expect(task).toMatch(/^origin: issue$/m);
 		expect(task).toMatch(/^originTrust: untrusted$/m);
-		// The agent-authored `brief:` link is preserved.
-		expect(task).toMatch(/^brief: it$/m);
+		// The agent-authored `prd:` link is preserved.
+		expect(task).toMatch(/^prd: it$/m);
 	});
 
 	it('a TRUSTED-origin PRD propagates originTrust: trusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBriefWithOrigin(repo, 'it', 'trusted');
+		seedPrdWithOrigin(repo, 'it', 'trusted');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -357,7 +357,7 @@ describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-f
 
 	it('an UNSTAMPED (human/local) PRD propagates NOTHING — the normal path is untouched', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it'); // no origin/originTrust stamp
+		seedPrd(repo, 'it'); // no origin/originTrust stamp
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,

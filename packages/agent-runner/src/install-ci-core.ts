@@ -1,5 +1,5 @@
 /**
- * The provider-agnostic CORE of the `install-ci` scaffolder (brief `runner-in-ci`,
+ * The provider-agnostic CORE of the `install-ci` scaffolder (prd `runner-in-ci`,
  * task `install-ci-core-and-github-adapter`; US #7/#10). `install-ci` is a
  * human-run, one-time SCAFFOLDER (mirrors whitesmith's `src/providers/github-ci.ts`):
  * it writes `.github/**` + a composite setup action + secrets so autonomous work

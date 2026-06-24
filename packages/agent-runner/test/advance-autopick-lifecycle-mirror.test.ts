@@ -45,7 +45,7 @@ function task(fm: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-function brief(fm: Record<string, string>): string {
+function prd(fm: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(fm)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -72,8 +72,8 @@ const WORK = {
 		'answered-task.md': task({slug: 'answered-task', needsAnswers: 'true'}),
 		'half-task.md': task({slug: 'half-task', needsAnswers: 'true'}),
 	},
-	brief: {
-		'answered-prd.md': brief({slug: 'answered-prd', needsAnswers: 'true'}),
+	prd: {
+		'answered-prd.md': prd({slug: 'answered-prd', needsAnswers: 'true'}),
 	},
 	observations: {
 		'open.md': obs({slug: 'open'}),
@@ -82,7 +82,7 @@ const WORK = {
 	questions: {
 		'task-answered-task.md': sidecar('task:answered-task', true),
 		'task-half-task.md': sidecar('task:half-task', false), // pending
-		'brief-answered-prd.md': sidecar('brief:answered-prd', true),
+		'prd-answered-prd.md': sidecar('prd:answered-prd', true),
 	},
 };
 
@@ -101,7 +101,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['brief:answered-prd', 'task:answered-task']);
+		).toEqual(['prd:answered-prd', 'task:answered-task']);
 	});
 
 	it('INTERIM born-OFF default: triage + surface EMPTY, apply still present (consume always-on)', async () => {
@@ -116,7 +116,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		expect(result.lifecycle.surface).toEqual([]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['brief:answered-prd', 'task:answered-task']);
+		).toEqual(['prd:answered-prd', 'task:answered-task']);
 	});
 });
 
@@ -186,7 +186,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			briefs: pool.briefs,
+			prds: pool.prds,
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

@@ -1,7 +1,7 @@
 ---
 title: Protocol — write the land-time re-verify invariant + human-reconcile warning (dual-write SOURCE + mirror)
 slug: protocol-land-time-reverify-invariant
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: [adr-land-primitive-rebase-reverify-advance]
 covers: [1, 2, 3]
 ---
@@ -9,7 +9,7 @@ covers: [1, 2, 3]
 ## What to build
 
 Add the land-time re-verify invariant to the protocol docs, and the
-human-reconcile WARNING (the resolution of OQ5 in the brief), as a single
+human-reconcile WARNING (the resolution of OQ5 in the prd), as a single
 dual-write change.
 
 Two facts to land in prose:
@@ -28,7 +28,7 @@ Two facts to land in prose:
    `git pull --rebase`, then re-run `verify` on the rebased tree BEFORE
    pushing. The runner path enforces this automatically; on the human path
    it is on you. (Warning, not a gate — the human path is deliberately
-   lighter.) Use the wording from the brief's Applied Answer q4 verbatim
+   lighter.) Use the wording from the prd's Applied Answer q4 verbatim
    unless it needs minor adaptation to match the surrounding doc voice.
 
 Per this repo's protocol-docs rule, EDIT THE SOURCE (`skills/setup/protocol/`)
@@ -59,8 +59,8 @@ AND MIRROR byte-identically into `work/protocol/`. Bump
 
 ## Prompt
 
-> Read `work/briefs/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
-> (or `briefs/ready/`) — especially Stories 1-3, the Solution section, and
+> Read `work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
+> (or `prds/ready/`) — especially Stories 1-3, the Solution section, and
 > Applied Answer q4 for the verbatim warning wording. Read this repo's
 > AGENTS.md "Protocol docs — edit the SOURCE, never `work/protocol/`" rule
 > before touching anything. Edit `skills/setup/protocol/WORK-CONTRACT.md`

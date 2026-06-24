@@ -72,26 +72,26 @@ describe('parseIntakeVerdict — the parse table', () => {
 		expect(v.taskBody).toBe('## What to build\n\nA --quiet flag.');
 	});
 
-	it('parses a `brief` verdict including the gate axes', () => {
+	it('parses a `prd` verdict including the gate axes', () => {
 		const output = [
 			'```json',
 			JSON.stringify({
-				outcome: 'brief',
-				briefSlug: 'big-feature',
-				briefTitle: 'A big coherent feature',
-				briefBody: '## Problem Statement\n\nIt is big.',
-				briefHumanOnly: true,
-				briefNeedsAnswers: true,
+				outcome: 'prd',
+				prdSlug: 'big-feature',
+				prdTitle: 'A big coherent feature',
+				prdBody: '## Problem Statement\n\nIt is big.',
+				prdHumanOnly: true,
+				prdNeedsAnswers: true,
 			}),
 			'```',
 		].join('\n');
 		const v = parseIntakeVerdict(output);
-		expect(v.outcome).toBe('brief');
-		expect(v.briefSlug).toBe('big-feature');
-		expect(v.briefTitle).toBe('A big coherent feature');
-		expect(v.briefBody).toBe('## Problem Statement\n\nIt is big.');
-		expect(v.briefHumanOnly).toBe(true);
-		expect(v.briefNeedsAnswers).toBe(true);
+		expect(v.outcome).toBe('prd');
+		expect(v.prdSlug).toBe('big-feature');
+		expect(v.prdTitle).toBe('A big coherent feature');
+		expect(v.prdBody).toBe('## Problem Statement\n\nIt is big.');
+		expect(v.prdHumanOnly).toBe(true);
+		expect(v.prdNeedsAnswers).toBe(true);
 	});
 
 	it('parses an `ask` verdict (question only)', () => {
@@ -135,9 +135,9 @@ describe('parseIntakeVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in {ask,task,brief,bounce}', () => {
+	it('THROWS on an outcome not in {ask,task,prd,bounce}', () => {
 		expect(() => parseIntakeVerdict('{"outcome":"merge"}')).toThrow(
-			/ask\|task\|brief\|bounce/,
+			/ask\|task\|prd\|bounce/,
 		);
 	});
 });
@@ -277,7 +277,7 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(onBranch).toContain('slug: add-quiet-flag');
 		expect(onBranch).toMatch(/^issue: 42$/m);
 		expect(onBranch).toContain('covers: []');
-		expect(onBranch).not.toMatch(/^brief:/m);
+		expect(onBranch).not.toMatch(/^prd:/m);
 		expect(onBranch).not.toContain('Fixes');
 		// The AGENT posted nothing itself (runner owns seams); on a SUCCESSFUL task the
 		// RUNNER posts exactly ONE informational `task created` completion comment.

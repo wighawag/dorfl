@@ -109,9 +109,9 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		);
 	}
 
-	/** A `needsAnswers: true` PRD in `work/briefs/ready/` (a declared blocker, no sidecar). */
-	function seedBlockedBrief(slug: string): void {
-		const dir = join(repo, 'work', 'briefs', 'ready');
+	/** A `needsAnswers: true` PRD in `work/prds/ready/` (a declared blocker, no sidecar). */
+	function seedBlockedPrd(slug: string): void {
+		const dir = join(repo, 'work', 'prds', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),
@@ -127,10 +127,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	}
 
 	/** An answered sidecar for `<namespace>:<slug>` (the APPLY/consume case). */
-	function seedAnsweredSidecar(
-		namespace: 'task' | 'brief',
-		slug: string,
-	): void {
+	function seedAnsweredSidecar(namespace: 'task' | 'prd', slug: string): void {
 		const item = `${namespace}:${slug}`;
 		const model = newSidecar(item, [{question: 'pick one?'}]);
 		model.entries[0].answer = 'yes';
@@ -192,7 +189,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 	});
 
 	it('on ⇒ a blocked PRD pool IS enumerated (auto-picked as prd:<slug>)', async () => {
-		seedBlockedBrief('blocked-brief');
+		seedBlockedPrd('blocked-prd');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -201,7 +198,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 			lifecycleGates: surfaceGateFor(true),
 			count: 5,
 		});
-		expect(args).toEqual(['brief:blocked-brief']);
+		expect(args).toEqual(['prd:blocked-prd']);
 	});
 
 	it('APPLY is NOT gated: an answered blocker sidecar is auto-picked + applied EVEN under surfaceBlockers off', async () => {

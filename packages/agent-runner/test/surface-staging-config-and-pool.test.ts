@@ -36,13 +36,13 @@ import {run} from '../src/git.js';
 
 /**
  * F2 — `surfaceStaging` (default true) opens the SURFACE polarity into STAGING
- * (`tasks/backlog/` + `briefs/proposed/`) without opening the BUILD polarity
- * (brief `staging-surface-and-apply-promote-safety`).
+ * (`tasks/backlog/` + `prds/proposed/`) without opening the BUILD polarity
+ * (prd `staging-surface-and-apply-promote-safety`).
  *
  * Covers the task acceptance set:
  *   (a) a `needsAnswers` task in `tasks/backlog/` appears in the surface pool
  *       under the default `true`;
- *   (b) a `needsAnswers` brief in `briefs/proposed/` appears under the default;
+ *   (b) a `needsAnswers` prd in `prds/proposed/` appears under the default;
  *   (c) both disappear under `surfaceStaging:false` (pool-only legacy);
  *   (d) BUILD/claim never sees staged items in EITHER mode (the trust model is
  *       untouched);
@@ -83,20 +83,17 @@ function seedPoolTask(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-function seedStagedBrief(
-	slug: string,
-	fm: {needsAnswers?: boolean} = {},
-): void {
-	const dir = join(repo, 'work', 'briefs', 'proposed');
+function seedStagedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
+	const dir = join(repo, 'work', 'prds', 'proposed');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	lines.push('---', '', '# brief');
+	lines.push('---', '', '# prd');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
 function seedSidecar(
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	answered: boolean,
 ): void {
@@ -135,14 +132,14 @@ describe('surfaceStaging:true (default) — staged needsAnswers items appear in 
 		expect(pools.apply).toEqual([]);
 	});
 
-	it('(b) a `needsAnswers` brief in briefs/proposed/ is a SURFACE candidate', () => {
-		seedStagedBrief('staged-brief', {needsAnswers: true});
+	it('(b) a `needsAnswers` prd in prds/proposed/ is a SURFACE candidate', () => {
+		seedStagedPrd('staged-prd', {needsAnswers: true});
 		const pools = gatherLifecycleInPlace({
 			repoPath: repo,
 			gates: {surface: true, surfaceStaging: true},
 		});
 		expect(pools.surface.map((i) => `${i.namespace}:${i.slug}`)).toContain(
-			'brief:staged-brief',
+			'prd:staged-prd',
 		);
 	});
 
@@ -154,22 +151,22 @@ describe('surfaceStaging:true (default) — staged needsAnswers items appear in 
 			JSON.stringify({surfaceBlockers: true}, null, 2),
 		);
 		seedStagedTask('staged-task', {needsAnswers: true});
-		seedStagedBrief('staged-brief', {needsAnswers: true});
+		seedStagedPrd('staged-prd', {needsAnswers: true});
 
 		const report = scanRepoPaths([repo], cfg({surfaceBlockers: true}));
 		const surface = report.repos[0].lifecycle.surface.map(
 			(i) => `${i.namespace}:${i.slug}`,
 		);
 		expect(surface).toEqual(
-			expect.arrayContaining(['task:staged-task', 'brief:staged-brief']),
+			expect.arrayContaining(['task:staged-task', 'prd:staged-prd']),
 		);
 	});
 });
 
 describe('surfaceStaging:false — staging is NOT inspected (legacy pool-only)', () => {
-	it('(c) staged task + brief disappear from the surface pool', () => {
+	it('(c) staged task + prd disappear from the surface pool', () => {
 		seedStagedTask('staged-task', {needsAnswers: true});
-		seedStagedBrief('staged-brief', {needsAnswers: true});
+		seedStagedPrd('staged-prd', {needsAnswers: true});
 		const pools = gatherLifecycleInPlace({
 			repoPath: repo,
 			gates: {surface: true, surfaceStaging: false},
@@ -184,7 +181,7 @@ describe('surfaceStaging:false — staging is NOT inspected (legacy pool-only)',
 			JSON.stringify({surfaceBlockers: true, surfaceStaging: false}, null, 2),
 		);
 		seedStagedTask('staged-task', {needsAnswers: true});
-		seedStagedBrief('staged-brief', {needsAnswers: true});
+		seedStagedPrd('staged-prd', {needsAnswers: true});
 
 		const report = scanRepoPaths([repo], cfg({surfaceBlockers: true}));
 		expect(report.repos[0].lifecycle.surface).toEqual([]);

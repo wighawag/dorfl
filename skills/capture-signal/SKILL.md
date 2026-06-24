@@ -13,7 +13,7 @@ The bucket _definitions_ are authoritative in [WORK-CONTRACT.md](work/protocol/W
 
 The hard part is not _how_ to write the note — it is _remembering to_ at the moment a signal appears. Fire this skill when, mid-task, you notice any of:
 
-- a **discrepancy / drift** (a doc contradicts the code; a task/brief assumes something no longer true; a dependency landed differently than assumed);
+- a **discrepancy / drift** (a doc contradicts the code; a task/prd assumes something no longer true; a dependency landed differently than assumed);
 - a **recurring tool/process failure** (the same error twice — yours or the system's; a wasted-round-trip pattern);
 - **surprising external/domain behaviour** you had to learn (an API's real behaviour, a protocol quirk) — verified ground truth;
 - an **out-of-scope idea/opportunity** ("we could also…") that would derail the current task;
@@ -28,7 +28,7 @@ If you catch yourself _narrating_ a signal in prose ("interesting — X keeps ha
 | --- | --- | --- |
 | spotted, **unverified** ("I noticed maybe-X") — INCLUDING agent/harness **conduct** signals | `work/notes/observations/<slug>.md` | append-only |
 | **verified external/domain** ground truth (a real API/protocol behaviour) | `work/notes/findings/<slug>.md` | accumulates |
-| a **proposed** enhancement, pre-brief ("we might build X") | `work/notes/ideas/<slug>.md` | editable |
+| a **proposed** enhancement, pre-prd ("we might build X") | `work/notes/ideas/<slug>.md` | editable |
 | a **decision WE made** + its why | `docs/adr/<slug>.md` | durable |
 | a **claimed item that got stuck** (gate red, conflict, ambiguity) | needs-attention (the runner marks its per-item lock `state: stuck`) | lock-ref state |
 

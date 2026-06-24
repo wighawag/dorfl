@@ -62,7 +62,7 @@ function spyExecutor(): {executor: RungExecutor; calls: string[]} {
 		calls,
 		executor: {
 			buildTask: record('build-task'),
-			taskBrief: record('task-brief'),
+			taskPrd: record('task-prd'),
 			triageObservation: record('triage-observation'),
 			surface: record('surface'),
 			apply: record('apply'),
@@ -113,18 +113,18 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(calls).toEqual(['build-task:task:feature']);
 	});
 
-	it('resolves prd:<slug> to the task-brief rung', async () => {
+	it('resolves prd:<slug> to the task-prd rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
-			arg: 'brief:autotask',
+			arg: 'prd:autotask',
 			cwd: repoPath(),
 			executor,
 			readSignals: () => ({needsAnswers: undefined, sidecar: undefined}),
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('task-brief');
-		expect(calls).toEqual(['task-brief:brief:autotask']);
+		expect(result.rung).toBe('task-prd');
+		expect(calls).toEqual(['task-prd:prd:autotask']);
 	});
 
 	it('resolves obs:<slug> (the NEW namespace) to the triage-observation rung', async () => {
@@ -143,7 +143,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 
 	it('a bare-slug task/PRD COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
-		writeItem('brief', 'auto-slice.md', {slug: 'auto-slice'});
+		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'auto-slice',
@@ -184,7 +184,7 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 					order.push('execute');
 					return {exitCode: 0, outcome: 'advanced', message: 'built'};
 				},
-				taskBrief: async () => ({
+				taskPrd: async () => ({
 					exitCode: 0,
 					outcome: 'advanced',
 					message: '',

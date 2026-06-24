@@ -32,7 +32,7 @@ import {run} from '../src/git.js';
  *     (active + non-terminal) lock, even with the flag;
  *   - a concurrent change to a lock ref makes its leased delete REJECT (reported,
  *     `lost`), never `--force`;
- *   - it covers all four terminals (task done/cancelled, brief tasked/dropped);
+ *   - it covers all four terminals (task done/cancelled, prd tasked/dropped);
  *   - the default report-only path (`reportItemLocks`) still deletes nothing (proven
  *     in `release-lock-and-gc-stuck-report.test.ts`).
  */
@@ -200,7 +200,7 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 		expect(text).toMatch(/reaped 1/);
 	});
 
-	it('covers all four terminals (task done/cancelled, brief tasked/dropped)', async () => {
+	it('covers all four terminals (task done/cancelled, prd tasked/dropped)', async () => {
 		const cases: Array<{
 			item: string;
 			action: 'implement' | 'task';
@@ -220,16 +220,16 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 				entry: 'task-t-cancelled',
 			},
 			{
-				item: 'brief:b-tasked',
+				item: 'prd:b-tasked',
 				action: 'task',
-				folder: 'briefs-tasked',
-				entry: 'brief-b-tasked',
+				folder: 'prds-tasked',
+				entry: 'prd-b-tasked',
 			},
 			{
-				item: 'brief:b-dropped',
+				item: 'prd:b-dropped',
 				action: 'task',
-				folder: 'briefs-dropped',
-				entry: 'brief-b-dropped',
+				folder: 'prds-dropped',
+				entry: 'prd-b-dropped',
 			},
 		];
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['t-done']);

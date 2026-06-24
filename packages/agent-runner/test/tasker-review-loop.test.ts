@@ -159,8 +159,8 @@ describe('runTaskReviewLoop — converging (findings → edits → clean)', () =
 
 	it('REFUSES an edit outside work/tasks/backlog/ (defensive scope fence)', async () => {
 		seedCandidate('child');
-		const escaped = join(cwd, 'work', 'briefs', 'ready', 'it.md');
-		mkdirSync(join(cwd, 'work', 'briefs', 'ready'), {recursive: true});
+		const escaped = join(cwd, 'work', 'prds', 'ready', 'it.md');
+		mkdirSync(join(cwd, 'work', 'prds', 'ready'), {recursive: true});
 		writeFileSync(escaped, 'original PRD');
 		await runTaskReviewLoop({
 			slug: 'it',
@@ -169,7 +169,7 @@ describe('runTaskReviewLoop — converging (findings → edits → clean)', () =
 				{
 					verdict: 'block',
 					findings: [{severity: 'blocking', question: 'x'}],
-					edits: [{path: 'work/briefs/ready/it.md', content: 'HIJACKED'}],
+					edits: [{path: 'work/prds/ready/it.md', content: 'HIJACKED'}],
 				},
 				{verdict: 'approve', findings: []},
 			]),
@@ -363,7 +363,7 @@ describe('runTaskReviewLoop — taskerLoopMax cap rejects via the sink', () => {
 			taskerLoopMax: 2,
 		});
 		expect(result.outcome).toBe('decomposition-unclear');
-		expect(result.briefQuestions).toEqual(['should this even be one PRD?']);
+		expect(result.prdQuestions).toEqual(['should this even be one PRD?']);
 		// No uncertain tasks emitted on this outcome.
 		expect(result.uncertainTasks).toEqual([]);
 	});

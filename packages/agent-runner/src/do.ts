@@ -129,14 +129,14 @@ export type DoOutcome =
 	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'tasked' // `do brief:<slug>` — the brief was tasked into work/backlog/ (runner-owned)
-	| 'gate-refused' // `do brief:<slug>` — the tasking gate refused (honest skip)
-	| 'stale'; // `do brief:<slug>` — the held brief was edited under the lock (stale tasking)
+	| 'tasked' // `do prd:<slug>` — the prd was tasked into work/backlog/ (runner-owned)
+	| 'gate-refused' // `do prd:<slug>` — the tasking gate refused (honest skip)
+	| 'stale'; // `do prd:<slug>` — the held prd was edited under the lock (stale tasking)
 
 export interface DoResult {
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: DoOutcome;
-	/** The resolved bare slug acted on (task or brief), when one was resolved. */
+	/** The resolved bare slug acted on (task or prd), when one was resolved. */
 	slug?: string;
 	/** The work branch the run operated on, when one was created/switched-to. */
 	branch?: string;
@@ -170,7 +170,7 @@ export type DoAgentRunner = (input: {
 };
 
 export interface DoOptions {
-	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `brief:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `prd:<slug>`. */
 	arg: string;
 	/** The working clone/checkout to run in-place in. */
 	cwd: string;
@@ -186,10 +186,10 @@ export interface DoOptions {
 	/**
 	 * Per-repo `autoTask` policy (resolved by `autoslice-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
-	 * (`do-autopick.ts`'s taskable-brief pool): "may an agent auto-task an
-	 * UNDECLARED brief in this repo?". An EXPLICITLY-named `do brief:<slug>` tasks
+	 * (`do-autopick.ts`'s taskable-prd pool): "may an agent auto-task an
+	 * UNDECLARED prd in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
-	 * `performTask` — naming the brief IS the authorization, exactly as `do <task>`
+	 * `performTask` — naming the prd IS the authorization, exactly as `do <task>`
 	 * builds regardless of `autoBuild`). Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
@@ -204,7 +204,7 @@ export interface DoOptions {
 	promptGuidance?: PromptGuidance;
 	/**
 	 * **The tasker review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
-	 * consumed ONLY by the `do brief:<slug>` tasking path — after the agent produces
+	 * consumed ONLY by the `do prd:<slug>` tasking path — after the agent produces
 	 * candidate tasks, run the `review` SKILL as a review→edit→re-review loop that
 	 * improves them, routing the verdict through the needsAnswers / needs-attention
 	 * sink. Ignored by the task-build path. Omitted ⇒ no loop (candidate tasks land
@@ -233,20 +233,20 @@ export interface DoOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`). Consumed ONLY by the `do brief:<slug>` tasking path: the
+	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` tasking path: the
 	 * value threaded into {@link performTask} is `taskingIntegration ?? integration`,
 	 * so an unset override is byte-for-byte today's behaviour (tasking uses
 	 * `integration`). The task-BUILD path ALWAYS threads `integration` (never this
 	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
 	 * layer sets `integration` AND `taskingIntegration` to the typed mode — see
-	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, brief}` resolver.
+	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, prd}` resolver.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (brief
+	 * **The per-repo TASK-PLACEMENT default** (prd
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
-	 * the `do brief:<slug>` tasking path: the value is fed as the
+	 * the `do prd:<slug>` tasking path: the value is fed as the
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
 	 * `taskingIntegration` (flag > env > per-repo > global > built-in
@@ -311,7 +311,7 @@ export interface DoOptions {
 	 */
 	providerInstance?: ReviewProvider;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`):
+	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`):
 	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
 	 * `do`/`complete` pipeline, so CI inherits it for free). When `review` is on,
 	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
@@ -325,7 +325,7 @@ export interface DoOptions {
 	reviewGate?: ReviewGate;
 	/**
 	 * **The task-SET ACCEPTANCE GATE seam** (task `slice-acceptance-gate`):
-	 * consumed ONLY by the `do brief:<slug>` tasking path. When `review` resolves on,
+	 * consumed ONLY by the `do prd:<slug>` tasking path. When `review` resolves on,
 	 * a fresh-context review of the produced task SET runs BEFORE the tasks
 	 * integrate (riding `performIntegration`'s review block); `block` routes the set
 	 * to needs-attention, `approve` lets it integrate. It rides the SAME BUILD
@@ -429,7 +429,7 @@ interface DoAgentLaunchOptions {
  * there is no checkout, so the worktree is materialised under `workspacesDir`.
  */
 export interface DoRemoteOptions extends DoAgentLaunchOptions {
-	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `brief:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `prd:<slug>`. */
 	arg: string;
 	/**
 	 * The registered remote spec/URL to run against (`do --remote <r>`). Resolved
@@ -449,12 +449,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	arbiter?: string;
 	/**
 	 * Per-repo `autoTask` policy — gates the AUTO-PICK / pool path only. An
-	 * EXPLICITLY-named `do --remote brief:<slug>` tasks regardless of it (the
+	 * EXPLICITLY-named `do --remote prd:<slug>` tasks regardless of it (the
 	 * dispatch passes `explicit: true`), mirroring `do <task>` vs `autoBuild`.
 	 * Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
-	/** The tasker review→edit→converge loop seam — `do --remote brief:<slug>` path only (see {@link DoOptions.reviewLoop}). */
+	/** The tasker review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: TaskReviewGate;
 	/** The tasker improver loop's `taskerLoopMax` cap. Loop only. */
 	taskerLoopMax?: number;
@@ -471,22 +471,22 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`) on the `do --remote brief:<slug>` path: threaded into
+	 * `taskingIntegration`) on the `do --remote prd:<slug>` path: threaded into
 	 * {@link performTask} as `taskingIntegration ?? integration`. Unset ⇒ tasking
 	 * uses `integration` (today's behaviour); the task-BUILD path always threads
 	 * `integration`. See {@link DoOptions.taskingIntegration}.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (brief
+	 * **The per-repo TASK-PLACEMENT default** (prd
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
-	 * brief:<slug>` path: threaded into {@link performTask} as the
+	 * prd:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
 	tasksLandIn?: 'pre-backlog' | 'todo';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
-	 * brief:` path. See {@link DoOptions.explicitTasksLandIn}.
+	 * prd:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
 	explicitTasksLandIn?: 'pre-backlog' | 'todo';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
@@ -531,7 +531,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
-	/** The task-SET ACCEPTANCE GATE seam — `do --remote brief:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
+	/** The task-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
 	taskReviewGate?: ReviewGate;
 	/** Override the read seam (slug resolution); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
@@ -544,7 +544,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * Map a `do brief:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
+ * Map a `do prd:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
  * contract: outcomes pass through (tasked / gate-refused / stale / agent-failed /
  * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
  * (exit 3) by its exit code, and the tasking-only exit 4 (stale) is reported on
@@ -578,7 +578,7 @@ function taskResultToDoResult(tasked: TaskResult): DoResult {
 			break;
 		case 'needs-attention':
 			// The tasker review→edit loop found the decomposition unclear and routed the
-			// brief to needs-attention (no guessed tasks). Same exit class as a stuck
+			// prd to needs-attention (no guessed tasks). Same exit class as a stuck
 			// build (1).
 			outcome = 'needs-attention';
 			exitCode = 1;
@@ -642,8 +642,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	}
 
 	// 1. Resolve the slug across BOTH namespaces — `do` is the ONE command that
-	//    spans them (ADR §3a): bare → task (after a no-brief-collision check;
-	//    ERROR on collision), `task:`/`brief:` explicit. A collision / resolution
+	//    spans them (ADR §3a): bare → task (after a no-prd-collision check;
+	//    ERROR on collision), `task:`/`prd:` explicit. A collision / resolution
 	//    failure is a loud usage error (exit 1).
 	let resolved;
 	try {
@@ -660,24 +660,24 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
-	// 2. `do brief:<slug>` → the brief-TASKING path (`autoslice-command`): the in-place
+	// 2. `do prd:<slug>` → the prd-TASKING path (`autoslice-command`): the in-place
 	//    `do` worker is AUTONOMOUS, so it tasks as the AGENT (gate-bound + lock).
 	//    The orchestration (gate → lock → to-task harness → runner-owned commit)
-	//    lives in `tasking.ts`; `do` dispatches `brief:` here. The agent only writes
+	//    lives in `tasking.ts`; `do` dispatches `prd:` here. The agent only writes
 	//    task files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the task-build pipeline below.
-	if (resolved.namespace === 'brief') {
+	if (resolved.namespace === 'prd') {
 		const tasked = await performTask({
 			slug: resolved.slug,
 			cwd,
 			arbiter,
 			doer: 'agent',
 			autoTask: options.autoTask,
-			// EXPLICIT dispatch: a `do brief:<slug>` target was NAMED (the operator typed
+			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
 			// it, or the auto-pick POOL already filtered it on `autoTask` before
 			// dispatching here — the single policy-enforcement point). So the tasking gate
-			// drops the `autoTask` policy term and binds only the brief's own readiness
-			// (`humanOnly`/`needsAnswers`) + `briefAfter`, EXACTLY as `do <task>` builds a
+			// drops the `autoTask` policy term and binds only the prd's own readiness
+			// (`humanOnly`/`needsAnswers`) + `prdAfter`, EXACTLY as `do <task>` builds a
 			// named task regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
 			explicit: true,
@@ -702,14 +702,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// precedence`). The tasker reads them as the configured-default + the
 			// top rung of the runner-deterministic placement resolver; the
 			// `originTrust: untrusted` force is read inside the tasker from the
-			// brief's stamped frontmatter.
+			// prd's stamped frontmatter.
 			tasksLandIn: options.tasksLandIn,
 			explicitTasksLandIn: options.explicitTasksLandIn,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			// The tasker review→edit→converge loop (slicer-review-edit-loop): improves the
 			// candidate tasks in place + routes the verdict through the needsAnswers /
-			// needs-attention sink. Threaded only on the `do brief:` path; omitted ⇒ no loop.
+			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
 			reviewLoop: options.reviewLoop,
 			taskerLoopMax: options.taskerLoopMax,
 			reviewExecutions: options.reviewExecutions,
@@ -954,7 +954,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	// 5. Run the agent autonomously in the checkout, ON the work branch — the
 	//    SAME prompt assembly `agent-runner prompt` emits (canonical wrapper +
-	//    source brief + the task's ## Prompt). The agent only edits code (it does
+	//    source prd + the task's ## Prompt). The agent only edits code (it does
 	//    no git). This is the one NEW middle step `ar-run.sh` shelled out for
 	//    (`prompt | pi`).
 	//    The post-claim pipeline reads the uniform `IsolatedTree` handle (`tree.dir`)
@@ -986,14 +986,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
-		// Per-item override layer: a task or brief may pin `promptGuidance.testFirst`
+		// Per-item override layer: a task or prd may pin `promptGuidance.testFirst`
 		// in its frontmatter, superseding the resolved repo policy for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd: tree.dir,
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
+		prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
 			cwd: tree.dir,
 			continueContext,
 			promptGuidance: itemGuidance,
@@ -1786,7 +1786,7 @@ export async function performDoRemote(
 	try {
 		// 2a. Resolve the slug across BOTH namespaces against the claim clone (it
 		//     carries `work/` from the mirror's main). A collision / resolution
-		//     failure is a loud usage error; a `brief:` arg reaches the not-yet-wired
+		//     failure is a loud usage error; a `prd:` arg reaches the not-yet-wired
 		//     stub — identical behaviour to in-place `do`.
 		let resolved;
 		try {
@@ -1803,11 +1803,11 @@ export async function performDoRemote(
 			return {exitCode: 1, outcome: 'usage-error', message};
 		}
 
-		if (resolved.namespace === 'brief') {
-			// `do --remote brief:<slug>`: task the brief as the AGENT, against the claim
+		if (resolved.namespace === 'prd') {
+			// `do --remote prd:<slug>`: task the prd as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
 			// mirror's main). No job worktree is needed — the tasking transition is a
-			// runner-owned `brief → tasking → brief` move + emit-backlog on the arbiter, not
+			// runner-owned `prd → tasking → prd` move + emit-backlog on the arbiter, not
 			// a build pipeline. The agent only writes task files; the runner does all git.
 			const tasked = await performTask({
 				slug: resolved.slug,
@@ -1815,10 +1815,10 @@ export async function performDoRemote(
 				arbiter: 'origin',
 				doer: 'agent',
 				autoTask: options.autoTask,
-				// EXPLICIT dispatch (same as the in-place path above): the `brief:<slug>` was
+				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
-				// tasking gate drops the policy term — only the brief's own readiness +
-				// `briefAfter` bind, mirroring the build path vs `autoBuild`.
+				// tasking gate drops the policy term — only the prd's own readiness +
+				// `prdAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				agentRunner: options.agentRunner,
 				harness: options.harness,
@@ -1829,22 +1829,22 @@ export async function performDoRemote(
 				// `provider` is the SAME the task-build path threads (arg parity), but the
 				// MODE is the per-TRANSITION TASKING resolution
 				// (`per-transition-integration-mode-slicing-vs-build`):
-				// `taskingIntegration ?? integration`, so the `--remote brief:` output ALSO
+				// `taskingIntegration ?? integration`, so the `--remote prd:` output ALSO
 				// routes through the shared core with the tasking-resolved mode.
 				integration: options.taskingIntegration ?? options.integration,
 				// The per-repo TASK-PLACEMENT default + the operator's explicit
 				// override (task `runner-deterministic-slice-placement-policy-and-
-				// precedence`). Same threading as the in-place `do brief:` path.
+				// precedence`). Same threading as the in-place `do prd:` path.
 				tasksLandIn: options.tasksLandIn,
 				explicitTasksLandIn: options.explicitTasksLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
-				// The tasker review→edit→converge loop on the `do --remote brief:` path too.
+				// The tasker review→edit→converge loop on the `do --remote prd:` path too.
 				reviewLoop: options.reviewLoop,
 				taskerLoopMax: options.taskerLoopMax,
 				reviewExecutions: options.reviewExecutions,
 				taskerLoopModel: options.taskerLoopModel,
-				// The task-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
+				// The task-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
 				review: options.review,
 				reviewGate: options.taskReviewGate,
 				acceptanceReviewModel: options.reviewModel,
@@ -2136,14 +2136,14 @@ async function runRemotePipeline(
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
-		// Per-item override layer (mirrors in-place `do`): the task/brief frontmatter
+		// Per-item override layer (mirrors in-place `do`): the task/prd frontmatter
 		// may override the resolved repo `promptGuidance.testFirst` for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd,
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
+		prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
 			cwd,
 			continueContext,
 			promptGuidance: itemGuidance,
@@ -2441,7 +2441,7 @@ async function primeWorktreeTrackingRef(
  * identity) ride VERBATIM from the threaded `DoOptions` onto the structurally-
  * matching {@link DoRemoteOptions} fields; `cwd` is DROPPED (the worktree replaces
  * it) and `remote` + `workspacesDir` are supplied from this driver's closure (the
- * mirror's arbiter URL + the agents' execution area). A `brief:` arg flows through
+ * mirror's arbiter URL + the agents' execution area). A `prd:` arg flows through
  * unchanged — `performDoRemote` tasks it against the claim clone with NO build
  * worktree (the tasking/surface/triage/apply rungs are tree-less ledger moves, the
  * substrate the task's criterion 4 preserves).

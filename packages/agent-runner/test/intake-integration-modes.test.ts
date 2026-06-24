@@ -7,13 +7,13 @@ import {
 /**
  * `intake-per-outcome-integration-modes` (PRD `issue-intake`, US #9): the PURE
  * per-outcome integration mode resolution. Because `intake` decides the artifact
- * TYPE (task vs brief) at RUNTIME, a single `--merge`/`--propose` cannot express a
- * type-conditional policy ("merge a brief but propose a task") — hence the four
+ * TYPE (task vs prd) at RUNTIME, a single `--merge`/`--propose` cannot express a
+ * type-conditional policy ("merge a prd but propose a task") — hence the four
  * GRANULAR flags layered over the two AGGREGATES. This is the unit-test target: a
  * resolution TABLE over the flag set → both per-type modes.
  *
- * The canonical rule (the source of truth: `work/briefs/tasked/issue-intake.md`):
- * - granular: `--merge-brief`/`--propose-brief` (brief), `--merge-task`/`--propose-task`
+ * The canonical rule (the source of truth: `work/prds/tasked/issue-intake.md`):
+ * - granular: `--merge-prd`/`--propose-prd` (prd), `--merge-task`/`--propose-task`
  *   (task);
  * - aggregates: `--merge` = both-merge, `--propose` = both-propose;
  * - GRANULAR OVERRIDES AGGREGATE;
@@ -30,7 +30,7 @@ const both = (
 	mode: IntakeIntegrationModes['task'],
 ): IntakeIntegrationModes => ({
 	task: mode,
-	brief: mode,
+	prd: mode,
 });
 
 describe('resolveIntakeIntegrationModes — the per-outcome resolution table', () => {
@@ -48,52 +48,52 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	it('--merge-brief routes per type: merges a brief, leaves a task at the default', () => {
-		expect(resolveIntakeIntegrationModes({mergeBrief: true})).toEqual({
-			brief: 'merge',
+	it('--merge-prd routes per type: merges a prd, leaves a task at the default', () => {
+		expect(resolveIntakeIntegrationModes({mergePrd: true})).toEqual({
+			prd: 'merge',
 			task: 'propose',
 		});
 	});
 
-	it('--merge-task routes per type: merges a task, leaves a brief at the default', () => {
+	it('--merge-task routes per type: merges a task, leaves a prd at the default', () => {
 		expect(resolveIntakeIntegrationModes({mergeTask: true})).toEqual({
-			brief: 'propose',
+			prd: 'propose',
 			task: 'merge',
 		});
 	});
 
-	it('--propose-brief over the default propose is still propose for the brief', () => {
-		expect(resolveIntakeIntegrationModes({proposeBrief: true})).toEqual(
+	it('--propose-prd over the default propose is still propose for the prd', () => {
+		expect(resolveIntakeIntegrationModes({proposePrd: true})).toEqual(
 			both('propose'),
 		);
 	});
 
-	it('GRANULAR OVERRIDES AGGREGATE: --merge --propose-task ⇒ brief merge, task propose', () => {
+	it('GRANULAR OVERRIDES AGGREGATE: --merge --propose-task ⇒ prd merge, task propose', () => {
 		expect(
 			resolveIntakeIntegrationModes({merge: true, proposeTask: true}),
-		).toEqual({brief: 'merge', task: 'propose'});
+		).toEqual({prd: 'merge', task: 'propose'});
 	});
 
-	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-brief ⇒ brief merge, task propose', () => {
+	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-prd ⇒ prd merge, task propose', () => {
 		expect(
-			resolveIntakeIntegrationModes({propose: true, mergeBrief: true}),
-		).toEqual({brief: 'merge', task: 'propose'});
+			resolveIntakeIntegrationModes({propose: true, mergePrd: true}),
+		).toEqual({prd: 'merge', task: 'propose'});
 	});
 
 	it('both granular flags override the aggregate on BOTH axes', () => {
 		expect(
 			resolveIntakeIntegrationModes({
 				merge: true,
-				proposeBrief: true,
+				proposePrd: true,
 				proposeTask: true,
 			}),
 		).toEqual(both('propose'));
 	});
 
-	it('same-type-both on the BRIEF axis (--merge-brief --propose-brief) is a usage ERROR', () => {
+	it('same-type-both on the PRD axis (--merge-prd --propose-prd) is a usage ERROR', () => {
 		expect(() =>
-			resolveIntakeIntegrationModes({mergeBrief: true, proposeBrief: true}),
-		).toThrow(/--merge-brief and --propose-brief are mutually exclusive/i);
+			resolveIntakeIntegrationModes({mergePrd: true, proposePrd: true}),
+		).toThrow(/--merge-prd and --propose-prd are mutually exclusive/i);
 	});
 
 	it('same-type-both on the TASK axis (--merge-task --propose-task) is a usage ERROR', () => {
@@ -115,7 +115,7 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		// A granular flag still overrides that config default for its own type.
 		expect(resolveIntakeIntegrationModes({proposeTask: true}, 'merge')).toEqual(
 			{
-				brief: 'merge',
+				prd: 'merge',
 				task: 'propose',
 			},
 		);
@@ -127,7 +127,7 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 
 	// `per-transition-integration-mode-slicing-vs-build`: the NEW `taskingIntegration`
 	// key is a DIFFERENT resolver (per-LIFECYCLE-TRANSITION, inside the trust
-	// boundary), NOT intake's per-EMITTED-TYPE `{task, brief}` (front door,
+	// boundary), NOT intake's per-EMITTED-TYPE `{task, prd}` (front door,
 	// author-trust). intake's resolver takes a FLAT `IntegrationMode` default (the
 	// CLI passes `config.integration`, never `config.taskingIntegration`), so it is
 	// structurally independent of the new key.

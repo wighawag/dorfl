@@ -55,36 +55,36 @@ function seedDone(slug: string): void {
 	writeFileSync(join(dir, `${slug}.md`), `---\nslug: ${slug}\n---\n`);
 }
 
-/** Seed a `work/briefs/ready/<slug>.md` PRD with the given gate frontmatter. */
-function seedBrief(
+/** Seed a `work/prds/ready/<slug>.md` PRD with the given gate frontmatter. */
+function seedPrd(
 	slug: string,
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		briefAfter?: string[];
+		prdAfter?: string[];
 	} = {},
 ): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.briefAfter) lines.push(`briefAfter: [${fm.briefAfter.join(', ')}]`);
+	if (fm.prdAfter) lines.push(`prdAfter: [${fm.prdAfter.join(', ')}]`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
 /**
- * Seed a TASKED PRD as RESIDENCE in `work/briefs/tasked/` (the source of truth for
+ * Seed a TASKED PRD as RESIDENCE in `work/prds/tasked/` (the source of truth for
  * tasked-ness, task `prd-sliced-folder-step-a`) — it has left the to-task pool
- * (`work/briefs/ready/`) and now resolves another PRD's `briefAfter` by FOLDER residence
+ * (`work/prds/ready/`) and now resolves another PRD's `prdAfter` by FOLDER residence
  * (the `tasked:` marker was removed in `remove-sliced-marker-step-b`).
  */
-function seedTaskedBrief(slug: string): void {
-	const fromDir = join(repo, 'work', 'briefs', 'ready');
+function seedTaskedPrd(slug: string): void {
+	const fromDir = join(repo, 'work', 'prds', 'ready');
 	const from = join(fromDir, `${slug}.md`);
 	rmSync(from, {force: true});
-	const dir = join(repo, 'work', 'briefs', 'tasked');
+	const dir = join(repo, 'work', 'prds', 'tasked');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -166,7 +166,7 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 	it('auto-picks the first eligible TASK when tasks exist', async () => {
 		seedTask('alpha');
 		seedTask('beta');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
@@ -176,12 +176,12 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 
 	it('auto-picks a PRD (do prd:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
 		// the PRD dispatches to the `do prd:` path (prefixed arg).
-		expect(args).toEqual(['brief:gamma']);
+		expect(args).toEqual(['prd:gamma']);
 	});
 
 	it('an empty backlog + no taskable PRD is NOT a failure (exit 0, nothing run)', async () => {
@@ -196,8 +196,8 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 	it('takes x items, tasks first then PRDs, in order', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
-		seedBrief('delta');
+		seedPrd('gamma');
+		seedPrd('delta');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),
@@ -206,13 +206,13 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'brief:delta', 'brief:gamma']);
+		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
 	});
 
 	it('-n bounds the count (does not over-take)', async () => {
 		seedTask('alpha');
 		seedTask('beta');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 2});
 		expect(args).toEqual(['alpha', 'beta']); // count caps at 2; PRD untouched
@@ -222,13 +222,13 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 	it('runs the named items in sequence (no pool/priority), arg passed verbatim', async () => {
 		const {run, args} = recordingRunner();
-		const result = await performDoArgs(['beta', 'task:alpha', 'brief:gamma'], {
+		const result = await performDoArgs(['beta', 'task:alpha', 'prd:gamma'], {
 			...base(run),
 			config: cfg(),
 		});
 		expect(result.exitCode).toBe(0);
 		// verbatim + in the operator's order (performDo does its own slug resolve).
-		expect(args).toEqual(['beta', 'task:alpha', 'brief:gamma']);
+		expect(args).toEqual(['beta', 'task:alpha', 'prd:gamma']);
 	});
 
 	it('reports a non-zero exit when one named item fails (first failure surfaces)', async () => {
@@ -256,7 +256,7 @@ describe('do <a> <b> — explicit multi-arg, in the GIVEN order', () => {
 describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 	it('default (drain): an eligible TASK outranks a taskable PRD', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 1});
 		expect(args).toEqual(['alpha']);
@@ -264,22 +264,22 @@ describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 
 	it('[task, build, ...] (== old prdsFirst:true): a taskable PRD outranks an eligible task', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		await performDoAuto({
 			...base(run),
 			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 1,
 		});
-		expect(args).toEqual(['brief:gamma']);
+		expect(args).toEqual(['prd:gamma']);
 	});
 
 	it('the FULL ordering flips with the order (all tasks vs all PRDs)', async () => {
 		seedTask('alpha');
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const off = recordingRunner();
 		await performDoAuto({...base(off.run), config: cfg(), count: 9});
-		expect(off.args).toEqual(['alpha', 'brief:gamma']);
+		expect(off.args).toEqual(['alpha', 'prd:gamma']);
 
 		const on = recordingRunner();
 		await performDoAuto({
@@ -287,13 +287,13 @@ describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 9,
 		});
-		expect(on.args).toEqual(['brief:gamma', 'alpha']);
+		expect(on.args).toEqual(['prd:gamma', 'alpha']);
 	});
 });
 
 describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 	it('autoTask OFF ⇒ no PRD is selected even with no tasks', async () => {
-		seedBrief('gamma');
+		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),
@@ -304,33 +304,33 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('a humanOnly / needsAnswers PRD is excluded; a briefAfter-blocked one too', async () => {
-		seedBrief('human', {humanOnly: true});
-		seedBrief('asks', {needsAnswers: true});
-		seedBrief('beta', {briefAfter: ['alpha']}); // alpha not tasked
-		seedBrief('ready'); // the only taskable one
+	it('a humanOnly / needsAnswers PRD is excluded; a prdAfter-blocked one too', async () => {
+		seedPrd('human', {humanOnly: true});
+		seedPrd('asks', {needsAnswers: true});
+		seedPrd('beta', {prdAfter: ['alpha']}); // alpha not tasked
+		seedPrd('ready'); // the only taskable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
-		expect(args).toEqual(['brief:ready']);
+		expect(args).toEqual(['prd:ready']);
 	});
 
-	it('a briefAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
+	it('a prdAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
 		// beta's blocker alpha is UNTASKED ⇒ beta is excluded (alpha itself is
 		// taskable: the gate does not exclude an untasked PRD).
-		seedBrief('alpha');
-		seedBrief('beta', {briefAfter: ['alpha']});
+		seedPrd('alpha');
+		seedPrd('beta', {prdAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
-		expect(blocked.args).toEqual(['brief:alpha']);
+		expect(blocked.args).toEqual(['prd:alpha']);
 
-		// Move alpha into `work/briefs/tasked/` (the source of truth for tasked-ness) ⇒
-		// beta's briefAfter is satisfied (resolved against FOLDER residence) and beta
+		// Move alpha into `work/prds/tasked/` (the source of truth for tasked-ness) ⇒
+		// beta's prdAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-task pool (it now rests in
 		// prd-tasked/), so only beta is selectable.
-		seedTaskedBrief('alpha');
+		seedTaskedPrd('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
-		expect(unblocked.args).toEqual(['brief:beta']);
+		expect(unblocked.args).toEqual(['prd:beta']);
 	});
 
 	it('blocked task is excluded from the task pool (existing eligibility path)', async () => {

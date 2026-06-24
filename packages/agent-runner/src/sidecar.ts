@@ -2,7 +2,7 @@ import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **question/answer SIDECAR contract** (brief `advance-loop`, task
+ * The **question/answer SIDECAR contract** (prd `advance-loop`, task
  * `advance-sidecar-contract`) — the one genuinely-new piece of the `advance`
  * family. A strict, tooling-OWNED per-item file `work/questions/<type>-<slug>.md`
  * carrying per-entry answered-state, so the tooling fully owns the Q&A artifact
@@ -67,14 +67,14 @@ import {workItemRel} from './work-layout.js';
  */
 
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
-export type SidecarType = 'brief' | 'task' | 'observation';
+export type SidecarType = 'prd' | 'task' | 'observation';
 
 /**
  * The optional triage/terminal routing an answered triage entry carries.
  *
  * `dropped` is the GENERIC "won't-proceed" terminal — it routes the item to its
- * per-regime terminal (`work/tasks/cancelled/` for a task, `work/briefs/dropped/`
- * for a brief; the flat top-level `work/dropped/` was retired by the
+ * per-regime terminal (`work/tasks/cancelled/` for a task, `work/prds/dropped/`
+ * for a prd; the flat top-level `work/dropped/` was retired by the
  * `folder-taxonomy-reorg-and-rename` migration as a slug-collision fix). It
  * GENERALISES the previous `out-of-scope` disposition: the specific REASON an
  * item was dropped (`superseded by <x>` / `out-of-scope` / `duplicate` /
@@ -116,7 +116,7 @@ export interface SidecarEntry {
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
 export interface SidecarModel {
-	/** The NAMESPACED identity (`brief:autotask`, `task:foo`, `observation:bar`). */
+	/** The NAMESPACED identity (`prd:autotask`, `task:foo`, `observation:bar`). */
 	item: string;
 	/** The item type (redundant with the filename; explicit for the parser). */
 	type: SidecarType;
@@ -165,7 +165,7 @@ export function allAnswered(model: SidecarModel): boolean {
 }
 
 const TYPE_TO_NAMESPACE: Record<SidecarType, string> = {
-	brief: 'brief',
+	prd: 'prd',
 	task: 'task',
 	observation: 'observation',
 };
@@ -175,13 +175,13 @@ function typeForNamespace(
 	explicit: SlugNamespace | undefined,
 	rawPrefix: string,
 ): SidecarType {
-	if (explicit === 'brief') {
-		return 'brief';
+	if (explicit === 'prd') {
+		return 'prd';
 	}
 	if (explicit === 'task') {
 		return 'task';
 	}
-	// `parseSlugArg` only knows `task:`/`brief:`; the sidecar adds the
+	// `parseSlugArg` only knows `task:`/`prd:`; the sidecar adds the
 	// `observation:` namespace (`obs:` is the CLI alias the verb resolves; the
 	// sidecar stores the canonical `observation`). A bare slug (no prefix)
 	// defaults to the task namespace, matching the resolver's "bare = task".
@@ -200,10 +200,10 @@ export interface SidecarIdentity {
 }
 
 /**
- * Resolve a namespaced-identity argument (`brief:autotask`, `task:foo`,
+ * Resolve a namespaced-identity argument (`prd:autotask`, `task:foo`,
  * `observation:bar`, `obs:bar`, or a bare `<slug>` = task) into its
  * `{type, slug, item}`. PURE string work over {@link parseSlugArg} — the
- * resolver is the single source of truth for the task/brief split; the sidecar
+ * resolver is the single source of truth for the task/prd split; the sidecar
  * extends it with the `observation` namespace.
  */
 export function resolveSidecarIdentity(identity: string): SidecarIdentity {

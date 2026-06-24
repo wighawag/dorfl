@@ -223,7 +223,7 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 		const groups = categoriseItems(repo.items);
 		allGroups.push(groups);
 		lines.push(...formatRepo(repo.path, groups));
-		// The one-slug-one-folder LINT (brief `ledger-integrity` story 3): WARN LOUDLY
+		// The one-slug-one-folder LINT (prd `ledger-integrity` story 3): WARN LOUDLY
 		// when any slug in this repo's ledger resides in >1 status folder (a corrupt
 		// ledger — never a silent pass). Clean ledgers add no lines.
 		const warnings = formatDuplicateWarnings(repo.ledgerDuplicates ?? []);

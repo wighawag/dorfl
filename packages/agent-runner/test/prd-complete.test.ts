@@ -3,7 +3,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fixtureFolderRel} from './helpers/gitRepo.js';
-import {isBriefComplete} from '../src/brief-complete.js';
+import {isPrdComplete} from '../src/prd-complete.js';
 
 let root: string;
 
@@ -36,18 +36,18 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-describe('isBriefComplete — the read-only "is this PRD complete?" core query', () => {
+describe('isPrdComplete — the read-only "is this PRD complete?" core query', () => {
 	it('NOT complete when NO task carries prd:<slug> (≥1 is required)', () => {
-		// A `work/` tree with tasks, but none link to this brief — even other briefs'
+		// A `work/` tree with tasks, but none link to this prd — even other prds'
 		// done tasks do not count.
 		writeTask('done', 'unrelated-done.md', {slug: 'unrelated-done'});
 		writeTask('done', 'other-prd.md', {
 			slug: 'other-prd',
-			brief: 'some-other-prd',
+			prd: 'some-other-prd',
 		});
 		writeTask('backlog', 'standalone.md', {slug: 'standalone'});
 
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -57,12 +57,12 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 	});
 
 	it('NOT complete when ≥1 prd:<slug> task exists but some are NOT in work/tasks/done/', () => {
-		// Three tasks link the brief; two are done, one is still in backlog.
-		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
-		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
-		writeTask('backlog', 'c.md', {slug: 'c', brief: 'issue-intake'});
+		// Three tasks link the prd; two are done, one is still in backlog.
+		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeTask('backlog', 'c.md', {slug: 'c', prd: 'issue-intake'});
 
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -73,11 +73,11 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 	});
 
 	it('NOT complete when a matching task is in in-progress or needs-attention (not done)', () => {
-		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
-		writeTask('in-progress', 'b.md', {slug: 'b', brief: 'issue-intake'});
+		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
+		writeTask('in-progress', 'b.md', {slug: 'b', prd: 'issue-intake'});
 
 		expect(
-			isBriefComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
 		).toBe(false);
 
 		// And the needs-attention case is likewise incomplete.
@@ -85,23 +85,23 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 			recursive: true,
 			force: true,
 		});
-		writeTask('needs-attention', 'b.md', {slug: 'b', brief: 'issue-intake'});
+		writeTask('needs-attention', 'b.md', {slug: 'b', prd: 'issue-intake'});
 
 		expect(
-			isBriefComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
 		).toBe(false);
 	});
 
 	it('COMPLETE when ≥1 prd:<slug> task exists and ALL are in work/tasks/done/', () => {
-		writeTask('done', 'a.md', {slug: 'a', brief: 'issue-intake'});
-		writeTask('done', 'b.md', {slug: 'b', brief: 'issue-intake'});
-		// An unrelated, not-done task for a different brief must not block completion.
+		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		// An unrelated, not-done task for a different prd must not block completion.
 		writeTask('backlog', 'elsewhere.md', {
 			slug: 'elsewhere',
-			brief: 'other-prd',
+			prd: 'other-prd',
 		});
 
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -112,9 +112,9 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 	});
 
 	it('COMPLETE with a single done task (≥1 is enough)', () => {
-		writeTask('done', 'only.md', {slug: 'only', brief: 'issue-intake'});
+		writeTask('done', 'only.md', {slug: 'only', prd: 'issue-intake'});
 
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -127,11 +127,11 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 		// Frontmatter slug wins; filename fallback when no slug.
 		writeTask('done', 'on-disk-name.md', {
 			slug: 'real-slug',
-			brief: 'issue-intake',
+			prd: 'issue-intake',
 		});
-		writeTask('done', 'filename-fallback.md', {brief: 'issue-intake'});
+		writeTask('done', 'filename-fallback.md', {prd: 'issue-intake'});
 
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -145,7 +145,7 @@ describe('isBriefComplete — the read-only "is this PRD complete?" core query',
 
 	it('reads cleanly with NO work/ folders present (no throw, NOT complete)', () => {
 		// An empty repo (no work/ tree at all) → no tasks → not complete.
-		const result = isBriefComplete({
+		const result = isPrdComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});

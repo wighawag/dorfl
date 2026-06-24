@@ -161,7 +161,7 @@ export interface CompleteOptions {
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`). When
+	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`). When
 	 * `true`, after the green `verify` and BEFORE the done-move, run the `review`
 	 * SKILL as a FRESH-CONTEXT agent (its own harness launch) and route its verdict:
 	 * `approve` → proceed to done-move/commit/integrate; `block` → route to
@@ -393,7 +393,7 @@ export async function performComplete(
 		return await runComplete(options, note);
 	} catch (err) {
 		// AUTONOMOUS-STRAND SURFACE (task
-		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, brief
+		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, prd
 		// `ledger-integrity` story 7). On the AUTONOMOUS path (`surfaceArbiter` set
 		// — the human-vs-autonomous gate the core's other failures use), a SOURCE-
 		// STRAND `CompleteRefusal` (the slug-is-stuck `nothing to complete`) and the
@@ -609,7 +609,7 @@ async function runComplete(
 		);
 	}
 	// The branch HEAD is on when it IS a work branch for this slug (so an explicit
-	// `brief:`-style recovery still completes the branch it is standing on); else
+	// `prd:`-style recovery still completes the branch it is standing on); else
 	// synthesise the task branch.
 	const branch =
 		headParsed && headParsed.slug === slug
@@ -669,7 +669,7 @@ async function runComplete(
 			!onInProgress &&
 			!onNeedsAttention &&
 			recordAtRenamedDonePosition(cwd, slug));
-	// STRANDED-DONE AUTO-RECOVER (brief `ledger-integrity` story 6, the autonomous
+	// STRANDED-DONE AUTO-RECOVER (prd `ledger-integrity` story 6, the autonomous
 	// half of `finish-already-committed-branch`). When neither in-progress/ nor
 	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
 	// branch was already built + done-moved + committed by a prior run that never
@@ -918,7 +918,7 @@ async function runComplete(
 		// because the work is already integrated and the branch may or may not
 		// still exist locally.
 		//
-		// CROSS-SUBSTRATE RELEASE (brief `ledger-status-per-item-lock-refs` US #9/#10;
+		// CROSS-SUBSTRATE RELEASE (prd `ledger-status-per-item-lock-refs` US #9/#10;
 		// task `complete-lock-then-durable-main-move-crash-safe`): the durable
 		// `main` record is already terminal, so the per-item lock claim took is now
 		// stale — release it SECOND (the move already landed FIRST). Best-effort +
@@ -945,7 +945,7 @@ async function runComplete(
 		};
 	}
 
-	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (brief
+	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (prd
 	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
 	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; task
 	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
@@ -1070,7 +1070,7 @@ async function runComplete(
 /**
  * Release the per-item lock `claim` ALSO acquired (`action: implement`, keyed
  * `task:<slug>`) AFTER the durable `main` move has landed — the SECOND, lock-
- * release half of complete's cross-substrate ordering (brief
+ * release half of complete's cross-substrate ordering (prd
  * `ledger-status-per-item-lock-refs` US #9/#10; task
  * `complete-lock-then-durable-main-move-crash-safe`).
  *

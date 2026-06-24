@@ -47,9 +47,9 @@ function stageTask(repo: string, slug: string): void {
 	stageStaged(repo, 'pre-backlog', slug);
 }
 
-/** Stage a PRD file in `work/briefs/proposed/` on the arbiter. */
-function stageBrief(repo: string, slug: string): void {
-	stageStaged(repo, 'pre-brief', slug);
+/** Stage a PRD file in `work/prds/proposed/` on the arbiter. */
+function stagePrd(repo: string, slug: string): void {
+	stageStaged(repo, 'pre-prd', slug);
 }
 
 function stageStaged(repo: string, folder: string, slug: string): void {
@@ -129,7 +129,7 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageTask(repo, 'beta-task');
 		stageTask(repo, 'alpha-task');
-		stageBrief(repo, 'some-prd');
+		stagePrd(repo, 'some-prd');
 		const result = await listPromotable({
 			cwd: repo,
 			arbiter: ARBITER,
@@ -139,7 +139,7 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 		expect(result.items).toEqual([
 			{namespace: 'task', slug: 'alpha-task'},
 			{namespace: 'task', slug: 'beta-task'},
-			{namespace: 'brief', slug: 'some-prd'},
+			{namespace: 'prd', slug: 'some-prd'},
 		]);
 	});
 
@@ -170,11 +170,11 @@ describe('promote [item] — no argument LISTS what is staged', () => {
 	it('lists staged tasks + PRDs as `namespace:slug` lines', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stageTask(repo, 'my-task');
-		stageBrief(repo, 'my-prd');
+		stagePrd(repo, 'my-prd');
 		const {out, code} = await runPromote(repo, []);
 		expect(code, out).toBeUndefined(); // a plain return, not process.exit
 		expect(out).toMatch(/task:my-task/);
-		expect(out).toMatch(/brief:my-prd/);
+		expect(out).toMatch(/prd:my-prd/);
 	});
 
 	it('says nothing is staged when both staging folders are empty', async () => {
@@ -205,12 +205,12 @@ describe('promote <item> — admits a staged item into its pool', () => {
 
 	it('promote prd:<slug> moves pre-prd/ -> prd/ on the arbiter (auto-sliceable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		stageBrief(repo, 'vision');
-		expect(onArbiterMain(repo, 'work/briefs/proposed/vision.md')).toBe(true);
-		const {out} = await runPromote(repo, ['brief:vision']);
-		expect(out).toMatch(/Promoted brief 'vision' into the pool/);
-		expect(onArbiterMain(repo, 'work/briefs/ready/vision.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/briefs/proposed/vision.md')).toBe(false);
+		stagePrd(repo, 'vision');
+		expect(onArbiterMain(repo, 'work/prds/proposed/vision.md')).toBe(true);
+		const {out} = await runPromote(repo, ['prd:vision']);
+		expect(out).toMatch(/Promoted prd 'vision' into the pool/);
+		expect(onArbiterMain(repo, 'work/prds/ready/vision.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/proposed/vision.md')).toBe(false);
 	});
 });
 

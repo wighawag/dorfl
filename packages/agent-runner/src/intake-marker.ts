@@ -2,7 +2,7 @@ import {brand} from './brand.js';
 import type {IssueComment} from './issue-provider.js';
 
 /**
- * **The intake MARKER** (task `intake-self-awareness-resumption-tracking`, brief
+ * **The intake MARKER** (task `intake-self-awareness-resumption-tracking`, prd
  * `issue-intake` US #2/#10): the ONE primitive the deterministic pre-decision
  * TRIAGE GATE is built on. A machine-readable HIDDEN HTML comment intake stamps on
  * EVERY comment it posts, recording a neutral FACT about what intake did:
@@ -26,7 +26,7 @@ import type {IssueComment} from './issue-provider.js';
  *   TERMINAL is the TRIAGE's interpretation, NEVER data in the marker (no `terminal`
  *   field): if a kind's terminal-ness ever changes that is a triage change and old
  *   markers stay valid.
- * - **`slug`** \u2014 present only on `kind=created` (which task/brief intake produced).
+ * - **`slug`** \u2014 present only on `kind=created` (which task/prd intake produced).
  * - **`seen=<id>,\u2026`** \u2014 the per-run DELTA of HUMAN comment ids intake READ this run
  *   (EXCLUDING intake's own marker-comments AND any human id already in a prior
  *   marker's `seen=`). Ids, not a count, because a count cannot distinguish "a new
@@ -47,7 +47,7 @@ export interface IntakeMarker {
 	kind: IntakeMarkerKind;
 	/** The HUMAN comment ids intake READ this run (the per-run delta; may be empty). */
 	seen: string[];
-	/** The created task/brief slug \u2014 present only on `kind=created`. */
+	/** The created task/prd slug \u2014 present only on `kind=created`. */
 	slug?: string;
 }
 

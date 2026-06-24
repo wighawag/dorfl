@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {
 	promoteFromPreBacklog,
-	promoteFromPreBrief,
+	promoteFromPrePrd,
 } from '../src/needs-attention.js';
 import {
 	acquireItemLock,
@@ -33,9 +33,9 @@ import {run} from '../src/git.js';
  *   (a) when an apply-style `advance` hold is already held on the item, a
  *       concurrent `promoteFromPreBacklog` LOSES CLEAN — no commit on `main`,
  *       the staged file is untouched, and the holder's lock is unmoved.
- *   (b) the brief-symmetric case (`promoteFromPrePrd` against a held
- *       `brief:<slug>` advance lock) behaves the same — the brief promote path
- *       is covered too per PRD q4 (the briefs/proposed → briefs/ready promote
+ *   (b) the prd-symmetric case (`promoteFromPrePrd` against a held
+ *       `prd:<slug>` advance lock) behaves the same — the prd promote path
+ *       is covered too per PRD q4 (the prds/proposed → prds/ready promote
  *       is symmetric with tasks/backlog → tasks/todo).
  *   (c) the lock is RELEASED on the happy path too: after a successful promote
  *       there is no held lock left behind for the next transition.
@@ -68,23 +68,23 @@ function seedStagedTask(repo: string, slug: string): void {
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
-		`---\nslug: ${slug}\nbrief: it\n---\n\n## Prompt\n\n> ${slug}\n`,
+		`---\nslug: ${slug}\nprd: it\n---\n\n## Prompt\n\n> ${slug}\n`,
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
 	run('git', ['commit', '-q', '-m', `stage ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** Seed a staged brief file at `work/briefs/proposed/<slug>.md` on the arbiter. */
-function seedStagedBrief(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'proposed');
+/** Seed a staged prd file at `work/prds/proposed/<slug>.md` on the arbiter. */
+function seedStagedPrd(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'proposed');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
-		`---\nslug: ${slug}\n---\n\n## Problem Statement\n\nbrief ${slug}\n`,
+		`---\nslug: ${slug}\n---\n\n## Problem Statement\n\nprd ${slug}\n`,
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `stage brief ${slug}`], repo, {
+	run('git', ['commit', '-q', '-m', `stage prd ${slug}`], repo, {
 		env: gitEnv(),
 	});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
@@ -148,16 +148,16 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		});
 	});
 
-	it('brief promote LOSES CLEAN when a concurrent advance hold is already held on the same brief', async () => {
+	it('prd promote LOSES CLEAN when a concurrent advance hold is already held on the same prd', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		seedStagedBrief(seeded.repo, 'brief-race');
+		seedStagedPrd(seeded.repo, 'prd-race');
 
-		// Apply-style advance hold on `brief:brief-race` (the brief lock entry is
+		// Apply-style advance hold on `prd:prd-race` (the prd lock entry is
 		// distinct from a task with the same slug, via `lockEntryFor`'s
 		// `<type>-<slug>` encoding).
 		const holder = raceClone(seeded, 'apply');
 		const held = await acquireItemLock({
-			item: 'brief:brief-race',
+			item: 'prd:prd-race',
 			action: 'advance',
 			cwd: holder,
 			arbiter: ARBITER,
@@ -166,8 +166,8 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(held.outcome).toBe('acquired');
 
 		const promoter = raceClone(seeded, 'promote');
-		const result = await promoteFromPreBrief({
-			slug: 'brief-race',
+		const result = await promoteFromPrePrd({
+			slug: 'prd-race',
 			cwd: promoter,
 			arbiter: ARBITER,
 			env: racerEnv('promote'),
@@ -176,16 +176,16 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(result.reasonNotMoved).toMatch(
 			/per-item lock|already locked|implement\/task\/advance/i,
 		);
-		// The staged brief is unmoved on the arbiter.
-		expect(
-			onArbiterMain(seeded.repo, 'work/briefs/proposed/brief-race.md'),
-		).toBe(true);
-		expect(onArbiterMain(seeded.repo, 'work/briefs/ready/brief-race.md')).toBe(
+		// The staged prd is unmoved on the arbiter.
+		expect(onArbiterMain(seeded.repo, 'work/prds/proposed/prd-race.md')).toBe(
+			true,
+		);
+		expect(onArbiterMain(seeded.repo, 'work/prds/ready/prd-race.md')).toBe(
 			false,
 		);
 
 		await releaseItemLock({
-			item: 'brief:brief-race',
+			item: 'prd:prd-race',
 			cwd: holder,
 			arbiter: ARBITER,
 			env: racerEnv('apply'),
@@ -219,25 +219,25 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(after).toBeUndefined();
 	});
 
-	it('a successful brief promote RELEASES the per-item lock (symmetric)', async () => {
+	it('a successful prd promote RELEASES the per-item lock (symmetric)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		seedStagedBrief(seeded.repo, 'happy-brief');
+		seedStagedPrd(seeded.repo, 'happy-prd');
 
-		const result = await promoteFromPreBrief({
-			slug: 'happy-brief',
+		const result = await promoteFromPrePrd({
+			slug: 'happy-prd',
 			cwd: seeded.repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		expect(onArbiterMain(seeded.repo, 'work/briefs/ready/happy-brief.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/prds/ready/happy-prd.md')).toBe(
 			true,
 		);
-		expect(
-			onArbiterMain(seeded.repo, 'work/briefs/proposed/happy-brief.md'),
-		).toBe(false);
+		expect(onArbiterMain(seeded.repo, 'work/prds/proposed/happy-prd.md')).toBe(
+			false,
+		);
 		const after = await readItemLock({
-			item: 'brief:happy-brief',
+			item: 'prd:happy-prd',
 			cwd: seeded.repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

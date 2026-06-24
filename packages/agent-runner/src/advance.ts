@@ -51,9 +51,9 @@ import {
 import type {NewQuestion} from './sidecar.js';
 
 /**
- * The **`advance` verb SKELETON** (brief `advance-loop`, task
+ * The **`advance` verb SKELETON** (prd `advance-loop`, task
  * `advance-verb-resolver`, US #1/5/6/18). `advance` is the SIBLING top-level verb
- * (NOT a `do` subcommand — `do` subcommands are REJECTED in the brief) that drives
+ * (NOT a `do` subcommand — `do` subcommands are REJECTED in the prd) that drives
  * a `work/` item ONE lifecycle rung toward "ready/built", reusing the SAME shared
  * `prefix:arg` resolver `do` uses (extended with the `obs:` namespace, see
  * {@link resolveAdvanceArg}).
@@ -77,7 +77,7 @@ import type {NewQuestion} from './sidecar.js';
  * (`advance-rung-surface`), `apply` (`advance-rung-apply`), and
  * `triage-observation` (`advance-rung-triage`) dispatch through the clearly-named
  * executor SEAM ({@link RungExecutor}); the build/task rungs ORCHESTRATE
- * `do`/`do brief:`. What this verb does NOT do (LATER tasks):
+ * `do`/`do prd:`. What this verb does NOT do (LATER tasks):
  *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the gate-FAMILY
  *     WIRING that resolves `autoBuild`/`autoTask`/`observationTriage` and threads
  *     them into the build/task gate composition — task `advance-drivers-and-gates`.
@@ -87,7 +87,7 @@ import type {NewQuestion} from './sidecar.js';
  *     the verb here is a SINGLE named-item tick; the bare form errors clearly
  *     ("needs the driver task"). See the `## Decisions` block in the task.
  *
- * The build-task / task-brief rungs ORCHESTRATE the existing `do` / `do brief:`
+ * The build-task / task-prd rungs ORCHESTRATE the existing `do` / `do prd:`
  * machinery ({@link performDo}) — `advance` is a driver layered ON TOP, NEVER a
  * peer that duplicates the build/task path (ONE build path, ONE task path —
  * US #6).
@@ -125,7 +125,7 @@ export type AdvanceExitCode = 0 | 1 | 2 | 3;
  * The injectable rung-executor SEAM — WHAT happens once the tick has classified a
  * rung AND won the `advancing` lock. It is the boundary between the skeleton (this
  * task) and the rung bodies (later tasks): the surface/apply/triage rungs are
- * filled by their own tasks; the build/task rungs ORCHESTRATE `do`/`do brief:`.
+ * filled by their own tasks; the build/task rungs ORCHESTRATE `do`/`do prd:`.
  *
  * Production wires {@link defaultRungExecutor}; tests inject a spy to assert the
  * classify→lock→dispatch ORDER (and that a CAS loser never reaches the executor).
@@ -133,8 +133,8 @@ export type AdvanceExitCode = 0 | 1 | 2 | 3;
 export interface RungExecutor {
 	/** A ready task → build it by ORCHESTRATING `do <slug>` (NOT a re-implementation). */
 	buildTask(input: RungExecInput): Promise<RungExecResult>;
-	/** A ready brief → task it by ORCHESTRATING `do brief:<slug>` (NOT a re-implementation). */
-	taskBrief(input: RungExecInput): Promise<RungExecResult>;
+	/** A ready prd → task it by ORCHESTRATING `do prd:<slug>` (NOT a re-implementation). */
+	taskPrd(input: RungExecInput): Promise<RungExecResult>;
 	/** An untriaged observation → triage it (LATER task fills this body). */
 	triageObservation(input: RungExecInput): Promise<RungExecResult>;
 	/** `needsAnswers` but no sidecar → surface the questions (LATER task fills this). */
@@ -145,15 +145,15 @@ export interface RungExecutor {
 
 /** What a rung executor is handed: the resolved identity + the run context. */
 export interface RungExecInput {
-	/** The canonical namespaced identity (`task:<slug>` / `brief:<slug>` / `observation:<slug>`). */
+	/** The canonical namespaced identity (`task:<slug>` / `prd:<slug>` / `observation:<slug>`). */
 	item: string;
-	/** The resolved namespace (`task` / `brief` / `observation`). */
+	/** The resolved namespace (`task` / `prd` / `observation`). */
 	namespace: SlugNamespace;
 	/** The bare slug. */
 	slug: string;
 	/** The classification that selected this rung (the two signals are visible). */
 	classification: TickClassification;
-	/** The tick's run context (cwd, arbiter, …) — threaded to `do`/`do brief:`. */
+	/** The tick's run context (cwd, arbiter, …) — threaded to `do`/`do prd:`. */
 	context: AdvanceContext;
 }
 
@@ -174,7 +174,7 @@ export interface AdvanceContext {
 	doOptions?: Omit<DoOptions, 'arg'>;
 	/**
 	 * The build/task ORCHESTRATION DRIVER seam (task
-	 * `advance-loop-driver-registry-set-job-worktrees`). The build-task / task-brief
+	 * `advance-loop-driver-registry-set-job-worktrees`). The build-task / task-prd
 	 * rungs ORCHESTRATE `do` by handing the resolved arg + the threaded
 	 * {@link doOptions} to THIS driver. `undefined` ⇒ {@link performDo} (the IN-PLACE
 	 * substrate — the human-local one-shot `advance` command + today's
@@ -280,7 +280,7 @@ export interface AdvanceContext {
 /** The options one `advance` tick consumes. */
 export interface AdvanceOptions extends AdvanceContext {
 	/**
-	 * The raw CLI slug argument: bare (= task), `task:<slug>`, `brief:<slug>`, or
+	 * The raw CLI slug argument: bare (= task), `task:<slug>`, `prd:<slug>`, or
 	 * `obs:<slug>` / `observation:<slug>`. Omit/empty ⇒ the bare eligible-SET form,
 	 * which needs the driver task (a clear error here — see `## Decisions`).
 	 */
@@ -323,7 +323,7 @@ export interface ItemSignals {
 export interface ReadSignalsInput {
 	/** The repo working-tree root. */
 	repoPath: string;
-	/** The item type (task / brief / observation). */
+	/** The item type (task / prd / observation). */
 	type: SidecarType;
 	/** The bare slug. */
 	slug: string;
@@ -335,8 +335,8 @@ export interface ReadSignalsInput {
 function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
 	return namespace === 'observation'
 		? 'observation'
-		: namespace === 'brief'
-			? 'brief'
+		: namespace === 'prd'
+			? 'prd'
 			: 'task';
 }
 
@@ -368,14 +368,14 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * The lifecycle folders each item type may rest in (frontmatter source). After
  * the capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the transient
- * `tasking/` folder is GONE — a brief rests in `briefs/ready` (source) or
- * `briefs/tasked` (tasked); while it is being tasked the body STAYS in
- * `briefs/ready` (the lock no longer moves it), so `tasking/` is never a
+ * `tasking/` folder is GONE — a prd rests in `prds/ready` (source) or
+ * `prds/tasked` (tasked); while it is being tasked the body STAYS in
+ * `prds/ready` (the lock no longer moves it), so `tasking/` is never a
  * frontmatter source.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-todo', 'in-progress', 'done'],
-	brief: ['briefs-ready', 'briefs-tasked'],
+	prd: ['prds-ready', 'prds-tasked'],
 	observation: ['observations'],
 };
 
@@ -396,18 +396,18 @@ function readNeedsAnswers(
 
 /**
  * The PRODUCTION rung executor: build/task rungs ORCHESTRATE the existing
- * `do`/`do brief:` machinery ({@link performDo}); the `surface`/`apply`/
+ * `do`/`do prd:` machinery ({@link performDo}); the `surface`/`apply`/
  * `triage-observation` rung bodies are filled by their own tasks
  * ({@link surfaceRung} / {@link applyRung} / {@link triageRung}). It NEVER
  * re-implements the build/task path — it hands the resolved arg to `performDo`,
- * which spans both namespaces (the task path is the `do brief:` rung the brief's
+ * which spans both namespaces (the task path is the `do prd:` rung the prd's
  * 2026-06-09 UPDATE confirms routes through `performIntegration`).
  */
 export const defaultRungExecutor: RungExecutor = {
 	async buildTask(input) {
 		return orchestrateDo(input);
 	},
-	async taskBrief(input) {
+	async taskPrd(input) {
 		return orchestrateDo(input);
 	},
 	async triageObservation(input) {
@@ -422,7 +422,7 @@ export const defaultRungExecutor: RungExecutor = {
 };
 
 /**
- * ORCHESTRATE `do`/`do brief:` for the build-task / task-brief rungs: hand the
+ * ORCHESTRATE `do`/`do prd:` for the build-task / task-prd rungs: hand the
  * resolved namespaced identity to {@link performDo} (the ONE build path / ONE
  * task path). `advance` is a driver ON TOP — it does NOT duplicate `do`. The
  * `do` outcome is mapped back onto the tick's outcome surface.
@@ -817,13 +817,13 @@ export async function performAdvance(
 		const message =
 			'`advance` with no item is the eligible-SET form (the one-shot driver). ' +
 			'The single-item tick needs a named item: ' +
-			'`advance <slug>` / `advance brief:<slug>` / `advance obs:<slug>`.';
+			'`advance <slug>` / `advance prd:<slug>` / `advance obs:<slug>`.';
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
 	// 1. RESOLVE the arg via the SHARED resolver (extended with `obs:`). `advance`
-	//    spans task / brief / observation; a collision / bad arg is a loud usage error.
+	//    spans task / prd / observation; a collision / bad arg is a loud usage error.
 	let resolved;
 	try {
 		resolved = resolveAdvanceArg({
@@ -883,7 +883,7 @@ export async function performAdvance(
 	// 3. LOCK — take the `advancing` CAS borrow for the classified rung, keyed on
 	//    the item's `<type>-<slug>` identity. The expensive phase is POST-lock.
 	//
-	//    UNIFIED PER-ITEM LOCK, TREE-LESS RUNGS ONLY (brief
+	//    UNIFIED PER-ITEM LOCK, TREE-LESS RUNGS ONLY (prd
 	//    `ledger-status-per-item-lock-refs` US #1/#3/#18; ADR
 	//    `ledger-status-on-per-item-lock-refs`). The rung kind is KNOWN here
 	//    (`classification.kind`, classified pre-lock), so the tree-less-only policy
@@ -894,7 +894,7 @@ export async function performAdvance(
 	//    inner `do`, so the unified hold is what realises advance∥claim / advance∥task
 	//    exclusion. For a BUILD-TASK / TASK-PRD rung we do NOT take the unified lock
 	//    at the advance layer: `performAdvance` ORCHESTRATES an inner `performDo` that
-	//    ITSELF acquires the SAME `task-<slug>`/`brief-<slug>` ref (the create-only CAS
+	//    ITSELF acquires the SAME `task-<slug>`/`prd-<slug>` ref (the create-only CAS
 	//    with NO re-entrancy/auto-steal, per the ADR), so taking it here too would
 	//    DEADLOCK the tick against itself. The inner `do`'s claim/task lock IS the
 	//    single exclusion point for those rungs. The `work/advancing/<entry>.md` marker
@@ -977,7 +977,7 @@ export async function performAdvance(
  * Is this a TREE-LESS rung (`surface`/`apply`/`triage-observation`) — the rungs
  * that have NO inner `performDo`, so the advancing acquire must ALSO take the
  * unified per-item lock (`action: advance`) to realise advance∥claim / advance∥task
- * exclusion? The build/task rungs (`build-task`/`task-brief`) are the inverse:
+ * exclusion? The build/task rungs (`build-task`/`task-prd`) are the inverse:
  * their inner `do` holds the SAME unified ref, so the advance layer must NOT take
  * it (it would deadlock the tick against itself). `no-op`/`invariant-violation`
  * never reach the lock step. This is the single place the tree-less-only policy
@@ -997,8 +997,8 @@ function dispatchRung(
 	switch (input.classification.kind) {
 		case 'build-task':
 			return executor.buildTask(input);
-		case 'task-brief':
-			return executor.taskBrief(input);
+		case 'task-prd':
+			return executor.taskPrd(input);
 		case 'triage-observation':
 			return executor.triageObservation(input);
 		case 'surface':

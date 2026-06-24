@@ -24,14 +24,14 @@ import type {
 /**
  * `install-ci-close-job-workflow` — the CI CLOSE-JOB driver (capability E). The
  * driver WIRES three UNCHANGED engine pieces (the resolution `resolveClosingIssue`,
- * the "brief complete?" query `brief-complete-query`, and `IssueProvider.closeIssue`)
+ * the "prd complete?" query `prd-complete-query`, and `IssueProvider.closeIssue`)
  * and re-implements NONE of them.
  *
  * SEAM: the `IssueProvider` is a STUB that records every `closeIssue` call IN
  * MEMORY — NO network, NO real `gh`, NO real GitHub issue touched (this test's
  * shared-write isolation: the stubbed close seam records calls in-memory without
  * touching a real issue). The query/resolution behaviour itself is already covered
- * by `brief-complete-query` / `frontmatter` tests and is NOT re-tested here; these
+ * by `prd-complete-query` / `frontmatter` tests and is NOT re-tested here; these
  * tests cover the DRIVER's wiring + closure conditions only.
  */
 
@@ -111,11 +111,11 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-describe('runCloseJob — the brief case (consumes the "brief complete?" query)', () => {
-	it("closes the brief's issue when ALL its tasks are in work/tasks/done/", async () => {
-		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
-		write('done', 'b.md', {slug: 'b', brief: 'my-brief'});
+describe('runCloseJob — the prd case (consumes the "prd complete?" query)', () => {
+	it("closes the prd's issue when ALL its tasks are in work/tasks/done/", async () => {
+		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -131,16 +131,16 @@ describe('runCloseJob — the brief case (consumes the "brief complete?" query)'
 			issueNumber: 42,
 			reason: 'completed',
 		});
-		expect(provider.closeCalls[0].comment).toContain('my-brief');
+		expect(provider.closeCalls[0].comment).toContain('my-prd');
 		expect(result.candidates.find((c) => c.issueNumber === 42)?.decision).toBe(
 			'closed',
 		);
 	});
 
-	it("leaves the brief's issue OPEN when one of its tasks is NOT yet in work/tasks/done/", async () => {
-		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
-		write('backlog', 'b.md', {slug: 'b', brief: 'my-brief'}); // not landed
+	it("leaves the prd's issue OPEN when one of its tasks is NOT yet in work/tasks/done/", async () => {
+		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+		write('backlog', 'b.md', {slug: 'b', prd: 'my-prd'}); // not landed
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -155,9 +155,9 @@ describe('runCloseJob — the brief case (consumes the "brief complete?" query)'
 		);
 	});
 
-	it('finds the brief issue from work/briefs/tasked/ too (a brief that has been tasked)', async () => {
-		write('brief-tasked', 'my-brief.md', {slug: 'my-brief', issue: '7'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
+	it('finds the prd issue from work/prds/tasked/ too (a prd that has been tasked)', async () => {
+		write('prd-tasked', 'my-prd.md', {slug: 'my-prd', issue: '7'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -170,7 +170,7 @@ describe('runCloseJob — the brief case (consumes the "brief complete?" query)'
 });
 
 describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
-	it('closes a lone task (issue:, no brief:) once it lands in work/tasks/done/', async () => {
+	it('closes a lone task (issue:, no prd:) once it lands in work/tasks/done/', async () => {
 		write('done', 'lone.md', {slug: 'lone', issue: '13'});
 
 		const provider = new MemoryIssueProvider();
@@ -205,10 +205,10 @@ describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
 });
 
 describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)', () => {
-	it('a fanned task carries brief: (NOT issue:) and reaches the number via the brief only', async () => {
-		// The brief carries the issue number; the fanned task carries `brief:` only.
-		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
+	it('a fanned task carries prd: (NOT issue:) and reaches the number via the prd only', async () => {
+		// The prd carries the issue number; the fanned task carries `prd:` only.
+		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -216,22 +216,22 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 			issueProvider: provider,
 		});
 
-		// Closed exactly ONCE, via the brief candidate — the task never resolves its
-		// own issue (it has none); the number lives only on the brief.
+		// Closed exactly ONCE, via the prd candidate — the task never resolves its
+		// own issue (it has none); the number lives only on the prd.
 		expect(result.closed).toEqual([42]);
 		expect(result.candidates.filter((c) => c.issueNumber === 42)).toHaveLength(
 			1,
 		);
 		expect(result.candidates.find((c) => c.issueNumber === 42)?.via).toBe(
-			'brief',
+			'prd',
 		);
 	});
 
-	it('on a hand-edited task carrying BOTH brief: and issue:, brief: WINS (issue: ignored)', async () => {
+	it('on a hand-edited task carrying BOTH prd: and issue:, prd: WINS (issue: ignored)', async () => {
 		// A contradiction only a human hand-edit could produce; resolveClosingIssue
-		// makes `brief:` win, so the task is NOT a lone-task candidate for issue 99.
-		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief', issue: '99'});
+		// makes `prd:` win, so the task is NOT a lone-task candidate for issue 99.
+		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd', issue: '99'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -239,16 +239,16 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 			issueProvider: provider,
 		});
 
-		// Only the brief's issue 42 is closed; the task's stray `issue: 99` is ignored.
+		// Only the prd's issue 42 is closed; the task's stray `issue: 99` is ignored.
 		expect(result.closed).toEqual([42]);
 		expect(result.candidates.some((c) => c.issueNumber === 99)).toBe(false);
 	});
 
-	it('considers each brief issue ONCE even with many tasks pointing at it (dedup)', async () => {
-		write('brief', 'my-brief.md', {slug: 'my-brief', issue: '42'});
-		write('done', 'a.md', {slug: 'a', brief: 'my-brief'});
-		write('done', 'b.md', {slug: 'b', brief: 'my-brief'});
-		write('done', 'c.md', {slug: 'c', brief: 'my-brief'});
+	it('considers each prd issue ONCE even with many tasks pointing at it (dedup)', async () => {
+		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
+		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
+		write('done', 'c.md', {slug: 'c', prd: 'my-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -262,7 +262,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 
 	it('ignores artifacts with NO closure link (no issue:, no prd:)', async () => {
 		write('done', 'plain.md', {slug: 'plain'});
-		write('brief', 'no-issue-brief.md', {slug: 'no-issue-brief'});
+		write('prd', 'no-issue-prd.md', {slug: 'no-issue-prd'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({

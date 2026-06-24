@@ -1,7 +1,7 @@
 ---
 title: Merge-questions gate axis — separate from `observationTriage`, higher default
 slug: merge-questions-gate-axis
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: true
 blockedBy: [merge-retries-gate-precedence]
 covers: [17]
@@ -12,11 +12,11 @@ covers: [17]
 Add a NEW per-repo gate axis that controls whether the merge-question
 surfacer is invoked, SEPARATE from `observationTriage`. Resolved through
 the SAME precedence chain as the other gates (flag > env > per-repo >
-global > default). Fixed at launch in the brief: must NOT ride
+global > default). Fixed at launch in the prd: must NOT ride
 `observationTriage`; must default HIGHER than `off`, because a dropped
 merge-question means pushed work never lands.
 
-## Open questions (needsAnswers — brief OQ7)
+## Open questions (needsAnswers — prd OQ7)
 
 The SEPARATION + higher-default is fixed. These three sub-decisions are
 not:
@@ -25,17 +25,17 @@ not:
    another option consistent with the existing gate vocabulary. Pick
    one.
 2. **Default value.** `ask` (surface + wait for a human answer) is the
-   brief's likely default; `auto` is allowed only for repos that trust
+   prd's likely default; `auto` is allowed only for repos that trust
    auto-landing of answered/unblocked merges (a merge-mode-like fast
    path); `off` is only correct for a repo that lands by some other
    means. Pick the default.
 3. **Shape.** Three-state `off | ask | auto` mirroring
-   `observationTriage`, or boolean? The brief leans 3-state; confirm or
+   `observationTriage`, or boolean? The prd leans 3-state; confirm or
    override.
 
 Do NOT build until OQ7 is answered.
 
-Cross-cutting note: the brief's "Part of a larger generalization"
+Cross-cutting note: the prd's "Part of a larger generalization"
 section lists two CROSS-CUTTING questions (sidecar-keying to a lock-
 ref/branch identity; questions-folder shape/name) that are SHARED with
 the stuck-lock surfacer sibling and must be resolved ONCE across both,
@@ -66,7 +66,7 @@ sub-decision.
 ## Prompt
 
 > Do NOT build until OQ7 is answered (name, default, shape). Once
-> answered: read Story 17 + the brief's "Implementation Decisions"
+> answered: read Story 17 + the prd's "Implementation Decisions"
 > paragraph that fixes the SEPARATION + higher-default. Locate the gate
 > precedence helper extended by `merge-retries-gate-precedence` (or, if
 > that slice hasn't landed yet, the sibling gates' helper) and add the

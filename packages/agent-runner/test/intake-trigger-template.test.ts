@@ -93,10 +93,10 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: true,
 			}),
-		).toEqual({brief: 'merge', task: 'merge', originTrust: 'trusted'});
+		).toEqual({prd: 'merge', task: 'merge', originTrust: 'trusted'});
 	});
 
-	it('UNTRUSTED author forces --propose-task REGARDLESS of autoBuild, but --merge-brief STAYS allowed', () => {
+	it('UNTRUSTED author forces --propose-task REGARDLESS of autoBuild, but --merge-prd STAYS allowed', () => {
 		// Both gates off: a trusted author would merge both; an untrusted author
 		// must still PROPOSE the task, while the PRD stays mergeable (a human
 		// tasks it before anything autonomous acts — the checkpoint is intact).
@@ -105,7 +105,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: false,
 			}),
-		).toEqual({brief: 'merge', task: 'propose', originTrust: 'untrusted'});
+		).toEqual({prd: 'merge', task: 'propose', originTrust: 'untrusted'});
 	});
 
 	it('autoBuild ON forces --propose-task even for a TRUSTED author (an agent will auto-build it)', () => {
@@ -114,16 +114,16 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: true, autoTask: false},
 				authorTrusted: true,
 			}),
-		).toEqual({brief: 'merge', task: 'propose', originTrust: 'trusted'});
+		).toEqual({prd: 'merge', task: 'propose', originTrust: 'trusted'});
 	});
 
-	it('autoTask ON forces --propose-brief (an agent will auto-slice it → human PR checkpoint now)', () => {
+	it('autoTask ON forces --propose-prd (an agent will auto-slice it → human PR checkpoint now)', () => {
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: true},
 				authorTrusted: true,
 			}),
-		).toEqual({brief: 'propose', task: 'merge', originTrust: 'trusted'});
+		).toEqual({prd: 'propose', task: 'merge', originTrust: 'trusted'});
 	});
 
 	it('originTrust is the author-trust verdict CARRIED for the stamp (trusted⇒trusted, untrusted⇒untrusted), independent of the gates', () => {
@@ -145,8 +145,8 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		}
 	});
 
-	it('the BRIEF flag is gate-derived ONLY — author-trust does NOT bite a brief', () => {
-		// autoTask off ⇒ --merge-brief for BOTH a trusted and an untrusted author.
+	it('the PRD flag is gate-derived ONLY — author-trust does NOT bite a prd', () => {
+		// autoTask off ⇒ --merge-prd for BOTH a trusted and an untrusted author.
 		const trusted = deriveIntakeFlags({
 			gate: {autoBuild: true, autoTask: false},
 			authorTrusted: true,
@@ -155,8 +155,8 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 			gate: {autoBuild: true, autoTask: false},
 			authorTrusted: false,
 		});
-		expect(trusted.brief).toBe('merge');
-		expect(untrusted.brief).toBe('merge');
+		expect(trusted.prd).toBe('merge');
+		expect(untrusted.prd).toBe('merge');
 	});
 
 	it('the only way to --merge-task is a TRUSTED author with autoBuild OFF (the conservative default keeps a human in the loop)', () => {
@@ -187,7 +187,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: true,
 			}),
-		).toEqual({brief: 'merge', task: 'merge', originTrust: 'trusted'});
+		).toEqual({prd: 'merge', task: 'merge', originTrust: 'trusted'});
 		// Flip ANY one of the three and it is no longer merge-everything.
 		expect(
 			deriveIntakeFlags({
@@ -205,7 +205,7 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 			deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: true},
 				authorTrusted: true,
-			}).brief,
+			}).prd,
 		).toBe('propose');
 	});
 });
@@ -290,8 +290,8 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		// All four granular per-outcome flags appear in the derivation.
 		expect(text).toContain('--propose-task');
 		expect(text).toContain('--merge-task');
-		expect(text).toContain('--merge-brief');
-		expect(text).toContain('--propose-brief');
+		expect(text).toContain('--merge-prd');
+		expect(text).toContain('--propose-prd');
 		// The derivation reads the gate env block.
 		expect(/AGENT_RUNNER_AUTO_BUILD\b/.test(text)).toBe(true);
 		expect(/AGENT_RUNNER_AUTO_TASK\b/.test(text)).toBe(true);
@@ -306,16 +306,16 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 			autoBuild: boolean,
 			autoTask: boolean,
 			trusted: boolean,
-		): {brief: string; task: string; originTrust: string} => {
-			// BRIEF: --propose-brief iff autoTask true, else --merge-brief.
-			const brief = autoTask ? '--propose-brief' : '--merge-brief';
+		): {prd: string; task: string; originTrust: string} => {
+			// PRD: --propose-prd iff autoTask true, else --merge-prd.
+			const prd = autoTask ? '--propose-prd' : '--merge-prd';
 			// TASK: --propose-task iff autoBuild true OR not trusted.
 			const task = autoBuild || !trusted ? '--propose-task' : '--merge-task';
 			// ORIGIN-TRUST: the same `trusted` case, carried to the stamp flag.
 			const originTrust = trusted
 				? '--origin-trust=trusted'
 				: '--origin-trust=untrusted';
-			return {brief, task, originTrust};
+			return {prd, task, originTrust};
 		};
 		for (const autoBuild of [false, true]) {
 			for (const autoTask of [false, true]) {
@@ -325,7 +325,7 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 						gate: {autoBuild, autoTask},
 						authorTrusted: trusted,
 					});
-					expect(fromShell.brief).toBe(`--${fromFn.brief}-brief`);
+					expect(fromShell.prd).toBe(`--${fromFn.prd}-prd`);
 					expect(fromShell.task).toBe(`--${fromFn.task}-task`);
 					// The stamp is derived from the SAME author-trust case as the modes.
 					expect(fromShell.originTrust).toBe(
@@ -472,10 +472,10 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		);
 	});
 
-	it('flags a missing --merge-brief (a PRD must stay mergeable for an untrusted author)', () => {
+	it('flags a missing --merge-prd (a PRD must stay mergeable for an untrusted author)', () => {
 		expectFlagged(
-			base.replace(/--merge-brief/g, '--propose-brief'),
-			'derives-merge-brief',
+			base.replace(/--merge-prd/g, '--propose-prd'),
+			'derives-merge-prd',
 		);
 	});
 

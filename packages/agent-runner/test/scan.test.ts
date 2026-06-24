@@ -32,7 +32,7 @@ function writeObservation(repo: string, slug: string, triaged?: string): void {
 /** Write the identity-keyed sidecar `work/questions/<type>-<slug>.md`, answered or pending. */
 function writeSidecar(
 	repo: string,
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	answered: boolean,
 ): void {
@@ -388,18 +388,18 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 });
 
 /**
- * The taskable-brief pool (`briefs[]`) surface on `scan`/`scanRepoPaths` (task
+ * The taskable-prd pool (`prds[]`) surface on `scan`/`scanRepoPaths` (task
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
- * propose-matrix `jq` reads `repos[].briefs[]` + `cwd.repo.briefs[]` and unions them
+ * propose-matrix `jq` reads `repos[].prds[]` + `cwd.repo.prds[]` and unions them
  * with the task legs; before this task landed, the pool was invisible there
  * and `AGENT_RUNNER_AUTO_TASK` was dead on the hourly cron. The eligibility
  * predicate REUSES `taskablePrds` (the SAME `autoslice-gate` predicate the
  * autopick paths run) — a config-less repo with `autoTask` off yields an
  * all-`eligible:false` pool (no `prd:` legs).
  */
-function writeBrief(
+function writePrd(
 	repo: string,
-	status: 'brief' | 'brief-tasked',
+	status: 'prd' | 'prd-tasked',
 	file: string,
 	frontmatter: Record<string, string>,
 ): void {
@@ -413,34 +413,34 @@ function writeBrief(
 	writeFileSync(join(dir, file), lines.join('\n'));
 }
 
-describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
+describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 	it('a ready ungated PRD appears as taskable when autoTask is on (no per-repo config)', () => {
-		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
+		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const brief = report.repos[0].briefs.find((p) => p.slug === 'ready');
-		expect(brief).toBeDefined();
-		expect(brief!.eligibility.eligible).toBe(true);
+		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
+		expect(prd).toBeDefined();
+		expect(prd!.eligibility.eligible).toBe(true);
 	});
 
-	it('gates humanOnly / needsAnswers / unsatisfied briefAfter PRDs out of the taskable pool', () => {
-		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
-		writeBrief('repo', 'brief', 'human.md', {slug: 'human', humanOnly: 'true'});
-		writeBrief('repo', 'brief', 'asks.md', {
+	it('gates humanOnly / needsAnswers / unsatisfied prdAfter PRDs out of the taskable pool', () => {
+		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
+		writePrd('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
+		writePrd('repo', 'prd', 'asks.md', {
 			slug: 'asks',
 			needsAnswers: 'true',
 		});
-		writeBrief('repo', 'brief', 'after.md', {
+		writePrd('repo', 'prd', 'after.md', {
 			slug: 'after',
-			briefAfter: '[dep]',
+			prdAfter: '[dep]',
 		});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const byslug = new Map(report.repos[0].briefs.map((p) => [p.slug, p]));
+		const byslug = new Map(report.repos[0].prds.map((p) => [p.slug, p]));
 		expect(byslug.get('ready')!.eligibility.eligible).toBe(true);
 		expect(byslug.get('human')!.eligibility.eligible).toBe(false);
 		expect(byslug.get('asks')!.eligibility.eligible).toBe(false);
@@ -448,17 +448,17 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 	});
 
 	it('an autoTask:false repo yields no TASKABLE PRD legs (the gate still binds)', () => {
-		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
+		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: false}),
 		);
-		const ready = report.repos[0].briefs.find((p) => p.slug === 'ready')!;
+		const ready = report.repos[0].prds.find((p) => p.slug === 'ready')!;
 		expect(ready.eligibility.eligible).toBe(false);
 	});
 
 	it('honours the per-repo `.agent-runner.json` autoTask override (off globally, on per-repo)', () => {
-		writeBrief('repo', 'brief', 'ready.md', {slug: 'ready'});
+		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writeFileSync(
 			join(root, 'repo', '.agent-runner.json'),
 			JSON.stringify({autoTask: true}),
@@ -468,61 +468,61 @@ describe('scanRepoPaths — taskable-brief pool (`briefs[]`)', () => {
 			mergeConfig({autoTask: false}),
 		);
 		expect(
-			report.repos[0].briefs.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
 
-	it('a briefAfter dep already in work/briefs/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
-		writeBrief('repo', 'brief', 'after.md', {
+	it('a prdAfter dep already in work/prds/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
+		writePrd('repo', 'prd', 'after.md', {
 			slug: 'after',
-			briefAfter: '[dep]',
+			prdAfter: '[dep]',
 		});
-		writeBrief('repo', 'brief-tasked', 'dep.md', {slug: 'dep'});
+		writePrd('repo', 'prd-tasked', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
 		expect(
-			report.repos[0].briefs.find((p) => p.slug === 'after')!.eligibility
+			report.repos[0].prds.find((p) => p.slug === 'after')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
 
 	it(
-		'end-to-end at the enumeration seam: ONE eligible task + ONE taskable brief ' +
-			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `briefs[]`)',
+		'end-to-end at the enumeration seam: ONE eligible task + ONE taskable prd ' +
+			'⇒ both surface (the propose-matrix `jq` reads BOTH `items[]` AND `prds[]`)',
 		() => {
 			writeItem('repo', 'backlog', 'go.md', {slug: 'go', blockedBy: '[]'});
-			writeBrief('repo', 'brief', 'cut.md', {slug: 'cut'});
+			writePrd('repo', 'prd', 'cut.md', {slug: 'cut'});
 			const report = scanRepoPaths(
 				[join(root, 'repo')],
 				mergeConfig({autoBuild: true, autoTask: true}),
 			);
 			const task = report.repos[0].items.find((i) => i.slug === 'go')!;
-			const brief = report.repos[0].briefs.find((p) => p.slug === 'cut')!;
+			const prd = report.repos[0].prds.find((p) => p.slug === 'cut')!;
 			expect(task.eligibility.eligible).toBe(true);
-			expect(brief.eligibility.eligible).toBe(true);
+			expect(prd.eligibility.eligible).toBe(true);
 		},
 	);
 });
 
-describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
+describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 	it('reports a ready ungated PRD as taskable from the bare mirror main (autoTask on)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
+			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 		});
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const brief = report.repos[0].briefs.find((p) => p.slug === 'ready');
-		expect(brief).toBeDefined();
-		expect(brief!.eligibility.eligible).toBe(true);
+		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
+		expect(prd).toBeDefined();
+		expect(prd!.eligibility.eligible).toBe(true);
 	});
 
 	it('a humanOnly / needsAnswers / autoTask:false PRD is NOT taskable (gate still binds)', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			brief: {
+			prd: {
 				'ready.md': `---\nslug: ready\n---\n# PRD`,
 				'human.md': `---\nslug: human\nhumanOnly: true\n---\n# PRD`,
 				'asks.md': `---\nslug: asks\nneedsAnswers: true\n---\n# PRD`,
@@ -533,13 +533,13 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			offReport.repos[0].briefs.every((p) => p.eligibility.eligible === false),
+			offReport.repos[0].prds.every((p) => p.eligibility.eligible === false),
 		).toBe(true);
 		// autoTask ON ⇒ only `ready` is taskable; the gated PRDs are NOT.
 		const onReport = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const by = new Map(onReport.repos[0].briefs.map((p) => [p.slug, p]));
+		const by = new Map(onReport.repos[0].prds.map((p) => [p.slug, p]));
 		expect(by.get('ready')!.eligibility.eligible).toBe(true);
 		expect(by.get('human')!.eligibility.eligible).toBe(false);
 		expect(by.get('asks')!.eligibility.eligible).toBe(false);
@@ -547,7 +547,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 
 	it('honours the COMMITTED per-repo `.agent-runner.json` autoTask override on the mirror', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
-			brief: {'ready.md': `---\nslug: ready\n---\n# PRD`},
+			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 			repoConfig: {autoTask: true},
 		});
 		// Global is OFF, but the mirror's committed file opts in ⇒ taskable.
@@ -555,7 +555,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			report.repos[0].briefs.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
@@ -563,7 +563,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 	it('end-to-end: ONE eligible task + ONE taskable PRD on the SAME mirror ⇒ both surface', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'go.md': task({slug: 'go'})},
-			brief: {'cut.md': `---\nslug: cut\n---\n# PRD`},
+			prd: {'cut.md': `---\nslug: cut\n---\n# PRD`},
 		});
 		const report = await scan(
 			mergeConfig({
@@ -576,8 +576,7 @@ describe('scan (registry) — taskable-brief pool (`briefs[]`)', () => {
 			report.repos[0].items.find((i) => i.slug === 'go')!.eligibility.eligible,
 		).toBe(true);
 		expect(
-			report.repos[0].briefs.find((p) => p.slug === 'cut')!.eligibility
-				.eligible,
+			report.repos[0].prds.find((p) => p.slug === 'cut')!.eligibility.eligible,
 		).toBe(true);
 	});
 });
@@ -694,7 +693,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 			needsAnswers: 'true',
 			blockedBy: '[]',
 		});
-		writeBrief('repo', 'brief', 'blocked-prd.md', {
+		writePrd('repo', 'prd', 'blocked-prd.md', {
 			slug: 'blocked-prd',
 			needsAnswers: 'true',
 		});
@@ -704,7 +703,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 		);
 		const surface = report.repos[0].lifecycle.surface;
 		expect(surface).toContainEqual({namespace: 'task', slug: 'blocked'});
-		expect(surface).toContainEqual({namespace: 'brief', slug: 'blocked-prd'});
+		expect(surface).toContainEqual({namespace: 'prd', slug: 'blocked-prd'});
 	});
 
 	it('APPLY is ALWAYS-ON: an answered sidecar applies even with BOTH create-gates calm', () => {

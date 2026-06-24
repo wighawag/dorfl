@@ -36,7 +36,7 @@ function answeredSidecar(item: string): SidecarModel {
 }
 
 function blocked(
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	sidecar: SidecarModel | undefined,
 ): NeedsAnswersCandidate {
@@ -95,7 +95,7 @@ describe('buildLifecyclePools — surface sub-pool (needsAnswers, no all-answere
 		const pools = buildLifecyclePools({
 			repoPath: '/repo',
 			observations: [],
-			needsAnswers: [blocked('brief', 'blocked-prd', undefined)],
+			needsAnswers: [blocked('prd', 'blocked-prd', undefined)],
 		});
 		expect(pools.surface).toEqual([]);
 	});
@@ -120,14 +120,14 @@ describe('buildLifecyclePools — apply sub-pool (answered sidecar; CONSUME, ALW
 			observations: [obs('open')],
 			needsAnswers: [
 				blocked('task', 'answered-task', answeredSidecar('task:answered-task')),
-				blocked('brief', 'answered-prd', answeredSidecar('brief:answered-prd')),
+				blocked('prd', 'answered-prd', answeredSidecar('prd:answered-prd')),
 			],
 			// create-side gates OFF (the default/interim) — apply is NOT gated.
 			gates: {},
 		});
 		expect(pools.apply).toEqual([
 			{repoPath: '/repo', slug: 'answered-task', namespace: 'task'},
-			{repoPath: '/repo', slug: 'answered-prd', namespace: 'brief'},
+			{repoPath: '/repo', slug: 'answered-prd', namespace: 'prd'},
 		]);
 		// create-side pools stay empty (gates off).
 		expect(pools.surface).toEqual([]);

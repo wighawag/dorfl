@@ -122,7 +122,7 @@ import {
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
-	promoteFromPreBrief,
+	promoteFromPrePrd,
 	listPromotable,
 } from './needs-attention.js';
 import {parseSlugArg} from './slug-namespace.js';
@@ -299,7 +299,7 @@ function resolveRemoteRepoConfig(options: {
  * {@link RunTick} swap seam at the precursor's registry-set advance driver
  * ({@link advanceRegistrySetRunTick}) instead of the build-only `runOnce` tick, so
  * plain `run` ≡ advance with calm-default gates: behaviour-preserving today
- * (both lifecycle gates default off ⇒ build ready tasks / task ready briefs /
+ * (both lifecycle gates default off ⇒ build ready tasks / task ready prds /
  * route failures to needs-attention, over the SAME registry-set discovery +
  * per-mirror job-worktree isolation the build tick used), lifecycle-capable the
  * moment a gate is flipped (triage / surface / apply).
@@ -343,10 +343,10 @@ function buildRegistrySetAdvanceTick(options: {
 		lifecycleGates: {
 			triage: config.observationTriage !== 'off',
 			surface: config.surfaceBlockers,
-			// `surfaceStaging` widens the SURFACE candidate set into STAGING (brief
+			// `surfaceStaging` widens the SURFACE candidate set into STAGING (prd
 			// `staging-surface-and-apply-promote-safety` F2). Default `true` — a
-			// tasked `needsAnswers` task in `tasks/backlog/` (or brief in
-			// `briefs/proposed/`) surfaces its questions BEFORE promotion. BUILD/claim
+			// tasked `needsAnswers` task in `tasks/backlog/` (or prd in
+			// `prds/proposed/`) surfaces its questions BEFORE promotion. BUILD/claim
 			// stays pool-only either way.
 			surfaceStaging: config.surfaceStaging,
 		},
@@ -378,10 +378,10 @@ function buildRegistrySetAdvanceTick(options: {
 				identity: config.identity,
 				autoTask: config.autoTask,
 				integration: config.integration,
-				// The per-TRANSITION TASKING override: the `do brief:` tasking path threads
+				// The per-TRANSITION TASKING override: the `do prd:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
-				// The TASK-PLACEMENT configured default (`do brief:` tasking output:
+				// The TASK-PLACEMENT configured default (`do prd:` tasking output:
 				// `pre-backlog` staged vs `todo` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
@@ -626,7 +626,7 @@ interface CompleteFlags {
 
 /**
  * Resolve the EXPLICIT operator placement override from `--tasks-land-in <where>`
- * (the top of the `do brief:` tasking-placement precedence — task
+ * (the top of the `do prd:` tasking-placement precedence — task
  * `runner-deterministic-slice-placement-policy-and-precedence`). Mirrors the
  * `flagMode === 'merge'` ⇒ `explicitMerge: true` shape: it contributes
  * `explicitTasksLandIn` ONLY when the operator actually typed the flag, so an
@@ -650,17 +650,17 @@ function explicitTasksLandInFromFlag(
 }
 
 /**
- * The BRIEF twin of {@link explicitTasksLandInFromFlag} (task
+ * The PRD twin of {@link explicitTasksLandInFromFlag} (task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). Resolve the
- * EXPLICIT operator brief-placement override from `--briefs-land-in <where>` for
- * `intake`'s `brief` dispatch — the TOP of the same precedence chain that the
- * tasking placement uses. Contributes `explicitBriefsLandIn` ONLY when the
+ * EXPLICIT operator prd-placement override from `--prds-land-in <where>` for
+ * `intake`'s `prd` dispatch — the TOP of the same precedence chain that the
+ * tasking placement uses. Contributes `explicitPrdsLandIn` ONLY when the
  * operator actually typed the flag, so an untrusted-origin's staging force
  * still wins when the value came from config. An invalid value FAILS LOUDLY
  * (a usage error, never silently dropped), mirroring the task helper above
- * and the `AGENT_RUNNER_BRIEFS_LAND_IN` env coercion.
+ * and the `AGENT_RUNNER_PRDS_LAND_IN` env coercion.
  */
-function explicitBriefsLandInFromFlag(
+function explicitPrdsLandInFromFlag(
 	raw: string | undefined,
 ): 'pre-proposed' | 'ready' | undefined {
 	if (raw === undefined) {
@@ -668,7 +668,7 @@ function explicitBriefsLandInFromFlag(
 	}
 	if (raw !== 'pre-proposed' && raw !== 'ready') {
 		throw new Error(
-			`--briefs-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
+			`--prds-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -690,7 +690,7 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--tasks-land-in <pre-backlog|todo>`: the explicit operator placement override for `do brief:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
+	/** `--tasks-land-in <pre-backlog|todo>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
 	tasksLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -704,11 +704,11 @@ interface DoFlags {
 	review?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
-	/** `--tasker-loop` / `--no-tasker-loop` — the tasker improver loop on/off toggle (`do brief:` path). Resolves into the `taskerLoop` config key. */
+	/** `--tasker-loop` / `--no-tasker-loop` — the tasker improver loop on/off toggle (`do prd:` path). Resolves into the `taskerLoop` config key. */
 	taskerLoop?: boolean;
-	/** `--tasker-loop-max <n>` — the tasker improver loop's in-context convergence cap (`do brief:` path). Resolves into the `taskerLoopMax` config key. */
+	/** `--tasker-loop-max <n>` — the tasker improver loop's in-context convergence cap (`do prd:` path). Resolves into the `taskerLoopMax` config key. */
 	taskerLoopMax?: string;
-	/** `--tasker-loop-model <id>` — the tasker improver loop reviewer's de-correlated model (`do brief:` path). Resolves into the `taskerLoopModel` config key. */
+	/** `--tasker-loop-model <id>` — the tasker improver loop reviewer's de-correlated model (`do prd:` path). Resolves into the `taskerLoopModel` config key. */
 	taskerLoopModel?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
@@ -721,20 +721,20 @@ interface IntakeFlags {
 	propose?: boolean;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
-	mergeBrief?: boolean;
-	proposeBrief?: boolean;
+	mergePrd?: boolean;
+	proposePrd?: boolean;
 	mergeTask?: boolean;
 	proposeTask?: boolean;
 	/**
 	 * `--origin-trust <trusted|untrusted>` — the author-trust verdict the CI shell
-	 * passes IN so `intake` STAMPS the emitted brief/task (task
+	 * passes IN so `intake` STAMPS the emitted prd/task (task
 	 * `untrusted-origin-forces-build-propose`). `intake` does NOT resolve trust; the
 	 * shell derives it from the SAME `author_association` case as the integration
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
-	/** `--briefs-land-in <pre-proposed|ready>`: the explicit operator brief-placement override (top of the precedence). Resolves into the `briefsLandIn` config key. */
-	briefsLandIn?: string;
+	/** `--prds-land-in <pre-proposed|ready>`: the explicit operator prd-placement override (top of the precedence). Resolves into the `prdsLandIn` config key. */
+	prdsLandIn?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -826,9 +826,9 @@ interface CloseMergedIssuesFlags {
 /**
  * Resolve a task-only command's slug argument through the §3a namespace guard
  * (`resolveTaskOnlyArg`): accept bare (= task) + `task:` (explicit alias),
- * REJECT `brief:` with a clear "operates on tasks, not briefs" error. On rejection
+ * REJECT `prd:` with a clear "operates on tasks, not prds" error. On rejection
  * it prints the error to stderr and exits 1 (the task-only commands never act
- * on a brief). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
+ * on a prd). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
  * branch) passes through untouched.
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
@@ -913,14 +913,14 @@ function buildInteractiveLauncher(
  * switching to its `work/<slug>` branch WITHOUT claiming). The runtime
  * difference is exactly the `resume` flag — `resume` forces it on (its only mode
  * is to re-engage), while `start` honours the (now hidden) `--resume` alias.
- * Both are task-only (§3a: accept bare + `task:`, reject `brief:`).
+ * Both are task-only (§3a: accept bare + `task:`, reject `prd:`).
  */
 async function runStartAction(
 	rawSlug: string | undefined,
 	flags: StartFlags,
 	resume: boolean,
 ): Promise<void> {
-	// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+	// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 	const slug = resolveTaskOnlySlug(rawSlug);
 	const cwd = process.cwd();
 
@@ -1336,7 +1336,7 @@ export function buildProgram(): Command {
 			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			// Wrap ONLY this CLI surface's `performClaim` call with the spinner
 			// helper (task `claim-cas-spinner`): the push can take seconds, so the
@@ -1542,7 +1542,7 @@ export function buildProgram(): Command {
 				flags.remote !== undefined && flags.remote.trim() !== ''
 					? flags.remote
 					: undefined;
-			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const theSlug = resolveTaskOnlySlug(rawSlug) as string;
 
 			const configPath = flags.config ?? defaultConfigPath();
@@ -1594,14 +1594,14 @@ export function buildProgram(): Command {
 		.command('prompt')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			"Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source brief substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
+			"Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source prd substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
 		)
 		.argument(
 			'[slug]',
 			'the slug to render (inferred from a work/<slug> branch if omitted)',
 		)
 		.action((rawSlug: string | undefined) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const slug = resolveTaskOnlySlug(rawSlug);
 			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
 			// gate family uses (env > per-repo > global > default), so e.g. a
@@ -1704,7 +1704,7 @@ export function buildProgram(): Command {
 			'run the acceptance gate in the current checkout (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
 		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const slug = resolveTaskOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
@@ -1832,7 +1832,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do brief:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then BRIEFS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do prd:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then PRDS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* tasks grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -1841,7 +1841,7 @@ export function buildProgram(): Command {
 		// for the auto-pick form. `do` stays SEQUENTIAL (parallelism is `run`).
 		.argument(
 			'[slugs...]',
-			'the item(s) to do: bare (= the task), task:<slug>, or brief:<slug> (task the BRIEF). Zero args = auto-pick; multiple = do them in sequence.',
+			'the item(s) to do: bare (= the task), task:<slug>, or prd:<slug> (task the PRD). Zero args = auto-pick; multiple = do them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -1850,7 +1850,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'-n, --number <x>',
-			'AUTO-PICK x eligible items and do them IN SEQUENCE (ordered by selectionOrder, default drain = tasks-first then briefs-to-task). Sequential — never a parallelism knob (that is `run`). Mutually exclusive with naming items.',
+			'AUTO-PICK x eligible items and do them IN SEQUENCE (ordered by selectionOrder, default drain = tasks-first then prds-to-task). Sequential — never a parallelism knob (that is `run`). Mutually exclusive with naming items.',
 		)
 		.option(
 			'--selection-order <order>',
@@ -1874,7 +1874,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `do brief:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `do prd:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -1923,15 +1923,15 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasker-loop',
-			'run the tasker IMPROVER loop on `do brief:<slug>` (review→edit→converge over the produced task set). ON by default; --no-tasker-loop skips it. DISTINCT from the acceptance gate (--review).',
+			'run the tasker IMPROVER loop on `do prd:<slug>` (review→edit→converge over the produced task set). ON by default; --no-tasker-loop skips it. DISTINCT from the acceptance gate (--review).',
 		)
 		.option(
 			'--no-tasker-loop',
-			'skip the tasker improver loop on `do brief:<slug>`',
+			'skip the tasker improver loop on `do prd:<slug>`',
 		)
 		.option(
 			'--tasker-loop-max <n>',
-			'cap the tasker improver loop on `do brief:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the brief to needs-attention (default 3)',
+			'cap the tasker improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the prd to needs-attention (default 3)',
 		)
 		.option(
 			'--tasker-loop-model <id>',
@@ -2095,7 +2095,7 @@ export function buildProgram(): Command {
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
 					// agent launch); absent ⇒ ambient.
 					identity: remoteConfig.identity,
-					// `do --remote brief:<slug>` tasking-gate policy (task-build path ignores it).
+					// `do --remote prd:<slug>` tasking-gate policy (task-build path ignores it).
 					autoTask: remoteConfig.autoTask,
 					// The resolved `promptGuidance` nudge — threaded into the remote worker
 					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
@@ -2103,7 +2103,7 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the `do --remote brief:` tasking path).
+					// Per-TRANSITION TASKING override (the `do --remote prd:` tasking path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: the configured default + the EXPLICIT operator override
 					// (`--tasks-land-in`), the top of the placement precedence — mirrors
@@ -2128,7 +2128,7 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					// The tasker IMPROVER loop on the `do --remote brief:` path is ON by default
+					// The tasker IMPROVER loop on the `do --remote prd:` path is ON by default
 					// (auto-tasking has no `verify` floor, so the loop is the task path's
 					// quality engine). `--tasker-loop`/`--no-tasker-loop` gates wiring the seam;
 					// `taskerLoopMax`/`taskerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2141,7 +2141,7 @@ export function buildProgram(): Command {
 						: undefined,
 					taskerLoopMax: remoteConfig.taskerLoopMax,
 					taskerLoopModel: remoteConfig.taskerLoopModel,
-					// The task-SET ACCEPTANCE GATE on the `do --remote brief:` path too.
+					// The task-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
 					taskReviewGate: remoteConfig.review
 						? harnessTaskAcceptanceGate({
 								harness: remoteHarness,
@@ -2238,7 +2238,7 @@ export function buildProgram(): Command {
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
 				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
 				identity: config.identity,
-				// `do brief:<slug>` tasking-gate policy (the task-build path ignores it).
+				// `do prd:<slug>` tasking-gate policy (the task-build path ignores it).
 				autoTask: config.autoTask,
 				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
 				// threaded into the worker prompt by performDo → buildAgentPrompt so a
@@ -2251,11 +2251,11 @@ export function buildProgram(): Command {
 				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
 				// untrusted-origin task still forces propose under a config `merge`.
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override: the `do brief:` tasking path threads
+				// Per-TRANSITION TASKING override: the `do prd:` tasking path threads
 				// `taskingIntegration ?? integration`; the task-build path stays on
 				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
 				taskingIntegration: config.taskingIntegration,
-				// TASK-PLACEMENT (`do brief:` tasking output): the configured default rung +
+				// TASK-PLACEMENT (`do prd:` tasking output): the configured default rung +
 				// the EXPLICIT operator override `--tasks-land-in` (top of the precedence).
 				// `explicitTasksLandIn` is set ONLY when the flag was typed (mirrors
 				// `explicitMerge`), so an untrusted-origin staging force still wins under a
@@ -2288,7 +2288,7 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				// The tasker IMPROVER loop on the `do brief:` tasking path is ON by default
+				// The tasker IMPROVER loop on the `do prd:` tasking path is ON by default
 				// (auto-tasking has no `verify` floor — the loop is the task path's quality
 				// engine). `--tasker-loop`/`--no-tasker-loop` gates wiring the seam;
 				// `taskerLoopMax`/`taskerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2351,11 +2351,11 @@ export function buildProgram(): Command {
 		});
 
 	// `advance` — the SIBLING top-level verb (NOT a `do` subcommand; `do`
-	// subcommands + a standalone `task` verb are REJECTED in brief `advance-loop`).
+	// subcommands + a standalone `task` verb are REJECTED in prd `advance-loop`).
 	// It reuses the SAME shared `prefix:arg` resolver `do` uses, EXTENDED with the
 	// `obs:` namespace, and wires the classify → lock → execute SKELETON: classify
 	// the rung (read-only, no model, no lock), take the `advancing` CAS borrow, then
-	// dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do brief:` (never a
+	// dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do prd:` (never a
 	// duplicate), surface/apply/triage dispatch to a named executor seam later
 	// tasks fill. The DRIVERS (one-shot/loop) + `-n` + per-action gates and the
 	// rung BODIES are LATER tasks; the bare eligible-SET form errors clearly here.
@@ -2363,11 +2363,11 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (BRIEF advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance brief:<slug> (the BRIEF tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do brief:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance prd:<slug> (the PRD tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
-			'the item(s) to advance: bare (= the task), task:<slug>, brief:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
+			'the item(s) to advance: bare (= the task), task:<slug>, prd:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2376,7 +2376,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'-n, --number <x>',
-			'AUTO-PICK x eligible items and advance them IN SEQUENCE (ordered by selectionOrder, default drain = tasks-first then briefs-to-task). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
+			'AUTO-PICK x eligible items and advance them IN SEQUENCE (ordered by selectionOrder, default drain = tasks-first then prds-to-task). Sequential — never a parallelism knob (that is `run` / the CI matrix). Mutually exclusive with naming items.',
 		)
 		.option(
 			'--isolated',
@@ -2392,11 +2392,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--surface-blockers',
-			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/brief carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance brief:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
+			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/prd carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
 		)
 		.option(
 			'--no-surface-blockers',
-			'leave a needsAnswers:true task/brief silently blocked (default; the blocked pool is dropped from auto-pick)',
+			'leave a needsAnswers:true task/prd silently blocked (default; the blocked pool is dropped from auto-pick)',
 		)
 		.option(
 			'--merge',
@@ -2408,7 +2408,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `advance brief:<slug>` tasking output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `advance prd:<slug>` tasking output lands: `pre-backlog` (staged) or `todo` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (AGENT_RUNNER_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -2544,7 +2544,7 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the isolated `do --remote brief:` path).
+					// Per-TRANSITION TASKING override (the isolated `do --remote prd:` path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
 					// (set only when typed, mirroring `explicitMerge`).
@@ -2678,7 +2678,7 @@ export function buildProgram(): Command {
 				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (a
 				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override (the `do brief:` tasking path threads
+				// Per-TRANSITION TASKING override (the `do prd:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`).
 				taskingIntegration: config.taskingIntegration,
 				// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
@@ -2748,7 +2748,7 @@ export function buildProgram(): Command {
 
 			// DISPATCH the variadic grammar (the one-shot SEQUENTIAL driver):
 			//   zero args       -> AUTO-PICK `count` (default 1) over the eligible pool
-			//                      (tasks-first then briefs-to-task; per-action gates
+			//                      (tasks-first then prds-to-task; per-action gates
 			//                      respected by the SELECTION layer; ordered by selectionOrder).
 			//   one named arg   -> the single-item tick (the always-allowed surface/apply
 			//                      path runs regardless of the gate family).
@@ -2848,7 +2848,7 @@ export function buildProgram(): Command {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 
-			// The `gc`-STYLE ledger SWEEP (brief `ledger-integrity` story 3): a SEPARATE
+			// The `gc`-STYLE ledger SWEEP (prd `ledger-integrity` story 3): a SEPARATE
 			// surface from the worktree reaper below — it REPORTS one-slug-one-folder
 			// violations in a repo's `work/` lifecycle ledger and NEVER deletes (a human
 			// resolves each). Distinct `work/`: the ledger, not the execution substrate.
@@ -2857,7 +2857,7 @@ export function buildProgram(): Command {
 					typeof flags.ledger === 'string' ? flags.ledger : process.cwd();
 				const result = sweepLedgerDuplicates(repoPath);
 				// The UNIFIED-LOCK stuck/orphaned-lock REPORT (task
-				// `release-lock-verb-and-gc-stuck-report`, brief
+				// `release-lock-verb-and-gc-stuck-report`, prd
 				// `ledger-status-per-item-lock-refs` US #12/#13/#14): generalises the
 				// advancing-marker report from advancing-only to the unified per-item
 				// lock. The locks live on the ARBITER ref (`refs/agent-runner/lock/*`),
@@ -2942,7 +2942,7 @@ export function buildProgram(): Command {
 				// ALL are REPORTED here (never auto-deleted — no automatic sweep exists; a
 				// human clears a NAMED unified lock via `release-lock`).
 				//
-				// SCOPED to the ATTENTION verdicts only (brief US#14/#21, ADR
+				// SCOPED to the ATTENTION verdicts only (prd US#14/#21, ADR
 				// `ledger-status-on-per-item-lock-refs`: this surface is the STUCK /
 				// crash-orphaned lock, NOT every held one): a `kept-stuck` (terminal +
 				// stuck) or a `cleared-stale`-eligible (terminal + stale active = orphaned)
@@ -3131,7 +3131,7 @@ export function buildProgram(): Command {
 			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
 		.action(async (rawSlug: string, flags: RequeueFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `brief:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
@@ -3168,12 +3168,12 @@ export function buildProgram(): Command {
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
 
-	// `promote [item]` (brief `staging-pool-position-gate-and-trust-model`, tasks
+	// `promote [item]` (prd `staging-pool-position-gate-and-trust-model`, tasks
 	// `pre-backlog-staging-folder-and-promote-step-a` /
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the HUMAN/runner-
 	// owned verb that moves a STAGED item into its agent-eligible POOL — a task
-	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a brief
-	// `work/briefs/proposed/<slug>.md → work/briefs/ready/<slug>.md` — as a tree-less CAS on the
+	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a prd
+	// `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md` — as a tree-less CAS on the
 	// arbiter, the SAME trust model + mechanism as `requeue`. The agent emits STAGED;
 	// only this verb (a human, or the runner) admits it to the pool. With NO argument
 	// it LISTS what is promotable (the "what is staged waiting for me?" discovery), so
@@ -3182,7 +3182,7 @@ export function buildProgram(): Command {
 		.command('promote [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a brief `work/briefs/proposed/<slug>.md → work/briefs/ready/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `task:<slug>` / `brief:<slug>` / a bare `<slug>` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the briefs in briefs/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
+			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a prd `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `task:<slug>` / `prd:<slug>` / a bare `<slug>` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the prds in prds/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3210,7 +3210,7 @@ export function buildProgram(): Command {
 				}
 				if (listed.items.length === 0) {
 					console.log(
-						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and work/briefs/proposed/ are empty).`,
+						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and work/prds/proposed/ are empty).`,
 					);
 					return;
 				}
@@ -3221,33 +3221,33 @@ export function buildProgram(): Command {
 				return;
 			}
 
-			// AN ITEM → promote it. `task:`/`brief:` are explicit; a bare slug defaults to
+			// AN ITEM → promote it. `task:`/`prd:` are explicit; a bare slug defaults to
 			// a task (mirrors `requeue`). An `obs:`/`observation:` prefix is rejected
 			// (observations have no pool).
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
 				console.error(
-					`error: promote takes a task or brief, not an observation ('${rawItem}'). Observations have no agent pool.`,
+					`error: promote takes a task or prd, not an observation ('${rawItem}'). Observations have no agent pool.`,
 				);
 				process.exit(1);
 			}
-			const namespace = parsed.explicit === 'brief' ? 'brief' : 'task';
+			const namespace = parsed.explicit === 'prd' ? 'prd' : 'task';
 			const slug = parsed.slug;
 			const result =
-				namespace === 'brief'
-					? await promoteFromPreBrief({cwd, slug, arbiter, env, note})
+				namespace === 'prd'
+					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
 				console.error(`error: ${result.reasonNotMoved}`);
 				process.exit(1);
 			}
 			const dest =
-				namespace === 'brief'
-					? workFolderPrefix('briefs-ready')
+				namespace === 'prd'
+					? workFolderPrefix('prds-ready')
 					: workFolderPrefix('tasks-todo');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
-					namespace === 'brief' ? 'auto-taskable' : 'claimable'
+					namespace === 'prd' ? 'auto-taskable' : 'claimable'
 				}.`,
 			);
 		});
@@ -3258,7 +3258,7 @@ export function buildProgram(): Command {
 	// `action: advance` on the UNIFIED per-item lock, so `release-lock <item>` (below)
 	// is the SOLE named human release for ALL holds (implement/task/advance).
 
-	// `release-lock <item>` (task `release-lock-verb-and-gc-stuck-report`, brief
+	// `release-lock <item>` (task `release-lock-verb-and-gc-stuck-report`, prd
 	// `ledger-status-per-item-lock-refs` US #14): the HUMAN-invoked named release of
 	// a stuck/orphaned UNIFIED per-item lock (`refs/agent-runner/lock/<entry>`) —
 	// the GENERALISATION of `release-advancing` from the advancing-only marker to
@@ -3275,7 +3275,7 @@ export function buildProgram(): Command {
 		.command('release-lock <item>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/agent-runner/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `brief:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
+			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/agent-runner/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3320,7 +3320,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-brief/--propose-brief and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
@@ -3333,23 +3333,23 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--merge',
-			'integrate BOTH outcomes (task AND brief) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
+			'integrate BOTH outcomes (task AND prd) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
 		)
 		.option(
 			'--propose',
-			'integrate BOTH outcomes (task AND brief) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
+			'integrate BOTH outcomes (task AND prd) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
 		)
 		.option(
 			'--no-pr',
 			'propose without opening a PR for intake emissions: push the branch but deliberately skip the review request (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
-			'--merge-brief',
-			'integrate a brief outcome in merge mode (granular; overrides --merge/--propose for a brief; mutually exclusive with --propose-brief)',
+			'--merge-prd',
+			'integrate a prd outcome in merge mode (granular; overrides --merge/--propose for a prd; mutually exclusive with --propose-prd)',
 		)
 		.option(
-			'--propose-brief',
-			'integrate a brief outcome in propose mode (granular; overrides --merge/--propose for a brief; mutually exclusive with --merge-brief)',
+			'--propose-prd',
+			'integrate a prd outcome in propose mode (granular; overrides --merge/--propose for a prd; mutually exclusive with --merge-prd)',
 		)
 		.option(
 			'--merge-task',
@@ -3361,11 +3361,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--origin-trust <trusted|untrusted>',
-			"the author-trust verdict to STAMP onto the emitted brief/task (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the task's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
+			"the author-trust verdict to STAMP onto the emitted prd/task (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the task's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
 		)
 		.option(
-			'--briefs-land-in <where>',
-			'where an intake-authored brief lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > briefsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_BRIEFS_LAND_IN) > per-repo > global > built-in.',
+			'--prds-land-in <where>',
+			'where an intake-authored prd lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > prdsLandIn default > built-in). Resolved flag > env (AGENT_RUNNER_PRDS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
@@ -3412,7 +3412,7 @@ export function buildProgram(): Command {
 				console.error(`>> ${resolved.message}`);
 			}
 			const config = resolved.config;
-			// Resolve the PER-OUTCOME integration modes (brief US #9): `intake` decides
+			// Resolve the PER-OUTCOME integration modes (prd US #9): `intake` decides
 			// the artifact TYPE at runtime, so a single --merge/--propose can't express
 			// a type-conditional policy. The granular flags override the aggregate; an
 			// UNSET type falls back to the per-repo/global `integration` (the SAME chain
@@ -3452,12 +3452,12 @@ export function buildProgram(): Command {
 				harness: config.harness,
 				piBin: config.piBin,
 			});
-			// The OPERATOR's EXPLICIT brief-placement override (`--briefs-land-in`), the TOP
+			// The OPERATOR's EXPLICIT prd-placement override (`--prds-land-in`), the TOP
 			// of the placement precedence — mirrors `explicitTasksLandInFromFlag` on
-			// the `do brief:` path. Fails loudly on a bad value.
-			let explicitBriefsLandIn: 'pre-proposed' | 'ready' | undefined;
+			// the `do prd:` path. Fails loudly on a bad value.
+			let explicitPrdsLandIn: 'pre-proposed' | 'ready' | undefined;
 			try {
-				explicitBriefsLandIn = explicitBriefsLandInFromFlag(flags.briefsLandIn);
+				explicitPrdsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
 			} catch (err) {
 				console.error(
 					`error: ${err instanceof Error ? err.message : String(err)}`,
@@ -3472,11 +3472,11 @@ export function buildProgram(): Command {
 				// The origin-trust stamp the CI shell passes IN (unset ⇒ unstamped).
 				originTrust,
 				noPR: config.noPR,
-				// BRIEF-PLACEMENT: the configured-default rung + the EXPLICIT
-				// `--briefs-land-in` override (top of the precedence). The shared placement
+				// PRD-PLACEMENT: the configured-default rung + the EXPLICIT
+				// `--prds-land-in` override (top of the precedence). The shared placement
 				// resolver in `intake.ts` overlays the untrusted-origin staging force.
-				briefsLandIn: config.briefsLandIn,
-				explicitBriefsLandIn,
+				prdsLandIn: config.prdsLandIn,
+				explicitPrdsLandIn,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
@@ -3494,10 +3494,10 @@ export function buildProgram(): Command {
 			process.exit(result.exitCode);
 		});
 
-	// The CI CLOSE-JOB driver (brief `runner-in-ci`, capability E; task
+	// The CI CLOSE-JOB driver (prd `runner-in-ci`, capability E; task
 	// `install-ci-close-job-workflow`). The thin JOB the emitted close-job workflow
 	// invokes on a merge to main: resolve which source issue(s) the landed work
-	// closes (resolveClosingIssue), run the "brief complete?" query for the brief case
+	// closes (resolveClosingIssue), run the "prd complete?" query for the prd case
 	// (prd-complete-query, done), and close via the IssueProvider seam — all
 	// UNCHANGED engine pieces, CONSUMED not re-built (the Out-of-Scope fence). CI
 	// owns ONLY the job + trigger. Local-runnable too (a manual catch-up close).
@@ -3505,7 +3505,7 @@ export function buildProgram(): Command {
 		.command('close-merged-issues')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Close source issues whose work has landed on main (CI capability E, brief runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.brief: → brief issue:`), runs the existing "brief complete?" query for the brief case (closes ONLY when ALL its brief:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
+			'Close source issues whose work has landed on main (CI capability E, prd runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.prd: → prd issue:`), runs the existing "prd complete?" query for the prd case (closes ONLY when ALL its prd:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
 		)
 		.option(
 			'--cwd <dir>',

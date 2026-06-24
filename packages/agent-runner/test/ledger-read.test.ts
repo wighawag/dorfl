@@ -99,8 +99,8 @@ describe('ledger-read seam — local-tree resolve method', () => {
 });
 
 describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD source)', () => {
-	function writeBrief(
-		folder: 'brief' | 'tasking' | 'brief-tasked',
+	function writePrd(
+		folder: 'prd' | 'tasking' | 'prd-tasked',
 		file: string,
 		fm: Record<string, string>,
 	): void {
@@ -114,62 +114,62 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		writeFileSync(join(dir, file), lines.join('\n'));
 	}
 
-	it('enumerates work/briefs/ready/*.md with each PRD’s gate axes, sorted by slug', () => {
-		writeBrief('brief', 'beta.md', {
+	it('enumerates work/prds/ready/*.md with each PRD’s gate axes, sorted by slug', () => {
+		writePrd('prd', 'beta.md', {
 			slug: 'beta',
 			needsAnswers: 'true',
-			briefAfter: '[alpha]',
+			prdAfter: '[alpha]',
 		});
-		writeBrief('brief', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
+		writePrd('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
 
-		const pool = currentLedgerRead.resolveBriefPool({
+		const pool = currentLedgerRead.resolvePrdPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.briefs.map((p) => p.slug)).toEqual(['alpha', 'beta']);
-		expect(pool.briefs[0]).toMatchObject({
+		expect(pool.prds.map((p) => p.slug)).toEqual(['alpha', 'beta']);
+		expect(pool.prds[0]).toMatchObject({
 			file: 'alpha.md',
 			slug: 'alpha',
 			humanOnly: true,
-			briefAfter: [],
+			prdAfter: [],
 		});
-		expect(pool.briefs[1]).toMatchObject({
+		expect(pool.prds[1]).toMatchObject({
 			slug: 'beta',
 			needsAnswers: true,
-			briefAfter: ['alpha'],
+			prdAfter: ['alpha'],
 		});
 	});
 
-	it('collects already-TASKED slugs from `work/briefs/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `tasked:` marker was removed)', () => {
+	it('collects already-TASKED slugs from `work/prds/tasked/` RESIDENCE (the folder is the SOLE source of truth; the `tasked:` marker was removed)', () => {
 		// alpha + gamma rest in prd-tasked/ (tasked); beta is still to-task in prd/.
-		writeBrief('brief-tasked', 'alpha.md', {slug: 'alpha'});
-		writeBrief('brief', 'beta.md', {slug: 'beta'});
-		writeBrief('brief-tasked', 'gamma.md', {slug: 'gamma'});
+		writePrd('prd-tasked', 'alpha.md', {slug: 'alpha'});
+		writePrd('prd', 'beta.md', {slug: 'beta'});
+		writePrd('prd-tasked', 'gamma.md', {slug: 'gamma'});
 		// An INERT leftover `tasked:` line on a PRD still in prd/ does NOT count (folder
 		// = truth; the marker was removed in remove-sliced-marker-step-b, so the line is
 		// ignored): delta carries one but resides in prd/, so it is NOT tasked.
-		writeBrief('brief', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
+		writePrd('prd', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
 
-		const pool = currentLedgerRead.resolveBriefPool({
+		const pool = currentLedgerRead.resolvePrdPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool.taskedSlugs).toEqual(new Set(['alpha', 'gamma']));
 	});
 
 	it('is OFFLINE/synchronous and reads an absent work/prd as an empty pool', () => {
-		const pool = currentLedgerRead.resolveBriefPool({
+		const pool = currentLedgerRead.resolvePrdPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool).not.toBeInstanceOf(Promise);
-		expect(pool.briefs).toEqual([]);
+		expect(pool.prds).toEqual([]);
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 
 	it('falls back to the filename when a PRD has no slug frontmatter', () => {
-		writeBrief('brief', 'no-slug.md', {title: 'x'});
-		const pool = currentLedgerRead.resolveBriefPool({
+		writePrd('prd', 'no-slug.md', {title: 'x'});
+		const pool = currentLedgerRead.resolvePrdPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.briefs.map((p) => p.slug)).toEqual(['no-slug']);
+		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
 	});
 });
 
@@ -403,7 +403,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		scratch.cleanup();
 	});
 
-	function brief(frontmatter: Record<string, string>): string {
+	function prd(frontmatter: Record<string, string>): string {
 		const lines = ['---'];
 		for (const [k, v] of Object.entries(frontmatter)) {
 			lines.push(`${k}: ${v}`);
@@ -412,32 +412,32 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		return lines.join('\n');
 	}
 
-	it('enumerates work/briefs/ready/*.md (gate axes, sorted by slug) + prd-tasked/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
+	it('enumerates work/prds/ready/*.md (gate axes, sorted by slug) + prd-tasked/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			brief: {
-				'beta.md': brief({
+			prd: {
+				'beta.md': prd({
 					slug: 'beta',
 					needsAnswers: 'true',
-					briefAfter: '[alpha]',
+					prdAfter: '[alpha]',
 				}),
-				'gamma.md': brief({slug: 'gamma', humanOnly: 'true'}),
+				'gamma.md': prd({slug: 'gamma', humanOnly: 'true'}),
 			},
-			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
+			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		});
 
-		const pool = await currentLedgerRead.resolveMirrorBriefPool({
+		const pool = await currentLedgerRead.resolveMirrorPrdPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.briefs.map((p) => p.slug)).toEqual(['beta', 'gamma']);
-		expect(pool.briefs[0]).toMatchObject({
+		expect(pool.prds.map((p) => p.slug)).toEqual(['beta', 'gamma']);
+		expect(pool.prds[0]).toMatchObject({
 			file: 'beta.md',
 			slug: 'beta',
 			needsAnswers: true,
-			briefAfter: ['alpha'],
+			prdAfter: ['alpha'],
 		});
-		expect(pool.briefs[1]).toMatchObject({slug: 'gamma', humanOnly: true});
+		expect(pool.prds[1]).toMatchObject({slug: 'gamma', humanOnly: true});
 		// Tasked-ness is RESIDENCE in prd-tasked/ (the folder is the source of truth).
 		expect(pool.taskedSlugs).toEqual(new Set(['alpha']));
 	});
@@ -445,26 +445,26 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 	it('falls back to the filename for a PRD with no slug frontmatter', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			brief: {'no-slug.md': '---\ntitle: x\n---\n\n# PRD'},
+			prd: {'no-slug.md': '---\ntitle: x\n---\n\n# PRD'},
 		});
-		const pool = await currentLedgerRead.resolveMirrorBriefPool({
+		const pool = await currentLedgerRead.resolveMirrorPrdPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.briefs.map((p) => p.slug)).toEqual(['no-slug']);
+		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
 	});
 
 	it('reads an absent work/prd as an empty pool (no throw)', async () => {
 		const ws = join(scratch.root, '.agent-runner');
 		// No prd/ folder seeded (only a done/ entry) — the pool reads as empty.
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
-			done: {'a.md': brief({slug: 'a'})},
+			done: {'a.md': prd({slug: 'a'})},
 		});
-		const pool = await currentLedgerRead.resolveMirrorBriefPool({
+		const pool = await currentLedgerRead.resolveMirrorPrdPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.briefs).toEqual([]);
+		expect(pool.prds).toEqual([]);
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 });

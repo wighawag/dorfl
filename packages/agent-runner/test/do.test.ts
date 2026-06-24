@@ -57,13 +57,13 @@ const editingAgent: DoAgentRunner = ({cwd}) => {
 	return {ok: true};
 };
 
-/** Seed a `work/briefs/ready/<slug>.md` in the checkout's working tree (for prd: tests). */
-function seedBrief(
+/** Seed a `work/prds/ready/<slug>.md` in the checkout's working tree (for prd: tests). */
+function seedPrd(
 	repo: string,
 	slug: string,
 	fm: {humanOnly?: boolean; needsAnswers?: boolean} = {},
 ): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -72,7 +72,7 @@ function seedBrief(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 	// Commit it so the PRD lives on main (and survives the work-branch cut).
 	gitIn(['add', '-A'], repo);
-	gitIn(['commit', '-q', '-m', `brief: ${slug}`], repo);
+	gitIn(['commit', '-q', '-m', `prd: ${slug}`], repo);
 	gitIn(['push', '-q', ARBITER, 'main'], repo);
 }
 
@@ -1641,11 +1641,11 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		// named task regardless of `autoBuild`. autoTask OFF (the default) no longer
 		// refuses the explicit form (the policy gates the auto-pick POOL only).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		seedBrief(repo, 'somePrd');
+		seedPrd(repo, 'somePrd');
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
@@ -1671,11 +1671,11 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 
 	it('do prd:<slug> on an explicitly-named humanOnly PRD STILL refuses (the readiness axis binds, only the policy dropped)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		seedBrief(repo, 'somePrd', {humanOnly: true});
+		seedPrd(repo, 'somePrd', {humanOnly: true});
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
@@ -1696,11 +1696,11 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 
 	it('do prd:<slug> with autoTask on tasks the PRD (runner owns the git)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'somePrd');
+		seedPrd(repo, 'somePrd');
 
 		// The stubbed tasking agent writes a backlog task file (no git).
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -1716,7 +1716,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 						'---',
 						'title: somePrd-first',
 						'slug: somePrd-first',
-						'brief: somePrd',
+						'prd: somePrd',
 						'---',
 						'',
 						'## Prompt',
@@ -1751,7 +1751,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/prds/tasked/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1760,7 +1760,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/briefs/ready/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/prds/ready/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1776,19 +1776,19 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 				{env: gitEnv()},
 			).status,
 		).not.toBe(0);
-		const brief = run(
+		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
+			['show', `${ARBITER}/main:work/prds/tasked/somePrd.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
-		expect(brief).not.toMatch(/^tasked:/m);
+		expect(prd).not.toMatch(/^tasked:/m);
 	});
 
 	it('a bare slug that collides (a task AND a PRD share it) ERRORS loudly', async () => {
 		// Seed a task `dup` AND a PRD `dup` → a bare `do dup` is ambiguous.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup']);
-		seedBrief(repo, 'dup');
+		seedPrd(repo, 'dup');
 
 		const result = await performDo({
 			arg: 'dup', // bare → ambiguous across namespaces
@@ -1802,7 +1802,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/ambiguous/i);
 		expect(result.message).toMatch(/task:dup/);
-		expect(result.message).toMatch(/brief:dup/);
+		expect(result.message).toMatch(/prd:dup/);
 		// Nothing was claimed — the collision halts before any git transition.
 		expect(existsOnArbiterMain(repo, 'backlog', 'dup')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'dup')).toBe(false);
@@ -1810,7 +1810,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 
 	it('an explicit task:<slug> on a colliding slug is unambiguous (builds the task)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup']);
-		seedBrief(repo, 'dup');
+		seedPrd(repo, 'dup');
 
 		const result = await performDo({
 			arg: 'task:dup', // explicit → no collision check, builds the task
@@ -1846,7 +1846,7 @@ const taskingAgent: DoAgentRunner = ({cwd}) => {
 		[
 			'---',
 			'slug: somePrd-first',
-			'brief: somePrd',
+			'prd: somePrd',
 			'---',
 			'',
 			'## Prompt',
@@ -1861,10 +1861,10 @@ const taskingAgent: DoAgentRunner = ({cwd}) => {
 describe('do — per-transition integration mode (taskingIntegration vs integration)', () => {
 	it('the TASKING transition uses `taskingIntegration` over `integration`: `integration:propose` + `taskingIntegration:merge` lands the task FILES on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'somePrd');
+		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -1897,7 +1897,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		expect(
 			run(
 				'git',
-				['cat-file', '-e', `${ARBITER}/main:work/briefs/tasked/somePrd.md`],
+				['cat-file', '-e', `${ARBITER}/main:work/prds/tasked/somePrd.md`],
 				repo,
 				{env: gitEnv()},
 			).status,
@@ -1932,10 +1932,10 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 
 	it('UNSET `taskingIntegration` ⇒ tasking falls back to `integration` (byte-for-byte today): `integration:merge` with no override lands the task files on main', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'somePrd');
+		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -1967,10 +1967,10 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		// tasking transition pushes the work branch + leaves main untouched (no PR
 		// provider needed for a local --bare arbiter; selectProvider derives `none`).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'somePrd');
+		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'brief:somePrd',
+			arg: 'prd:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -2001,7 +2001,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 				[
 					'cat-file',
 					'-e',
-					`${ARBITER}/work/brief-somePrd:work/tasks/backlog/somePrd-first.md`,
+					`${ARBITER}/work/prd-somePrd:work/tasks/backlog/somePrd-first.md`,
 				],
 				repo,
 				{env: gitEnv()},

@@ -123,14 +123,14 @@ export {
 export type {
 	LedgerTodoItem,
 	LedgerObservationItem,
-	LedgerBriefItem,
-	LedgerBriefPool,
-	BriefExistence,
+	LedgerPrdItem,
+	LedgerPrdPool,
+	PrdExistence,
 	LocalLedgerState,
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
-	ResolveBriefExistenceInput,
-	ResolveBriefPoolInput,
+	ResolvePrdExistenceInput,
+	ResolvePrdPoolInput,
 	ResolveArbiterStateInput,
 	ResolveMirrorStateInput,
 	LedgerReadStrategy,
@@ -138,11 +138,11 @@ export type {
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
 
 export type {
-	BriefCompleteInput,
-	BriefTask,
-	BriefCompleteResult,
-} from './brief-complete.js';
-export {isBriefComplete} from './brief-complete.js';
+	PrdCompleteInput,
+	PrdTask,
+	PrdCompleteResult,
+} from './prd-complete.js';
+export {isPrdComplete} from './prd-complete.js';
 
 export type {
 	LedgerTransitionKind,
@@ -242,11 +242,11 @@ export type {
 	SelectedItem,
 	LifecycleSelectedItem,
 	SelectedLifecyclePools,
-	BriefCandidate,
-	TaskableBriefsInput,
+	PrdCandidate,
+	TaskablePrdsInput,
 	SelectPrioritisedInput,
 } from './select-priority.js';
-export {taskableBriefs, selectPrioritised} from './select-priority.js';
+export {taskablePrds, selectPrioritised} from './select-priority.js';
 
 export type {
 	ClaimExitCode,
@@ -392,7 +392,7 @@ export type {
 	IntakeDecider,
 	PerformIntakeOptions,
 } from './intake.js';
-export {performIntake, buildIntakeDecisionBrief} from './intake.js';
+export {performIntake, buildIntakeDecisionPrd} from './intake.js';
 
 export type {
 	IntakeEventKind,

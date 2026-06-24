@@ -3,15 +3,15 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {resolveRepoConfigFromMirror} from './repo-mirror.js';
 import {
 	scoreItems,
-	scoreBriefs,
+	scorePrds,
 	toScannedLifecycle,
 	type ScannedItem,
 	type ScanReport,
 	type RepoReport,
 } from './scan.js';
 import {
-	taskableBriefs,
-	type BriefCandidate,
+	taskablePrds,
+	type PrdCandidate,
 	type SelectedLifecyclePools,
 } from './select-priority.js';
 import {gatherLifecycleMirror} from './lifecycle-gather.js';
@@ -21,10 +21,10 @@ import {heldTaskSlugs} from './item-lock.js';
 /**
  * The MIRROR-SIDE eligible-pool scan — the isolated counterpart to
  * `do-autopick`'s in-place pool scan ({@link performDoAuto}). It enumerates the
- * SAME two pools (eligible TASKS + taskable BRIEFS) but reads a BARE hub mirror's
+ * SAME two pools (eligible TASKS + taskable PRDS) but reads a BARE hub mirror's
  * committed `main` ref (`git ls-tree`/`git show`), NOT a working checkout.
  *
- * This is the ONE reusable enumeration unit the brief's FOLD-IN note demands: BOTH
+ * This is the ONE reusable enumeration unit the prd's FOLD-IN note demands: BOTH
  * the `run` loop driver's isolated+parallel auto-pick AND the one-shot/CI
  * `advance --remote -n` / the CI matrix consume it, so the `-n`/auto-pick rungs
  * (both `do` and `advance`, both `run`-loop and one-shot) all call the SAME scan.
@@ -43,9 +43,9 @@ import {heldTaskSlugs} from './item-lock.js';
  *   - **tasks** — {@link scoreItems} (the SAME eligibility scoring the in-place
  *     `scanRepoPaths`/registry `scan` use) over the mirror's `work/backlog` +
  *     `work/done` read via {@link LedgerReadStrategy.resolveMirrorState}.
- *   - **taskable briefs** — {@link taskableBriefs} (`autoslice-gate`'s predicate)
- *     over the mirror's `work/briefs/ready` + `work/briefs/tasked` read via the mirror-ref
- *     {@link LedgerReadStrategy.resolveMirrorBriefPool}.
+ *   - **taskable prds** — {@link taskablePrds} (`autoslice-gate`'s predicate)
+ *     over the mirror's `work/prds/ready` + `work/prds/tasked` read via the mirror-ref
+ *     {@link LedgerReadStrategy.resolveMirrorPrdPool}.
  *
  * Per-repo policy parity: a bare mirror has no checked-out `.agent-runner.json`,
  * but the COMMITTED one is reachable on `main` (the `do --remote` per-repo seam).
@@ -100,7 +100,7 @@ export interface ScanMirrorPoolOptions {
 
 /**
  * The enumerated mirror-side pool — the isolated counterpart of `do-autopick`'s
- * two pools. Both drivers feed `report` + `briefs` into the SAME
+ * two pools. Both drivers feed `report` + `prds` into the SAME
  * {@link selectPrioritised} (the loop driver takes all; the one-shot/CI driver
  * bounds by a SEQUENTIAL `count`).
  */
@@ -117,11 +117,11 @@ export interface MirrorPoolScanResult {
 	/** Just the eligible subset of {@link tasks} (convenience for assertions/callers). */
 	eligibleTasks: ScannedItem[];
 	/**
-	 * The TASKABLE BRIEF pool — already filtered through `taskableBriefs`
+	 * The TASKABLE PRD pool — already filtered through `taskablePrds`
 	 * (`autoslice-gate`'s predicate). In declaration order; the selection layer
 	 * does not re-gate it.
 	 */
-	briefs: BriefCandidate[];
+	prds: PrdCandidate[];
 	/**
 	 * The LIFECYCLE pools (task `advance-autopick-lifecycle-pools`): untriaged
 	 * observations (triage), `needsAnswers`-blocked items with no all-answered
@@ -170,7 +170,7 @@ export async function scanMirrorPool(
 	// scored through the EXACT same `scoreItems` the in-place/registry scans use.
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
-	// HELD-SLUG SUBTRACTION (brief `ledger-status-per-item-lock-refs` US #15): a bare
+	// HELD-SLUG SUBTRACTION (prd `ledger-status-per-item-lock-refs` US #15): a bare
 	// hub mirror's arbiter is its `origin`; read the held lock refs from there and
 	// exclude those slugs from the enumerated `backlog/` pool. Non-fatal (empty set
 	// on any fault) and redundant-but-harmless while the body still moves — wired now
@@ -179,30 +179,30 @@ export async function scanMirrorPool(
 	// its own lock-ref fetch.
 	const heldSlugs = await heldTaskSlugs(mirrorPath, 'origin', env);
 	const items = scoreItems(state, repoConfig.autoBuild, counts, heldSlugs);
-	// Pool 2 — TASKABLE BRIEFS from the bare mirror's `work/briefs/ready`+`work/briefs/tasked`,
+	// Pool 2 — TASKABLE PRDS from the bare mirror's `work/prds/ready`+`work/prds/tasked`,
 	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
-	// we can populate the `briefs[]` companion of `items[]` on the RepoReport below.
-	const pool = await read.resolveMirrorBriefPool({mirrorPath, ref, env});
-	const briefs = taskableBriefs({
-		candidates: pool.briefs.map((p) => ({
+	// we can populate the `prds[]` companion of `items[]` on the RepoReport below.
+	const pool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
+	const prds = taskablePrds({
+		candidates: pool.prds.map((p) => ({
 			repoPath: mirrorPath,
 			slug: p.slug,
 			humanOnly: p.humanOnly,
 			needsAnswers: p.needsAnswers,
-			briefAfter: p.briefAfter,
+			prdAfter: p.prdAfter,
 		})),
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: repoConfig.autoTask,
 	});
 	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
-	// mirror-side pool scan exists only to SCORE the task/brief candidate pools for
+	// mirror-side pool scan exists only to SCORE the task/prd candidate pools for
 	// autonomous selection, never to render a dashboard, so it carries an empty lint
 	// (the duplicate surface is the user-facing `scan`/`status`, per the task). The
-	// `briefs[]` companion of `items[]` is filled via the SAME `scoreBriefs` helper
-	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].briefs[] |
+	// `prds[]` companion of `items[]` is filled via the SAME `scorePrds` helper
+	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
-	// `needsAnswers` backlog/briefs + their sidecars + `work/observations/`) and built
+	// `needsAnswers` backlog/prds + their sidecars + `work/observations/`) and built
 	// through the SHARED enumeration unit the in-place caller uses — so the in-place
 	// + mirror-side selections AGREE. Create-gates default OFF (interim); apply
 	// (consume) is always present.
@@ -217,7 +217,7 @@ export async function scanMirrorPool(
 	const repo: RepoReport = {
 		path: mirrorPath,
 		items,
-		briefs: scoreBriefs(mirrorPath, pool, repoConfig.autoTask),
+		prds: scorePrds(mirrorPath, pool, repoConfig.autoTask),
 		// The propose-matrix lifecycle pool on this mirror's `RepoReport` — the SAME
 		// `gatherLifecycleMirror` result projected onto the `scan --json` shape, so
 		// the dashboard/matrix surface agrees with the selection scoring below.
@@ -234,7 +234,7 @@ export async function scanMirrorPool(
 		report,
 		tasks: items,
 		eligibleTasks: items.filter((i) => i.eligibility.eligible),
-		briefs,
+		prds,
 		lifecycle,
 	};
 }

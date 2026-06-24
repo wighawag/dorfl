@@ -26,7 +26,7 @@ import type {
 } from './run.js';
 
 /**
- * The **`advance` LOOP DRIVER** (brief `advance-loop`, task
+ * The **`advance` LOOP DRIVER** (prd `advance-loop`, task
  * `advance-drivers-and-gates`, US #7/22/26/31) — the second of the two drivers
  * over the substrate-agnostic advance TICK. Where the one-shot driver
  * (`advance-drivers.ts`) runs the tick over named item(s) SEQUENTIALLY, this
@@ -113,7 +113,7 @@ export interface AdvanceOnceOptions {
 
 /** One advanced item's result + the identity it was for (input order preserved). */
 export interface AdvanceBatchItem {
-	/** The namespaced arg the tick was run on (`brief:<slug>` / bare slug). */
+	/** The namespaced arg the tick was run on (`prd:<slug>` / bare slug). */
 	arg: string;
 	/** The tick's result, or a captured throw mapped to a usage-error result. */
 	result: AdvanceResult;
@@ -162,7 +162,7 @@ export async function advanceOnce(
 			maxParallel: Number.MAX_SAFE_INTEGER,
 			perRepoMax: Number.MAX_SAFE_INTEGER,
 		},
-		briefs: scan.briefs,
+		prds: scan.prds,
 		selectionOrder: options.config.selectionOrder,
 		lifecycle: scan.lifecycle,
 	});
@@ -240,15 +240,15 @@ export async function advanceOnce(
 
 /**
  * The advance arg for a selected item (the SELECTION->ARG dispatch): `obs:<slug>`
- * for an observation (the triage rung), `brief:<slug>` for a brief, bare slug for a
+ * for an observation (the triage rung), `prd:<slug>` for a prd, bare slug for a
  * task. The tick re-classifies each arg into the right rung (surface/apply for a
- * `needsAnswers`-blocked task/brief; triage for an observation).
+ * `needsAnswers`-blocked task/prd; triage for an observation).
  */
 function argForSelected(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	return item.namespace === 'brief' ? `brief:${item.slug}` : item.slug;
+	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
 }
 
 /**
@@ -375,7 +375,7 @@ export interface AdvanceRegistrySetOptions {
  *
  * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
  * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
- * ready tasks / task ready briefs, each per-job-worktree-isolated off the
+ * ready tasks / task ready prds, each per-job-worktree-isolated off the
  * mirror's arbiter, same integration result — two callers of one
  * `performIntegration` band (the advance build rung reaches it via `performDo`
  * → `performDoRemote`; `runOneItem` reaches it directly), NOT a shared code path.
@@ -549,7 +549,7 @@ export interface AdvanceRunTickDeps extends Omit<
  * Adapt the {@link advanceOnce} LOOP DRIVER to the {@link RunTick} swap SEAM so
  * `run` (≡ CI, US #7) drives the ADVANCE tick over the mirror-side eligible pool
  * instead of the build tick. `run.ts` deliberately writes {@link runLoop} against
- * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop brief can
+ * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop prd can
  * swap the tick WITHOUT re-architecting the loop — this is that swap.
  *
  * The seam is `(RunOnceOptions) => Promise<RunOnceResult>`; one advance batch is
@@ -625,7 +625,7 @@ export interface AdvanceRegistrySetRunTickDeps extends Omit<
  *
  * Under calm gates (both lifecycle create-gates off) this is the OBSERVABLE-
  * OUTCOME equivalent of plain `run`'s build tick over the same registry: build
- * ready tasks / task ready briefs, each per-job-worktree-isolated off the
+ * ready tasks / task ready prds, each per-job-worktree-isolated off the
  * mirror's arbiter, same integration result; touch no observations, surface no
  * questions. Flip a gate and the SAME tick performs the lifecycle
  * (triage / surface / apply) for free — no separate `--advance` mode to discover.

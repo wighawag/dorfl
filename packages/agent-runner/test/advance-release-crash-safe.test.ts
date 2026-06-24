@@ -123,7 +123,7 @@ function recoverConflictExecutor(branch: string): RungExecutor {
 			}
 			return {exitCode: 0, outcome: 'advanced', message: 'rebased clean'};
 		},
-		taskBrief: stub,
+		taskPrd: stub,
 		triageObservation: stub,
 		surface: stub,
 		apply: stub,
@@ -209,7 +209,7 @@ describe('advance build-task rung: no transient residue across a failing dispatc
 					message: 'build failed mid-flight, tree dirty',
 				};
 			},
-			taskBrief: stub,
+			taskPrd: stub,
 			triageObservation: stub,
 			surface: stub,
 			apply: stub,
@@ -244,7 +244,7 @@ describe('advance build-task rung: no transient residue across a failing dispatc
 			async buildTask() {
 				return {exitCode: 0, outcome: 'advanced', message: 'ok'};
 			},
-			async taskBrief() {
+			async taskPrd() {
 				return {exitCode: 0, outcome: 'advanced', message: ''};
 			},
 			async triageObservation() {

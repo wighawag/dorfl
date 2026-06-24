@@ -49,14 +49,14 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 				role: 'assistant',
 				content: [
 					{type: 'thinking', thinking: 'IGNORED'},
-					{type: 'text', text: 'Reading the brief, '},
+					{type: 'text', text: 'Reading the prd, '},
 					{type: 'text', text: 'then the PRD.'},
 					{type: 'toolCall', name: 'read', arguments: {path: 'x'}},
 				],
 			},
 		});
 		expect(formatWatchEvent(record, false)).toEqual([
-			'Reading the brief, then the PRD.',
+			'Reading the prd, then the PRD.',
 			'▶ read',
 		]);
 	});
@@ -174,7 +174,7 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 		// message, an assistant (text+text+read toolCall), a toolResult, an
 		// assistant (text + edit toolCall), and a content-as-string assistant.
 		expect(surfaced).toEqual([
-			"I'll start by reading the task brief, then its source PRD.",
+			"I'll start by reading the task prd, then its source PRD.",
 			'▶ read',
 			'Now editing the file.',
 			'▶ edit',

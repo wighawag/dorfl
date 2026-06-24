@@ -1,5 +1,5 @@
 /**
- * The `install-ci` ADVANCE-LIFECYCLE capability (brief `runner-in-ci`, task
+ * The `install-ci` ADVANCE-LIFECYCLE capability (prd `runner-in-ci`, task
  * `install-ci-advance-lifecycle-workflow`; capability C: auto-triage observations
  * + surface declared blockers + apply committed answers). This module GENERATES
  * the advance-lifecycle workflow by ABSORBING and PARAMETERISING the existing seed
@@ -47,7 +47,7 @@
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
  *     `--isolated`/`--remote`/registry. A CI concurrency group (per-ref) prevents
  *     overlapping ticks; the claim CAS is the real cross-run serialiser.
- *   - All invocations use explicit slug prefixes (`task:`/`brief:`), never bare
+ *   - All invocations use explicit slug prefixes (`task:`/`prd:`), never bare
  *     (ADR `command-surface-and-journeys` §3a).
  *   - The running CI job NEVER edits `.github/workflows/**` (US #9): it requests
  *     NO `workflows` permission and cannot rewrite its own triggers.
@@ -98,7 +98,7 @@ export function generateAdvanceLifecycleWorkflow(
 	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # agent-runner — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
-# observations + surface declared blockers + apply committed answers, brief
+# observations + surface declared blockers + apply committed answers, prd
 # runner-in-ci). EMITTED by \`agent-runner install-ci\` by PARAMETERISING the seed
 # \`docs/ci/advance-loop.yml.template\` (the advance-loop capability's output) — the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the
@@ -259,16 +259,16 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. \`scan --json\` reports
-  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`, \`repos[].briefs[]\`,
+  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`, \`repos[].prds[]\`,
   # \`repos[].lifecycle\`) AND the in-place working checkout (\`cwd.repo.items[]\`,
-  # \`cwd.repo.briefs[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
+  # \`cwd.repo.prds[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups
   # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
-  # Actions matrix list of explicit \`task:<slug>\` / \`brief:<slug>\` / \`obs:<slug>\`
+  # Actions matrix list of explicit \`task:<slug>\` / \`prd:<slug>\` / \`obs:<slug>\`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): \`obs:\` (triage untriaged
-  # observations), surface \`task:\`/\`brief:\` (\`needsAnswers\`, no answered sidecar)
-  # AND apply \`task:\`/\`brief:\` (\`needsAnswers\`, answered sidecar — consume the
+  # observations), surface \`task:\`/\`prd:\` (\`needsAnswers\`, no answered sidecar)
+  # AND apply \`task:\`/\`prd:\` (\`needsAnswers\`, answered sidecar — consume the
   # committed answer, closing the on-answer \`push: work/questions/**\` loop). Each
   # becomes one matrix leg → one independent \`advance --propose\`. Skipped in merge
   # mode. Inert with calm-default gates (empty triage/surface pools).
@@ -299,19 +299,19 @@ jobs:
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit \`task:\` / \`brief:\` / \`obs:\` prefixes, never bare (ADR
+        # uses explicit \`task:\` / \`prd:\` / \`obs:\` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
-        # builds them); TASKABLE BRIEFS ⇒ \`brief:<slug>\` legs (\`advance\` auto-tasks
+        # builds them); TASKABLE PRDS ⇒ \`prd:<slug>\` legs (\`advance\` auto-tasks
         # them, capability B — \`AGENT_RUNNER_AUTO_TASK\` above). LIFECYCLE pools:
         # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here;
-        # observations have no task/brief namespace), \`lifecycle.surface[]\` +
-        # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`task:\`/\`brief:\` legs
+        # observations have no task/prd namespace), \`lifecycle.surface[]\` +
+        # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`task:\`/\`prd:\` legs
         # for \`needsAnswers\` items — surface mints the blocker question, apply
         # consumes the committed answer). All pools surface on \`repos[]\` AND
         # \`cwd.repo\`; we union + dedup so the matrix has one leg per item.
         run: |
           items="$(agent-runner scan --json \\
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].briefs[]?, .cwd.repo.briefs[]?) | select(.eligibility.eligible == true) | "brief:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -324,7 +324,7 @@ jobs:
   # parallel shape and \`-n\` is NOT needed. Each leg passes \`--propose\`, tying the
   # integration mode to THIS shape: it sits at the top of the precedence chain, so
   # the workflow mode always wins over the repo config default and a leg can NEVER
-  # merge to main. Explicit \`task:\`/\`brief:\` prefixes only, never bare.
+  # merge to main. Explicit \`task:\`/\`prd:\` prefixes only, never bare.
   advance-propose:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
@@ -675,28 +675,28 @@ export function validateAdvanceLifecycleWorkflow(
 	require('explicit-task-prefix', /"task:" \+ \.slug/.test(text) ||
 		/task:/.test(
 			text,
-		), 'CI must use explicit `task:`/`brief:` slug prefixes, never bare (ADR ' +
+		), 'CI must use explicit `task:`/`prd:` slug prefixes, never bare (ADR ' +
 		'command-surface-and-journeys §3a).');
 
-	// --- The propose `enumerate` matrix must UNION taskable briefs --------------
+	// --- The propose `enumerate` matrix must UNION taskable prds --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `AGENT_RUNNER_AUTO_TASK: 'true'` dead on the
-	// hourly cron — a ready ungated BRIEF would never become a matrix leg. The `jq`
-	// must enumerate `brief:<slug>` ids from `scan --json`'s taskable-BRIEF pool
-	// (`repos[].briefs[]` + `cwd.repo.briefs[]`) alongside the eligible-task legs.
-	require('propose-enumerates-taskable-prds', /"brief:" \+ \.slug/.test(text) &&
-		/\.briefs\[\]/.test(
+	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
+	// must enumerate `prd:<slug>` ids from `scan --json`'s taskable-PRD pool
+	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-task legs.
+	require('propose-enumerates-taskable-prds', /"prd:" \+ \.slug/.test(text) &&
+		/\.prds\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union taskable briefs into the ' +
-		"matrix as `brief:<slug>` legs (read from `scan --json`'s `repos[].briefs[]` " +
-		'+ `cwd.repo.briefs[]` pools), so a ready ungated BRIEF becomes one auto-task ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable prds into the ' +
+		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
+		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-task ' +
 		'matrix leg per item alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 
 	// --- The propose `enumerate` matrix must UNION the LIFECYCLE pools ----------
 	// (`ci-propose-matrix-enumerates-lifecycle-items`): a build/task-only `jq`
 	// runs the answer-loop ONLY in merge mode — a `needsAnswers` item is
-	// `eligible:false` and untriaged observations are not in the task/brief pools at
+	// `eligible:false` and untriaged observations are not in the task/prd pools at
 	// all, so NO lifecycle rung (triage/surface/apply) ever gets a propose leg. The
 	// `jq` must enumerate the three lifecycle sub-pools from `scan --json`
 	// (`repos[].lifecycle.*` + `cwd.repo.lifecycle.*`): `triage[]` → `obs:<slug>`,
@@ -711,7 +711,7 @@ export function validateAdvanceLifecycleWorkflow(
 		), 'the propose-mode `enumerate` `jq` must union the LIFECYCLE pools into the ' +
 		"matrix (read from `scan --json`'s `repos[].lifecycle.*` + " +
 		'`cwd.repo.lifecycle.*`): `triage[]` as `obs:<slug>` legs, and ' +
-		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`brief:`) legs, ' +
+		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`prd:`) legs, ' +
 		'so the WHOLE answer-loop (triage + surface + apply) runs in propose mode, ' +
 		'not only in merge mode ' +
 		'(`ci-propose-matrix-enumerates-lifecycle-items`).');

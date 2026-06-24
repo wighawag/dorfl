@@ -4,7 +4,7 @@ import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **unified item-lock module** (brief `ledger-status-per-item-lock-refs`, ADR
+ * The **unified item-lock module** (prd `ledger-status-per-item-lock-refs`, ADR
  * `ledger-status-on-per-item-lock-refs`). The runner's ONE lock primitive: ONE
  * lock per item, on a PER-ITEM hidden ref `refs/agent-runner/lock/<entry>`,
  * acquired by an ATOMIC create-only push and released by DELETING the ref, with a
@@ -16,12 +16,12 @@ import {workItemRel} from './work-layout.js';
  * It GENERALISES the green tracer that proved the dangerous core end-to-end on a
  * bare `file://` arbiter (the tracer is now this file). The one production
  * difference from the tracer is the IDENTITY SEAM: callers pass a NAMESPACED item
- * identity (`task:<slug>` / `brief:<slug>` / `observation:<slug>` / `obs:<slug>`,
+ * identity (`task:<slug>` / `prd:<slug>` / `observation:<slug>` / `obs:<slug>`,
  * or a bare `<slug>` = task), and this module derives the type-encoded lock
  * `<entry>` (`<type>-<slug>`) through {@link resolveSidecarIdentity} — the SAME
  * single source of truth the sidecar (`work/questions/<type>-<slug>.md`) and the
  * work branch (`work/<type>-<slug>`) already use. There is deliberately NO second
- * identity scheme: a task, a brief,
+ * identity scheme: a task, a prd,
  * and an observation that share a slug get DISTINCT lock refs, and the SAME item
  * under different actions shares ONE ref (so implement / task / advance on one
  * item are mutually exclusive by construction).
@@ -63,7 +63,7 @@ export const LOCK_REF_PREFIX = 'refs/agent-runner/lock';
  * (`<type>-<slug>`) from a NAMESPACED item identity, through the shared
  * {@link resolveSidecarIdentity} resolver (the single source of truth, which the
  * sidecar filename + the advancing-lock marker also key onto). Accepts the same
- * forms as that resolver: `task:<slug>` / `brief:<slug>` / `observation:<slug>` /
+ * forms as that resolver: `task:<slug>` / `prd:<slug>` / `observation:<slug>` /
  * `obs:<slug>`, or a bare `<slug>` (= task). Acquire/release/read ALL key
  * through THIS function, so there is one — and only one — addressing scheme.
  */
@@ -132,7 +132,7 @@ export interface ReleaseResult {
 
 /**
  * Outcome of an AMEND-style transition (mark-stuck / resume / requeue) — the
- * lock-entry STATE MACHINE's interior moves (brief `ledger-status-per-item-lock-refs`,
+ * lock-entry STATE MACHINE's interior moves (prd `ledger-status-per-item-lock-refs`,
  * the C8 lock-entry state machine in the design trail). Each is a single CAS on the
  * held ref (no retry loop), so the verdict is definitive:
  *   - `transitioned` — we won the CAS; the entry now holds the target `(action, state)`.
@@ -269,7 +269,7 @@ async function gitHardInput(
 }
 export interface AcquireOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`task:<slug>` / `brief:<slug>` /
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `prd:<slug>` /
 	 * `observation:<slug>` / `obs:<slug>`, or a bare `<slug>` = task). Resolved to
 	 * the type-encoded lock `<entry>` through {@link lockEntryFor}.
 	 */
@@ -440,7 +440,7 @@ export interface ReleaseHeldResult {
 }
 
 /**
- * GUARDED release for a runner that KNOWS it acquired and HELD the lock (brief
+ * GUARDED release for a runner that KNOWS it acquired and HELD the lock (prd
  * `ledger-status-per-item-lock-refs` US #13): unlike {@link releaseItemLock} —
  * whose `not-held` is a BENIGN idempotent case the complete/tasking/needs-attention
  * callers tolerate (the body may predate the lock, or a crash-recovery may have
@@ -866,25 +866,25 @@ export async function readItemLock(
  * authoritative resting records the cross-substrate reconciliation reads. An
  * item is TERMINAL on `main` iff ANY of these paths exists on `<arbiter>/main`.
  * The won't-proceed terminal is PER-REGIME (the slug-collision correctness fix:
- * a dropped task and a dropped brief sharing a slug used to collide on one
+ * a dropped task and a dropped prd sharing a slug used to collide on one
  * bare-slug `work/dropped/<slug>.md`):
  *   - a TASK: `work/tasks/done/<slug>.md` (completed) OR
  *     `work/tasks/cancelled/<slug>.md` (the task regime's won't-proceed terminal).
- *   - a BRIEF: `work/briefs/tasked/<slug>.md` (tasked) OR `work/briefs/dropped/<slug>.md`
- *     (the brief regime's won't-proceed terminal).
+ *   - a PRD: `work/prds/tasked/<slug>.md` (tasked) OR `work/prds/dropped/<slug>.md`
+ *     (the prd regime's won't-proceed terminal).
  *   - an OBSERVATION: NONE. A note has no durable terminal folder — it leaves by
  *     deletion (its absence, not a terminal record, is the end state). A promoted
- *     observation becomes a NEW task/brief with its own ref.
+ *     observation becomes a NEW task/prd with its own ref.
  */
 export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 	const file = `${slug}.md`;
 	switch (type) {
 		case 'task':
 			return [workItemRel('done', file), workItemRel('cancelled', file)];
-		case 'brief':
+		case 'prd':
 			return [
-				workItemRel('briefs-tasked', file),
-				workItemRel('briefs-dropped', file),
+				workItemRel('prds-tasked', file),
+				workItemRel('prds-dropped', file),
 			];
 		case 'observation':
 			return [];
@@ -892,7 +892,7 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 }
 
 /** The outcome of a cross-substrate reconciliation of one item's lock against
- * the authoritative `main` durable record (brief `ledger-status-per-item-lock-refs`
+ * the authoritative `main` durable record (prd `ledger-status-per-item-lock-refs`
  * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). */
 export type ReconcileOutcome =
 	| 'cleared-stale' // `main` is terminal + the lock was `active` (stranded) → cleared
@@ -907,20 +907,20 @@ export interface ReconcileResult {
 	entry: string;
 	ref: string;
 	/** Whether `<arbiter>/main` shows the item terminal (per {@link terminalMainPaths}:
-	 * a task at `tasks/done`/`tasks/cancelled`, a brief at `briefs/tasked`/`briefs/dropped`). */
+	 * a task at `tasks/done`/`tasks/cancelled`, a prd at `prds/tasked`/`prds/dropped`). */
 	terminalOnMain: boolean;
 	message: string;
 }
 
 /**
  * Reconcile ONE item's per-item lock against the AUTHORITATIVE `main` durable
- * record — the heart of complete's cross-substrate crash-safety (brief
+ * record — the heart of complete's cross-substrate crash-safety (prd
  * `ledger-status-per-item-lock-refs` US #9/#10; ADR
  * `ledger-status-on-per-item-lock-refs`; the design trail's Amendment 6).
  *
  * complete's order is hold lock → land the DURABLE `main` move FIRST → release
  * the lock SECOND. A crash BETWEEN the move and the release leaves a
- * terminal-on-`main` item (a completed/cancelled task or a tasked/dropped brief,
+ * terminal-on-`main` item (a completed/cancelled task or a tasked/dropped prd,
  * per {@link terminalMainPaths}) with a STILL-HELD lock — a stale lock with no
  * in-flight work behind it. This is the recovery that converges it.
  *
@@ -1193,7 +1193,7 @@ export interface LockReportEntry {
 	reconcile: ReconcileOutcome;
 }
 
-/** The `gc --ledger` stuck/orphaned-lock REPORT (brief
+/** The `gc --ledger` stuck/orphaned-lock REPORT (prd
  * `ledger-status-per-item-lock-refs` US #14): every lingering per-item lock on the
  * arbiter, each classified read-only against `main`. An EMPTY list = no locks held
  * (an absent ref namespace reads as `[]`, the recoverable "all locks released"
@@ -1203,7 +1203,7 @@ export interface ItemLockReport {
 }
 
 /**
- * Build the `gc --ledger` stuck/orphaned-lock REPORT (brief
+ * Build the `gc --ledger` stuck/orphaned-lock REPORT (prd
  * `ledger-status-per-item-lock-refs` US #12/#13/#14; ADR
  * `ledger-status-on-per-item-lock-refs`): enumerate every per-item lock currently
  * held on the arbiter ({@link listItemLockEntries} — held active + stuck, with
@@ -1256,7 +1256,7 @@ export async function reportItemLocks(
  */
 /**
  * Does the `gc --ledger` lock report contain a lock that NEEDS HUMAN ATTENTION
- * (brief US#14/#21; ADR `ledger-status-on-per-item-lock-refs`: this surface is the
+ * (prd US#14/#21; ADR `ledger-status-on-per-item-lock-refs`: this surface is the
  * STUCK / crash-orphaned lock, NOT every held one)? TRUE iff some lock is
  * `kept-stuck` (terminal-on-`main` + stuck) or `cleared-stale`-eligible
  * (terminal-on-`main` + a stale active orphan). A `kept-in-flight` (active,
@@ -1365,7 +1365,7 @@ export interface ReapReport {
 }
 
 /**
- * The OPT-IN `gc --ledger --reap-stale-locks` SWEEP (brief
+ * The OPT-IN `gc --ledger --reap-stale-locks` SWEEP (prd
  * `ledger-status-per-item-lock-refs` US #14): a human asserting "clear the dead
  * TERMINAL locks now", so one command sweeps every orphaned terminal lock instead
  * of N hand-run `release-lock`s. It is the WRITE twin of {@link reportItemLocks}
@@ -1542,7 +1542,7 @@ export function formatReapReport(report: ReapReport): string[] {
  * {@link lockEntryFor} for the three known namespaces.
  */
 export function itemFromLockEntry(entry: string): string {
-	for (const prefix of ['task', 'brief', 'observation'] as const) {
+	for (const prefix of ['task', 'prd', 'observation'] as const) {
 		const tag = `${prefix}-`;
 		if (entry.startsWith(tag)) {
 			return `${prefix}:${entry.slice(tag.length)}`;
@@ -1601,7 +1601,7 @@ export async function listItemLocks(
 
 /**
  * Read the FULL lock entries currently held on the arbiter — the `status`/`scan`
- * in-flight read path (brief `ledger-status-per-item-lock-refs` US #8; task
+ * in-flight read path (prd `ledger-status-per-item-lock-refs` US #8; task
  * `needs-attention-as-stuck-lock-state`). One fetch of the lock refs, then read
  * each held entry's `lock.md` blob, returning the parsed {@link LockEntry} for
  * every ref (so a caller can surface `active` (in-progress) and `stuck`
@@ -1658,9 +1658,9 @@ export async function listItemLockEntries(
 
 /**
  * List the TASK slugs currently lock-held on the arbiter — the held-slug set the
- * `todo/` pool readers SUBTRACT (brief `ledger-status-per-item-lock-refs` US #15;
+ * `todo/` pool readers SUBTRACT (prd `ledger-status-per-item-lock-refs` US #15;
  * task `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
- * and keeps only the `task-<slug>` entries (a brief/observation lock does not gate
+ * and keeps only the `task-<slug>` entries (a prd/observation lock does not gate
  * the TASK pool), mapping each to its bare `<slug>`. Best-effort: a fetch
  * fault yields an EMPTY set, so the offline pool read degrades to "subtract
  * nothing" rather than erroring — while the body still moves to `in-progress/` the

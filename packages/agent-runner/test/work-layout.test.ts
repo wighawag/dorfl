@@ -14,19 +14,19 @@ import {
 	TASK_RESOLUTION_FOLDERS,
 	TASK_LIFECYCLE_FOLDERS,
 	LEDGER_STATUS_FOLDERS,
-	BRIEF_FOLDERS,
+	PRD_FOLDERS,
 } from '../src/work-layout.js';
 
 describe('work-layout — the single source of every work/ path + folder union', () => {
-	it('the symbolic KEYS read in the new task/brief vocabulary; the VALUES are unchanged', () => {
+	it('the symbolic KEYS read in the new task/prd vocabulary; the VALUES are unchanged', () => {
 		// The key-vocabulary cutover task
 		// (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) flips only the
-		// KEYS to the new task/brief words (`pre-backlog` -> `tasks-backlog`,
-		// `backlog` -> `tasks-todo`, `pre-prd` -> `briefs-proposed`,
-		// `prd` -> `briefs-ready`, `prd-tasked` -> `briefs-tasked`). It is a PURE in-code
+		// KEYS to the new task/prd words (`pre-backlog` -> `tasks-backlog`,
+		// `backlog` -> `tasks-todo`, `pre-prd` -> `prds-proposed`,
+		// `prd` -> `prds-ready`, `prd-tasked` -> `prds-tasked`). It is a PURE in-code
 		// symbol rename: every VALUE string below is byte-identical to before the task,
 		// so NO on-disk folder moved. The already-clean keys (`done`/`cancelled`/
-		// `briefs-dropped`/`questions`/`protocol` and the lock-ref-state keys
+		// `prds-dropped`/`questions`/`protocol` and the lock-ref-state keys
 		// `in-progress`/`needs-attention`) are unchanged.
 		expect(WORK_ROOT).toBe('work');
 		expect(WORK_FOLDER_NAME).toEqual({
@@ -36,10 +36,10 @@ describe('work-layout — the single source of every work/ path + folder union',
 			'needs-attention': 'needs-attention',
 			done: 'tasks/done',
 			cancelled: 'tasks/cancelled',
-			'briefs-proposed': 'briefs/proposed',
-			'briefs-ready': 'briefs/ready',
-			'briefs-tasked': 'briefs/tasked',
-			'briefs-dropped': 'briefs/dropped',
+			'prds-proposed': 'prds/proposed',
+			'prds-ready': 'prds/ready',
+			'prds-tasked': 'prds/tasked',
+			'prds-dropped': 'prds/dropped',
 			observations: 'notes/observations',
 			ideas: 'notes/ideas',
 			findings: 'notes/findings',
@@ -48,28 +48,28 @@ describe('work-layout — the single source of every work/ path + folder union',
 		});
 	});
 
-	it('the brief regime resolves to staging / pool / resting, and the terminals are per-regime', () => {
-		// The brief lifecycle: proposed (staging) -> ready (pool) -> tasked (resting).
-		expect(workFolderName('briefs-proposed')).toBe('briefs/proposed');
-		expect(workFolderName('briefs-ready')).toBe('briefs/ready');
-		expect(workFolderName('briefs-tasked')).toBe('briefs/tasked');
+	it('the prd regime resolves to staging / pool / resting, and the terminals are per-regime', () => {
+		// The prd lifecycle: proposed (staging) -> ready (pool) -> tasked (resting).
+		expect(workFolderName('prds-proposed')).toBe('prds/proposed');
+		expect(workFolderName('prds-ready')).toBe('prds/ready');
+		expect(workFolderName('prds-tasked')).toBe('prds/tasked');
 		// The two PER-REGIME won't-proceed terminals (the slug-collision fix): a
-		// dropped task and a dropped brief sharing a slug resolve to DIFFERENT paths.
+		// dropped task and a dropped prd sharing a slug resolve to DIFFERENT paths.
 		expect(workFolderName('cancelled')).toBe('tasks/cancelled');
-		expect(workFolderName('briefs-dropped')).toBe('briefs/dropped');
+		expect(workFolderName('prds-dropped')).toBe('prds/dropped');
 	});
 
 	it('workFolderName resolves a symbolic key to its on-disk name', () => {
 		expect(workFolderName('tasks-todo')).toBe('tasks/todo');
-		expect(workFolderName('briefs-tasked')).toBe('briefs/tasked');
+		expect(workFolderName('prds-tasked')).toBe('prds/tasked');
 	});
 
 	it('workFolderPath builds <root>/work/<folder>', () => {
 		expect(workFolderPath('/repo', 'tasks-todo')).toBe(
 			join('/repo', 'work', 'tasks', 'todo'),
 		);
-		expect(workFolderPath('/repo', 'briefs-ready')).toBe(
-			join('/repo', 'work', 'briefs', 'ready'),
+		expect(workFolderPath('/repo', 'prds-ready')).toBe(
+			join('/repo', 'work', 'prds', 'ready'),
 		);
 	});
 
@@ -133,6 +133,6 @@ describe('work-layout — the single source of every work/ path + folder union',
 			'done',
 			'cancelled',
 		]);
-		expect([...BRIEF_FOLDERS]).toEqual(['briefs-ready', 'briefs-tasked']);
+		expect([...PRD_FOLDERS]).toEqual(['prds-ready', 'prds-tasked']);
 	});
 });

@@ -17,7 +17,7 @@ import {
 	renderPrompt,
 	resolveItemPromptGuidance,
 	resolvePromptGuidanceForItem,
-	findBriefPath,
+	findPrdPath,
 	PromptError,
 	type ContinueContext,
 } from '../src/prompt.js';
@@ -71,7 +71,7 @@ function seedTask(
 	folder: 'in-progress' | 'backlog',
 	slug: string,
 	body: string,
-	brief = 'my-prd',
+	prd = 'my-prd',
 ): void {
 	const dir = join(root, 'work', fixtureFolderRel(folder));
 	mkdirSync(dir, {recursive: true});
@@ -79,7 +79,7 @@ function seedTask(
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`brief: ${brief}`,
+		`prd: ${prd}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -96,12 +96,12 @@ function seedTask(
 }
 
 /** Task file CONTENT (not written to disk) for the done/-continue fixtures. */
-function doneTask(slug: string, brief = 'my-prd'): string {
+function doneTask(slug: string, prd = 'my-prd'): string {
 	return [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		`brief: ${brief}`,
+		`prd: ${prd}`,
 		'blockedBy: []',
 		'---',
 		'',
@@ -142,25 +142,25 @@ describe('extractPromptSection', () => {
 });
 
 describe('canonical wrapper — read from the contract, not a divergent copy', () => {
-	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<brief> substituted (default-OFF nudge applied)', () => {
+	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<prd> substituted (default-OFF nudge applied)', () => {
 		const protocol = readFileSync(CLAIM_PROTOCOL, 'utf8');
 		const template = extractCanonicalWrapperTemplate(protocol);
 
 		// Sanity: the canonical template carries the placeholders we substitute.
 		expect(template).toContain('<slug>');
 
-		const emitted = wrapper('example', 'my-brief');
+		const emitted = wrapper('example', 'my-prd');
 		// With the nudge OFF (the default), the conditional-fragment transform
 		// strips the markers + the IF-branch and keeps the historic ELSE text
 		// (BYTE-IDENTITY guard — see the `promptGuidance.testFirst` seam tests).
 		const expected = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<brief>/g, 'my-brief');
+			.replace(/<prd>/g, 'my-prd');
 		expect(emitted).toBe(expected);
 	});
 
 	it('substitutes <slug> everywhere it appears in the canonical text', () => {
-		const emitted = wrapper('my-slug', 'my-brief');
+		const emitted = wrapper('my-slug', 'my-prd');
 		// The canonical wrapper comes from CLAIM-PROTOCOL.md (the PROTOCOL doc), now
 		// cut over to the new layout/vocabulary by the protocol-docs/skills/setup
 		// vocabulary task. The emitted task-body path is `work/tasks/todo/<slug>.md`.
@@ -168,10 +168,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<slug>');
 	});
 
-	it('substitutes the source brief path (work/briefs/ready/<brief>.md)', () => {
+	it('substitutes the source prd path (work/prds/ready/<prd>.md)', () => {
 		const emitted = wrapper('example', 'agent-runner');
 		expect(emitted).toContain('agent-runner');
-		expect(emitted).not.toContain('<brief>');
+		expect(emitted).not.toContain('<prd>');
 	});
 
 	it('resolveProtocolDoc finds the bundled contract by default', () => {
@@ -282,16 +282,16 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 	it('builds a prompt from the TARGET repo work/protocol/ copy when present', () => {
 		// Seed a target-repo copy whose canonical wrapper carries a UNIQUE marker so
 		// we can prove THAT copy (not the bundled one) was the source.
-		// 'complete brief' is inside the canonical wrapper template; tagging it in the
+		// 'complete prd' is inside the canonical wrapper template; tagging it in the
 		// target copy proves THAT copy (not the bundled one) was the prompt source.
 		const bundled = readFileSync(
 			resolveProtocolDoc('CLAIM-PROTOCOL.md'),
 			'utf8',
 		);
-		expect(bundled).toContain('complete brief');
+		expect(bundled).toContain('complete prd');
 		const tagged = bundled.replace(
-			'complete brief',
-			'TARGET-MARKER complete brief',
+			'complete prd',
+			'TARGET-MARKER complete prd',
 		);
 		const protoDir = join(scratch.root, 'work', 'protocol');
 		mkdirSync(protoDir, {recursive: true});
@@ -300,7 +300,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			cwd: scratch.root,
 		});
-		expect(out).toContain('TARGET-MARKER complete brief');
+		expect(out).toContain('TARGET-MARKER complete prd');
 	});
 });
 
@@ -333,10 +333,10 @@ describe('promptGuidance.testFirst nudge — the conditional-fragment seam', () 
 		const template = extractCanonicalWrapperTemplate(protocol);
 		const baseline = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<brief>/g, 'my-brief');
-		expect(wrapper('example', 'my-brief')).toBe(baseline);
+			.replace(/<prd>/g, 'my-prd');
+		expect(wrapper('example', 'my-prd')).toBe(baseline);
 		expect(
-			wrapper('example', 'my-brief', {promptGuidance: {testFirst: false}}),
+			wrapper('example', 'my-prd', {promptGuidance: {testFirst: false}}),
 		).toBe(baseline);
 		// And the byte-identity guard: with the nudge OFF, the strengthened text
 		// must be absent and the soft historic text must be present (the soft line
@@ -412,10 +412,10 @@ describe('buildAgentPrompt', () => {
 	});
 
 	it('only slug/prd vary in the wrapper (two tasks share the wrapper text)', () => {
-		const a = buildAgentPrompt('alpha', 'brief-a', 'BODY');
-		const b = buildAgentPrompt('bravo', 'brief-b', 'BODY');
-		const stripA = a.replace(/alpha/g, 'SLUG').replace(/brief-a/g, 'PRD');
-		const stripB = b.replace(/bravo/g, 'SLUG').replace(/brief-b/g, 'PRD');
+		const a = buildAgentPrompt('alpha', 'prd-a', 'BODY');
+		const b = buildAgentPrompt('bravo', 'prd-b', 'BODY');
+		const stripA = a.replace(/alpha/g, 'SLUG').replace(/prd-a/g, 'PRD');
+		const stripB = b.replace(/bravo/g, 'SLUG').replace(/prd-b/g, 'PRD');
 		expect(stripA).toBe(stripB);
 	});
 });
@@ -656,7 +656,7 @@ describe('resolveTask — in-progress over backlog', () => {
 		const task = resolveTask(scratch.root, 'foo');
 		expect(task.folder).toBe('in-progress');
 		expect(task.taskPrompt).toContain('in-progress body');
-		expect(task.brief).toBe('my-prd');
+		expect(task.prd).toBe('my-prd');
 	});
 
 	it('falls back to work/tasks/todo/ when not in-progress', () => {
@@ -807,10 +807,10 @@ describe('renderPrompt — slug given', () => {
 	});
 
 	it('renders the wrapper + task prompt for an explicit slug', () => {
-		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-brief');
+		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-prd');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
 		expect(out).toContain('work/tasks/todo/given.md');
-		expect(out).toContain('the-brief');
+		expect(out).toContain('the-prd');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
 	});
@@ -878,18 +878,18 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 
 // ---------------------------------------------------------------------------
 // Per-item override layer for `promptGuidance.testFirst`
-// (task `prompt-guidance-testfirst-item-override`, brief US #5).
+// (task `prompt-guidance-testfirst-item-override`, prd US #5).
 //
 // Precedence chain (highest → lowest):
 //   per-task frontmatter
-//   > per-brief frontmatter (when the task carries `brief:`)
+//   > per-prd frontmatter (when the task carries `prd:`)
 //   > repo-resolved policy (CLI flag > env > per-repo > global > default false)
 //
 // We test at TWO seams:
 //   - {@link resolveItemPromptGuidance}: the pure precedence resolver,
-//     parameterised over the full (repo × brief × task) matrix.
+//     parameterised over the full (repo × prd × task) matrix.
 //   - {@link renderPrompt}: the prompt-assembly seam, end-to-end — a task or
-//     brief frontmatter override changes the strengthened/soft text the worker
+//     prd frontmatter override changes the strengthened/soft text the worker
 //     actually receives.
 //
 // We deliberately do NOT test process-level behaviour ("the agent really wrote
@@ -906,7 +906,7 @@ describe('resolveItemPromptGuidance — the precedence matrix', () => {
 		};
 	}
 
-	it('repo-only: with no task / no brief, the repo policy wins', () => {
+	it('repo-only: with no task / no prd, the repo policy wins', () => {
 		expect(resolveItemPromptGuidance({testFirst: false})).toEqual({
 			testFirst: false,
 		});
@@ -915,7 +915,7 @@ describe('resolveItemPromptGuidance — the precedence matrix', () => {
 		});
 	});
 
-	it('brief overrides repo when the task does not override', () => {
+	it('prd overrides repo when the task does not override', () => {
 		expect(
 			resolveItemPromptGuidance({testFirst: false}, fm(undefined), fm(true)),
 		).toEqual({testFirst: true});
@@ -924,7 +924,7 @@ describe('resolveItemPromptGuidance — the precedence matrix', () => {
 		).toEqual({testFirst: false});
 	});
 
-	it('task overrides brief AND repo (the highest tier wins outright)', () => {
+	it('task overrides prd AND repo (the highest tier wins outright)', () => {
 		expect(
 			resolveItemPromptGuidance({testFirst: false}, fm(true), fm(false)),
 		).toEqual({testFirst: true});
@@ -935,15 +935,15 @@ describe('resolveItemPromptGuidance — the precedence matrix', () => {
 
 	it('a task `false` override is honoured (it is NOT confused with omitted)', () => {
 		// The escape hatch: an exploratory task pins testFirst:false even when the
-		// repo + brief both default it on. Critical guard against `?? false` bugs.
+		// repo + prd both default it on. Critical guard against `?? false` bugs.
 		expect(
 			resolveItemPromptGuidance({testFirst: true}, fm(false), fm(true)),
 		).toEqual({testFirst: false});
 	});
 
-	it('a task with NO `brief:` (chore) can still carry the override (by symmetry with humanOnly)', () => {
-		// Recorded decision: a brief-less chore task may still pin the nudge in
-		// its own frontmatter — the brief layer is simply absent and the chain
+	it('a task with NO `prd:` (chore) can still carry the override (by symmetry with humanOnly)', () => {
+		// Recorded decision: a prd-less chore task may still pin the nudge in
+		// its own frontmatter — the prd layer is simply absent and the chain
 		// reads task ⇒ repo.
 		expect(
 			resolveItemPromptGuidance({testFirst: false}, fm(true), undefined),
@@ -960,17 +960,17 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 		scratch.cleanup();
 	});
 
-	/** Write a brief file with the given testFirst marker (or none). */
-	function seedBrief(
+	/** Write a prd file with the given testFirst marker (or none). */
+	function seedPrd(
 		root: string,
-		folder: 'briefs-ready' | 'briefs-tasked',
+		folder: 'prds-ready' | 'prds-tasked',
 		slug: string,
 		testFirst: boolean | undefined,
 	): void {
 		const dir = join(
 			root,
 			'work',
-			folder === 'briefs-ready' ? 'briefs/ready' : 'briefs/tasked',
+			folder === 'prds-ready' ? 'prds/ready' : 'prds/tasked',
 		);
 		mkdirSync(dir, {recursive: true});
 		const body = ['---', `slug: ${slug}`];
@@ -983,12 +983,12 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 
 	function taskContent(
 		slug: string,
-		brief: string | undefined,
+		prd: string | undefined,
 		testFirst: boolean | undefined,
 	): string {
 		const body = ['---', `slug: ${slug}`];
-		if (brief !== undefined) {
-			body.push(`brief: ${brief}`);
+		if (prd !== undefined) {
+			body.push(`prd: ${prd}`);
 		}
 		if (testFirst !== undefined) {
 			body.push(`promptGuidance.testFirst: ${String(testFirst)}`);
@@ -997,9 +997,9 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 		return body.join('\n');
 	}
 
-	it('loads the brief at briefs/ready and applies its override over the repo policy', () => {
-		seedBrief(scratch.root, 'briefs-ready', 'my-brief', true);
-		const content = taskContent('t', 'my-brief', undefined);
+	it('loads the prd at prds/ready and applies its override over the repo policy', () => {
+		seedPrd(scratch.root, 'prds-ready', 'my-prd', true);
+		const content = taskContent('t', 'my-prd', undefined);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
@@ -1008,37 +1008,37 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 		expect(out).toEqual({testFirst: true});
 	});
 
-	it('falls back to briefs/tasked when the brief is not in briefs/ready', () => {
-		seedBrief(scratch.root, 'briefs-tasked', 'tasked-brief', true);
+	it('falls back to prds/tasked when the prd is not in prds/ready', () => {
+		seedPrd(scratch.root, 'prds-tasked', 'tasked-prd', true);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
-			taskContent: taskContent('t', 'tasked-brief', undefined),
+			taskContent: taskContent('t', 'tasked-prd', undefined),
 		});
 		expect(out).toEqual({testFirst: true});
 	});
 
-	it('a task override beats the brief override (per-task wins)', () => {
-		seedBrief(scratch.root, 'briefs-ready', 'my-brief', true);
+	it('a task override beats the prd override (per-task wins)', () => {
+		seedPrd(scratch.root, 'prds-ready', 'my-prd', true);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
-			taskContent: taskContent('t', 'my-brief', false),
+			taskContent: taskContent('t', 'my-prd', false),
 		});
 		expect(out).toEqual({testFirst: false});
 	});
 
-	it('a missing brief file silently falls through to the repo policy (the override is OPTIONAL)', () => {
+	it('a missing prd file silently falls through to the repo policy (the override is OPTIONAL)', () => {
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: true},
-			taskContent: taskContent('t', 'absent-brief', undefined),
+			taskContent: taskContent('t', 'absent-prd', undefined),
 		});
 		expect(out).toEqual({testFirst: true});
 	});
 
-	it('findBriefPath returns undefined when the brief is in neither folder', () => {
-		expect(findBriefPath(scratch.root, 'nope')).toBeUndefined();
+	it('findPrdPath returns undefined when the prd is in neither folder', () => {
+		expect(findPrdPath(scratch.root, 'nope')).toBeUndefined();
 	});
 });
 
@@ -1051,36 +1051,36 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 		scratch.cleanup();
 	});
 
-	/** Write a task + (optional) brief, with explicit per-item testFirst overrides. */
+	/** Write a task + (optional) prd, with explicit per-item testFirst overrides. */
 	function seedItem(
 		root: string,
 		slug: string,
 		opts: {
-			brief?: string;
+			prd?: string;
 			taskTestFirst?: boolean;
-			briefTestFirst?: boolean;
+			prdTestFirst?: boolean;
 		},
 	): void {
 		const taskDir = join(root, 'work', 'tasks', 'todo');
 		mkdirSync(taskDir, {recursive: true});
 		const t = ['---', `slug: ${slug}`];
-		if (opts.brief !== undefined) {
-			t.push(`brief: ${opts.brief}`);
+		if (opts.prd !== undefined) {
+			t.push(`prd: ${opts.prd}`);
 		}
 		if (opts.taskTestFirst !== undefined) {
 			t.push(`promptGuidance.testFirst: ${String(opts.taskTestFirst)}`);
 		}
 		t.push('---', '', '## Prompt', '', '> TASK-BODY', '');
 		writeFileSync(join(taskDir, `${slug}.md`), t.join('\n'));
-		if (opts.brief !== undefined) {
-			const briefDir = join(root, 'work', 'briefs', 'ready');
-			mkdirSync(briefDir, {recursive: true});
-			const b = ['---', `slug: ${opts.brief}`];
-			if (opts.briefTestFirst !== undefined) {
-				b.push(`promptGuidance.testFirst: ${String(opts.briefTestFirst)}`);
+		if (opts.prd !== undefined) {
+			const prdDir = join(root, 'work', 'prds', 'ready');
+			mkdirSync(prdDir, {recursive: true});
+			const b = ['---', `slug: ${opts.prd}`];
+			if (opts.prdTestFirst !== undefined) {
+				b.push(`promptGuidance.testFirst: ${String(opts.prdTestFirst)}`);
 			}
 			b.push('---', '', '## Problem Statement', '', 'thing', '');
-			writeFileSync(join(briefDir, `${opts.brief}.md`), b.join('\n'));
+			writeFileSync(join(prdDir, `${opts.prd}.md`), b.join('\n'));
 		}
 	}
 
@@ -1111,8 +1111,8 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 		expect(out).not.toContain(STRONG);
 	});
 
-	it('repo=OFF, brief=ON, task=(omit) → strengthened (inherits the brief)', () => {
-		seedItem(scratch.root, 'c', {brief: 'feature-x', briefTestFirst: true});
+	it('repo=OFF, prd=ON, task=(omit) → strengthened (inherits the prd)', () => {
+		seedItem(scratch.root, 'c', {prd: 'feature-x', prdTestFirst: true});
 		const out = renderPrompt({
 			slug: 'c',
 			cwd: scratch.root,
@@ -1122,10 +1122,10 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 		expect(out).not.toContain(SOFT);
 	});
 
-	it('repo=OFF, brief=ON, task=OFF → soft (per-task beats per-brief)', () => {
+	it('repo=OFF, prd=ON, task=OFF → soft (per-task beats per-prd)', () => {
 		seedItem(scratch.root, 'd', {
-			brief: 'feature-x',
-			briefTestFirst: true,
+			prd: 'feature-x',
+			prdTestFirst: true,
 			taskTestFirst: false,
 		});
 		const out = renderPrompt({

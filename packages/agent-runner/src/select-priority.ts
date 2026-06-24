@@ -26,20 +26,20 @@ import {
  * (ADR §3: "the `run`/`do` auto-task step"). This task (`do-autopick`) OWNS and
  * builds this helper; it does NOT retro-wire `run` to call it (at `do-autopick`
  * time `run`'s tick is task-only — concurrent + looped — and adopting this
- * helper, so `run` also auto-tasks eligible briefs, is a noted FOLLOW-UP once both
+ * helper, so `run` also auto-tasks eligible prds, is a noted FOLLOW-UP once both
  * land). Build it standalone; do not assume `run` already calls it.
  *
  * **Up to FIVE pools.** The `scan`/`selectCandidates`/eligibility model is
- * TASK-ONLY (there is no brief candidate). So this helper composes:
+ * TASK-ONLY (there is no prd candidate). So this helper composes:
  *
  *   - the **`build` pool** (eligible TASKS) — the EXISTING {@link selectCandidates}
  *     path (round-robin across repos, capped). This is the EXACT task-selection
  *     primitive `run` uses, so `run` and this helper SHARE it (they share
  *     `selectCandidates`, the task-pool core).
- *   - the **`task` pool** (brief-to-task) — a pool the caller builds from the brief reader
- *     (`ledgerRead.resolveBriefPool`) filtered by `autoslice-gate`'s pure predicate
- *     ({@link resolveTaskingEligibility}); see {@link taskableBriefs}. The helper
- *     does NOT reinvent brief eligibility.
+ *   - the **`task` pool** (prd-to-task) — a pool the caller builds from the prd reader
+ *     (`ledgerRead.resolvePrdPool`) filtered by `autoslice-gate`'s pure predicate
+ *     ({@link resolveTaskingEligibility}); see {@link taskablePrds}. The helper
+ *     does NOT reinvent prd eligibility.
  *
  * `do` is STRICTLY SEQUENTIAL (parallelism is `run`'s job, ADR §3) — this helper
  * only ORDERS + COUNTS the items; the caller runs the existing `do` pipeline per
@@ -49,14 +49,14 @@ import {
 
 /**
  * Which namespace a selected item names (mirrors the slug-namespace split). The
- * `do` selection only ever produces `task`/`brief`; the `advance` selection ALSO
+ * `do` selection only ever produces `task`/`prd`; the `advance` selection ALSO
  * produces `observation` (the lifecycle triage pool, task
  * `advance-autopick-lifecycle-pools`), so a selected lifecycle item carries which
  * rung the driver dispatches to. The widening is BACKWARD-COMPATIBLE: `do` never
  * emits `observation` (its lifecycle pools default to none, see
  * {@link selectPrioritised}).
  */
-export type SelectedNamespace = 'task' | 'brief' | 'observation';
+export type SelectedNamespace = 'task' | 'prd' | 'observation';
 
 /** One item the selection layer picked, in run order. */
 export interface SelectedItem {
@@ -65,8 +65,8 @@ export interface SelectedItem {
 	/** The bare slug to act on. */
 	slug: string;
 	/**
-	 * `'task'` ⇒ run the task-build `do` pipeline; `'brief'` ⇒ dispatch to the
-	 * `do brief:<slug>` tasking path (tasking itself is `autoslice-command`, not
+	 * `'task'` ⇒ run the task-build `do` pipeline; `'prd'` ⇒ dispatch to the
+	 * `do prd:<slug>` tasking path (tasking itself is `autoslice-command`, not
 	 * here); `'observation'` ⇒ (advance only) the triage rung via `obs:<slug>`. The
 	 * caller turns this into the right `do`/`advance` arg/dispatch.
 	 */
@@ -76,45 +76,45 @@ export interface SelectedItem {
 /**
  * A lifecycle-pool selected item (task `advance-autopick-lifecycle-pools`). It is
  * a {@link SelectedItem} — the same shape — carrying the lifecycle namespace
- * (`observation` for triage; `task`/`brief` for a `needsAnswers`-blocked item the
+ * (`observation` for triage; `task`/`prd` for a `needsAnswers`-blocked item the
  * tick will surface/apply). A distinct alias names the lifecycle pools at the
  * call sites WITHOUT a structural difference (the discriminator is `namespace`).
  */
 export type LifecycleSelectedItem = SelectedItem;
 
-/** A brief candidate for the tasking pool, before the eligibility gate runs. */
-export interface BriefCandidate {
+/** A prd candidate for the tasking pool, before the eligibility gate runs. */
+export interface PrdCandidate {
 	repoPath: string;
 	slug: string;
 	humanOnly: HumanOnlyGate;
 	needsAnswers: HumanOnlyGate;
-	briefAfter: string[];
+	prdAfter: string[];
 }
 
-/** Inputs to {@link taskableBriefs}: the raw brief pool + the gate context. */
-export interface TaskableBriefsInput {
-	/** Every brief enumerated from `work/briefs/ready/` (the auto-task candidate source). */
-	candidates: BriefCandidate[];
-	/** Slugs whose brief resides in `work/briefs/tasked/` (resolves `briefAfter`). */
+/** Inputs to {@link taskablePrds}: the raw prd pool + the gate context. */
+export interface TaskablePrdsInput {
+	/** Every prd enumerated from `work/prds/ready/` (the auto-task candidate source). */
+	candidates: PrdCandidate[];
+	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `prdAfter`). */
 	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autoslice-gate`'s per-repo key). */
 	autoTask: boolean;
 }
 
 /**
- * Filter a raw brief pool down to the TASKABLE briefs, in declaration order, using
+ * Filter a raw prd pool down to the TASKABLE prds, in declaration order, using
  * `autoslice-gate`'s pure predicate ({@link resolveTaskingEligibility}) — NOT a
- * reinvented eligibility model. A brief is taskable iff `needsAnswers !== true &&
- * humanOnly !== true && autoTask` AND every `briefAfter` brief is already tasked.
- * Pure: no I/O (the caller reads the pool through `ledgerRead.resolveBriefPool`).
+ * reinvented eligibility model. A prd is taskable iff `needsAnswers !== true &&
+ * humanOnly !== true && autoTask` AND every `prdAfter` prd is already tasked.
+ * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
-export function taskableBriefs(input: TaskableBriefsInput): BriefCandidate[] {
+export function taskablePrds(input: TaskablePrdsInput): PrdCandidate[] {
 	return input.candidates.filter(
-		(brief) =>
+		(prd) =>
 			resolveTaskingEligibility({
-				humanOnly: brief.humanOnly,
-				needsAnswers: brief.needsAnswers,
-				briefAfter: brief.briefAfter,
+				humanOnly: prd.humanOnly,
+				needsAnswers: prd.needsAnswers,
+				prdAfter: prd.prdAfter,
 				taskedSlugs: input.taskedSlugs,
 				autoTask: input.autoTask,
 			}).taskable,
@@ -133,10 +133,10 @@ export interface SelectPrioritisedInput {
 	/** Caps for the task-pool selection (round-robin/per-repo/total). */
 	caps: SelectCaps;
 	/**
-	 * The ALREADY-FILTERED taskable brief pool (run {@link taskableBriefs} first).
+	 * The ALREADY-FILTERED taskable prd pool (run {@link taskablePrds} first).
 	 * In declaration order; this helper does not re-gate them.
 	 */
-	briefs: BriefCandidate[];
+	prds: PrdCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
 	 * `task` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
@@ -157,7 +157,7 @@ export interface SelectPrioritisedInput {
 	/**
 	 * The OPTIONAL lifecycle pools (task `advance-autopick-lifecycle-pools`),
 	 * constructed CALLER-SIDE (the `advance` callers only) and passed in — exactly
-	 * as {@link briefs} is. DEFAULTS to none, so `performDoAuto` (which passes only
+	 * as {@link prds} is. DEFAULTS to none, so `performDoAuto` (which passes only
 	 * its two pools) is provably UNCHANGED: `do` auto-pick never selects an
 	 * observation or a `needsAnswers` item. ONLY the `advance` callers
 	 * (`performAdvanceAuto` / the mirror-side advance path) supply these.
@@ -171,7 +171,7 @@ export interface SelectPrioritisedInput {
 	 */
 	lifecycle?: SelectedLifecyclePools;
 	/**
-	 * The HELD-SLUG set to SUBTRACT from the `build` pool (eligible TASKS) — brief
+	 * The HELD-SLUG set to SUBTRACT from the `build` pool (eligible TASKS) — prd
 	 * `ledger-status-per-item-lock-refs` US #15, task
 	 * `claim-acquires-unified-lock-no-body-move`. A task whose per-item lock is
 	 * currently held is dropped from selection, so the eligible pool is "in
@@ -198,13 +198,13 @@ export interface SelectedLifecyclePools {
  * Build the ordered, counted list of items to do across the (up to) FIVE pools,
  * applying the configurable {@link selectionOrder} with `apply` PINNED FIRST and
  * the count bound. The task pool is selected via the EXISTING
- * {@link selectCandidates} (the shared primitive `run` uses); the brief pool is the
- * pre-filtered {@link taskableBriefs} output; the lifecycle pools (`apply` /
+ * {@link selectCandidates} (the shared primitive `run` uses); the prd pool is the
+ * pre-filtered {@link taskablePrds} output; the lifecycle pools (`apply` /
  * `surface` / `triage`) are caller-built (none for `do`).
  *
  * Ordering: `apply` is always prepended (consume-always-wins; not orderable),
  * then the four orderable pools (`build` = eligible tasks, `task` = taskable
- * briefs, `surface`, `triage`) interleaved in the resolved {@link selectionOrder}
+ * prds, `surface`, `triage`) interleaved in the resolved {@link selectionOrder}
  * (default `drain` = `[build, task, surface, triage]`, which reproduces today's
  * tasks-first two-pool default). A pool named in the order but EMPTY (gated off)
  * contributes nothing — a no-op, not an error (gates decide what is PRESENT,
@@ -225,17 +225,17 @@ export function selectPrioritised(
 			namespace: 'task' as const,
 		}));
 
-	const taskItems: SelectedItem[] = input.briefs.map((brief) => ({
-		repoPath: brief.repoPath,
-		slug: brief.slug,
-		namespace: 'brief' as const,
+	const taskItems: SelectedItem[] = input.prds.map((prd) => ({
+		repoPath: prd.repoPath,
+		slug: prd.slug,
+		namespace: 'prd' as const,
 	}));
 
 	const lifecycle = input.lifecycle;
 
 	// The per-pool item lists, keyed by the orderable pool name. NOTE the
 	// vocabulary bridge: `build` = the eligible-TASK pool (namespace `task`),
-	// `task` = the taskable-brief pool (namespace `brief`) — the action names, not the
+	// `task` = the taskable-prd pool (namespace `prd`) — the action names, not the
 	// item namespaces (task `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,

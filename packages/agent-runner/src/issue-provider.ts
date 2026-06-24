@@ -9,7 +9,7 @@ import {brand} from './brand.js';
 
 /**
  * The single provider-native PROCESSING LOCK label (task `intake-processing-lock`,
- * brief `issue-intake` US #10): a TRANSIENT concurrency mutex — added on start (the
+ * prd `issue-intake` US #10): a TRANSIENT concurrency mutex — added on start (the
  * winner only), removed on finish — that serialises two concurrent `intake` runs on
  * the SAME issue. It is namespaced under the brand (`agent-runner:processing`) so it
  * cannot collide with a user's own labels. It carries NO `work/` state — it is NOT a
@@ -19,7 +19,7 @@ import {brand} from './brand.js';
 export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
 
 /**
- * The **issue seam** (brief `issue-intake`, task `intake-tracer-slice-outcome`):
+ * The **issue seam** (prd `issue-intake`, task `intake-tracer-slice-outcome`):
  * the provider-pluggable surface `intake <N>` reads an issue + its comment thread
  * through, and posts a clarifying comment back onto. It is the SIBLING of the
  * review-request `ReviewProvider` (`integrator.ts` / `github.ts`): both name a
@@ -33,7 +33,7 @@ export const PROCESSING_LOCK_LABEL = `${brand.base}:processing`;
  * `intake-closes-issue-on-bounce`) is the ATOMIC close used on a BOUNCE — a
  * terminal outcome, so intake closes the issue directly (comment + `not planned`
  * + close in ONE call). It is ALSO the method CI's future close-job uses for the
- * task/brief path; only the BOUNCE close is intake's.
+ * task/prd path; only the BOUNCE close is intake's.
  *
  * The label ops are a TRANSIENT CONCURRENCY MUTEX carrying NO `work/` state — ONE
  * lock label, added-on-start / removed-on-finish. They are NOT a label
@@ -295,7 +295,7 @@ export interface IssueProvider {
 	 * reason IN THE SAME atomic operation (`gh issue close <N> [--comment <body>]
 	 * [--reason "not planned"]`). Used on a BOUNCE (terminal: comment + `not
 	 * planned` + close in ONE call — no post-then-close partial-failure window) and,
-	 * later, by CI's task/brief close-job. The RUNNER calls this; the agent stays
+	 * later, by CI's task/prd close-job. The RUNNER calls this; the agent stays
 	 * seam-free. NEVER throws — a missing/unauthenticated `gh` DEGRADES, surfacing
 	 * the REAL `gh` stderr via {@link CloseIssueResult.reason} (NOT a hard-coded
 	 * guess), so the terminal outcome is unchanged and the cause stays diagnosable.

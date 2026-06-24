@@ -1,7 +1,7 @@
 ---
 title: Cross-job ref-based land-lock accelerator (portable, with stale-lock reclaim)
 slug: cross-job-ref-based-land-lock
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: true
 blockedBy: [merge-retries-gate-precedence]
 covers: [5]
@@ -22,7 +22,7 @@ and must degrade to that floor if the lock is unavailable.
 
 ## Open questions (needsAnswers)
 
-The brief (Applied Answer q1) says: ship this slice only if a SOUND
+The prd (Applied Answer q1) says: ship this slice only if a SOUND
 stale-lock reclaim story is cheap; otherwise split it out. Concretely:
 
 1. **Stale-lock reclaim mechanism.** A ref-lock held by a crashed job
@@ -34,8 +34,8 @@ stale-lock reclaim story is cheap; otherwise split it out. Concretely:
    model); (c) a human-only reclaim verb (`release-lock`-style) that
    refuses to ship without admin opt-in. Pick one and justify.
 2. **In-scope-now vs follow-on.** Given (1)'s answer, is this slice
-   cheap enough to ship in this brief, or should it be split into a
-   follow-on brief and this slice cancelled? The brief explicitly
+   cheap enough to ship in this prd, or should it be split into a
+   follow-on prd and this slice cancelled? The prd explicitly
    allows the latter.
 3. **Lock granularity.** One global land-lock per repo, or
    per-target-branch? (Per-repo is simpler; per-branch matches future

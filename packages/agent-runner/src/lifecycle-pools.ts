@@ -8,8 +8,8 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  * `advance-autopick-lifecycle-pools`) \u2014 the MISSING FOUNDATION a 2026-06-12 review
  * found. Before this, `performAdvanceAuto` (in-place) and `scanMirrorPool`
  * (mirror-side) enumerated ONLY the two BUILD pools (eligible tasks + taskable
- * briefs), so a bare / `-n` / loop / CI `advance` could ONLY build tasks + task
- * briefs. The lifecycle rungs (triage / surface / apply) were EXPLICIT-INVOCATION-
+ * prds), so a bare / `-n` / loop / CI `advance` could ONLY build tasks + task
+ * prds. The lifecycle rungs (triage / surface / apply) were EXPLICIT-INVOCATION-
  * ONLY because NOTHING enumerated observations or `needsAnswers`-blocked items
  * into the selection. This unit closes that gap, at the SELECTION layer ONLY (it
  * does NOT touch the classifier `advance-classify.ts` or the rung bodies \u2014 the
@@ -20,7 +20,7 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  * divergent enumerations. The per-substrate I/O (reading `work/observations/` +
  * the per-item sidecar state) is done CALLER-SIDE through the read seam (sync
  * in-place, async mirror-ref) and the already-resolved inputs are handed here \u2014
- * exactly as `taskableBriefs` is fed by each caller. This unit is then pure: no I/O.
+ * exactly as `taskablePrds` is fed by each caller. This unit is then pure: no I/O.
  *
  * **Three lifecycle sub-pools, gated by PURPOSE (ADR `ci-config-policy-and-gate-
  * family.md` \u00a74 \u2014 gates govern CREATE only; CONSUME is always-on):**
@@ -28,7 +28,7 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  *   - **triage** \u2014 UNTRIAGED observations (no `triaged:` settled marker). A CREATE
  *     act (the bot mints a promote/keep/delete question), so gated by
  *     {@link LifecyclePoolGates.triage} (the future `observationTriage` gate).
- *   - **surface** \u2014 `needsAnswers`-blocked tasks/briefs with NO all-answered sidecar
+ *   - **surface** \u2014 `needsAnswers`-blocked tasks/prds with NO all-answered sidecar
  *     (no sidecar yet, or a still-pending one). A CREATE act (the bot mints the
  *     blocker question), so gated by {@link LifecyclePoolGates.surface} (the future
  *     `surfaceBlockers` gate). A PENDING sidecar is NOT enumerated (it would only
@@ -71,14 +71,14 @@ export interface LifecyclePoolGates {
 	surface?: boolean;
 	/**
 	 * Does the SURFACE candidate set widen to include STAGING (`tasks/backlog/` +
-	 * `briefs/proposed/`), or stay POOL-ONLY? This field is CONSUMED BY THE
+	 * `prds/proposed/`), or stay POOL-ONLY? This field is CONSUMED BY THE
 	 * GATHER (`lifecycle-gather.ts`), NOT by {@link buildLifecyclePools} — the
 	 * builder is pure and only routes already-resolved candidates between surface
 	 * / apply by sidecar-answered-state. The gather decides WHICH items become
 	 * candidates in the first place; this gate widens that input set when `true`.
 	 * Default `false` at THIS library boundary (calm; the CLI threads
 	 * `config.surfaceStaging` which itself defaults to `true`, so the user-visible
-	 * default is `true`). Brief `staging-surface-and-apply-promote-safety` F2.
+	 * default is `true`). Prd `staging-surface-and-apply-promote-safety` F2.
 	 * BUILD/claim eligibility is UNCHANGED in either mode — staging items stay
 	 * non-claimable, the trust model is untouched.
 	 */
@@ -86,9 +86,9 @@ export interface LifecyclePoolGates {
 }
 
 /**
- * One `needsAnswers`-blocked task/brief candidate for the SURFACE/APPLY sub-pools,
+ * One `needsAnswers`-blocked task/prd candidate for the SURFACE/APPLY sub-pools,
  * before this unit routes it. The caller resolves the item's namespace + slug
- * (from `work/backlog` tasks + `work/briefs` briefs carrying `needsAnswers:true`) and
+ * (from `work/backlog` tasks + `work/prds` prds carrying `needsAnswers:true`) and
  * its ACTIVE sidecar (parsed from `work/questions/<type>-<slug>.md`, or
  * `undefined` when none exists) \u2014 through the read seam (sync in-place / async
  * mirror-ref). This unit then routes it to APPLY (sidecar all-answered, consume,
@@ -97,8 +97,8 @@ export interface LifecyclePoolGates {
 export interface NeedsAnswersCandidate {
 	/** The repo this item lives in (a working checkout in-place, the mirror path remote). */
 	repoPath: string;
-	/** `'task'` (a `work/backlog/` task) or `'brief'` (a `work/briefs/` brief). */
-	namespace: 'task' | 'brief';
+	/** `'task'` (a `work/backlog/` task) or `'prd'` (a `work/prds/` prd). */
+	namespace: 'task' | 'prd';
 	/** The bare slug. */
 	slug: string;
 	/** The parsed ACTIVE sidecar, or `undefined` when none exists yet. */
@@ -116,7 +116,7 @@ export interface LifecyclePoolsInput {
 	 */
 	observations: LedgerObservationItem[];
 	/**
-	 * Every `needsAnswers:true` task/brief (the create-side blocked items), each
+	 * Every `needsAnswers:true` task/prd (the create-side blocked items), each
 	 * with its resolved active sidecar. This unit routes each to SURFACE or APPLY.
 	 */
 	needsAnswers: NeedsAnswersCandidate[];
@@ -146,7 +146,7 @@ export interface LifecyclePools {
  * Build the three lifecycle sub-pools from the raw candidates + the gates, PURE.
  * Each selected item carries the lifecycle `namespace` discriminator so the
  * driver's per-item dispatch can map it to the right TICK arg (observation \u2192
- * `obs:<slug>`; a blocked task/brief \u2192 `task:`/`brief:<slug>`, which the tick then
+ * `obs:<slug>`; a blocked task/prd \u2192 `task:`/`prd:<slug>`, which the tick then
  * classifies into surface/apply/no-op). This unit decides WHICH sub-pool each item
  * belongs to (and whether its gate lets it through); the TICK re-classifies and
  * runs the actual rung (the classifier + rung bodies are unchanged).

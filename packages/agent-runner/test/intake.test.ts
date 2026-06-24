@@ -254,7 +254,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).toContain('slug: add-quiet-flag');
 		expect(onBranch).toMatch(/^issue: 42$/m);
 		expect(onBranch).toContain('covers: []');
-		expect(onBranch).not.toMatch(/^brief:/m);
+		expect(onBranch).not.toMatch(/^prd:/m);
 		expect(onBranch).not.toContain('Fixes');
 		// No --origin-trust passed (a LOCAL intake) ⇒ NO origin-trust stamp.
 		expect(onBranch).not.toMatch(/^origin:/m);
@@ -341,23 +341,23 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose output modes',
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
 			}),
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('briefed');
+		expect(result.outcome).toBe('prd-written');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		// `originTrust: untrusted` FORCES staging via the shared placement resolver
-		// (PRD US #12), so the PRD lands at `work/briefs/proposed/<slug>.md` on the work
+		// (PRD US #12), so the PRD lands at `work/prds/proposed/<slug>.md` on the work
 		// branch, NOT in the auto-slice pool. The originTrust stamp on the BODY is
 		// unchanged — the file just sits in the staged slot.
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prds/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -619,7 +619,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			issueProvider,
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'merge', brief: 'propose'},
+			integration: {task: 'merge', prd: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
@@ -641,18 +641,18 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose output modes',
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
 			}),
 			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
-		expect(result.outcome).toBe('briefed');
+		expect(result.outcome).toBe('prd-written');
 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
-			`${ARBITER}/work/intake-brief-quiet-and-verbose-modes`,
+			`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
 			repo,
 		);
 		expect(subject).toContain('Quiet and verbose output modes');
@@ -810,23 +810,23 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(taskProvider.closes).toHaveLength(0);
 		expect(tasked.closed).toBeUndefined();
 
-		// BRIEF: emits a brief, no close.
-		const briefProvider = stubIssueProvider({issue: {number: 9}});
-		const briefed = await performIntake({
+		// PRD: emits a prd, no close.
+		const prdProvider = stubIssueProvider({issue: {number: 9}});
+		const prdWritten = await performIntake({
 			issueNumber: 9,
 			cwd: repo,
 			arbiter: ARBITER,
-			issueProvider: briefProvider,
+			issueProvider: prdProvider,
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose modes',
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});
-		expect(briefed.outcome).toBe('briefed');
-		expect(briefProvider.closes).toHaveLength(0);
-		expect(briefed.closed).toBeUndefined();
+		expect(prdWritten.outcome).toBe('prd-written');
+		expect(prdProvider.closes).toHaveLength(0);
+		expect(prdWritten.closed).toBeUndefined();
 	});
 
 	it('a `bounce`/`ask` verdict with NO drafted message still posts a sensible default comment', async () => {
@@ -861,7 +861,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(bounceProvider.closes[0].reason).toBe('not planned');
 	});
 
-	it('a stubbed `prd` verdict writes work/briefs/proposed/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
+	it('a stubbed `prd` verdict writes work/prds/proposed/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 42}});
 		const result = await performIntake({
@@ -870,12 +870,12 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose output modes for the CLI',
-				briefHumanOnly: true,
-				briefNeedsAnswers: true,
-				briefBody: [
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes for the CLI',
+				prdHumanOnly: true,
+				prdNeedsAnswers: true,
+				prdBody: [
 					'## Problem Statement',
 					'',
 					'The CLI has no output-verbosity control.',
@@ -894,19 +894,19 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('briefed');
+		expect(result.outcome).toBe('prd-written');
 		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
 		// The built-in PRD-placement floor stages the intake-authored PRD (the PRD
 		// twin of `tasksLandIn`'s `pre-backlog` floor) — it lands at
-		// `work/briefs/proposed/`, NOT directly in the auto-slice pool, until promoted.
+		// `work/prds/proposed/`, NOT directly in the auto-slice pool, until promoted.
 		expect(result.emitted).toBe(
-			'work/briefs/proposed/quiet-and-verbose-modes.md',
+			'work/prds/proposed/quiet-and-verbose-modes.md',
 		);
 
 		// One informational completion comment posted (this task): the runner reports
 		// `prd created` back on the issue, framed as created (not resolved).
 		expect(issueProvider.comments).toHaveLength(1);
-		expect(issueProvider.comments[0].body).toContain('Created brief');
+		expect(issueProvider.comments[0].body).toContain('Created prd');
 
 		// PROPOSE (default): the PRD rides the work/<slug> branch; main is NOT touched.
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -915,7 +915,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
 			],
 			repo,
 		).trim();
@@ -927,7 +927,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-brief-quiet-and-verbose-modes:work/briefs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/prds/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -949,20 +949,20 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
-				outcome: 'brief',
-				briefTitle: 'A Coupled But Small Pair',
+				outcome: 'prd',
+				prdTitle: 'A Coupled But Small Pair',
 			}),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('briefed');
+		expect(result.outcome).toBe('prd-written');
 		// Content-derived slug from the title (never a counter).
 		expect(result.emittedSlug).toBe('a-coupled-but-small-pair');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-brief-a-coupled-but-small-pair:work/briefs/proposed/a-coupled-but-small-pair.md`,
+				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/prds/proposed/a-coupled-but-small-pair.md`,
 			],
 			repo,
 		);
@@ -1249,9 +1249,9 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			// The TASK mode resolves to merge (e.g. from `--merge-task`); the BRIEF mode
+			// The TASK mode resolves to merge (e.g. from `--merge-task`); the PRD mode
 			// is irrelevant for a task verdict.
-			integration: {task: 'merge', brief: 'propose'},
+			integration: {task: 'merge', prd: 'propose'},
 			env: gitEnv(),
 		});
 
@@ -1278,7 +1278,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'propose', brief: 'merge'},
+			integration: {task: 'propose', prd: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -1307,33 +1307,33 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose output modes',
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose output modes',
 			}),
 			// The PRD mode resolves to merge; the TASK mode must NOT route the PRD.
-			integration: {task: 'propose', brief: 'merge'},
+			integration: {task: 'propose', prd: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('briefed');
-		// MERGE: the PRD landed on arbiter main — STAGED in `work/briefs/proposed/` (the
+		expect(result.outcome).toBe('prd-written');
+		// MERGE: the PRD landed on arbiter main — STAGED in `work/prds/proposed/` (the
 		// built-in PRD-placement floor); the merge target is the arbiter main, the
 		// folder is the runner's deterministic placement decision.
 		expect(
 			existsOnArbiterMain(repo, 'backlog', 'quiet-and-verbose-modes'),
 		).toBe(false);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		const briefOnMain = gitIn(
+		const prdOnMain = gitIn(
 			[
 				'cat-file',
 				'-e',
-				`${ARBITER}/main:work/briefs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/main:work/prds/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
 		// `cat-file -e` exits 0 (no output) when the blob exists.
-		expect(briefOnMain).toBe('');
+		expect(prdOnMain).toBe('');
 	});
 
 	it('ask/bounce IGNORE the modes (no integrate happens regardless of the flags)', async () => {
@@ -1347,7 +1347,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
-			integration: {task: 'merge', brief: 'merge'},
+			integration: {task: 'merge', prd: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -2245,16 +2245,16 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'brief',
-				briefSlug: 'quiet-and-verbose-modes',
-				briefTitle: 'Quiet and verbose modes',
+				outcome: 'prd',
+				prdSlug: 'quiet-and-verbose-modes',
+				prdTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('briefed');
+		expect(result.outcome).toBe('prd-written');
 		expect(issueProvider.comments).toHaveLength(1);
 		const body = issueProvider.comments[0].body;
-		expect(body).toContain('Created brief `quiet-and-verbose-modes`');
+		expect(body).toContain('Created prd `quiet-and-verbose-modes`');
 		expect(body).not.toMatch(/resolved|closed/i);
 		expect(body).toContain(`kind=created slug=quiet-and-verbose-modes`);
 		// No close, no state change.
@@ -2271,7 +2271,7 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			issueProvider,
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'merge', brief: 'propose'},
+			integration: {task: 'merge', prd: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');

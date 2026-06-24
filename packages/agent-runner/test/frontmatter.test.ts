@@ -12,7 +12,7 @@ describe('parseFrontmatter', () => {
 			'---',
 			'title: Some Title',
 			'slug: my-task',
-			'brief: my-brief',
+			'prd: my-prd',
 			'humanOnly: true',
 			'needsAnswers: true',
 			'blockedBy: [foo, bar]',
@@ -23,7 +23,7 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('my-task');
-		expect(fm.brief).toBe('my-brief');
+		expect(fm.prd).toBe('my-prd');
 		expect(fm.humanOnly).toBe(true);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.blockedBy).toEqual(['foo', 'bar']);
@@ -81,51 +81,46 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).blockedBy).toEqual([]);
 	});
 
-	it('parses brief-level briefAfter (inline list)', () => {
+	it('parses prd-level prdAfter (inline list)', () => {
 		const md = [
 			'---',
-			'slug: my-brief',
-			'briefAfter: [other-brief, third-brief]',
+			'slug: my-prd',
+			'prdAfter: [other-prd, third-prd]',
 			'---',
 		].join('\n');
-		expect(parseFrontmatter(md).briefAfter).toEqual([
-			'other-brief',
-			'third-brief',
-		]);
+		expect(parseFrontmatter(md).prdAfter).toEqual(['other-prd', 'third-prd']);
 	});
 
-	it('parses a block-style briefAfter list', () => {
+	it('parses a block-style prdAfter list', () => {
 		const md = [
 			'---',
-			'slug: my-brief',
-			'briefAfter:',
-			'  - other-brief',
-			'  - third-brief',
+			'slug: my-prd',
+			'prdAfter:',
+			'  - other-prd',
+			'  - third-prd',
 			'---',
 		].join('\n');
-		expect(parseFrontmatter(md).briefAfter).toEqual([
-			'other-brief',
-			'third-brief',
-		]);
+		expect(parseFrontmatter(md).prdAfter).toEqual(['other-prd', 'third-prd']);
 	});
 
-	it('returns empty briefAfter when omitted', () => {
-		const md = ['---', 'slug: my-brief', '---'].join('\n');
-		expect(parseFrontmatter(md).briefAfter).toEqual([]);
+	it('returns empty prdAfter when omitted', () => {
+		const md = ['---', 'slug: my-prd', '---'].join('\n');
+		expect(parseFrontmatter(md).prdAfter).toEqual([]);
 	});
 
-	it('the HARD CUTOVER: the pre-rename `prd:` and `taskAfter:` keys are NOT parsed (no old field name)', () => {
+	it('the HARD CUTOVER: the pre-rename `brief:` and `briefAfter:` keys are NOT parsed (no old field name)', () => {
 		const md = [
 			'---',
 			'slug: my-task',
-			'prd: old-parent',
-			'taskAfter: [old-dep]',
+			'brief: old-parent',
+			'briefAfter: [old-dep]',
 			'---',
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		// The old keys are inert text now — neither maps to the new fields.
-		expect(fm.brief).toBeUndefined();
-		expect(fm.briefAfter).toEqual([]);
+		// (`prd:`/`prdAfter:` are the LIVE keys after the brief->prd rename.)
+		expect(fm.prd).toBeUndefined();
+		expect(fm.prdAfter).toEqual([]);
 	});
 
 	// ── Origin-trust PROVENANCE (task untrusted-origin-forces-build-propose) ────
@@ -182,26 +177,26 @@ describe('parseFrontmatter', () => {
 		expect(fm.originTrust).toBeUndefined();
 	});
 
-	it('reads a full brief frontmatter block (humanOnly/needsAnswers/briefAfter)', () => {
+	it('reads a full prd frontmatter block (humanOnly/needsAnswers/prdAfter)', () => {
 		const md = [
 			'---',
 			'title: Historical Store',
 			'slug: historical-store',
 			'humanOnly: true',
 			'needsAnswers: true',
-			'briefAfter: [foundations]',
+			'prdAfter: [foundations]',
 			'---',
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('historical-store');
 		expect(fm.humanOnly).toBe(true);
 		expect(fm.needsAnswers).toBe(true);
-		expect(fm.briefAfter).toEqual(['foundations']);
+		expect(fm.prdAfter).toEqual(['foundations']);
 	});
 
-	it('parses a brief-only `issue: N` link as a number (intake brief-emit)', () => {
-		// `intake`'s brief outcome writes `issue: N` on `work/briefs/ready/<slug>.md` so the close
-		// JOB can reach it via `task.brief: → brief issue:`. It must be machine-readable.
+	it('parses a prd-only `issue: N` link as a number (intake prd-emit)', () => {
+		// `intake`'s prd outcome writes `issue: N` on `work/prds/ready/<slug>.md` so the close
+		// JOB can reach it via `task.prd: → prd issue:`. It must be machine-readable.
 		const md = [
 			'---',
 			'title: Some Feature',
@@ -213,9 +208,9 @@ describe('parseFrontmatter', () => {
 		expect(fm.issue).toBe(42);
 	});
 
-	it('parses a lone-task `issue: N` link as a number (intake TASK-emit, no brief:)', () => {
+	it('parses a lone-task `issue: N` link as a number (intake TASK-emit, no prd:)', () => {
 		// `intake`'s TASK outcome writes `issue: N` on the lone `work/tasks/todo/<slug>.md`
-		// (no `brief:`) as the provider-agnostic closure link a future CI close-job reads.
+		// (no `prd:`) as the provider-agnostic closure link a future CI close-job reads.
 		const md = [
 			'---',
 			'title: Fix the thing',
@@ -226,11 +221,11 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.issue).toBe(7);
-		expect(fm.brief).toBeUndefined();
+		expect(fm.prd).toBeUndefined();
 	});
 
-	it('treats omitted `issue:` as undefined (every non-intake brief and most tasks)', () => {
-		const md = ['---', 'slug: a', 'brief: my-brief', '---'].join('\n');
+	it('treats omitted `issue:` as undefined (every non-intake prd and most tasks)', () => {
+		const md = ['---', 'slug: a', 'prd: my-prd', '---'].join('\n');
 		expect(parseFrontmatter(md).issue).toBeUndefined();
 	});
 
@@ -243,7 +238,7 @@ describe('parseFrontmatter', () => {
 
 	it('ignores a stale `tasked:` line (the marker was removed in remove-sliced-marker-step-b)', () => {
 		// `tasked:` is no longer a parsed frontmatter axis — tasked-ness is RESIDENCE in
-		// `work/briefs/tasked/`. A leftover `tasked:` line is just inert text the parser
+		// `work/prds/tasked/`. A leftover `tasked:` line is just inert text the parser
 		// neither recognises nor trips over.
 		const md = ['---', 'slug: my-prd', 'tasked: 2026-06-03', '---'].join('\n');
 		const fm = parseFrontmatter(md);
@@ -274,7 +269,7 @@ describe('parseFrontmatter', () => {
 		expect(fm.humanOnly).toBeUndefined();
 		expect(fm.needsAnswers).toBeUndefined();
 		expect(fm.blockedBy).toEqual([]);
-		expect(fm.briefAfter).toEqual([]);
+		expect(fm.prdAfter).toEqual([]);
 	});
 
 	it('ignores keys appearing after the frontmatter block', () => {
@@ -354,32 +349,32 @@ describe('parseFrontmatter', () => {
 });
 
 describe('resolveClosingIssue', () => {
-	it('a fanned task (brief: only) closes via the `brief:` hop', () => {
-		expect(resolveClosingIssue({brief: 'my-brief', issue: undefined})).toEqual({
-			via: 'brief',
-			brief: 'my-brief',
+	it('a fanned task (prd: only) closes via the `prd:` hop', () => {
+		expect(resolveClosingIssue({prd: 'my-prd', issue: undefined})).toEqual({
+			via: 'prd',
+			prd: 'my-prd',
 		});
 	});
 
 	it('a lone task (issue: only) closes via its own `issue:` field', () => {
-		expect(resolveClosingIssue({brief: undefined, issue: 7})).toEqual({
+		expect(resolveClosingIssue({prd: undefined, issue: 7})).toEqual({
 			via: 'issue',
 			issue: 7,
 		});
 	});
 
-	it('when both are present (a hand-edit contradiction), `brief:` WINS and `issue:` is ignored', () => {
+	it('when both are present (a hand-edit contradiction), `prd:` WINS and `issue:` is ignored', () => {
 		// The one-closure-path invariant: intake never emits both; a human typo degrades
-		// to "use the brief's number" rather than crashing (no throwing validator).
-		expect(resolveClosingIssue({brief: 'my-brief', issue: 9})).toEqual({
-			via: 'brief',
-			brief: 'my-brief',
+		// to "use the prd's number" rather than crashing (no throwing validator).
+		expect(resolveClosingIssue({prd: 'my-prd', issue: 9})).toEqual({
+			via: 'prd',
+			prd: 'my-prd',
 		});
 	});
 
 	it('neither present → no closure path (undefined)', () => {
 		expect(
-			resolveClosingIssue({brief: undefined, issue: undefined}),
+			resolveClosingIssue({prd: undefined, issue: undefined}),
 		).toBeUndefined();
 	});
 });

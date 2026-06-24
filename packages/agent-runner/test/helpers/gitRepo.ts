@@ -13,22 +13,22 @@ import {
  * The fixture status words the test call sites speak, mapped to the CURRENT
  * `work-layout` symbolic KEYS. After the symbolic-key vocabulary cutover
  * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) the registry keys
- * read in the new task/brief words (`tasks-todo`, `briefs-ready`, …); the fixture
- * call sites speak the matching current status words (`backlog`, `brief`,
- * `brief-tasked`, `pre-backlog`, `pre-brief`). This is the single seam they route
+ * read in the new task/prd words (`tasks-todo`, `prds-ready`, …); the fixture
+ * call sites speak the matching current status words (`backlog`, `prd`,
+ * `prd-tasked`, `pre-backlog`, `pre-prd`). This is the single seam they route
  * through, so a later folder/key rename is one alias-map flip HERE rather than a
  * call-site sweep (the design intent of {@link fixtureFolderRel}).
  */
 const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
 	'pre-backlog': 'tasks-backlog',
 	backlog: 'tasks-todo',
-	// The BRIEF staging area (`work/briefs/proposed/`).
-	'pre-brief': 'briefs-proposed',
-	// The BRIEF pool (`work/briefs/ready/`).
-	brief: 'briefs-ready',
-	// The TASKED-brief residence (`work/briefs/tasked/`).
-	'brief-tasked': 'briefs-tasked',
-	briefTasked: 'briefs-tasked',
+	// The PRD staging area (`work/prds/proposed/`).
+	'pre-prd': 'prds-proposed',
+	// The PRD pool (`work/prds/ready/`).
+	prd: 'prds-ready',
+	// The TASKED-prd residence (`work/prds/tasked/`).
+	'prd-tasked': 'prds-tasked',
+	prdTasked: 'prds-tasked',
 };
 
 /**
@@ -38,7 +38,7 @@ const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
  * call sites speak to the current registry KEYS (via {@link FIXTURE_WORD_TO_KEY}),
  * then resolves the key to its on-disk name. After the notes-regroup +
  * task-board-rename flip + the symbolic-key cutover these resolve to the NEW layout
- * (`tasks/todo`, `tasks/done`, `briefs/ready`, `notes/observations`, …). This is
+ * (`tasks/todo`, `tasks/done`, `prds/ready`, `notes/observations`, …). This is
  * the single seam the parameter-driven fixture helpers (which cannot be statically
  * swept) route through, so a later folder/key rename is a flip HERE too.
  *
@@ -203,8 +203,8 @@ export function seedRepoWithArbiter(
 		needsAnswers?: boolean;
 		blockedBy?: string[];
 		promptBody?: string;
-		/** Brief slugs to seed under `work/briefs/ready/<slug>.md` (for the tasking lock). */
-		briefs?: string[];
+		/** Prd slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
+		prds?: string[];
 		/**
 		 * Commit a `.agent-runner.json` at the repo root (so it travels onto
 		 * `<arbiter>/main`) — the per-repo config the no-checkout `do --remote` reads
@@ -224,11 +224,11 @@ export function seedRepoWithArbiter(
 	for (const slug of slugs) {
 		writeFileSync(join(backlog, `${slug}.md`), taskFile(slug, opts));
 	}
-	if (opts.briefs && opts.briefs.length > 0) {
-		const briefDir = join(repo, 'work', 'briefs', 'ready');
-		mkdirSync(briefDir, {recursive: true});
-		for (const slug of opts.briefs) {
-			writeFileSync(join(briefDir, `${slug}.md`), briefFile(slug));
+	if (opts.prds && opts.prds.length > 0) {
+		const prdDir = join(repo, 'work', 'prds', 'ready');
+		mkdirSync(prdDir, {recursive: true});
+		for (const slug of opts.prds) {
+			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
 		}
 	}
 	if (opts.repoConfig) {
@@ -302,8 +302,8 @@ function taskFile(
 	].join('\n');
 }
 
-/** A minimal brief file body for `work/briefs/ready/<slug>.md` (tasking-lock fixtures). */
-export function briefFile(slug: string, marker = 'ORIGINAL'): string {
+/** A minimal prd file body for `work/prds/ready/<slug>.md` (tasking-lock fixtures). */
+export function prdFile(slug: string, marker = 'ORIGINAL'): string {
 	return [
 		'---',
 		`title: ${slug}`,
@@ -312,7 +312,7 @@ export function briefFile(slug: string, marker = 'ORIGINAL'): string {
 		'',
 		'## Problem Statement',
 		'',
-		`Brief body for ${slug} (${marker}).`,
+		`Prd body for ${slug} (${marker}).`,
 		'',
 	].join('\n');
 }
@@ -442,14 +442,14 @@ export function registerMirrorWithWork(
 		 */
 		cancelled?: Record<string, string>;
 		/**
-		 * Files committed under `work/briefs/dropped/` (the BRIEF regime's
+		 * Files committed under `work/prds/dropped/` (the PRD regime's
 		 * "won't-proceed" terminal). The per-regime counterpart of `cancelled`.
 		 */
-		briefsDropped?: Record<string, string>;
-		/** Briefs to task, committed under `work/briefs/ready/` on the mirror's `main`. */
-		brief?: Record<string, string>;
-		/** Already-TASKED briefs, committed under `work/briefs/tasked/` (tasked-ness residence). */
-		briefTasked?: Record<string, string>;
+		prdsDropped?: Record<string, string>;
+		/** Prds to task, committed under `work/prds/ready/` on the mirror's `main`. */
+		prd?: Record<string, string>;
+		/** Already-TASKED prds, committed under `work/prds/tasked/` (tasked-ness residence). */
+		prdTasked?: Record<string, string>;
 		/** Observations committed under `work/notes/observations/` (the triage candidate pool). */
 		observations?: Record<string, string>;
 		/** Sidecars committed under `work/questions/` (`<type>-<slug>.md`). */
@@ -480,9 +480,9 @@ export function registerMirrorWithWork(
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
 	writeAll('cancelled', work.cancelled);
-	writeAll('briefs-dropped', work.briefsDropped);
-	writeAll('brief', work.brief);
-	writeAll('brief-tasked', work.briefTasked);
+	writeAll('prds-dropped', work.prdsDropped);
+	writeAll('prd', work.prd);
+	writeAll('prd-tasked', work.prdTasked);
 	writeAll('observations', work.observations);
 	writeAll('questions', work.questions);
 	if (work.repoConfig) {

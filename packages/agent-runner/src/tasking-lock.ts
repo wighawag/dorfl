@@ -7,19 +7,19 @@ import {
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **tasking concurrency lock** (brief `auto-slice`, task `autoslice-lock`).
+ * The **tasking concurrency lock** (prd `auto-slice`, task `autoslice-lock`).
  *
- * Serialises *concurrent* taskers (two CI runs, or human + CI) so a brief is never
+ * Serialises *concurrent* taskers (two CI runs, or human + CI) so a prd is never
  * double-tasked. As of the capstone cut-over (task
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, prd
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
- * the legacy `git mv work/briefs/ready/<slug>.md → work/tasking/<slug>.md` MARKER on `main`
+ * the legacy `git mv work/prds/ready/<slug>.md → work/tasking/<slug>.md` MARKER on `main`
  * is GONE: the body NEVER relocates until the durable promotion, exactly as claim
  * no longer moves the task body (task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`). The tasking lock
  * is now ONLY the UNIFIED per-item lock (`refs/agent-runner/lock/<entry>`,
- * `action: task`, keyed `brief:<slug>`) — the SAME ref claim and advance use for
- * the same item, so tasking a brief is mutually exclusive with claiming/advancing
+ * `action: task`, keyed `prd:<slug>`) — the SAME ref claim and advance use for
+ * the same item, so tasking a prd is mutually exclusive with claiming/advancing
  * the SAME item BY CONSTRUCTION (the second acquirer loses the SAME create-only
  * ref CAS, with NO retry budget and NO false contention). There is no transient
  * status in `main`'s tree anymore, so a work branch cut from `main` inherits no
@@ -29,15 +29,15 @@ import {workItemRel} from './work-layout.js';
  *   A `lost` (the item is already held for implement/task/advance) makes the
  *   tasking acquire lose DEFINITIVELY (exit 2, no retry). On a successful acquire
  *   it returns {@link AcquireTaskingLockResult.lockedBlob}: the git blob sha of the
- *   brief body the lock TOOK, read from `work/briefs/ready/<slug>.md` on the arbiter — the
+ *   prd body the lock TOOK, read from `work/prds/ready/<slug>.md` on the arbiter — the
  *   snapshot the tasker reads + tasks from, handed back so the integrate
- *   transition can fail loud if the held brief was edited concurrently (the
+ *   transition can fail loud if the held prd was edited concurrently (the
  *   read-stability backstop). A dry-run takes no lock (it mutates nothing).
  *
  * - **Release** ({@link releaseTaskingLock}) DELETES the unified lock ref. It
- *   moves NO lifecycle file: the durable `brief → brief-tasked` success move is owned
+ *   moves NO lifecycle file: the durable `prd → prd-tasked` success move is owned
  *   by the integrate band (`tasking.ts`/`integration-core.ts`), and there is no
- *   `tasking/ → brief/` abort bounce anymore (the body never left `brief/`). When
+ *   `tasking/ → prd/` abort bounce anymore (the body never left `prd/`). When
  *   `routeToNeedsAttention` is set (the tasker review/edit loop's
  *   decomposition-unclear verdict, or the task-SET acceptance gate's `block`),
  *   release amends the lock `active → stuck` with the reason on the entry INSTEAD
@@ -51,13 +51,13 @@ import {workItemRel} from './work-layout.js';
  * The READ-STABILITY backstop (the content-identity stale check that used to live
  * in the release, comparing the held `work/tasking/<slug>.md` blob against the
  * acquire-time snapshot) now lives at the integrate seam (`tasking.ts`
- * `heldBriefIsStale`, comparing `work/briefs/ready/<slug>.md`) — relocated because the
+ * `heldPrdIsStale`, comparing `work/prds/ready/<slug>.md`) — relocated because the
  * completing transition, not the release, owns the commit. See
- * `work/observations/tasking-lock-does-not-stabilise-brief-content.md`.
+ * `work/observations/tasking-lock-does-not-stabilise-prd-content.md`.
  *
- * This module provides the lock PRIMITIVES only. The orchestrating `do brief:<slug>`
+ * This module provides the lock PRIMITIVES only. The orchestrating `do prd:<slug>`
  * tasking command (`tasking.ts`) acquires, drives the agent's tasking, integrates
- * the emitted tasks + the durable `brief → brief-tasked` move, and releases. The
+ * the emitted tasks + the durable `prd → prd-tasked` move, and releases. The
  * human path (no contention) may task on `main` directly without the lock.
  */
 
@@ -74,7 +74,7 @@ export type AcquireTaskingLockOutcome =
 export type AcquireTaskingLockExitCode = 0 | 1 | 2 | 3;
 
 export interface AcquireTaskingLockOptions {
-	/** The brief slug to lock (`work/briefs/ready/<slug>.md`). */
+	/** The prd slug to lock (`work/prds/ready/<slug>.md`). */
 	slug: string;
 	/** Working clone/worktree the lock acquire runs in. */
 	cwd: string;
@@ -98,10 +98,10 @@ export interface AcquireTaskingLockResult {
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 	/**
-	 * On a successful acquire (`acquired`), the git BLOB sha of the brief body that
-	 * the lock TOOK (`work/briefs/ready/<slug>.md` on the arbiter). This IS the snapshot the
+	 * On a successful acquire (`acquired`), the git BLOB sha of the prd body that
+	 * the lock TOOK (`work/prds/ready/<slug>.md` on the arbiter). This IS the snapshot the
 	 * tasker reads + tasks from; the integrate transition compares the current
-	 * `work/briefs/ready/<slug>.md` blob against it to fail loud on a concurrent edit (the
+	 * `work/prds/ready/<slug>.md` blob against it to fail loud on a concurrent edit (the
 	 * read-stability backstop). `undefined` unless `outcome === 'acquired'` (and on
 	 * dry-run, where nothing was published).
 	 */
@@ -157,37 +157,37 @@ async function runAcquire(
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	// Is the brief still lockable (present in work/briefs/ready/ on the arbiter's main)?
+	// Is the prd still lockable (present in work/prds/ready/ on the arbiter's main)?
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const brief = workItemRel('briefs-ready', `${slug}.md`);
-	const briefBlob = await gitSoft(
-		['rev-parse', `${arbiter}/main:${brief}`],
+	const prd = workItemRel('prds-ready', `${slug}.md`);
+	const prdBlob = await gitSoft(
+		['rev-parse', `${arbiter}/main:${prd}`],
 		cwd,
 		env,
 	);
-	if (briefBlob.status !== 0) {
-		const message = `'${brief}' not found on ${arbiter}/main (no such brief, or it was already moved/tasked).`;
+	if (prdBlob.status !== 0) {
+		const message = `'${prd}' not found on ${arbiter}/main (no such prd, or it was already moved/tasked).`;
 		note(message);
 		return {exitCode: 2, outcome: 'lost', message};
 	}
-	const lockedBlob = briefBlob.stdout.trim();
+	const lockedBlob = prdBlob.stdout.trim();
 
 	// A dry-run takes no lock (it mutates nothing) but still reports the lockable
 	// snapshot it WOULD take.
 	if (dryRun) {
-		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${brief} present on ${arbiter}/main).`;
+		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${prd} present on ${arbiter}/main).`;
 		note(message);
 		return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 	}
 
-	// Acquire the UNIFIED per-item lock (`action: task`, keyed `brief:<slug>` so it
+	// Acquire the UNIFIED per-item lock (`action: task`, keyed `prd:<slug>` so it
 	// shares the ONE ref with claim/advance of the SAME item). A create-only ref
 	// CAS: the winner holds it, the loser is DEFINITIVELY `lost` (exit 2, no retry
 	// budget). No auto-steal of an orphaned lock, consistent with claim/advance and
 	// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts
 	// a lock is dead via `release-lock` + `gc --ledger`).
 	const lock = await acquireItemLock({
-		item: `brief:${slug}`,
+		item: `prd:${slug}`,
 		action: 'task',
 		cwd,
 		arbiter,
@@ -222,7 +222,7 @@ export type ReleaseTaskingLockOutcome =
 export type ReleaseTaskingLockExitCode = 0 | 1 | 2 | 3 | 4;
 
 export interface ReleaseTaskingLockOptions {
-	/** The brief slug whose lock to release. */
+	/** The prd slug whose lock to release. */
 	slug: string;
 	/** Working clone/worktree the release runs in. */
 	cwd: string;
@@ -231,7 +231,7 @@ export interface ReleaseTaskingLockOptions {
 	/**
 	 * The git BLOB sha the lock TOOK ({@link AcquireTaskingLockResult.lockedBlob}).
 	 * RETAINED for API parity; the content-identity stale check now lives at the
-	 * integrate seam (`tasking.ts` `heldBriefIsStale`), which runs BEFORE the
+	 * integrate seam (`tasking.ts` `heldPrdIsStale`), which runs BEFORE the
 	 * completing commit. The release itself no longer reads the held body (there is
 	 * no `tasking/` marker), so it does not consult this.
 	 */
@@ -243,9 +243,9 @@ export interface ReleaseTaskingLockOptions {
 	/**
 	 * The tasker review→edit LOOP's **decomposition-unclear** verdict
 	 * (`slicer-review-edit-loop`), or the task-SET acceptance gate's `block`:
-	 * instead of DELETING the lock (returning the brief to the claimable/taskable
+	 * instead of DELETING the lock (returning the prd to the claimable/taskable
 	 * pool), amend it `active → stuck` with this reason recorded on the entry,
-	 * emitting NO guessed tasks. The brief body stays in `work/briefs/ready/` (it never moved
+	 * emitting NO guessed tasks. The prd body stays in `work/prds/ready/` (it never moved
 	 * under the lock); the stuck lock IS the tasking needs-attention surface (no
 	 * `work/needs-attention/` folder write), so it is NOT re-taskable until a human
 	 * resolves it via `release-lock`/`resume`. Omitted ⇒ the normal release DELETES
@@ -268,9 +268,9 @@ export interface ReleaseTaskingLockResult {
 /**
  * Release the tasking lock for `slug`: DELETE the unified `action: task` lock ref
  * (idempotent — an already-absent ref is a clean `released`). It moves NO lifecycle
- * file: the durable `brief → brief-tasked` success move is owned by the integrate band,
- * and the brief body never left `work/briefs/ready/` under the lock, so there is no
- * `tasking/ → brief/` restore.
+ * file: the durable `prd → prd-tasked` success move is owned by the integrate band,
+ * and the prd body never left `work/prds/ready/` under the lock, so there is no
+ * `tasking/ → prd/` restore.
  *
  * When `routeToNeedsAttention` is set (the tasker decomposition-unclear verdict /
  * the task-SET acceptance gate `block`), the lock is AMENDED `active → stuck`
@@ -322,11 +322,11 @@ async function runRelease(
 
 	// DECOMPOSITION-UNCLEAR / TASK-GATE BLOCK: amend the lock `active → stuck` with
 	// the reason on the entry (the tasking needs-attention surface), NOT delete it.
-	// The brief body stays in `work/briefs/ready/`; the stuck lock keeps it out of the
+	// The prd body stays in `work/prds/ready/`; the stuck lock keeps it out of the
 	// taskable pool until a human resolves it (`release-lock`/`resume`).
 	if (options.routeToNeedsAttention !== undefined) {
 		const stuck = await markStuckItemLock({
-			item: `brief:${slug}`,
+			item: `prd:${slug}`,
 			reason: options.routeToNeedsAttention.reason,
 			cwd,
 			arbiter,
@@ -350,7 +350,7 @@ async function runRelease(
 
 	// NORMAL release: delete the lock ref (idempotent).
 	const released = await releaseItemLock({
-		item: `brief:${slug}`,
+		item: `prd:${slug}`,
 		cwd,
 		arbiter,
 		env,

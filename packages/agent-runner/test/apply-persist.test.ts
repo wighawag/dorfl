@@ -223,11 +223,11 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		expect(result.itemPath).toBe('work/tasks/cancelled/foo.md');
 	});
 
-	it('dropped on a BRIEF → moves to work/briefs/dropped/ (the brief regime terminal; the per-regime split, no slug collision)', () => {
+	it('dropped on a PRD → moves to work/prds/dropped/ (the prd regime terminal; the per-regime split, no slug collision)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'foo',
-			folder: 'brief',
-			type: 'brief',
+			folder: 'prd',
+			type: 'prd',
 			questions: ['ship it?'],
 			answers: ['no'],
 			dispositions: ['dropped'],
@@ -235,7 +235,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'brief:foo',
+			item: 'prd:foo',
 			itemPath,
 			env: gitEnv(),
 		});
@@ -243,15 +243,15 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		expect(result.outcome).toBe('dropped');
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(false);
-		// A dropped BRIEF lands in briefs/dropped/, NOT tasks/cancelled/ — so a
-		// task-drop and a brief-drop sharing the slug `foo` never collide.
-		expect(existsSync(join(repo, 'work', 'briefs', 'dropped', 'foo.md'))).toBe(
+		// A dropped PRD lands in prds/dropped/, NOT tasks/cancelled/ — so a
+		// task-drop and a prd-drop sharing the slug `foo` never collide.
+		expect(existsSync(join(repo, 'work', 'prds', 'dropped', 'foo.md'))).toBe(
 			true,
 		);
 		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'foo.md'))).toBe(
 			false,
 		);
-		expect(result.itemPath).toBe('work/briefs/dropped/foo.md');
+		expect(result.itemPath).toBe('work/prds/dropped/foo.md');
 	});
 
 	it('dropped on an OBSERVATION → recommends deletion (a note has NO terminal folder; it leaves by deletion)', () => {
@@ -432,7 +432,7 @@ describe('applyAnsweredQuestions — NEVER invents an answer (always allowed, on
 	});
 });
 
-describe('applyAnsweredQuestions — full-resolution RECONCILES the body (strips the marker-fenced open-questions block, brief `apply-reconciles-stale-open-questions`)', () => {
+describe('applyAnsweredQuestions — full-resolution RECONCILES the body (strips the marker-fenced open-questions block, prd `apply-reconciles-stale-open-questions`)', () => {
 	/**
 	 * Re-seed with a body that carries a marker-fenced open-questions block (the
 	 * shape the templates sibling task will introduce). The reconcile must strip
@@ -596,7 +596,7 @@ describe('applyAnsweredQuestions — only the repo it is pointed at is touched',
 });
 
 /**
- * F3a (brief `staging-surface-and-apply-promote-safety`) — the apply rung is
+ * F3a (prd `staging-surface-and-apply-promote-safety`) — the apply rung is
  * FOLDER-AGNOSTIC: at write-time it re-resolves the item's CURRENT path by
  * IDENTITY (the symmetric twin of `sidecarPathFor`'s identity-keyed resolution).
  * A concurrent `promote` that `git mv`'d the item from staging into the pool
@@ -647,37 +647,34 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		expect(fm.needsAnswers).toBe(false);
 	});
 
-	it('BRIEF (symmetric): a concurrent promote `briefs/proposed → briefs/ready` — apply commits at the POST-MOVE path', () => {
+	it('PRD (symmetric): a concurrent promote `prds/proposed → prds/ready` — apply commits at the POST-MOVE path', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'bar',
-			folder: 'pre-brief',
-			type: 'brief',
+			folder: 'pre-prd',
+			type: 'prd',
 			questions: ['scope?'],
 			answers: ['narrow'],
 		});
-		expect(itemPath).toBe('work/briefs/proposed/bar.md');
+		expect(itemPath).toBe('work/prds/proposed/bar.md');
 
-		mkdirSync(join(repo, 'work', 'briefs', 'ready'), {recursive: true});
-		gitIn(
-			['mv', 'work/briefs/proposed/bar.md', 'work/briefs/ready/bar.md'],
-			repo,
-		);
+		mkdirSync(join(repo, 'work', 'prds', 'ready'), {recursive: true});
+		gitIn(['mv', 'work/prds/proposed/bar.md', 'work/prds/ready/bar.md'], repo);
 		gitIn(['commit', '-q', '-m', 'promote: bar proposed → ready'], repo);
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'brief:bar',
+			item: 'prd:bar',
 			itemPath /* STALE */,
 			env: gitEnv(),
 		});
 
 		expect(result.outcome).toBe('resolved');
-		expect(result.itemPath).toBe('work/briefs/ready/bar.md');
+		expect(result.itemPath).toBe('work/prds/ready/bar.md');
 		const touched = filesInHeadCommit(repo);
-		expect(touched).toContain('work/briefs/ready/bar.md');
+		expect(touched).toContain('work/prds/ready/bar.md');
 		expect(touched).toContain(sidecarPath);
-		expect(existsSync(join(repo, 'work/briefs/proposed/bar.md'))).toBe(false);
-		expect(trackedInHead(repo, 'work/briefs/proposed/bar.md')).toBe(false);
+		expect(existsSync(join(repo, 'work/prds/proposed/bar.md'))).toBe(false);
+		expect(trackedInHead(repo, 'work/prds/proposed/bar.md')).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 	});
 

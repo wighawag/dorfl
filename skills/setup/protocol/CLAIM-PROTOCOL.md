@@ -4,7 +4,7 @@ This documents how a `work/tasks/todo/<slug>.md` item is **atomically claimed** 
 
 ## The core idea: claim = acquiring the item's per-item LOCK (an atomic create-only ref push)
 
-A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`brief`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/todo/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`). (ADR `ledger-status-on-per-item-lock-refs`.)
+A claim **acquires the item's per-item lock** — a hidden `refs/agent-runner/lock/<type>-<slug>` ref (`<type>` is `task`/`prd`) created by an ATOMIC create-only push (`--force-with-lease=<ref>:`, i.e. "succeed only if the ref is still absent"). Git's ref-update-on-push IS the compare-and-swap: the winner creates the ref; a concurrent acquirer for the SAME item finds it present and is rejected = **definitively lost, with NO retry budget** (a per-item ref only ever contends with another writer for that same item — a genuine conflict the loser should lose). The item's body STAYS in `work/tasks/todo/<slug>.md`; **claim writes NOTHING to `main`** (so an agent can claim even on a protected `main`). (ADR `ledger-status-on-per-item-lock-refs`.)
 
 This SUPERSEDES the older claim mechanism (a `git mv todo/ → in-progress/` micro-commit raced on the shared `main` ref): that shared-`main` CAS falsely-contended between DIFFERENT items under parallelism and exhausted its retry budget; per-item lock refs never falsely contend. The claimable predicate is now **"the body is in the pool `tasks/todo/` on `main` AND no lock is held on its ref."**
 
@@ -50,7 +50,7 @@ CLAIM (acquire the per-item lock; collision-detecting, no body move):
   2. confirm the body is still in the pool: work/tasks/todo/<slug>.md on <arbiter>/main
   3. build a PARENTLESS lock-entry commit (action: implement, state: active,
      holder/since) with plumbing — never touches the working tree/HEAD
-  4. push it create-only to refs/agent-runner/lock/<type>-<slug>   (<type> = task/brief)
+  4. push it create-only to refs/agent-runner/lock/<type>-<slug>   (<type> = task/prd)
      with --force-with-lease=<ref>:   (the EMPTY expected value = "ref must be absent")
      ├─ ACCEPTED  -> the lock is atomically yours (the body stays in tasks/todo/;
      |              NOTHING was written to main).
@@ -80,17 +80,17 @@ WORK (only after the lock is held):
   8. integrate to <arbiter>/main as normal (PR on GitHub, or ff/rebase push offline).
 ```
 
-> The durable `tasks/todo → tasks/done` / `briefs/ready → briefs/tasked` / `tasks/todo → tasks/cancelled` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `tasks/done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
+> The durable `tasks/todo → tasks/done` / `prds/ready → prds/tasked` / `tasks/todo → tasks/cancelled` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `tasks/done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
 
 ## The prompt handed to the work agent (the `## Prompt` wrapper)
 
-When a human or an autonomous runner dispatches an agent to do the WORK phase, the agent is given a small, constant **wrapper** around the task's own `## Prompt` section. The wrapper is the same every time except the slug; an autonomous runner emits it deterministically. The task file is the brief; the wrapper just frames it and draws the line around git.
+When a human or an autonomous runner dispatches an agent to do the WORK phase, the agent is given a small, constant **wrapper** around the task's own `## Prompt` section. The wrapper is the same every time except the slug; an autonomous runner emits it deterministically. The task file is the prd; the wrapper just frames it and draws the line around git.
 
 ```
 You are completing one work task in this repo. It has already been claimed for
 you (its per-item lock is held) and lives at work/tasks/todo/<slug>.md — read that
-file fully; it is your complete brief (What to build, Acceptance criteria, Prompt).
-Also read its source brief (the task's `brief:` field, at work/briefs/ready/<brief>.md)
+file fully; it is your complete prd (What to build, Acceptance criteria, Prompt).
+Also read its source prd (the task's `prd:` field, at work/prds/ready/<prd>.md)
 for context.
 
 <!-- if promptGuidance.testFirst -->

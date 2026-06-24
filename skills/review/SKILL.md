@@ -1,6 +1,6 @@
 ---
 name: review
-description: 'Thoroughly and adversarially review a work/-protocol artifact against the work/ contract, ending in a destination check against the brief/ADR goal. Use before any artifact is trusted: a task before it lands, code in a work PR against its task, a brief before tasking, or a captured note. Emits a verdict; the caller routes it.'
+description: 'Thoroughly and adversarially review a work/-protocol artifact against the work/ contract, ending in a destination check against the prd/ADR goal. Use before any artifact is trusted: a task before it lands, code in a work PR against its task, a prd before tasking, or a captured note. Emits a verdict; the caller routes it.'
 ---
 
 # review

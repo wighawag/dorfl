@@ -3,8 +3,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	taskableBriefs,
-	type BriefCandidate,
+	taskablePrds,
+	type PrdCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import type {Config} from './config.js';
@@ -24,9 +24,9 @@ import type {ConfigOverrideMap} from './config-override.js';
  * Auto-pick / `-n` draw from TWO POOLS ordered by the configurable
  * `selectionOrder` (the shared, pure {@link selectPrioritised} helper): eligible
  * TASKS (the `build` pool — the existing `scan`/`selectCandidates`/eligibility
- * path) and TASKABLE briefs (the `task` pool — built from the brief reader +
+ * path) and TASKABLE prds (the `task` pool — built from the prd reader +
  * `autoslice-gate`'s predicate), in the per-repo `selectionOrder` (default `drain`
- * = tasks-first). A selected brief dispatches to the `do brief:<slug>` path (tasking
+ * = tasks-first). A selected prd dispatches to the `do prd:<slug>` path (tasking
  * itself is `autoslice-command`, not built here).
  *
  * Explicit multi-arg (`do <a> <b>`) bypasses the pools/priority entirely — the
@@ -41,7 +41,7 @@ type SharedDoOptions = Omit<DoOptions, 'arg'>;
 
 export interface PerformDoMultiOptions extends SharedDoOptions {
 	/**
-	 * The resolved repo config (provides `autoTask` for the brief gate,
+	 * The resolved repo config (provides `autoTask` for the prd gate,
 	 * `selectionOrder` for the pool order, and the task-pool selection caps). The
 	 * per-item runs still receive `autoTask`/`integration`/etc. via the spread
 	 * `SharedDoOptions`.
@@ -62,7 +62,7 @@ export interface PerformDoMultiOptions extends SharedDoOptions {
 	count?: number;
 	/** Override the single-`do` runner (tests inject a stub). Defaults to {@link performDo}. */
 	run?: DoRunner;
-	/** Override the read seam (brief pool); defaults to the active {@link ledgerRead}. */
+	/** Override the read seam (prd pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 }
 
@@ -85,7 +85,7 @@ export interface DoMultiResult {
  * The task-pool caps for an in-place `do` selection. `do` is per-repo +
  * sequential, so the REAL bound is the requested `count` (handled by the
  * priority helper); the task-pool selection should not truncate BEFORE the
- * count + the brief pool are combined. We therefore cap the task pool at "all
+ * count + the prd pool are combined. We therefore cap the task pool at "all
  * eligible" (a large bound) and let {@link selectPrioritised}'s `count` do the
  * trimming across both pools.
  */
@@ -116,18 +116,18 @@ export async function performDoAuto(
 		options.override,
 	);
 
-	// Pool 2 — TASKABLE briefs: the NEW pool from the shared brief read path
-	// (`resolveBriefPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
-	const pool = read.resolveBriefPool({repoPath: cwd});
-	const briefCandidates: BriefCandidate[] = pool.briefs.map((brief) => ({
+	// Pool 2 — TASKABLE prds: the NEW pool from the shared prd read path
+	// (`resolvePrdPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
+	const pool = read.resolvePrdPool({repoPath: cwd});
+	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
 		repoPath: cwd,
-		slug: brief.slug,
-		humanOnly: brief.humanOnly,
-		needsAnswers: brief.needsAnswers,
-		briefAfter: brief.briefAfter,
+		slug: prd.slug,
+		humanOnly: prd.humanOnly,
+		needsAnswers: prd.needsAnswers,
+		prdAfter: prd.prdAfter,
 	}));
-	const eligibleBriefs = taskableBriefs({
-		candidates: briefCandidates,
+	const eligiblePrds = taskablePrds({
+		candidates: prdCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
@@ -137,14 +137,14 @@ export async function performDoAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		briefs: eligibleBriefs,
+		prds: eligiblePrds,
 		selectionOrder: options.config.selectionOrder,
 		count,
 	});
 
 	if (selected.length === 0) {
 		const message =
-			'Nothing eligible to do (no eligible tasks and no taskable briefs).';
+			'Nothing eligible to do (no eligible tasks and no taskable prds).';
 		note(message);
 		return {results: [], exitCode: 0, message};
 	}
@@ -155,8 +155,8 @@ export async function performDoAuto(
 /**
  * Run the EXPLICIT multi-arg form (`do <a> <b> …`): the named items in the GIVEN
  * order (no pool/priority — the operator chose them). Each arg is run through the
- * existing `do` pipeline, which itself resolves bare/`task:`/`brief:` (so a named
- * brief dispatches to the tasking path and a collision errors), SEQUENTIALLY.
+ * existing `do` pipeline, which itself resolves bare/`task:`/`prd:` (so a named
+ * prd dispatches to the tasking path and a collision errors), SEQUENTIALLY.
  */
 export async function performDoArgs(
 	args: string[],
@@ -176,7 +176,7 @@ export async function performDoArgs(
 /**
  * Run a list of selected items through the existing `do` pipeline, SEQUENTIALLY,
  * threading the shared options to each. For the pool path the `do` arg encodes
- * the namespace (`brief:<slug>` for a selected brief, bare slug for a task); for the
+ * the namespace (`prd:<slug>` for a selected prd, bare slug for a task); for the
  * explicit-arg path the caller's raw arg is passed verbatim.
  */
 async function runSelectedInSequence(
@@ -190,8 +190,8 @@ async function runSelectedInSequence(
 	for (const item of selected) {
 		const arg = mode.verbatimArg
 			? item.slug
-			: item.namespace === 'brief'
-				? `brief:${item.slug}`
+			: item.namespace === 'prd'
+				? `prd:${item.slug}`
 				: item.slug;
 		const result = await run({...shared, arg});
 		results.push(result);

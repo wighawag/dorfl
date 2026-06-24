@@ -11,7 +11,7 @@ superseded_by:
 
 ## Context
 
-`runner-in-ci` (`work/briefs/tasked/runner-in-ci.md`) makes CI run the autonomous rungs
+`runner-in-ci` (`work/prds/tasked/runner-in-ci.md`) makes CI run the autonomous rungs
 headless. A long design pass asked: what knobs does CI need, where do they live,
 and does CI introduce a new "enable advanced features" gate? The answer that
 emerged reshapes the gate family itself, and the conclusion is: **CI is NOT a
@@ -23,7 +23,7 @@ in GitHub Actions. The only CI-specific artifact is auth + a fixed workflow shel
 
 ### 1. CI always runs `advance`; the verb is never a user decision
 
-`advance` is a strict superset of `do` (build task / task brief), adding the
+`advance` is a strict superset of `do` (build task / task prd), adding the
 lifecycle rungs (triage an observation, surface a declared-open question, apply a
 committed answer). With the lifecycle gates at their calm defaults (below),
 `advance` degrades to exactly `do`'s build/task behaviour. So there is no reason
@@ -46,7 +46,7 @@ ungated rung needing a new master flag. The family:
 | autonomous rung | gate | OFF behaviour |
 | --- | --- | --- |
 | build an undeclared task | `autoBuild` (bool) | rung does not run |
-| task an undeclared brief | `autoTask` (bool) | rung does not run |
+| task an undeclared prd | `autoTask` (bool) | rung does not run |
 | triage an observation | **`observationTriage`** (`off` / `ask` / `auto`) | see below |
 | surface a declared `needsAnswers` blocker | **`surfaceBlockers`** (bool) | declared-blocked item is left silently blocked, not rendered as a question |
 | apply a committed answer | (always allowed) | n/a |
@@ -67,7 +67,7 @@ both, or neither:
     a judgement call.
 
 - **`surfaceBlockers` (bool, default `off`)** governs DECLARED work that is blocked:
-  whether a task/brief carrying `needsAnswers: true` is rendered into an answerable
+  whether a task/prd carrying `needsAnswers: true` is rendered into an answerable
   question sidecar (`on`) or left silently blocked in the backlog (`off`). This is
   a different job from observation triage: it is about committed work items, not the
   raw inbox.
@@ -93,7 +93,7 @@ What to do across the pools that ARE present is a separate config axis,
   `[build, task, surface, triage]` (drain ready work, then create, then ask,
   generalizing today's tasks-first "drain before create"); `groom` =
   `[surface, triage, build, task]`. It SUBSUMES the old `prdsFirst` boolean
-  ("tasks before briefs" is just `build` before `task`), which is removed.
+  ("tasks before prds" is just `build` before `task`), which is removed.
 - A pool named in the order but gated OFF is simply absent (a no-op, not an error):
   order ranks what the gates left present.
 
@@ -221,11 +221,11 @@ linearise at the target anyway). So sequence IS the serialiser for merge.
 
 ### 8. The merge-vs-propose POLICY (per capability) and AUTHOR-TRUST stay as recorded
 
-CI derives the integration mode per artifact from the downstream gate (a brief merged
+CI derives the integration mode per artifact from the downstream gate (a prd merged
 iff a human must task it next; a task merged iff a human must build it next) and,
 for issue intake, the author-trust axis (untrusted author ⇒ propose regardless).
 The fully-gateless "issue → task → build → main, no human" path is a loud,
-non-default opt-in. See `work/briefs/tasked/runner-in-ci.md` for the policy table; it is
+non-default opt-in. See `work/prds/tasked/runner-in-ci.md` for the policy table; it is
 unchanged by this ADR.
 
 ## Naming (an acknowledged trap, now resolved)
@@ -253,4 +253,4 @@ once the tool has real downstream users owed a migration window.
 - The emitted advance workflow carries NO `AGENT_RUNNER_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.agent-runner.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoTask off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
 - The verb decision (`do` vs `advance`) is eliminated from CI; "calm build-only" is `advance` + both lifecycle gates off, not a different verb.
 - Engine work falls out (captured as `work/ideas/`): the `autoTriage -> observationTriage` 3-state migration; the `surfaceBlockers` gate; unifying `run` onto the advance tick.
-- Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/briefs/tasked/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").
+- Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/prds/tasked/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").

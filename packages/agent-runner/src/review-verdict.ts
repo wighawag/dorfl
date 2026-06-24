@@ -4,7 +4,7 @@
  * (`work/protocol/REVIEW-PROTOCOL.md`, source-of-truth
  * `skills/setup/protocol/REVIEW-PROTOCOL.md`).
  *
- * This is the keystone of the `runner-invoked-disciplines-into-protocol` brief
+ * This is the keystone of the `runner-invoked-disciplines-into-protocol` prd
  * (task 1, D4): every runner-invoked review prompt builder
  * ({@link buildReviewPrompt}, {@link buildTaskAcceptancePrompt} in
  * `review-gate.ts`; {@link buildLoneTaskReviewPrompt} in `intake.ts`;
@@ -84,7 +84,7 @@ export interface ReviewVerdict {
 	questions?: string[];
 	/** For the tasker improver loop: specific tasks to emit `needsAnswers: true`. */
 	uncertainTasks?: UncertainTask[];
-	/** For the tasker improver loop: route the WHOLE brief to needs-attention. */
+	/** For the tasker improver loop: route the WHOLE prd to needs-attention. */
 	decompositionUnclear?: {questions: string[]};
 }
 
@@ -276,7 +276,7 @@ export function reviewDisciplinePrompt(): string {
 		'(the in-band, protocol-native review protocol every set-up repo carries;',
 		'the human-facing pointer is `skills/review/SKILL.md`). Apply its lenses',
 		'IN ORDER, ENDING in the destination check ("if this is built/merged',
-		'exactly as written, do we end up with the system the brief/task',
+		'exactly as written, do we end up with the system the prd/task',
 		'goal describes?"). Be ADVERSARIAL; verify against what ACTUALLY LANDED',
 		'(the bytes on disk), not intent. Weight findings by REAL impact \u2014 the',
 		'lenses find candidates, impact decides severity (a technically-true nit',

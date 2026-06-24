@@ -68,8 +68,8 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `AGENT_RUNNER_SURFACE_BLOCKERS=true|false` works and a typo FAILS LOUDLY.
 	surfaceBlockers: 'boolean',
 	// `surfaceStaging` (the BOOLEAN gate-family member that widens the SURFACE
-	// candidate set to include STAGING — `tasks/backlog/` + `briefs/proposed/` —
-	// not only the agent pool; brief
+	// candidate set to include STAGING — `tasks/backlog/` + `prds/proposed/` —
+	// not only the agent pool; prd
 	// `staging-surface-and-apply-promote-safety` F2) coerces as a BOOLEAN like
 	// `autoBuild`/`surfaceBlockers`, so `AGENT_RUNNER_SURFACE_STAGING=true|false`
 	// works and a typo FAILS LOUDLY. Resolution chain identical to the other
@@ -92,7 +92,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Unset ⇒ the tasking transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
 	taskingIntegration: {enum: ['propose', 'merge']},
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — brief
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — prd
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
 	// `pre-backlog`/`todo` enum, so `AGENT_RUNNER_TASKS_LAND_IN=todo` works and a
 	// typo FAILS LOUDLY. Same
@@ -100,13 +100,13 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// built-in `pre-backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
 	tasksLandIn: {enum: ['pre-backlog', 'todo']},
-	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — brief
+	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — prd
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
-	// `pre-proposed`/`ready` enum, so `AGENT_RUNNER_BRIEFS_LAND_IN=ready` works and a typo
+	// `pre-proposed`/`ready` enum, so `AGENT_RUNNER_PRDS_LAND_IN=ready` works and a typo
 	// FAILS LOUDLY. Same precedence chain as `tasksLandIn` (flag > env > per-repo
 	// > global > built-in `pre-proposed`); fed into the shared placement resolver
-	// (`src/placement.ts`) as the configured-default rung for the brief lifecycle.
-	briefsLandIn: {enum: ['pre-proposed', 'ready']},
+	// (`src/placement.ts`) as the configured-default rung for the prd lifecycle.
+	prdsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `AGENT_RUNNER_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `AGENT_RUNNER_PROVIDER` is ignored
@@ -142,7 +142,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 /**
  * The env vars for the nested members of the `promptGuidance` namespace. The
  * key is the env var name (`AGENT_RUNNER_PROMPT_GUIDANCE_<MEMBER>`, the nested
- * naming the brief specifies); the value is the (boolean) coercion. Each member
+ * naming the prd specifies); the value is the (boolean) coercion. Each member
  * present in env contributes `{<member>: bool}` into a single
  * `promptGuidance` partial — mergeConfig replaces the whole namespace per the
  * layered precedence, which is correct because EVERY member is included (env

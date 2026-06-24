@@ -17,7 +17,7 @@
  *     discipline), does NOT re-inline the confidence-check / `humanOnly` rules
  *     (the prompt-snapshot guard against re-emerging duplication), AND no
  *     longer carries the stale pre-rename vocabulary (`to-tasks`,
- *     `work/backlog/`, `work/prd/`) the brief calls out as a bonus bug.
+ *     `work/backlog/`, `work/prd/`) the prd calls out as a bonus bug.
  *   - `skills/to-task/SKILL.md` is a thin human-facing pointer at the
  *     protocol doc, still USER-invoked (`disable-model-invocation: true` \u2014
  *     the to-task skill is reached for, never spawned by the runner).
@@ -66,14 +66,14 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		expect(doc).toMatch(/confidence check/i);
 		// File-orthogonality \u2014 the merge-conflict-minimisation rule.
 		expect(doc).toMatch(/file-orthogonal/i);
-		// The brief-vs-task gate disjointness.
+		// The prd-vs-task gate disjointness.
 		expect(doc).toMatch(/DISJOINT/);
-		expect(doc).toMatch(/briefAfter/);
+		expect(doc).toMatch(/prdAfter/);
 		// The prose-description of the emitted task shape (D2).
 		expect(doc).toMatch(/emitted task shape/i);
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
-		expect(doc).toMatch(/\bbrief\b/);
+		expect(doc).toMatch(/\bprd\b/);
 		expect(doc).toMatch(/\bblockedBy\b/);
 		expect(doc).toMatch(/\bcovers\b/);
 		// The placement rule \u2014 staging vs pool.
@@ -125,7 +125,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 		'---',
 		'title: A canonical task',
 		'slug: canonical-task',
-		'brief: example-brief',
+		'prd: example-prd',
 		'blockedBy: [other-task]',
 		'covers: [1, 2]',
 		'needsAnswers: true',
@@ -152,7 +152,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 	it('the frontmatter parser accepts the canonical fixture (every field reads back as the doc describes)', () => {
 		const fm = parseFrontmatter(fixture);
 		expect(fm.slug).toBe('canonical-task');
-		expect(fm.brief).toBe('example-brief');
+		expect(fm.prd).toBe('example-prd');
 		expect(fm.blockedBy).toEqual(['other-task']);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.humanOnly).toBeUndefined();
@@ -163,7 +163,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 		// Required frontmatter (the parser reads these).
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
-		expect(doc).toMatch(/\bbrief\b/);
+		expect(doc).toMatch(/\bprd\b/);
 		expect(doc).toMatch(/\bblockedBy\b/);
 		// Optional axes the fixture exercises.
 		expect(doc).toMatch(/\bcovers\b/);
@@ -179,9 +179,9 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 	});
 });
 
-describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
-	// `buildTaskingBrief` is module-private; read its assembled output for
-	// `slug: 'example-brief'` from the source file so this test is hermetic and
+describe('buildTaskingPrd \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
+	// `buildTaskingPrd` is module-private; read its assembled output for
+	// `slug: 'example-prd'` from the source file so this test is hermetic and
 	// does not require exporting the builder. (The same indirect-read pattern
 	// the surface task's prompt assertions use.)
 	const TASKING = readFileSync(TASKING_SRC, 'utf8');
@@ -190,7 +190,7 @@ describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline 
 	// interpolation).
 	const builderBody = (() => {
 		const match =
-			/function buildTaskingBrief\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
+			/function buildTaskingPrd\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
 				TASKING,
 			);
 		expect(match).toBeTruthy();
@@ -201,11 +201,11 @@ describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline 
 		expect(builderBody).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
 	});
 
-	it('points the agent at the HELD brief in `work/briefs/ready/<slug>.md` (current vocabulary)', () => {
-		expect(builderBody).toMatch(/work\/briefs\/ready\//);
-		// The brief moves to `work/briefs/tasked/` on success \u2014 the prompt
+	it('points the agent at the HELD prd in `work/prds/ready/<slug>.md` (current vocabulary)', () => {
+		expect(builderBody).toMatch(/work\/prds\/ready\//);
+		// The prd moves to `work/prds/tasked/` on success \u2014 the prompt
 		// mentions the runner-owned destination so the agent does NOT do it.
-		expect(builderBody).toMatch(/work\/briefs\/tasked\//);
+		expect(builderBody).toMatch(/work\/prds\/tasked\//);
 	});
 
 	it('does NOT re-inline the confidence-check rules / humanOnly NARROW prose (lives in the protocol doc now)', () => {
@@ -221,13 +221,13 @@ describe('buildTaskingBrief \u2014 in-band reference + no re-inlined discipline 
 		expect(builderBody).not.toMatch(/Use the \*\*to-tasks\*\* skill/);
 	});
 
-	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/` remain (the brief\u2019s bonus bug)', () => {
+	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/` remain (the prd\u2019s bonus bug)', () => {
 		expect(builderBody).not.toMatch(/to-tasks/);
 		// `work/backlog/` is the PRE-RENAME pool name (now `work/tasks/todo/`);
 		// guard the bare token without matching the current `work/tasks/backlog/`
 		// staging spelling.
 		expect(builderBody).not.toMatch(/(?<!\/tasks\/)work\/backlog\//);
-		// `work/prd/` is the pre-rename brief folder (now `work/briefs/ready/`).
+		// `work/prd/` is the pre-rename prd folder (now `work/prds/ready/`).
 		expect(builderBody).not.toMatch(/work\/prd\//);
 	});
 
@@ -265,6 +265,6 @@ describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointe
 		expect(skill).not.toMatch(/tracer bullet/i);
 		expect(skill).not.toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(skill).not.toMatch(/file-orthogonal/i);
-		expect(skill).not.toMatch(/`briefAfter` \(cross-brief order\)/);
+		expect(skill).not.toMatch(/`prdAfter` \(cross-prd order\)/);
 	});
 });

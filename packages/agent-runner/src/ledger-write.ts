@@ -89,7 +89,7 @@ export type LedgerTransitionKind =
 	| 'tasking'
 	| 'advancing'
 	/**
-	 * The **promote** transition (brief `staging-pool-position-gate-and-trust-model`,
+	 * The **promote** transition (prd `staging-pool-position-gate-and-trust-model`,
 	 * task `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED task
 	 * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` to enter the
 	 * agent-eligible pool. A durable `main` move, the same category as `requeue`
@@ -174,7 +174,7 @@ export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
  * move result the folder-native mechanism produces. The RECOVERABLE branch push
  * outcome rides on `branchPush` (the caller reads it rather than assuming
  * "pushed" off the local move). The OBSERVABLE half is now the per-item lock
- * `state: stuck` amend (brief `ledger-status-per-item-lock-refs`); there is no
+ * `state: stuck` amend (prd `ledger-status-per-item-lock-refs`); there is no
  * separate on-`main` surface outcome to report.
  */
 export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
@@ -627,7 +627,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 *     work travels cross-machine and a requeue continues from its tip. (Mode M
 	 *     does that by `git push`ing the branch; the WHICH branch is the caller's,
 	 *     not assumed `work/<slug>` — a build bounce pushes `work/<slug>`, a tasking
-	 *     bounce its `work/brief-<slug>`, a temp-branch caller pushes NOTHING.)
+	 *     bounce its `work/prd-<slug>`, a temp-branch caller pushes NOTHING.)
 	 *
 	 * Both halves are ONE operation done in ONE place: it delegates to {@link
 	 * routeToNeedsAttention}, which appends the reason as body prose (never a
@@ -773,7 +773,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
  * The SOLE stuck-state RECORD: amend the item's HELD per-item lock
  * `active → stuck` + the FULL reason prose + any agent-surfaced questions, via the
  * state machine's mark-stuck CAS amend ({@link markStuckItemLock}) — task
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; brief
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; prd
  * `ledger-status-per-item-lock-refs` US #5/#8; ADR
  * `ledger-status-on-per-item-lock-refs`). This REPLACES the `git mv →
  * needs-attention/` folder bounce + its on-`main` surface + branch push: the
@@ -799,7 +799,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
  *     posture the old local-only folder move took). NOTE this records nothing
  *     durable, by design: the human is in the loop.
  *
- * Keyed on `task:<slug>` (the bounce surfaces a TASK; the brief/observation locks
+ * Keyed on `task:<slug>` (the bounce surfaces a TASK; the prd/observation locks
  * are tasking/advance holds whose own bounce paths are separate).
  */
 async function bounceToStuckLock(params: {

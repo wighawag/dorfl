@@ -13,10 +13,10 @@ superseded_by:
 
 The task `untrusted-origin-forces-build-propose` closes a trust-laundering gap:
 an issue from an untrusted author is gated at the CI front door (forced
-`--propose` on the emitted brief/task), but once that artifact lands on `main`,
+`--propose` on the emitted prd/task), but once that artifact lands on `main`,
 its untrusted origin used to be invisible — a later autonomous tick treated it as
 trusted in-boundary work. The task persists origin-trust provenance
-(`origin`/`originTrust` frontmatter), propagates it brief → task, and makes the
+(`origin`/`originTrust` frontmatter), propagates it prd → task, and makes the
 **build** transition resolve to `propose` for untrusted-origin work even when the
 configured mode is `merge` (an explicit `--merge` overrides — the operator is
 present).

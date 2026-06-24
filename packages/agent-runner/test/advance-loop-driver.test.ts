@@ -45,7 +45,7 @@ function task(frontmatter: Record<string, string>): string {
 	return lines.join('\n');
 }
 
-function brief(frontmatter: Record<string, string>): string {
+function prd(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) lines.push(`${k}: ${v}`);
 	lines.push('---', '', '# PRD');
@@ -85,7 +85,7 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 				'alpha.md': task({slug: 'alpha'}),
 				'human.md': task({slug: 'human', humanOnly: 'true'}), // gated out
 			},
-			brief: {'gamma.md': brief({slug: 'gamma'})},
+			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await advanceOnce({
@@ -96,14 +96,14 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 			env: gitEnv(),
 		});
 		// the eligible task + the taskable PRD (not the humanOnly task).
-		expect(args.sort()).toEqual(['alpha', 'brief:gamma']);
+		expect(args.sort()).toEqual(['alpha', 'prd:gamma']);
 		expect(result.items).toHaveLength(2);
 	});
 
 	it('honours the per-action GATES via the mirror scan (gates off ⇒ empty batch)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'alpha.md': task({slug: 'alpha'})},
-			brief: {'gamma.md': brief({slug: 'gamma'})},
+			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
 		const {run, args} = recordingRunner();
 		const result = await advanceOnce({

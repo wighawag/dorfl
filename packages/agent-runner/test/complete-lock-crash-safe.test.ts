@@ -18,7 +18,7 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	gitIn,
-	briefFile,
+	prdFile,
 	type Scratch,
 	fixtureFolderRel,
 } from './helpers/gitRepo.js';
@@ -224,26 +224,26 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 
 	it('clears a stale ACTIVE PRD lock when main shows the PRD prd-tasked', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['z'], {
-			briefs: ['zeta'],
+			prds: ['zeta'],
 		});
 		await acquireItemLock({
-			item: 'brief:zeta',
+			item: 'prd:zeta',
 			action: 'task',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'brief-tasked', 'zeta', briefFile('zeta'));
+		seedTerminalOnArbiter(arbiter, 'prd-tasked', 'zeta', prdFile('zeta'));
 
 		const rec = await reconcileItemLockAgainstMain({
-			item: 'brief:zeta',
+			item: 'prd:zeta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
 		expect(rec.outcome).toBe('cleared-stale');
-		expect(lockRefOnArbiter(arbiter, 'brief-zeta')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'prd-zeta')).toBe(false);
 	});
 
 	it('KEEPS a STUCK lock that co-exists with a done record (not corruption — US #10)', async () => {
@@ -355,11 +355,11 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			'work/tasks/done/s.md',
 			'work/tasks/cancelled/s.md',
 		]);
-		// A brief: tasked (tasked, resting) OR the brief regime's terminal
-		// (briefs/dropped). A task-drop and a brief-drop sharing a slug never collide.
-		expect(terminalMainPaths('brief', 'p')).toEqual([
-			'work/briefs/tasked/p.md',
-			'work/briefs/dropped/p.md',
+		// A prd: tasked (tasked, resting) OR the prd regime's terminal
+		// (prds/dropped). A task-drop and a prd-drop sharing a slug never collide.
+		expect(terminalMainPaths('prd', 'p')).toEqual([
+			'work/prds/tasked/p.md',
+			'work/prds/dropped/p.md',
 		]);
 		// An observation has NO durable terminal — it leaves by deletion.
 		expect(terminalMainPaths('observation', 'o')).toEqual([]);

@@ -54,8 +54,8 @@ function seedTask(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-function seedBrief(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+function seedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
@@ -74,7 +74,7 @@ function seedObservation(slug: string, triaged?: string): void {
 
 /** Write the identity-keyed sidecar for `<namespace>:<slug>`, answered or pending. */
 function seedSidecar(
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	answered: boolean,
 ): void {
@@ -158,7 +158,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 	});
 
 	it('a needsAnswers PRD (no sidecar) → surface arg (prd:<slug>)', async () => {
-		seedBrief('blocked-prd', {needsAnswers: true});
+		seedPrd('blocked-prd', {needsAnswers: true});
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
 			cwd: repo,
@@ -167,7 +167,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 			lifecycleGates: FORCE_ON,
 			count: 5,
 		});
-		expect(args).toEqual(['brief:blocked-prd']);
+		expect(args).toEqual(['prd:blocked-prd']);
 	});
 
 	it('a PENDING-sidecar blocked item is NOT selected (calm, no thrash)', async () => {
@@ -202,11 +202,11 @@ describe('advance auto-pick — answered-sidecar items → apply (ALWAYS on)', (
 	});
 
 	it('an answered PRD sidecar → apply (prd:<slug>), gates off', async () => {
-		seedBrief('answered-prd', {needsAnswers: true});
-		seedSidecar('brief', 'answered-prd', true);
+		seedPrd('answered-prd', {needsAnswers: true});
+		seedSidecar('prd', 'answered-prd', true);
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({cwd: repo, run, config: cfg(), count: 5});
-		expect(args).toEqual(['brief:answered-prd']);
+		expect(args).toEqual(['prd:answered-prd']);
 	});
 });
 
@@ -229,7 +229,7 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 	it('the five-pool ORDER: apply PINNED first, then the drain order (build → task → surface → triage)', async () => {
 		// buildable
 		seedTask('build-me');
-		seedBrief('task-me');
+		seedPrd('task-me');
 		// lifecycle
 		seedObservation('triage-me'); // triage
 		seedTask('surface-me', {needsAnswers: true}); // surface (no sidecar)
@@ -246,7 +246,7 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 		expect(args).toEqual([
 			'apply-me', // apply: PINNED FIRST (consume-always-wins)
 			'build-me', // build: eligible task
-			'brief:task-me', // task: taskable PRD
+			'prd:task-me', // task: taskable PRD
 			'surface-me', // surface
 			'obs:triage-me', // triage
 		]);
@@ -270,17 +270,17 @@ describe('do auto-pick is PROVABLY UNCHANGED (F-SHARE)', () => {
 	it('do auto-pick / -n NEVER selects an observation or a needsAnswers item', async () => {
 		// A `work/` full of lifecycle items + ONE eligible task + ONE taskable PRD.
 		seedTask('build-me');
-		seedBrief('task-me');
+		seedPrd('task-me');
 		seedObservation('untriaged');
 		seedTask('blocked-task', {needsAnswers: true});
-		seedBrief('blocked-prd', {needsAnswers: true});
+		seedPrd('blocked-prd', {needsAnswers: true});
 		seedTask('answered', {needsAnswers: true});
 		seedSidecar('task', 'answered', true);
 
 		const {run, args} = doRunner();
 		await performDoAuto({cwd: repo, run, config: cfg(), count: 99});
 		// `do` passes NO lifecycle pools → selects ONLY the eligible task + PRD.
-		expect(args).toEqual(['build-me', 'brief:task-me']);
+		expect(args).toEqual(['build-me', 'prd:task-me']);
 		expect(args.some((a) => a.startsWith('obs:'))).toBe(false);
 	});
 });

@@ -13,8 +13,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	taskableBriefs,
-	type BriefCandidate,
+	taskablePrds,
+	type PrdCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import {gatherLifecycleInPlace} from './lifecycle-gather.js';
@@ -23,7 +23,7 @@ import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
 /**
- * The **`advance` one-shot DRIVER** (brief `advance-loop`, task
+ * The **`advance` one-shot DRIVER** (prd `advance-loop`, task
  * `advance-drivers-and-gates`, US #2/7/23/25/26) — the SEQUENTIAL driver that
  * WRAPS the substrate-agnostic advance TICK ({@link performAdvance}) over named
  * item(s) or the bare eligible-SET form. It is the in-place counterpart of
@@ -49,7 +49,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **The FLAT per-action gate family (US #23)** falls out of the SELECTION layer,
  * exactly as it does for `do`: the eligible-pool scan only SURFACES a build item
- * when `autoBuild` is on and a task-a-brief item when `autoTask` is on (the gate
+ * when `autoBuild` is on and a task-a-prd item when `autoTask` is on (the gate
  * is a policy on the autonomous-SELECTION step, NOT on the explicit verb a human
  * typed — an explicitly-NAMED `advance <slug>` builds regardless, mirroring
  * `do <task>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
@@ -61,7 +61,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **Isolation + chaining FALL OUT (US #26):** this driver builds NO new isolation
  * or chaining machinery — it threads the SAME `AdvanceContext` the tick already
- * consumes (which orchestrates `do`/`do brief:` through the isolation-strategy seam
+ * consumes (which orchestrates `do`/`do prd:` through the isolation-strategy seam
  * and rebase-before-integrate); a chain conflict routes to needs-attention as
  * today, inside the orchestrated `do`.
  */
@@ -83,7 +83,7 @@ type SharedAdvanceContext = AdvanceContext;
 export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The resolved repo config — provides `autoBuild` (the build gate for the
-	 * task pool), `autoTask` (the task-a-brief gate for the brief pool), and
+	 * task pool), `autoTask` (the task-a-prd gate for the prd pool), and
 	 * `selectionOrder` (the configurable cross-pool order). The per-action gate
 	 * family is APPLIED HERE, at the selection layer (the policy-on-autonomous-
 	 * selection point).
@@ -105,7 +105,7 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	count?: number;
 	/** Override the single-tick runner (tests inject a stub). Defaults to {@link performAdvance}. */
 	run?: AdvanceTickRunner;
-	/** Override the read seam (brief pool); defaults to the active {@link ledgerRead}. */
+	/** Override the read seam (prd pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/**
 	 * The LIFECYCLE-POOL create-gates (task `advance-autopick-lifecycle-pools`),
@@ -146,15 +146,15 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
 
 /**
  * Run the BARE / `-n <x>` form: build the two ELIGIBLE pools for `cwd` (eligible
- * TASKS gated by `autoBuild`, taskable briefs gated by `autoTask`), order them
+ * TASKS gated by `autoBuild`, taskable prds gated by `autoTask`), order them
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
- * `do-autopick` pools (the SAME `scoreItems`/`taskableBriefs` predicates), so the
+ * `do-autopick` pools (the SAME `scoreItems`/`taskablePrds` predicates), so the
  * per-action gate family is honoured by construction.
  *
  * The bare/`-n` selection draws ONLY from the autonomous pools (eligible tasks +
- * taskable briefs); SURFACE + APPLY of a gated item are reached by NAMING the item
+ * taskable prds); SURFACE + APPLY of a gated item are reached by NAMING the item
  * ({@link performAdvanceArgs}) — they are always-allowed and not pool-gated, so the
  * bare form with every flag off correctly selects NOTHING (zero autonomy) while a
  * named `advance <slug>` still surfaces/applies.
@@ -179,25 +179,25 @@ export async function performAdvanceAuto(
 		options.override,
 	);
 
-	// Pool 2 — TASKABLE briefs filtered by `autoslice-gate`'s predicate (gated on
-	// `autoTask`). With `autoTask` off NO brief is selected — the task rung is
+	// Pool 2 — TASKABLE prds filtered by `autoslice-gate`'s predicate (gated on
+	// `autoTask`). With `autoTask` off NO prd is selected — the task rung is
 	// never reached by the bare/`-n` selection.
-	const pool = read.resolveBriefPool({repoPath: cwd});
-	const briefCandidates: BriefCandidate[] = pool.briefs.map((brief) => ({
+	const pool = read.resolvePrdPool({repoPath: cwd});
+	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
 		repoPath: cwd,
-		slug: brief.slug,
-		humanOnly: brief.humanOnly,
-		needsAnswers: brief.needsAnswers,
-		briefAfter: brief.briefAfter,
+		slug: prd.slug,
+		humanOnly: prd.humanOnly,
+		needsAnswers: prd.needsAnswers,
+		prdAfter: prd.prdAfter,
 	}));
-	const eligibleBriefs = taskableBriefs({
-		candidates: briefCandidates,
+	const eligiblePrds = taskablePrds({
+		candidates: prdCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
 
 	// Pools 3 + 4 — the LIFECYCLE pools (untriaged observations + `needsAnswers`-
-	// blocked tasks/briefs + answered-sidecar items), built CALLER-SIDE (here, the
+	// blocked tasks/prds + answered-sidecar items), built CALLER-SIDE (here, the
 	// `advance` caller) through the SHARED enumeration unit and passed in — NOT baked
 	// into `selectPrioritised` (so `do` is provably unchanged). The create-gates
 	// default OFF (interim hardcoded-off): triage + surface contribute nothing; the
@@ -214,7 +214,7 @@ export async function performAdvanceAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		briefs: eligibleBriefs,
+		prds: eligiblePrds,
 		selectionOrder: options.config.selectionOrder,
 		lifecycle,
 		count,
@@ -225,7 +225,7 @@ export async function performAdvanceAuto(
 		// select. The question loop (surface/apply) is reached by NAMING an item, not
 		// the bare form — so this is calm-at-rest, NOT a failure.
 		const message =
-			'Nothing eligible to advance (no eligible tasks and no taskable briefs ' +
+			'Nothing eligible to advance (no eligible tasks and no taskable prds ' +
 			'under the per-action gates; name an item to surface/apply its questions).';
 		note(message);
 		return {results: [], exitCode: 0, message};
@@ -237,8 +237,8 @@ export async function performAdvanceAuto(
 /**
  * Run the EXPLICIT multi-arg form (`advance <a> <b> …`): the named items in the
  * GIVEN order (no pool/priority — the operator chose them). Each arg is run
- * through the existing advance tick, which itself resolves bare/`task:`/`brief:`/
- * `obs:` (so a named brief drives the task rung, an `obs:` the triage rung, a
+ * through the existing advance tick, which itself resolves bare/`task:`/`prd:`/
+ * `obs:` (so a named prd drives the task rung, an `obs:` the triage rung, a
  * collision errors), SEQUENTIALLY. A NAMED item is the always-allowed path — its
  * surface/apply rung runs regardless of the per-action gates.
  */
@@ -251,7 +251,7 @@ export async function performAdvanceArgs(
 		repoPath: options.cwd,
 		slug: arg,
 		// The arg is passed VERBATIM to the tick (it does its own slug resolution
-		// across task/brief/observation); the namespace is irrelevant for explicit args.
+		// across task/prd/observation); the namespace is irrelevant for explicit args.
 		namespace: 'task' as const,
 	}));
 	return runSelectedInSequence(selected, options, run, {verbatimArg: true});
@@ -260,7 +260,7 @@ export async function performAdvanceArgs(
 /**
  * Run a list of selected items through the existing advance tick, SEQUENTIALLY
  * (US #25 — `-n` is always sequential), threading the shared context to each. For
- * the pool path the arg encodes the namespace (`brief:<slug>` for a selected brief,
+ * the pool path the arg encodes the namespace (`prd:<slug>` for a selected prd,
  * bare slug for a task); for the explicit-arg path the caller's raw arg is passed
  * verbatim. Each tick is INDEPENDENTLY `advancing`-lock-guarded inside
  * {@link performAdvance} — sequential here means one item at a time, never a
@@ -359,11 +359,11 @@ export async function runAdvanceTickWithTreelessPublish(
  * classifies into the right rung:
  *   - `observation` → `obs:<slug>` (the triage rung; bare would resolve to a
  *     task, so the `obs:` prefix is required);
- *   - `brief` → `brief:<slug>` (a taskable brief's task rung, OR a `needsAnswers` brief
+ *   - `prd` → `prd:<slug>` (a taskable prd's task rung, OR a `needsAnswers` prd
  *     the tick surfaces/applies);
  *   - `task` → bare `<slug>` (an eligible task's build rung, OR a `needsAnswers`
  *     task the tick surfaces/applies).
- * The tick re-classifies each arg, so a `needsAnswers`-blocked task/brief reaches
+ * The tick re-classifies each arg, so a `needsAnswers`-blocked task/prd reaches
  * surface/apply and an untriaged observation reaches triage — the classifier +
  * rung bodies are unchanged; only this selection->arg mapping is new.
  */
@@ -371,8 +371,8 @@ function argForSelectedItem(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	if (item.namespace === 'brief') {
-		return `brief:${item.slug}`;
+	if (item.namespace === 'prd') {
+		return `prd:${item.slug}`;
 	}
 	return item.slug;
 }

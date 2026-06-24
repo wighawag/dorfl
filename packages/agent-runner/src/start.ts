@@ -587,7 +587,7 @@ async function switchToWorkBranch(params: {
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 	// `start` is a TASK-only command: the branch is the task-namespaced
-	// `work/task-<slug>` (distinct from a same-slug brief-tasking branch).
+	// `work/task-<slug>` (distinct from a same-slug prd-tasking branch).
 	const branch = workBranchRef('task', slug);
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);

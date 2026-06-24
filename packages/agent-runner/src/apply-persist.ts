@@ -22,19 +22,19 @@ import type {WorkFolderKey} from './work-layout.js';
 /**
  * The lifecycle folders an item may rest in at APPLY-write-time, BY TYPE — the
  * scan set for the identity-keyed item-path resolver below. Includes the
- * STAGING folders (`tasks-backlog`, `briefs-proposed`) on purpose: a concurrent
+ * STAGING folders (`tasks-backlog`, `prds-proposed`) on purpose: a concurrent
  * `promote` may have just `git mv`'d the item from staging into the pool
  * between this apply's CAPTURE and WRITE, and the apply must resolve to the
- * post-move path — the whole point of folder-agnostic apply (F3a of brief
+ * post-move path — the whole point of folder-agnostic apply (F3a of prd
  * `staging-surface-and-apply-promote-safety`). Terminal-only folders
- * (`cancelled`, `briefs-dropped`, `needs-attention`) are NOT here — once an
+ * (`cancelled`, `prds-dropped`, `needs-attention`) are NOT here — once an
  * item has reached a terminal, the apply is OVER, and a re-resolve into a
  * terminal would mean the item has effectively vanished from the active
  * lifecycle (callers handle that as the clean-exit `vanished` outcome below).
  */
 const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
-	brief: ['briefs-proposed', 'briefs-ready', 'briefs-tasked'],
+	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
 	observation: ['observations'],
 };
 
@@ -51,7 +51,7 @@ const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
  * sibling triage move) — the apply rung then exits CLEAN (no commit, no ghost
  * file), routed as the `vanished` outcome.
  *
- * This is the F3a fix from brief `staging-surface-and-apply-promote-safety`:
+ * This is the F3a fix from prd `staging-surface-and-apply-promote-safety`:
  * the sidecar is already identity-keyed and folder-agnostic; the item path is
  * now the same. A concurrent `promote` that `git mv`'d the item out from under
  * a captured path can no longer cause a stale-path write.
@@ -72,8 +72,8 @@ export function resolveItemPathByIdentity(
 
 /**
  * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
- * by its TYPE — the slug-collision correctness fix (brief
- * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped brief
+ * by its TYPE — the slug-collision correctness fix (prd
+ * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped prd
  * sharing a slug used to collide on one bare-slug `work/dropped/<slug>.md`; each
  * regime now has its own namespaced terminal. An OBSERVATION has NO terminal folder
  * (`undefined`) — a note leaves by DELETION, so a `dropped` disposition on an
@@ -83,15 +83,15 @@ function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
 	switch (type) {
 		case 'task':
 			return 'cancelled';
-		case 'brief':
-			return 'briefs-dropped';
+		case 'prd':
+			return 'prds-dropped';
 		case 'observation':
 			return undefined;
 	}
 }
 
 /**
- * The engine-owned APPLY PERSIST (brief `advance-loop`, task `advance-rung-apply`,
+ * The engine-owned APPLY PERSIST (prd `advance-loop`, task `advance-rung-apply`,
  * US #11/14/15/29/30) — the half of the APPLY rung the ENGINE owns. On
  * `classify=apply` (ALL sidecar entries answered), it applies the HUMAN's
  * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
@@ -137,13 +137,13 @@ const APPLIED_HEADING = '## Applied answers';
  * resolved (no leftover "these are still open" prose above `## Applied answers`).
  *
  * The strip is STRUCTURAL (marker-pair based), NOT a heading-text regex — the
- * brief's D1 decision: a `## Open questions` heading match would be fragile to
+ * prd's D1 decision: a `## Open questions` heading match would be fragile to
  * author wording (`## Open questions (clear needsAnswers when resolved)` vs.
  * `## Open questions`). Items authored WITHOUT the markers are left untouched
  * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
  *
  * The sibling task `templates-mark-transient-open-questions-block` introduces
- * the markers in the brief/task templates; this task exports the constants so
+ * the markers in the prd/task templates; this task exports the constants so
  * the two tasks agree on the literal byte sequence.
  */
 export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';
@@ -155,7 +155,7 @@ const TRIAGED_KEEP = 'keep';
 export interface ApplyAnsweredQuestionsOptions {
 	/** Working clone/worktree the apply commits in. */
 	cwd: string;
-	/** The namespaced item identity (`task:foo` / `brief:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `prd:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The
@@ -189,13 +189,13 @@ export type ApplyTerminal =
 	| 'kept'
 	/**
 	 * Moved to the regime's PER-REGIME "won't-proceed" terminal: a TASK to
-	 * `work/tasks/cancelled/`, a BRIEF to `work/briefs/dropped/` (the slug-collision
+	 * `work/tasks/cancelled/`, a PRD to `work/prds/dropped/` (the slug-collision
 	 * fix, task `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
 	 * terminal folder, so a `dropped` disposition on one downgrades to
 	 * `delete-recommended` (notes leave by deletion). The specific REASON
 	 * (`out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned`) lives in the
 	 * item BODY, not in the folder name. The OUTCOME word stays `dropped` for a
-	 * task/brief (the disposition kept its meaning; only the resolved PATH is
+	 * task/prd (the disposition kept its meaning; only the resolved PATH is
 	 * regime-namespaced).
 	 */
 	| 'dropped'
@@ -365,7 +365,7 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 
 /**
  * Strip ALL marker-fenced open-questions blocks from an item body — the FULL
- * RESOLUTION reconcile step (brief `apply-reconciles-stale-open-questions`,
+ * RESOLUTION reconcile step (prd `apply-reconciles-stale-open-questions`,
  * decisions D1 / D3). Removes each `<!-- open-questions -->` … `<!--
  * /open-questions -->` pair (markers included) plus the blank lines that
  * flanked it, so the answers in `## Applied answers` no longer sit beneath a
@@ -437,11 +437,11 @@ export function applyAnsweredQuestions(
 
 	const {model, path: sidecarPath} = readSidecar(cwd, item);
 
-	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, brief
+	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, prd
 	// `staging-surface-and-apply-promote-safety`): re-resolve the item's CURRENT
 	// path by IDENTITY, mirroring the sidecar's already-folder-agnostic
 	// resolution. The captured `itemPath` is ADVISORY — a concurrent `promote`
-	// (`tasks/backlog → tasks/todo`, `briefs/proposed → briefs/ready`) may have
+	// (`tasks/backlog → tasks/todo`, `prds/proposed → prds/ready`) may have
 	// moved the item between capture and now, and we MUST write the post-move
 	// path, never the stale one. If the item has vanished entirely, exit CLEAN
 	// (no commit, no ghost file) — the matching benign skip the surface/triage
@@ -508,8 +508,8 @@ export function applyAnsweredQuestions(
 	const itemType = resolveSidecarIdentity(item).type;
 	// A `dropped` disposition on an OBSERVATION has no terminal folder (notes leave
 	// by deletion), so it DOWNGRADES to a delete-recommendation — the note is never
-	// moved to a terminal. For a task/brief, `dropped` keeps routing to the regime's
-	// namespaced won't-proceed terminal (`tasks/cancelled` / `briefs/dropped`).
+	// moved to a terminal. For a task/prd, `dropped` keeps routing to the regime's
+	// namespaced won't-proceed terminal (`tasks/cancelled` / `prds/dropped`).
 	const terminal =
 		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
 			? 'delete'
@@ -648,7 +648,7 @@ interface MoveTerminalInput {
  * cleared needsAnswers + deleted the sidecar). Status = the folder (WORK-CONTRACT
  * rule 3): the move IS the terminal state, no frontmatter status field. A
  * `dropped` disposition resolves the destination PER REGIME (`tasks/cancelled`
- * for a task, `briefs/dropped` for a brief) so a task-drop and a brief-drop
+ * for a task, `prds/dropped` for a prd) so a task-drop and a prd-drop
  * sharing a slug never collide; `needs-attention` is type-agnostic. Returns the
  * NEW item path.
  */

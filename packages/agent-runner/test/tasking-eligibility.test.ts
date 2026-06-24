@@ -53,7 +53,7 @@ describe('resolveTaskGate — the humanOnly × needsAnswers × autoTask matrix',
 
 describe('resolveTaskGate — explicit naming satisfies the autoTask policy term', () => {
 	// `explicit: true` mirrors `do <task>` building regardless of `autoBuild`:
-	// naming the brief IS the authorization, so the `autoTask` policy term drops.
+	// naming the prd IS the authorization, so the `autoTask` policy term drops.
 	it('explicit + autoTask OFF is taskable (the policy term is satisfied by naming)', () => {
 		expect(resolveTaskGate(undefined, undefined, false, true)).toBe(true);
 	});
@@ -74,12 +74,12 @@ describe('resolveTaskGate — explicit naming satisfies the autoTask policy term
 	});
 });
 
-describe('resolveTaskingEligibility — explicit drops the policy term but keeps briefAfter', () => {
-	it('explicit + autoTask OFF + no briefAfter ⇒ taskable', () => {
+describe('resolveTaskingEligibility — explicit drops the policy term but keeps prdAfter', () => {
+	it('explicit + autoTask OFF + no prdAfter ⇒ taskable', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			briefAfter: [],
+			prdAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
@@ -88,25 +88,25 @@ describe('resolveTaskingEligibility — explicit drops the policy term but keeps
 		expect(r.gatePass).toBe(true);
 	});
 
-	it('explicit + autoTask OFF but an UNTASKED briefAfter ⇒ gate passes, still blocked', () => {
+	it('explicit + autoTask OFF but an UNTASKED prdAfter ⇒ gate passes, still blocked', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			briefAfter: ['other'],
+			prdAfter: ['other'],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
 		});
 		expect(r.gatePass).toBe(true);
 		expect(r.taskable).toBe(false);
-		expect(r.briefAfter.missing).toEqual(['other']);
+		expect(r.prdAfter.missing).toEqual(['other']);
 	});
 
 	it('explicit + humanOnly ⇒ never (the readiness axis binds)', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			briefAfter: [],
+			prdAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
@@ -116,8 +116,8 @@ describe('resolveTaskingEligibility — explicit drops the policy term but keeps
 	});
 });
 
-describe('resolveTaskAfter — against `work/briefs/tasked/` residence (not done/)', () => {
-	it('is satisfied when briefAfter is empty', () => {
+describe('resolveTaskAfter — against `work/prds/tasked/` residence (not done/)', () => {
+	it('is satisfied when prdAfter is empty', () => {
 		const r = resolveTaskAfter([], new Set());
 		expect(r.satisfied).toBe(true);
 		expect(r.missing).toEqual([]);
@@ -147,22 +147,22 @@ describe('resolveTaskAfter — against `work/briefs/tasked/` residence (not done
 	});
 });
 
-describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked fixtures)', () => {
+describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fixtures)', () => {
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
 		autoTask: boolean;
-		briefAfter: string[];
+		prdAfter: string[];
 		tasked: Set<string>;
 		taskable: boolean;
 		gatePass: boolean;
 	}> = [
-		// undeclared + autoTask on + no briefAfter ⇒ taskable
+		// undeclared + autoTask on + no prdAfter ⇒ taskable
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: true,
 			gatePass: true,
@@ -172,7 +172,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			briefAfter: ['other'],
+			prdAfter: ['other'],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: true,
@@ -182,7 +182,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			briefAfter: ['other'],
+			prdAfter: ['other'],
 			tasked: new Set(['other']),
 			taskable: true,
 			gatePass: true,
@@ -192,17 +192,17 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: false,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
 		},
-		// humanOnly + autoTask on ⇒ never (gate fails regardless of briefAfter)
+		// humanOnly + autoTask on ⇒ never (gate fails regardless of prdAfter)
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoTask: true,
-			briefAfter: ['other'],
+			prdAfter: ['other'],
 			tasked: new Set(['other']),
 			taskable: false,
 			gatePass: false,
@@ -212,7 +212,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: undefined,
 			needsAnswers: true,
 			autoTask: true,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -222,7 +222,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: false,
 			needsAnswers: true,
 			autoTask: true,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -232,7 +232,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: true,
 			needsAnswers: true,
 			autoTask: true,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -242,17 +242,17 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoTask: false,
-			briefAfter: [],
+			prdAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
 		},
-		// multiple briefAfter, one untasked ⇒ blocked though gate passes
+		// multiple prdAfter, one untasked ⇒ blocked though gate passes
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			briefAfter: ['a', 'b'],
+			prdAfter: ['a', 'b'],
 			tasked: new Set(['a']),
 			taskable: false,
 			gatePass: true,
@@ -263,10 +263,10 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 		const label =
 			`humanOnly=${String(c.humanOnly)} needsAnswers=${String(c.needsAnswers)} ` +
 			`autoTask=${c.autoTask} ` +
-			`briefAfter=${
-				c.briefAfter.length === 0
+			`prdAfter=${
+				c.prdAfter.length === 0
 					? 'none'
-					: c.briefAfter.every((s) => c.tasked.has(s))
+					: c.prdAfter.every((s) => c.tasked.has(s))
 						? 'tasked'
 						: 'untasked'
 			}`;
@@ -274,7 +274,7 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 			const r = resolveTaskingEligibility({
 				humanOnly: c.humanOnly,
 				needsAnswers: c.needsAnswers,
-				briefAfter: c.briefAfter,
+				prdAfter: c.prdAfter,
 				taskedSlugs: c.tasked,
 				autoTask: c.autoTask,
 			});
@@ -283,15 +283,15 @@ describe('resolveTaskingEligibility — gate × briefAfter (tasked-vs-untasked f
 		});
 	}
 
-	it('reports the untasked PRDs when blocked by briefAfter', () => {
+	it('reports the untasked PRDs when blocked by prdAfter', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			briefAfter: ['other'],
+			prdAfter: ['other'],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});
-		expect(r.briefAfter.satisfied).toBe(false);
-		expect(r.briefAfter.missing).toEqual(['other']);
+		expect(r.prdAfter.satisfied).toBe(false);
+		expect(r.prdAfter.missing).toEqual(['other']);
 	});
 });

@@ -28,7 +28,7 @@
  * member of this union and naming it is a usage error.
  *
  *  - `build` — build an eligible task;
- *  - `task` — task a taskable brief;
+ *  - `task` — task a taskable prd;
  *  - `surface` — render a `needsAnswers` blocker into an answerable sidecar;
  *  - `triage` — triage an untriaged observation.
  */

@@ -132,7 +132,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 		);
 		const cfg = loadConfig(cfgPath);
 		expect(resolvePromptGuidance(cfg).testFirst).toBe(true);
-		const w = wrapper('example', 'my-brief', {
+		const w = wrapper('example', 'my-prd', {
 			cwd: root,
 			promptGuidance: {testFirst: true},
 		});
@@ -153,7 +153,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 		);
 		const cfg = loadConfig(cfgPath);
 		expect(resolvePromptGuidance(cfg).testFirst).toBe(false);
-		const w = wrapper('example', 'my-brief', {cwd: root});
+		const w = wrapper('example', 'my-prd', {cwd: root});
 		expect(w).toContain('TDD where the task asks for');
 		expect(w).not.toContain('failing test BEFORE the production code');
 	});

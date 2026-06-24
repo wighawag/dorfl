@@ -765,7 +765,7 @@ async function runOneItem(
 		}
 
 		// 3. Build the prompt — the SAME dual-use assembly `agent-runner prompt`
-		//    emits: the canonical wrapper (+ source brief) + the task's ## Prompt.
+		//    emits: the canonical wrapper (+ source prd) + the task's ## Prompt.
 		let prompt: string;
 		try {
 			// CONTINUE-aware resolution: only on a continue (the job continued a kept
@@ -801,14 +801,14 @@ async function runOneItem(
 					})
 				: undefined;
 			// Thread the resolved per-repo nudge through the per-item override layer
-			// (a task or brief may pin `promptGuidance.testFirst` in its frontmatter,
+			// (a task or prd may pin `promptGuidance.testFirst` in its frontmatter,
 			// superseding the repo policy for THIS item) before the wrapper is built.
 			const itemGuidance = resolvePromptGuidanceForItem({
 				cwd: tree.dir,
 				repoResolved: resolvePromptGuidance(config),
 				taskContent: readFileSync(task.path, 'utf8'),
 			});
-			prompt = buildAgentPrompt(task.slug, task.brief, task.taskPrompt, {
+			prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
 				cwd: tree.dir,
 				continueContext,
 				promptGuidance: itemGuidance,
@@ -879,7 +879,7 @@ async function runOneItem(
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
 		// integrate band — plus the needs-attention routing on any failure — now runs
 		// through the SHARED `performIntegration` core (`integration-core.ts`, the
-		// run/do convergence brief). `run` no longer forks its own gate / done-move /
+		// run/do convergence prd). `run` no longer forks its own gate / done-move /
 		// completion commit / `Integrator`+`integrateWithRebase`: that closed all
 		// three drift instances at once (the fleet now gets the review gate, the PR
 		// title/body, AND the per-repo language-agnostic `verify` gate instead of the
@@ -1236,7 +1236,7 @@ export function defaultRunWorkspace(): string {
  * One supervised TICK over the registry, as a swappable unit. Today the tick IS
  * `runOnce` (claim+build+integrate a concurrent batch of eligible TASKS). The
  * loop ({@link runLoop}) is deliberately written against this signature — NOT
- * against `runOnce` directly — so the advance-loop brief can later swap the tick
+ * against `runOnce` directly — so the advance-loop prd can later swap the tick
  * (build / task / triage / surface / apply) WITHOUT re-architecting the loop
  * (the forward-pointer: the loop owns concurrency/scheduling, the tick owns one
  * item's work). The loop never reaches inside a tick.

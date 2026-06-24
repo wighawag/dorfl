@@ -15,7 +15,7 @@ import {
 
 /** A canonical two-entry sidecar text in the new human-readable format. */
 const SAMPLE = [
-	'<!-- agent-runner-sidecar: item=brief:autotask type=brief slug=autotask allAnswered=false -->',
+	'<!-- agent-runner-sidecar: item=prd:autotask type=prd slug=autotask allAnswered=false -->',
 	'',
 	'## Q1',
 	'',
@@ -44,8 +44,8 @@ const SAMPLE = [
 describe('parseSidecar — new human-readable format', () => {
 	it('parses identity from the top HTML comment and ordered entries', () => {
 		const model = parseSidecar(SAMPLE);
-		expect(model.item).toBe('brief:autotask');
-		expect(model.type).toBe('brief');
+		expect(model.item).toBe('prd:autotask');
+		expect(model.type).toBe('prd');
 		expect(model.slug).toBe('autotask');
 		expect(model.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
 		expect(model.entries[0].question).toBe(
@@ -174,7 +174,7 @@ describe('serialiseSidecar — canonical shape + semantic round-trip', () => {
 		const out = serialiseSidecar(model);
 		// Identity comment at the top (HTML comment, no YAML frontmatter).
 		expect(out.startsWith('<!-- agent-runner-sidecar:')).toBe(true);
-		expect(out).toContain('item=brief:autotask');
+		expect(out).toContain('item=prd:autotask');
 		expect(out).toContain('allAnswered=false');
 		// No literal block-scalar `|` pipes anywhere (the old format's giveaway).
 		expect(out).not.toContain('question: |');
@@ -464,9 +464,9 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 });
 
 describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver SoT)', () => {
-	it('brief:<slug> → work/questions/brief-<slug>.md', () => {
-		expect(sidecarPathFor('brief:autotask')).toBe(
-			'work/questions/brief-autotask.md',
+	it('prd:<slug> → work/questions/prd-<slug>.md', () => {
+		expect(sidecarPathFor('prd:autotask')).toBe(
+			'work/questions/prd-autotask.md',
 		);
 	});
 	it('task:<slug> → work/questions/task-<slug>.md', () => {
@@ -487,6 +487,6 @@ describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver S
 		});
 	});
 	it('the `:`→`-` mapping is in the FILENAME only (item keeps the colon)', () => {
-		expect(resolveSidecarIdentity('brief:x').item).toBe('brief:x');
+		expect(resolveSidecarIdentity('prd:x').item).toBe('prd:x');
 	});
 });

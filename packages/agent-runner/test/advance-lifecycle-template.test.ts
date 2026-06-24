@@ -175,19 +175,19 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS taskable BRIEFS into the matrix as ' +
-			'`brief:<slug>` legs alongside the task legs (task ' +
+		'the propose `enumerate` `jq` UNIONS taskable PRDS into the matrix as ' +
+			'`prd:<slug>` legs alongside the task legs (task ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
 		() => {
 			const text = generateAdvanceLifecycleWorkflow(config);
 			// Without this, `AGENT_RUNNER_AUTO_TASK: 'true'` above is dead on the hourly
-			// cron — a ready ungated BRIEF never becomes a matrix leg. The `jq` must read
-			// `scan --json`'s taskable-BRIEF pool (`repos[].briefs[]` + `cwd.repo.briefs[]`)
-			// AND the task pool, and emit BOTH `task:<slug>` and `brief:<slug>` ids.
+			// cron — a ready ungated PRD never becomes a matrix leg. The `jq` must read
+			// `scan --json`'s taskable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+			// AND the task pool, and emit BOTH `task:<slug>` and `prd:<slug>` ids.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"brief:" \+ \.slug/.test(text)).toBe(true);
-			expect(/\.repos\[\]\.briefs\[\]\?/.test(text)).toBe(true);
-			expect(/\.cwd\.repo\.briefs\[\]\?/.test(text)).toBe(true);
+			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
 		},
 	);
 
@@ -357,7 +357,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(true);
 	});
 
-	it('uses explicit slug prefixes (task:/brief:), never bare', () => {
+	it('uses explicit slug prefixes (task:/prd:), never bare', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(text).toContain('"task:" + .slug');
 	});
@@ -502,15 +502,15 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	});
 
 	it(
-		'flags a regression to a TASK-ONLY `jq` (no `brief:` legs) — the propose ' +
-			'matrix must enumerate the taskable-BRIEF pool',
+		'flags a regression to a TASK-ONLY `jq` (no `prd:` legs) — the propose ' +
+			'matrix must enumerate the taskable-PRD pool',
 		() => {
 			// Pre-fix shape: task-only `jq` over `items[]` only. Reintroducing it must
 			// be flagged so `AGENT_RUNNER_AUTO_TASK` is never silently dead on the cron.
 			const broken = base
-				.replace(/"brief:" \+ \.slug/g, '"task:" + .slug')
-				.replace(/\.repos\[\]\.briefs\[\]\?/g, '.repos[].items[]?')
-				.replace(/\.cwd\.repo\.briefs\[\]\?/g, '.cwd.repo.items[]?');
+				.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
+				.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
+				.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
 			expectFlagged(broken, 'propose-enumerates-taskable-prds');
 		},
 	);

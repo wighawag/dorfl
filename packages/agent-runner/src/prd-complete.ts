@@ -10,44 +10,44 @@ import {
 } from './work-layout.js';
 
 /**
- * The read-only **"is this brief complete?"** core query (brief `issue-intake`, US #8 —
- * the closure-linkage half). Given a brief slug + a `work/` tree, a brief is COMPLETE
- * iff there is **≥1 task carrying `brief:<slug>`** AND **all such tasks reside in
+ * The read-only **"is this prd complete?"** core query (prd `issue-intake`, US #8 —
+ * the closure-linkage half). Given a prd slug + a `work/` tree, a prd is COMPLETE
+ * iff there is **≥1 task carrying `prd:<slug>`** AND **all such tasks reside in
  * `work/done/`**. Pure `work/`-folder logic — no seam, no git, no `gh`, no mutation.
  *
- * This is the LINKAGE the intake engine emits for CI to ACT on: a brief fans out to N
- * tasks = N PRs whose tasks carry `brief:` ONLY (no `Refs #N` keyword is emitted),
+ * This is the LINKAGE the intake engine emits for CI to ACT on: a prd fans out to N
+ * tasks = N PRs whose tasks carry `prd:` ONLY (no `Refs #N` keyword is emitted),
  * and the issue is closed by CI's merge-to-main JOB that runs THIS query +
  * `closeIssue`. That close JOB is `runner-in-ci`'s — NOT
  * built here; this module exposes ONLY the query for the job to call. The issue
- * number lives ONLY on the brief (`issue:`); tasks link via `task.brief: → brief`, so
- * this query keys on the SAME `brief:` field that hop uses.
+ * number lives ONLY on the prd (`issue:`); tasks link via `task.prd: → prd`, so
+ * this query keys on the SAME `prd:` field that hop uses.
  *
- * It is a `work/`-FOLDER RESIDENCE scan keyed on the parsed `brief:` field — NOT the
+ * It is a `work/`-FOLDER RESIDENCE scan keyed on the parsed `prd:` field — NOT the
  * claim ledger (`ledger-read.ts` resolves claim-STATE, a different concern). It
- * reuses {@link parseFrontmatter} (the `brief:` field) rather than hand-rolling a YAML
+ * reuses {@link parseFrontmatter} (the `prd:` field) rather than hand-rolling a YAML
  * parse, and scans the task lifecycle folders directly: `work/tasks/todo/`,
  * `work/in-progress/`, `work/needs-attention/`, and `work/done/`. A task that has
  * NOT yet landed in `work/done/` (still in backlog / in-progress / needs-attention)
- * means the brief is not yet complete.
+ * means the prd is not yet complete.
  */
 
-/** The task lifecycle folders a `brief:<slug>` task can reside in. */
+/** The task lifecycle folders a `prd:<slug>` task can reside in. */
 const TASK_FOLDERS = TASK_LIFECYCLE_FOLDERS;
 
 /** Where a task resides — the folder name under `work/`. */
 type TaskFolder = TaskLifecycleFolder;
 
-/** What the query needs: which repo's `work/` tree to scan + which brief slug. */
-export interface BriefCompleteInput {
+/** What the query needs: which repo's `work/` tree to scan + which prd slug. */
+export interface PrdCompleteInput {
 	/** The repo working-tree root whose `work/` task folders to scan. */
 	repoPath: string;
-	/** The brief slug to check (matched against each task's frontmatter `brief:`). */
+	/** The prd slug to check (matched against each task's frontmatter `prd:`). */
 	slug: string;
 }
 
-/** One task carrying `brief:<slug>`, with the folder it resides in. */
-export interface BriefTask {
+/** One task carrying `prd:<slug>`, with the folder it resides in. */
+export interface PrdTask {
 	/** Filename within `work/<folder>/` (e.g. `add-quiet-flag.md`). */
 	file: string;
 	/** The task's resolved slug (frontmatter `slug:`, falling back to filename). */
@@ -57,19 +57,19 @@ export interface BriefTask {
 }
 
 /**
- * The result of the "is this brief complete?" query. {@link complete} is the
+ * The result of the "is this prd complete?" query. {@link complete} is the
  * load-bearing verdict; {@link tasks} surfaces the matched set (with residence)
  * so a caller can explain the verdict if it wants to.
  */
-export interface BriefCompleteResult {
+export interface PrdCompleteResult {
 	/**
-	 * `true` iff ≥1 task carries `brief:<slug>` AND every such task resides in
+	 * `true` iff ≥1 task carries `prd:<slug>` AND every such task resides in
 	 * `work/done/`. `false` when no task carries the slug (≥1 is REQUIRED) OR when
 	 * any matching task is still outside `work/done/`.
 	 */
 	complete: boolean;
-	/** Every task carrying `brief:<slug>`, across all task folders, sorted by slug. */
-	tasks: BriefTask[];
+	/** Every task carrying `prd:<slug>`, across all task folders, sorted by slug. */
+	tasks: PrdTask[];
 }
 
 /** List the `.md` filenames in `<repoPath>/work/<folder>/`, sorted; `[]` if absent. */
@@ -85,17 +85,15 @@ function listMarkdown(repoPath: string, folder: TaskFolder): string[] {
 }
 
 /**
- * Is this brief COMPLETE? Read-only: scan the task lifecycle folders, parse each
- * task's `brief:` via {@link parseFrontmatter}, keep those whose `brief:` equals
+ * Is this prd COMPLETE? Read-only: scan the task lifecycle folders, parse each
+ * task's `prd:` via {@link parseFrontmatter}, keep those whose `prd:` equals
  * `slug`, and return COMPLETE iff that set is NON-EMPTY and EVERY member resides in
  * `work/done/`. Touches no git, no network, no mutation — a pure `work/`-folder
- * residence scan keyed on the parsed `brief:` field.
+ * residence scan keyed on the parsed `prd:` field.
  */
-export function isBriefComplete(
-	input: BriefCompleteInput,
-): BriefCompleteResult {
+export function isPrdComplete(input: PrdCompleteInput): PrdCompleteResult {
 	const {repoPath, slug} = input;
-	const tasks: BriefTask[] = [];
+	const tasks: PrdTask[] = [];
 	for (const folder of TASK_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const content = readFileSync(
@@ -103,7 +101,7 @@ export function isBriefComplete(
 				'utf8',
 			);
 			const fm = parseFrontmatter(content);
-			if (fm.brief === slug) {
+			if (fm.prd === slug) {
 				tasks.push({
 					file,
 					slug: fm.slug ?? basename(file, '.md'),

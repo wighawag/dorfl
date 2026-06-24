@@ -7,8 +7,8 @@
 
 /**
  * **Origin-trust PROVENANCE** (task `untrusted-origin-forces-build-propose`).
- * How a brief/task was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
- * signal SURVIVES the brief/task merge boundary (a landed-on-`main` artifact would
+ * How a prd/task was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
+ * signal SURVIVES the prd/task merge boundary (a landed-on-`main` artifact would
  * otherwise erase how it was created — the laundering gap).
  *
  * - `origin` — `human` (the default / unset: a human authored it locally; a local
@@ -43,44 +43,44 @@ export interface Frontmatter {
 	originTrust: OriginTrust | undefined;
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
-	/** Source brief slug (frontmatter `brief:`); the brief lives at `work/briefs/ready/<brief>.md`. */
-	brief: string | undefined;
+	/** Source prd slug (frontmatter `prd:`); the prd lives at `work/prds/ready/<prd>.md`. */
+	prd: string | undefined;
 	/**
 	 * The GitHub issue number an `intake`-emitted artifact was transformed from
 	 * (frontmatter `issue:`). Parsed so the `issue: N` intake writes is
 	 * MACHINE-READABLE — the close JOB (`runner-in-ci`'s) reaches it to resolve the
 	 * issue from folder + field state. Carried on EITHER:
 	 *
-	 * - a **brief** (`intake`'s brief outcome) — a fanned task reaches it via
-	 *   `task.brief: → work/briefs/ready/<brief>.md → brief issue:` (the number lives
-	 *   ONLY on the brief, never duplicated across the N fanned tasks); OR
-	 * - a **lone task** (`intake`'s TASK outcome, no `brief:`) — the provider-agnostic
+	 * - a **prd** (`intake`'s prd outcome) — a fanned task reaches it via
+	 *   `task.prd: → work/prds/ready/<prd>.md → prd issue:` (the number lives
+	 *   ONLY on the prd, never duplicated across the N fanned tasks); OR
+	 * - a **lone task** (`intake`'s TASK outcome, no `prd:`) — the provider-agnostic
 	 *   closure link for a task that closes its own issue directly (replaces the old
 	 *   GitHub-only `Fixes #N` body line, which is now a deferred optimisation).
 	 *
-	 * INVARIANT — one closure path per task: a task uses `issue:` XOR `brief:`, never
+	 * INVARIANT — one closure path per task: a task uses `issue:` XOR `prd:`, never
 	 * both. Either it closes its own issue directly (`issue:`) or it contributes to a
-	 * brief that closes the issue (`brief:` → brief `issue:`). This is NOT enforced by a
+	 * prd that closes the issue (`prd:` → prd `issue:`). This is NOT enforced by a
 	 * throwing validator (there is no frontmatter-validation layer): intake never
-	 * emits both — its task / brief dispatch branches are mutually exclusive — so only
-	 * a human hand-edit could produce both, and the precedence rule (`brief:` wins,
+	 * emits both — its task / prd dispatch branches are mutually exclusive — so only
+	 * a human hand-edit could produce both, and the precedence rule (`prd:` wins,
 	 * `issue:` ignored) is the future close-job's concern (see {@link
-	 * resolveClosingIssue}), degrading a typo to "use the brief's number" rather than
-	 * crashing. `undefined` when omitted (every non-intake brief and most tasks).
+	 * resolveClosingIssue}), degrading a typo to "use the prd's number" rather than
+	 * crashing. `undefined` when omitted (every non-intake prd and most tasks).
 	 */
 	issue: number | undefined;
 	/**
 	 * Autonomy gate axis 1 (DECIDED). `true` when the item declares itself
 	 * human-only (a human must drive it regardless of how complete the spec is);
 	 * `undefined` when omitted (undeclared — most items). Present on both tasks
-	 * and briefs.
+	 * and prds.
 	 */
 	humanOnly: boolean | undefined;
 	/**
 	 * Autonomy gate axis 2 (DISCOVERED). `true` when the item has unresolved
 	 * questions blocking autonomous progress (the open questions live in the body);
 	 * `undefined` when omitted. Orthogonal to `humanOnly`; present on both tasks
-	 * and briefs.
+	 * and prds.
 	 */
 	needsAnswers: boolean | undefined;
 	/**
@@ -96,19 +96,19 @@ export interface Frontmatter {
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 	/**
-	 * Brief-only: slugs of briefs that must already be TASKED before this brief may be
-	 * tasked (resolved against `work/briefs/tasked/` residence, NOT `done/`). `[]` when
+	 * Prd-only: slugs of prds that must already be TASKED before this prd may be
+	 * tasked (resolved against `work/prds/tasked/` residence, NOT `done/`). `[]` when
 	 * omitted or empty. Parsed here so the auto-tasker can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
-	briefAfter: string[];
+	prdAfter: string[];
 	/**
 	 * The per-item override layer for the `promptGuidance` NUDGE namespace
-	 * (task `prompt-guidance-testfirst-item-override`, brief US #5). A task or
-	 * brief may carry one or more `promptGuidance.<member>: true | false`
+	 * (task `prompt-guidance-testfirst-item-override`, prd US #5). A task or
+	 * prd may carry one or more `promptGuidance.<member>: true | false`
 	 * frontmatter lines to OVERRIDE the resolved repo policy for THAT ITEM only.
 	 * Each member is `undefined` when omitted (⇒ inherit the next layer down in
-	 * the precedence chain: per-task > per-brief > repo-resolved). The override
+	 * the precedence chain: per-task > per-prd > repo-resolved). The override
 	 * is honoured at the prompt-assembly seam (`prompt.ts`); it never affects
 	 * the `verify` gate.
 	 *
@@ -247,12 +247,12 @@ export function setFrontmatterMarker(
 
 /**
  * PROPAGATE the origin-trust PROVENANCE (`origin` + `originTrust`) from a SOURCE
- * artifact (a brief) onto a TARGET artifact's content (an emitted task), returning
+ * artifact (a prd) onto a TARGET artifact's content (an emitted task), returning
  * the new content (task `untrusted-origin-forces-build-propose`). The tasker
- * calls this so a task born from an untrusted-origin brief carries the stamp the
+ * calls this so a task born from an untrusted-origin prd carries the stamp the
  * BUILD transition reads. IDEMPOTENT: each present source field is written via
  * {@link setFrontmatterMarker} (replace-or-append). When the source has NO `origin`
- * (a human/local-authored brief ⇒ trusted), the target is returned UNCHANGED — the
+ * (a human/local-authored prd ⇒ trusted), the target is returned UNCHANGED — the
  * normal path is never stamped (zero behaviour change). When a stamp IS applied to
  * a fence-less target, {@link setFrontmatterMarker} now prepends a fence to carry
  * it (tasks the tasker emits always have a fence, so this is the defensive path).
@@ -280,13 +280,13 @@ export function parseFrontmatter(content: string): Frontmatter {
 		origin: undefined,
 		originTrust: undefined,
 		slug: undefined,
-		brief: undefined,
+		prd: undefined,
 		issue: undefined,
 		humanOnly: undefined,
 		needsAnswers: undefined,
 		triaged: undefined,
 		blockedBy: [],
-		briefAfter: [],
+		prdAfter: [],
 		promptGuidance: {testFirst: undefined},
 	};
 	if (block === undefined) {
@@ -324,10 +324,10 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.originTrust = v === 'trusted' || v === 'untrusted' ? v : undefined;
 		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'brief') {
-			result.brief = rawValue === '' ? undefined : unquote(rawValue);
+		} else if (key === 'prd') {
+			result.prd = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'issue') {
-			// Integer issue link (`intake`'s brief-emit OR a lone-task emit). A
+			// Integer issue link (`intake`'s prd-emit OR a lone-task emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather
 			// than malformed).
 			const n = Number(unquote(rawValue));
@@ -348,7 +348,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			// observation out of the triage pool. An empty value reads as undefined
 			// (undeclared — still untriaged).
 			result.triaged = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'blockedBy' || key === 'briefAfter') {
+		} else if (key === 'blockedBy' || key === 'prdAfter') {
 			let list: string[];
 			if (rawValue.startsWith('[')) {
 				list = parseInlineList(rawValue);
@@ -375,7 +375,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			if (key === 'blockedBy') {
 				result.blockedBy = list;
 			} else {
-				result.briefAfter = list;
+				result.prdAfter = list;
 			}
 		}
 	}
@@ -385,27 +385,27 @@ export function parseFrontmatter(content: string): Frontmatter {
 
 /**
  * Resolve, from a parsed artifact's frontmatter, HOW it closes its source issue:
- * the `brief:` hop or the lone-task `issue:` field. A PURE helper for the FUTURE
+ * the `prd:` hop or the lone-task `issue:` field. A PURE helper for the FUTURE
  * CI close-job (`runner-in-ci`'s) — it is NOT wired into intake or any reader
  * today; it merely pins the one-closure-path PRECEDENCE in one place.
  *
- * Encodes the invariant: a task uses `issue:` XOR `brief:`. When (only a human
- * hand-edit could) BOTH are present, `brief:` WINS — the close-job hops to the brief's
- * `issue:` and IGNORES the task's own `issue:` (the fanned-brief path is the
- * authoritative one; a lone `issue:` on a `brief:`-bearing task is a contradiction
- * that degrades to "use the brief" rather than crashing).
+ * Encodes the invariant: a task uses `issue:` XOR `prd:`. When (only a human
+ * hand-edit could) BOTH are present, `prd:` WINS — the close-job hops to the prd's
+ * `issue:` and IGNORES the task's own `issue:` (the fanned-prd path is the
+ * authoritative one; a lone `issue:` on a `prd:`-bearing task is a contradiction
+ * that degrades to "use the prd" rather than crashing).
  *
  * Returns:
- * - `{via: 'brief', brief}` when a `brief:` is present (hop to the brief's `issue:`; the
- *   caller resolves the brief file to read its number);
+ * - `{via: 'prd', prd}` when a `prd:` is present (hop to the prd's `issue:`; the
+ *   caller resolves the prd file to read its number);
  * - `{via: 'issue', issue}` when only a lone-task `issue:` is present;
  * - `undefined` when neither is present (no closure path).
  */
 export function resolveClosingIssue(
-	frontmatter: Pick<Frontmatter, 'brief' | 'issue'>,
-): {via: 'brief'; brief: string} | {via: 'issue'; issue: number} | undefined {
-	if (frontmatter.brief !== undefined) {
-		return {via: 'brief', brief: frontmatter.brief};
+	frontmatter: Pick<Frontmatter, 'prd' | 'issue'>,
+): {via: 'prd'; prd: string} | {via: 'issue'; issue: number} | undefined {
+	if (frontmatter.prd !== undefined) {
+		return {via: 'prd', prd: frontmatter.prd};
 	}
 	if (frontmatter.issue !== undefined) {
 		return {via: 'issue', issue: frontmatter.issue};

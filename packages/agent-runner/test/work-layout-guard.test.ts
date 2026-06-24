@@ -176,24 +176,24 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// Path-construction literals (the SHAPES the centralisation removed) MUST match
 		// — otherwise the guard could rot into a vacuous pass. After the notes-regroup +
 		// task-board-rename flip the task board lives under `tasks/` and the capture
-		// buckets under `notes/`; after the brief-regime rename the brief lifecycle
-		// lives under `briefs/` (`briefs/proposed`/`briefs/ready`/`briefs/tasked`) and
-		// the won't-proceed terminals are per-regime (`tasks/cancelled`/`briefs/dropped`).
+		// buckets under `notes/`; after the prd-regime rename the prd lifecycle
+		// lives under `prds/` (`prds/proposed`/`prds/ready`/`prds/tasked`) and
+		// the won't-proceed terminals are per-regime (`tasks/cancelled`/`prds/dropped`).
 		// A path-construction literal for any of those is now the NESTED form — the
 		// matcher fires on the WHOLE nested path because the folder NAME the alternation
-		// carries is itself `briefs/ready` etc. `questions` keeps its flat shape.
+		// carries is itself `prds/ready` etc. `questions` keeps its flat shape.
 		for (const path of [
 			'work/tasks/todo',
-			'work/briefs/proposed',
-			'work/briefs/ready/',
+			'work/prds/proposed',
+			'work/prds/ready/',
 			'work/tasks/todo/',
 			'work/tasks/backlog/',
 			'work/tasks/cancelled/',
-			'work/briefs/dropped/',
+			'work/prds/dropped/',
 			'work/notes/observations/',
 			'work/tasks/todo/${slug}.md',
 			'work/tasks/done/${slug}.md',
-			'work/briefs/tasked/${slug}.md',
+			'work/prds/tasked/${slug}.md',
 			'work/questions/${type}-${slug}.md',
 			'work/tasks/done/<slug>.md',
 			'${ref}:work/tasks/done',
@@ -212,7 +212,7 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		for (const prose of [
 			"'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ",
 			'work/tasks/todo/${slug}.md (nor work/in-progress/${slug}.md nor ',
-			'Read the source PRD (work/briefs/ready/${input.slug}.md) and review the candidate',
+			'Read the source PRD (work/prds/ready/${input.slug}.md) and review the candidate',
 			'(A repo participates iff it has a work/tasks/todo/ with >= 1 .md file.)',
 			'work/questions/**', // the advance-CI template push-trigger glob
 			'workspace', // a word that merely starts with "work"

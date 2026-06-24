@@ -115,23 +115,23 @@ describe('placement.resolvePlacement: precedence chain', () => {
 
 describe("placement.placementFolder: maps the side onto a lifecycle's slots", () => {
 	const TASK_SLOTS = {staging: 'pre-backlog', pool: 'backlog'};
-	// The brief-placement caller passes its own staging/pool slots (the same
+	// The prd-placement caller passes its own staging/pool slots (the same
 	// lifecycle-generic resolver serves both regimes); modelled here with the
-	// current brief fixture words `{staging: 'pre-brief', pool: 'brief'}`. These
+	// current prd fixture words `{staging: 'pre-prd', pool: 'prd'}`. These
 	// are illustrative slot strings the resolver echoes back, not on-disk names
-	// (the real caller threads `briefs/proposed`/`briefs/ready` via `work-layout`).
-	const BRIEF_SLOTS = {staging: 'pre-brief', pool: 'brief'};
+	// (the real caller threads `prds/proposed`/`prds/ready` via `work-layout`).
+	const PRD_SLOTS = {staging: 'pre-prd', pool: 'prd'};
 
 	it('task slots: staging \u2192 pre-backlog, pool \u2192 backlog', () => {
 		expect(placementFolder(TASK_SLOTS, 'staging')).toBe('pre-backlog');
 		expect(placementFolder(TASK_SLOTS, 'pool')).toBe('backlog');
 	});
 
-	it('brief slots (the brief-placement caller): staging \u2192 pre-brief, pool \u2192 brief', () => {
-		// The brief-placement caller REUSES this exact resolver with its own slots;
+	it('prd slots (the prd-placement caller): staging \u2192 pre-prd, pool \u2192 prd', () => {
+		// The prd-placement caller REUSES this exact resolver with its own slots;
 		// this asserts the lifecycle-generic seam holds (the same function serves
 		// both).
-		expect(placementFolder(BRIEF_SLOTS, 'staging')).toBe('pre-brief');
-		expect(placementFolder(BRIEF_SLOTS, 'pool')).toBe('brief');
+		expect(placementFolder(PRD_SLOTS, 'staging')).toBe('pre-prd');
+		expect(placementFolder(PRD_SLOTS, 'pool')).toBe('prd');
 	});
 });

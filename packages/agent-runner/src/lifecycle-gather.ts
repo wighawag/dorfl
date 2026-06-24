@@ -32,9 +32,9 @@ import type {SelectedLifecyclePools} from './select-priority.js';
  * BOTH OFF (the interim hardcoded-off; the gate tasks flip them on).
  */
 
-/** A `needsAnswers:true` task/brief pulled from the live `work/` state (pre-sidecar). */
+/** A `needsAnswers:true` task/prd pulled from the live `work/` state (pre-sidecar). */
 interface BlockedItem {
-	namespace: 'task' | 'brief';
+	namespace: 'task' | 'prd';
 	slug: string;
 }
 
@@ -45,7 +45,7 @@ interface BlockedItem {
  */
 function readSidecarInPlace(
 	repoPath: string,
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 ): SidecarModel | undefined {
 	const rel = sidecarPathFor(`${namespace}:${slug}`);
@@ -57,8 +57,8 @@ function readSidecarInPlace(
 }
 
 /**
- * Collect every `needsAnswers:true` task (from `work/backlog`) + brief (from
- * `work/briefs`) for the in-place repo, through the read seam (the SAME readers the
+ * Collect every `needsAnswers:true` task (from `work/backlog`) + prd (from
+ * `work/prds`) for the in-place repo, through the read seam (the SAME readers the
  * build-pool scan uses). These are the SURFACE/APPLY candidates this task draws
  * into the selection (today they are build/task-INELIGIBLE, so nothing else
  * surfaces them).
@@ -75,16 +75,16 @@ function blockedItemsInPlace(
 			out.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	const pool = read.resolveBriefPool({repoPath});
-	for (const brief of pool.briefs) {
-		if (brief.needsAnswers === true) {
-			out.push({namespace: 'brief', slug: brief.slug});
+	const pool = read.resolvePrdPool({repoPath});
+	for (const prd of pool.prds) {
+		if (prd.needsAnswers === true) {
+			out.push({namespace: 'prd', slug: prd.slug});
 		}
 	}
-	// SURFACE-on-STAGING widening (brief
+	// SURFACE-on-STAGING widening (prd
 	// `staging-surface-and-apply-promote-safety` F2): when `surfaceStaging` is
 	// ON, the candidate set ADDITIONALLY enumerates `needsAnswers` items resting
-	// in STAGING (`tasks/backlog/` + `briefs/proposed/`), so a tasked item
+	// in STAGING (`tasks/backlog/` + `prds/proposed/`), so a tasked item
 	// surfaces its questions BEFORE the human promotes it. BUILD/claim still
 	// reads POOL-only (`scoreItems` over `state.todo`); only the surface polarity
 	// widens here.
@@ -94,9 +94,9 @@ function blockedItemsInPlace(
 				out.push({namespace: 'task', slug: item.slug});
 			}
 		}
-		for (const brief of read.resolveLocalBriefStaging({repoPath})) {
-			if (brief.needsAnswers === true) {
-				out.push({namespace: 'brief', slug: brief.slug});
+		for (const prd of read.resolveLocalPrdStaging({repoPath})) {
+			if (prd.needsAnswers === true) {
+				out.push({namespace: 'prd', slug: prd.slug});
 			}
 		}
 	}
@@ -146,7 +146,7 @@ export function gatherLifecycleInPlace(input: {
 async function readSidecarMirror(
 	mirrorPath: string,
 	ref: string,
-	namespace: 'task' | 'brief',
+	namespace: 'task' | 'prd',
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<SidecarModel | undefined> {
@@ -163,7 +163,7 @@ async function readSidecarMirror(
  * Gather + build the lifecycle pools for a MIRROR-SIDE bare hub mirror (async).
  * Reads the SAME logical inputs as {@link gatherLifecycleInPlace} \u2014 observations +
  * the `needsAnswers` pool from the mirror's committed `main` (via
- * `resolveMirrorState`), the brief pool via `resolveMirrorBriefPool`, and each item's
+ * `resolveMirrorState`), the prd pool via `resolveMirrorPrdPool`, and each item's
  * sidecar via `git show` \u2014 then hands them to the SAME shared
  * {@link buildLifecyclePools}, so the in-place + mirror enumerations AGREE.
  */
@@ -180,12 +180,12 @@ export async function gatherLifecycleMirror(input: {
 	const env = input.env;
 
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
-	const briefPool = await read.resolveMirrorBriefPool({mirrorPath, ref, env});
+	const prdPool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
 	const surfaceStaging = input.gates?.surfaceStaging === true;
-	const [taskStaging, briefStaging] = surfaceStaging
+	const [taskStaging, prdStaging] = surfaceStaging
 		? await Promise.all([
 				read.resolveMirrorTaskStaging({mirrorPath, ref, env}),
-				read.resolveMirrorBriefStaging({mirrorPath, ref, env}),
+				read.resolveMirrorPrdStaging({mirrorPath, ref, env}),
 			])
 		: [[], []];
 
@@ -195,15 +195,15 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const brief of briefPool.briefs) {
-		if (brief.needsAnswers === true) {
-			blocked.push({namespace: 'brief', slug: brief.slug});
+	for (const prd of prdPool.prds) {
+		if (prd.needsAnswers === true) {
+			blocked.push({namespace: 'prd', slug: prd.slug});
 		}
 	}
-	// SURFACE-on-STAGING widening (brief
+	// SURFACE-on-STAGING widening (prd
 	// `staging-surface-and-apply-promote-safety` F2): mirror-side counterpart of
 	// the in-place widening above — enumerate `needsAnswers` items in
-	// STAGING (`tasks/backlog/` + `briefs/proposed/`) from the bare mirror's
+	// STAGING (`tasks/backlog/` + `prds/proposed/`) from the bare mirror's
 	// committed `<ref>` tree, so the in-place + mirror surfaces AGREE. The
 	// staging reads are skipped entirely when the gate is OFF (no extra git
 	// ls-tree work in the legacy mode).
@@ -212,9 +212,9 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const brief of briefStaging) {
-		if (brief.needsAnswers === true) {
-			blocked.push({namespace: 'brief', slug: brief.slug});
+	for (const prd of prdStaging) {
+		if (prd.needsAnswers === true) {
+			blocked.push({namespace: 'prd', slug: prd.slug});
 		}
 	}
 

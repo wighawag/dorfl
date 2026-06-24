@@ -6,11 +6,11 @@ import {resolveSidecarIdentity} from './sidecar.js';
 import {acquireItemLock, releaseItemLock} from './item-lock.js';
 
 /**
- * The **advancing-lock BORROW** (brief `advance-loop`, task
+ * The **advancing-lock BORROW** (prd `advance-loop`, task
  * `advancing-lock-borrow`, US #19–24).
  *
  * The surface/apply/triage phase's SHORT borrow. As of the capstone cut-over
- * (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, brief
+ * (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, prd
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the legacy `work/advancing/<entry>.md` presence-MARKER on `main` is GONE. The
  * advancing borrow now rides ONLY the UNIFIED per-item lock
@@ -20,15 +20,15 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  *
  * The borrow is keyed by item IDENTITY (`<type>-<slug>`, via
  * {@link resolveSidecarIdentity} — the single source of truth the unified lock,
- * the sidecar, and the work branch all share), so a task, a brief, and an
+ * the sidecar, and the work branch all share), so a task, a prd, and an
  * observation that share a slug NEVER collide, and the SAME `<entry>` ref means an
  * `advance` hold is MUTUALLY EXCLUSIVE with a claim/task hold of the SAME item BY
  * CONSTRUCTION (the second acquirer loses the SAME create-only ref CAS).
  *
  * It is file-ORTHOGONAL to the item it locks: the item's own lifecycle file NEVER
  * moves (the borrow is a LOCK, not a lifecycle transition), which is exactly why
- * it can lock items resting in DIFFERENT source folders (a backlog task, a `briefs/`
- * brief, an `observations/` note) with one uniform mechanism.
+ * it can lock items resting in DIFFERENT source folders (a backlog task, a `prds/`
+ * prd, an `observations/` note) with one uniform mechanism.
  *
  * **TREE-LESS vs BUILD/TASK RUNGS (`acquireUnified`).** The advance tick sets
  * `acquireUnified` PER RUNG (the policy lives in `advance.ts`, where the rung is
@@ -41,7 +41,7 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
  *     working-tree write, no retry budget).
  *   - **BUILD-TASK / TASK-PRD rungs** never take the unified lock at the advance
  *     layer (`acquireUnified` false): `performAdvance` orchestrates an inner
- *     `performDo` that ITSELF acquires the SAME `task-<slug>`/`brief-<slug>` ref
+ *     `performDo` that ITSELF acquires the SAME `task-<slug>`/`prd-<slug>` ref
  *     (the create-only CAS with NO re-entrancy/auto-steal), so taking it again here
  *     would DEADLOCK the tick against itself. For these rungs the acquire/release
  *     are a NO-OP (`acquired`/`released`); the inner `do`'s lock is the sole
@@ -80,7 +80,7 @@ export type AcquireAdvancingLockExitCode = 0 | 1 | 2 | 3;
 
 export interface AcquireAdvancingLockOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`task:<slug>` / `brief:<slug>` /
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `prd:<slug>` /
 	 * `obs:<slug>` / `observation:<slug>`, or a bare `<slug>` = task). The
 	 * resolver derives the type-encoded entry `<type>-<slug>` from it.
 	 */
@@ -100,8 +100,8 @@ export interface AcquireAdvancingLockOptions {
 	 * sets this PER RUNG (the policy lives where the rung is known — `advance.ts`):
 	 * `true` for the TREE-LESS rungs (`surface`/`apply`/`triage`), which have no
 	 * inner `do` and so genuinely need the unified hold to realise advance∥claim /
-	 * advance∥task exclusion; `false` (the default) for the build-task / task-brief
-	 * rungs, whose inner `performDo` ALREADY takes the SAME `task-<slug>`/`brief-<slug>`
+	 * advance∥task exclusion; `false` (the default) for the build-task / task-prd
+	 * rungs, whose inner `performDo` ALREADY takes the SAME `task-<slug>`/`prd-<slug>`
 	 * ref — taking it again here would DEADLOCK the tick against itself, so for those
 	 * the acquire is a NO-OP `acquired`. When `true`, a lock `lost` makes the acquire
 	 * lose DEFINITIVELY (no retry budget). A dry-run never takes the lock (it mutates
@@ -249,7 +249,7 @@ export interface ReleaseAdvancingLockOptions {
 	 * Release the item's UNIFIED per-item lock (the complement of
 	 * {@link AcquireAdvancingLockOptions.acquireUnified}). The advance tick sets this
 	 * for a TREE-LESS rung (`surface`/`apply`/`triage`), where the acquire took the
-	 * unified lock; `false` (the default) for the build-task / task-brief rungs,
+	 * unified lock; `false` (the default) for the build-task / task-prd rungs,
 	 * which never took it at the advance layer (the inner `performDo`'s claim/task
 	 * lock is the exclusion point and is released by the inner `do`) — for those the
 	 * release is a NO-OP `released`.

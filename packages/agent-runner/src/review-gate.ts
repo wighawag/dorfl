@@ -18,7 +18,7 @@ export {
 } from './review-verdict.js';
 
 /**
- * **Gate 2 — the PR/code review gate** (GATES brief `work/briefs/tasked/review.md`), the
+ * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`), the
  * JUDGEMENT layer that rides ON TOP of the deterministic `verify` floor (ADR §8).
  *
  * After the green `verify` and BEFORE the done-move, `complete`/`do` invoke the
@@ -110,7 +110,7 @@ export function buildReviewPrompt(slug: string): string {
 	return [
 		`You are a FRESH-CONTEXT reviewer (Gate 2 — PR/code review). Review the`,
 		`code changes on this work branch AGAINST the task that specified them`,
-		`(work/in-progress/${slug}.md or work/done/${slug}.md) and its source brief.`,
+		`(work/in-progress/${slug}.md or work/done/${slug}.md) and its source prd.`,
 		``,
 		reviewDisciplinePrompt(),
 		``,
@@ -150,7 +150,7 @@ export function buildReviewPrompt(slug: string): string {
 		`comment on the PR — write it FOR a human landing there, NOT as scratch`,
 		`thinking. LEAD with the verdict ("Approved" or "Blocked") and then give the`,
 		`lenses' reasoning and the destination check ("merged as written, do we reach`,
-		`the task/brief goal?"). Write it deliberately; do NOT narrate your process`,
+		`the task/prd goal?"). Write it deliberately; do NOT narrate your process`,
 		`("Let me check…"). Make it as long or as short as the review genuinely`,
 		`needs — there is NO length limit and no need to pad. It is plain text inside`,
 		`the JSON string (escape newlines as \\n). Do NOT fill "edits"/"edit"/`,
@@ -245,10 +245,10 @@ export function harnessReviewGate(
  * Render the TASK-SET acceptance-gate PROMPT — the task-path mirror of
  * {@link buildReviewPrompt} (task `slice-acceptance-gate`). Instead of
  * reviewing a code diff against ONE task, this instructs a FRESH-CONTEXT
- * agent to review the WHOLE candidate SET of tasks produced for brief `slug`,
+ * agent to review the WHOLE candidate SET of tasks produced for prd `slug`,
  * using the **review discipline**'s SET-OF-TASKS lens (coherence / dependency
  * graph / gaps + overlap / "if every task is built exactly as written, do we
- * reach the system the brief describes, and is each task
+ * reach the system the prd describes, and is each task
  * correct-if-implemented?"). It emits the SAME unified `ReviewVerdict` shape
  * so {@link parseReviewVerdict} reads it identically.
  *
@@ -263,24 +263,24 @@ export function harnessReviewGate(
 export function buildTaskAcceptancePrompt(slug: string): string {
 	return [
 		`You are a FRESH-CONTEXT reviewer (the task-SET ACCEPTANCE GATE). Review`,
-		`the candidate tasks this tasking run produced for the brief "${slug}" — the`,
+		`the candidate tasks this tasking run produced for the prd "${slug}" — the`,
 		`new/changed candidate task files on this work branch — AGAINST their source`,
-		`brief (work/briefs/ready/${slug}.md — the held brief stays in briefs/ready/ while it is being`,
+		`prd (work/prds/ready/${slug}.md — the held prd stays in prds/ready/ while it is being`,
 		`tasked).`,
 		``,
 		reviewDisciplinePrompt(),
 		``,
 		`Review the WHOLE SET as a SET, not each task in isolation. The set-level`,
 		`framings the review discipline names:`,
-		`  - COHERENCE — do the tasks speak the brief's (and the system's) language`,
-		`    consistently; no task re-means or forks a concept another task/the brief`,
+		`  - COHERENCE — do the tasks speak the prd's (and the system's) language`,
+		`    consistently; no task re-means or forks a concept another task/the prd`,
 		`    already owns?`,
 		`  - DEPENDENCY GRAPH — is the \`blockedBy\`/ordering graph sound (acyclic, the`,
 		`    keystone first, each task's stated blockers really land its premise)?`,
-		`  - GAPS + OVERLAP — does the set COVER the brief with no missing piece, and`,
+		`  - GAPS + OVERLAP — does the set COVER the prd with no missing piece, and`,
 		`    without two tasks doing the same work or fighting over the same seam?`,
 		`  - CORRECT-IF-IMPLEMENTED — if EVERY task is built EXACTLY as written, do we`,
-		`    reach the system the brief describes, and is each task individually`,
+		`    reach the system the prd describes, and is each task individually`,
 		`    correct-if-implemented (no task that compiles but builds the wrong thing)?`,
 		``,
 		`This is a TERMINAL one-shot accept/reject gate: do NOT edit any task, do NOT`,

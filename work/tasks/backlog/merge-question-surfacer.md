@@ -1,7 +1,7 @@
 ---
 title: Advance surfacer — emit MERGE-QUESTIONS for unmerged `work/*` branches (+ `gh pr list` ceiling)
 slug: merge-question-surfacer
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [14]
 ---
@@ -37,9 +37,9 @@ OUT OF SCOPE for THIS slice (separate slices):
   (`apply-rung-merge-disposition`).
 - The gate axis that gates this surfacer's invocation
   (`merge-questions-gate-axis`).
-- The cross-cutting questions in the brief's "Part of a larger
+- The cross-cutting questions in the prd's "Part of a larger
   generalization" section (sidecar-keying, questions-folder shape) —
-  those are see-also, not in this brief's scope.
+  those are see-also, not in this prd's scope.
 
 ## Acceptance criteria
 

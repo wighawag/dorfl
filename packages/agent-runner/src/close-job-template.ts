@@ -1,12 +1,12 @@
 /**
- * The `install-ci` CLOSE-JOB capability (brief `runner-in-ci`, task
+ * The `install-ci` CLOSE-JOB capability (prd `runner-in-ci`, task
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). This module GENERATES the one fixed workflow file for the close-job and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
  * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text).
  *
- * The discipline (from the brief capability-E row + the Out-of-Scope fence):
+ * The discipline (from the prd capability-E row + the Out-of-Scope fence):
  *
  *   - TRIGGER: a MERGE to `main`. There is no native "PR merged" event, so the
  *     workflow uses `push: {branches: [main]}` (NOT `pull_request: closed`): it
@@ -16,7 +16,7 @@
  *     cannot close. (See the `## Decisions` block in the task.)
  *   - The job INVOKES the close machinery via `agent-runner close-merged-issues`,
  *     which CONSUMES the UNCHANGED engine pieces: the resolution
- *     (`resolveClosingIssue`), the "brief complete?" query (`prd-complete-query`,
+ *     (`resolveClosingIssue`), the "prd complete?" query (`prd-complete-query`,
  *     done), and `IssueProvider.closeIssue`. CI owns ONLY the job + trigger; it
  *     re-implements NONE of those (the Out-of-Scope fence).
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
@@ -54,7 +54,7 @@ export const CLOSE_JOB_WORKFLOW_PATH = 'workflows/close-job.yml';
  */
 export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 	return `\
-# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, brief runner-in-ci).
+# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, prd runner-in-ci).
 # EMITTED by \`agent-runner install-ci\`; the human commits it. DO NOT hand-edit a
 # copy — re-run install-ci to upgrade the shell.
 #
@@ -69,9 +69,9 @@ export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
 #   * the RESOLUTION (resolveClosingIssue): a lone task closes its own \`issue:\`;
-#     a fanned task reaches the number via \`task.brief: → brief issue:\`.
-#   * the "brief complete?" QUERY (prd-complete-query, done): a brief's issue closes
-#     ONLY when ALL its \`brief:<slug>\` tasks are in work/done/.
+#     a fanned task reaches the number via \`task.prd: → prd issue:\`.
+#   * the "prd complete?" QUERY (prd-complete-query, done): a prd's issue closes
+#     ONLY when ALL its \`prd:<slug>\` tasks are in work/done/.
 #   * the CLOSE (IssueProvider.closeIssue): the atomic comment+close seam — NO
 #     direct \`gh\` in the engine core; any comment rides this close, never the PR
 #     comment seam.
@@ -117,7 +117,7 @@ jobs:
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs
-        # the "brief complete?" query for the brief case, and closes via the provider
+        # the "prd complete?" query for the prd case, and closes via the provider
         # seam — all UNCHANGED engine pieces, consumed not re-built.
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}

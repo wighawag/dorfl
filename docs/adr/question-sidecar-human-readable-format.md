@@ -10,7 +10,7 @@ superseded_by:
 # ADR: the question sidecar is a human-readable Markdown surface, not a tooling-owned YAML-ish file
 
 > This REVISITS a resolved format. The original sidecar format is RESOLVED in the `advance-loop`
-> brief (`work/briefs/tasked/advance-loop.md`, "The sidecar FORMAT (RESOLVED here)") and the design
+> prd (`work/prds/tasked/advance-loop.md`, "The sidecar FORMAT (RESOLVED here)") and the design
 > note `work/notes/ideas/advance-loop-question-answer-protocol.md`, and was built faithfully to that
 > spec. This ADR records the maintainer's decision to change it and the
 > why, so the change is not read as drift and the trade-off is not re-litigated.
@@ -67,16 +67,16 @@ Reformat the sidecar so the SAME file is both human-readable on GitHub AND machi
 
 ## Consequences
 
-- The brief-resolved "tooling-owned, byte-exact round-trip" property is deliberately RELAXED to
+- The prd-resolved "tooling-owned, byte-exact round-trip" property is deliberately RELAXED to
   semantic round-trip. This is the cost we accept to make the human surface readable; it is the
   whole point of the change.
 - `serialiseSidecar`/`parseSidecar` and `sidecar.test.ts` are rewritten; the surface-questions skill
   (`skills/surface-questions/SKILL.md`) documents the new hand-written shape; the `advance-loop`
-  brief's (`work/briefs/tasked/advance-loop.md`) "sidecar FORMAT (RESOLVED here)" section is updated
+  prd's (`work/prds/tasked/advance-loop.md`) "sidecar FORMAT (RESOLVED here)" section is updated
   to point here.
 - The clean cutover means an un-migrated old-format sidecar would not parse; the migration must cover
   every live sidecar in one change (verified: 3 live in this repo at decision time).
-- A future reader seeing Markdown + HTML comments instead of the brief's documented YAML-ish format
+- A future reader seeing Markdown + HTML comments instead of the prd's documented YAML-ish format
   must find THIS ADR to understand the deliberate change; hence it is recorded.
 
 ## Status

@@ -3,7 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {scanMirrorPool} from '../src/mirror-pool-scan.js';
 import {scanRepoPaths} from '../src/scan.js';
-import {taskableBriefs, selectPrioritised} from '../src/select-priority.js';
+import {taskablePrds, selectPrioritised} from '../src/select-priority.js';
 import {mergeConfig} from '../src/config.js';
 import {
 	makeScratch,
@@ -50,7 +50,7 @@ function task(frontmatter: Record<string, string>): string {
 }
 
 /** A minimal PRD markdown body with the given frontmatter fields. */
-function brief(frontmatter: Record<string, string>): string {
+function prd(frontmatter: Record<string, string>): string {
 	const lines = ['---'];
 	for (const [k, v] of Object.entries(frontmatter)) {
 		lines.push(`${k}: ${v}`);
@@ -74,14 +74,14 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 				'unblocked.md': task({slug: 'unblocked', blockedBy: '[dep]'}),
 			},
 			done: {'dep.md': task({slug: 'dep'})},
-			brief: {
+			prd: {
 				// taskable
-				'taskme.md': brief({slug: 'taskme'}),
+				'taskme.md': prd({slug: 'taskme'}),
 				// gated out
-				'brief-human.md': brief({slug: 'brief-human', humanOnly: 'true'}),
-				'brief-asks.md': brief({slug: 'brief-asks', needsAnswers: 'true'}),
-				// briefAfter not satisfied (untasked-dep is NOT in prd-tasked/)
-				'after.md': brief({slug: 'after', briefAfter: '[untasked-dep]'}),
+				'prd-human.md': prd({slug: 'prd-human', humanOnly: 'true'}),
+				'prd-asks.md': prd({slug: 'prd-asks', needsAnswers: 'true'}),
+				// prdAfter not satisfied (untasked-dep is NOT in prd-tasked/)
+				'after.md': prd({slug: 'after', prdAfter: '[untasked-dep]'}),
 			},
 		});
 
@@ -97,13 +97,13 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			'unblocked',
 		]);
 		// Exactly the taskable PRDs.
-		expect(result.briefs.map((p) => p.slug).sort()).toEqual(['taskme']);
+		expect(result.prds.map((p) => p.slug).sort()).toEqual(['taskme']);
 	});
 
 	it('honours the GATES: autoBuild off ⇒ no eligible task; autoTask off ⇒ no taskable PRD', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': task({slug: 'ready'})},
-			brief: {'taskme.md': brief({slug: 'taskme'})},
+			prd: {'taskme.md': prd({slug: 'taskme'})},
 		});
 
 		const strict = await scanMirrorPool({
@@ -112,7 +112,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(strict.eligibleTasks).toEqual([]);
-		expect(strict.briefs).toEqual([]);
+		expect(strict.prds).toEqual([]);
 
 		const permissive = await scanMirrorPool({
 			mirrorPath,
@@ -120,7 +120,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(permissive.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(permissive.briefs.map((p) => p.slug)).toEqual(['taskme']);
+		expect(permissive.prds.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
 	it('layers the COMMITTED per-repo .agent-runner.json from the mirror main (parity with the working checkout that reads it)', async () => {
@@ -129,7 +129,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 		// task/PRD become eligible exactly as an in-place checkout would resolve them.
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': task({slug: 'ready'})},
-			brief: {'taskme.md': brief({slug: 'taskme'})},
+			prd: {'taskme.md': prd({slug: 'taskme'})},
 			repoConfig: {autoBuild: true, autoTask: true},
 		});
 
@@ -139,13 +139,13 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(result.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(result.briefs.map((p) => p.slug)).toEqual(['taskme']);
+		expect(result.prds.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
-	it('resolves blockedBy / briefAfter against the mirror own folders (per-repo, like in-place)', async () => {
+	it('resolves blockedBy / prdAfter against the mirror own folders (per-repo, like in-place)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
-			brief: {'after.md': brief({slug: 'after', briefAfter: '[alpha]'})},
+			prd: {'after.md': prd({slug: 'after', prdAfter: '[alpha]'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
@@ -156,7 +156,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(before.eligibleTasks).toEqual([]);
-		expect(before.briefs).toEqual([]);
+		expect(before.prds).toEqual([]);
 
 		// Re-seed with the deps satisfied (fresh mirror).
 		scratch.cleanup();
@@ -165,10 +165,10 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 		const second = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
 			done: {'a.md': task({slug: 'a'})},
-			brief: {
-				'after.md': brief({slug: 'after', briefAfter: '[alpha]'}),
+			prd: {
+				'after.md': prd({slug: 'after', prdAfter: '[alpha]'}),
 			},
-			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
+			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		});
 		const after = await scanMirrorPool({
 			mirrorPath: second.mirrorPath,
@@ -176,7 +176,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(after.eligibleTasks.map((s) => s.slug)).toEqual(['b']);
-		expect(after.briefs.map((p) => p.slug)).toEqual(['after']);
+		expect(after.prds.map((p) => p.slug)).toEqual(['after']);
 	});
 });
 
@@ -189,11 +189,11 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 				'unblocked.md': task({slug: 'unblocked', blockedBy: '[dep]'}),
 			},
 			done: {'dep.md': task({slug: 'dep'})},
-			brief: {
-				'taskme.md': brief({slug: 'taskme'}),
-				'after.md': brief({slug: 'after', briefAfter: '[alpha]'}),
+			prd: {
+				'taskme.md': prd({slug: 'taskme'}),
+				'after.md': prd({slug: 'after', prdAfter: '[alpha]'}),
 			},
-			briefTasked: {'alpha.md': brief({slug: 'alpha'})},
+			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		};
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
@@ -216,7 +216,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			const dir = join(
 				checkout,
 				'work',
-				fixtureFolderRel(folder === 'briefTasked' ? 'briefTasked' : folder),
+				fixtureFolderRel(folder === 'prdTasked' ? 'prdTasked' : folder),
 			);
 			mkdirSync(dir, {recursive: true});
 			for (const [file, content] of Object.entries(
@@ -226,19 +226,19 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			}
 		}
 		const inPlaceReport = scanRepoPaths([checkout], cfg);
-		const inPlaceBriefs = taskableBriefs({
+		const inPlacePrds = taskablePrds({
 			candidates: (await import('../src/ledger-read.js')).ledgerRead
-				.resolveBriefPool({repoPath: checkout})
-				.briefs.map((p) => ({
+				.resolvePrdPool({repoPath: checkout})
+				.prds.map((p) => ({
 					repoPath: checkout,
 					slug: p.slug,
 					humanOnly: p.humanOnly,
 					needsAnswers: p.needsAnswers,
-					briefAfter: p.briefAfter,
+					prdAfter: p.prdAfter,
 				})),
 			taskedSlugs: (
 				await import('../src/ledger-read.js')
-			).ledgerRead.resolveBriefPool({repoPath: checkout}).taskedSlugs,
+			).ledgerRead.resolvePrdPool({repoPath: checkout}).taskedSlugs,
 			autoTask: cfg.autoTask,
 		});
 
@@ -249,8 +249,8 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 				.map((i) => i.slug)
 				.sort(),
 		);
-		expect(mirror.briefs.map((p) => p.slug).sort()).toEqual(
-			inPlaceBriefs.map((p) => p.slug).sort(),
+		expect(mirror.prds.map((p) => p.slug).sort()).toEqual(
+			inPlacePrds.map((p) => p.slug).sort(),
 		);
 	});
 });
@@ -262,14 +262,14 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				'alpha.md': task({slug: 'alpha'}),
 				'beta.md': task({slug: 'beta'}),
 			},
-			brief: {'gamma.md': brief({slug: 'gamma'})},
+			prd: {'gamma.md': prd({slug: 'gamma'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 		const pool = await scanMirrorPool({mirrorPath, config: cfg, env: gitEnv()});
 
 		// Build the PRD candidate list the SAME way do-autopick does, from the pool the
 		// mirror scan returns (no duplicated enumeration).
-		const briefCandidates = pool.briefs;
+		const prdCandidates = pool.prds;
 
 		// LOOP driver shape (`run`): take ALL eligible, parallelism is the loop's job.
 		const loopSelection = selectPrioritised({
@@ -278,12 +278,12 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			briefs: briefCandidates,
+			prds: prdCandidates,
 		});
 		expect(loopSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:alpha',
 			'task:beta',
-			'brief:gamma',
+			'prd:gamma',
 		]);
 
 		// ONE-SHOT driver shape (`advance --remote -n 2`): ALWAYS SEQUENTIAL, bound by
@@ -294,7 +294,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			briefs: briefCandidates,
+			prds: prdCandidates,
 			count: 2,
 		});
 		expect(oneShotSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

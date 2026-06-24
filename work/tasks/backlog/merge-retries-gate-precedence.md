@@ -1,7 +1,7 @@
 ---
 title: `mergeRetries` resolves through the gate-family precedence chain (flag > env > per-repo > global > default)
 slug: merge-retries-gate-precedence
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [5]
 ---
@@ -51,7 +51,7 @@ unchanged.
 
 ## Prompt
 
-> Read Story 5 + Applied Answer q1 of the brief. Locate the existing
+> Read Story 5 + Applied Answer q1 of the prd. Locate the existing
 > gate-precedence helper (search for sibling gates such as
 > `observationTriage` resolution) and follow its shape exactly — do not
 > invent a parallel chain. Thread the resolved value into the merge loop

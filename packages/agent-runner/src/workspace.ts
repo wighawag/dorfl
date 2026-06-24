@@ -155,8 +155,8 @@ export interface CreateJobOptions {
 	/** The work slug being processed (→ branch `work/<type>-<slug>` + work-id). */
 	slug: string;
 	/**
-	 * The item TYPE — `'task'` (build) or `'brief'` (tasking) — namespacing the
-	 * work branch via {@link workBranchRef} so a same-slug task and brief never
+	 * The item TYPE — `'task'` (build) or `'prd'` (tasking) — namespacing the
+	 * work branch via {@link workBranchRef} so a same-slug task and prd never
 	 * collide. Defaults to `'task'`.
 	 */
 	type?: SlugNamespace;

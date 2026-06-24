@@ -1,5 +1,5 @@
 /**
- * The pure `advance` TICK classifier (brief `advance-loop`, task
+ * The pure `advance` TICK classifier (prd `advance-loop`, task
  * `advance-tick-classifier`) — the substrate-agnostic, read-only seam BOTH the
  * one-shot driver and the loop (`run`) driver wrap. Mirrors the existing pure
  * `categorise.ts` / `eligibility.ts` seams: NO model, NO lock, NO file mutation
@@ -15,7 +15,7 @@
  *
  *   needsAnswers: true?
  *   ├─ NO  → ANALYSE (state-appropriate rung: build a ready task / task a ready
- *   │        brief / triage an untriaged observation). Analysis MAY advance, OR
+ *   │        prd / triage an untriaged observation). Analysis MAY advance, OR
  *   │        SURFACE questions.
  *   └─ YES → sidecar exists?
  *            ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar)
@@ -39,8 +39,8 @@
  *
  * "ANALYSE" is NOT "always advance" — surface-and-pause is itself a rung, so the
  * ANALYSE branch resolves to the per-TYPE rung the executor will run (the cells
- * of the brief's "Per-item-type transitions" table): `build-task` (task),
- * `task-brief` (brief), `triage-observation` (observation) when there are no open
+ * of the prd's "Per-item-type transitions" table): `build-task` (task),
+ * `task-prd` (prd), `triage-observation` (observation) when there are no open
  * questions; `surface` (first-pass question generation) when `needsAnswers` but
  * no sidecar yet; `apply` when all entries are answered.
  */
@@ -56,7 +56,7 @@ import {allAnswered} from './sidecar.js';
  * never a third state store.
  */
 export interface TickItem {
-	/** The item type — the state machine is per-TYPE (task / brief / observation). */
+	/** The item type — the state machine is per-TYPE (task / prd / observation). */
 	type: SidecarType;
 	/** Autonomy axis 2 (DISCOVERED): `true` ⇒ open questions block autonomous work. */
 	needsAnswers: boolean | undefined;
@@ -74,8 +74,8 @@ export type TickRungKind =
 	// --- ANALYSE rungs (no open questions; advance one lifecycle rung) ---
 	/** A ready task → build it (later: invoke the `do <slug>` machinery). */
 	| 'build-task'
-	/** A ready brief → task it (later: invoke the `do brief:<slug>` machinery). */
-	| 'task-brief'
+	/** A ready prd → task it (later: invoke the `do prd:<slug>` machinery). */
+	| 'task-prd'
 	/** An untriaged observation → triage it (auto-disposition or surface a question). */
 	| 'triage-observation'
 	// --- Transitional ANALYSE rungs (driven by the two signals) ---
@@ -118,7 +118,7 @@ export interface TickClassification {
 /** The per-TYPE ANALYSE rung when there are no open questions (the no-gate path). */
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
-	brief: 'task-brief',
+	prd: 'task-prd',
 	observation: 'triage-observation',
 };
 
@@ -126,12 +126,12 @@ const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
  * Classify ONE tick PURELY from the item's two signals + its type — read-only,
  * no model, no lock, no file mutation. Returns the classified rung the executor
  * will later run (or `no-op` / `invariant-violation`). The decision tree is the
- * brief's per-item state machine, with invariant 1 asserted at the boundary:
+ * prd's per-item state machine, with invariant 1 asserted at the boundary:
  *
  *   - `needsAnswers` NOT true:
  *       - a sidecar present ⇒ INVARIANT 1 BROKEN (`sidecar-without-needsAnswers`)
  *         → `invariant-violation`. (`needsAnswers:false ⟺ no active sidecar`.)
- *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-task` / `task-brief` /
+ *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-task` / `task-prd` /
  *         `triage-observation`).
  *   - `needsAnswers` true:
  *       - NO sidecar ⇒ `surface` (first-pass question generation — transitional).

@@ -5,7 +5,7 @@ import {join} from 'node:path';
  * folder-name union/array, the item-scan predicate, and the prefix-task helpers
  * used across `src/`.
  *
- * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` brief — the de-risking
+ * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` prd — the de-risking
  * checkpoint. EVERY raw work-path literal (`join(cwd, 'work', ...)`, `'work/<folder>'`,
  * `'work/<folder>/'.length` prefix-tasks) and EVERY folder-name union/array that
  * used to be scattered across ~70 files now routes through here. The NAMES are
@@ -15,7 +15,7 @@ import {join} from 'node:path';
  * The whole point of the seam: the LATER rename tasks flip the VALUES in
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
  * Call sites reference folders by their SYMBOLIC key (`'tasks-todo'`,
- * `'briefs-ready'`, …), never by a raw string, so renaming a folder never
+ * `'prds-ready'`, …), never by a raw string, so renaming a folder never
  * re-touches a single call site.
  *
  * Domain note (crown-jewel invariant): a `work/` tree is a set of governance
@@ -47,13 +47,13 @@ export const WORK_ROOT = 'work' as const;
  *     `tasks-backlog`) → `tasks/todo` (the agent pool, key `tasks-todo`) →
  *     `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed terminal, key
  *     `cancelled`).
- *   - BRIEF lifecycle, the `briefs/` regime: `briefs/proposed` (staging, key
- *     `briefs-proposed`) → `briefs/ready` (auto-task pool, key `briefs-ready`) →
- *     `briefs/tasked` (tasked, resting, key `briefs-tasked`) / `briefs/dropped`
- *     (the PER-REGIME won't-proceed terminal, key `briefs-dropped`).
- *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `briefs/dropped`)
+ *   - PRD lifecycle, the `prds/` regime: `prds/proposed` (staging, key
+ *     `prds-proposed`) → `prds/ready` (auto-task pool, key `prds-ready`) →
+ *     `prds/tasked` (tasked, resting, key `prds-tasked`) / `prds/dropped`
+ *     (the PER-REGIME won't-proceed terminal, key `prds-dropped`).
+ *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `prds/dropped`)
  *     replace the previous shared top-level `work/dropped/`: a dropped task and a
- *     dropped brief sharing a slug used to COLLIDE on one bare-slug
+ *     dropped prd sharing a slug used to COLLIDE on one bare-slug
  *     `work/dropped/<slug>.md`; namespacing each regime's terminal removes the
  *     collision. A dropped OBSERVATION needs no terminal — notes leave by deletion.
  *   - Capture buckets under the `notes/` umbrella (do NOT flow; leave by deletion):
@@ -66,11 +66,11 @@ export const WORK_ROOT = 'work' as const;
  *
  * NOTE on the symbolic-key vocabulary cutover
  * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`): the KEYS below now
- * read in the NEW task/brief vocabulary (`tasks-backlog`/`tasks-todo`,
- * `briefs-proposed`/`briefs-ready`/`briefs-tasked`). This is a PURE in-code symbol
+ * read in the NEW task/prd vocabulary (`tasks-backlog`/`tasks-todo`,
+ * `prds-proposed`/`prds-ready`/`prds-tasked`). This is a PURE in-code symbol
  * rename — the VALUE strings are byte-identical to before, so no on-disk folder
  * moved. An earlier sibling task (`folder-taxonomy-reorg-and-rename` Phase 1)
- * flipped the VALUES (`tasks/todo`, `briefs/ready`, …) while deliberately leaving
+ * flipped the VALUES (`tasks/todo`, `prds/ready`, …) while deliberately leaving
  * the KEYS on the old words; this task flips only the KEYS so the registry reads
  * coherently. The folder-as-status invariant and every resolved path are unchanged.
  */
@@ -81,10 +81,10 @@ export const WORK_FOLDER_NAME = {
 	'needs-attention': 'needs-attention',
 	done: 'tasks/done',
 	cancelled: 'tasks/cancelled',
-	'briefs-proposed': 'briefs/proposed',
-	'briefs-ready': 'briefs/ready',
-	'briefs-tasked': 'briefs/tasked',
-	'briefs-dropped': 'briefs/dropped',
+	'prds-proposed': 'prds/proposed',
+	'prds-ready': 'prds/ready',
+	'prds-tasked': 'prds/tasked',
+	'prds-dropped': 'prds/dropped',
 	observations: 'notes/observations',
 	ideas: 'notes/ideas',
 	findings: 'notes/findings',
@@ -200,7 +200,7 @@ export type TaskResolutionFolder = (typeof TASK_RESOLUTION_FOLDERS)[number];
 
 /**
  * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
- * in (brief-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
+ * in (prd-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-todo`, `in-progress`,
  * `needs-attention`, `done`.
  */
 export const TASK_LIFECYCLE_FOLDERS = [
@@ -210,7 +210,7 @@ export const TASK_LIFECYCLE_FOLDERS = [
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the task lifecycle folders (brief-complete.ts / close-job.ts). */
+/** One of the task lifecycle folders (prd-complete.ts / close-job.ts). */
 export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
 
 /**
@@ -219,9 +219,9 @@ export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
  * `in-progress`/`needs-attention`/`tasking` are NOT here (they are lock-ref state).
  * `cancelled` is the task regime's won't-proceed terminal (the per-regime split
- * of the previous shared `dropped/`); the brief regime's terminal `briefs-dropped`
+ * of the previous shared `dropped/`); the prd regime's terminal `prds-dropped`
  * is NOT here (this set is the TASK board's state machine, keyed by `tasks/`-slug,
- * and a brief never co-resides with a task on the tasks board).
+ * and a prd never co-resides with a task on the tasks board).
  */
 export const LEDGER_STATUS_FOLDERS = [
 	'tasks-todo',
@@ -233,14 +233,14 @@ export const LEDGER_STATUS_FOLDERS = [
 export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
 
 /**
- * The BRIEF-lifecycle folders an `issue:`-bearing brief / a tasked brief can reside
- * in: `briefs-ready` (source / pool), `briefs-tasked` (tasked, resting) —
- * close-job.ts `BRIEF_FOLDERS`.
+ * The PRD-lifecycle folders an `issue:`-bearing prd / a tasked prd can reside
+ * in: `prds-ready` (source / pool), `prds-tasked` (tasked, resting) —
+ * close-job.ts `PRD_FOLDERS`.
  */
-export const BRIEF_FOLDERS = [
-	'briefs-ready',
-	'briefs-tasked',
+export const PRD_FOLDERS = [
+	'prds-ready',
+	'prds-tasked',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the brief-lifecycle folders (close-job.ts / ledger-read.ts). */
-export type BriefFolder = (typeof BRIEF_FOLDERS)[number];
+/** One of the prd-lifecycle folders (close-job.ts / ledger-read.ts). */
+export type PrdFolder = (typeof PRD_FOLDERS)[number];

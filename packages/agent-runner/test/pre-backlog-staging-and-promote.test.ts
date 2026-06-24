@@ -51,8 +51,8 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-function seedBrief(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'briefs', 'ready');
+function seedPrd(repo: string, slug: string): void {
+	const dir = join(repo, 'work', 'prds', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -69,7 +69,7 @@ function seedBrief(repo: string, slug: string): void {
 		].join('\n'),
 	);
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
-	run('git', ['commit', '-q', '-m', `brief: ${slug}`], repo, {env: gitEnv()});
+	run('git', ['commit', '-q', '-m', `prd: ${slug}`], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
@@ -84,7 +84,7 @@ function stagingAgent(file = 'child'): TaskAgentRunner {
 				'---',
 				`title: ${file}`,
 				`slug: ${file}`,
-				'brief: it',
+				'prd: it',
 				'---',
 				'',
 				'## Prompt',
@@ -141,7 +141,7 @@ function showArbiterMain(repo: string, path: string): string {
 describe('STEP A — tasker output lands STAGED in pre-backlog/, not backlog/', () => {
 	it('a --merge tasking run commits the emitted task under work/tasks/backlog/ (the pool is untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -157,14 +157,14 @@ describe('STEP A — tasker output lands STAGED in pre-backlog/, not backlog/', 
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/todo/child.md')).toBe(false);
 		// PRD lifecycle move still happens (the staging split is orthogonal).
-		expect(onArbiterMain(repo, 'work/briefs/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
 	});
 });
 
 describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (readers unchanged)', () => {
 	it('a STAGED slug is NOT claimable (the claim CAS reads work/tasks/todo/ only)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -204,7 +204,7 @@ describe('STEP A — work/tasks/todo/ STILL means the agent-eligible pool (reade
 describe('STEP A — the runner-owned promotion makes a staged task claimable', () => {
 	it('promoteFromPreBacklog moves work/tasks/backlog/<slug>.md -> work/tasks/todo/<slug>.md on the arbiter; afterwards the slug claims', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -265,7 +265,7 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 describe('STEP A — the agent cannot self-place into the pool (pool-placement fence)', () => {
 	it('an agent that writes work/tasks/todo/<hijack>.md during tasking has its write scrubbed; only work/tasks/backlog/<legit>.md lands', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -292,7 +292,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 		// Seed a pool task on the arbiter first.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['poolitem']);
 		const poolBefore = showArbiterMain(repo, 'work/tasks/todo/poolitem.md');
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		// Agent writes a legit staged task AND tampers with the pre-existing pool task.
 		const tamperingAgent: TaskAgentRunner = ({cwd}) => {
 			const staged = join(cwd, 'work', 'tasks', 'backlog');
@@ -330,10 +330,10 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
  * THE CLI WIRE (the Gate-2 block this task was bounced for, now closed). The
  * resolver + the `performTask` options + the per-repo/env config keys all worked
  * in isolation, but `config.tasksLandIn` and the `--tasks-land-in` flag were
- * NEVER threaded from `cli.ts` into the `DoOptions` the `do brief:` path builds, so
+ * NEVER threaded from `cli.ts` into the `DoOptions` the `do prd:` path builds, so
  * the configured-default + explicit-flag rungs were dead from the shipped binary
  * (a user setting `tasksLandIn: 'todo'` saw the built-in `pre-backlog` floor).
- * These tests drive the REAL `buildProgram()` `do brief:` path end-to-end on a
+ * These tests drive the REAL `buildProgram()` `do prd:` path end-to-end on a
  * `--bare file://` arbiter, with the tasker STUBBED by a trivial `agentCmd` bash
  * command (the null harness shells `bash -c <agentCmd>` in the worktree), and
  * assert the configured / flag-chosen placement ACTUALLY reaches the runner.
@@ -344,7 +344,7 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
 // shells out to), so it is passed via the `--agent-cmd` FLAG, not the repo config.
 const STUB_TASKER_AGENT_CMD =
 	"mkdir -p work/tasks/backlog && printf '%s\\n' '---' 'title: child' " +
-	"'slug: child' 'brief: it' '---' '' '## Prompt' '' '> build it' " +
+	"'slug: child' 'prd: it' '---' '' '## Prompt' '' '> build it' " +
 	'> work/tasks/backlog/child.md';
 
 /** Write a per-repo `.agent-runner.json` (the `tasksLandIn` default under test) + push it. */
@@ -420,13 +420,13 @@ async function runDo(
 }
 
 describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the tasker (the wire)', () => {
-	it('a per-repo `tasksLandIn: todo` reaches performTask via `do brief:` (task lands in the POOL, not pre-backlog/)', async () => {
+	it('a per-repo `tasksLandIn: todo` reaches performTask via `do prd:` (task lands in the POOL, not pre-backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		// The key under test: a per-repo configured default of `todo` (the pool).
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
-			'brief:it',
+			'prd:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -440,11 +440,11 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 
 	it('the built-in floor still STAGES when no tasksLandIn is configured (control: proves the case above is the config, not a default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		// No tasksLandIn — the resolver's built-in floor stages.
 		writeRepoConfig(repo, {autoTask: true});
 		const {code, captured} = await runDo(repo, [
-			'brief:it',
+			'prd:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -457,10 +457,10 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 
 	it('the explicit `--tasks-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: todo` config (operator flag wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'todo'});
 		const {code, captured} = await runDo(repo, [
-			'brief:it',
+			'prd:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -476,14 +476,14 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 
 	it('`--tasks-land-in <bad>` FAILS LOUDLY (a usage error, never a silent drop)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		seedBrief(repo, 'it');
+		seedPrd(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true});
 		// `explicitTasksLandInFromFlag` throws on a bad value; the action surfaces it
 		// as a fatal usage error (a non-zero exit / thrown error), never a silent
 		// fall-through to the built-in floor. Assert the run did NOT succeed and
 		// nothing was tasked.
 		const {code, captured} = await runDo(repo, [
-			'brief:it',
+			'prd:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',

@@ -156,7 +156,7 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		// The report suggests `release-lock <item>`; the item form must be the SAME
 		// the lock API accepts (the inverse of lockEntryFor for the known namespaces).
 		expect(itemFromLockEntry('task-foo')).toBe('task:foo');
-		expect(itemFromLockEntry('brief-bar')).toBe('brief:bar');
+		expect(itemFromLockEntry('prd-bar')).toBe('prd:bar');
 		expect(itemFromLockEntry('observation-baz')).toBe('observation:baz');
 	});
 });

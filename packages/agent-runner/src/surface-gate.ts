@@ -5,7 +5,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
 import type {NewQuestion, SidecarDisposition} from './sidecar.js';
 
 /**
- * The **SURFACE gate** (brief `advance-loop`, task `advance-rung-surface`,
+ * The **SURFACE gate** (prd `advance-loop`, task `advance-rung-surface`,
  * US #32/33) — the surface-question rung's fresh-context spawn, the DIRECT mirror
  * of the PR/code review gate ({@link import('./review-gate.js')}). On
  * `classify=surface`, the advance engine spawns a FRESH-CONTEXT agent with the
@@ -68,7 +68,7 @@ export interface SurfaceEmit {
 
 /** What the surface gate needs to launch a fresh-context surface of one item. */
 export interface SurfaceGateInput {
-	/** The namespaced identity the surface is for (`task:foo` / `brief:bar` / `observation:baz`). */
+	/** The namespaced identity the surface is for (`task:foo` / `prd:bar` / `observation:baz`). */
 	item: string;
 	/** The working clone/checkout the gate runs in. */
 	cwd: string;

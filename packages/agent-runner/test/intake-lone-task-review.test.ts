@@ -441,8 +441,8 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 2}}),
 			decide: async () => ({
-				outcome: 'brief',
-				briefTitle: 'A coherent feature',
+				outcome: 'prd',
+				prdTitle: 'A coherent feature',
 			}),
 			reviewTask: spyGate,
 			env: gitEnv(),

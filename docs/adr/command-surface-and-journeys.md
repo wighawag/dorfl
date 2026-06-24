@@ -9,7 +9,7 @@ superseded_by:
 
 # ADR: command surface & user journeys
 
-> **STATUS: accepted.** A full journey-model design pass (2026-06-05) reconciled a command surface that had grown task-by-task into an incoherent set. This ADR is the durable source of truth for the command model; CONTEXT.md "The faces (commands)" is the short glossary view. It **mandates a reconciliation** of the existing command code + the `runner-in-ci` / `auto-slice` briefs/tasks to this model (see "Reconciliation cadence"); those `work/observations/` notes track the drift this ADR deliberately introduces.
+> **STATUS: accepted.** A full journey-model design pass (2026-06-05) reconciled a command surface that had grown task-by-task into an incoherent set. This ADR is the durable source of truth for the command model; CONTEXT.md "The faces (commands)" is the short glossary view. It **mandates a reconciliation** of the existing command code + the `runner-in-ci` / `auto-slice` prds/tasks to this model (see "Reconciliation cadence"); those `work/observations/` notes track the drift this ADR deliberately introduces.
 
 ## The model in one sentence
 
@@ -61,7 +61,7 @@ A sharp boundary, NOT two flavours of one thing:
       | `do --remote <r> <slug>` | foreign | a job worktree (isolation implied — no checkout exists) |
 
       `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--isolated` names the isolation intent (a worktree off my own arbiter) — the affordance an isolated supervised conductor needs without forcing a foreign URL. The two are orthogonal and `--isolated` is purely additive. **Decided 2026-06-08; all three forms ship today.**
-  - **Auto-task priority within a tick:** eligible **tasks first, then briefs to task** (drain ready work before creating more), with a per-repo toggle to flip it.
+  - **Auto-task priority within a tick:** eligible **tasks first, then prds to task** (drain ready work before creating more), with a per-repo toggle to flip it.
 
 CI uses **`do`** AND **`advance`** (wired by the future `install-ci`), never `run --once` — which verb is the §3b routing rule.
 
@@ -69,26 +69,26 @@ CI uses **`do`** AND **`advance`** (wired by the future `install-ci`), never `ru
 
 The usual confusion conflates two distinct concerns. The routing rule, recorded so it is not re-derived:
 
-- **"What do I work on?" (SELECTION) — `do` and `advance` are ~equal.** Both auto-pick over the SAME mirror-side eligible-pool scan (`do -n` picks buildable tasks + taskable briefs; `advance -n` picks over that same pool PLUS observations). For a pure "build whatever is ready on a cron" job they are about the same amount of workflow YAML; **`advance` does NOT reduce selection logic.** A build-only CI cron is well served by `do` alone.
-- **The LIFECYCLE — where `advance` earns its place.** `do` knows only two rungs: build a task, task a brief. It structurally CANNOT triage an observation, surface a question to `work/questions/` when an item needs judgement, or apply a human's committed answer and then advance. `advance`'s whole point is "do every autonomous rung, and when you hit judgement, write a question file and STOP" — which is what lets a CI loop drain a POPULATED `work/` tree toward "all ready tasks built," the human's only job being to answer question files on their own time. `do` has no question/answer protocol, so it cannot run that loop.
+- **"What do I work on?" (SELECTION) — `do` and `advance` are ~equal.** Both auto-pick over the SAME mirror-side eligible-pool scan (`do -n` picks buildable tasks + taskable prds; `advance -n` picks over that same pool PLUS observations). For a pure "build whatever is ready on a cron" job they are about the same amount of workflow YAML; **`advance` does NOT reduce selection logic.** A build-only CI cron is well served by `do` alone.
+- **The LIFECYCLE — where `advance` earns its place.** `do` knows only two rungs: build a task, task a prd. It structurally CANNOT triage an observation, surface a question to `work/questions/` when an item needs judgement, or apply a human's committed answer and then advance. `advance`'s whole point is "do every autonomous rung, and when you hit judgement, write a question file and STOP" — which is what lets a CI loop drain a POPULATED `work/` tree toward "all ready tasks built," the human's only job being to answer question files on their own time. `do` has no question/answer protocol, so it cannot run that loop.
 - **The genuine workflow simplification `advance` adds is the TRIGGER + the rung set, NOT the matrix logic.** The shipped CI template (`docs/ci/advance-loop.yml.template`) shows it: (1) an `on: push` touching `work/questions/**` trigger — "a human committed an answer → run a pass to apply it and surface the next batch" — a cadence `do` has no rung for; (2) one dispatch input `integrationMode` drives BOTH the integration flag AND the job shape (`propose` → a MATRIX of independent one-PR-per-item jobs; `merge` → a SINGLE SEQUENTIAL job, because merge-mode items rebase-chain and parallel merge jobs would thrash the main-CAS). NOTE the propose=matrix / merge=sequential discipline is a property of the INTEGRATION MODE, not the verb — `do` could use the identical CI shape.
 
-**The routing rule:** CI is "build ready tasks / task ready briefs on a cron," human triages/answers locally ⇒ **`do -n` (or `do --remote -n`) is sufficient and simpler** (two rungs, no sidecar machinery). CI should drain a whole populated `work/` tree toward done while a human only answers committed question files (the "human is the clock" north star) ⇒ **`advance`** — the win is the surface/apply rungs + the `on: push work/questions/**` trigger, not the auto-pick. One line: **`advance` doesn't simplify PICKING; it adds the rungs and the answer-driven trigger that let CI advance the LIFECYCLE, not just the build.** (Folded 2026-06-12 from `work/observations/do-vs-advance-in-ci-selection-vs-lifecycle.md`; consistent with the `runner-in-ci` brief's "two distinct concerns" + "do AND advance both belong in CI" notes and ADR `ci-config-policy-and-gate-family`.)
+**The routing rule:** CI is "build ready tasks / task ready prds on a cron," human triages/answers locally ⇒ **`do -n` (or `do --remote -n`) is sufficient and simpler** (two rungs, no sidecar machinery). CI should drain a whole populated `work/` tree toward done while a human only answers committed question files (the "human is the clock" north star) ⇒ **`advance`** — the win is the surface/apply rungs + the `on: push work/questions/**` trigger, not the auto-pick. One line: **`advance` doesn't simplify PICKING; it adds the rungs and the answer-driven trigger that let CI advance the LIFECYCLE, not just the build.** (Folded 2026-06-12 from `work/observations/do-vs-advance-in-ci-selection-vs-lifecycle.md`; consistent with the `runner-in-ci` prd's "two distinct concerns" + "do AND advance both belong in CI" notes and ADR `ci-config-policy-and-gate-family`.)
 
-## 3a. Slug-namespace resolution: a brief and a task may share a slug
+## 3a. Slug-namespace resolution: a prd and a task may share a slug
 
-A brief and a task **can have the same slug** (e.g. brief `auto-slice`). `do` spans both namespaces (build a task OR task a brief), so a bare slug is ambiguous. The rule:
+A prd and a task **can have the same slug** (e.g. prd `auto-slice`). `do` spans both namespaces (build a task OR task a prd), so a bare slug is ambiguous. The rule:
 
-| input | resolves to | on collision (both a task AND a brief named `<slug>`) |
+| input | resolves to | on collision (both a task AND a prd named `<slug>`) |
 | --- | --- | --- |
-| `<slug>` (bare) | the **task** | **ERROR** — "ambiguous; use `task:<slug>` or `brief:<slug>`" |
+| `<slug>` (bare) | the **task** | **ERROR** — "ambiguous; use `task:<slug>` or `prd:<slug>`" |
 | `task:<slug>` | the task | always unambiguous |
-| `brief:<slug>` | the brief (task it) | always unambiguous |
+| `prd:<slug>` | the prd (task it) | always unambiguous |
 
-- **Bare `<slug>` is HUMAN CONVENIENCE ONLY.** It resolves to the task, but ONLY after confirming no brief shares the slug; on a collision it **errors** (loud, immediate, human-resolvable) — it never silently guesses. (So even the bare path does a cheap cross-namespace existence check.)
-- **CI / automation / `install-ci`-generated workflows MUST use explicit prefixes** (`do task:foo` / `do brief:foo`), NEVER bare — because (a) in CI an ambiguity error halts the job, and (b) a bare slug that works today would silently break when a same-named brief/task appears later. Explicit prefixes are collision-proof across time.
-- **`do`** accepts all three. **Task-only commands** (`claim`, `start`, `resume`, `complete`, `prompt`, `requeue`, `work-on`) accept bare (= task) and `task:` (explicit alias), and **reject `brief:`** with a clear "operates on tasks, not briefs" error.
-- This mirrors a distinction the contract ALREADY makes by field: task `blockedBy` resolves against tasks (`work/done/`), brief `briefAfter` against briefs (residence in `work/briefs/tasked/` — the folder is the source of truth for tasked-ness, mirroring `blockedBy` → `done/`). The `task:`/`brief:` prefixes are the command-line form of that same namespace split — one coherent rule, not two.
+- **Bare `<slug>` is HUMAN CONVENIENCE ONLY.** It resolves to the task, but ONLY after confirming no prd shares the slug; on a collision it **errors** (loud, immediate, human-resolvable) — it never silently guesses. (So even the bare path does a cheap cross-namespace existence check.)
+- **CI / automation / `install-ci`-generated workflows MUST use explicit prefixes** (`do task:foo` / `do prd:foo`), NEVER bare — because (a) in CI an ambiguity error halts the job, and (b) a bare slug that works today would silently break when a same-named prd/task appears later. Explicit prefixes are collision-proof across time.
+- **`do`** accepts all three. **Task-only commands** (`claim`, `start`, `resume`, `complete`, `prompt`, `requeue`, `work-on`) accept bare (= task) and `task:` (explicit alias), and **reject `prd:`** with a clear "operates on tasks, not prds" error.
+- This mirrors a distinction the contract ALREADY makes by field: task `blockedBy` resolves against tasks (`work/done/`), prd `prdAfter` against prds (residence in `work/prds/tasked/` — the folder is the source of truth for tasked-ness, mirroring `blockedBy` → `done/`). The `task:`/`prd:` prefixes are the command-line form of that same namespace split — one coherent rule, not two.
 
 ## 4. The human face — do work yourself (optionally with your AI)
 
@@ -139,21 +139,21 @@ Mirrors sync **lazily, on every operation that fetches** — there is no push-tr
 
 A clean line the whole surface is checked against, and a reinforcement of ADR §9 (the `work/` contract + claim protocol is a **runner-agnostic protocol**; `agent-runner` is ONE implementation):
 
-- **Adopting the contract** (set up a repo, migrate from another system, the tasking/brief methodology) is **protocol-layer → a SKILL** (tool-agnostic; anyone can follow it with zero `agent-runner` installed). This is why `to-task`, `to-brief`, and `setup` (the single onboarding/migration skill) are SKILLS.
+- **Adopting the contract** (set up a repo, migrate from another system, the tasking/prd methodology) is **protocol-layer → a SKILL** (tool-agnostic; anyone can follow it with zero `agent-runner` installed). This is why `to-task`, `to-prd`, and `setup` (the single onboarding/migration skill) are SKILLS.
 - **Executing work** (claim CAS, the `run` loop, `do`, isolation, integration) is **implementation-layer → a COMMAND.**
 
 Corollary for any future _checking/diagnostic_ tooling (e.g. a possible `doctor`): the **core check must stay harness-agnostic** (the contract surface: `work/` folders, `CONTEXT.md`+name, valid config, a registered arbiter, a runnable gate). **Skill _location/discoverability_ is harness-specific** (pi reads `~/.agents/skills/`; another harness reads elsewhere) → it must be **delegated to the harness adapter via the §5 seam**, never hardcoded. The harness seam is the boundary for ALL harness-specific knowledge, not just agent invocation. (A `doctor` command is NOT decided — see the future-items note; until/unless we add it, clear docs listing required vs recommended skills suffice.)
 
 ## Reconciliation cadence (mandated by accepting this ADR)
 
-This ADR deliberately makes the current code + some briefs/tasks drift. Resolve in THREE phases, in order:
+This ADR deliberately makes the current code + some prds/tasks drift. Resolve in THREE phases, in order:
 
-1. **Reconcile-the-docs (this pass):** this ADR + the CONTEXT rewrite + reshape the affected briefs/tasks to this model — so the spec is coherent BEFORE building.
+1. **Reconcile-the-docs (this pass):** this ADR + the CONTEXT rewrite + reshape the affected prds/tasks to this model — so the spec is coherent BEFORE building.
 2. **Build the new system:** tasks implementing the new surface (registry/`remote`, `run`/`do` split, renames, in-place isolation strategy, the deltas).
 3. **Reconcile-the-code:** apply the drift check (WORK-CONTRACT "Drift is a needs-attention signal") to confirm existing tasks/code match the new code, then resume feature work.
 
 ## Consequences
 
 - The surface becomes coherent: one registration model, consistent target resolution (`<slug>` = current repo; `--remote` = anywhere), clean agent/human symmetry, `ar-run.sh` dies into `do`, a single deletion sweep.
-- It **invalidates assumptions** in `runner-in-ci` (which assumed CI calls `run --once` against a registered remote — wrong; CI = `do`) and `auto-slice` (the `task <brief>` command is subsumed by `do <brief>` + the `run`/`do` auto-task step). These need the phase-1 reshape (tracked as observations).
+- It **invalidates assumptions** in `runner-in-ci` (which assumed CI calls `run --once` against a registered remote — wrong; CI = `do`) and `auto-slice` (the `task <prd>` command is subsumed by `do <prd>` + the `run`/`do` auto-task step). These need the phase-1 reshape (tracked as observations).
 - Future protocol-layer items (the `setup` onboarding/migration skill) and the uncertain `doctor` command are captured separately, NOT built in this pass.

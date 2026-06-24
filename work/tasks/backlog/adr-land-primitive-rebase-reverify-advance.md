@@ -1,7 +1,7 @@
 ---
 title: ADR — Land = rebase + re-verify + advance, one primitive with two frontends
 slug: adr-land-primitive-rebase-reverify-advance
-brief: land-time-reverify-and-parallel-merge-ceiling
+prd: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [1, 2, 3, 10]
 ---
@@ -33,7 +33,7 @@ The ADR must record:
 - The invariants that DO NOT change: never `--force` to main, never
   auto-resolve a conflict (ADR §10).
 - Deliberately-deferred forward seams: the `merge_queue` ruleset slot
-  (Tier 2) is deferred to a follow-on brief, recorded here so it is not
+  (Tier 2) is deferred to a follow-on prd, recorded here so it is not
   mistaken for an oversight.
 
 This ADR is the durable home of the rationale the protocol-doc invariant
@@ -47,7 +47,7 @@ line POINTS to.
       words; states the primitive; states the two frontends; states the
       floor/ceiling gradient; states what remains an invariant.
 - [ ] Cross-links the protocol invariant line that will live in
-      `WORK-CONTRACT.md` / `CLAIM-PROTOCOL.md`, the brief, and (by name) the
+      `WORK-CONTRACT.md` / `CLAIM-PROTOCOL.md`, the prd, and (by name) the
       existing engine surfaces (`integration-core.ts`'s
       `performIntegration` + `freshWorktreeGate` + `mergeRetries`,
       `integrator.ts`, `run.ts`'s `createKeyedLock()`).
@@ -55,15 +55,15 @@ line POINTS to.
 
 ## Blocked by
 
-- None — pure documentation; the engine and the brief already supply the
+- None — pure documentation; the engine and the prd already supply the
   content.
 
 ## Prompt
 
 > You are writing the durable rationale ADR for the land-time re-verify
 > doctrine. The engine that implements it ALREADY EXISTS — do not change
-> code in this task. Read `work/briefs/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
-> (or `briefs/ready/` if not yet moved) end-to-end first, then
+> code in this task. Read `work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
+> (or `prds/ready/` if not yet moved) end-to-end first, then
 > `integration-core.ts`, `integrator.ts`, and `run.ts` enough to name the
 > surfaces correctly. Follow `docs/adr/ADR-FORMAT.md`. Keep it durable:
 > name the principle, the primitive, the two frontends, the floor/ceiling

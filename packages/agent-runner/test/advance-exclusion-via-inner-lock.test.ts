@@ -43,7 +43,7 @@ afterEach(() => {
  *      inner `do`'s claim lock ALONE — a held `task:<slug>` lock makes the advance
  *      build-task rung's inner claim LOSE; the advance layer takes no hold of its
  *      own.
- *   2. the brief advance-layer TOCTOU (two advancers both classifying the item as
+ *   2. the prd advance-layer TOCTOU (two advancers both classifying the item as
  *      build BEFORE the inner `do`) resolves to EXACTLY ONE winner at the inner
  *      claim lock.
  *
@@ -189,7 +189,7 @@ describe('advance-layer TOCTOU resolves to one winner at the inner claim lock', 
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 
-		// Both ticks classify the item as build-task (pre-lock, the brief TOCTOU
+		// Both ticks classify the item as build-task (pre-lock, the prd TOCTOU
 		// window) and both orchestrate an inner `do` → performClaim. The inner claim
 		// lock resolves it: exactly one wins the `task-solo` ref CAS.
 		const [ra, rb] = await Promise.all([

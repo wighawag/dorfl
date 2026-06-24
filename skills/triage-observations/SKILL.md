@@ -15,9 +15,9 @@ Drain `work/notes/observations/` toward a **live-only inbox**: every note that s
 Default to **alphabetical order** (the folder listing — `ls work/notes/observations/`), so a full pass deterministically covers the whole inbox with nothing skipped or repeated. The human may override with their own order or name specific files; when they do, follow that and do NOT jump ahead or batch. For each:
 
 1. **READ** the observation in full.
-2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, briefs, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
+2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, prds, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
 3. **RECOMMEND** exactly one disposition (below), with reasoning grounded in what you found — not a guess.
-4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this brief's untasked state intentional?") as an explicit question.
+4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this prd's untasked state intentional?") as an explicit question.
 5. **EXECUTE** the chosen disposition. For light dispositions (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-task, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
 6. **UPDATE** a running checklist of dispositions so the session has an at-a-glance summary.
 

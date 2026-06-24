@@ -10,7 +10,7 @@ superseded_by:
 
 > **STATUS: proposed.** Pins the WHY behind a three-axis autonomy model and a runner-enforced
 > placement gate. Full design + edge cases + config in
-> `work/briefs/ready/staging-pool-position-gate-and-trust-model.md`; design trail in
+> `work/prds/ready/staging-pool-position-gate-and-trust-model.md`; design trail in
 > `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md`.
 
 ## Decision
@@ -19,19 +19,19 @@ An item's autonomy is governed by THREE orthogonal axes, each OWNED by the side 
 produce it:
 
 - **POSITION (a folder, RUNNER-deterministic, STRUCTURAL).** A staging vs pool split, `pre-backlog/`
-  (staging, not agent-eligible) vs `tasks/todo/` (the agent pool) for tasks; `briefs/proposed/` (staging) vs
-  `briefs/ready/` (auto-tasking pool) for briefs. WHICH folder an item's output lands in is COMPUTED by the
+  (staging, not agent-eligible) vs `tasks/todo/` (the agent pool) for tasks; `prds/proposed/` (staging) vs
+  `prds/ready/` (auto-tasking pool) for prds. WHICH folder an item's output lands in is COMPUTED by the
   RUNNER from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit
   operator flags) via a fixed precedence chain. No judgement; a pure function the agent cannot
   influence.
 - **NATURE (`humanOnly`, AGENT/human judgement, ADVISORY).** "An agent must NEVER auto-take this by
   nature", decided by reasoning about the work (does building/tasking it need human
   judgement/security/secrets?). Non-deterministic, content-derived, advisory (a human can override).
-  Task `humanOnly` gates BUILDING (survives even in `tasks/todo/`); brief `humanOnly` gates TASKING.
+  Task `humanOnly` gates BUILDING (survives even in `tasks/todo/`); prd `humanOnly` gates TASKING.
 - **DISCOVERED (`needsAnswers`, AGENT judgement, ADVISORY).** "Blocked on an open question" , 
   unchanged.
 
-The agent CREATES ledger files ONLY in the staging folder (`pre-backlog/` for tasks, `briefs/proposed/` for briefs);
+The agent CREATES ledger files ONLY in the staging folder (`pre-backlog/` for tasks, `prds/proposed/` for prds);
 the RUNNER owns every MOVE and every PROMOTION into a pool. This restates the existing "the agent does
 not move files between `work/` folders" rule to also cover CREATION (tasking creates, not moves).
 
@@ -69,16 +69,16 @@ not move files between `work/` folders" rule to also cover CREATION (tasking cre
   needs a durable flag that survives even in the pool.
 - **Let the agent choose its birth folder / promote itself.** Rejected: it makes every gate advisory
   and bypassable. Placement must be runner-resolved from inputs the agent cannot forge.
-- **A brief-level position split is not worth it (earlier view).** Reversed: `intake` authors briefs and
-  untrusted origins exist today, so briefs have the same intake-triage need as tasks; they get the
-  `briefs/proposed/ → briefs/ready/` split too.
+- **A prd-level position split is not worth it (earlier view).** Reversed: `intake` authors prds and
+  untrusted origins exist today, so prds have the same intake-triage need as tasks; they get the
+  `prds/proposed/ → prds/ready/` split too.
 
 ## Consequences
 
 - A per-repo placement policy (default landing per lifecycle) + per-source exceptions (untrusted
   origin forces staging; explicit operator flag overrides), resolved like the existing
   `originTrust`/`integration` precedence, RUNNER-resolved, the agent never sets it.
-- Task `humanOnly` is NARROWED to the rare hard case; brief `humanOnly` is UNCHANGED and still
+- Task `humanOnly` is NARROWED to the rare hard case; prd `humanOnly` is UNCHANGED and still
   essential (it gates auto-tasking, no folder substitute). `needsAnswers` unchanged.
 - The `AGENTS.md`/WORK-CONTRACT "agent does not move files" rule is restated to cover creation: the
   agent may CREATE only in the staging folder; the runner owns moves + promotions.

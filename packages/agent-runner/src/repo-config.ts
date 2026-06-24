@@ -61,16 +61,16 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
-	// `taskingIntegration` (the per-TRANSITION override for the brief→tasks TASKING
+	// `taskingIntegration` (the per-TRANSITION override for the prd→tasks TASKING
 	// transition ONLY) is a genuine repo property exactly like `integration`: whether
-	// THIS repo tasks a brief straight onto `main` (task FILES land, no PR) while it
+	// THIS repo tasks a prd straight onto `main` (task FILES land, no PR) while it
 	// still BUILDS each task as a reviewable PR is agreed by all collaborators +
 	// travels with the repo. Resolved per-repo through the SAME chain as
 	// `integration`, then falls back to `integration` when unset. DISTINCT from
-	// intake's per-EMITTED-TYPE `{task, brief}` resolver (front door, author-trust):
+	// intake's per-EMITTED-TYPE `{task, prd}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'taskingIntegration',
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, brief
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, prd
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
 	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
@@ -82,16 +82,16 @@ export const REPO_ALLOWED_KEYS = [
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
 	'tasksLandIn',
-	// `briefsLandIn` (the per-repo BRIEF-PLACEMENT default — staging vs pool, brief
+	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — staging vs pool, prd
 	// `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12) is a genuine
 	// repo property exactly like `tasksLandIn`: whether THIS repo's intake-
-	// authored briefs land STAGED (`pre-proposed/`, review-without-PR human-promote path)
+	// authored prds land STAGED (`pre-proposed/`, review-without-PR human-promote path)
 	// or straight in the auto-tasking POOL (`ready/`, trusted fast-path) is agreed by
 	// all collaborators + travels with the repo. Resolved per-repo through the
 	// SAME chain as `tasksLandIn` (flag > env > per-repo > global > built-in
 	// `pre-proposed`). Fed into the shared placement resolver as the configured-default
-	// rung for the brief lifecycle (`src/placement.ts`).
-	'briefsLandIn',
+	// rung for the prd lifecycle (`src/placement.ts`).
+	'prdsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with
@@ -112,9 +112,9 @@ export const REPO_ALLOWED_KEYS = [
 	// this repo?) is a genuine repo property — the build member of the symmetric
 	// per-action gate family.
 	'autoBuild',
-	// `autoTask` (may an agent auto-task undeclared briefs in this repo?) is a
+	// `autoTask` (may an agent auto-task undeclared prds in this repo?) is a
 	// genuine repo property — the tasking-autonomy mirror of `autoBuild`
-	// (`work/briefs/auto-task.md`), resolved per-repo through the same chain.
+	// (`work/prds/auto-task.md`), resolved per-repo through the same chain.
 	'autoTask',
 	// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
 	// INBOX) is a genuine repo property — the observation-side question-surfacing
@@ -123,13 +123,13 @@ export const REPO_ALLOWED_KEYS = [
 	// boolean (no alias; no external users owed a migration window, 2026-06-12).
 	'observationTriage',
 	// `surfaceBlockers` (the BOOLEAN gate over DECLARED blocked work — whether a
-	// task/brief carrying `needsAnswers:true` is rendered into a question sidecar) is a
+	// task/prd carrying `needsAnswers:true` is rendered into a question sidecar) is a
 	// genuine repo property — the blocked-work side of the question-surfacing gate
 	// family (ADR `ci-config-policy-and-gate-family`), the orthogonal peer of
 	// `observationTriage`, resolved per-repo through the same chain as `autoBuild`.
 	'surfaceBlockers',
 	// `surfaceStaging` (the BOOLEAN gate-family member that widens SURFACE into
-	// STAGING — brief `staging-surface-and-apply-promote-safety` F2) is a genuine
+	// STAGING — prd `staging-surface-and-apply-promote-safety` F2) is a genuine
 	// repo property exactly like its siblings (`surfaceBlockers`/`autoBuild`):
 	// whether THIS repo inspects staging for questions is agreed by all
 	// collaborators + travels with the repo. Default `true`; resolved per-repo
@@ -148,8 +148,8 @@ export const REPO_ALLOWED_KEYS = [
 	// (machine paths/commands), so they are rejected below.
 	'model',
 	'harness',
-	// Gate 2 (PR/code review) policy is a genuine repo property (GATES brief
-	// `work/briefs/tasked/review.md`), resolved per-repo like `integration`/`autoBuild`:
+	// Gate 2 (PR/code review) policy is a genuine repo property (GATES prd
+	// `work/prds/tasked/review.md`), resolved per-repo like `integration`/`autoBuild`:
 	// whether this repo runs Gate 2 (`review`), which model the review agent runs
 	// on (`reviewModel`), and the revise↔review loop bound (`reviewMaxRounds`).
 	// `reviewModel` is routing intent (not auth), so — like `model` — it is
