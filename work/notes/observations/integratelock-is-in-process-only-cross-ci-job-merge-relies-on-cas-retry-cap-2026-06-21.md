@@ -3,7 +3,7 @@ title: '`integrateLock` is in-process only; cross-CI-job parallel merge relies o
 type: observation
 status: spotted
 spotted: 2026-06-21
-needsAnswers: true
+needsAnswers: false
 ---
 
 # `integrateLock` is in-process only; cross-CI-job parallel merge relies on the CAS retry loop, whose cap (5) was sized for in-process siblings
@@ -38,3 +38,30 @@ retry cap (or add a cross-job concurrency group) for the matrix width on purpose
 
 Not fixing here: a sizing/design decision for the future parallel-merge CI shape,
 captured so it is not rediscovered in production as spurious needs-attention bounces.
+
+## Triaged: promoted
+
+Promoted to a new backlog task `work/tasks/todo/integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21.md`
+(a human answered "promote", disposition `promote-adr`). This observation is
+resolved; the new item carries the work.
+
+Manual completion of an INTERRUPTED promote (2026-06-24): a prior advance tick
+(`f09a2ed`, 2026-06-22) already CREATED the promoted task through the create-CAS
+but never landed step 2 (record + resolve the observation), so the answered
+observation sidecar was left in place and every subsequent `advance "obs:<slug>"`
+re-lost the now-impossible create-CAS (the target already exists) and exited 2 in
+a loop. Completing step 2 by hand here: appended this block, cleared
+`needsAnswers`, and deleted the observation's answered sidecar
+(`work/questions/observation-integratelock-...md`) -- exactly what
+`promoteObservation` step 2 would have committed. The promoted TASK's own surfaced
+sidecar (`work/questions/task-integratelock-...md`) is intentionally left untouched
+(it carries the task's open scoping questions).
+
+Per the answer's steer (`promote-adr`): prefer FOLDING the durable rule (across
+runners the arbiter-ref CAS IS the merge queue; within a runner the in-process
+`integrateLock` is only an optimisation; size `DEFAULT_MERGE_RETRIES` / add a
+cross-job concurrency-group mutex for the matrix width on purpose) into the
+`land-time-reverify-and-parallel-merge-ceiling` brief's eventual ADR rather than
+spinning a standalone one. The general idempotency gap that produced the retry
+loop is tracked separately by
+`observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22`.
