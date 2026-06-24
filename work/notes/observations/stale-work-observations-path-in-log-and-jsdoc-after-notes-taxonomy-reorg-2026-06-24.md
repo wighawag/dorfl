@@ -3,6 +3,7 @@ title: Stale `work/observations/` path in a runtime LOG message + ~30 JSDoc/comm
 date: 2026-06-24
 status: open
 noticedDuring: dogfood of the observation-discharge PRD (a prior agent wrote a note into work/observations/ instead of work/notes/observations/)
+needsAnswers: true
 ---
 
 ## What I noticed
