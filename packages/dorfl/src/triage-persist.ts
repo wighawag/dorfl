@@ -1,19 +1,13 @@
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
 import {setFrontmatterMarker} from './frontmatter.js';
-import {applyAtomic} from './sidecar-apply.js';
 import {workItemRel} from './work-layout.js';
 import {
 	createItemThroughCas,
 	type CreateItemThroughCasResult,
 } from './advancing-lock.js';
-import {
-	parseSidecar,
-	resolveSidecarIdentity,
-	sidecarPathFor,
-	type SidecarModel,
-} from './sidecar.js';
+import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
 
 /**
@@ -34,20 +28,24 @@ import type {TriageAutoKind} from './triage-gate.js';
  *          `triaged:duplicate` so it drops out of the pool; or
  *        - `map` → record the mapping onto the existing item + stamp `triaged:keep`
  *          (settled onto its existing home, drops out of the pool, never re-asked).
- *   2. **promote → new-item creation through the CAS** ({@link promoteObservation},
- *      US #24): an ANSWERED "promote" drafts a new `work/backlog/<new-slug>.md`
- *      routed THROUGH the CAS keyed on the NEW item's identity (its target path),
- *      so the (unlikely) same-slug new-item race needs NO special case — the loser
- *      fails the CAS and backs off. On a WIN it then records the triage on the
- *      observation and RESOLVES it (clears `needsAnswers` + deletes the sidecar)
- *      atomically.
+ *   2. **promote → SELF-CONTAINED new-item creation + DELETE through the CAS**
+ *      ({@link promoteObservation}, US #1/#3/#8): an ANSWERED "promote" drafts a
+ *      new `work/tasks/ready/<new-slug>.md` whose body is built FROM the
+ *      observation (mechanism + fix prose into `## What to build`, the
+ *      `## Open questions` scoping transcribed, `needsAnswers` set when questions
+ *      remain), routed THROUGH the CAS keyed on the NEW item's identity (its
+ *      target path) — so the (unlikely) same-slug new-item race needs NO special
+ *      case (the loser fails the CAS and backs off). On a WIN the observation +
+ *      its answered sidecar are `git rm`-ed IN THE SAME atomic create commit
+ *      (discharge by DELETION; the human's ratified "promote" answer authors it),
+ *      so a crash never strands the note without its successor.
  *
- * Like its sibling persists, the auto-disposition + the post-create resolve are
- * LOCAL one-commit primitives over a working tree (the throwaway-git-repo test
- * pattern); the CAS-create is the ONLY arbiter race (it IS the new-item-creation
- * CAS helper from `advancing-lock-borrow`). The `advancing` CAS lock that makes the
- * triage rung WINNER-ONLY on the OBSERVATION is held by `performAdvance` BEFORE
- * this is called.
+ * Like its sibling persists, the auto-disposition is a LOCAL one-commit primitive
+ * over a working tree (the throwaway-git-repo test pattern); the CAS-create (now
+ * carrying the note+sidecar deletion in the SAME commit) is the ONLY arbiter race
+ * (it IS the new-item-creation CAS helper from `advancing-lock-borrow`). The
+ * `advancing` CAS lock that makes the triage rung WINNER-ONLY on the OBSERVATION
+ * is held by `performAdvance` BEFORE this is called.
  *
  * **NEVER auto-deletes a non-duplicate signal; NEVER auto-promotes a judgement
  * call (US #17).** The auto-disposition is bounded to `duplicate`/`map` (the gate's
@@ -62,7 +60,6 @@ const TRIAGED_KEEP = 'keep';
 /** Marker headings appended to the observation body (durable, tooling-owned record). */
 const DUPLICATE_HEADING = '## Recommended: delete (duplicate)';
 const MAP_HEADING = '## Triaged: maps onto an existing item';
-const PROMOTE_HEADING = '## Triaged: promoted';
 
 function gitSoft(
 	args: string[],
@@ -250,7 +247,12 @@ export interface PromoteObservationOptions {
 	 * item's PATH, so a same-slug new-item race ⇒ the loser fails the CAS.
 	 */
 	newSlug?: string;
-	/** The new backlog stub's content. Defaults to a minimal stub from the observation. */
+	/**
+	 * The new task's content. Defaults to a SELF-CONTAINED body built from the
+	 * observation (its mechanism + fix prose carried into `## What to build`, its
+	 * `## Open questions` transcribed, `needsAnswers` set when questions remain) —
+	 * so the spawned task is buildable on its own and the note is safely deletable.
+	 */
 	stubContent?: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
 	arbiter?: string;
@@ -266,30 +268,37 @@ export interface PromoteObservationOptions {
 
 export interface PromoteObservationResult {
 	/**
-	 * `promoted` (the new item landed via the CAS + the observation was resolved),
-	 * `lost` (the same-slug new-item race was lost — the loser backs off), or
-	 * `contended` (the CAS push kept failing). Maps onto the claim-CAS exit codes.
+	 * `promoted` (the new item landed via the CAS + the observation+sidecar were
+	 * deleted in the SAME commit), `lost` (the same-slug new-item race was lost —
+	 * the loser backs off, observation left INTACT), or `contended` (the CAS push
+	 * kept failing). Maps onto the claim-CAS exit codes.
 	 */
 	outcome: 'promoted' | 'lost' | 'contended' | 'usage-error';
 	exitCode: 0 | 1 | 2 | 3;
-	/** The new backlog item's path (relative to repo root) on a WIN. */
+	/** The new task's path (relative to repo root) on a WIN. */
 	newItemPath?: string;
 	/** A human-readable summary. */
 	message: string;
 }
 
 /**
- * Promote an ANSWERED observation to a NEW backlog stub (US #24): CAS-create the
- * new `work/backlog/<new-slug>.md` keyed on the NEW item's identity (its target
- * path), then — on a WIN — record the triage on the observation and RESOLVE it
- * (clear `needsAnswers` + delete the sidecar) atomically.
+ * Promote an ANSWERED observation to a NEW, SELF-CONTAINED task (US #1/#3/#8):
+ * CAS-create the new `work/tasks/ready/<new-slug>.md` keyed on the NEW item's
+ * identity (its target path), with the observation note + its answered sidecar
+ * `git rm`-ed IN THE SAME atomic commit. Promote is ONE commit (create + delete).
+ *
+ * The minted task body is built FROM the observation (see {@link buildPromotedBody}):
+ * its mechanism + fix prose is carried into `## What to build`, and its
+ * `## Open questions` scoping is transcribed into the task's own `## Open questions`
+ * block with `needsAnswers` set when questions remain (cleared when none do) — so an
+ * agent can build from the task ALONE and no decision residue is lost on deletion.
+ * This self-containment is the PRECONDITION for the same-commit deletion.
  *
  * The CAS-create is the new-item-creation helper from `advancing-lock-borrow`
  * ({@link createItemThroughCas}): a same-slug new-item race needs NO special case
  * — exactly one creator lands the file, the LOSER fails the CAS (exit 2) and backs
- * off WITHOUT resolving the observation (so a retry can re-promote with a different
- * slug). The promotion is a NEW item's creation, NOT a move of the observation
- * (the observation stays in `work/observations/`, resolved + recorded).
+ * off WITHOUT deleting the observation (so a retry can re-promote). The observation
+ * (+ its sidecar) is deleted ONLY on a WIN, riding the winning creator's commit.
  */
 export async function promoteObservation(
 	options: PromoteObservationOptions,
@@ -303,18 +312,27 @@ export async function promoteObservation(
 		return {
 			outcome: 'usage-error',
 			exitCode: 1,
-			message: `promote ${item}: empty new slug — cannot draft a backlog stub`,
+			message: `promote ${item}: empty new slug — cannot draft a task`,
 		};
 	}
 	const newItemPath = workItemRel('tasks-ready', `${newSlug}.md`);
 	const by = options.by || resolveBy(cwd, env);
-	const content = options.stubContent ?? defaultStub(newSlug, item);
+	const content =
+		options.stubContent ??
+		buildPromotedBody(newSlug, readItem(cwd, itemPath, env));
 
-	// 1. CAS-CREATE the new backlog stub keyed on its identity. A same-slug race ⇒
-	//    the loser fails here and backs off WITHOUT resolving the observation.
+	// The note + its answered sidecar `git rm` IN THE SAME create commit (promote =
+	// ONE atomic commit). A CAS LOSER never reaches the commit, so it leaves both
+	// INTACT for a retry (today's loser-backs-off guarantee, now over deletion).
+	const sidecarPath = sidecarPathFor(item);
+
+	// CAS-CREATE the new task keyed on its identity, carrying the note+sidecar
+	// deletion in the SAME commit. A same-slug race ⇒ the loser fails here and
+	// backs off WITHOUT deleting the observation.
 	const created: CreateItemThroughCasResult = await createItemThroughCas({
 		path: newItemPath,
 		content,
+		deletePaths: [itemPath, sidecarPath],
 		cwd,
 		arbiter: options.arbiter,
 		by,
@@ -326,7 +344,7 @@ export async function promoteObservation(
 		const message =
 			`promote ${item}: the new item ${newItemPath} ${created.outcome} the ` +
 			`create CAS (${created.message}) — backing off, the observation is left ` +
-			'unresolved for a retry.';
+			'intact for a retry.';
 		note(message);
 		return {
 			outcome: created.outcome === 'lost' ? 'lost' : 'contended',
@@ -335,61 +353,96 @@ export async function promoteObservation(
 		};
 	}
 
-	// 2. WON: record the triage on the observation + RESOLVE it (clear needsAnswers
-	//    + delete the sidecar) atomically. The observation stays in observations/.
-	const body = readItem(cwd, itemPath, env);
-	const recorded = appendBlock(body, PROMOTE_HEADING, [
-		`Promoted to a new backlog task \`${newItemPath}\` (a human answered`,
-		'"promote"). This observation is resolved; the new item carries the work.',
-	]);
-	const sidecar = readSidecar(cwd, item);
-	applyAtomic({
-		cwd,
-		itemPath,
-		itemBody: recorded,
-		sidecar,
-		mode: 'resolve',
-		by,
-		env,
-		note,
-	});
-
 	const message =
-		`promoted ${item} → CREATED ${newItemPath} (via the CAS) + resolved the ` +
-		'observation (needsAnswers cleared, sidecar deleted).';
+		`promoted ${item} → CREATED ${newItemPath} (via the CAS) + DELETED the ` +
+		'observation + its sidecar in the same commit.';
 	note(message);
 	return {outcome: 'promoted', exitCode: 0, newItemPath, message};
 }
 
-/** Read + parse the observation's answered sidecar (the apply path's source). */
-function readSidecar(cwd: string, item: string): SidecarModel {
-	const path = sidecarPathFor(item);
-	const abs = join(cwd, path);
-	if (!existsSync(abs)) {
-		throw new TriagePersistError(
-			`no sidecar at ${path} for ${item} — the promote path resolves an answered observation`,
-		);
-	}
-	return parseSidecar(readFileSync(abs, 'utf8'));
-}
-
-/** A minimal backlog stub drafted from a promoted observation. */
-function defaultStub(slug: string, fromObservation: string): string {
-	return [
+/**
+ * Build a SELF-CONTAINED task body from a promoted observation. The observation's
+ * body (its mechanism + fix prose) is lifted into `## What to build`; its
+ * `## Open questions` section — if any — is SPLIT OUT and transcribed into the
+ * task's own `## Open questions` block, and `needsAnswers: true` is stamped iff
+ * that block carries content (so deleting the note loses no scoping residue).
+ *
+ * Composition rule (recorded in the done record `## Decisions`): the split point
+ * is the observation's FIRST `## Open questions` heading (any later sibling text
+ * up to the next same-level heading, or EOF, is the scoping). Everything BEFORE it
+ * is the mechanism/fix prose. We copy PROSE (not a back-pointer) so the task is
+ * buildable on its own.
+ */
+function buildPromotedBody(slug: string, observation: string): string {
+	const {mechanism, openQuestions} = splitObservationBody(observation);
+	const hasQuestions = openQuestions.trim() !== '';
+	const lines: string[] = [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
-		'needsAnswers: true',
+		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
 		'blockedBy: []',
 		'---',
 		'',
 		'## What to build',
 		'',
-		`Promoted from observation \`${fromObservation}\`. A human answered`,
-		'"promote": draft this into a buildable task. Carries `needsAnswers:true`',
-		'so the advance loop surfaces the open scoping questions before it is built.',
+		mechanism.trim() === ''
+			? '(no mechanism/fix prose was carried from the observation.)'
+			: mechanism.trim(),
 		'',
-	].join('\n');
+	];
+	if (hasQuestions) {
+		lines.push('## Open questions', '', openQuestions.trim(), '');
+	}
+	return lines.join('\n');
+}
+
+/**
+ * Split an observation's text into its mechanism/fix PROSE (before the first
+ * `## Open questions` heading) and its open-questions SCOPING (that section's
+ * body, up to the next `## ` heading or EOF). The frontmatter fence is dropped
+ * (the new task gets its own). When there is no `## Open questions` heading the
+ * whole body is mechanism and the scoping is empty.
+ */
+function splitObservationBody(observation: string): {
+	mechanism: string;
+	openQuestions: string;
+} {
+	const body = stripFrontmatter(observation);
+	const lines = body.split('\n');
+	// Match `## Open questions` (and tolerant variants like
+	// `## Open questions to NOT guess` the capture-signal skill writes).
+	const startIdx = lines.findIndex((l) => /^##\s+Open questions\b/i.test(l));
+	if (startIdx === -1) {
+		return {mechanism: body, openQuestions: ''};
+	}
+	let endIdx = lines.length;
+	for (let i = startIdx + 1; i < lines.length; i++) {
+		if (/^##\s+/.test(lines[i])) {
+			endIdx = i;
+			break;
+		}
+	}
+	const mechanism = lines.slice(0, startIdx).join('\n');
+	const openQuestions = lines.slice(startIdx + 1, endIdx).join('\n');
+	return {mechanism, openQuestions};
+}
+
+/** Strip a leading `---\n…\n---` frontmatter fence, returning the body. */
+function stripFrontmatter(content: string): string {
+	const normalized = content.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
+	if (!normalized.startsWith('---\n')) {
+		return normalized;
+	}
+	const lines = normalized.split('\n');
+	const closing = lines.indexOf('---', 1);
+	if (closing === -1) {
+		return normalized;
+	}
+	return lines
+		.slice(closing + 1)
+		.join('\n')
+		.replace(/^\n+/, '');
 }
 
 /** Append a `## heading` block to a body (append-only; the body is the durable record). */
@@ -399,4 +452,4 @@ function appendBlock(body: string, heading: string, lines: string[]): string {
 }
 
 // Re-export the heading + marker constants the tests assert against.
-export {DUPLICATE_HEADING, MAP_HEADING, PROMOTE_HEADING};
+export {DUPLICATE_HEADING, MAP_HEADING};

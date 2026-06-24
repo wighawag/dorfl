@@ -20,6 +20,7 @@ import {
 	raceClone,
 	racerEnv,
 	existsOnArbiterMain,
+	pathOnArbiterMain,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -118,6 +119,15 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 	});
 });
 
+/**
+ * The distinctive mechanism/fix signal text the self-contained promotion must
+ * carry into the spawned task body (NOT a back-pointer phrase).
+ */
+const MECHANISM_SIGNAL =
+	'claim-cas.ts:270 exits 2 on a stale snapshot; add a --quiet-if-gone flag.';
+const OPEN_QUESTION_SIGNAL =
+	'Should --quiet-if-gone be the default, or opt-in behind a flag?';
+
 /** Seed an answered-promote observation + sidecar in a repo (working tree). */
 function seedAnsweredPromote(repo: string, slug: string): string {
 	const itemPath = `work/notes/observations/${slug}.md`;
@@ -131,7 +141,13 @@ function seedAnsweredPromote(repo: string, slug: string): string {
 			'needsAnswers: true',
 			'---',
 			'',
-			'A signal awaiting triage.',
+			'## What was seen',
+			'',
+			`A signal awaiting triage. ${MECHANISM_SIGNAL}`,
+			'',
+			'## Open questions',
+			'',
+			`1. ${OPEN_QUESTION_SIGNAL}`,
 			'',
 		].join('\n'),
 	);
@@ -151,9 +167,10 @@ function seedAnsweredPromote(repo: string, slug: string): string {
 }
 
 describe('promoteObservation — new-item creation through the CAS', () => {
-	it('creates the new backlog item on the arbiter + resolves the observation (exit 0)', async () => {
+	it('creates a SELF-CONTAINED task on the arbiter + DELETES the observation + sidecar in the SAME commit (exit 0)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const itemPath = seedAnsweredPromote(seeded.repo, 'prom');
+		const sidecarPath = 'work/questions/observation-prom.md';
 		gitIn(['add', '-A'], seeded.repo);
 		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
 		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
@@ -169,14 +186,89 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.newItemPath).toBe('work/tasks/ready/prom.md');
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'prom')).toBe(true);
-		// The observation resolved locally (sidecar gone, needsAnswers cleared).
-		expect(
-			existsSync(join(seeded.repo, 'work/questions/observation-prom.md')),
-		).toBe(false);
-		expect(
-			parseFrontmatter(readFileSync(join(seeded.repo, itemPath), 'utf8'))
-				.needsAnswers,
-		).toBe(false);
+
+		// The spawned task body carries the observation's REAL mechanism/fix signal
+		// (self-contained, not a back-pointer phrase).
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/prom.md'],
+			seeded.repo,
+		);
+		expect(taskBody).toContain(MECHANISM_SIGNAL);
+		expect(taskBody).not.toMatch(/Promoted from observation/i);
+		// The observation's open questions are transcribed + needsAnswers reflects them.
+		expect(taskBody).toContain('## Open questions');
+		expect(taskBody).toContain(OPEN_QUESTION_SIGNAL);
+		expect(parseFrontmatter(taskBody).needsAnswers).toBe(true);
+
+		// The observation + its sidecar are DELETED on the arbiter (discharge by
+		// deletion).
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
+
+		// The create + the two deletions ride ONE atomic commit on arbiter/main
+		// (`--no-renames` so git's similarity heuristic does not fold the
+		// note→task content lift into an `R`ename — we want the literal A + D pair).
+		const touched = gitIn(
+			['show', '--name-status', '--no-renames', '--format=', 'arbiter/main'],
+			seeded.repo,
+		)
+			.split('\n')
+			.map((l) => l.trim())
+			.filter(Boolean);
+		expect(touched).toContain(`A\twork/tasks/ready/prom.md`);
+		expect(touched).toContain(`D\t${itemPath}`);
+		expect(touched).toContain(`D\t${sidecarPath}`);
+	});
+
+	it('a promoted observation with NO open questions clears needsAnswers on the task', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = `work/notes/observations/noq.md`;
+		mkdirSync(join(seeded.repo, 'work', 'notes', 'observations'), {
+			recursive: true,
+		});
+		writeFileSync(
+			join(seeded.repo, itemPath),
+			[
+				'---',
+				'title: noq',
+				'needsAnswers: true',
+				'---',
+				'',
+				`Fully-scoped signal: ${MECHANISM_SIGNAL}`,
+				'',
+			].join('\n'),
+		);
+		let model: SidecarModel = newSidecar('observation:noq', [
+			{question: 'Promote?', disposition: 'promote-task'},
+		]);
+		model = {
+			...model,
+			entries: model.entries.map((e) => ({...e, answer: 'yes'})),
+		};
+		mkdirSync(join(seeded.repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(
+			join(seeded.repo, 'work/questions/observation-noq.md'),
+			serialiseSidecar(model),
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:noq',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/noq.md'],
+			seeded.repo,
+		);
+		expect(taskBody).toContain(MECHANISM_SIGNAL);
+		expect(taskBody).not.toContain('## Open questions');
+		expect(parseFrontmatter(taskBody).needsAnswers).toBe(false);
 	});
 
 	it('honours an explicit newSlug (the promoted identity, keyed by the new path)', async () => {
@@ -301,7 +393,9 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		});
 		expect(result.outcome).toBe('lost');
 		expect(result.exitCode).toBe(2);
-		// The sidecar is STILL present + needsAnswers still true (not resolved).
+		// The loser DELETES nothing: the observation + its sidecar are STILL present
+		// (left intact + unresolved for a retry).
+		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
 		expect(
 			existsSync(join(seeded.repo, 'work/questions/observation-taken.md')),
 		).toBe(true);

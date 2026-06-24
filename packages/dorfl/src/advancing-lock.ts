@@ -1,4 +1,4 @@
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -374,6 +374,15 @@ export interface CreateItemThroughCasOptions {
 	path: string;
 	/** The new item's file content. */
 	content: string;
+	/**
+	 * Extra repo-relative paths to `git rm` IN THE SAME create commit (e.g. the
+	 * promoted observation + its answered sidecar). They ride the winning creator's
+	 * ATOMIC commit, so a crash never leaves the source deleted without its
+	 * successor (or the successor created with the source still live), and a CAS
+	 * LOSER — which never reaches the commit — leaves them INTACT for a retry.
+	 * A listed path that is absent on the create branch is skipped (best-effort rm).
+	 */
+	deletePaths?: string[];
 	/** Working clone/worktree the creation runs in. */
 	cwd: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
@@ -411,6 +420,11 @@ type CreateAttemptResult =
  * CAS (exit 2) and backs off. Same CAS-micro-commit / force-with-lease shape as the
  * unified lock; it is NOT a lock (it does not hold a borrow), it ATOMICALLY publishes
  * a new file iff that path is still absent on the arbiter.
+ *
+ * An optional {@link CreateItemThroughCasOptions.deletePaths} rides the SAME create
+ * commit (the promote route's note + sidecar `git rm`), so create + delete are ONE
+ * atomic commit: a crash never strands the source without its successor, and a CAS
+ * LOSER — which never reaches the commit — leaves the source intact for a retry.
  */
 export async function createItemThroughCas(
 	options: CreateItemThroughCasOptions,
@@ -475,6 +489,7 @@ async function runCreate(
 			const result = await createAttempt({
 				path,
 				content: options.content,
+				deletePaths: options.deletePaths ?? [],
 				by,
 				arbiter,
 				dryRun,
@@ -505,6 +520,7 @@ async function runCreate(
 interface CreateAttemptContext {
 	path: string;
 	content: string;
+	deletePaths: string[];
 	by: string;
 	arbiter: string;
 	dryRun: boolean;
@@ -518,7 +534,8 @@ interface CreateAttemptContext {
 async function createAttempt(
 	ctx: CreateAttemptContext,
 ): Promise<CreateAttemptResult> {
-	const {arbiter, path, content, createBranch, cwd, env, note} = ctx;
+	const {arbiter, path, content, deletePaths, createBranch, cwd, env, note} =
+		ctx;
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 
@@ -549,6 +566,24 @@ async function createAttempt(
 		throw new AdvancingLockUsageError(
 			`git add failed for '${path}' (unexpected — aborting create)`,
 		);
+	}
+
+	// `git rm` the extra paths (the promoted source note + its sidecar) INTO this
+	// SAME create commit, so the create + delete are ONE atomic commit. Best-effort
+	// per path: a path absent on the create branch (e.g. an uncommitted local note,
+	// or an already-gone sidecar) is staged as a working-tree removal instead so
+	// the commit still carries the intended deletion without aborting.
+	for (const del of deletePaths) {
+		if (del === '' || del === path) {
+			continue;
+		}
+		const rm = await gitSoft(['rm', '--quiet', '--', del], cwd, env);
+		if (rm.status !== 0) {
+			// Not tracked on this branch — remove from the working tree (if present)
+			// and stage that removal; a never-existed path is simply skipped.
+			rmSync(join(cwd, del), {force: true});
+			await gitSoft(['add', '--', del], cwd, env);
+		}
 	}
 
 	await gitHard(
