@@ -5,6 +5,7 @@ status: spotted
 spotted: 2026-06-20
 slug: scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree
 needsAnswers: false
+triaged: keep
 ---
 
 ## What was noticed
@@ -65,3 +66,11 @@ promote-slice. Verified live divergence: the autoBuild gate uses the working-tre
 
 Promoted to a new backlog task `work/tasks/ready/scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree-2026-06-20.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree-2026-06-20` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation already triaged 2026-06-22 with explicit 'Triaged: promoted' marker; the work was promoted to work/tasks/ready/scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree-2026-06-20.md, which exists. The observation itself records the mapping and is resolved — no human judgement remains.
