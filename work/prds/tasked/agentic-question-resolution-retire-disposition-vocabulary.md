@@ -3,7 +3,7 @@ title: Agentic question-resolution — retire the disposition vocabulary, genera
 slug: agentic-question-resolution-retire-disposition-vocabulary
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is tasked — they move into tasks/ADRs and this prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: the tasks below. This prd has been TASKED: the Implementation/Testing detail moved into the task files (see the task map at the end), and it now settles to its durable framing (Problem / Solution / User Stories / Resolved decisions / Out of Scope).
 
 ## Problem Statement
 
@@ -62,6 +62,12 @@ no longer lingers.
    DECISION AGENT that reads my answer + the source item and acts: mint a
    self-contained task, mint a PRD, mint an ADR, delete the source, or ask me a
    follow-up.
+   _(Tasking note: the `mint an ADR` clause is DEFERRED past the keystone — there
+   is no ADR-mint path in the codebase today, and PRD decision 14 makes the engine
+   outcome-agnostic so `adr` is added separately. The agentic apply path LAUNCHES
+   with task / prd / delete / ask; `mint-adr` is the follow-on task
+   `agentic-apply-mint-adr-route`. This is a flagged, named non-delivery, not a
+   hole.)_
 3. As an operator, the agent's decision is grounded in the SOURCE ITEM's full
    context (its body, type, and surrounding signal), not just the latest answer
    text — the analogue of intake reading the whole issue thread.
@@ -185,45 +191,6 @@ no longer lingers.
     future outcome) CAN be added to intake later by a separate decision, without
     re-architecting — but this PRD makes no behaviour change to intake's outcomes.
 
-## Implementation Decisions
-
-- **Sidecar model.** Drop `SidecarDisposition`, the `disposition=` parse/serialise,
-  the `DISPOSITIONS` set, the most-decisive picker, and the `keep`/`triaged:keep`
-  stamp. `allAnswered`/`pendingEntries` stay (binary answered-ness); the apply
-  decision no longer reads a field.
-- **Decision engine.** Define `decide(input, allowedOutcomes) → verdict` (the
-  shared seam, stubbable for tests like intake's). Verdict union is the SUPERSET
-  `{task | prd | adr | delete | ask}`; each caller passes its allowed subset.
-- **advance-apply wiring.** `applyAnsweredQuestions` calls the decision engine
-  with the answered-sidecar + source-item input-adapter and the advance
-  allowed-outcome set; routes `ask` into the existing append/re-pause branch,
-  `task`/`prd`/`adr` into the mint-and-delete-source path (reuse
-  `promoteObservation`/`createItemThroughCas`), `delete` into the discharge
-  deletion path.
-- **intake.** Either refactor onto the shared engine (extract) or leave as-is with
-  a sibling (fork) — see open question 2. If extracted, intake's verdict set is
-  unchanged unless open question 3 enables `adr`.
-- **CLI helper.** A small explicit verb to delete a source + its sidecar in one
-  revertible commit (for the human/skill direct-delete path).
-- **Orphan GC.** A sweep over `work/questions/` that removes a sidecar whose
-  `(type, slug)` source is absent on the arbiter.
-
-## Testing Decisions
-
-- A decision-engine test with a STUBBED verdict (no model) per outcome:
-  ask→append+re-pause; task/prd/adr→mint self-contained + source deleted in the
-  same commit; delete→source+sidecar removed, reason in commit message.
-- An allowed-outcome test: a caller that does NOT allow `adr` never receives it;
-  intake's set is unchanged.
-- An append-loop test (already-covered shape): answered q1/q2 + an agent
-  follow-up appends q3, preserves q1/q2, keeps `needsAnswers:true`.
-- An orphan-GC test: a sidecar whose source is gone is reaped; one whose source
-  exists is left.
-- A direct-delete CLI test over a throwaway repo: source + sidecar removed in one
-  revertible commit.
-- Prior art: intake's stubbed-verdict dispatcher tests; the existing
-  apply-persist / sidecar / surface-persist tests.
-
 ## Out of Scope
 
 - The `needs-attention/` LIFECYCLE state and its recovery (`requeue`, status
@@ -246,9 +213,87 @@ no longer lingers.
   abstraction — the engine should read the human's answer, not a token. Same
   `prompt→verdict→dispatch` shape as intake, unified.
 - Key evidence: `sidecar.ts` (the `disposition=` field + `DISPOSITIONS` set +
-  `SidecarDisposition`); `apply-persist.ts` (the deterministic disposition picker
-  `:318/:331`, the `keep`/`triaged:keep` machinery `:152/:638`, the append/re-pause
-  branch `:433`, the observation-delete discharge `:548`); `intake.ts` (the
-  `prompt→verdict→dispatch` seam + stubbable dispatcher, `buildIntakeDecisionPrd`);
-  `advance.ts:717` (`appendQuestions: context.applyFollowups`, the follow-up wiring
-  already present); SURFACE-PROTOCOL.md (the disposition list the surface emits).
+  `SidecarDisposition`); `apply-persist.ts` (the deterministic disposition picker,
+  the `keep`/`triaged:keep` machinery, the append/re-pause branch, the
+  observation-delete discharge); `intake.ts` (the `prompt→verdict→dispatch` seam +
+  stubbable dispatcher, `buildIntakeDecisionPrd`); `advance.ts`
+  (`appendQuestions: context.applyFollowups`, the follow-up wiring already
+  present); SURFACE-PROTOCOL.md (the disposition list the surface emits).
+
+## Task map
+
+This prd was decomposed (2026-06-24) into seven vertical tasks (born in
+`work/tasks/backlog/`). The Implementation/Testing detail above moved into them:
+
+1. **`decision-engine-shared-decide-seam`** (US #9) — the shared
+   `decide(input, allowedOutcomes) → verdict` core, stubbable, outcome-agnostic.
+   Startable now.
+2. **`agentic-apply-retire-disposition-vocabulary`** (US #1/#2/#3/#4/#6/#7/#8/#10;
+   the KEYSTONE) — flips the apply rung to the agent-driven decision AND removes
+   the disposition vocabulary + picker + `keep`/`triaged:keep`. The agentic
+   decision SUBSUMES the triage rung: the triage question loses its disposition
+   token, `answeredPromoteArtifact` + the surface/triage-gate disposition emit
+   (`surface-gate.ts`/`triage-gate.ts`) are removed, the artifact type comes from
+   the agent verdict, and the `auto`-triage `map` case discharges by deletion (no
+   more `triaged:keep`). The `auto` exception otherwise survives; the
+   `needs-attention/` lifecycle state and self-containment-on-promote are
+   preserved. Owns the disposition removal across `sidecar.ts` / `apply-persist.ts`
+   / the advance/triage/surface-gate seam (the engine + gate CODE); the
+   operator-facing PROSE is task #4. EXTRACTS `resolveItemPathByIdentity` into a
+   neutral re-exported module so the CLI verb (#3) and the orphan gc sweep (#6)
+   reuse it without importing the hot file. Does NOT own US #10 (see #6). Blocked
+   by #1.
+3. **`direct-delete-question-cli-helper`** (US #5/#11) — a `dorfl` verb to delete a
+   source + sidecar in one revertible commit (the direct human/skill path, no engine
+   round-trip). Reuses the keystone's extracted `resolveItemPathByIdentity`, so it
+   is WRITE-orthogonal (only new CLI/module files) but has a READ dependency on that
+   extracted seam. Blocked by #2.
+4. **`surface-skill-prose-drop-disposition-vocabulary`** (US #6) — drops the
+   disposition vocabulary from the PROTOCOL prose (SURFACE-PROTOCOL.md +
+   WORK-CONTRACT.md, source+copy byte-identical) and the `answer-questions` /
+   `surface-questions` skills; distinguishes the retired TOKEN vocabulary from
+   generic-English "disposition" (left untouched). Does NOT touch triage-observations
+   (that is #7). Blocked by #2.
+5. **`agentic-apply-mint-adr-route`** (US #2, the deferred ADR clause) — adds the
+   `mint-adr` outcome: widens advance-apply's allowed set to permit `adr` and adds
+   the ADR-mint route (`docs/adr/`, ADR-FORMAT shape, source deleted in the same
+   commit). Deferred past the keystone because no ADR-mint path exists today and
+   PRD decision 14 makes the engine outcome-agnostic. Blocked by #2.
+6. **`orphan-sidecar-gc-sweep`** (US #10) — reaps a sidecar whose source was
+   deleted out-of-band, as a SWEEP over `work/questions/` folded into `dorfl gc`
+   (which runs on the scheduled CI tick). It CANNOT be an apply step: a deleted
+   source is in no lifecycle pool, so the advance driver never enumerates it and no
+   per-item tick (`apply`/`no-op`) ever runs on the orphan; the sidecar file is the
+   orphan's only on-disk trace, so the reap must enumerate `work/questions/`
+   directly. Reuses the keystone's extracted `resolveItemPathByIdentity`;
+   write-orthogonal (edits `gc.ts`/CLI/CI template, which no other task touches).
+   Blocked by #2.
+7. **`triage-observations-skill-retire-disposition-vocabulary`** (US #6) — the
+   FINAL prose sweep: brings the `triage-observations` human-drain skill (and the
+   borderline `orchestrate`/`work` mentions) into the retired-vocabulary world,
+   preserving its workflow. Kept separate from #4 because it is a larger
+   human-workflow surface whose own recommendation taxonomy is adjacent to (not
+   identical to) the engine's retired `disposition=` tokens — a deliberate scope
+   call (3a). Blocked by #4 (settled protocol prose first).
+
+The hot files (`sidecar.ts`, `apply-persist.ts`, and the advance/triage/surface-gate
+seam: `advance.ts`, `advance-classify.ts`, `triage-persist.ts`, `triage-gate.ts`,
+`surface-gate.ts`) are edited only by the keystone (#2) — and the apply seam again
+by #5 (mint-adr), serialized after #2. #1 (decision engine) is a new module,
+file-orthogonal and startable now. The rest are all blocked by #2: #3 (CLI verb)
+and #6 (orphan gc sweep) have a READ dependency on the keystone's extracted
+`resolveItemPathByIdentity` but are write-orthogonal (#3 new files, #6 edits
+`gc.ts`/CLI/CI template — neither touched by another task); #4 (protocol prose) is
+doc-only, gated so the prose matches the shipped engine; #5 extends the apply seam;
+#7 (triage-observations prose) is doc-only and gated on #4. The orphan-sidecar reap
+(US #10) is a SWEEP over `work/questions/` in #6, NOT an apply step — a deleted
+source is never enumerated by the advance driver, so the per-item apply path can
+never reach it; the sweep (folded into the scheduled CI `dorfl gc`) is the only
+mechanism that fires.
+
+US #6 (vocabulary GONE from sidecar/parser/apply-rung AND the surface/skill prose)
+is delivered across THREE tasks by layer: #2 removes it from the engine + gate CODE;
+#4 from the protocol docs + answer/surface-questions skills; #7 from the
+triage-observations human-drain skill (a deliberately separate surface). US #2
+launches via #2 with the ADR clause delivered by #5 (a flagged, named phasing — not
+a hole).
