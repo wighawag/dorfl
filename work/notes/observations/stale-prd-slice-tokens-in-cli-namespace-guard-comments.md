@@ -3,6 +3,7 @@ needsAnswers: false
 status: resolved
 resolvedBy: rename-slicing-modules-and-symbols-to-tasking
 resolvedDate: 2026-06-23
+triaged: keep
 ---
 
 # Stale `slice:`/`prd:` tokens in the slice-only-command guard comments (cli.ts)
@@ -42,3 +43,11 @@ Left untouched here: this is doc-comment prose, owned by
 `rename-slicing-modules-and-symbols-to-tasking` ("doc comments in the touched
 modules use task/brief/tasking wording") and the protocol/skills prose sweep, not
 the CLI flag/verb rename. Captured so the contradiction is not lost.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:rename-slicing-modules-and-symbols-to-tasking` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation's own front-matter declares status: resolved, resolvedBy: rename-slicing-modules-and-symbols-to-tasking, and that task is in work/tasks/done/ — the cli.ts guard-comment sweep was executed there. Unambiguous map to that single existing item.
