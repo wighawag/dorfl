@@ -506,7 +506,8 @@ export class PromptError extends Error {}
  * primitive in `gc.ts`, the same `merge-base --is-ancestor <tip> <arbiter>/main`
  * the reaper uses) — no second, divergent reachability implementation. Absent
  * this gate (a fresh claim — `resolveTask` called with no continue gate) the
- * resolution is UNCHANGED: `in-progress` then `backlog`, blind to `done/`.
+ * resolution is UNCHANGED: `in-progress` then `tasks-ready` (the pool), blind to
+ * `done/`.
  */
 export interface ContinueResolutionGate {
 	/** The repo/worktree/mirror the work-branch + arbiter refs live in. */
@@ -570,15 +571,17 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
 
 /**
  * Resolve a task's file: prefer `work/in-progress/<slug>.md`, fall back to
- * `work/backlog/<slug>.md`. Returns the parsed prd + extracted `## Prompt` body.
- * Throws {@link PromptError} when neither file exists or it has no prompt body.
+ * `work/tasks/ready/<slug>.md` (the pool). Returns the parsed prd + extracted
+ * `## Prompt` body. Throws {@link PromptError} when neither file exists or it has
+ * no prompt body.
  *
  * On a CONTINUE (a {@link ContinueResolutionGate} is supplied), `work/done/` is
- * added to the resolution AFTER `in-progress`/`backlog` — but ONLY when the gate
- * proves the work-branch tip is STRANDED (committed-but-not-on-the-arbiter). A
- * genuinely-COMPLETE `done/` task (tip reachable on `<arbiter>/main`) is NEVER
+ * added to the resolution AFTER `in-progress`/`tasks-ready` — but ONLY when the
+ * gate proves the work-branch tip is STRANDED (committed-but-not-on-the-arbiter).
+ * A genuinely-COMPLETE `done/` task (tip reachable on `<arbiter>/main`) is NEVER
  * resolved, so onboard cannot resurrect a finished task (defect 3 / story 5).
- * The `in-progress`/`backlog` resolution is UNCHANGED in every case; `done/` is
+ * The `in-progress`/`tasks-ready` resolution is UNCHANGED in every case; `done/`
+ * is
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
  * is byte-identical to the original `['in-progress','tasks-ready']`-only resolution.
  *
@@ -648,7 +651,8 @@ export function inferSlugFromBranch(
 /**
  * The full `dorfl prompt [<slug>]` rendering: resolve the slug (explicit,
  * else inferred from a `work/<slug>` branch), resolve its task file
- * (in-progress over backlog), and assemble the canonical wrapper + the task's
+ * (in-progress over `tasks-ready`, the pool), and assemble the canonical wrapper
+ * + the task's
  * `## Prompt`. Pure with respect to the repo (read-only) — the caller writes the
  * result to stdout.
  */

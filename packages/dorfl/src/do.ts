@@ -95,8 +95,9 @@ import {
  * `do-autopick`.
  *
  * CLAIM SEMANTICS (autonomous, same as `do --remote`/`run`): the claim is
- * explicit and claim-or-lose. An item that is NOT in backlog on the arbiter
- * (already in-progress / done / absent) is not claimable, so the CAS returns
+ * explicit and claim-or-lose. An item that is NOT in the pool (`tasks-ready`) on
+ * the arbiter (already in-progress / done / absent) is not claimable, so the CAS
+ * returns
  * `lost` (exit 2) and the run skips cleanly — `do`, the unattended CI worker,
  * never re-claims an item someone else holds and never silently picks up a
  * needs-attention item (a human does that through the human face).
