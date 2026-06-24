@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-21
 needsAnswers: false
+triaged: keep
 ---
 
 ## What was seen
@@ -143,3 +144,11 @@ Flag-gated (e.g. `--quiet-if-gone`) set by the matrix leg in the workflow; keep 
 
 Promoted to a new backlog task `work/tasks/ready/advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation was already triaged and promoted to a ready task with the identical slug (see 'Triaged: promoted' footer); the signal is fully captured there.
