@@ -411,3 +411,187 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		).toBe(true);
 	});
 });
+
+/**
+ * Seed an answered-`promote-prd` observation + sidecar (working tree). The TWIN of
+ * {@link seedAnsweredPromote}, only the sidecar disposition differs (`promote-prd`
+ * not `promote-task`) — so the PRD-route tests below assert the SAME body/delete
+ * shape against a `prds/proposed/` target instead of a `tasks/ready/` one.
+ */
+function seedAnsweredPromotePrd(repo: string, slug: string): string {
+	const itemPath = `work/notes/observations/${slug}.md`;
+	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
+	writeFileSync(
+		join(repo, itemPath),
+		[
+			'---',
+			`title: ${slug}`,
+			'date: 2026-06-11',
+			'needsAnswers: true',
+			'---',
+			'',
+			'## What was seen',
+			'',
+			`A PRD-sized signal awaiting triage. ${MECHANISM_SIGNAL}`,
+			'',
+			'## Open questions',
+			'',
+			`1. ${OPEN_QUESTION_SIGNAL}`,
+			'',
+		].join('\n'),
+	);
+	let model: SidecarModel = newSidecar(`observation:${slug}`, [
+		{question: 'Promote?', disposition: 'promote-prd'},
+	]);
+	model = {
+		...model,
+		entries: model.entries.map((e) => ({
+			...e,
+			answer: 'yes, promote as a PRD',
+		})),
+	};
+	mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+	writeFileSync(
+		join(repo, `work/questions/observation-${slug}.md`),
+		serialiseSidecar(model),
+	);
+	return itemPath;
+}
+
+describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)', () => {
+	it('a promote-prd mints prds/proposed/<slug>.md via the SAME CAS writer + DELETES the observation + sidecar in the SAME commit', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromotePrd(seeded.repo, 'prdprom');
+		const sidecarPath = 'work/questions/observation-prdprom.md';
+		const prdPath = 'work/prds/proposed/prdprom.md';
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:prdprom',
+			itemPath,
+			artifact: 'prd',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		expect(result.exitCode).toBe(0);
+		// The PRD lands in `proposed/` (staging) — NOT `tasks/ready/`.
+		expect(result.newItemPath).toBe(prdPath);
+		expect(pathOnArbiterMain(seeded.repo, prdPath)).toBe(true);
+		expect(pathOnArbiterMain(seeded.repo, 'work/tasks/ready/prdprom.md')).toBe(
+			false,
+		);
+
+		// The minted PRD body is self-contained: it carries the observation's REAL
+		// mechanism/fix signal (not a back-pointer) under the PRD lead heading.
+		const prdBody = gitIn(['show', `arbiter/main:${prdPath}`], seeded.repo);
+		expect(prdBody).toContain(MECHANISM_SIGNAL);
+		expect(prdBody).toContain('## Problem Statement');
+		expect(prdBody).not.toMatch(/Promoted from observation/i);
+		// Open questions transcribed + needsAnswers reflects them.
+		expect(prdBody).toContain('## Open questions');
+		expect(prdBody).toContain(OPEN_QUESTION_SIGNAL);
+		expect(parseFrontmatter(prdBody).needsAnswers).toBe(true);
+
+		// The observation + its sidecar are DELETED on the arbiter (discharge by
+		// deletion), riding the SAME atomic commit as the PRD create.
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
+		const touched = gitIn(
+			['show', '--name-status', '--no-renames', '--format=', 'arbiter/main'],
+			seeded.repo,
+		)
+			.split('\n')
+			.map((l) => l.trim())
+			.filter(Boolean);
+		expect(touched).toContain(`A\t${prdPath}`);
+		expect(touched).toContain(`D\t${itemPath}`);
+		expect(touched).toContain(`D\t${sidecarPath}`);
+	});
+
+	it('a same-slug CAS race on the PRD target leaves the observation INTACT for a retry (the loser backs off)', async () => {
+		// Pre-create the PRD target on the arbiter so the promote always loses the CAS.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const dest = join(seeded.repo, 'work', 'prds', 'proposed');
+		mkdirSync(dest, {recursive: true});
+		writeFileSync(join(dest, 'taken.md'), '---\ntitle: taken\n---\n\ntaken.\n');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'pre-occupy prd target'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const itemPath = seedAnsweredPromotePrd(seeded.repo, 'taken');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:taken',
+			itemPath,
+			artifact: 'prd',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('lost');
+		expect(result.exitCode).toBe(2);
+		// The loser DELETES nothing: observation + sidecar STILL present for a retry.
+		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
+		expect(
+			existsSync(join(seeded.repo, 'work/questions/observation-taken.md')),
+		).toBe(true);
+	});
+
+	it('a promote-prd with NO open questions clears needsAnswers on the minted PRD', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = `work/notes/observations/prdnoq.md`;
+		mkdirSync(join(seeded.repo, 'work', 'notes', 'observations'), {
+			recursive: true,
+		});
+		writeFileSync(
+			join(seeded.repo, itemPath),
+			[
+				'---',
+				'title: prdnoq',
+				'needsAnswers: true',
+				'---',
+				'',
+				`Fully-scoped PRD-sized signal: ${MECHANISM_SIGNAL}`,
+				'',
+			].join('\n'),
+		);
+		let model: SidecarModel = newSidecar('observation:prdnoq', [
+			{question: 'Promote?', disposition: 'promote-prd'},
+		]);
+		model = {
+			...model,
+			entries: model.entries.map((e) => ({...e, answer: 'yes'})),
+		};
+		mkdirSync(join(seeded.repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(
+			join(seeded.repo, 'work/questions/observation-prdnoq.md'),
+			serialiseSidecar(model),
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:prdnoq',
+			itemPath,
+			artifact: 'prd',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		const prdBody = gitIn(
+			['show', 'arbiter/main:work/prds/proposed/prdnoq.md'],
+			seeded.repo,
+		);
+		expect(prdBody).toContain(MECHANISM_SIGNAL);
+		expect(prdBody).not.toContain('## Open questions');
+		expect(parseFrontmatter(prdBody).needsAnswers).toBe(false);
+	});
+});

@@ -251,6 +251,16 @@ export interface PromoteObservationOptions {
 	/** The observation file path RELATIVE to `cwd` (e.g. `work/observations/foo.md`). */
 	itemPath: string;
 	/**
+	 * The artifact TYPE to mint: `'task'` → `work/tasks/ready/<slug>.md` (the
+	 * default, the `promote-task` route); `'prd'` → `work/prds/proposed/<slug>.md`
+	 * (the `promote-prd` route — a PRD-sized signal lands in `proposed/` staging,
+	 * which a human later promotes to `ready/`). BOTH go through the SAME
+	 * triage-local {@link createItemThroughCas} writer (one local commit through the
+	 * CAS) — NOT intake's branch+integrate band — so the CAS-loser-backs-off
+	 * guarantee and the same-commit note deletion are uniform across the two routes.
+	 */
+	artifact?: 'task' | 'prd';
+	/**
 	 * The NEW backlog slug to draft. Defaults to the observation's own slug (the
 	 * promoted item is `work/backlog/<obs-slug>.md`). The CAS is keyed on the new
 	 * item's PATH, so a same-slug new-item race ⇒ the loser fails the CAS.
@@ -291,17 +301,28 @@ export interface PromoteObservationResult {
 }
 
 /**
- * Promote an ANSWERED observation to a NEW, SELF-CONTAINED task (US #1/#3/#8):
- * CAS-create the new `work/tasks/ready/<new-slug>.md` keyed on the NEW item's
- * identity (its target path), with the observation note + its answered sidecar
- * `git rm`-ed IN THE SAME atomic commit. Promote is ONE commit (create + delete).
+ * Promote an ANSWERED observation to a NEW, SELF-CONTAINED artifact (US #1/#3/#8
+ * for the task route; US #4/#9 for the PRD route): CAS-create the new item keyed
+ * on the NEW item's identity (its target path), with the observation note + its
+ * answered sidecar `git rm`-ed IN THE SAME atomic commit. Promote is ONE commit
+ * (create + delete).
  *
- * The minted task body is built FROM the observation (see {@link buildPromotedBody}):
- * its mechanism + fix prose is carried into `## What to build`, and its
- * `## Open questions` scoping is transcribed into the task's own `## Open questions`
- * block with `needsAnswers` set when questions remain (cleared when none do) — so an
- * agent can build from the task ALONE and no decision residue is lost on deletion.
- * This self-containment is the PRECONDITION for the same-commit deletion.
+ * The artifact TYPE (`options.artifact`) selects the target + body shape: `'task'`
+ * (default) mints `work/tasks/ready/<slug>.md`; `'prd'` mints
+ * `work/prds/proposed/<slug>.md` (PRD staging — a human later promotes it to
+ * `ready/`). BOTH routes use the SAME triage-local {@link createItemThroughCas}
+ * writer (NOT intake's `switchToWorkBranch`/`performIntegration` branch+integrate
+ * band, which is intake's standalone front door): one create/integrate surface for
+ * triage, the CAS-loser-backs-off guarantee uniform across task and PRD promotion.
+ *
+ * The minted body is built FROM the observation (see {@link buildPromotedBody}):
+ * its mechanism + fix prose is carried into the artifact's lead section (`## What
+ * to build` for a task, `## Problem Statement` for a PRD), and its
+ * `## Open questions` scoping is transcribed into the new item's own
+ * `## Open questions` block with `needsAnswers` set when questions remain (cleared
+ * when none do) — so an agent can build from the artifact ALONE and no decision
+ * residue is lost on deletion. This self-containment is the PRECONDITION for the
+ * same-commit deletion.
  *
  * The CAS-create is the new-item-creation helper from `advancing-lock-borrow`
  * ({@link createItemThroughCas}): a same-slug new-item race needs NO special case
@@ -317,18 +338,26 @@ export async function promoteObservation(
 
 	const {slug: obsSlug} = resolveSidecarIdentity(item);
 	const newSlug = (options.newSlug ?? obsSlug).trim();
+	const artifact = options.artifact ?? 'task';
 	if (newSlug === '') {
 		return {
 			outcome: 'usage-error',
 			exitCode: 1,
-			message: `promote ${item}: empty new slug — cannot draft a task`,
+			message: `promote ${item}: empty new slug — cannot draft a ${artifact}`,
 		};
 	}
-	const newItemPath = workItemRel('tasks-ready', `${newSlug}.md`);
+	// Branch the target on artifact TYPE: `task` → the agent pool (`tasks-ready`);
+	// `prd` → PRD STAGING (`prds-proposed`), the conservative default a human later
+	// promotes to `ready/`. Both still go through the SAME createItemThroughCas
+	// writer below — only the destination folder + body shape differ.
+	const newItemPath = workItemRel(
+		artifact === 'prd' ? 'prds-proposed' : 'tasks-ready',
+		`${newSlug}.md`,
+	);
 	const by = options.by || resolveBy(cwd, env);
 	const content =
 		options.stubContent ??
-		buildPromotedBody(newSlug, readItem(cwd, itemPath, env));
+		buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env));
 
 	// The note + its answered sidecar `git rm` IN THE SAME create commit (promote =
 	// ONE atomic commit). A CAS LOSER never reaches the commit, so it leaves both
@@ -370,30 +399,44 @@ export async function promoteObservation(
 }
 
 /**
- * Build a SELF-CONTAINED task body from a promoted observation. The observation's
- * body (its mechanism + fix prose) is lifted into `## What to build`; its
- * `## Open questions` section — if any — is SPLIT OUT and transcribed into the
- * task's own `## Open questions` block, and `needsAnswers: true` is stamped iff
+ * Build a SELF-CONTAINED body from a promoted observation. The observation's body
+ * (its mechanism + fix prose) is lifted into the artifact's LEAD section; its
+ * `## Open questions` section — if any — is SPLIT OUT and transcribed into the new
+ * item's own `## Open questions` block, and `needsAnswers: true` is stamped iff
  * that block carries content (so deleting the note loses no scoping residue).
+ *
+ * The artifact TYPE selects the frontmatter + lead heading: a `task` gets
+ * `## What to build` + `blockedBy: []` (the buildable-task shape); a `prd` gets
+ * `## Problem Statement` (the PRD-spec shape, with no `blockedBy` — a PRD is not a
+ * blockable task). BOTH carry the SAME transcribed mechanism prose + open-question
+ * block, so a PRD minted into `proposed/` is just as self-contained as a task.
  *
  * Composition rule (recorded in the done record `## Decisions`): the split point
  * is the observation's FIRST `## Open questions` heading (any later sibling text
  * up to the next same-level heading, or EOF, is the scoping). Everything BEFORE it
- * is the mechanism/fix prose. We copy PROSE (not a back-pointer) so the task is
+ * is the mechanism/fix prose. We copy PROSE (not a back-pointer) so the artifact is
  * buildable on its own.
  */
-function buildPromotedBody(slug: string, observation: string): string {
+function buildPromotedBody(
+	artifact: 'task' | 'prd',
+	slug: string,
+	observation: string,
+): string {
 	const {mechanism, openQuestions} = splitObservationBody(observation);
 	const hasQuestions = openQuestions.trim() !== '';
+	const leadHeading =
+		artifact === 'prd' ? '## Problem Statement' : '## What to build';
 	const lines: string[] = [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
 		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
-		'blockedBy: []',
+		// A PRD is a spec, not a blockable task — only the task shape carries
+		// `blockedBy`.
+		...(artifact === 'prd' ? [] : ['blockedBy: []']),
 		'---',
 		'',
-		'## What to build',
+		leadHeading,
 		'',
 		mechanism.trim() === ''
 			? '(no mechanism/fix prose was carried from the observation.)'
