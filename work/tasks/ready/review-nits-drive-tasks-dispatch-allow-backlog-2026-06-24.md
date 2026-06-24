@@ -1,10 +1,11 @@
 ---
-title: review-gate non-blocking nits for 'drive-tasks-dispatch-allow-backlog' (Gate 2 approve)
-date: 2026-06-24
-status: open
-reviewOf: drive-tasks-dispatch-allow-backlog
-needsAnswers: true
+title: review-nits-drive-tasks-dispatch-allow-backlog-2026-06-24
+slug: review-nits-drive-tasks-dispatch-allow-backlog-2026-06-24
+needsAnswers: false
+blockedBy: []
 ---
+
+## What to build
 
 ## Non-blocking review findings
 
