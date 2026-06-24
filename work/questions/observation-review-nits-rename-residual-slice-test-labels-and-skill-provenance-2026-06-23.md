@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-rename-residual-slice-test-labels-and-skill-provenance-2026-06-23 type=observation slug=review-nits-rename-residual-slice-test-labels-and-skill-provenance-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-rename-residual-slice-test-labels-and-skill-provenance-2026-06-23 type=observation slug=review-nits-rename-residual-slice-test-labels-and-skill-provenance-2026-06-23 allAnswered=false -->
 
 ## Q1
 
@@ -6,7 +6,7 @@
 
 > The observation file (work/notes/observations/review-nits-rename-residual-slice-test-labels-and-skill-provenance-2026-06-23.md) records three findings from an APPROVED Gate-2 review:
 >   1. test/close-job.test.ts: the renamed first it-block (~L115-140 uses `my-brief`/'closes the brief's issue…') sits in a describe (L114 'runCloseJob — the PRD case') whose other it-blocks and fixtures (L140-143, L159-160, L210-211, L233) still read `my-prd`/`prd:<slug> slice`/'PRD'. Within the task's literal line-scoping; coherence wart only.
->   2. test/scan.test.ts:396 — JSDoc still says 'REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate…)' though the live src symbol is now `taskableBriefs` (packages/agent-runner/src/select-priority.ts:111). Identical stale citations live in select-priority.test.ts:54, mirror-pool-scan.test.ts, do-autopick.test.ts:294 — a broader residual cluster, not unique to this slice.
+>   2. test/scan.test.ts:396 — JSDoc still says 'REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate…)' though the live src symbol is now `taskableBriefs` (packages/dorfl/src/select-priority.ts:111). Identical stale citations live in select-priority.test.ts:54, mirror-pool-scan.test.ts, do-autopick.test.ts:294 — a broader residual cluster, not unique to this slice.
 >   3. PR/commit body has no `## Decisions` block; reviewer notes nothing was hidden beyond the scoping calls already flagged.
 > Reality check: no follow-up task in work/tasks/{backlog,todo}/ currently captures a 'sliceablePrds → taskableBriefs comment/test-vocabulary sweep'; the prior renames landed in work/tasks/done/rename-slicing-modules-and-symbols-to-tasking.md and work/tasks/done/rename-residual-slice-test-labels-and-skill-provenance.md but neither swept these comment/describe residuals. The original slice is APPROVED and integrating — these are durable nits, not blockers.
 

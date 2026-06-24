@@ -1,5 +1,5 @@
 {
-  "name": "agent-runner-monorepo",
+  "name": "dorfl-monorepo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.1",
@@ -17,8 +17,8 @@
     "prepublishOnly": "pnpm format:check && pnpm build",
     "release": "pnpm prepublishOnly && git push --all && pnpm changeset publish && git push --tags",
     "---------------------- FORMAT ----------------------": "",
-    "format": "prettier --write . && pnpm --filter @agent-runner/website format",
-    "format:check": "prettier --check . && pnpm --filter @agent-runner/website format:check",
+    "format": "prettier --write . && pnpm --filter @dorfl/website format",
+    "format:check": "prettier --check . && pnpm --filter @dorfl/website format:check",
     "---------------------- TEST ----------------------": "",
     "test": "pnpm -r test",
     "---------------------- DEV ----------------------": "",

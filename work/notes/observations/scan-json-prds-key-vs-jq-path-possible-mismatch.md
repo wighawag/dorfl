@@ -9,7 +9,7 @@ src-comment prose sweep).
 
 The advance CI/lifecycle workflow templates (`advance-ci-template.ts`,
 `advance-lifecycle-template.ts`) emit a propose-matrix `jq` that reads
-`.repos[].prds[]?` + `.cwd.repo.prds[]?` from `agent-runner scan --json`, and the
+`.repos[].prds[]?` + `.cwd.repo.prds[]?` from `dorfl scan --json`, and the
 matching validators + tests (`advance-ci-template.test.ts` L113-114,
 `advance-lifecycle-template.test.ts`) ASSERT the template text contains
 `\.repos\[\]\.prds\[\]\?` / `\.cwd\.repo\.prds\[\]\?`. But `scan.ts`'s

@@ -1,7 +1,7 @@
 ---
 title: needs-attention — route stuck items to a folder, surface them, allow return
 slug: needs-attention
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [verify]
 covers: [11, 12]
@@ -36,7 +36,7 @@ This subsumes the previously-parked "needs-attention surfacing" problem.
 
 ## Prompt
 
-> Implement the `needs-attention` mechanism in `packages/agent-runner/`. READ FIRST: ADR §12 (and §10) in `docs/adr/execution-substrate-decisions.md`, and the `needs-attention/` section of `WORK-CONTRACT.md` (authoritative). Follow this repo's `AGENTS.md`.
+> Implement the `needs-attention` mechanism in `packages/dorfl/`. READ FIRST: ADR §12 (and §10) in `docs/adr/execution-substrate-decisions.md`, and the `needs-attention/` section of `WORK-CONTRACT.md` (authoritative). Follow this repo's `AGENTS.md`.
 >
 > Build a runner-owned helper that, when a claimed item cannot complete (red `verify`, rebase/merge conflict, agent-reported ambiguity, timeout, rejected review), writes the reason (+ surfaced questions) into the item file and `git mv work/in-progress/<slug>.md work/needs-attention/<slug>.md` (mkdir -p first), committing it like the done-move. The build agent never does this. Wire new consumers (`agent-workspaces`'s rebase-conflict path; `watch`'s timeout/failure) to route here. (The DONE `complete` command is wired in by a separate follow-up slice, `complete-needs-attention`.) Make `scan`/eligibility SKIP `needs-attention/` for claiming but have `status` LIST these with their reason. Add a return step that `git mv`s an item back to `backlog/` for re-claiming. Introduce NO status/label field — state stays the folder (contract rule 3); the reason is prose in the body.
 >

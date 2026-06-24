@@ -11,7 +11,7 @@ needsAnswers: true
 A CI `advance-lifecycle` run (push-triggered) had a matrix leg run:
 
 ```
-agent-runner advance "task:work-layout-guard-catch-absolute-prefix-path-literals" --propose --watch --arbiter origin
+dorfl advance "task:work-layout-guard-catch-absolute-prefix-path-literals" --propose --watch --arbiter origin
 ```
 
 and FAILED with exit code 2:
@@ -29,7 +29,7 @@ Investigation (this repo, 2026-06-21):
   `work/tasks/done/work-layout-guard-catch-absolute-prefix-path-literals.md` on
   `origin/main`, integrated in commit `598d5da` (PR #185) at 06:28:43.
 - The CI workflow (`.github/workflows/advance-lifecycle.yml`) is a DYNAMIC MATRIX:
-  an `enumerate` job runs `agent-runner scan --json | jq '... select(.eligibility
+  an `enumerate` job runs `dorfl scan --json | jq '... select(.eligibility
   .eligible == true) | "task:" + .slug ...'` to snapshot eligible ids, then fans
   out one `advance "task:<slug>" --propose` leg per id (line ~274).
 - TIMELINE = the enumerate-then-fan-out RACE: `enumerate` snapshotted `main` while

@@ -6,9 +6,9 @@ description: 'Onboard a repo onto the file-based work/ contract: scaffold an emp
 
 # setup
 
-The **single skill to onboard a repo** onto the **`work/` contract** — the runner-agnostic, file-based protocol (defined in `protocol/WORK-CONTRACT.md`, which setup OWNS and copies into each target repo's `work/protocol/`) that `agent-runner` consumes. This is the **adopt-the-contract** step (a SKILL, not a command — adoption must NOT require installing `agent-runner`; the contract is the protocol, the runner is one consumer).
+The **single skill to onboard a repo** onto the **`work/` contract** — the runner-agnostic, file-based protocol (defined in `protocol/WORK-CONTRACT.md`, which setup OWNS and copies into each target repo's `work/protocol/`) that `dorfl` consumes. This is the **adopt-the-contract** step (a SKILL, not a command — adoption must NOT require installing `dorfl`; the contract is the protocol, the runner is one consumer).
 
-**One skill, two phases, auto-detected depth.** setup always does **Phase A — Scaffold** (deterministic; the `work/` skeleton, the protocol docs, `CONTEXT.md`, the `.agent-runner.json` gate). If it then detects **existing material to convert** (a task tracker, design docs, substantial source), it ALSO does **Phase B — Convert** (judgement-heavy; map that material onto the contract's buckets, hunt decisions, elicit ADRs). On an empty/near-empty repo, Phase B is simply empty and setup finishes after Phase A. The user never has to choose "scaffold vs migrate" — setup figures out the depth.
+**One skill, two phases, auto-detected depth.** setup always does **Phase A — Scaffold** (deterministic; the `work/` skeleton, the protocol docs, `CONTEXT.md`, the `.dorfl.json` gate). If it then detects **existing material to convert** (a task tracker, design docs, substantial source), it ALSO does **Phase B — Convert** (judgement-heavy; map that material onto the contract's buckets, hunt decisions, elicit ADRs). On an empty/near-empty repo, Phase B is simply empty and setup finishes after Phase A. The user never has to choose "scaffold vs migrate" — setup figures out the depth.
 
 > **Where the contract docs live:** setup copies the protocol reference docs into the target repo's **`work/protocol/`** (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, `task-template.md`, `prd-template.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`). Every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to `work/protocol/<doc>` in the repo you are setting up — read them there, not from a sibling skill folder.
 
@@ -34,12 +34,12 @@ An **ADR** (`docs/adr/`) records a **DECISION + its why** — the rejected optio
 
 ### A1. Detect the repo state (works empty OR populated — NEVER clobber)
 
-`ls`/glob the repo first. For EACH artifact setup would write, if it ALREADY exists, do NOT overwrite — report it and leave it (or, for `.agent-runner.json` / `CONTEXT.md`, offer to MERGE-in only the missing keys/sections). Only CREATE what is missing. This is what makes setup safe to run on a populated repo and idempotent to re-run.
+`ls`/glob the repo first. For EACH artifact setup would write, if it ALREADY exists, do NOT overwrite — report it and leave it (or, for `.dorfl.json` / `CONTEXT.md`, offer to MERGE-in only the missing keys/sections). Only CREATE what is missing. This is what makes setup safe to run on a populated repo and idempotent to re-run.
 
 - If `work/` already has the folders → skip them. **If `work/` is on the LEGACY FLAT layout** (top-level `backlog/` / `prd/` / `observations/` / … instead of the `notes/` / `tasks/` / `prds/` umbrellas) → do NOT silently scaffold a second, parallel tree beside it; surface it and offer the documented migration mapping (see A5b).
 - **`work/protocol/` is the ONE exception to never-clobber — it is protocol-owned, not repo-owned.** The repo's `work/` _items_ (tasks/prds/notes) are sacred and never touched; but the `work/protocol/` reference docs are verbatim copies setup owns, so re-running setup **re-syncs** them (overwrite with the current canonical copies + bump `work/protocol/VERSION`). This is how a repo picks up protocol updates. Never hand-edit `work/protocol/<doc>` in a target repo — edits belong in setup's canonical `protocol/` source and propagate via re-sync.
 - If `CONTEXT.md` exists → do not overwrite; offer to APPEND a "domain terms" section if absent, else leave it.
-- If `.agent-runner.json` exists → do not overwrite; report its `verify`/`harness` and offer to fill only ABSENT keys.
+- If `.dorfl.json` exists → do not overwrite; report its `verify`/`harness` and offer to fill only ABSENT keys.
 - **Detect Phase B material — do NOT skip dotfolders that might hold meaningful content.** While inventorying, note any **convertible material**: a `tasks/` folder, a `TODO.md`, an issue-tracker export, `docs/` design notes / RFCs, plan files, and **substantial source code** (code that embodies decisions). A plain `ls` of the visible top level is NOT enough: a hidden (dot-prefixed) folder can hold real sources (design docs, plans, tasks, notes), and a missed source is silently under-routed (a rich design doc that should be a prd never gets seen). So look inside dotfolders too, and judge each by whether it _could plausibly contain documents/plans/notes_ worth converting. **Skip only the noise** — `.git/`, `node_modules/` and other dependency dirs, build output, and anything `.gitignore`d are never sources. This detection decides whether Phase B runs (see A4 / Phase B). A repo with only a README that says "clean slate" (or nothing) → Phase B is empty; finish after Phase A.
 
 ### A2. The adoption conversation (seed CONTEXT.md — keep it short)
@@ -51,11 +51,11 @@ Derive the **project name** from the repo (folder/remote name) for the CONTEXT t
 
 **Nudge for a per-change convention (language-agnostic — never tool-specific).** Many repos require something extra on every change: a changeset, a `CHANGELOG` entry, a news fragment, etc. setup does NOT detect or assume any of these — there is no generic signal and guessing one (e.g. keying off `.changeset/`) would smuggle ecosystem favouritism into a deliberately language-agnostic skill (the A3 rule). Instead, ASK once, generically: **"Any standing per-change rule agents must follow in this repo — e.g. a changeset, a CHANGELOG entry, a news fragment? I'll note it under `## Conventions` in CONTEXT.md."** If they give one, record it in the CONTEXT.md `## Conventions` section (fold this into the A4 plan, do NOT make it a separate question round); if they skip, leave the commented stub. Mention the homes a convention can live in: **CONTEXT.md** (the in-band slot agents read), **their own agent config** (e.g. an `AGENTS.md` their harness reads), and — if they want it _enforced_ rather than merely stated — **their own check wired into the `verify` gate** (their command, e.g. `changeset status --since=main`; setup never injects one, per A3 — it only points out that `verify` is where enforcement would go).
 
-**Nudge for `promptGuidance.testFirst` (a prompt nudge, NOT a gate — fold into the A4 plan, do NOT add a separate question round).** `promptGuidance` is a per-repo NUDGE namespace in `.agent-runner.json` that strengthens the worker's in-band prompt without changing what the `verify` gate accepts; its first member is `testFirst`. ASK once, phrased AS a nudge so it is obvious this is guidance and not an acceptance bar: **"Should autonomous builds in this repo default to writing the failing test BEFORE the production code? Your `verify` gate still decides pass/fail either way — this just strengthens the wording the worker is given (`promptGuidance.testFirst` in `.agent-runner.json`; a NUDGE, not a gate)."** On **yes** → MERGE-IN `promptGuidance: { testFirst: true }` into `.agent-runner.json` per A1's merge-don't-clobber rule (preserve every other existing key VERBATIM; if `promptGuidance` already exists, add/set only `testFirst` and leave any sibling members in place). On **no / skip / don't know / absent user** → write NOTHING for this key (the runtime default is `false`, so omitting it IS the negative answer; do not write `testFirst: false`, do not create the `promptGuidance` object just to leave it empty). AGENTS.md is **never** written or modified by this nudge (host-owned — see the Boundary section); the load-bearing channel is the in-band prompt, which the runner already strengthens from `CLAIM-PROTOCOL.md` when the resolved value is `true`.
+**Nudge for `promptGuidance.testFirst` (a prompt nudge, NOT a gate — fold into the A4 plan, do NOT add a separate question round).** `promptGuidance` is a per-repo NUDGE namespace in `.dorfl.json` that strengthens the worker's in-band prompt without changing what the `verify` gate accepts; its first member is `testFirst`. ASK once, phrased AS a nudge so it is obvious this is guidance and not an acceptance bar: **"Should autonomous builds in this repo default to writing the failing test BEFORE the production code? Your `verify` gate still decides pass/fail either way — this just strengthens the wording the worker is given (`promptGuidance.testFirst` in `.dorfl.json`; a NUDGE, not a gate)."** On **yes** → MERGE-IN `promptGuidance: { testFirst: true }` into `.dorfl.json` per A1's merge-don't-clobber rule (preserve every other existing key VERBATIM; if `promptGuidance` already exists, add/set only `testFirst` and leave any sibling members in place). On **no / skip / don't know / absent user** → write NOTHING for this key (the runtime default is `false`, so omitting it IS the negative answer; do not write `testFirst: false`, do not create the `promptGuidance` object just to leave it empty). AGENTS.md is **never** written or modified by this nudge (host-owned — see the Boundary section); the load-bearing channel is the in-band prompt, which the runner already strengthens from `CLAIM-PROTOCOL.md` when the resolved value is `true`.
 
 ### A3. Discover the real `verify` gate FROM THE REPO (detect, never assume)
 
-The `.agent-runner.json` `verify` gate is the protocol's per-project, **language-agnostic** acceptance gate (build + test + format/lint, all green). The single rule: **discover the gate from THIS repo; never write a canned, stack-shaped guess.**
+The `.dorfl.json` `verify` gate is the protocol's per-project, **language-agnostic** acceptance gate (build + test + format/lint, all green). The single rule: **discover the gate from THIS repo; never write a canned, stack-shaped guess.**
 
 **Two shape rules for the gate you write (independent of which stack):**
 
@@ -95,7 +95,7 @@ Present, in one message:
 - the **`promptGuidance.testFirst` nudge** (A2) — "default to test-first autonomous builds in this repo? (NUDGE, not a gate — `verify` still decides pass/fail.)" Default = no (omit the key);
 - **IF Phase-B material was detected (A1): the inventory → bucket mapping table** (see B1) — "is this routing right?".
 
-Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.agent-runner.json` with an unconfirmed description/gate, and do not start Phase-B conversion, until they answer. (You MAY create the deterministic skeleton — empty `work/` folders + `work/protocol/` copies — without waiting, since those are content-free; but anything carrying judgement waits.) Narrating "I'll show the plan first" and then barrelling ahead in the same turn defeats the checkpoint — the STOP is real.
+Then **STOP and WAIT for the user's reply.** Do not write `CONTEXT.md`/`.dorfl.json` with an unconfirmed description/gate, and do not start Phase-B conversion, until they answer. (You MAY create the deterministic skeleton — empty `work/` folders + `work/protocol/` copies — without waiting, since those are content-free; but anything carrying judgement waits.) Narrating "I'll show the plan first" and then barrelling ahead in the same turn defeats the checkpoint — the STOP is real.
 
 ### A5. Write the scaffold (create-only) + run the gate once
 
@@ -110,9 +110,9 @@ work/
   protocol/                               # the propagated protocol docs (copied below)
 ```
 
-The two won't-proceed terminals are deliberately named DIFFERENTLY per regime (`tasks/cancelled/` vs `prds/dropped/`) — a slug-collision correctness fix (a dropped task and a dropped prd sharing a slug must not collide on one bare-slug path); see `work/protocol/WORK-CONTRACT.md`. Then **copy the protocol docs verbatim into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `prd-template.md`, `ADR-FORMAT.md`) and write `work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if present (protocol-owned, per A1); write `CONTEXT.md` and `.agent-runner.json` if absent (or merge-in missing keys per A1).
+The two won't-proceed terminals are deliberately named DIFFERENTLY per regime (`tasks/cancelled/` vs `prds/dropped/`) — a slug-collision correctness fix (a dropped task and a dropped prd sharing a slug must not collide on one bare-slug path); see `work/protocol/WORK-CONTRACT.md`. Then **copy the protocol docs verbatim into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `prd-template.md`, `ADR-FORMAT.md`) and write `work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if present (protocol-owned, per A1); write `CONTEXT.md` and `.dorfl.json` if absent (or merge-in missing keys per A1).
 
-**Run the gate ONCE and report (catch a wrong `verify` immediately).** After writing `.agent-runner.json`, actually EXECUTE the `verify` command once and report green/red — the cheapest moment to discover the gate is wrong (a typo, a missing script, deps not installed), instead of at first build. If red, say WHY (e.g. "`format:check` failed — run `format` first" / "`build` needs deps installed") and offer to adjust the gate or note the prep step; do NOT silently leave a red gate. (Deps clearly not installed = the env-prep gap — that is what the `prepare` field is FOR: put the install in `prepare` (A3b), do NOT contort `verify` to hide it.)
+**Run the gate ONCE and report (catch a wrong `verify` immediately).** After writing `.dorfl.json`, actually EXECUTE the `verify` command once and report green/red — the cheapest moment to discover the gate is wrong (a typo, a missing script, deps not installed), instead of at first build. If red, say WHY (e.g. "`format:check` failed — run `format` first" / "`build` needs deps installed") and offer to adjust the gate or note the prep step; do NOT silently leave a red gate. (Deps clearly not installed = the env-prep gap — that is what the `prepare` field is FOR: put the install in `prepare` (A3b), do NOT contort `verify` to hide it.)
 
 If **no Phase-B material** was detected, skip to **Report + hand off**. Otherwise continue to Phase B.
 
@@ -195,12 +195,12 @@ Phase B finishes with TWO mandatory checkpoints (a flat report bullet is too eas
 - **REPORT** every path written/created, re-synced, and every repo-owned file left untouched — grouped by bucket — plus anything left as `needsAnswers`/`observations`/`ideas`, and (ephemerally, report-only) any ADR-worthy decisions whose _why_ went un-answered. Note any `findings/` whose `source:` is code-derived (weakest provenance) so the human knows to verify them. Report the gate-run result (green/red).
 - **Update `CONTEXT.md` to reflect what was populated:** fold domain vocabulary into the glossary; note which buckets this repo now uses, precise about polarity (`notes/findings/` = **external** ground-truth with sources; our own architecture in `CONTEXT.md`/`docs/`; open questions in `notes/ideas/` (vague) or `needsAnswers` tasks (near-spec)). Do NOT write "this repo carries reverse-engineered `findings/` about our code" — the polarity mistake B3 exists to prevent. Append/merge only; never clobber.
 - **NEVER enumerate individual items in `CONTEXT.md` (no index files — the FOLDER is the index).** Describe _that_ the repo has ADRs / prds / observations and what they are FOR; do NOT list them one by one (e.g. not "`0001` (…), `0002` (…)"). A hand-maintained list goes stale the moment one is added/removed/superseded — and `docs/adr/` (the folder) already IS the canonical, always-current index (WORK-CONTRACT rule 2: no shared index/manifest; derive lists with `ls`). Applies to every bucket. (FINE and distinct: cross-referencing ONE specific ADR as a glossary term's authority — "the X seam (`docs/adr/x.md`)" — that points a term at its source of truth; the ban is on the _list_, not a pointed cross-reference.)
-- **Hand off:** tell the user the repo is contract-ready and what's next — write a prd (`to-prd`), task it into tasks (`to-task`), or build with `agent-runner do` (if the runner is installed — note the `harness`/`verify` configured).
+- **Hand off:** tell the user the repo is contract-ready and what's next — write a prd (`to-prd`), task it into tasks (`to-task`), or build with `dorfl do` (if the runner is installed — note the `harness`/`verify` configured).
 - **Git etiquette:** do NOT stage/commit/push — leave everything in the working tree for the user to inspect and commit (the `to-prd`/`to-task` producer convention). For a big repo, Phase B is iterative: bound each run to a subset (one source area at a time), report, let the human review, run again.
 
 ## Boundary (what setup does NOT do)
 
-- It does NOT install or require `agent-runner` (the contract is runner-agnostic).
+- It does NOT install or require `dorfl` (the contract is runner-agnostic).
 - It does NOT register an arbiter / configure CI (those are runner/CI concerns).
 - It does NOT BUILD or claim work (that is the runner). A converted task is just another `tasks/ready/` (or staged `tasks/backlog/`) item the engine then advances.
 - It NEVER writes an ADR whose _why_ it inferred from code (the discipline above); NEVER puts a description of our own code in `findings/` (that is `CONTEXT.md`/`docs/`); NEVER writes a vague wish into the task board `tasks/backlog/` (that is an `idea`); NEVER enumerates items into `CONTEXT.md` (the folder is the index); NEVER auto-commits or silently deletes.
@@ -221,14 +221,14 @@ The domain glossary for `<project>`. Agents and skills use THIS vocabulary when 
 ## Core domain terms
 
 - **<term>** — <meaning> (seeded from the adoption conversation; refine as you go).
-- **promptGuidance** — the per-repo NUDGE namespace in `.agent-runner.json` whose members (currently just `testFirst`) strengthen the wording in the worker's in-band prompt. NOT a gate: the `verify` step is still the only acceptance bar. Omitted ⇒ off; absence is the default.
+- **promptGuidance** — the per-repo NUDGE namespace in `.dorfl.json` whose members (currently just `testFirst`) strengthen the wording in the worker's in-band prompt. NOT a gate: the `verify` step is still the only acceptance bar. Omitted ⇒ off; absence is the default.
 - **work/ contract** — the on-disk system this repo uses, defined by the reference docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the contract), `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `prd-template.md`, `ADR-FORMAT.md`. Three REGIME umbrellas — `notes/` (capture buckets), `tasks/` (the build board), `prds/` (the prd lifecycle) — plus top-level `questions/` and `protocol/`. One markdown file per item, status = the folder it lives in (never a field). Capture buckets: `notes/ideas/` (proposed), `notes/observations/` (spotted, unverified, append-only), `notes/findings/` (verified external/domain ground truth, each with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`) record what WE decided and why.
 
 ## Conventions
 
 Standing per-change rules agents must follow in this repo.
 
-<!-- e.g. "Every change requires a changeset (`pnpm changeset`)" / a CHANGELOG fragment / a news entry. Add yours here, or delete this section. For enforcement, wire your own check into the `.agent-runner.json` `verify` gate. -->
+<!-- e.g. "Every change requires a changeset (`pnpm changeset`)" / a CHANGELOG fragment / a news entry. Add yours here, or delete this section. For enforcement, wire your own check into the `.dorfl.json` `verify` gate. -->
 
 ## Skills this repo uses
 
@@ -236,7 +236,7 @@ Standing per-change rules agents must follow in this repo.
 - Recommended: `review`, `grill-me`.
 ```
 
-### `.agent-runner.json`
+### `.dorfl.json`
 
 ```json
 {

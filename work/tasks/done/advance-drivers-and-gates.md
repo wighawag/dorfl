@@ -46,9 +46,9 @@ It is sequenced AFTER the rungs (it drives them) and after the pool scan (it sel
 
 > Build the two DRIVERS over the advance tick (one-shot sequential + loop), `-n` ALWAYS sequential, the FLAT per-action gate family, and the bare/eligible-set selection. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("One substrate-agnostic TICK, two drivers", "Two drivers + -n + CI", "Repo-config: a FLAT per-action gate family", US #2/7/22/23/25/26/31). The tick (classifier + rungs) is already built; this slice WRAPS it. `run` ≡ CI (same tick, different substrate; no new execution model). `-n` is ALWAYS sequential for both `do` and `advance` — parallelism is only `run` or the CI matrix; remove the inline `-n`×`--remote` refusal (the mirror-side scan now backs it). Each rung RESPECTS its gate (build→`allowAgents`, slice→`autoSlice`, auto-triage→`autoTriage`); surface + apply ALWAYS allowed (the zero-autonomy question loop). Isolation = the isolation-strategy seam; chaining = rebase-before-integrate (ADR §10); chain conflict → needs-attention; build NO new isolation/chaining machinery. The `advancing` lock is MANDATORY for the autonomous driver, a no-op for a solo human. The loop provably DRAINS (monotonic pool shrink; stable/idle at rest).
 >
-> READ FIRST: `packages/agent-runner/src/run.ts` (the existing concurrent loop driver
+> READ FIRST: `packages/dorfl/src/run.ts` (the existing concurrent loop driver
 >
-> - the do/run convergence — the loop wraps the tick), `packages/agent-runner/src/do.ts`
+> - the do/run convergence — the loop wraps the tick), `packages/dorfl/src/do.ts`
 > - `do-autopick.ts` (the one-shot + `-n` + autopick path), `integration-core.ts` (`performIntegration` — the shared gate→integrate back-half), `isolation.ts` (the isolation-strategy seam), `repo-config.ts` (the gate resolution chain), the mirror-side pool scan from `mirror-side-eligible-pool-scan`, the verb + rungs from the advance slices, and the inline `-n`×`--remote` refusal in `cli.ts` to remove.
 >
 > FIRST, check this slice against current reality (drift). The do/run convergence, the isolation seam, and `do prd:`-through-integration are LANDED substrate (PRD 2026-06-09 UPDATE). If they landed differently, reconcile or route to `needs-attention/`.
@@ -60,7 +60,7 @@ It is sequenced AFTER the rungs (it drives them) and after the pool scan (it sel
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-drivers-and-gates --arbiter origin
+dorfl claim advance-drivers-and-gates --arbiter origin
 git fetch origin && git switch -c work/advance-drivers-and-gates origin/main
 git mv work/in-progress/advance-drivers-and-gates.md work/done/advance-drivers-and-gates.md
 ```

@@ -1,9 +1,9 @@
-# agent-runner — the `advance` loop in CI (the advance-loop capability, PRD advance-loop, US #27/28)
+# dorfl — the `advance` loop in CI (the advance-loop capability, PRD advance-loop, US #27/28)
 #
 # ────────────────────────────────────────────────────────────────────────────
 # ONE-STEP ADOPTION: copy THIS file to `.github/workflows/advance-loop.yml`
 # in your target repo, set the secrets it references, and you are wired. It is a
-# `.template` here ON PURPOSE so it NEVER self-triggers inside the agent-runner
+# `.template` here ON PURPOSE so it NEVER self-triggers inside the dorfl
 # repo itself (a live `.github/workflows/*.yml` here would loop the tool on its own
 # work — see docs/ci/README.md "Why a `.template`").
 #
@@ -23,7 +23,7 @@
 #
 # ONE WORD, ONE MEANING — `integrationMode` drives BOTH (US #27). The dispatch
 # input is the INTEGRATION MODE (propose | merge, the same vocabulary as
-# `.agent-runner.json`'s `integration` and `advance --propose`/`--merge`). The job
+# `.dorfl.json`'s `integration` and `advance --propose`/`--merge`). The job
 # SHAPE is DERIVED from it — it is NOT a second, independent knob. So the shape the
 # legs run in and the integration mode they pass to `advance` can NEVER desync:
 #
@@ -32,7 +32,7 @@
 #                       opens its OWN PR. propose-mode items are independent PRs, so
 #                       a matrix is true parallelism and `-n` is not even needed.
 #                       The matrix items are ENUMERATED via the mirror-side pool
-#                       scan (`agent-runner scan --json`, the registry/hub-mirror
+#                       scan (`dorfl scan --json`, the registry/hub-mirror
 #                       enumeration), so CI fans out over exactly the eligible pool.
 #
 #   * `integrationMode: merge` → a SINGLE SEQUENTIAL job running
@@ -45,7 +45,7 @@
 #
 # Pick the mode with the `integrationMode` dispatch input (default below). It rides
 # `advance` as `--propose`/`--merge`, which sits at the TOP of the precedence chain
-# (flag > per-repo `.agent-runner.json` `integration` > global > default), so the
+# (flag > per-repo `.dorfl.json` `integration` > global > default), so the
 # WORKFLOW mode always wins over a repo's config default — they cannot disagree.
 # Only the job for the chosen mode runs; the other is skipped by its `if:` guard.
 
@@ -80,11 +80,11 @@ on:
       # Override an engine gate for THIS manual run only (rides the env layer of
       # flag > env > per-repo > global > default). `type: choice` with a BLANK first
       # option (not `type: boolean`, which has no "unset"): blank ⇒ emit NOTHING
-      # (config wins); a non-blank choice ⇒ export the matching AGENT_RUNNER_* for
+      # (config wins); a non-blank choice ⇒ export the matching DORFL_* for
       # this run. The per-job step below writes ONLY when non-blank (an empty value
       # would make the engine's env coercion throw).
       autoBuild:
-        description: 'One-shot override of the autoBuild gate (AGENT_RUNNER_AUTO_BUILD) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        description: 'One-shot override of the autoBuild gate (DORFL_AUTO_BUILD) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -93,7 +93,7 @@ on:
           - 'true'
           - 'false'
       autoTask:
-        description: 'One-shot override of the autoTask gate (AGENT_RUNNER_AUTO_TASK) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        description: 'One-shot override of the autoTask gate (DORFL_AUTO_TASK) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -102,7 +102,7 @@ on:
           - 'true'
           - 'false'
       observationTriage:
-        description: 'One-shot override of the observationTriage gate (AGENT_RUNNER_OBSERVATION_TRIAGE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        description: 'One-shot override of the observationTriage gate (DORFL_OBSERVATION_TRIAGE) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -112,7 +112,7 @@ on:
           - 'ask'
           - 'auto'
       surfaceBlockers:
-        description: 'One-shot override of the surfaceBlockers gate (AGENT_RUNNER_SURFACE_BLOCKERS) for THIS dispatch run only. Blank ⇒ no override (config wins).'
+        description: 'One-shot override of the surfaceBlockers gate (DORFL_SURFACE_BLOCKERS) for THIS dispatch run only. Blank ⇒ no override (config wins).'
         required: false
         default: ''
         type: choice
@@ -164,19 +164,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # MUST run BEFORE `scan`: scan's matrix pools are gated by the SAME engine
         # gate family, so an override that does not reach this job produces an empty
         # matrix and is silently inert. `if:` + the inner `[ -n ... ]` guard keep
         # schedule/push (and a blank dispatch field) exporting NOTHING — an empty
-        # AGENT_RUNNER_* would make the engine's env coercion throw.
+        # DORFL_* would make the engine's env coercion throw.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
       - id: scan
         # The eligible-pool scan: enumerate eligible items as namespaced ids.
@@ -187,9 +187,9 @@ jobs:
         # eligible ones as explicit `task:<slug>` / `prd:<slug>` ids (CI MUST
         # use explicit prefixes). Each becomes one matrix leg → one independent
         # `advance` → one PR — for a TASK that is the build, for a PRD that is
-        # the auto-slice (capability B, `AGENT_RUNNER_AUTO_TASK`).
+        # the auto-slice (capability B, `DORFL_AUTO_TASK`).
         run: |
-          items="$(agent-runner scan --json \
+          items="$(dorfl scan --json \
             | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
@@ -216,36 +216,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # Mirror of the enumerate-job override (see there): export each gate's
-        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input, so the
+        # DORFL_* ONLY on a workflow_dispatch with a non-blank input, so the
         # one-shot override also reaches the `advance` leg that builds the item.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
       - name: advance one item (propose ⇒ opens a PR)
         # `--propose` ties the integration mode to THIS (matrix) shape: it sits at
         # the top of the precedence chain, so the workflow mode always wins over the
-        # repo's `.agent-runner.json` default and a leg can NEVER merge to main.
+        # repo's `.dorfl.json` default and a leg can NEVER merge to main.
         # `--propose` shells `gh` to open the PR, which reads `GH_TOKEN` from the env
         # (a workflow PERMISSION is not a credential). Prefer a dedicated
-        # `AGENT_RUNNER_GH_TOKEN` secret (a PAT / App token) so PRs carry YOUR
+        # `DORFL_GH_TOKEN` secret (a PAT / App token) so PRs carry YOUR
         # identity AND trigger downstream workflows (PRs opened with the built-in
         # `GITHUB_TOKEN` are `github-actions[bot]` and do NOT trigger further
         # `on: pull_request` runs). Falls back to the auto `GITHUB_TOKEN` so it works
         # zero-config; the job's `pull-requests: write` scopes that token.
         env:
-          GH_TOKEN: ${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
         # `--watch` streams the build agent's high-signal turns into THIS job log
         # live (read-only observer; no outcome/gate/git effect), so the run shows
         # the agent working instead of freezing. Fits because each matrix leg names
         # ONE item (one pi session to tail); the `-n` merge job cannot use it.
-        run: agent-runner advance "${{ matrix.item }}" --propose --watch --arbiter origin
+        run: dorfl advance "${{ matrix.item }}" --propose --watch --arbiter origin
 
   # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
   # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.
@@ -257,18 +257,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # Mirror of the enumerate-job override (see there): export each gate's
-        # AGENT_RUNNER_* ONLY on a workflow_dispatch with a non-blank input. The
+        # DORFL_* ONLY on a workflow_dispatch with a non-blank input. The
         # merge job re-scans the pool inside `advance -n`, so it needs the override
         # too for the lifecycle/task pools to reflect it.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "AGENT_RUNNER_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "AGENT_RUNNER_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "AGENT_RUNNER_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "AGENT_RUNNER_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
+          [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
       - name: advance the eligible pool sequentially (merge ⇒ rebase-chains to main)
         # `--merge` rides ONLY this single sequential job (never a matrix leg), so
@@ -277,8 +277,8 @@ jobs:
         # repo config default, so the workflow mode and the integration mode agree.
         # `gh` (merge / PR housekeeping) reads `GH_TOKEN` from the env.
         env:
-          GH_TOKEN: ${{ secrets.AGENT_RUNNER_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: agent-runner advance -n 10 --merge --arbiter origin
+          GH_TOKEN: ${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: dorfl advance -n 10 --merge --arbiter origin
 
   # ── REAP merged remote work/* branches (the hygiene sweep) ───────────────────
   # The provider-agnostic counterpart of the worktree reaper: delete remote
@@ -305,8 +305,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
       - name: reap merged remote work/* branches (gc --remote-branches)
         # Deletes ONLY branches provably merged into origin/main; reports
         # deleted-vs-retained-with-reason. Safe to run every tick (idempotent).
-        run: agent-runner gc --remote-branches --arbiter origin
+        run: dorfl gc --remote-branches --arbiter origin

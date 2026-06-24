@@ -1,7 +1,7 @@
 ---
 title: start — claim then onboard the human onto the work branch
 slug: start
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [claim-command]
 covers: [5]
@@ -11,7 +11,7 @@ covers: [5]
 
 A human-convenience command that does the two-step ritual we run every time a person starts a slice by hand: claim the item, and — **only if the claim landed** — put the human on the work branch ready to start, in their CURRENT checkout.
 
-`agent-runner start [<slug>] [--arbiter <remote>] [--resume]`:
+`dorfl start [<slug>] [--arbiter <remote>] [--resume]`:
 
 Branch on the item's CURRENT FOLDER on `<arbiter>/main` (never on the advisory `claimed_by` field — WORK-CONTRACT rule 6: folder + git history are truth):
 
@@ -23,7 +23,7 @@ Slug inference: if `<slug>` is omitted and the current branch is `work/<slug>`, 
 
 Scope notes (deliberate):
 
-- This is the **human-in-current-checkout** path: work happens right here in the repo the person is looking at. It does NOT use the `agent-workspaces` isolated worktrees under `~/.agent-runner/` — that substrate is for the runner's parallel jobs, a different use case. The two models coexist on purpose.
+- This is the **human-in-current-checkout** path: work happens right here in the repo the person is looking at. It does NOT use the `agent-workspaces` isolated worktrees under `~/.dorfl/` — that substrate is for the runner's parallel jobs, a different use case. The two models coexist on purpose.
 - It is a **separate command, not a flag on `claim`**, so `claim` stays conceptually pure (just the CAS). `start` = claim THEN onboard.
 - It is **harness-agnostic**: it lands the human on the work branch and gets out of the way. It does NOT launch an agent/editor (e.g. `pi`) — you're already in the right dir on the right branch, so launch whatever you want yourself.
 - Single item only (a human works one thing at a time); batch/parallel claiming is the runner's job (`run-once`).
@@ -42,11 +42,11 @@ Scope notes (deliberate):
 
 ## Blocked by
 
-- `claim-command` — sequences the `agent-runner claim` CAS; switches to the work branch only after it provably lands.
+- `claim-command` — sequences the `dorfl claim` CAS; switches to the work branch only after it provably lands.
 
 ## Prompt
 
-> Implement `agent-runner start <slug>` in `packages/agent-runner/`. It is a thin human convenience over the `claim-command` slice: run the claim CAS, and ONLY if it returns 0, `git fetch <arbiter>` + `git switch -c work/<slug> <arbiter>/main` so the human is on the work branch in their current checkout. On exit 2/3 (lost/contended) behave exactly like `claim`: restore the user, create no work branch, propagate the exit code. READ FIRST: the `claim-command` slice + `skills/to-slices/CLAIM-PROTOCOL.md`, and ADR §1/§8 in `docs/adr/execution-substrate-decisions.md`.
+> Implement `dorfl start <slug>` in `packages/dorfl/`. It is a thin human convenience over the `claim-command` slice: run the claim CAS, and ONLY if it returns 0, `git fetch <arbiter>` + `git switch -c work/<slug> <arbiter>/main` so the human is on the work branch in their current checkout. On exit 2/3 (lost/contended) behave exactly like `claim`: restore the user, create no work branch, propagate the exit code. READ FIRST: the `claim-command` slice + `skills/to-slices/CLAIM-PROTOCOL.md`, and ADR §1/§8 in `docs/adr/execution-substrate-decisions.md`.
 >
 > Deliberate scope: this is the human-in-current-checkout path; it does NOT use the `agent-workspaces` isolated worktrees (that's the runner's parallel-jobs substrate). Keep it a SEPARATE command, not a flag on `claim`, so `claim` stays just the CAS. Single item only. Harness-agnostic: do NOT launch an agent or editor (the user is already in the right place and can launch `pi` etc. themselves). Never weaken the claim's cheap/restorable guarantee — the work branch is created only after the claim lands.
 >

@@ -72,7 +72,7 @@ Update the existing `run` tests that assert "two concurrent same-repo merges bot
 ### Claiming this slice
 
 ```sh
-agent-runner claim run-merge-integration-concurrency-safe --arbiter origin
+dorfl claim run-merge-integration-concurrency-safe --arbiter origin
 git fetch origin && git switch -c work/run-merge-integration-concurrency-safe origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/run-merge-integration-concurrency-safe.md work/done/run-merge-integration-concurrency-safe.md

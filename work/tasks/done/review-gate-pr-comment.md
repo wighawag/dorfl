@@ -69,7 +69,7 @@ The Gate-2 verdict (`lastVerdict`) is produced inside `performIntegration` (`src
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-gate-pr-comment --arbiter <remote>      # default --arbiter origin
+dorfl claim review-gate-pr-comment --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/review-gate-pr-comment <remote>/main
 git mv work/in-progress/review-gate-pr-comment.md work/done/review-gate-pr-comment.md
 ```

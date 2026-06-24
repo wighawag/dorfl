@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:tests-asserting-on-live-inbox-content-are-brittle-landmines-2026-06-20 type=observation slug=tests-asserting-on-live-inbox-content-are-brittle-landmines-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:tests-asserting-on-live-inbox-content-are-brittle-landmines-2026-06-20 type=observation slug=tests-asserting-on-live-inbox-content-are-brittle-landmines-2026-06-20 allAnswered=false -->
 
 ## Q1
 

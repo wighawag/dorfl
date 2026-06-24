@@ -26,8 +26,8 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
    cp docs/ci/advance-loop.yml.template .github/workflows/advance-loop.yml
    ```
 
-2. Provide the `agent-runner-setup` composite action the template references at
-   `.github/actions/agent-runner-setup` (installs Node + `agent-runner` + the
+2. Provide the `dorfl-setup` composite action the template references at
+   `.github/actions/dorfl-setup` (installs Node + `dorfl` + the
    agent harness, configures git identity + provider auth). Its auth/secrets shape
    is the separate `runner-in-ci` prd's concern — this template only assumes such a
    setup step exists and INVOKES the driver.
@@ -41,9 +41,9 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
      to `main`).
 
    The `--propose`/`--merge` flag sits at the TOP of `advance`'s precedence chain
-   (flag > per-repo `.agent-runner.json` `integration` > global > default), so the
+   (flag > per-repo `.dorfl.json` `integration` > global > default), so the
    workflow mode always wins over a repo's config default. (You may still pin
-   `integration` in `.agent-runner.json` as the default for un-dispatched runs, but
+   `integration` in `.dorfl.json` as the default for un-dispatched runs, but
    the workflow leg always passes the explicit flag matching its shape.)
 
 ## The two CI shapes (US #27)
@@ -54,7 +54,7 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 | `merge`           | a SINGLE SEQUENTIAL job      | `advance -n <x> --merge`          | merge-mode items land on `main` via rebase (ADR §10); this template keeps merge a single sequential job today (see the note below). |
 
 **One word, one meaning.** The dispatch input is `integrationMode` — the SAME
-vocabulary as `.agent-runner.json`'s `integration` and `advance --propose`/
+vocabulary as `.dorfl.json`'s `integration` and `advance --propose`/
 `--merge`. It is NOT a separate "job-shape" knob: the shape is DERIVED from the
 mode, and the SAME value is passed to `advance` as `--propose`/`--merge`. So the
 shape the legs run in and the integration mode they actually use can never desync
@@ -62,10 +62,10 @@ shape the legs run in and the integration mode they actually use can never desyn
 every leg silently merging to `main` because the repo config defaulted to `merge`).
 
 The propose matrix enumerates its items via the **mirror-side eligible-pool scan**
-(`agent-runner scan --json`, the hub-mirror enumeration the loop driver also
+(`dorfl scan --json`, the hub-mirror enumeration the loop driver also
 consumes), so CI fans out over exactly the eligible pool. Each leg passes
 `--propose`, so a matrix leg can NEVER merge to `main`. The merge job runs the
-one-shot driver `agent-runner advance -n <x> --merge` (`-n` is ALWAYS sequential —
+one-shot driver `dorfl advance -n <x> --merge` (`-n` is ALWAYS sequential —
 parallelism comes only from the propose matrix, never from `-n`); `--merge` rides
 ONLY this single sequential job, so a parallel merge-to-`main` is structurally
 impossible in the SHIPPED template.
@@ -87,7 +87,7 @@ impossible in the SHIPPED template.
 
 ### Matrix enumeration scope
 
-`agent-runner scan --json` reports eligible **tasks** from BOTH the hub-mirror
+`dorfl scan --json` reports eligible **tasks** from BOTH the hub-mirror
 queue (`repos[].items[]`) AND the in-place working checkout (`cwd.repo.items[]`);
 the enumeration unions both pools, because CI runs in-place (a fresh runner has no
 registered mirror, so the eligible tasks live in `cwd.repo.items[]`). So the
@@ -111,7 +111,7 @@ concern, not this template's).
 
 The file is shipped as `advance-loop.yml.template`, NOT a live
 `.github/workflows/advance-loop.yml`, **on purpose**: a live workflow committed in
-the agent-runner repo itself would self-trigger and loop the tool on its OWN
+the dorfl repo itself would self-trigger and loop the tool on its OWN
 `work/` tree unintentionally. The `.template` suffix keeps it inert here; it only
 becomes live when a consumer copies it into their own `.github/workflows/`.
 

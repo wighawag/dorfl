@@ -1,7 +1,7 @@
 ---
 title: complete integration flag — merge/propose per invocation; switch to main + delete merged branch (both modes)
 slug: complete-integration-flag
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [complete]
 covers: [7, 8]
@@ -13,7 +13,7 @@ Let the human choose the integration mode **at `complete` time** (the moment it 
 
 End-to-end:
 
-- `agent-runner complete` gains mutually-exclusive **`--merge`** / **`--propose`** flags.
+- `dorfl complete` gains mutually-exclusive **`--merge`** / **`--propose`** flags.
 - **Resolution precedence** (highest first):
   1. `--merge` / `--propose` flag (this invocation)
   2. per-repo config integration override (see the `per-repo-config` slice; if not yet available, this level is simply skipped)
@@ -46,7 +46,7 @@ End-to-end:
 
 ## Prompt
 
-> Add `--merge`/`--propose` to `agent-runner complete` in `packages/agent-runner/`, resolving the integration mode at completion time. Read `complete.ts` and `config.ts`. The flags are mutually exclusive (error if both). Resolution precedence, highest first: the flag (this invocation) > per-repo config override (from the `per-repo-config` slice — if that layer isn't present yet, skip it) > global config `integration` > built-in default `propose`. Do NOT let integration mode be chosen at `start` time or stamped into slice frontmatter — it is resolved only where it applies (complete/integrate). Keep the autonomous runner (`run-once`/`watch`) config-only (no per-tick flag), resolving the same per-repo > global > default order so human and autonomous paths agree.
+> Add `--merge`/`--propose` to `dorfl complete` in `packages/dorfl/`, resolving the integration mode at completion time. Read `complete.ts` and `config.ts`. The flags are mutually exclusive (error if both). Resolution precedence, highest first: the flag (this invocation) > per-repo config override (from the `per-repo-config` slice — if that layer isn't present yet, skip it) > global config `integration` > built-in default `propose`. Do NOT let integration mode be chosen at `start` time or stamped into slice frontmatter — it is resolved only where it applies (complete/integrate). Keep the autonomous runner (`run-once`/`watch`) config-only (no per-tick flag), resolving the same per-repo > global > default order so human and autonomous paths agree.
 >
 > ALSO fold in this fix: `complete` must switch the human back to local `main` in BOTH modes (today it only does in merge). merge = switch + ff to the new main; propose = `git switch main` ONLY (no ff). Then DELETE the local `work/<slug>` branch when its work is provably on the arbiter — same predicate as worktree deletion (ADR §4), mode-agnostic: tip is ancestor of `<arbiter>/main` (merged) OR `<arbiter>/work/<slug>` tip == local tip (pushed & up-to-date); else keep it. NEVER delete the remote branch (propose PR needs it); verify remote-tip == local-tip so an un-pushed amend is never lost. Add `--no-switch` to leave the human on the work branch (and keep it) in either mode.
 >

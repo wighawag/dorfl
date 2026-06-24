@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21 type=observation slug=needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21 type=observation slug=needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21 allAnswered=false -->
 
 ## Q1
 

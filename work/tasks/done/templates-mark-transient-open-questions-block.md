@@ -23,7 +23,7 @@ End-to-end:
 - [ ] Task template carries the same marker convention (consistent with the brief template) so any future per-task `needsAnswers` flow has the same reconciliation seam.
 - [ ] `skills/setup/protocol/brief-template.md` ↔ `work/protocol/brief-template.md` and `skills/setup/protocol/task-template.md` ↔ `work/protocol/task-template.md` are byte-identical (`diff -r skills/setup/protocol work/protocol` shows no drift on these files).
 - [ ] The acceptance gate (`pnpm -r build && pnpm -r test && pnpm format:check`) stays green; if any existing snapshot/template-render test exists for the templates, it is updated alongside the template change.
-- [ ] No code in `packages/agent-runner/` is modified by this slice (the reconciliation logic lands in the sibling slice); this slice changes only the templates.
+- [ ] No code in `packages/dorfl/` is modified by this slice (the reconciliation logic lands in the sibling slice); this slice changes only the templates.
 
 ## Blocked by
 
@@ -35,7 +35,7 @@ End-to-end:
 >
 > Domain vocabulary: a "brief" is a launch snapshot in `work/briefs/ready/*.md`; the "open-questions block" is the transient section authors fill while `needsAnswers: true` and the apply rung must strip on full resolution; the "autonomy note" is the "Set `needsAnswers: true` ... clear once answered" authoring instruction that today appears as durable body prose and shouldn't.
 >
-> Where to look: `skills/setup/protocol/brief-template.md` and `skills/setup/protocol/task-template.md` (SOURCE OF TRUTH per `AGENTS.md`); `work/protocol/brief-template.md` and `work/protocol/task-template.md` (the propagated COPY for this repo; MUST stay byte-identical with the source). Also skim how `packages/agent-runner/src/sidecar*.ts` already uses HTML-comment markers, so the marker style here matches house style.
+> Where to look: `skills/setup/protocol/brief-template.md` and `skills/setup/protocol/task-template.md` (SOURCE OF TRUTH per `AGENTS.md`); `work/protocol/brief-template.md` and `work/protocol/task-template.md` (the propagated COPY for this repo; MUST stay byte-identical with the source). Also skim how `packages/dorfl/src/sidecar*.ts` already uses HTML-comment markers, so the marker style here matches house style.
 >
 > Seam to test at: the templates themselves — if there is an existing render or snapshot test covering them, update it. There is no apply-side logic in this slice.
 >
@@ -50,7 +50,7 @@ End-to-end:
 ### Claiming this task
 
 ```sh
-agent-runner claim templates-mark-transient-open-questions-block --arbiter origin
+dorfl claim templates-mark-transient-open-questions-block --arbiter origin
 git fetch origin && git switch -c work/templates-mark-transient-open-questions-block origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/tasks/todo/templates-mark-transient-open-questions-block.md work/tasks/done/templates-mark-transient-open-questions-block.md

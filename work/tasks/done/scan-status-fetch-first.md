@@ -49,7 +49,7 @@ Important scope guard: this is about `scan`/`status` FETCHING FIRST, **not** abo
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim scan-status-fetch-first --arbiter <remote>      # default --arbiter origin
+dorfl claim scan-status-fetch-first --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/scan-status-fetch-first <remote>/main
 # on completion, in the work branch's PR/merge:

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build-2026-06-24 type=observation slug=advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build-2026-06-24 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build-2026-06-24 type=observation slug=advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build-2026-06-24 allAnswered=false -->
 
 ## Q1
 

@@ -22,7 +22,7 @@ rebase.
 
 - Delete `drop-bookkeeping-rebase.ts` and its call sites: the integration rebase
   (`integration-core.ts`) and the onboard continue-rebase (`continue-branch.ts`).
-  Remove the `Agent-Runner-Bookkeeping: route-to-needs-attention` trailer producer
+  Remove the `Dorfl-Bookkeeping: route-to-needs-attention` trailer producer
   (`needs-attention.ts` no longer emits a route-to-needs-attention move-only commit
   after 9b, so the trailer has no producer).
 - Prove a branch continue/rebase is now a PLAIN rebase: a work branch cut from `main`
@@ -37,7 +37,7 @@ good) and completes defect #2's dissolution (branch inheritance gone).
 
 - [ ] `drop-bookkeeping-rebase.ts` is deleted; the integration rebase and the onboard
       continue-rebase no longer reference a drop step; the
-      `Agent-Runner-Bookkeeping: route-to-needs-attention` trailer has no producer and
+      `Dorfl-Bookkeeping: route-to-needs-attention` trailer has no producer and
       its consumer is gone.
 - [ ] A work branch cut from `main` carries NO transient status; a continue/rebase is
       a PLAIN rebase with no drop step and no rename/rename ledger conflict (tested).
@@ -63,7 +63,7 @@ good) and completes defect #2's dissolution (branch inheritance gone).
 > body; needs-attention is the lock stuck state, not a folder move; the
 > slicing/advancing markers are gone). So `drop-bookkeeping-rebase.ts` — which exists
 > only to drop the `route-to-needs-attention` move-only bookkeeping commits a branch
-> inherited (it keys on the `Agent-Runner-Bookkeeping: route-to-needs-attention` git
+> inherited (it keys on the `Dorfl-Bookkeeping: route-to-needs-attention` git
 > trailer) — is dead. Read `drop-bookkeeping-rebase.ts` and its call sites
 > (`integration-core.ts` integration rebase, `continue-branch.ts` onboard
 > continue-rebase) and the trailer producer in `needs-attention.ts`. PRD US #6; ADR

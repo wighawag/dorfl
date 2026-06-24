@@ -54,7 +54,7 @@ The §3a slug-namespace resolver: a PRD and a slice may share a slug, so a bare 
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim slug-namespace-resolution --arbiter <remote>      # default --arbiter origin
+dorfl claim slug-namespace-resolution --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/slug-namespace-resolution <remote>/main
 # on completion, in the work branch's PR/merge:

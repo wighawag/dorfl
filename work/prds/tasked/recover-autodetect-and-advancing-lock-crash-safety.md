@@ -8,7 +8,7 @@ humanOnly: true
 
 ## Problem Statement
 
-A live `agent-runner advance "slice:autonomous-integration-refusal-surfaces-not-strands-in-progress" --propose --watch` (2026-06-16) was supposed to CONTINUE a requeued slice (kept work branch) and add the small in-place `performDo` mapping a Gate-2 review had demanded. The agent did exactly that and reported the gate GREEN in its working tree. The run nonetheless ended in failure, the agent's fix was LOST, and the arbiter ledger was left corrupt. Three distinct defects combined:
+A live `dorfl advance "slice:autonomous-integration-refusal-surfaces-not-strands-in-progress" --propose --watch` (2026-06-16) was supposed to CONTINUE a requeued slice (kept work branch) and add the small in-place `performDo` mapping a Gate-2 review had demanded. The agent did exactly that and reported the gate GREEN in its working tree. The run nonetheless ended in failure, the agent's fix was LOST, and the arbiter ledger was left corrupt. Three distinct defects combined:
 
 **Defect A — the stranded-done auto-recover DISCARDS a continue-agent's new work.** The `autonomous-path-auto-recovers-already-committed-stranded-branch` slice (merged) added an auto-detect in `complete.ts` that, on the autonomous path, sets the recover-already-committed mode purely from BRANCH FOLDER STATE:
 

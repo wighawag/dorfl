@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-fix-scan-json-brief-pool-jq-and-close-job-via-2026-06-23 type=observation slug=review-nits-fix-scan-json-brief-pool-jq-and-close-job-via-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-fix-scan-json-brief-pool-jq-and-close-job-via-2026-06-23 type=observation slug=review-nits-fix-scan-json-brief-pool-jq-and-close-job-via-2026-06-23 allAnswered=false -->
 
 ## Q1
 

@@ -68,7 +68,7 @@ against `dropped/`.
 ## Prompt
 
 > Make COMPLETE cross-substrate crash-safe. Read the existing complete path
-> (`packages/agent-runner/src/complete*.ts` and the `ledger-write.ts` durable
+> (`packages/dorfl/src/complete*.ts` and the `ledger-write.ts` durable
 > transitions), today the done-move and any lock cleanup are entangled on `main`.
 > READ the RE-SCOPED banner: under Option A complete still sources its durable move
 > from `in-progress/` (the `backlog/`-source cut-over is #9). New order: hold lock →

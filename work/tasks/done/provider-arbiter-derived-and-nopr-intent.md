@@ -42,7 +42,7 @@ So the `provider` override is the ONE axis that can disagree with the arbiter (`
    - The error must name the real fix ("propose mode on a GitHub arbiter but `gh` is not authenticated — `gh auth login` / set a `providers.github` identity token, or `--merge`, or `--no-pr` to push without a PR").
    - **Narrow the runtime degrade accordingly:** the GitHubProvider's silent manual-PR degrade stays for `noPR: true` (intended) and for a TRANSIENT mid-run `gh` outage (probe passed up front, API failed later) — but the "`gh` unavailable/unauthed at the start of a propose-with-PR-intent run" case is now caught UP FRONT instead of silently degrading at integration.
 
-6. **Migration: a stale `provider` in config/env must not break.** A leftover `provider:` key in an existing `.agent-runner.json` / `AGENT_RUNNER_PROVIDER` env is IGNORED with a one-line deprecation WARNING (not a hard error), so an existing config keeps working. If the old value was `provider: none`, the warning should point at the new `noPR` axis as its replacement. Decide + document in a `## Decisions` block (mirror the `allowAgents`→`autoBuild` removal-with-warning precedent).
+6. **Migration: a stale `provider` in config/env must not break.** A leftover `provider:` key in an existing `.dorfl.json` / `DORFL_PROVIDER` env is IGNORED with a one-line deprecation WARNING (not a hard error), so an existing config keeps working. If the old value was `provider: none`, the warning should point at the new `noPR` axis as its replacement. Decide + document in a `## Decisions` block (mirror the `allowAgents`→`autoBuild` removal-with-warning precedent).
 
 7. **Docs/skill sweep.** Update any doc/skill/ADR that documents `provider`/`--provider` (grep `docs/`, `skills/setup/`, ADRs, `CONTEXT.md`) to describe: the provider is arbiter-derived + identity-authed; `noPR` (+ `--no-pr`) is the explicit suppress-PR intent; and propose-without-a-GitHub-identity now FAILS UP FRONT (not silent degrade). `setup` should know `noPR` exists as a per-repo policy.
 
@@ -59,7 +59,7 @@ So the `provider` override is the ONE axis that can disagree with the arbiter (`
 - [ ] EARLY VISIBLE FAILURE: propose mode + GitHub arbiter + `noPR` UNSET + a `gh` AUTH/AVAILABILITY PROBE that says `gh` is unavailable/unauthed ⇒ the run FAILS UP FRONT (before claim/onboard/build, at the pre-flight-guard stage alongside the dirty-tree / diverged-main / `NO_AGENT_CMD_MESSAGE` refusals) with a clear error naming the fix (`gh auth login` / set a `providers.github` token / `--merge` / `--no-pr`). The guard runs the probe (mirroring `GitHubProvider.available`), NOT a pure config check. Tested: no build work runs.
 - [ ] AMBIENT-AUTH SETUPS ARE NOT BROKEN: propose mode + GitHub arbiter + NO `providers.github` identity but `gh` is ambiently authed (probe passes) ⇒ the run PROCEEDS and opens the PR (NO false-positive up-front failure). Tested — this is the common local-dev case; failing on absent-identity alone is explicitly wrong.
 - [ ] The GitHubProvider's manual-PR degrade is NARROWED to the LEGITIMATE cases only: `noPR: true` (intended no PR) and a TRANSIENT mid-run `gh` outage (the up-front probe PASSED but the API failed later). The start-of-run "`gh` unavailable/unauthed" case no longer reaches the silent degrade (it is caught up front by the probe, above). Tested.
-- [ ] A leftover `provider:` key in config / `AGENT_RUNNER_PROVIDER` env is IGNORED with a one-line deprecation WARNING (not a hard error); a stale `provider: none` warning points at `noPR`. An existing config keeps working. Tested.
+- [ ] A leftover `provider:` key in config / `DORFL_PROVIDER` env is IGNORED with a one-line deprecation WARNING (not a hard error); a stale `provider: none` warning points at `noPR`. An existing config keeps working. Tested.
 - [ ] Docs/skills/ADRs/CONTEXT.md no longer document `provider`/`--provider`; they describe the arbiter-derived + identity-authed model, the `noPR`/`--no-pr` suppress-PR intent, and the up-front failure when propose intends a PR but `gh` is unauthed (probe-based, ambient auth still works). `setup` knows `noPR` as a per-repo policy.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
@@ -82,7 +82,7 @@ So the `provider` override is the ONE axis that can disagree with the arbiter (`
 ### Claiming this slice
 
 ```sh
-agent-runner claim provider-arbiter-derived-and-nopr-intent --arbiter origin
+dorfl claim provider-arbiter-derived-and-nopr-intent --arbiter origin
 git fetch origin && git switch -c work/provider-arbiter-derived-and-nopr-intent origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/provider-arbiter-derived-and-nopr-intent.md work/done/provider-arbiter-derived-and-nopr-intent.md

@@ -67,7 +67,7 @@ Replace the inline duplications in `src/issue-provider.ts` with the shared expor
 ### Claiming this slice
 
 ```sh
-agent-runner claim converge-issue-provider-onto-gh-failure-module --arbiter origin
+dorfl claim converge-issue-provider-onto-gh-failure-module --arbiter origin
 git fetch origin && git switch -c work/converge-issue-provider-onto-gh-failure-module origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/converge-issue-provider-onto-gh-failure-module.md work/done/converge-issue-provider-onto-gh-failure-module.md

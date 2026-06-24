@@ -39,7 +39,7 @@ Make the acceptance gate run against the artifact that will actually LAND, by ru
 
 3. **Run `prepare` in the fresh gate worktree (the blockedBy reason).** The throwaway worktree is fresh — no `node_modules`/deps — so the `prepare` step (`prepare-config-step`) runs there before `verify`, exactly as it does for any freshly-materialised worktree. This is per-gate install cost when `freshWorktreeGate` is on (the cost the opt-out exists for). Reuse the `prepare`-before-`verify` seam that slice builds; do NOT reimplement install here.
 
-4. **Reap the throwaway gate worktree.** The fresh gate worktree is created PER gate and reaped after (pass or fail) — it is not the job worktree the agent built in; it is a transient gate sandbox. Never leak it (cross-ref the worktree-hygiene concerns in `work/observations/job-worktree-artifact-agent-runner-job-json-leaks-into-commits.md` and the reap discipline in `work/backlog/isolated-config-read-main-only-fetch-and-reap-on-failure.md`). A `gate-failed` in the fresh worktree routes EXACTLY as a gate-failed does today (the source of the gate tree changes; the failure routing does not).
+4. **Reap the throwaway gate worktree.** The fresh gate worktree is created PER gate and reaped after (pass or fail) — it is not the job worktree the agent built in; it is a transient gate sandbox. Never leak it (cross-ref the worktree-hygiene concerns in `work/observations/job-worktree-artifact-dorfl-job-json-leaks-into-commits.md` and the reap discipline in `work/backlog/isolated-config-read-main-only-fetch-and-reap-on-failure.md`). A `gate-failed` in the fresh worktree routes EXACTLY as a gate-failed does today (the source of the gate tree changes; the failure routing does not).
 
 5. **Record that this subsumes Gate-3.** The `drive-backlog` skill already dropped its Gate-3 re-verify trusting Gate-1+Gate-2; this slice makes that trust SOUND (Gate-1 now provably tests the merged artifact). Add a one-line note in `skills/drive-backlog/SKILL.md` (in-repo source; `~/.agents/skills/` symlinks to it) where it explains dropping Gate-3, pointing at `freshWorktreeGate` as the root-cause fix (so a reader knows the rare divergence is closed by default, not merely un-checked).
 
@@ -87,7 +87,7 @@ Make the acceptance gate run against the artifact that will actually LAND, by ru
 ### Claiming this slice
 
 ```sh
-agent-runner claim gate-on-rebased-tip-fresh-worktree --arbiter origin
+dorfl claim gate-on-rebased-tip-fresh-worktree --arbiter origin
 git fetch origin && git switch -c work/gate-on-rebased-tip-fresh-worktree origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/gate-on-rebased-tip-fresh-worktree.md work/done/gate-on-rebased-tip-fresh-worktree.md

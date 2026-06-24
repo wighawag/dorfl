@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21 type=task slug=questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21 allAnswered=false -->
+<!-- dorfl-sidecar: item=task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21 type=task slug=questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21 allAnswered=false -->
 
 ## Q1
 

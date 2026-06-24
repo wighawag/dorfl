@@ -16,7 +16,7 @@ This DROPPED the old `performStart` hint ("if this is your own work, re-run with
 
 Suggested wording (finalise the exact verbs at build time):
 
-> `'<slug>' is already in-progress on <arbiter>/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`agent-runner resume <slug>\` (or \`work-on\`), or recover via \`requeue\`.`
+> `'<slug>' is already in-progress on <arbiter>/main. If someone else claimed it, pick another item; if it's your own (e.g. an interrupted run), continue it with \`dorfl resume <slug>\` (or \`work-on\`), or recover via \`requeue\`.`
 
 Keep the done/absent message (`claim-cas.ts:272`) AS-IS \u2014 it is already accurate.
 

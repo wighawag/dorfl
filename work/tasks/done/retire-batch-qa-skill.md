@@ -48,7 +48,7 @@ This is a small, clean removal sequenced LATE — after both the new skill exist
 ### Claiming this slice
 
 ```sh
-agent-runner claim retire-batch-qa-skill --arbiter origin
+dorfl claim retire-batch-qa-skill --arbiter origin
 git fetch origin && git switch -c work/retire-batch-qa-skill origin/main
 git mv work/in-progress/retire-batch-qa-skill.md work/done/retire-batch-qa-skill.md
 ```

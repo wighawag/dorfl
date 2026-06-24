@@ -21,7 +21,7 @@ This is a pure-refactor enabler: it changes NO observable behaviour. It is the p
 
 ## Solution
 
-Introduce a **ledger-transition seam** inside agent-runner with two paired halves, behind which the **current behaviour is the ONLY strategy**. There is **no mode, no config, nothing selectable**. Observable behaviour is byte-identical to today.
+Introduce a **ledger-transition seam** inside dorfl with two paired halves, behind which the **current behaviour is the ONLY strategy**. There is **no mode, no config, nothing selectable**. Observable behaviour is byte-identical to today.
 
 - **Write seam** — a single entry point for applying a `work/` transition (claim / complete / needs-attention). The sole strategy does exactly what the code does today (claim CAS to `main`; complete merges/ff to `main`; needs-attention move). The claim primitive lives behind this seam so a future strategy could supply a different `main`-free CAS — but today there is one (force-with-lease to `main`).
 

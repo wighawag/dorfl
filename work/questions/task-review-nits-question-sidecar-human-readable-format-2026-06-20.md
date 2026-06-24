@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:review-nits-question-sidecar-human-readable-format-2026-06-20 type=task slug=review-nits-question-sidecar-human-readable-format-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=task:review-nits-question-sidecar-human-readable-format-2026-06-20 type=task slug=review-nits-question-sidecar-human-readable-format-2026-06-20 allAnswered=false -->
 
 ## Q1
 

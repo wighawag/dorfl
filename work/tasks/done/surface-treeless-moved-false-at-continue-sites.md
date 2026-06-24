@@ -73,7 +73,7 @@ NOTE on which `moved:false` cases are live here (verify, then scope the message 
 ### Claiming this slice
 
 ```sh
-agent-runner claim surface-treeless-moved-false-at-continue-sites --arbiter origin
+dorfl claim surface-treeless-moved-false-at-continue-sites --arbiter origin
 git fetch origin && git switch -c work/surface-treeless-moved-false-at-continue-sites origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/surface-treeless-moved-false-at-continue-sites.md work/done/surface-treeless-moved-false-at-continue-sites.md

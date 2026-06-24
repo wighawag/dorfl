@@ -7,7 +7,7 @@ description: 'The pre-promotion checklist: judge ONE staged work/ item (a task i
 
 **Staging is the human review-gate.** In the `work/` contract, `tasks/backlog/` and `prds/proposed/` are STAGING (untrusted / agent-authored output lands here); the agent POOL is `tasks/ready/` and `prds/ready/`. Items enter staging by a runner-deterministic placement decision; they leave it ONLY when a human promotes them. This skill is the **discipline a human applies to ONE staged item before promoting it** — it is the checklist that makes the gate a real review, not a rubber stamp.
 
-It is a thin **methodology skill** (prose you follow), a sibling of `review`. It does NOT move anything: the promotion `git mv` (`tasks/backlog/ → tasks/ready/`, `prds/proposed/ → prds/ready/`) is a runner-owned transition (a future `agent-runner promote <item>` verb, or the human's own move). You EMIT a verdict; the caller acts on it. Per the contract, an agent never sets position.
+It is a thin **methodology skill** (prose you follow), a sibling of `review`. It does NOT move anything: the promotion `git mv` (`tasks/backlog/ → tasks/ready/`, `prds/proposed/ → prds/ready/`) is a runner-owned transition (a future `dorfl promote <item>` verb, or the human's own move). You EMIT a verdict; the caller acts on it. Per the contract, an agent never sets position.
 
 ## When to use vs. not
 
@@ -26,7 +26,7 @@ For each staged item, run the `review` discipline FIRST (it is the body of this 
    - **Prd** → `humanOnly`/`needsAnswers` correct and it is genuinely taskable (not still a design sketch). Like `blockedBy`, `taskedAfter:` is ENFORCED against `prds/tasked/` residence by the auto-tasker, so an unsatisfied `taskedAfter:` is NOT a reason to keep a taskable prd staged — promote it and let the tasker sequence it. An unready (design-sketch / question-bearing) prd stays `prds/proposed/`.
 4. **No collision / no duplicate** — confirm no item with the same `(umbrella, slug)` already rests in the destination pool or a terminal, and the work isn't already covered by a done item.
 5. **Verdict** — emit ONE of:
-   - **PROMOTE** — review passed, fresh, pool-ready, no collision. State the move the caller should make (`agent-runner promote <item>`, or the `git mv`).
+   - **PROMOTE** — review passed, fresh, pool-ready, no collision. State the move the caller should make (`dorfl promote <item>`, or the `git mv`).
    - **KEEP-STAGED** — a fixable gap that is NOT machine-enforced: a drifted premise, an open question (`needsAnswers`), a wrongly-set `humanOnly`, or a prd that is still a design sketch. (An unresolved `blockedBy` / `taskedAfter:` is NOT such a gap — it is enforced, so it is a PROMOTE, not a keep-staged.) State the SPECIFIC gap so it can be resolved, then re-checked.
    - **DROP** — superseded / out-of-scope / duplicate. Route to the regime terminal (`tasks/cancelled/` / `prds/dropped/`) with the `reason:`, per the contract.
 

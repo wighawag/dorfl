@@ -11,7 +11,7 @@ covers: [5]
 
 The OPTIONAL portable accelerator for cross-job merge serialisation
 (Applied Answer q1 part (b)): a ref-based land-lock — CAS-claim a sentinel
-ref (e.g. `refs/agent-runner/land-lock`) so losers QUEUE / back off rather
+ref (e.g. `refs/dorfl/land-lock`) so losers QUEUE / back off rather
 than burn CAS-retry attempts and bounce. Pure ref CAS, works against a
 bare arbiter — so it does not violate the git-alone floor framing the way
 GitHub-Actions `concurrency:` would.

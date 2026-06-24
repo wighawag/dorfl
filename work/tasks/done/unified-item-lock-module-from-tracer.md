@@ -29,7 +29,7 @@ ref), parentless commit (gc-reclaimable), and the entry round-trips.
 
 - [ ] A production lock module exposes acquire / release / read / list (and the
       entry serialise/parse) as the runner's lock API, generalising the tracer.
-- [ ] The lock lives on a hidden `refs/agent-runner/*` ref keyed by `<type>-<slug>`;
+- [ ] The lock lives on a hidden `refs/dorfl/*` ref keyed by `<type>-<slug>`;
       acquire is create-only/leased (winner creates the ref; loser is definitively
       `lost`, no retry loop), release DELETES the ref, the lock-entry commit is
       PARENTLESS.
@@ -48,10 +48,10 @@ ref), parentless commit (gc-reclaimable), and the entry round-trips.
 
 ## Prompt
 
-> Generalise the GREEN tracer at `packages/agent-runner/src/item-lock-ref.ts` (and
+> Generalise the GREEN tracer at `packages/dorfl/src/item-lock-ref.ts` (and
 > its test `test/item-lock-ref.test.ts`) into the PRODUCTION unified item-lock module
 > the runner will call. Read both files first, they already prove the dangerous
-> core (per-item hidden ref `refs/agent-runner/lock/<entry>`, atomic create-only
+> core (per-item hidden ref `refs/dorfl/lock/<entry>`, atomic create-only
 > acquire via `--force-with-lease=<ref>:`, delete-to-release, a PARENTLESS lock-entry
 > commit built with plumbing, and a two-axis `action × state` entry that round-trips).
 > Governing ADR: `docs/adr/ledger-status-on-per-item-lock-refs.md`. PRD:

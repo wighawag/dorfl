@@ -11,7 +11,7 @@ You **emit task files; you do not act on them** — see [Git protocol](#git-prot
 ## When to use vs. not
 
 - **Use** when tasking a `work/prds/ready/<slug>.md`, a design doc, or a plan into grabbable units for solo-with-agents (incl. parallel) work.
-- **Don't** use to _write_ the prd (that's a separate step — `to-prd`) or to _claim/run_ a task (that's the runner: `agent-runner claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
+- **Don't** use to _write_ the prd (that's a separate step — `to-prd`) or to _claim/run_ a task (that's the runner: `dorfl claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
 
 ## Process
 
@@ -65,7 +65,7 @@ The prd is a launch snapshot (see the `to-prd` skill). Now that the work is task
 - The tasks now own _what to build_ (Implementation/Testing detail) — remove those sections from the prd.
 - Any **durable rationale** worth keeping (the _why_ of a decision) is RELOCATED to an ADR (`docs/adr/<slug>.md`), not deleted.
 - The prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to tasks/ADRs.
-- **Move the prd to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/ready/<slug>.md work/prds/tasked/<slug>.md` (residence in `work/prds/tasked/` IS tasked-ness — the build-machine `tasks/done/` analogue for prds, the sole signal). Do NOT add a `tasked:` frontmatter marker; the folder is the source of truth. (On the agent/runner path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
+- **Move the prd to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/ready/<slug>.md work/prds/tasked/<slug>.md` (residence in `work/prds/tasked/` IS tasked-ness — the build-machine `tasks/done/` analogue for prds, the sole signal). Do NOT add a `tasked:` frontmatter marker; the folder is the source of truth. (On the dorfl path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
 
 This is a hand-off transition, not ongoing maintenance — after this single trim the prd is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → tasks; rationale → ADR.)
 
@@ -107,4 +107,4 @@ The tasker ALWAYS writes emitted task files to `work/tasks/backlog/` (the STAGIN
 
 ## The on-disk contract
 
-The full `work/` layout, slug rules, and frontmatter are in `work/protocol/WORK-CONTRACT.md`. The claim/lifecycle protocol these files are designed to support (consumed by the runner — `agent-runner claim`/`do`/`complete`) is in `work/protocol/CLAIM-PROTOCOL.md` — read it so the files you emit are claim-ready, but this discipline does not itself claim or run tasks.
+The full `work/` layout, slug rules, and frontmatter are in `work/protocol/WORK-CONTRACT.md`. The claim/lifecycle protocol these files are designed to support (consumed by the runner — `dorfl claim`/`do`/`complete`) is in `work/protocol/CLAIM-PROTOCOL.md` — read it so the files you emit are claim-ready, but this discipline does not itself claim or run tasks.

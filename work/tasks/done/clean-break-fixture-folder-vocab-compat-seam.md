@@ -65,7 +65,7 @@ Sweep each test that passes an old folder word or declares a local `folder:` uni
 ### Claiming this task
 
 ```sh
-agent-runner claim clean-break-fixture-folder-vocab-compat-seam --arbiter <remote>
+dorfl claim clean-break-fixture-folder-vocab-compat-seam --arbiter <remote>
 git fetch <remote> && git switch -c work/clean-break-fixture-folder-vocab-compat-seam <remote>/main
 git mv work/tasks/todo/clean-break-fixture-folder-vocab-compat-seam.md work/tasks/done/clean-break-fixture-folder-vocab-compat-seam.md
 ```

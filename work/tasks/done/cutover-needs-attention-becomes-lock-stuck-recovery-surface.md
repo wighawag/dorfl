@@ -37,7 +37,7 @@ move, per decision (i+):
   Removing it is what lets 9d delete that machinery. (Terminal records
   `done`/`dropped`/`prd-sliced` are write-once, so they inherit harmlessly and STAY.)
 - **Visibility trade (consciously taken, per the ADR):** a human reads a stuck
-  item's reason/questions via `agent-runner status` (which renders the lock entry)
+  item's reason/questions via `dorfl status` (which renders the lock entry)
   or `git show <lock-ref>:lock.md`, NOT `ls work/needs-attention/`. This is the same
   working-tree-visibility drop the ADR already made for `in-progress`.
 

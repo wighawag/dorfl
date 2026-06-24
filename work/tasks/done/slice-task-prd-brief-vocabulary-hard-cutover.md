@@ -92,7 +92,7 @@ flake under full-suite parallel load.
 > Domain vocabulary: the system has ONE identity scheme shared by four surfaces,
 > the CLI prefix (`do <prefix>:<slug>`), the work-branch ref (`work/<type>-<slug>`),
 > the sidecar filename (`work/questions/<type>-<slug>.md`), and the per-item lock
-> ref (`refs/agent-runner/lock/<type>-<slug>`). All four derive `<type>` from one
+> ref (`refs/dorfl/lock/<type>-<slug>`). All four derive `<type>` from one
 > resolver. This slice flips `<type>` from `slice`/`prd` to `task`/`brief`
 > everywhere, keeping `observation`/`obs:` exactly as-is. The cutover is BREAKING:
 > a pre-rename un-namespaced ref / old prefix is rejected (it is not a

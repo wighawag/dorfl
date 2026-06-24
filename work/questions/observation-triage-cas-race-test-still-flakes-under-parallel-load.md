@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:triage-cas-race-test-still-flakes-under-parallel-load type=observation slug=triage-cas-race-test-still-flakes-under-parallel-load allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:triage-cas-race-test-still-flakes-under-parallel-load type=observation slug=triage-cas-race-test-still-flakes-under-parallel-load allAnswered=false -->
 
 ## Q1
 

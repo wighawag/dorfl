@@ -17,7 +17,7 @@ End-to-end behaviour after this slice (the canonical decision table — see the 
 - **PRD** (clear AND coherent but needs >1 slice — INCLUDES a coupled-but-SMALL pair, which is NEVER bounced): write `work/prd/<slug>.md` with `issue: N`, integrate, and STOP (slicing is the separate `do prd:` step). The artifact carries its own gate axes (`humanOnly`/`needsAnswers`) as the prompt judged them.
 - **BOUNCE** (genuinely multiple UNRELATED concerns — no single shared vision): `postIssueComment` "please file separate issues", emit NOTHING, leave the issue open.
 
-The **decision prompt** is an INLINE prompt builder (a function returning the prompt string, like `buildSlicingBrief` in `slicing.ts` and the reviewer prompts in `review-gate.ts`) — NOT a standalone asset/`.md` file (no such convention exists in `packages/agent-runner/src`). It encodes the decision aids stated once in the PRD:
+The **decision prompt** is an INLINE prompt builder (a function returning the prompt string, like `buildSlicingBrief` in `slicing.ts` and the reviewer prompts in `review-gate.ts`) — NOT a standalone asset/`.md` file (no such convention exists in `packages/dorfl/src`). It encodes the decision aids stated once in the PRD:
 
 - "clear?" bar = the `to-slices`/`needsAnswers` bar (don't guess a spec from a vague issue → ASK);
 - "one slice?" bar = `to-slices`' tracer-bullet test (fits → SLICE; needs splitting → PRD);

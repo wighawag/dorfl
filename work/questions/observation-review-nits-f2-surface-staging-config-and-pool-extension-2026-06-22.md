@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-f2-surface-staging-config-and-pool-extension-2026-06-22 type=observation slug=review-nits-f2-surface-staging-config-and-pool-extension-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-f2-surface-staging-config-and-pool-extension-2026-06-22 type=observation slug=review-nits-f2-surface-staging-config-and-pool-extension-2026-06-22 allAnswered=false -->
 
 ## Q1
 
@@ -16,7 +16,7 @@ _Suggested default: promote-adr — the four choices (especially the asymmetric 
 
 **Nit 2 (mirror gather staging widening is not directly tested): promote a small follow-up slice that adds a bare-mirror test seeding a staged `needsAnswers` item and asserting `gatherLifecycleMirror({gates:{surface:true,surfaceStaging:true}}).surface` enumerates it (and is empty when surfaceStaging:false), or KEEP / DELETE?**
 
-> Observation body §2: packages/agent-runner/test/surface-staging-config-and-pool.test.ts covers gatherLifecycleInPlace + scanRepoPaths but never invokes gatherLifecycleMirror or the new resolveMirror*Staging methods. The mirror path (readTaskStagingFromTree / readBriefStagingFromTree via `git ls-tree`+`git show`) is the actual code path CI's propose-matrix executes against the bare hub mirror, so this is the higher-risk untested path.
+> Observation body §2: packages/dorfl/test/surface-staging-config-and-pool.test.ts covers gatherLifecycleInPlace + scanRepoPaths but never invokes gatherLifecycleMirror or the new resolveMirror*Staging methods. The mirror path (readTaskStagingFromTree / readBriefStagingFromTree via `git ls-tree`+`git show`) is the actual code path CI's propose-matrix executes against the bare hub mirror, so this is the higher-risk untested path.
 
 _Suggested default: promote-slice — the untested path is precisely the one CI exercises in production; a single targeted test is cheap and high-value._
 

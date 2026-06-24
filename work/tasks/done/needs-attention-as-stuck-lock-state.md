@@ -22,7 +22,7 @@ covers: [5, 8]
 ## What to build
 
 Make a bounce ALSO mark the held per-item lock `state: stuck` + reason (the lock's
-mark-stuck transition), and make `agent-runner status` / `scan` ALSO read the lock
+mark-stuck transition), and make `dorfl status` / `scan` ALSO read the lock
 refs to surface held (in-progress) and stuck (needs-attention) items + reasons,
 **in addition to** today's `git mv in-progress→needs-attention` folder move and the
 folder-based status view. This is the additive, back-compatible half: the lock
@@ -35,7 +35,7 @@ Concretely, after this slice:
   `git mv in-progress→needs-attention` on `main` UNCHANGED, and ADDITIONALLY marks
   the held lock `state: stuck` + reason via the CAS amend from
   `lock-entry-state-machine-and-invariants`.
-- `agent-runner status` / `scan` keep their folder-based view UNCHANGED, and
+- `dorfl status` / `scan` keep their folder-based view UNCHANGED, and
   ADDITIONALLY read the lock refs to list held + stuck items and reasons.
   Eligibility/selection stay OFFLINE on `main` (pool still `backlog/`).
 - The `done` + `stuck` co-existence the state machine allows is exercised (a
@@ -50,7 +50,7 @@ folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 - [ ] A bounce ADDITIONALLY marks the held lock `state: stuck` + reason (a CAS
       amend); today's `git mv in-progress→needs-attention` folder move is KEPT
       unchanged (interim dual-write).
-- [ ] `agent-runner status` / `scan` ADDITIONALLY read the lock refs and surface held
+- [ ] `dorfl status` / `scan` ADDITIONALLY read the lock refs and surface held
       (in-progress) and stuck (needs-attention) items + reasons; eligibility/selection
       still read the pool offline from `backlog/` on `main`.
 - [ ] A `done` item can carry a `stuck` lock (rebase-conflict bounce of a just-
@@ -78,7 +78,7 @@ folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 > Make a bounce ALSO mark the `stuck` STATE of the per-item lock, and `status`/`scan`
 > ALSO read the lock refs, IN ADDITION to today's behaviour. Today a stuck claimed
 > item is `git mv`'d `work/in-progress/<slug>.md → work/needs-attention/<slug>.md`
-> with the reason in the body (`packages/agent-runner/src/needs-attention.ts` + the
+> with the reason in the body (`packages/dorfl/src/needs-attention.ts` + the
 > `ledger-write.ts` transitions), read those. KEEP that folder move as-is. ADD: mark
 > the HELD lock `state: stuck` + reason via the CAS amend (`markStuckItemLock` from
 > `lock-entry-state-machine-and-invariants`). PRD
@@ -90,7 +90,7 @@ folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 > status view; those break the legacy consumers + ~tests whose retargets are the
 > capstone #9. Note claim still moves the body to `in-progress/` under Option A, so
 > the bounce's SOURCE folder is still `in-progress/` here. Retarget the in-flight VIEW
-> ADDITIVELY: `agent-runner status` / `scan` (`status.ts`, `scan.ts`) ALSO read the
+> ADDITIVELY: `dorfl status` / `scan` (`status.ts`, `scan.ts`) ALSO read the
 > lock refs to list held + stuck items and reasons; keep eligibility/selection OFFLINE
 > on `main` (pool still `backlog/`). Handle the `done`+`stuck` co-existence the state
 > machine allows. Prove the EXISTING needs-attention tests still pass (the folder move

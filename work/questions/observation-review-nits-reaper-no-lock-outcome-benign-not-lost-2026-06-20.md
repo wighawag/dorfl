@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20 type=observation slug=review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20 type=observation slug=review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20 allAnswered=false -->
 
 ## Q1
 

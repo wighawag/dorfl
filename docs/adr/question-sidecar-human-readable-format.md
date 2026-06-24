@@ -18,7 +18,7 @@ superseded_by:
 ## Context
 
 The question/answer sidecar (`work/questions/<type>-<slug>.md`, `serialiseSidecar`/`parseSidecar`
-in `packages/agent-runner/src/sidecar.ts`) is the HUMAN-FACING surface of the "human is the clock"
+in `packages/dorfl/src/sidecar.ts`) is the HUMAN-FACING surface of the "human is the clock"
 answer loop: the `advance` family writes a question per item, and the human reads the question and
 writes the answer IN THIS FILE, very often through the GitHub web UI (the `on: push
 work/questions/**` trigger consumes those commits).
@@ -37,7 +37,7 @@ Reformat the sidecar so the SAME file is both human-readable on GitHub AND machi
 
 - **Content is real Markdown.** The question is a bold line, context is a blockquote, the suggested
   default is italic. A human skims it as a question, not a config file.
-- **Machine fields live in HTML comments** (`<!-- agent-runner-sidecar: ... -->` for identity,
+- **Machine fields live in HTML comments** (`<!-- dorfl-sidecar: ... -->` for identity,
   `<!-- qN fields: id=.. answered=.. disposition=.. -->` per entry). GitHub renders HTML comments
   as NOTHING, so the machine state is invisible to the human and unbreakable by their edit.
 - **The answer has a fixed, obvious labelled region** ("**Your answer** (write below this line):")

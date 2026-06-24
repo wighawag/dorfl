@@ -56,7 +56,7 @@ End-to-end path:
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim install-ci-close-job-workflow --arbiter <remote>      # default --arbiter origin
+dorfl claim install-ci-close-job-workflow --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/install-ci-close-job-workflow <remote>/main
 # on completion, in the work branch's PR/merge:

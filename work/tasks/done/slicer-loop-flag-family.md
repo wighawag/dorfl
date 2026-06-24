@@ -13,7 +13,7 @@ Give the slicer IMPROVER loop (`slicer-review-loop.ts`) its OWN, distinct flag f
 Rename across flag + config key + env var + internal fields (mirror the `reviewPr → review` clean-rename precedent in `work/done/rename-reviewpr-to-review.md` — a clean isolated rename, no back-compat alias unless the maintainer asks):
 
 - `--slicer-loop` / `--no-slicer-loop` — turn the improver loop on/off. **ON by default** (auto-slicing has no `verify` floor, so the loop is the slice path's quality engine). Today there is NO on/off flag — the loop runs whenever its seam is wired; add the explicit toggle.
-- `--slicer-loop-max <n>` — the in-context convergence cap. This is today's `--max-review` / `maxReview` (config key + env `AGENT_RUNNER_MAX_REVIEW`); RENAME it. Default unchanged (3).
+- `--slicer-loop-max <n>` — the in-context convergence cap. This is today's `--max-review` / `maxReview` (config key + env `DORFL_MAX_REVIEW`); RENAME it. Default unchanged (3).
 - `--slicer-loop-model <id>` — the loop reviewer's de-correlated model. The seam already exists internally as the loop's `reviewModel` field; RENAME that field to `slicerLoopModel` and EXPOSE it as this flag, so the loop stops sharing the `reviewModel` name with the acceptance gate.
 
 NAMING RULE (the whole point): gate family = `--review*` (shared with build); improver-loop family = `--slicer-loop*` (slice-only). No flag/key/field name spans both. After this, the two review concepts are unmistakable at the CLI and in code.
@@ -42,7 +42,7 @@ Behaviour is otherwise IDENTICAL — this is a rename + an explicit on/off toggl
 > RENAMES:
 >
 > - ADD `--slicer-loop` / `--no-slicer-loop` (on by default) — today the loop has no on/off flag (it runs whenever the `reviewLoop` seam is wired in `cli.ts`); add an explicit toggle that gates wiring the seam.
-> - `--max-review` / `maxReview` / `AGENT_RUNNER_MAX_REVIEW` → `--slicer-loop-max` / `slicerLoopMax` / `AGENT_RUNNER_SLICER_LOOP_MAX` (default 3, precedence unchanged).
+> - `--max-review` / `maxReview` / `DORFL_MAX_REVIEW` → `--slicer-loop-max` / `slicerLoopMax` / `DORFL_SLICER_LOOP_MAX` (default 3, precedence unchanged).
 > - the loop's internal `reviewModel` (in `slicer-review-loop.ts` / `slicing.ts`'s `PerformSliceOptions.reviewModel` for the LOOP) → `slicerLoopModel`, exposed as `--slicer-loop-model <id>`. LEAVE the acceptance gate's `reviewModel` / build `--review-model` UNTOUCHED.
 >
 > WHERE TO LOOK (verify — paths may have drifted): `src/cli.ts` (the `--max-review` option on the `do` command + the `reviewLoop`/`maxReview` wiring for in-place AND `--remote` prd: paths), `src/do-config.ts` (`maxReview` flag mapping + `ReviewFlags`), `src/config.ts` + `src/repo-config.ts` (`maxReview` in `Config` / `DEFAULT_CONFIG` / `REPO_ALLOWED_KEYS`), `src/env-config.ts` (`maxReview: 'number'`), `src/do.ts` (`DoOptions`/`DoRemoteOptions` `maxReview`/`reviewLoop` fields + threading), `src/slicing.ts` (`PerformSliceOptions` loop fields + the `runSliceReviewLoop` call), `src/slicer-review-loop.ts` (the loop's `reviewModel` field + `SliceReviewGateInput.reviewModel`). Tests: `test/slicer-maxreview-config.test.ts`, `test/slicer-review-loop.test.ts`, `test/slicing.test.ts`, `test/do-config.test.ts`, `test/env-config.test.ts`.

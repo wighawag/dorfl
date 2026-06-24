@@ -57,7 +57,7 @@ Mostly CLI-surface changes — the one genuine behaviour change is `--by` (above
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim flag-cleanup-renames --arbiter <remote>      # default --arbiter origin
+dorfl claim flag-cleanup-renames --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/flag-cleanup-renames <remote>/main
 # on completion, in the work branch's PR/merge:

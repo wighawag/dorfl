@@ -99,7 +99,7 @@ even if the rename never ships.
 > may still exist in some readers and should route through `work-layout` like any
 > other.
 >
-> Where to look: every `.ts` in `packages/agent-runner/src` that mentions `work/`
+> Where to look: every `.ts` in `packages/dorfl/src` that mentions `work/`
 > (about 70 files). The folder unions/arrays are in `prompt.ts` (`SliceFolder`),
 > `ledger-write.ts` (`WORK_FOLDERS`), `close-job.ts` (`PRD_FOLDERS`),
 > `ledger-lint.ts` + `integration-core.ts` (`LEDGER_STATUS_FOLDERS`),

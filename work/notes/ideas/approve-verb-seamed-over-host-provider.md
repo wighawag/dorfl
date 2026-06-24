@@ -11,13 +11,13 @@ status: incubating
 > Gate-3 merge step shells out to `gh pr comment` + `gh pr merge` DIRECTLY (skill
 > golden rule 4 + step 4c), which (a) hardcodes GitHub and (b) bypasses the
 > runner's provider + identity wiring. The skill itself already flags this — step
-> 4c's "PROVIDER ASSUMPTION" note anticipates "a likely future `agent-runner`
+> 4c's "PROVIDER ASSUMPTION" note anticipates "a likely future `dorfl`
 > command, e.g. an `approve`/`land` verb". This is that idea, sharpened. NOT built.
 
 ## The signal
 
 `drive-backlog` is the ONE skill that leans on the runner CLI directly, and for
-the BUILD step it does the right thing — it calls `agent-runner do`, which runs
+the BUILD step it does the right thing — it calls `dorfl do`, which runs
 the whole claim→build→gate→PR flow through the runner (provider-agnostic,
 identity-aware). But for the final APPROVE+MERGE step it reaches AROUND the
 runner and calls `gh` itself:
@@ -43,7 +43,7 @@ That is the only part of the conductor's loop the runner doesn't own. Two costs:
 Add a runner verb — `approve` (or `land`) — that takes a reviewed branch/PR + a
 verdict body and lands it, **seamed over the git-host provider** exactly like
 `openRequest` / `postPRComment` already are. The skill's step 4c then becomes a
-single `agent-runner approve …` instead of two raw `gh` calls.
+single `dorfl approve …` instead of two raw `gh` calls.
 
 **The approve mechanics live INSIDE the provider** (a new sibling method on
 `ReviewProvider`, next to `openRequest` + `postPRComment`):

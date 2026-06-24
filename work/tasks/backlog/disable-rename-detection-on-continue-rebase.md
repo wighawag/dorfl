@@ -148,12 +148,12 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 >
 > Where to look (by module/concept, not brittle line numbers):
 >   - The continue machinery is the continue-branch module
->     (`packages/agent-runner/src/continue-branch.ts`): the helper that rebases the
+>     (`packages/dorfl/src/continue-branch.ts`): the helper that rebases the
 >     currently-checked-out continued `work/<slug>` branch onto the fetched main, and
 >     the stale-lease push retry loop that RE-rebases on each retry. BOTH run `git
 >     rebase`; both need rename-off.
 >   - The shared integrate band is the integration-core module
->     (`packages/agent-runner/src/integration-core.ts`): the rebase-to-integrate tail
+>     (`packages/dorfl/src/integration-core.ts`): the rebase-to-integrate tail
 >     rebases the work branch onto `<arbiter>/main`. That rebase (and any re-rebase in
 >     its Race-1 merge-push retry loop) is the SAME kept-branch-onto-latest-main
 >     replay and needs rename-off too. Note the band already has a sibling-slug
@@ -171,7 +171,7 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 >
 > Seams to test at: the `rebaseContinuedBranchOntoMain` helper is directly unit-
 > testable with throwaway repos + a local bare arbiter (see
-> `packages/agent-runner/test/continue-branch.test.ts` and its
+> `packages/dorfl/test/continue-branch.test.ts` and its
 > `makeScratch`/`seedRepoWithArbiter`/`gitIn`/`gitEnv` helpers). Build the regression
 > at that seam (and/or the integrate-tail seam if more natural): construct a sparse
 > source folder with one item, commit a `git mv` of that sole item to a target
@@ -210,7 +210,7 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim disable-rename-detection-on-continue-rebase --arbiter <remote>
+dorfl claim disable-rename-detection-on-continue-rebase --arbiter <remote>
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/disable-rename-detection-on-continue-rebase <remote>/main
 # on completion, in the work branch's PR/merge:

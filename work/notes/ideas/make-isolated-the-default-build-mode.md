@@ -68,7 +68,7 @@ So the default flips:
 
 ## Why NOT / caveats (the case AGAINST — do not hand-wave these)
 
-- **Per-repo `.agent-runner.json` for isolated/`--remote` builds** — this WAS a
+- **Per-repo `.dorfl.json` for isolated/`--remote` builds** — this WAS a
   blocker (isolated builds silently fell back to global+default for
   `harness`/`verify`/`provider`, so a repo declaring `harness: pi` could get the
   null adapter), but a slice that READS per-repo config from the arbiter's `main`
@@ -77,7 +77,7 @@ So the default flips:
   CONFIRM it covers the isolated-off-own-arbiter form (not only foreign
   `--remote`) before flipping, since the default MUST honour the repo's declared
   config. (In-place reads it from the local file; isolated reads it from
-  `main:.agent-runner.json` on the arbiter — verify the two agree.)
+  `main:.dorfl.json` on the arbiter — verify the two agree.)
 - **Local-only / untracked slices become invisible.** Isolated builds off
   `origin/main`, so a slice (or its deps) that exists only in the local checkout
   and isn't pushed can't be built — in-place can. The default flip would mean
@@ -95,7 +95,7 @@ So the default flips:
 
 ## Suggested shape / sequencing
 
-1. **Confirm isolated builds honour per-repo `.agent-runner.json` FIRST** —
+1. **Confirm isolated builds honour per-repo `.dorfl.json` FIRST** —
    likely already done via `remote-do-reads-per-repo-config-from-arbiter-main`;
    verify it covers the isolated-off-own-arbiter form (not only foreign
    `--remote`). The default cannot flip while an isolated build could run a

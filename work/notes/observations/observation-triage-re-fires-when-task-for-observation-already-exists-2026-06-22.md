@@ -12,7 +12,7 @@ On a CI `advance-lifecycle` run (propose mode), the triage leg for an observatio
 failed with exit code 2:
 
 ```
-agent-runner advance "obs:integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21" --propose --watch --arbiter origin
+dorfl advance "obs:integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21" --propose --watch --arbiter origin
 >> 'work/tasks/todo/integratelock-...-2026-06-21.md' already exists on origin/main — the new item lost the create race (or the slug is taken). Back off.
 >> promote observation:integratelock-...: the new item ... lost the create CAS (...) — backing off, the observation is left unresolved for a retry.
 Error: Process completed with exit code 2.
@@ -20,7 +20,7 @@ Error: Process completed with exit code 2.
 
 Investigation (this repo, 2026-06-22):
 
-- The triage rung (`observationTriage: auto` in `.agent-runner.json`) promotes an
+- The triage rung (`observationTriage: auto` in `.dorfl.json`) promotes an
   untriaged observation into a new task, guarded by a create CAS (the new
   `work/tasks/todo/<slug>.md` must not already exist on `<arbiter>/main`).
 - A task for this observation ALREADY EXISTS on `origin/main`:

@@ -6,7 +6,7 @@ status: verified
 
 ## Why this finding exists
 
-While reviewing the three agent-runner fix slices (continue-rebase auto-resolve, mirror write-through, fail-fast gate), the question arose: are these slices COMPENSATING for a deeper design flaw (bookkeeping `.md` moves living on the work branch), such that a more radical root fix — "make the work branch carry ONLY code, never any `work/**` move" — would dissolve the whole rebase-conflict class instead of reconciling it at two sites? This finding records the answer (NO, that alternative is impossible) with the evidence, so it is not re-litigated.
+While reviewing the three dorfl fix slices (continue-rebase auto-resolve, mirror write-through, fail-fast gate), the question arose: are these slices COMPENSATING for a deeper design flaw (bookkeeping `.md` moves living on the work branch), such that a more radical root fix — "make the work branch carry ONLY code, never any `work/**` move" — would dissolve the whole rebase-conflict class instead of reconciling it at two sites? This finding records the answer (NO, that alternative is impossible) with the evidence, so it is not re-litigated.
 
 ## Verified facts (against `integration-core.ts` + the live commit history)
 

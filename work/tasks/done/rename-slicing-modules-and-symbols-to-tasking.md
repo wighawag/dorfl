@@ -56,14 +56,14 @@ NOTE: this task does NOT rename the protocol-doc FILE or its inlined path in the
 > - `intake.ts:1720` and `:2279`: `slicing.ts` → `tasking.ts` (filename only)
 > - `do.ts:666`: `slicing.ts` → `tasking.ts` (filename only)
 >
-> Do NOT do the broad slice/PRD concept-prose sweep (deferred). After these 11 edits, `grep -rnE '(slicing|slicing-lock|slicer-review-loop|prd-complete)\.ts' packages/agent-runner/src` must return zero. Then re-run the gate.
+> Do NOT do the broad slice/PRD concept-prose sweep (deferred). After these 11 edits, `grep -rnE '(slicing|slicing-lock|slicer-review-loop|prd-complete)\.ts' packages/dorfl/src` must return zero. Then re-run the gate.
 
 ---
 
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-slicing-modules-and-symbols-to-tasking --arbiter <remote>
+dorfl claim rename-slicing-modules-and-symbols-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-slicing-modules-and-symbols-to-tasking <remote>/main
 git mv work/tasks/todo/rename-slicing-modules-and-symbols-to-tasking.md work/tasks/done/rename-slicing-modules-and-symbols-to-tasking.md
 ```
@@ -82,10 +82,10 @@ KEEP everything else from your branch; just finish these. Re-run the gate; ensur
 
 ## Requeue 2026-06-23
 
-Gate-2 BLOCKED this TWICE for the SAME defect class under-swept. The file renames and symbol renames are DONE and green (keep them). The remaining work is a WIDE, MECHANICAL, GENERALISING sweep — do NOT fix only the lines named below; fix EVERY instance of each class across ALL of packages/agent-runner/src, then SELF-VERIFY to zero. "Touched modules" = EVERY module whose symbols this task renamed (cli.ts, do.ts, intake.ts, ledger-read.ts, scan.ts, select-priority.ts, mirror-pool-scan.ts, close-job.ts, review-gate.ts, review-verdict.ts, prompt.ts, item-lock.ts, and the tasking-* modules), NOT just the 5 renamed files.
+Gate-2 BLOCKED this TWICE for the SAME defect class under-swept. The file renames and symbol renames are DONE and green (keep them). The remaining work is a WIDE, MECHANICAL, GENERALISING sweep — do NOT fix only the lines named below; fix EVERY instance of each class across ALL of packages/dorfl/src, then SELF-VERIFY to zero. "Touched modules" = EVERY module whose symbols this task renamed (cli.ts, do.ts, intake.ts, ledger-read.ts, scan.ts, select-priority.ts, mirror-pool-scan.ts, close-job.ts, review-gate.ts, review-verdict.ts, prompt.ts, item-lock.ts, and the tasking-* modules), NOT just the 5 renamed files.
 
 GAP 1 — ALL dangling JSDoc {@link} (tsc does NOT check these, so the green gate hides them). Every {@link X} whose target X was renamed away must point at the NEW name. Confirmed renamed targets (old -> new): buildSliceAcceptancePrompt->buildTaskAcceptancePrompt, harnessSliceReviewGate->harnessTaskReviewGate, heldSliceSlugs->heldTaskSlugs, isPrdComplete->isBriefComplete, LedgerPrdItem->LedgerBriefItem, LedgerPrdPool->LedgerBriefPool, performSlice->performTask, PrdExistence->BriefExistence, prdTitle->briefTitle, promoteFromPrePrd->promoteFromPreBrief, readLocalPrdPool->readLocalBriefPool, resolvePrdExistence->resolveBriefExistence, resolveSlice->resolveTask, sliceablePrds->taskableBriefs, SliceResult->TaskResult, sliceTitle->taskTitle, findPrdFileBySlug->findBriefFileBySlug, and the prds/slices ledger fields -> their renamed forms. For each {@link} target, grep for its DEFINITION; if no def exists, it was renamed — update the link. KEEP the still-defined LoneSlice* family verbatim (LONE_SLICE_REVIEW_MAX_ROUNDS, buildLoneSliceReviewPrompt, etc.) IF those symbols genuinely still carry that name in this task's scope.
-  SELF-VERIFY: `grep -rnoE '\{@link [A-Za-z_]+\}' packages/agent-runner/src | grep -iE 'Slice|Slicer|Prd'` must return ONLY links whose target symbol still EXISTS (grep its def). Zero dangling links.
+  SELF-VERIFY: `grep -rnoE '\{@link [A-Za-z_]+\}' packages/dorfl/src | grep -iE 'Slice|Slicer|Prd'` must return ONLY links whose target symbol still EXISTS (grep its def). Zero dangling links.
 
 GAP 2 — ALL stale slice/PRD/slicing/slicer vocabulary in COMMENTS and USER-FACING STRINGS across every touched module, swept to task/brief/tasking. This includes:
   - cli.ts USER-FACING --help strings: "auto-build undeclared ... slices" (x2 pairs ~L1021/1025/1102/1106), "run one agent on a slice prompt" (~L1119), "claim a slice" (~L1478) -> task vocabulary.
@@ -98,4 +98,4 @@ GAP 2 — ALL stale slice/PRD/slicing/slicer vocabulary in COMMENTS and USER-FAC
 
 KEEP VERBATIM (Decision 5): immutable slug references to OTHER tasks/briefs and config keys not in this task's scope: e.g. slice-acceptance-gate, slicer-review-edit-loop, auto-slice, runner-deterministic-slice-placement-policy-and-precedence, the slicerLoop/slicerLoopMax/slicerLoopModel CONFIG KEYS (owned by a later task), and any historical slug. Do NOT touch work/protocol/SLICING-PROTOCOL.md or the prompt builder's inlined doc path (the dependent protocol-doc task owns those).
 
-TERMINATION (self-verify ALL before finishing): (a) zero dangling {@link} per Gap 1's grep; (b) no live *.ts FILENAME carries slice/slicer/prd (you already renamed intake-lone-slice-review.test.ts? confirm it and the 3 others are renamed); (c) `grep -rniE 'slice|slicer|\bprd\b' packages/agent-runner/src` returns ONLY immutable foreign slugs / out-of-scope config keys / the deliberately-kept LoneSlice family — every other hit is a miss to fix; (d) build/test/format:check green. Apply REVIEW-PROTOCOL lens 4: a second instance of any pattern means GENERALISE, never fix-one-and-stop.
+TERMINATION (self-verify ALL before finishing): (a) zero dangling {@link} per Gap 1's grep; (b) no live *.ts FILENAME carries slice/slicer/prd (you already renamed intake-lone-slice-review.test.ts? confirm it and the 3 others are renamed); (c) `grep -rniE 'slice|slicer|\bprd\b' packages/dorfl/src` returns ONLY immutable foreign slugs / out-of-scope config keys / the deliberately-kept LoneSlice family — every other hit is a miss to fix; (d) build/test/format:check green. Apply REVIEW-PROTOCOL lens 4: a second instance of any pattern means GENERALISE, never fix-one-and-stop.

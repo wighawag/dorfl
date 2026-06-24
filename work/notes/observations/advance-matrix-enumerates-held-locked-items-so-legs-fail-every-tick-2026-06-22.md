@@ -12,7 +12,7 @@ On a CI `advance-lifecycle` run (propose mode), several matrix legs failed with
 exit code 2 / "already claimed":
 
 ```
-agent-runner advance "task:c2-rebase-until-real-on-durable-main-promotions" --propose --watch --arbiter origin
+dorfl advance "task:c2-rebase-until-real-on-durable-main-promotions" --propose --watch --arbiter origin
 >> 'c2-rebase-until-real-on-durable-main-promotions' is already claimed on origin/main (its per-item lock is held). ...
 Error: Process completed with exit code 2.
 ```
@@ -23,12 +23,12 @@ Same for `task:per-machine-config-override-layer` and
 Investigation (this repo, 2026-06-22):
 
 - Each of those slugs had a HELD per-item lock on `origin`
-  (`refs/agent-runner/lock/task-<slug>`), state `stuck` (Gate-2 review blocked) or
+  (`refs/dorfl/lock/task-<slug>`), state `stuck` (Gate-2 review blocked) or
   `active` (a leaked crash hold). All three task bodies were already in
   `work/tasks/done/`. (Those specific leaked locks were cleared by hand via
   `release-lock` while diagnosing — that is the OPERATIONAL residue, not this bug.)
 - The STRUCTURAL bug: the propose matrix is built from
-  `agent-runner scan --json | jq` (`.github/workflows/advance-lifecycle.yml`,
+  `dorfl scan --json | jq` (`.github/workflows/advance-lifecycle.yml`,
   `enumerate` job). The IN-PLACE scan path (`scanRepoPaths`, the surface CI reads)
   does NOT subtract held-locked slugs from the LIFECYCLE pools, and the in-place
   `scoreItems` caller passes the DEFAULT empty `heldSlugs` set:

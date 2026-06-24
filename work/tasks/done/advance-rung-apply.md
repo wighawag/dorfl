@@ -40,7 +40,7 @@ This rung is sequenced AFTER `advance-rung-surface` to serialize edits to the sh
 
 > Build the APPLY-answers rung of the advance engine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The per-item state machine", US #11/14/15/29/30, "The sidecar FORMAT" — the `disposition` field). On classify=apply (ALL entries answered): under the `advancing` CAS lock, apply the human's answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the sidecar contract's atomic-apply), then EITHER append new questions (stay `needsAnswers:true`, re-pause) OR resolve fully (clear `needsAnswers` + DELETE the sidecar in the SAME commit). An answer may disposition the item to ANY terminal (advance / out-of-scope / needs-attention / observation keep/delete) via the `disposition` field; a "keep" records `triaged:keep` and drops the item out of the pool. ALWAYS allowed (no gate); NEVER invents an answer. A subset-answered sidecar is NOT applied (NO-OP).
 >
-> READ FIRST: the sidecar atomic-apply from `advance-sidecar-contract`, the classifier from `advance-tick-classifier` (the apply vs no-op boundary), the `advancing` lock from `advancing-lock-borrow`, the rung-executor seam (now also written by `advance-rung-surface`), `packages/agent-runner/src/needs-attention.ts` (the existing bounce), and how items move to `out-of-scope/` (WORK-CONTRACT.md).
+> READ FIRST: the sidecar atomic-apply from `advance-sidecar-contract`, the classifier from `advance-tick-classifier` (the apply vs no-op boundary), the `advancing` lock from `advancing-lock-borrow`, the rung-executor seam (now also written by `advance-rung-surface`), `packages/dorfl/src/needs-attention.ts` (the existing bounce), and how items move to `out-of-scope/` (WORK-CONTRACT.md).
 >
 > FIRST, check this slice against current reality (drift). If a dependency landed differently than assumed, reconcile or route to `needs-attention/`.
 >
@@ -51,7 +51,7 @@ This rung is sequenced AFTER `advance-rung-surface` to serialize edits to the sh
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-rung-apply --arbiter origin
+dorfl claim advance-rung-apply --arbiter origin
 git fetch origin && git switch -c work/advance-rung-apply origin/main
 git mv work/in-progress/advance-rung-apply.md work/done/advance-rung-apply.md
 ```

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:adr-methodology-still-cites-slicing-protocol-doc-filename-2026-06-23 type=observation slug=adr-methodology-still-cites-slicing-protocol-doc-filename-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:adr-methodology-still-cites-slicing-protocol-doc-filename-2026-06-23 type=observation slug=adr-methodology-still-cites-slicing-protocol-doc-filename-2026-06-23 allAnswered=false -->
 
 ## Q1
 

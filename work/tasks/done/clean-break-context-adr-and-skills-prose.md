@@ -29,7 +29,7 @@ A clean-break vocabulary + scaffolding sweep across the live current-state prose
 - `skills/drive-tasks/SKILL.md`, `skills/setup/SKILL.md`, `skills/to-brief/SKILL.md`, `skills/work/SKILL.md` — sweep the remaining current-concept `slice`/`prd`/`slicing` prose to task/brief/tasking; keep immutable slugs.
 
 ### 4. One in-scope src-comment residual (folded in by the conductor, 2026-06-23)
-- `packages/agent-runner/src/do.ts` (~L548) — the `taskResultToDoResult` passthrough-contract JSDoc comment still names the now-renamed outcome token `sliced` (it lists `outcomes pass through (sliced / gate-refused / stale / agent-failed / usage-error)`). The `'sliced'` run-outcome was renamed to `'tasked'` by the now-landed task `rename-advance-rung-and-sliced-outcome-tokens`, so this comment references a non-existent token. Fix the single word `sliced` -> `tasked` in that comment. This is the ONE src-comment fix in this prose task's scope (a Gate-2 nit from the rung-rename task, in its blast radius); do NOT broaden into other src files (the other `sliced` hits in src are immutable historical slugs like `remove-sliced-marker-step-b` / `prd-sliced-folder-step-a` — leave those verbatim).
+- `packages/dorfl/src/do.ts` (~L548) — the `taskResultToDoResult` passthrough-contract JSDoc comment still names the now-renamed outcome token `sliced` (it lists `outcomes pass through (sliced / gate-refused / stale / agent-failed / usage-error)`). The `'sliced'` run-outcome was renamed to `'tasked'` by the now-landed task `rename-advance-rung-and-sliced-outcome-tokens`, so this comment references a non-existent token. Fix the single word `sliced` -> `tasked` in that comment. This is the ONE src-comment fix in this prose task's scope (a Gate-2 nit from the rung-rename task, in its blast radius); do NOT broaden into other src files (the other `sliced` hits in src are immutable historical slugs like `remove-sliced-marker-step-b` / `prd-sliced-folder-step-a` — leave those verbatim).
 
 ## KEEP verbatim (called out where kept)
 Immutable historical slugs of landed tasks/briefs; the brief slug `code-identifier-slice-prd-to-task-brief-rename` itself; any reference inside a quoted past decision where renaming would falsify the record (rare — prefer renaming the concept and leaving only a true historical-slug token).
@@ -62,7 +62,7 @@ Immutable historical slugs of landed tasks/briefs; the brief slug `code-identifi
 ### Claiming this task
 
 ```sh
-agent-runner claim clean-break-context-adr-and-skills-prose --arbiter <remote>
+dorfl claim clean-break-context-adr-and-skills-prose --arbiter <remote>
 git fetch <remote> && git switch -c work/clean-break-context-adr-and-skills-prose <remote>/main
 git mv work/tasks/todo/clean-break-context-adr-and-skills-prose.md work/tasks/done/clean-break-context-adr-and-skills-prose.md
 ```

@@ -58,7 +58,7 @@ This is **"do not EXECUTE the suite to confirm green,"** NOT "ignore tests." The
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-prompt-assume-gate-green --arbiter <remote>      # default --arbiter origin
+dorfl claim review-prompt-assume-gate-green --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/review-prompt-assume-gate-green <remote>/main
 git mv work/in-progress/review-prompt-assume-gate-green.md work/done/review-prompt-assume-gate-green.md
 ```

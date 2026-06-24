@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:task-pool-folder-named-todo-is-less-precise-than-ready-2026-06-20 type=observation slug=task-pool-folder-named-todo-is-less-precise-than-ready-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:task-pool-folder-named-todo-is-less-precise-than-ready-2026-06-20 type=observation slug=task-pool-folder-named-todo-is-less-precise-than-ready-2026-06-20 allAnswered=false -->
 
 ## Q1
 

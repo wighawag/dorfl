@@ -63,7 +63,7 @@ Extend the tree-less ledger-move primitive to the SURFACE direction so an after-
 ### Claiming this slice
 
 ```sh
-agent-runner claim treeless-surface-for-after-commit-push-failure --arbiter origin
+dorfl claim treeless-surface-for-after-commit-push-failure --arbiter origin
 git fetch origin && git switch -c work/treeless-surface-for-after-commit-push-failure origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/treeless-surface-for-after-commit-push-failure.md work/done/treeless-surface-for-after-commit-push-failure.md

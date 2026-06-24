@@ -151,7 +151,7 @@ A per-item SIDECAR file, flat, `work/questions/<type>-<slug>.md` (e.g. `work/que
 
 ### The sidecar FORMAT (RESOLVED — see the ADR)
 
-The concrete on-disk format is RESOLVED in ADR `docs/adr/question-sidecar-human-readable-format.md` (accepted 2026-06-20) and IMPLEMENTED in `packages/agent-runner/src/sidecar.ts` + documented for hand-writers in `skills/surface-questions/SKILL.md`. The sidecar is a HUMAN-READABLE Markdown file (bold question / blockquote context / italic suggested-default / fixed `**Your answer** (write below this line):` marker) with all MACHINE state in HTML comments (an identity comment at the top carrying `item`/`type`/`slug`/`allAnswered`; a per-entry comment carrying `id` and optional `disposition`). The original `key: |` YAML-block-scalar shape that lived here is SUPERSEDED — see the ADR for context, the three ratified trade-offs (semantic round-trip; heading-delimited answer; clean cutover + migrate), and the consequences. The load-bearing rules are unchanged:
+The concrete on-disk format is RESOLVED in ADR `docs/adr/question-sidecar-human-readable-format.md` (accepted 2026-06-20) and IMPLEMENTED in `packages/dorfl/src/sidecar.ts` + documented for hand-writers in `skills/surface-questions/SKILL.md`. The sidecar is a HUMAN-READABLE Markdown file (bold question / blockquote context / italic suggested-default / fixed `**Your answer** (write below this line):` marker) with all MACHINE state in HTML comments (an identity comment at the top carrying `item`/`type`/`slug`/`allAnswered`; a per-entry comment carrying `id` and optional `disposition`). The original `key: |` YAML-block-scalar shape that lived here is SUPERSEDED — see the ADR for context, the three ratified trade-offs (semantic round-trip; heading-delimited answer; clean cutover + migrate), and the consequences. The load-bearing rules are unchanged:
 
 - **A non-empty answer ⇒ answered** (with an explicit `answered=true|false` override in the per-entry HTML comment when it disagrees with the derivation; emitted only on disagreement so a stale comment cannot become a sticky override). `allAnswered` in the identity comment is a DERIVED mirror — the classifier MAY read it for cheap scanning but MUST recompute from entries on apply.
 - **Entry ids are stable + monotonic** (`q1`, `q2`, …), never reused — APPEND adds `qN+1`; the agent keys "already asked/answered" off the id.
@@ -181,7 +181,7 @@ SLICE: surface (→ sidecar, stays backlog) / pending NO-OP / apply (append-or-c
 | SURFACE a question (write sidecar) | none — ALWAYS allowed | — |
 | APPLY a human's answer | none — ALWAYS allowed | — |
 
-Resolved like the existing gates: `flag > AGENT_RUNNER_* env > .agent-runner.json > global > default false`. Advance RESPECTS these; it never bypasses them.
+Resolved like the existing gates: `flag > DORFL_* env > .dorfl.json > global > default false`. Advance RESPECTS these; it never bypasses them.
 
 ### batch-qa → surface-questions
 
@@ -195,7 +195,7 @@ Refocus the `batch-qa` skill into **`surface-questions`**: GATHER-only (formulat
 
 ### The `allowAgents` → `autoBuild` rename (SEQUENCED LAST)
 
-A clean, isolated, breaking config migration (touches `.agent-runner.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT) with an alias/deprecation window — DONE AFTER the advance family lands, so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Precedent: `rename-reviewpr-to-review`. Build the advance work with `allowAgents` named as-is; rename alone afterwards.
+A clean, isolated, breaking config migration (touches `.dorfl.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT) with an alias/deprecation window — DONE AFTER the advance family lands, so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Precedent: `rename-reviewpr-to-review`. Build the advance work with `allowAgents` named as-is; rename alone afterwards.
 
 ## Testing Decisions
 

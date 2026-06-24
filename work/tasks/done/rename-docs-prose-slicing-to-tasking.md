@@ -44,7 +44,7 @@ This task is file-orthogonal (only `docs/` markdown), so it can run any time.
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-docs-prose-slicing-to-tasking --arbiter <remote>
+dorfl claim rename-docs-prose-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-docs-prose-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-docs-prose-slicing-to-tasking.md work/tasks/done/rename-docs-prose-slicing-to-tasking.md
 ```

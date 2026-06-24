@@ -46,7 +46,7 @@ Rename the tasking-discipline protocol doc and everything that references its fi
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-protocol-doc-slicing-to-tasking --arbiter <remote>
+dorfl claim rename-protocol-doc-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-protocol-doc-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-protocol-doc-slicing-to-tasking.md work/tasks/done/rename-protocol-doc-slicing-to-tasking.md
 ```

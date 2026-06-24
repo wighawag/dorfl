@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:clean-break-other-rename-narration-phrases-survive-2026-06-23 type=observation slug=clean-break-other-rename-narration-phrases-survive-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:clean-break-other-rename-narration-phrases-survive-2026-06-23 type=observation slug=clean-break-other-rename-narration-phrases-survive-2026-06-23 allAnswered=false -->
 
 ## Q1
 

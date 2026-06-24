@@ -11,7 +11,7 @@ status: incubating
 
 ## The signal
 
-agent-runner has two clear classes of command, and the distinction matters
+dorfl has two clear classes of command, and the distinction matters
 (it drives identity attribution, who is expected to invoke it, and the mental
 model):
 
@@ -64,7 +64,7 @@ is backwards — it marks the thing you want to be the default.
   deprecation window. Decide whether prefixes are the ONLY name or an additional
   surfacing.
 - **Prefix syntax.** `human:complete` (colon, mirrors the existing `slice:` /
-  `prd:` arg convention) vs a `human` SUBCOMMAND group (`agent-runner human
+  `prd:` arg convention) vs a `human` SUBCOMMAND group (`dorfl human
   complete`) vs a help-only grouping with no name change. The colon form is
   consistent with the codebase's existing `<ns>:<slug>` convention.
 - **Does this REPLACE or COMPLEMENT the existing help-group split?** cli.ts
@@ -84,7 +84,7 @@ is backwards — it marks the thing you want to be the default.
 
 It makes a real, already-load-bearing distinction (human vs agent identity)
 LEGIBLE at the surface instead of buried in docs — both for humans onboarding and
-for an agent that emits agent-runner commands and should never accidentally reach
+for an agent that emits dorfl commands and should never accidentally reach
 for a human verb (or vice-versa). It is the naming-layer complement to the
 identity feature's RUNTIME enforcement of the same split.
 

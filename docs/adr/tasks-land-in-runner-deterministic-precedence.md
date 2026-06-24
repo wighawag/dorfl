@@ -34,8 +34,8 @@ context of the existing trust precedences.
 A per-repo default landing for the tasker's emitted tasks, resolved EXACTLY like
 the existing `taskingIntegration`/`integration` precedence:
 
-    flag (`--tasks-land-in`) > env (`AGENT_RUNNER_TASKS_LAND_IN`) > per-repo
-      `.agent-runner.json` > global config > built-in default (`'pre-backlog'`)
+    flag (`--tasks-land-in`) > env (`DORFL_TASKS_LAND_IN`) > per-repo
+      `.dorfl.json` > global config > built-in default (`'pre-backlog'`)
 
 Spelling rationale:
 
@@ -113,7 +113,7 @@ would silently change the safety story; one ADR keeps them legible together.
 
 ## Consequences
 
-- A repo's `.agent-runner.json` may carry `tasksLandIn: 'todo'` (the
+- A repo's `.dorfl.json` may carry `tasksLandIn: 'todo'` (the
   trusted-fast-path landing) or `'pre-backlog'` (the staging default); both land
   through the same resolver, with the same untrusted-origin force overlaid.
 - The runner-deterministic placement is THE seam (`src/placement.ts`); a future
@@ -144,7 +144,7 @@ in-scope choices the reviewers asked to pin:
    `explicitMerge: true`), so an untrusted-origin staging force still wins when the
    value came from config, not the flag. A bad flag value FAILS LOUDLY
    (`explicitTasksLandInFromFlag`), the same discipline as the
-   `--observation-triage` enum + the `AGENT_RUNNER_TASKS_LAND_IN` env coercion.
+   `--observation-triage` enum + the `DORFL_TASKS_LAND_IN` env coercion.
    A binary-level test (`do prd:` through `buildProgram()` on a `--bare file://`
    arbiter with a stub tasker) proves the configured value + the flag actually
    reach `performTask` end-to-end, not only via the in-process interface.

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:pi-harness-jsonl-reliance type=observation slug=pi-harness-jsonl-reliance allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:pi-harness-jsonl-reliance type=observation slug=pi-harness-jsonl-reliance allAnswered=false -->
 
 ## Q1
 

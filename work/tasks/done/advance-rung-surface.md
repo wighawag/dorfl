@@ -38,7 +38,7 @@ This is the FIRST rung body filling the executor seam from `advance-verb-resolve
 
 > Build the SURFACE rung of the advance engine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("batch-qa → surface-questions", US #33, "The per-item state machine"). On classify=surface: under the `advancing` CAS lock, spawn a fresh-context agent with `surface-questions` loaded, collect its emitted questions, and the ENGINE writes/appends them to the sidecar CAS-atomically + sets `needsAnswers:true` in the same atomic step — exactly as the review gate uses `review` (skill judges, engine persists). Surfacing is ALWAYS allowed (no gate). Expensive work is POST-lock, winner-only.
 >
-> READ FIRST: `packages/agent-runner/src/review-gate.ts` (the fresh-context skill-loaded spawn + structured-emit-parse pattern to MIRROR), the sidecar append/atomic-apply from `advance-sidecar-contract`, the `advancing` lock from `advancing-lock-borrow`, the rung-executor seam from `advance-verb-resolver`, and the `surface-questions` skill. Use the house stubbed-harness test pattern (so no real agent/model is invoked in tests).
+> READ FIRST: `packages/dorfl/src/review-gate.ts` (the fresh-context skill-loaded spawn + structured-emit-parse pattern to MIRROR), the sidecar append/atomic-apply from `advance-sidecar-contract`, the `advancing` lock from `advancing-lock-borrow`, the rung-executor seam from `advance-verb-resolver`, and the `surface-questions` skill. Use the house stubbed-harness test pattern (so no real agent/model is invoked in tests).
 >
 > FIRST, check this slice against current reality (drift). The agent-spawn / reporting-channel substrate is LANDED (PRD 2026-06-09 UPDATE — `agent-stop`, review-gate). If it landed differently, reconcile or route to `needs-attention/`.
 >
@@ -49,7 +49,7 @@ This is the FIRST rung body filling the executor seam from `advance-verb-resolve
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-rung-surface --arbiter origin
+dorfl claim advance-rung-surface --arbiter origin
 git fetch origin && git switch -c work/advance-rung-surface origin/main
 git mv work/in-progress/advance-rung-surface.md work/done/advance-rung-surface.md
 ```

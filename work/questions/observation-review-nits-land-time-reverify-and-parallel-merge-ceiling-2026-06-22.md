@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-land-time-reverify-and-parallel-merge-ceiling-2026-06-22 type=observation slug=review-nits-land-time-reverify-and-parallel-merge-ceiling-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-land-time-reverify-and-parallel-merge-ceiling-2026-06-22 type=observation slug=review-nits-land-time-reverify-and-parallel-merge-ceiling-2026-06-22 allAnswered=false -->
 
 ## Q1
 

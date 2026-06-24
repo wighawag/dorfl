@@ -55,7 +55,7 @@ A **runner-owned `needs-attention → done` path**: when a `do`/`run` gate failu
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim complete-from-needs-attention --arbiter <remote>      # default --arbiter origin
+dorfl claim complete-from-needs-attention --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/complete-from-needs-attention <remote>/main
 # on completion, in the work branch's PR/merge:

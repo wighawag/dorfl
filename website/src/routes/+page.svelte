@@ -3,7 +3,7 @@
 	import {base} from '$app/paths';
 	import Lockup from '$lib/Lockup.svelte';
 
-	const repoUrl = 'https://github.com/wighawag/agent-runner';
+	const repoUrl = 'https://github.com/wighawag/dorfl';
 
 	// Product framing from the repo's CONTEXT.md and work/protocol/WORK-CONTRACT.md.
 	const pillars = [
@@ -222,13 +222,13 @@
 		>
 			<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
 					><span class="text-bone-muted"># install (placeholder)</span>
-<span class="text-amber">npm install -g agent-runner</span>
+<span class="text-amber">npm install -g dorfl</span>
 
 <span class="text-bone-muted"
 						># register a repo and let Dorfl pick a ready task</span
 					>
-<span class="text-amber">agent-runner remote add &lt;url&gt;</span>
-<span class="text-amber">agent-runner do</span></code
+<span class="text-amber">dorfl remote add &lt;url&gt;</span>
+<span class="text-amber">dorfl do</span></code
 				></pre>
 		</div>
 		<p class="mt-6 text-sm text-bone-muted">

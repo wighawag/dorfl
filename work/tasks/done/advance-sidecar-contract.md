@@ -77,7 +77,7 @@ disposition:                 # optional, triage/terminal entries: promote-slice 
 >
 > Domain vocabulary: the sidecar is IDENTITY-keyed (`<type>-<slug>`, derived from the namespaced identity via the existing resolver `slug-namespace.ts` — `:`→`-` for the filename), NOT folder-keyed, so it survives the item's `git mv`s with no lock-step move. The ONLY in-body signal is the existing `needsAnswers` flag — there is NO back-pointer field. `allAnswered` is a DERIVED mirror (recompute from entries every write; never trusted over them). Append never overwrites (the sidecar is the full Q&A history); ids are stable + monotonic, never reused. Atomic-apply mutates the item body + sidecar in ONE commit and, on full resolution, clears `needsAnswers` + deletes the sidecar in that same commit (the invariant `needsAnswers:false ⟺ no active sidecar`).
 >
-> READ FIRST: `packages/agent-runner/src/frontmatter.ts` (YAML frontmatter parse/serialise house pattern), `packages/agent-runner/src/slug-namespace.ts` (`parseSlugArg`/`resolveSlug` — the namespaced-identity source of truth), and the existing slicing-lock / claim-cas tests for the throwaway-git-repo atomic-commit pattern.
+> READ FIRST: `packages/dorfl/src/frontmatter.ts` (YAML frontmatter parse/serialise house pattern), `packages/dorfl/src/slug-namespace.ts` (`parseSlugArg`/`resolveSlug` — the namespaced-identity source of truth), and the existing slicing-lock / claim-cas tests for the throwaway-git-repo atomic-commit pattern.
 >
 > FIRST, check this slice against current reality (it is a launch snapshot — though freshly cut). The `prd/`→`slicing/`→`prd-sliced/` lifecycle and `slug-namespace.ts` resolver are LANDED substrate (see the PRD's 2026-06-09 PRECURSOR-LANDED UPDATE). If a dependency landed differently than this slice assumes, route to `needs-attention/` with the discrepancy rather than building on a stale premise.
 >
@@ -88,7 +88,7 @@ disposition:                 # optional, triage/terminal entries: promote-slice 
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-sidecar-contract --arbiter origin
+dorfl claim advance-sidecar-contract --arbiter origin
 git fetch origin && git switch -c work/advance-sidecar-contract origin/main
 git mv work/in-progress/advance-sidecar-contract.md work/done/advance-sidecar-contract.md
 ```

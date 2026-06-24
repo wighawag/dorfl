@@ -11,7 +11,7 @@ needsAnswers: true
 
 During an observation-triage session that drained the inbox (deleting ~60 discharged
 notes incl. all 42 Gate-2 review-nits), the test
-`packages/agent-runner/test/observation-identity-roundtrip.test.ts` went RED: its block
+`packages/dorfl/test/observation-identity-roundtrip.test.ts` went RED: its block
 "the 17 migrated review-nits obs each round-trip" scanned the REAL repo's
 `work/notes/observations/review-nits-*.md` files and hard-asserted
 `files.length >= 17`. Once the review-nits were triaged out (the correct, intended
@@ -45,7 +45,7 @@ inbox (the desired end state) because doing so breaks the build.
 
 ## Refs
 
-- The fixed test: `packages/agent-runner/test/observation-identity-roundtrip.test.ts`
+- The fixed test: `packages/dorfl/test/observation-identity-roundtrip.test.ts`
   (the "MANY minted review-nits obs each round-trip" block, now self-seeded).
 - The contract that guarantees the inbox shrinks: `work/protocol/WORK-CONTRACT.md`
   ("Discharge by deletion" / capture buckets leave by deletion).

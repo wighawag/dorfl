@@ -10,7 +10,7 @@ triaged: keep
 
 The `advance` family writes one question-per-item SIDECAR to
 `work/questions/<type>-<slug>.md`, serialised by
-`serialiseSidecar` (`packages/agent-runner/src/sidecar.ts`). The on-disk shape is
+`serialiseSidecar` (`packages/dorfl/src/sidecar.ts`). The on-disk shape is
 a YAML-ish hybrid: frontmatter, then per-entry `## Q1` headings whose BODY is
 bare key/value lines using YAML block scalars in raw Markdown:
 
@@ -71,10 +71,10 @@ revisits a PRD-RESOLVED format.
 
 ## Refs
 
-- `packages/agent-runner/src/sidecar.ts` — `serialiseSidecar` /
+- `packages/dorfl/src/sidecar.ts` — `serialiseSidecar` /
   `parseSidecar` / `blockField` (the format + the parser that must stay
   compatible).
-- `packages/agent-runner/test/sidecar.test.ts` — the round-trip + tolerant-parse
+- `packages/dorfl/test/sidecar.test.ts` — the round-trip + tolerant-parse
   tests any reformat must keep green.
 - `work/prd-sliced/advance-loop.md` — "The sidecar FORMAT (RESOLVED here)" +
   MAINTAINER-RESOLVED §1 (the answered predicate); the PRD that froze the shape.
@@ -87,4 +87,4 @@ This observation maps UNAMBIGUOUSLY onto `task:question-sidecar-human-readable-f
 covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
-Reason: The observation describes exactly the problem (sidecar `key: |` block scalars render as run-together noise on GitHub) that the now-DONE task `work/tasks/done/question-sidecar-human-readable-format.md` was built to solve — same file (`packages/agent-runner/src/sidecar.ts`), same symptoms, same three candidate directions, resolved via the accepted ADR `docs/adr/question-sidecar-human-readable-format.md` with bold question + blockquote context + HTML-comment machine fields + labelled answer marker. Already covered.
+Reason: The observation describes exactly the problem (sidecar `key: |` block scalars render as run-together noise on GitHub) that the now-DONE task `work/tasks/done/question-sidecar-human-readable-format.md` was built to solve — same file (`packages/dorfl/src/sidecar.ts`), same symptoms, same three candidate directions, resolved via the accepted ADR `docs/adr/question-sidecar-human-readable-format.md` with bold question + blockquote context + HTML-comment machine fields + labelled answer marker. Already covered.

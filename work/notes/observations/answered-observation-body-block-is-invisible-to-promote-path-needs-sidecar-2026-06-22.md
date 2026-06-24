@@ -12,7 +12,7 @@ Running the triage leg for an observation that a human had marked `promote-slice
 in its body did NOTHING (no task minted):
 
 ```
-agent-runner advance "obs:advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21" --propose --watch --arbiter origin
+dorfl advance "obs:advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21" --propose --watch --arbiter origin
 >> LOCKED 'observation-...' for advancing on origin (unified lock).
 >> surface observation:...: no open judgement — nothing surfaced (no sidecar written).
 >> RELEASED 'observation-...' advancing borrow on origin (item untouched).

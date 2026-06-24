@@ -45,6 +45,6 @@ This is pure, file-orthogonal logic over an event shape — no seam, no git, no 
 >
 > SCOPE FENCE: ONLY the pure classifier. Do NOT build CI's trigger policy (command/every-issue, maintainer/anyone) — that is `runner-in-ci`. Do NOT wire it into a real webhook/CI path (no CI here). Do NOT touch the seam, dispatcher, lock, mode KNOBS, or the "PRD complete?" query.
 >
-> FIRST run the drift check: confirm no event-classification logic already exists in `packages/agent-runner/src`. If it does, reconcile against it; if a premise is broken, route to `needs-attention/` with the discrepancy.
+> FIRST run the drift check: confirm no event-classification logic already exists in `packages/dorfl/src`. If it does, reconcile against it; if a premise is broken, route to `needs-attention/` with the discrepancy.
 >
 > "Done" = the classifier returns re-evaluate for new-comment / body-edit and ignore for a buried comment-edit, edit-vs-reply doesn't change the path, it is pure (no seam/git/gh), and `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.

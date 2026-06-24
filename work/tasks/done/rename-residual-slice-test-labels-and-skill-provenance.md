@@ -21,7 +21,7 @@ covers: []
 - `test/workspace.test.ts` (~L36) fixture slug `'my-slice'` -> `'my-task'` (an arbitrary work-id-encoding fixture; the concept it stands for is a task).
 - `test/setup-prompt-guidance-question.test.ts` (~L135, L156) fixture `'my-prd'` -> `'my-brief'`.
 - `test/surface-blockers-gate.test.ts` (~L195) fixture `'blocked-prd'` -> `'blocked-brief'` (+ its `seedBlockedBrief` call site).
-- `test/task-acceptance-gate.test.ts` (~L44) the temp-dir prefix `'agent-runner-slice-gate-'` -> `'agent-runner-task-gate-'`.
+- `test/task-acceptance-gate.test.ts` (~L44) the temp-dir prefix `'dorfl-slice-gate-'` -> `'dorfl-task-gate-'`.
 
 ### 3. Skill prose — self-sufficient, no done-task provenance
 - `skills/drive-tasks/SKILL.md` (~L74): DELETE the anecdote "(This session fixed the `slicer-review-edit-loop` task exactly this way: …)" — keep the RULE (requeue + re-do continues from the kept branch), drop the historical session anecdote. The skill states what to do, not which past task did it.
@@ -63,7 +63,7 @@ covers: []
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-residual-slice-test-labels-and-skill-provenance --arbiter <remote>
+dorfl claim rename-residual-slice-test-labels-and-skill-provenance --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-residual-slice-test-labels-and-skill-provenance <remote>/main
 git mv work/tasks/todo/rename-residual-slice-test-labels-and-skill-provenance.md work/tasks/done/rename-residual-slice-test-labels-and-skill-provenance.md
 ```

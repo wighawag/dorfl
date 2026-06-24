@@ -16,7 +16,7 @@ Reference leaner instantiation consulted while building this:
 The site lives flat directly under `website/` (`src/`, `static/`,
 `svelte.config.js` at this folder's root), not under `website/web/`. The
 template's `web/` wrapper exists to turn a standalone repo into a monorepo;
-`agent-runner` is already a pnpm monorepo, so `website/` is just another
+`dorfl` is already a pnpm monorepo, so `website/` is just another
 workspace member. `website/AGENTS.md` explicitly says this is expected, so it is
 not recorded as drift.
 
@@ -152,7 +152,7 @@ not recorded as drift.
 - **What:** Added `- 'website'` to the repo-root `pnpm-workspace.yaml` (which
   previously listed only `packages/*`).
 - **Why:** Without it, pnpm does not treat `website/` as a workspace package, so
-  `pnpm install` / `pnpm --filter @agent-runner/website ...` cannot resolve it. The
+  `pnpm install` / `pnpm --filter @dorfl/website ...` cannot resolve it. The
   AGENTS.md framing itself states `website/` "is just another workspace member", so
   this is the wiring that makes that true. It is the minimal possible root touch
   (one line) and changes nothing about the existing `packages/*` members.
@@ -165,7 +165,7 @@ not recorded as drift.
 
 - **What:** The root `format` / `format:check` scripts now run
   `prettier --write/--check .` AND then delegate into the website
-  (`&& pnpm --filter @agent-runner/website format[:check]`). Also added `website/`
+  (`&& pnpm --filter @dorfl/website format[:check]`). Also added `website/`
   to the **root** `.prettierignore`.
 - **Why:** The root prettier config has no plugins, but `website/.prettierrc`
   declares `prettier-plugin-svelte` / `-tailwindcss`. When root `prettier --check .`

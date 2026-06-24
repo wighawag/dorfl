@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22 type=observation slug=observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22 type=observation slug=observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22 allAnswered=false -->
 
 ## Q1
 

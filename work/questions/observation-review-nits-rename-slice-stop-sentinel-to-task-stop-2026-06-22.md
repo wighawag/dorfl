@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-rename-slice-stop-sentinel-to-task-stop-2026-06-22 type=observation slug=review-nits-rename-slice-stop-sentinel-to-task-stop-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-rename-slice-stop-sentinel-to-task-stop-2026-06-22 type=observation slug=review-nits-rename-slice-stop-sentinel-to-task-stop-2026-06-22 allAnswered=false -->
 
 ## Q1
 

@@ -37,7 +37,7 @@ Do NOT pull in the rest of the mechanical STEP-B rename across the tree — this
 
 ## Prompt
 
-> You are finishing the scoped, surface-area portion of the deferred STEP-B vocabulary rename from `folder-taxonomy-reorg-and-rename`. The new folder layout (`work-layout.ts`) already says `tasks/backlog` = staging and `tasks/todo` = the agent pool, but several readers still use `backlog` to mean "the pool". Find them in the surface area F2/F3 will touch — `packages/agent-runner/src/ledger-read.ts`, `lifecycle-gather.ts`, the `scan` output shape, `config.ts` doc-comments, and the `slicesLandIn` / `prdsLandIn` enum value space in `env-config.ts` — and rename the POOL noun to `todo` consistently. Keep `tasks/backlog` meaning STAGING.
+> You are finishing the scoped, surface-area portion of the deferred STEP-B vocabulary rename from `folder-taxonomy-reorg-and-rename`. The new folder layout (`work-layout.ts`) already says `tasks/backlog` = staging and `tasks/todo` = the agent pool, but several readers still use `backlog` to mean "the pool". Find them in the surface area F2/F3 will touch — `packages/dorfl/src/ledger-read.ts`, `lifecycle-gather.ts`, the `scan` output shape, `config.ts` doc-comments, and the `slicesLandIn` / `prdsLandIn` enum value space in `env-config.ts` — and rename the POOL noun to `todo` consistently. Keep `tasks/backlog` meaning STAGING.
 >
 > Briefs are symmetric: `prdsLandIn` is in scope alongside `slicesLandIn`.
 >

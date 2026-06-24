@@ -102,7 +102,7 @@ taxonomy reorg PRD (`folder-taxonomy-reorg-and-rename.md`), which owns the
 >
 > SEAMS TO TEST AT: a `--bare file://` arbiter via `test/helpers/gitRepo.ts`
 > (`seedRepoWithArbiter`, `gitEnv`, `raceClone`, `racerEnv`); shape-reference
-> `test/item-lock-ref.test.ts`. Tests live in `packages/agent-runner/test/*.test.ts`.
+> `test/item-lock-ref.test.ts`. Tests live in `packages/dorfl/test/*.test.ts`.
 > Prove: (a) slicer output lands in `pre-backlog/`; (b) `backlog/` readers are
 > unchanged and still treat `backlog/` as the pool; (c) the runner-owned promotion
 > moves a file into the pool and makes it claimable; (d) the agent cannot self-place

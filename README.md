@@ -1,4 +1,4 @@
-# agent-runner
+# dorfl
 
 > Claims work atomically off a git ref; status is the folder.
 
@@ -14,7 +14,7 @@ built by dogfooding itself: it tracks its own roadmap in its own `work/` tree.
   finished). No shared index, no counters, content-derived slugs only. This is what
   makes the whole thing conflict-safe for many agents working in parallel.
 - **Claims are atomic.** Acquiring an item is a create-only `--force-with-lease` push
-  of a per-item lock ref (`refs/agent-runner/lock/<entry>`). The first push wins; the
+  of a per-item lock ref (`refs/dorfl/lock/<entry>`). The first push wins; the
   losers pick another item. The claim writes nothing to `main`.
 - **The runner owns every git-state transition.** A build agent only writes code and
   gets the acceptance gate green; claim, done-move, and integration are the runner's
@@ -67,10 +67,10 @@ human). See `docs/adr/command-surface-and-journeys.md` for the full model.
 
 A pnpm monorepo:
 
-- `packages/agent-runner/` — the CLI (`type: module`, NodeNext, tsc, vitest,
+- `packages/dorfl/` — the CLI (`type: module`, NodeNext, tsc, vitest,
   commander).
 - `website/` — the Dorfl landing site (Dorfl is the product name for this tool).
-- `skills/` — the agent-runner skills, authored here; `~/.agents/skills/*` symlink
+- `skills/` — the dorfl skills, authored here; `~/.agents/skills/*` symlink
   into them.
 - `docs/adr/` — architecture decision records.
 
@@ -85,7 +85,7 @@ pnpm format            # prettier --write .
 
 ## Acceptance gate
 
-A task is done-eligible (equivalent to `agent-runner verify`) when this is green:
+A task is done-eligible (equivalent to `dorfl verify`) when this is green:
 
 ```sh
 pnpm format:check && pnpm -r build && pnpm -r test

@@ -8,7 +8,7 @@ covers: [10]
 
 ## What to build
 
-Serialise two concurrent `intake` runs on the SAME issue with a **provider-native `processing` LOCK label** (e.g. `agent-runner:processing`): added on start (winner only), removed on finish. This extends the issue seam with label ops and acquires/ releases around the existing `intake` run.
+Serialise two concurrent `intake` runs on the SAME issue with a **provider-native `processing` LOCK label** (e.g. `dorfl:processing`): added on start (winner only), removed on finish. This extends the issue seam with label ops and acquires/ releases around the existing `intake` run.
 
 Critical framing (the PRD is emphatic — do not drift):
 
@@ -40,7 +40,7 @@ Extends the issue seam with `addLabel` / `removeLabel` / `getLabels`, implemente
 
 ## Prompt
 
-> Add `intake`'s PROCESSING LOCK: a provider-native `processing` label (e.g. `agent-runner:processing`) as a TRANSIENT concurrency mutex — added on start (winner only), removed on finish — serialising two concurrent runs on the SAME issue (US #10).
+> Add `intake`'s PROCESSING LOCK: a provider-native `processing` label (e.g. `dorfl:processing`) as a TRANSIENT concurrency mutex — added on start (winner only), removed on finish — serialising two concurrent runs on the SAME issue (US #10).
 >
 > CRITICAL FRAMING (from `work/prd-sliced/issue-intake.md` — do NOT drift): this is a transient CONCURRENCY mutex carrying NO `work/` state. It is NOT a `work/`-file CAS (the contended thing is the ISSUE; the output slug is unknown pre-run). It is NOT a whitesmith-style label STATE-MACHINE — ADR §12 forbids modelling `work/` lifecycle in labels. ONE transient lock label, nothing more. A non-label provider DEGRADES to best-effort (CI's per-issue concurrency group — `runner-in-ci`'s, out of scope — is then the only serialiser).
 >

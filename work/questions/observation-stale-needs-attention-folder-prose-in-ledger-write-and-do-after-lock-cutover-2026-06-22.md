@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:stale-needs-attention-folder-prose-in-ledger-write-and-do-after-lock-cutover-2026-06-22 type=observation slug=stale-needs-attention-folder-prose-in-ledger-write-and-do-after-lock-cutover-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:stale-needs-attention-folder-prose-in-ledger-write-and-do-after-lock-cutover-2026-06-22 type=observation slug=stale-needs-attention-folder-prose-in-ledger-write-and-do-after-lock-cutover-2026-06-22 allAnswered=false -->
 
 ## Q1
 

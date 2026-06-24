@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:drive-recovery-landed-task2-direct-on-main-bypassing-pr-2026-06-23 type=observation slug=drive-recovery-landed-task2-direct-on-main-bypassing-pr-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:drive-recovery-landed-task2-direct-on-main-bypassing-pr-2026-06-23 type=observation slug=drive-recovery-landed-task2-direct-on-main-bypassing-pr-2026-06-23 allAnswered=false -->
 
 ## Q1
 

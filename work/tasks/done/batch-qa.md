@@ -50,7 +50,7 @@ Mirror the structure/voice + frontmatter of `skills/review/`, `skills/to-slices/
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim batch-qa --arbiter <remote>      # default --arbiter origin
+dorfl claim batch-qa --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/batch-qa <remote>/main
 # on completion, in the work branch's PR/merge:

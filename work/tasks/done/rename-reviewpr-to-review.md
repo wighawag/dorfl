@@ -1,5 +1,5 @@
 ---
-title: rename reviewPr → review (flag --review, config key review, env AGENT_RUNNER_REVIEW) — the -pr suffix is a fossil; the gate is merge/propose-agnostic
+title: rename reviewPr → review (flag --review, config key review, env DORFL_REVIEW) — the -pr suffix is a fossil; the gate is merge/propose-agnostic
 slug: rename-reviewpr-to-review
 prd: review
 blockedBy: []
@@ -12,7 +12,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 
 - **CLI flag:** `--review-pr` / `--no-review-pr` → **`--review` / `--no-review`** (on both `do` and `complete`).
 - **Config key:** `reviewPr` → **`review`** (`config.ts` `Config` + `DEFAULT_CONFIG`, `repo-config.ts` `REPO_ALLOWED_KEYS`, `do-config.ts` `ReviewFlags`/`reviewFlagOverrides`, the `do.ts`/`complete.ts` option fields, `cli.ts` wiring).
-- **Env var:** `AGENT_RUNNER_REVIEW_PR` → **`AGENT_RUNNER_REVIEW`** (`env-config.ts`).
+- **Env var:** `DORFL_REVIEW_PR` → **`DORFL_REVIEW`** (`env-config.ts`).
 - **Internal field** on `DoOptions`/`CompleteOptions` (`reviewPr?: boolean`) → `review?: boolean`.
 
 ### Why (rationale — record so it is not relitigated)
@@ -32,7 +32,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 ## Acceptance criteria
 
 - [ ] `--review` / `--no-review` work on `do` AND `complete`; `--review-pr` / `--no-review-pr` are GONE (no longer accepted).
-- [ ] Config key is `review` (per-repo `.agent-runner.json`, global config); env is `AGENT_RUNNER_REVIEW`; resolution precedence + default-off unchanged.
+- [ ] Config key is `review` (per-repo `.dorfl.json`, global config); env is `DORFL_REVIEW`; resolution precedence + default-off unchanged.
 - [ ] No `reviewPr` identifier remains in `src/` (grep clean) — including the `DoOptions`/`CompleteOptions` field, `do-config.ts` flag mapping, and `repo-config.ts` allowed keys.
 - [ ] Sibling keys `reviewModel`/`reviewMaxRounds`/`autoMerge` are untouched and still resolve as before.
 - [ ] Behaviour is byte-for-byte identical (a renamed-flag run does exactly what the old flag did): the review gate runs after verify on both merge and propose; approve→integrate, block→needs-attention; autoMerge downgrade intact.
@@ -46,22 +46,22 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 
 ## Prompt
 
-> Rename the review-gate toggle `reviewPr` → `review` (flag `--review`/`--no-review`, config key `review`, env `AGENT_RUNNER_REVIEW`, and the internal `DoOptions`/`CompleteOptions` field). PURE rename + doc fix — ZERO behaviour change. The `-pr` suffix is a fossil: the gate runs after `verify` on BOTH `--merge` and `--propose` (no PR on merge), and the other review concept (slice generation) is the slicer EDIT LOOP with no toggle, so there is no `--review-spec` to disambiguate against.
+> Rename the review-gate toggle `reviewPr` → `review` (flag `--review`/`--no-review`, config key `review`, env `DORFL_REVIEW`, and the internal `DoOptions`/`CompleteOptions` field). PURE rename + doc fix — ZERO behaviour change. The `-pr` suffix is a fossil: the gate runs after `verify` on BOTH `--merge` and `--propose` (no PR on merge), and the other review concept (slice generation) is the slicer EDIT LOOP with no toggle, so there is no `--review-spec` to disambiguate against.
 >
-> FIRST run the drift check: confirm the current names exist where expected — `cli.ts` (`--review-pr`/`--no-review-pr` on `do` AND `complete`), `config.ts` (`Config.reviewPr` + `DEFAULT_CONFIG`), `repo-config.ts` (`REPO_ALLOWED_KEYS`), `do-config.ts` (`ReviewFlags`/`reviewFlagOverrides`), `env-config.ts` (`reviewPr: 'boolean'`, env `AGENT_RUNNER_REVIEW_PR`), `do.ts`/`complete.ts` (`reviewPr?` option + the `reviewPr` gate-on check), `review-gate.ts` (any reference). ~100 token occurrences across the 8 src + 2 test files (verified 2026-06-06; the count is illustrative — the bar is "grep finds no `reviewPr`"). Route to needs-attention if the shape differs.
+> FIRST run the drift check: confirm the current names exist where expected — `cli.ts` (`--review-pr`/`--no-review-pr` on `do` AND `complete`), `config.ts` (`Config.reviewPr` + `DEFAULT_CONFIG`), `repo-config.ts` (`REPO_ALLOWED_KEYS`), `do-config.ts` (`ReviewFlags`/`reviewFlagOverrides`), `env-config.ts` (`reviewPr: 'boolean'`, env `DORFL_REVIEW_PR`), `do.ts`/`complete.ts` (`reviewPr?` option + the `reviewPr` gate-on check), `review-gate.ts` (any reference). ~100 token occurrences across the 8 src + 2 test files (verified 2026-06-06; the count is illustrative — the bar is "grep finds no `reviewPr`"). Route to needs-attention if the shape differs.
 >
-> Rename ALL of them to `review` / `--review` / `AGENT_RUNNER_REVIEW`. Leave `reviewModel`, `reviewMaxRounds`, `autoMerge` UNTOUCHED (they are correctly named). No back-compat alias (unreleased). Keep resolution precedence + default-off + all gate behaviour identical. Update the in-tree specs/docs that name the old key (`work/prd/review.md`, `work/prd/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`). Do NOT rename the SLUGS `review-gate-pr` / `rename-reviewpr-to-review` (content-derived ids, not the flag).
+> Rename ALL of them to `review` / `--review` / `DORFL_REVIEW`. Leave `reviewModel`, `reviewMaxRounds`, `autoMerge` UNTOUCHED (they are correctly named). No back-compat alias (unreleased). Keep resolution precedence + default-off + all gate behaviour identical. Update the in-tree specs/docs that name the old key (`work/prd/review.md`, `work/prd/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`). Do NOT rename the SLUGS `review-gate-pr` / `rename-reviewpr-to-review` (content-derived ids, not the flag).
 >
 > READ FIRST: `src/cli.ts` (the two command definitions), `src/config.ts`, `src/repo-config.ts`, `src/do-config.ts`, `src/env-config.ts`, `src/do.ts`, `src/complete.ts`, `src/review-gate.ts`; the tests `test/review-gate-pr.test.ts` + `test/review-gate.test.ts`.
 >
-> TDD/grep discipline: after the rename, `grep -rn reviewPr packages/agent-runner/src` is EMPTY; the existing review-gate tests pass under `--review` (rename refs, keep assertions); a renamed-flag run behaves exactly as the old one. "Done" = acceptance criteria met and the gate green.
+> TDD/grep discipline: after the rename, `grep -rn reviewPr packages/dorfl/src` is EMPTY; the existing review-gate tests pass under `--review` (rename refs, keep assertions); a renamed-flag run behaves exactly as the old one. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim rename-reviewpr-to-review --arbiter <remote>      # default --arbiter origin
+dorfl claim rename-reviewpr-to-review --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/rename-reviewpr-to-review <remote>/main
 git mv work/in-progress/rename-reviewpr-to-review.md work/done/rename-reviewpr-to-review.md
 ```

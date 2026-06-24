@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-sidecar-promote-task-vocabulary-and-dropped-routing-doc-2026-06-22 type=observation slug=review-nits-sidecar-promote-task-vocabulary-and-dropped-routing-doc-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-sidecar-promote-task-vocabulary-and-dropped-routing-doc-2026-06-22 type=observation slug=review-nits-sidecar-promote-task-vocabulary-and-dropped-routing-doc-2026-06-22 allAnswered=false -->
 
 ## Q1
 

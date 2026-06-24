@@ -1,7 +1,7 @@
 ---
 title: integration provider — GitHub (gh) propose/PR adapter
 slug: integration-github
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [7, 8]
@@ -35,7 +35,7 @@ The core never imports `gh`; only this adapter shells out to it.
 
 ## Prompt
 
-> Implement the **GitHub** integration provider for `agent-runner`, fulfilling the provider seam created by `agent-workspaces`. READ FIRST: ADR §6 in `docs/adr/execution-substrate-decisions.md` (mode × provider; push is the guarantee; `propose` not `pr`), and the integration-seam code from `agent-workspaces` (with its `none` provider).
+> Implement the **GitHub** integration provider for `dorfl`, fulfilling the provider seam created by `agent-workspaces`. READ FIRST: ADR §6 in `docs/adr/execution-substrate-decisions.md` (mode × provider; push is the guarantee; `propose` not `pr`), and the integration-seam code from `agent-workspaces` (with its `none` provider).
 >
 > Build a `github` provider that, in `propose` mode, opens a PR via `gh pr create` for an already-pushed `work/<slug>` branch (the seam does the push; you add the review request). Auto-detect a GitHub arbiter from its remote URL and select this provider by default, with an explicit `provider` config override. If `gh` is missing/unauthenticated, degrade to the `none` behaviour (branch pushed + print manual-PR instructions) — never hard-fail, since the work is already safe. Record the PR URL in the job record / `status`. The core must NOT import `gh`; only this adapter shells out to it. Never `--force` to main.
 >

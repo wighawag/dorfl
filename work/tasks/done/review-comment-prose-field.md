@@ -70,7 +70,7 @@ The single-JSON-object contract does two jobs we keep BOTH of: it carries the ma
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-comment-prose-field --arbiter <remote>      # default --arbiter origin
+dorfl claim review-comment-prose-field --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/review-comment-prose-field <remote>/main
 git mv work/in-progress/review-comment-prose-field.md work/done/review-comment-prose-field.md
 ```

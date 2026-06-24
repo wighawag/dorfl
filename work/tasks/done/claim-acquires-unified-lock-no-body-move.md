@@ -86,7 +86,7 @@ predicate's shape is unaffected. Build against `backlog/` now.
 
 > Make the CLAIM path ALSO acquire the unified per-item lock from
 > `unified-item-lock-module-from-tracer`, IN ADDITION to today's behaviour. Read
-> `packages/agent-runner/src/claim-cas.ts` (`performClaim`) first: it `git mv`s the
+> `packages/dorfl/src/claim-cas.ts` (`performClaim`) first: it `git mv`s the
 > body `backlog→in-progress` via `applyTransition` and returns `claimCommit`. KEEP
 > that exactly as-is. ADD: after (or as part of) a successful claim, acquire the
 > per-item lock (`action: implement`) via the lock module (`acquireItemLock`,

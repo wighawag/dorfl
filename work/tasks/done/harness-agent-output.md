@@ -71,7 +71,7 @@ Because opencode's output is a stream that does not persist as a readable record
 ### Claiming this slice
 
 ```sh
-agent-runner claim harness-agent-output --arbiter <remote>      # default --arbiter origin
+dorfl claim harness-agent-output --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/harness-agent-output <remote>/main
 git mv work/in-progress/harness-agent-output.md work/done/harness-agent-output.md
 ```

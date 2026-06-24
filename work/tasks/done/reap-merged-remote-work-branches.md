@@ -10,11 +10,11 @@ covers: []
 > MAINTAINER DECISIONS (settled 2026-06-12 — implement, do not re-open):
 > - **Q1 = (a) provider-agnostic sweep** (NOT relying on the GitHub setting alone): delete a merged `<arbiter>/work/<slug>` via `git push --delete`, guarded by the ancestor predicate, so it works on a `--bare` arbiter and any provider.
 > - **Q2 = a `gc` sub-mode** for the sweep (the out-of-band human/UI merge has no event to hook, so a sweep is the right shape), AND **install-ci wires a scheduled trigger** so the sweep runs automatically (an option, on by default with an opt-out). Optionally install-ci ALSO enables GitHub's repo-level auto-delete-head-branch as a zero-code belt-and-suspenders for GitHub arbiters.
-> - **Q3 = yes:** in auto-merge mode (agent-runner performs the merge), delete the head branch INLINE as part of the merge step (we know the exact merge moment — no sweep needed for that case).
+> - **Q3 = yes:** in auto-merge mode (dorfl performs the merge), delete the head branch INLINE as part of the merge step (we know the exact merge moment — no sweep needed for that case).
 
 ## The gap (verify against current code)
 
-In propose mode, `do --propose` / `complete --propose` pushes `work/<slug>` to the arbiter and opens a PR (`src/integrator.ts` `integrate`, mode `propose` → push the branch + `provider.openRequest`). When that PR later MERGES (GitHub UI / `gh`, often out-of-band), NOTHING in agent-runner deletes the remote `work/<slug>` branch. Verified:
+In propose mode, `do --propose` / `complete --propose` pushes `work/<slug>` to the arbiter and opens a PR (`src/integrator.ts` `integrate`, mode `propose` → push the branch + `provider.openRequest`). When that PR later MERGES (GitHub UI / `gh`, often out-of-band), NOTHING in dorfl deletes the remote `work/<slug>` branch. Verified:
 
 - `src/github.ts` (the only provider) opens the PR + posts a review COMMENT and has ZERO branch-deletion capability (grep: no `gh pr merge --delete-branch`, no `git push --delete`, no auto-delete setting). Confirmed still true.
 - No merged-remote-branch reap/sweep exists anywhere: `gc` (`src/gc.ts` `gc()` ~L245, CLI `src/cli.ts` ~L2076) reaps job WORKTREES under `workspacesDir/work/*`, NOT remote `work/*` branches on the arbiter. The ONLY existing remote-branch deletion is `requeue --reset` (`src/cli.ts` ~L2207) — the one sanctioned UN-merged deletion (deliberate + guarded).
@@ -34,7 +34,7 @@ The safety predicate is the lynchpin: a remote `work/<slug>` branch is reapable 
 
 1. **(a) Provider-agnostic `gc` merged-branch SWEEP.** Add a `gc` sub-mode (a new flag, e.g. `gc --remote-branches` / a unified `gc` that also sweeps, decide in a `## Decisions` block) that, against an arbiter, enumerates remote `work/*` branches (`git ls-remote --heads <arbiter> 'work/*'` or against the hub mirror) and, for each whose tip is `--is-ancestor` of `<arbiter>/main`, deletes it via `git push <arbiter> --delete work/<slug>` (NEVER `--force`; deletion of a fully-merged ref needs no force). Report each: deleted (merged) / retained (not an ancestor ⇒ still in-flight) with the reason — mirroring the existing per-job retained-with-reason output. This works on a `--bare` arbiter and any provider (plain git). Do NOT touch a branch that is not provably an ancestor of main.
 
-2. **(b) Inline delete in auto-merge mode (Q3).** When agent-runner ITSELF performs the merge (auto-merge mode, `src/integrator.ts` `integrate` mode `merge` / the auto-merge path), delete the head `work/<slug>` branch as part of the merge step — AFTER confirming the merge landed (the commits are now on main, so the ancestor predicate trivially holds) via the same `git push --delete` (or `gh pr merge --delete-branch` on the GitHub provider, decide which keeps the seam simplest). This needs no sweep because we know the exact merge moment. Mode `merge` that pushes `work/<slug>:main` (no separate remote head) is unaffected; the propose+we-merge path is where the remote head exists to reap.
+2. **(b) Inline delete in auto-merge mode (Q3).** When dorfl ITSELF performs the merge (auto-merge mode, `src/integrator.ts` `integrate` mode `merge` / the auto-merge path), delete the head `work/<slug>` branch as part of the merge step — AFTER confirming the merge landed (the commits are now on main, so the ancestor predicate trivially holds) via the same `git push --delete` (or `gh pr merge --delete-branch` on the GitHub provider, decide which keeps the seam simplest). This needs no sweep because we know the exact merge moment. Mode `merge` that pushes `work/<slug>:main` (no separate remote head) is unaffected; the propose+we-merge path is where the remote head exists to reap.
 
 3. **(c) install-ci wires the sweep trigger (+ optional GitHub setting).** Update the install-ci deliverable (`docs/ci/advance-loop.yml.template` — it already has a `schedule:` cron ~L48-51) so the scheduled CI tick ALSO runs the `gc` merged-branch sweep (an option, ON by default with a documented opt-out), so out-of-band human/UI merges get their branches reaped automatically on the next tick. OPTIONALLY: install-ci / `setup` may ALSO enable GitHub's repo-level "auto-delete head branches" (`delete_branch_on_merge`) as a zero-code belt-and-suspenders for GitHub arbiters — document it as an additive convenience, NOT a replacement for the provider-agnostic sweep (which is the general home and the only thing that works on `--bare` arbiters / non-GitHub providers).
 
@@ -47,7 +47,7 @@ The safety predicate is the lynchpin: a remote `work/<slug>` branch is reapable 
 
 - [ ] A `gc` sub-mode sweeps remote `work/*` branches on the arbiter and deletes (via `git push --delete`, NEVER `--force`) exactly those whose tip is `git merge-base --is-ancestor <tip> <arbiter>/main` (provably merged), reusing `gc`'s existing `isAncestor` predicate (`src/gc.ts` ~L403-411). Each branch is reported deleted-merged / retained-with-reason.
 - [ ] An UN-merged in-flight branch (tip NOT an ancestor of `<arbiter>/main`, e.g. a kept-for-continue `requeue` branch) is NEVER deleted by the sweep. Tested explicitly: a merged branch ⇒ deleted; a pushed-but-unmerged branch ⇒ retained (the recovery point is safe).
-- [ ] In auto-merge mode, when agent-runner performs the merge, the remote head `work/<slug>` is deleted INLINE after the merge lands (confirmed merged), via the same ancestor-safe deletion. Tested. (Mode `merge` that pushes `work/<slug>:main` with no remote head is unaffected.)
+- [ ] In auto-merge mode, when dorfl performs the merge, the remote head `work/<slug>` is deleted INLINE after the merge lands (confirmed merged), via the same ancestor-safe deletion. Tested. (Mode `merge` that pushes `work/<slug>:main` with no remote head is unaffected.)
 - [ ] install-ci (`docs/ci/advance-loop.yml.template`) runs the `gc` merged-branch sweep on its scheduled tick (ON by default, with a documented opt-out), so out-of-band merges are reaped automatically. Optionally documents enabling GitHub's `delete_branch_on_merge` as an additive GitHub-only convenience (NOT a replacement for the sweep).
 - [ ] Works on a `--bare` (local) arbiter and any provider (the sweep is plain git, no `gh` dependency). Tested against a `--bare` arbiter fixture.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
@@ -73,7 +73,7 @@ The safety predicate is the lynchpin: a remote `work/<slug>` branch is reapable 
 ### Claiming this slice
 
 ```sh
-agent-runner claim reap-merged-remote-work-branches --arbiter origin
+dorfl claim reap-merged-remote-work-branches --arbiter origin
 git fetch origin && git switch -c work/reap-merged-remote-work-branches origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/reap-merged-remote-work-branches.md work/done/reap-merged-remote-work-branches.md

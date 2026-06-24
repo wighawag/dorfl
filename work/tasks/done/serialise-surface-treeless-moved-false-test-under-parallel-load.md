@@ -16,7 +16,7 @@ was never added to that list. The product code is sound; only the TEST races
 under file-parallel load.
 
 Add `test/surface-treeless-moved-false.test.ts` to the `RACE_SENSITIVE` array in
-`packages/agent-runner/vitest.config.ts` (with a one-line comment matching the
+`packages/dorfl/vitest.config.ts` (with a one-line comment matching the
 existing entries' style — it drives real git against a `--bare` arbiter and
 writes `main`, same determinism reasoning as the sibling
 `needs-attention-surface-on-main.test.ts` / start-on-main entries), so it runs in
@@ -29,7 +29,7 @@ change with no product-code impact.
 ## Acceptance criteria
 
 - [ ] `test/surface-treeless-moved-false.test.ts` is listed in the
-      `RACE_SENSITIVE` array in `packages/agent-runner/vitest.config.ts`, with a
+      `RACE_SENSITIVE` array in `packages/dorfl/vitest.config.ts`, with a
       short comment in the established style explaining WHY (real git + `--bare`
       arbiter + writes `main` → keep out of file-parallel pressure).
 - [ ] The test runs in the serial `RACE_SENSITIVE` vitest project (excluded from
@@ -57,12 +57,12 @@ change with no product-code impact.
 > FIRST, check this slice against current reality (it is a launch snapshot and may
 > have DRIFTED): confirm `test/surface-treeless-moved-false.test.ts` still exists
 > and is still ABSENT from the `RACE_SENSITIVE` array in
-> `packages/agent-runner/vitest.config.ts`. If it has since been added (someone
+> `packages/dorfl/vitest.config.ts`. If it has since been added (someone
 > else fixed it), the flake is already addressed — route this slice to
 > `needs-attention/` noting that, rather than making a no-op edit.
 >
 > Background / domain vocabulary: `RACE_SENSITIVE` is a list in
-> `packages/agent-runner/vitest.config.ts` of test files that drive real git
+> `packages/dorfl/vitest.config.ts` of test files that drive real git
 > against a `--bare` `file://` arbiter AND write `main` (the compare-and-swap
 > "ledger" pushes). Those tests are flaky under vitest's default file-parallelism
 > because concurrent `file://` pushes contend on the same arbiter ref; the config
@@ -101,7 +101,7 @@ continuing the kept work/slice-serialise-surface-treeless-moved-false-test-under
 
 ## Requeue 2026-06-15
 
-Previous keep+continue re-drive hit a rebase conflict in the slice .md lifecycle move; the code change is 7 trivial lines (add the test file to RACE_SENSITIVE in packages/agent-runner/vitest.config.ts with an explanatory comment). Discarding the conflicted branch and rebuilding fresh off current main (which now has the prepare step).
+Previous keep+continue re-drive hit a rebase conflict in the slice .md lifecycle move; the code change is 7 trivial lines (add the test file to RACE_SENSITIVE in packages/dorfl/vitest.config.ts with an explanatory comment). Discarding the conflicted branch and rebuilding fresh off current main (which now has the prepare step).
 
 ## Needs attention
 

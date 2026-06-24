@@ -1,5 +1,5 @@
 ---
-title: the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRDs (prd:<slug> legs), not only slices — today scan --json is slice-only, so AGENT_RUNNER_AUTO_SLICE never fires on the hourly cron and a ready ungated PRD is never auto-sliced
+title: the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRDs (prd:<slug> legs), not only slices — today scan --json is slice-only, so DORFL_AUTO_SLICE never fires on the hourly cron and a ready ungated PRD is never auto-sliced
 slug: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
 blockedBy: []
 covers: []
@@ -10,12 +10,12 @@ covers: []
 The default CI tick cannot auto-slice a PRD. The hourly `schedule` cron in the emitted `advance-lifecycle.yml` runs in `propose` mode (the default; the `advance-merge`/`-n` job is gated `== 'merge'` and never runs on cron). In `propose` mode the matrix is built by the `enumerate` job from:
 
 ```
-agent-runner scan --json | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique'
+dorfl scan --json | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "slice:" + .slug] | unique'
 ```
 
-`scan` (`packages/agent-runner/src/scan.ts`) and the cwd section (`cwd-section.ts` → `scanRepoPaths` → `scoreItems`) enumerate ONLY `work/backlog/*.md` SLICES, scored through the BUILD gate (`resolveEligibility`). There is NO PRD enumeration anywhere in the `scan --json` output — both `.repos[].items[]` and `.cwd.repo.items[]` are slice-only. PRD enumeration (the `sliceablePrds` predicate over `work/prd` vs `work/prd-sliced`, gated on `autoSlice`) lives ONLY in `scanMirrorPool` (`mirror-pool-scan.ts`) and the in-place `do-autopick` pool — the paths consumed by `advance -n` / `run` / `do --remote -n`, which the cron tick never reaches.
+`scan` (`packages/dorfl/src/scan.ts`) and the cwd section (`cwd-section.ts` → `scanRepoPaths` → `scoreItems`) enumerate ONLY `work/backlog/*.md` SLICES, scored through the BUILD gate (`resolveEligibility`). There is NO PRD enumeration anywhere in the `scan --json` output — both `.repos[].items[]` and `.cwd.repo.items[]` are slice-only. PRD enumeration (the `sliceablePrds` predicate over `work/prd` vs `work/prd-sliced`, gated on `autoSlice`) lives ONLY in `scanMirrorPool` (`mirror-pool-scan.ts`) and the in-place `do-autopick` pool — the paths consumed by `advance -n` / `run` / `do --remote -n`, which the cron tick never reaches.
 
-Net: in the default propose tick the matrix can only ever contain `slice:` legs. A sliceable PRD is structurally invisible to the enumerator, so `AGENT_RUNNER_AUTO_SLICE: 'true'` (which the advance-lifecycle gate env hardcodes precisely to enable capability B, "auto-slice ready PRDs") does nothing on the hourly cron. The advertised capability is dead on the default tick. (Confirmed by `skill-eval-engine`, authored ungated/ready, never sliced or even claim-attempted: `git log --all --grep skill-eval-engine` shows only the authoring + a later parking commit.)
+Net: in the default propose tick the matrix can only ever contain `slice:` legs. A sliceable PRD is structurally invisible to the enumerator, so `DORFL_AUTO_SLICE: 'true'` (which the advance-lifecycle gate env hardcodes precisely to enable capability B, "auto-slice ready PRDs") does nothing on the hourly cron. The advertised capability is dead on the default tick. (Confirmed by `skill-eval-engine`, authored ungated/ready, never sliced or even claim-attempted: `git log --all --grep skill-eval-engine` shows only the authoring + a later parking commit.)
 
 GOAL: make a ready, ungated, sliceable PRD reachable by the DEFAULT scheduled (propose) tick — one `advance prd:<slug> --propose` matrix leg per sliceable PRD, exactly as each eligible slice already gets one `advance slice:<slug> --propose` leg. CI already uses explicit prefixes, so `prd:` legs are correct and supported by the command surface. The `autoSlice` policy still gates which PRDs are sliceable (resolved per-repo); this slice does NOT change WHAT is sliceable, only that the propose enumerator can SEE the sliceable-PRD pool.
 
@@ -28,11 +28,11 @@ This is a fix along the `scan --json` → `jq` → matrix path plus the workflow
 
 ## Build-time note: which templates to edit (NOT an open question — an ordering courtesy)
 
-Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`); all three exist as of 2026-06-16. The sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (IN-PROGRESS) DELETES `build-slice-tick-template.ts`. RECOMMENDED ORDERING: build this AFTER that deletion lands (see Blocked by) so you only update the two survivors and never add PRD-enumeration to a doomed file. DRIFT-CHECK at build time: `ls packages/agent-runner/src/build-slice-tick-template.ts` — edit it only if it still exists; never resurrect it if gone.
+Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `advance-ci-template.ts`, `build-slice-tick-template.ts`); all three exist as of 2026-06-16. The sibling slice `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick` (IN-PROGRESS) DELETES `build-slice-tick-template.ts`. RECOMMENDED ORDERING: build this AFTER that deletion lands (see Blocked by) so you only update the two survivors and never add PRD-enumeration to a doomed file. DRIFT-CHECK at build time: `ls packages/dorfl/src/build-slice-tick-template.ts` — edit it only if it still exists; never resurrect it if gone.
 
 ## Acceptance criteria
 
-- [ ] `agent-runner scan --json` reports the sliceable-PRD pool for each repo (and the cwd section), gated on the per-repo resolved `autoSlice`, REUSING the existing `sliceablePrds` predicate + the `work/prd`/`work/prd-sliced` read (no forked predicate). A test asserts a ready, ungated PRD appears as sliceable in the JSON and a `humanOnly`/`needsAnswers`/`autoSlice:false`-gated PRD does NOT.
+- [ ] `dorfl scan --json` reports the sliceable-PRD pool for each repo (and the cwd section), gated on the per-repo resolved `autoSlice`, REUSING the existing `sliceablePrds` predicate + the `work/prd`/`work/prd-sliced` read (no forked predicate). A test asserts a ready, ungated PRD appears as sliceable in the JSON and a `humanOnly`/`needsAnswers`/`autoSlice:false`-gated PRD does NOT.
 - [ ] The emitted propose-mode `enumerate` job's `jq` unions sliceable PRDs into the matrix as `prd:<slug>` legs alongside `slice:<slug>` legs (deduped). A template test asserts the emitted YAML enumerates both prefixes.
 - [ ] End-to-end at the enumeration seam: given a work tree with one eligible slice AND one sliceable PRD, the propose matrix contains BOTH `slice:<slug>` and `prd:<slug>`. A test pins this (mirror the existing scan/enumerate tests).
 - [ ] The structural validator(s) for the edited template(s) accept the PRD-enumerating `jq` and still reject a regression to slice-only (if a validator currently pins slice-only enumeration, update it).
@@ -48,9 +48,9 @@ Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `adv
 
 > The maintainer has RESOLVED the design questions (see `## Decisions`): approach (a) (surface PRDs in `scan --json`, union `prd:` legs into the propose matrix) + a separate `prds[]` array key. Build to that.
 >
-> FIRST, drift-check: confirm the default cron tick still runs `propose` mode and that the propose `enumerate` job still builds its matrix from `agent-runner scan --json | jq '... "slice:" + .slug'` (slice-only) in the LIVE template(s) — `packages/agent-runner/src/advance-lifecycle-template.ts` is the retained superset; verify whether `build-slice-tick-template.ts` still exists (`ls packages/agent-runner/src/build-slice-tick-template.ts` — as of 2026-06-16 it STILL EXISTS; the slice that deletes it, `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick`, is IN-PROGRESS, not landed) and skip it only if it is gone by build time. Confirm `scan`/`cwd-section` still enumerate slices only (no PRD pool in `scan --json`), and that `scanMirrorPool` is where `sliceablePrds` lives. If a prior change already added PRD legs to the propose matrix, route to needs-attention noting that.
+> FIRST, drift-check: confirm the default cron tick still runs `propose` mode and that the propose `enumerate` job still builds its matrix from `dorfl scan --json | jq '... "slice:" + .slug'` (slice-only) in the LIVE template(s) — `packages/dorfl/src/advance-lifecycle-template.ts` is the retained superset; verify whether `build-slice-tick-template.ts` still exists (`ls packages/dorfl/src/build-slice-tick-template.ts` — as of 2026-06-16 it STILL EXISTS; the slice that deletes it, `install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick`, is IN-PROGRESS, not landed) and skip it only if it is gone by build time. Confirm `scan`/`cwd-section` still enumerate slices only (no PRD pool in `scan --json`), and that `scanMirrorPool` is where `sliceablePrds` lives. If a prior change already added PRD legs to the propose matrix, route to needs-attention noting that.
 >
-> WHY: the hourly CI cron runs propose mode, whose matrix is built from a slice-only `scan --json`, so a ready ungated PRD never becomes a matrix leg and `AGENT_RUNNER_AUTO_SLICE: 'true'` never fires on the scheduled tick. `skill-eval-engine` (authored ready) was never sliced for exactly this reason.
+> WHY: the hourly CI cron runs propose mode, whose matrix is built from a slice-only `scan --json`, so a ready ungated PRD never becomes a matrix leg and `DORFL_AUTO_SLICE: 'true'` never fires on the scheduled tick. `skill-eval-engine` (authored ready) was never sliced for exactly this reason.
 >
 > GOAL (approach (a)): surface the sliceable-PRD pool in `scan --json` (reuse `sliceablePrds` + the `work/prd`/`work/prd-sliced` read, resolve `autoSlice` per-repo as `scanMirrorPool` does — do not fork the predicate), then update the live propose `enumerate` `jq` to ALSO emit `prd:<slug>` legs for sliceable PRDs, so each ready PRD becomes one `advance prd:<slug> --propose` leg. Do not change WHAT is sliceable (the `autoSlice` gate still binds); only make the pool visible to the propose enumerator.
 >
@@ -65,7 +65,7 @@ Three templates carry the slice-only `jq` (`advance-lifecycle-template.ts`, `adv
 ### Claiming this slice
 
 ```sh
-agent-runner claim ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices --arbiter origin
+dorfl claim ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices --arbiter origin
 git fetch origin && git switch -c work/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices origin/main
 git mv work/in-progress/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices.md work/done/ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices.md
 ```

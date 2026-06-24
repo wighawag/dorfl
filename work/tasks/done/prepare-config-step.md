@@ -1,5 +1,5 @@
 ---
-title: prepare-config-step — add a `prepare` field to `.agent-runner.json` (the env-prep / install step) that the runner runs ONCE per fresh worktree/clone BEFORE the first `verify`, distinct from (and never baked into) the acceptance gate; teach `setup` to detect/provide-or-ask for it
+title: prepare-config-step — add a `prepare` field to `.dorfl.json` (the env-prep / install step) that the runner runs ONCE per fresh worktree/clone BEFORE the first `verify`, distinct from (and never baked into) the acceptance gate; teach `setup` to detect/provide-or-ask for it
 slug: prepare-config-step
 blockedBy: []
 covers: []
@@ -14,7 +14,7 @@ covers: []
 
 ## The gap (verify against current code)
 
-`.agent-runner.json` has `verify` (the per-repo acceptance gate, `VerifyConfig = string | string[]`, `src/config.ts` ~L188-194; run by `runVerify` in `src/verify.ts`, invoked at `src/integration-core.ts` ~L349). There is NO `prepare`/install/bootstrap field and NO step that installs deps before `verify` runs. Consequences (from the observation):
+`.dorfl.json` has `verify` (the per-repo acceptance gate, `VerifyConfig = string | string[]`, `src/config.ts` ~L188-194; run by `runVerify` in `src/verify.ts`, invoked at `src/integration-core.ts` ~L349). There is NO `prepare`/install/bootstrap field and NO step that installs deps before `verify` runs. Consequences (from the observation):
 
 - A fresh worktree/clone has NO `node_modules` (or vendored deps / submodules / codegen output) until something installs them. The runner builds in isolated worktrees off the hub mirror (ADR `execution-substrate-decisions` §2), so a fresh job worktree's `verify` FAILS for lack of deps unless install happens first.
 - Today the only place install can go is INSIDE `verify` (observed on a real `setup`/migrate run: `verify` baked in `pnpm install --ignore-scripts && pnpm build && …`), which conflates "is the env ready?" (prepare) with "is the tree green?" (verify) and makes every gate run pay the install cost — so `verify` stops being a pure, cheaply-re-runnable acceptance check.
@@ -29,9 +29,9 @@ covers: []
    - A non-empty `prepare` that FAILS (non-zero) is a hard error that routes the item the SAME way a red gate does (or a distinct `prepare-failed` outcome — decide and document): the env could not be made ready, so `verify` cannot be trusted. Surface it clearly (a "prepare failed" message distinct from "gate failed"), and NEVER proceed to `verify`/integrate on a failed prepare.
    - `prepare` UNSET ⇒ the step is a no-op (today's behaviour byte-for-byte; a repo with no deps is unaffected).
 
-3. **`agent-runner verify` CLI + `prepare` visibility.** Decide (and document) whether the standalone `agent-runner verify` command (`src/cli.ts` ~L1026) runs `prepare` first too (so a human invoking it on a fresh checkout gets a working gate) or stays verify-only (prepare is the runner's fresh-worktree concern). Lean: keep the standalone `verify` command verify-ONLY (it is the pure gate; a human prepares their own checkout), and run `prepare` only in the runner's fresh-worktree lifecycle — but state the choice.
+3. **`dorfl verify` CLI + `prepare` visibility.** Decide (and document) whether the standalone `dorfl verify` command (`src/cli.ts` ~L1026) runs `prepare` first too (so a human invoking it on a fresh checkout gets a working gate) or stays verify-only (prepare is the runner's fresh-worktree concern). Lean: keep the standalone `verify` command verify-ONLY (it is the pure gate; a human prepares their own checkout), and run `prepare` only in the runner's fresh-worktree lifecycle — but state the choice.
 
-4. **Teach `setup` to detect/provide-or-ask for `prepare`.** Update `skills/setup/SKILL.md` (the in-repo source; recall `~/.agents/skills/` symlinks to it): when onboarding a repo, DETECT a likely prepare command (a lockfile ⇒ the matching install, e.g. `pnpm-lock.yaml` ⇒ `pnpm install`; submodules ⇒ `git submodule update --init`; a codegen script) and either set `prepare` in the scaffolded `.agent-runner.json` OR ASK the human to confirm/provide it. Update `setup`'s EXISTING "strip install from `verify`" rule to say WHERE install now belongs: it moves to `prepare`, not deleted. The two fields must be presented as the clean split (prepare = env-ready, verify = tree-green).
+4. **Teach `setup` to detect/provide-or-ask for `prepare`.** Update `skills/setup/SKILL.md` (the in-repo source; recall `~/.agents/skills/` symlinks to it): when onboarding a repo, DETECT a likely prepare command (a lockfile ⇒ the matching install, e.g. `pnpm-lock.yaml` ⇒ `pnpm install`; submodules ⇒ `git submodule update --init`; a codegen script) and either set `prepare` in the scaffolded `.dorfl.json` OR ASK the human to confirm/provide it. Update `setup`'s EXISTING "strip install from `verify`" rule to say WHERE install now belongs: it moves to `prepare`, not deleted. The two fields must be presented as the clean split (prepare = env-ready, verify = tree-green).
 
 ## Scope
 
@@ -40,7 +40,7 @@ covers: []
 
 ## Acceptance criteria
 
-- [ ] `.agent-runner.json` accepts a `prepare` field (`string | string[]`, same resolution/precedence as `verify`); unset ⇒ no prepare step (no default install). Documented next to `verify` with the prepare=env-ready / verify=tree-green split and the explicit "install must NOT be baked into `verify`" rule.
+- [ ] `.dorfl.json` accepts a `prepare` field (`string | string[]`, same resolution/precedence as `verify`); unset ⇒ no prepare step (no default install). Documented next to `verify` with the prepare=env-ready / verify=tree-green split and the explicit "install must NOT be baked into `verify`" rule.
 - [ ] On a FRESH worktree/clone, the runner runs `prepare` (when set) BEFORE `verify`. Tested: a freshly-materialised worktree ⇒ prepare runs then verify. (No durable cross-gate skip-cache is required; an OPTIONAL within-one-worktree non-committed signal to skip a redundant re-install is allowed but must be a control-area sentinel, never a committed marker.)
 - [ ] A failing `prepare` (non-zero) NEVER proceeds to `verify`/integrate and surfaces a message distinct from "gate failed" (a `prepare-failed`-style outcome). Tested.
 - [ ] `prepare` UNSET ⇒ byte-for-byte today's behaviour (no-op); a repo with no `prepare` is unaffected. Tested.
@@ -54,11 +54,11 @@ covers: []
 
 ## Prompt
 
-> Add a `prepare` (env-prep / install) step to the agent-runner protocol, DISTINCT from the `verify` acceptance gate. MAINTAINER DECISIONS (settled — implement, do not re-open): option (a) — an explicit `prepare` config field (NOT runner auto-detect, NOT out-of-scope); `prepare` runs ONCE per fresh worktree/clone BEFORE the first `verify` and is NOT baked into `verify` (the runner sequences prepare→verify; `verify` stays a pure, cheaply-re-runnable acceptance check; install must NOT leak into it); on an already-prepared tree `prepare` is SKIPPED; `setup` must detect/provide-or-ask for it and repoint its "strip install from verify" rule at `prepare`.
+> Add a `prepare` (env-prep / install) step to the dorfl protocol, DISTINCT from the `verify` acceptance gate. MAINTAINER DECISIONS (settled — implement, do not re-open): option (a) — an explicit `prepare` config field (NOT runner auto-detect, NOT out-of-scope); `prepare` runs ONCE per fresh worktree/clone BEFORE the first `verify` and is NOT baked into `verify` (the runner sequences prepare→verify; `verify` stays a pure, cheaply-re-runnable acceptance check; install must NOT leak into it); on an already-prepared tree `prepare` is SKIPPED; `setup` must detect/provide-or-ask for it and repoint its "strip install from verify" rule at `prepare`.
 >
-> THE GAP (verify first): `.agent-runner.json` has only `verify` (`src/config.ts` ~L188-194, `src/verify.ts`, invoked `src/integration-core.ts` ~L349); there is no prepare/install step, so a fresh job worktree off the hub mirror has no `node_modules` and `verify` fails unless install is (wrongly) baked into `verify`.
+> THE GAP (verify first): `.dorfl.json` has only `verify` (`src/config.ts` ~L188-194, `src/verify.ts`, invoked `src/integration-core.ts` ~L349); there is no prepare/install step, so a fresh job worktree off the hub mirror has no `node_modules` and `verify` fails unless install is (wrongly) baked into `verify`.
 >
-> BUILD: (1) add a `prepare` field (`string | string[]`, same precedence as `verify`; unset ⇒ no-op, NO default install) in `src/config.ts`, documented as env-ready vs verify's tree-green, with the explicit "do not bake install into verify" rule. (2) Run `prepare` once-per-fresh-worktree before the first `verify` at the gate seam (covers the autonomous `do`/`run` job-worktree paths + `complete`), gated by a NON-COMMITTED prepared-ness marker (in the worktree control area / `workspacesDir`, e.g. alongside `.agent-runner-job.json` — NOT a committed file) so it does not re-run per gate; a failing `prepare` never proceeds to verify/integrate and surfaces a `prepare-failed`-style message distinct from gate-failed. (3) Decide + document whether the standalone `agent-runner verify` CLI runs prepare first (lean: NO — keep it verify-only). (4) Update `skills/setup/SKILL.md` (in-repo source; `~/.agents/skills/` symlinks to it) to detect a likely prepare command (lockfile ⇒ matching install / submodules / codegen) and set-or-ask, and repoint the existing "strip install from verify" rule at `prepare`.
+> BUILD: (1) add a `prepare` field (`string | string[]`, same precedence as `verify`; unset ⇒ no-op, NO default install) in `src/config.ts`, documented as env-ready vs verify's tree-green, with the explicit "do not bake install into verify" rule. (2) Run `prepare` once-per-fresh-worktree before the first `verify` at the gate seam (covers the autonomous `do`/`run` job-worktree paths + `complete`), gated by a NON-COMMITTED prepared-ness marker (in the worktree control area / `workspacesDir`, e.g. alongside `.dorfl-job.json` — NOT a committed file) so it does not re-run per gate; a failing `prepare` never proceeds to verify/integrate and surfaces a `prepare-failed`-style message distinct from gate-failed. (3) Decide + document whether the standalone `dorfl verify` CLI runs prepare first (lean: NO — keep it verify-only). (4) Update `skills/setup/SKILL.md` (in-repo source; `~/.agents/skills/` symlinks to it) to detect a likely prepare command (lockfile ⇒ matching install / submodules / codegen) and set-or-ask, and repoint the existing "strip install from verify" rule at `prepare`.
 >
 > READ FIRST: `src/config.ts` (the `verify`/`VerifyConfig` field ~L36/L188-194 — add `prepare` beside it), `src/verify.ts` (`runVerify`/`resolveVerifyCommands` — the model to mirror for `prepare`), `src/integration-core.ts` (~L349, where `runVerify` is called in the gate band — where prepare-before-verify wires in), `src/do.ts`/`src/workspace.ts` (the job-worktree lifecycle where a fresh worktree is materialised — where the prepared-ness marker lives), `src/cli.ts` (~L1026, the standalone `verify` command), `skills/setup/SKILL.md` (the onboarding skill to update). Source signal: `work/observations/protocol-has-no-prepare-step-distinct-from-verify-gate.md`.
 >
@@ -69,7 +69,7 @@ covers: []
 ### Claiming this slice
 
 ```sh
-agent-runner claim prepare-config-step --arbiter origin
+dorfl claim prepare-config-step --arbiter origin
 git fetch origin && git switch -c work/prepare-config-step origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/prepare-config-step.md work/done/prepare-config-step.md

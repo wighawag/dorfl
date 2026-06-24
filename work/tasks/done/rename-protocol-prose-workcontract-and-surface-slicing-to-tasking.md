@@ -45,7 +45,7 @@ Real historical slugs, the intake `{slice,prd}` wire vocabulary (Decision 2 line
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-protocol-prose-workcontract-and-surface-slicing-to-tasking --arbiter <remote>
+dorfl claim rename-protocol-prose-workcontract-and-surface-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking.md work/tasks/done/rename-protocol-prose-workcontract-and-surface-slicing-to-tasking.md
 ```

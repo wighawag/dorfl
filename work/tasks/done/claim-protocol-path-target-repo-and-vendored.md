@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-Make `resolveClaimProtocolPath` resolve `CLAIM-PROTOCOL.md` from sources that actually exist when `agent-runner` is installed as a published npm CLI, so building a work-agent prompt no longer ENOENTs outside this dev monorepo.
+Make `resolveClaimProtocolPath` resolve `CLAIM-PROTOCOL.md` from sources that actually exist when `dorfl` is installed as a published npm CLI, so building a work-agent prompt no longer ENOENTs outside this dev monorepo.
 
 Today `resolveClaimProtocolPath(override?)` walks **monorepo-relative** paths (`../../../skills/setup/protocol/CLAIM-PROTOCOL.md`, a deeper `../../../../` variant, + legacy `to-slices/` fallbacks). `package.json` ships only `["dist","src"]`, so the monorepo-root `skills/` tree is **NOT published** — installed, every walk resolves into the consumer's filesystem → ENOENT. `buildAgentPrompt`/`wrapper` then `readFileSync(protocolPath)` and every `do`/`run`/`render-prompt` invocation fails. This has NEVER worked outside the monorepo.
 
@@ -45,7 +45,7 @@ The correct sources under the `work/protocol/` propagation model (ADR `methodolo
 
 ## Prompt
 
-> Fix the packaged-CLI ENOENT in `resolveClaimProtocolPath` (`src/prompt.ts`). It currently locates `CLAIM-PROTOCOL.md` via MONOREPO-RELATIVE walks (`../../../skills/setup/protocol/CLAIM-PROTOCOL.md` + a `../../../../` variant + legacy `to-slices/` fallbacks). `packages/agent-runner/package.json` ships only `["dist","src"]`, so the monorepo-root `skills/` tree is NOT published — installed as an npm CLI, every walk resolves into the consumer's filesystem → ENOENT, and `buildAgentPrompt`/`wrapper`'s `readFileSync(protocolPath)` fails for every `do`/`run`/`render-prompt`. It has never worked outside this dev monorepo.
+> Fix the packaged-CLI ENOENT in `resolveClaimProtocolPath` (`src/prompt.ts`). It currently locates `CLAIM-PROTOCOL.md` via MONOREPO-RELATIVE walks (`../../../skills/setup/protocol/CLAIM-PROTOCOL.md` + a `../../../../` variant + legacy `to-slices/` fallbacks). `packages/dorfl/package.json` ships only `["dist","src"]`, so the monorepo-root `skills/` tree is NOT published — installed as an npm CLI, every walk resolves into the consumer's filesystem → ENOENT, and `buildAgentPrompt`/`wrapper`'s `readFileSync(protocolPath)` fails for every `do`/`run`/`render-prompt`. It has never worked outside this dev monorepo.
 >
 > The right sources (ADR `docs/adr/methodology-and-skills.md` §5, the `work/protocol/` propagation model): `setup` copies `CLAIM-PROTOCOL.md` verbatim into every target repo's `work/protocol/` (it exists in THIS repo at `work/protocol/CLAIM-PROTOCOL.md`). So:
 >
@@ -54,7 +54,7 @@ The correct sources under the `work/protocol/` propagation model (ADR `methodolo
 > 3. VENDOR the doc into the package: a build step (part of `pnpm build`) copies `skills/setup/protocol/CLAIM-PROTOCOL.md` into the package (e.g. `dist/protocol/`), and add that location to `package.json` `files` so the published CLI is self-contained. A published package cannot reference files outside itself — it needs its own fallback copy.
 > 4. Authority: when both the target-repo copy and the bundled copy exist, the target-repo `work/protocol/` copy WINS (it reflects the adopted protocol version); the bundled copy is the un-set-up-repo fallback.
 >
-> READ FIRST: `src/prompt.ts` (`resolveClaimProtocolPath`, `wrapper`, `buildAgentPrompt`, `renderPrompt`, `PromptOptions`); the call sites `src/do.ts` (~the two `buildAgentPrompt` calls), `src/run.ts` (~the `buildAgentPrompt` call), `src/cli.ts` (the `render-prompt` action calling `renderPrompt({slug, cwd: process.cwd()})`); `packages/agent-runner/package.json` (`files`, the `build` script); `docs/adr/methodology-and-skills.md` §5 + `skills/setup/SKILL.md` (the `work/protocol/` propagation — setup OWNS + copies these docs).
+> READ FIRST: `src/prompt.ts` (`resolveClaimProtocolPath`, `wrapper`, `buildAgentPrompt`, `renderPrompt`, `PromptOptions`); the call sites `src/do.ts` (~the two `buildAgentPrompt` calls), `src/run.ts` (~the `buildAgentPrompt` call), `src/cli.ts` (the `render-prompt` action calling `renderPrompt({slug, cwd: process.cwd()})`); `packages/dorfl/package.json` (`files`, the `build` script); `docs/adr/methodology-and-skills.md` §5 + `skills/setup/SKILL.md` (the `work/protocol/` propagation — setup OWNS + copies these docs).
 >
 > SEAM TO TEST AT: `resolveClaimProtocolPath` directly (order: target-repo `work/protocol/` > vendored > legacy) AND a SIMULATED INSTALLED LAYOUT test — resolve/build a prompt against a temp dir that has NO sibling `skills/` tree and (for the bundled-fallback case) NO `work/protocol/`, asserting the vendored copy is chosen and `buildAgentPrompt` returns a prompt rather than throwing ENOENT. Add a target-repo case (temp repo WITH `work/protocol/CLAIM-PROTOCOL.md`) asserting it is preferred.
 >
@@ -73,7 +73,7 @@ Promotes `work/observations/claim-protocol-path-unresolvable-when-packaged-as-cl
 ### Claiming this slice
 
 ```sh
-agent-runner claim claim-protocol-path-target-repo-and-vendored --arbiter origin
+dorfl claim claim-protocol-path-target-repo-and-vendored --arbiter origin
 git fetch origin && git switch -c work/claim-protocol-path-target-repo-and-vendored origin/main
 git mv work/in-progress/claim-protocol-path-target-repo-and-vendored.md work/done/claim-protocol-path-target-repo-and-vendored.md
 ```

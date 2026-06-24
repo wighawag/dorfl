@@ -11,7 +11,7 @@ needsAnswers: true
 
 `disable-rename-detection-on-continue-rebase` (and `recovery-rebase-retry-against-moving-arbiter-main`) sit in `work/tasks/todo/` with `blockedBy: []` and no gates, yet the CI `advance-lifecycle` enumeration step never produced a `task:<slug>` leg for them — they were silently NOT considered for auto-build.
 
-Root cause is in the frontmatter parser, not CI. `agent-runner scan --json` reports:
+Root cause is in the frontmatter parser, not CI. `dorfl scan --json` reports:
 
 ```
 "slug":"disable-rename-detection-on-continue-rebase",
@@ -23,7 +23,7 @@ The phantom dependency `"] # startable no"` is the giveaway.
 
 ## Where (refs)
 
-- `packages/agent-runner/src/frontmatter.ts` — `parseInlineList(value)` (~L158): does `value.trim().slice(1, -1)` assuming the raw value is EXACTLY `[...]`. When the line is `blockedBy: [] # startable now`, `rawValue` is `"[] # startable now"`; `.slice(1, -1)` strips the leading `[` and the LAST CHAR (`w` of "now"), yielding `"] # startable no"`, which (no comma) becomes the single-element list `["] # startable no"]`.
+- `packages/dorfl/src/frontmatter.ts` — `parseInlineList(value)` (~L158): does `value.trim().slice(1, -1)` assuming the raw value is EXACTLY `[...]`. When the line is `blockedBy: [] # startable now`, `rawValue` is `"[] # startable now"`; `.slice(1, -1)` strips the leading `[` and the LAST CHAR (`w` of "now"), yielding `"] # startable no"`, which (no comma) becomes the single-element list `["] # startable no"]`.
 - The dispatch at `frontmatter.ts` ~L351 routes any `rawValue.startsWith('[')` to `parseInlineList` without stripping a trailing inline `# comment`.
 - Eligibility consumer: a non-empty `blockedBy` whose slugs aren't in `work/tasks/done/` ⇒ `eligible:false` ⇒ the CI scan/jq leg filter (`.eligibility.eligible == true`) drops the task ⇒ never enumerated.
 
@@ -51,6 +51,6 @@ Not a conduct signal — verified code defect (read `frontmatter.ts` + reproduce
 
 Fixed in `frontmatter.ts`: `parseInlineList` now routes through a new quote-aware `inlineListInner(value)` helper that finds the MATCHING closing `]` and ignores everything after it (so a trailing `# comment` is dropped; a `#`/`]` inside a quoted item survives), instead of the blind `slice(1, -1)`.
 
-Verified: `agent-runner scan --json` now reports `disable-rename-detection-on-continue-rebase` and `recovery-rebase-retry-against-moving-arbiter-main` as `eligibility.eligible: true` (phantom `"] # startable no"` dep gone). Gate green: build + 2593 tests + format:check.
+Verified: `dorfl scan --json` now reports `disable-rename-detection-on-continue-rebase` and `recovery-rebase-retry-against-moving-arbiter-main` as `eligibility.eligible: true` (phantom `"] # startable no"` dep gone). Gate green: build + 2593 tests + format:check.
 
 Tests added (`test/frontmatter.test.ts`): empty/non-empty inline `blockedBy` + `prdAfter` with trailing `# comment`, a `#`-inside-quoted-slug guard, and a parser↔template drift guard that parses the shipped `blockedBy: [] # ...` lines from `{skills/setup,work}/protocol/{task-template,WORK-CONTRACT}.md` to `[]`.

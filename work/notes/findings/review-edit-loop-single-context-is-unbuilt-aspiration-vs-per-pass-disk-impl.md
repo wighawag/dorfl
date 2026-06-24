@@ -12,7 +12,7 @@ slug: review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-imp
 
 That headline implies: ONE agent launch, looping internally, accumulating findings in its own working memory. **That is NOT what is built, and the PRD's own operative wording does not actually ask for it.**
 
-What is BUILT (`packages/agent-runner/src/slicer-review-loop.ts`, `runSliceReviewLoop` → `runOneExecution`):
+What is BUILT (`packages/dorfl/src/slicer-review-loop.ts`, `runSliceReviewLoop` → `runOneExecution`):
 
 - `runOneExecution` has `for (let pass = 1; pass <= slicerLoopMax; pass++)` — the runner drives the N loop.
 - Each pass calls `gate(...)` ONCE — in production (`harnessSliceReviewGate`) that is ONE fresh agent launch per pass (a distinct `LaunchInput`).
@@ -50,7 +50,7 @@ Do we WANT a truly single-launch in-context review-edit loop (the unbuilt aspira
 ## Where this is documented in place (so the next reader sees it where they look)
 
 - `work/prd/review.md` §Shape 2 — an inline ASPIRATION-VS-BUILT note next to the "single context" line.
-- `packages/agent-runner/src/slicer-review-loop.ts` — a docstring note on the N axis (the runtime is per-pass launches + disk, NOT single-context).
+- `packages/dorfl/src/slicer-review-loop.ts` — a docstring note on the N axis (the runtime is per-pass launches + disk, NOT single-context).
 - `work/done/slicer-review-edit-loop.md` — a note that the built loop is per-pass + disk despite the "single context" framing.
 - `work/backlog/intake-lone-slice-review-single-context-loop.md` — the parked corrective slice's human-only banner points here.
 

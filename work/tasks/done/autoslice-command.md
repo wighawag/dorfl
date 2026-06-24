@@ -36,7 +36,7 @@ Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; d
 
 ## Acceptance criteria
 
-- [ ] `agent-runner do prd:<slug>` slices that PRD; for the agent path it slices only when the gate passes (gate refusal is honest: names why it skipped). Bare `<slug>` resolves to a SLICE (errors on a slice/PRD collision); `slice:`/`prd:` are explicit. No standalone `slice` verb is added.
+- [ ] `dorfl do prd:<slug>` slices that PRD; for the agent path it slices only when the gate passes (gate refusal is honest: names why it skipped). Bare `<slug>` resolves to a SLICE (errors on a slice/PRD collision); `slice:`/`prd:` are explicit. No standalone `slice` verb is added.
 - [ ] It acquires the lock (agent path) before slicing and releases it (`work/slicing/ → work/prd/`) as part of the completing transition; the human path may slice on `main` without the lock.
 - [ ] The agent harness is invoked with the slicing brief and produces slice files ONLY; the RUNNER performs all commits/moves (agent does no git).
 - [ ] On success the produced `work/backlog/` slices are committed AND the PRD is marked `sliced:` in one runner-owned transition.
@@ -65,7 +65,7 @@ Reuse the existing harness seam + the runner-owns-git pattern from `do`/`run`; d
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim autoslice-command --arbiter <remote>      # default --arbiter origin
+dorfl claim autoslice-command --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/autoslice-command <remote>/main
 # on completion, in the work branch's PR/merge:

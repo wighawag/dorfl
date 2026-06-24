@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 type=observation slug=answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 type=observation slug=answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 allAnswered=false -->
 
 ## Q1
 

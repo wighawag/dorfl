@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21 type=task slug=integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21 allAnswered=false -->
+<!-- dorfl-sidecar: item=task:integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21 type=task slug=integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21 allAnswered=false -->
 
 ## Q1
 
@@ -14,7 +14,7 @@ _Suggested default: dropped — superseded by `briefs/tasked/land-time-reverify-
 
 ## Q2
 
-**If instead this task is KEPT as a standalone item (rejecting the supersession above), what is its precise buildable scope: (a) author the ADR alone (`land-is-rebase-reverify-advance-one-primitive-two-frontends`, or a narrower `cas-is-the-cross-runner-queue` ADR), (b) implement the scaled-`mergeRetries` precedence-chain config NOW (flag > env > per-repo > global > default, default unchanged), (c) implement the portable ref-based cross-job land-lock NOW (`refs/agent-runner/land-lock` CAS-claim with a TTL/stale-reclaim story), or (d) some combination — and how does that scope avoid colliding with the brief's slices once it produces them?**
+**If instead this task is KEPT as a standalone item (rejecting the supersession above), what is its precise buildable scope: (a) author the ADR alone (`land-is-rebase-reverify-advance-one-primitive-two-frontends`, or a narrower `cas-is-the-cross-runner-queue` ADR), (b) implement the scaled-`mergeRetries` precedence-chain config NOW (flag > env > per-repo > global > default, default unchanged), (c) implement the portable ref-based cross-job land-lock NOW (`refs/dorfl/land-lock` CAS-claim with a TTL/stale-reclaim story), or (d) some combination — and how does that scope avoid colliding with the brief's slices once it produces them?**
 
 > The observation itself frames the work as "Decision to record when the CI parallel-merge shape is designed" and "Not fixing here: a sizing/design decision for the future parallel-merge CI shape." The brief's resolved q1 also flags (b) the ref-lock as conditional on "a sound stale-lock reclaim" — if that is not cheap, ship (a) scaled now and split (b) into a follow-on. Without an explicit scope choice, the task cannot be claimed (the slicer would have to guess between an ADR-only doc slice and a code slice that introduces a new ref-lock primitive — materially different sizes and risk).
 

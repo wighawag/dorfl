@@ -49,7 +49,7 @@ slice, so the two rebase trivially.
 
 ## Acceptance criteria
 
-- [ ] A test asserts no `.ts` under `packages/agent-runner/src` except
+- [ ] A test asserts no `.ts` under `packages/dorfl/src` except
       `work-layout` contains a raw `work/<folder>` literal.
 - [ ] The allow-list is exactly the `work-layout` module (the single permitted
       home); the rule cannot be satisfied by sprinkling per-file disables.
@@ -80,7 +80,7 @@ slice, so the two rebase trivially.
 > Domain vocabulary + where to look: the house pattern for a source-scanning
 > structural guard is `ledger-lint.test.ts` / `main-divergence-guard.test.ts`,
 > follow it. The single allowed home for `work/<folder>` literals is the
-> `work-layout` module. Scan `packages/agent-runner/src` only; test fixtures under
+> `work-layout` module. Scan `packages/dorfl/src` only; test fixtures under
 > `test/` legitimately contain literal `work/...` paths (they construct throwaway
 > repos) and must NOT be flagged.
 >

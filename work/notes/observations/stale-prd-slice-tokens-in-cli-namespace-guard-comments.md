@@ -29,7 +29,7 @@ triaged: keep
 2026-06-22 (noticed during `rename-cli-verb-and-flags-do-prd-to-do-brief`).
 
 After the `task:`/`brief:` namespace-token cutover (PR #179), several doc comments
-in `packages/agent-runner/src/cli.ts` (e.g. the `resolveSliceOnlySlug` docstring
+in `packages/dorfl/src/cli.ts` (e.g. the `resolveSliceOnlySlug` docstring
 ~L826, and the repeated "Slice-only command (§3a): accept bare + `slice:`, reject
 `prd:`" comments at ~L916/923/1339/1545/1604/1707/3134) still describe the guard
 in the RETIRED tokens. The actual code (`resolveSliceOnlyArg` in

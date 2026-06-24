@@ -118,13 +118,13 @@ The marker removal + `advancing/` folder retirement are OUT OF SCOPE here, owned
 > FOR THE TREE-LESS RUNGS ONLY (`surface`/`apply`/`triage`), IN ADDITION to today's
 > `work/advancing/<type>-<slug>.md` marker CAS. READ THE RE-SCOPED BANNER FIRST: the
 > `build-slice` / `slice-prd` rungs must NOT take the unified lock, because
-> `performAdvance` (`packages/agent-runner/src/advance.ts`) orchestrates an inner
+> `performAdvance` (`packages/dorfl/src/advance.ts`) orchestrates an inner
 > `performDo` for those rungs that ITSELF acquires the SAME unified ref — taking it at
 > the advance layer too would DEADLOCK the tick against itself (verified: it red-ed 9
 > advance-tick tests). The inner `do`'s claim/slice lock IS the exclusion point for
 > those rungs.
 >
-> Read `packages/agent-runner/src/advancing-lock.ts`
+> Read `packages/dorfl/src/advancing-lock.ts`
 > (`acquireAdvancingLock`/`releaseAdvancingLock`, addressed via `advancingMarkerPath`
 > / `listAdvancingMarkers`) and `advance.ts` (`performAdvance`, `classifyTick`, the
 > LOCK step #3, the build/slice rungs that call `performDo`) first. KEEP the marker

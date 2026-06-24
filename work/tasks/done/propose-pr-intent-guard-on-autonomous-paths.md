@@ -70,7 +70,7 @@ CRITICAL FENCE: the guard must fire ONLY when a PR was genuinely WANTED (propose
 ### Claiming this slice
 
 ```sh
-agent-runner claim propose-pr-intent-guard-on-autonomous-paths --arbiter origin
+dorfl claim propose-pr-intent-guard-on-autonomous-paths --arbiter origin
 git fetch origin && git switch -c work/propose-pr-intent-guard-on-autonomous-paths origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/propose-pr-intent-guard-on-autonomous-paths.md work/done/propose-pr-intent-guard-on-autonomous-paths.md

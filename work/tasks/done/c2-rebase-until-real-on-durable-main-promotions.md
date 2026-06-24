@@ -143,9 +143,9 @@ reached under sustained parallel load).
 > replay to these relocations is the one near-fatal mistake; the SCOPE box names it explicitly.
 >
 > Where to look (by concept, not brittle paths, and verify against current code): the durable `main`
-> promotions route through the INTEGRATION band, `packages/agent-runner/src/integration-core.ts`
+> promotions route through the INTEGRATION band, `packages/dorfl/src/integration-core.ts`
 > (`performIntegration`) and its done-move primitive `ledgerWrite.applyCompleteTransition` in
-> `packages/agent-runner/src/ledger-write.ts`, with `complete.ts` as the caller for the done-move and
+> `packages/dorfl/src/ledger-write.ts`, with `complete.ts` as the caller for the done-move and
 > the slicing/cancel paths reaching the same integration machinery. The loop to change is the
 > EXISTING "Race-1" bounded re-rebase-and-retry (`DEFAULT_MERGE_RETRIES`, the `mergeRetries` input on
 > the integration core); the rebase-until-real change relaxes its FIXED CAP into a
@@ -191,7 +191,7 @@ reached under sustained parallel load).
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim c2-rebase-until-real-on-durable-main-promotions --arbiter <remote>   # default --arbiter origin
+dorfl claim c2-rebase-until-real-on-durable-main-promotions --arbiter <remote>   # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/c2-rebase-until-real-on-durable-main-promotions <remote>/main
 # on completion, in the work branch's PR/merge:

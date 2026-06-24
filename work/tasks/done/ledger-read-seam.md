@@ -34,7 +34,7 @@ ONE strategy = current behaviour: local reads still hit the working tree, arbite
 
 ## Prompt
 
-> Introduce the **read half** of the ledger-transition seam in `agent-runner`: one "resolve the live `work/` state for a repo" entry that the existing readers go through. PURE REFACTOR — behaviour byte-identical; you are unifying read call sites behind one seam, not changing what they read.
+> Introduce the **read half** of the ledger-transition seam in `dorfl`: one "resolve the live `work/` state for a repo" entry that the existing readers go through. PURE REFACTOR — behaviour byte-identical; you are unifying read call sites behind one seam, not changing what they read.
 >
 > READ FIRST: `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted — "Read seam"), then the two real read sources: `src/scan.ts` (`readBacklogItems`, `readDoneSlugs`, `readNeedsAttentionItems` — LOCAL working tree, offline, cross- repo) and `src/readiness.ts` (`readSliceOnArbiter`, `readDoneSlugsOnArbiter` — from `<arbiter>/main` via `git show`/`ls-tree`). Also `src/eligibility.ts` (pure resolver — leave its signature alone) and `src/gc.ts` (its `work/`-state reads).
 >
@@ -48,7 +48,7 @@ ONE strategy = current behaviour: local reads still hit the working tree, arbite
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim ledger-read-seam --arbiter <remote>      # default --arbiter origin
+dorfl claim ledger-read-seam --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/ledger-read-seam <remote>/main
 # on completion, in the work branch's PR/merge:

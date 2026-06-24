@@ -1,7 +1,7 @@
 # Working in `website/` (agent guidance)
 
 This folder holds the **Dorfl** marketing/landing site. (Dorfl is the new name
-for the tool currently called `agent-runner`.) It is scaffolded from our house
+for the tool currently called `dorfl`.) It is scaffolded from our house
 template `~/dev/github/wighawag/template-svelte-tailwind`
 (SvelteKit + Svelte 5 + Tailwind v4 via `@tailwindcss/vite`, `adapter-static`).
 
@@ -30,7 +30,7 @@ happen on the Dorfl site.
 
 - The site lives **directly under `website/`** (flat app: `src/`, `static/`,
   `svelte.config.js` here), not under `website/web/`. That is only because
-  `agent-runner` is **already a pnpm monorepo** (see `pnpm-workspace.yaml`,
+  `dorfl` is **already a pnpm monorepo** (see `pnpm-workspace.yaml`,
   `packages/`), so `website/` is just another workspace member. The template's
   `web/` wrapper exists to turn a standalone repo into a monorepo; we already are
   one. This structural difference is expected, not template drift.

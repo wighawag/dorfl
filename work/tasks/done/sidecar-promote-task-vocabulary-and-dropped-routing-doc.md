@@ -117,16 +117,16 @@ sidecar invariants stay green.
 > 1. Rename the `promote-slice` disposition value to `promote-task`. It is
 >    load-bearing: it is consumed as a behaviour gate
 >    (`entry.disposition === 'promote-slice'`), not just a label. Where to look (by
->    module/concept, not brittle line numbers): `packages/agent-runner/src/sidecar.ts`
+>    module/concept, not brittle line numbers): `packages/dorfl/src/sidecar.ts`
 >    (the `SidecarDisposition` union + the `DISPOSITIONS` parse set), and
->    `packages/agent-runner/src/surface-gate.ts` (the allowed-dispositions
+>    `packages/dorfl/src/surface-gate.ts` (the allowed-dispositions
 >    `DISPOSITIONS` set + the agent-facing JSON contract STRING the surface prompt
 >    emits — the `"disposition": "promote-slice|promote-adr|…"` line; this is what
 >    TELLS an answering agent what to write, so it MUST say `promote-task`). Then the
 >    live gate in `advance.ts` plus the doc-comment occurrences in `advance-drivers.ts`
 >    / `apply-persist.ts` (only `advance.ts` is a runtime gate; the other two are
 >    comments that would otherwise go stale), and the tests
->    `packages/agent-runner/test/sidecar.test.ts` + the surface-gate / triage / advance
+>    `packages/dorfl/test/sidecar.test.ts` + the surface-gate / triage / advance
 >    tests (grep `promote-slice` to find them all).
 >
 >    DECIDE and RECORD the parse-side back-compat policy: tolerate legacy
@@ -177,7 +177,7 @@ sidecar invariants stay green.
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim <slug> --arbiter <remote>      # default --arbiter origin
+dorfl claim <slug> --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/<slug> <remote>/main
 # on completion, in the work branch's PR/merge:

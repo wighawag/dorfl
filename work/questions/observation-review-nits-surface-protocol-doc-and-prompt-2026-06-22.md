@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-surface-protocol-doc-and-prompt-2026-06-22 type=observation slug=review-nits-surface-protocol-doc-and-prompt-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-surface-protocol-doc-and-prompt-2026-06-22 type=observation slug=review-nits-surface-protocol-doc-and-prompt-2026-06-22 allAnswered=false -->
 
 ## Q1
 
@@ -28,7 +28,7 @@ _Suggested default: keep — durably captured HERE is sufficient; matches the di
 
 **Should the residual doc-content echoes in `buildSurfacePrompt` (the table-of-contents line 'Its two laws, its humility aid… ALL live in that doc — read them there' and the restated 'EMPTY questions array VALID / absence NOT' rule) be trimmed, or kept as a practical output-shape contract mirroring the review-prompt's style?**
 
-> Gate 2 nit: packages/agent-runner/src/surface-gate.ts ~line 226 (the TOC line) and ~line 242 (the empty/absence rule). The slice's no-re-inlining test only forbids the LAW STRINGS (`GATHER-only`/`PERSIST-NEVER`/`NEVER invent an answer`/`HUMILITY RULE`), which pass. The empty/absence rule is a tiny doc duplication but is the parser-enforced output-shape contract and mirrors the review prompt's restate-format-invariants style; judgement-cheap to keep.
+> Gate 2 nit: packages/dorfl/src/surface-gate.ts ~line 226 (the TOC line) and ~line 242 (the empty/absence rule). The slice's no-re-inlining test only forbids the LAW STRINGS (`GATHER-only`/`PERSIST-NEVER`/`NEVER invent an answer`/`HUMILITY RULE`), which pass. The empty/absence rule is a tiny doc duplication but is the parser-enforced output-shape contract and mirrors the review prompt's restate-format-invariants style; judgement-cheap to keep.
 
 _Suggested default: keep — the empty/absence rule is a load-bearing output-shape contract the parser enforces and matches review-prompt style; the TOC line is a navigational nudge worth its tiny duplication cost._
 

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:cross-job-ref-based-land-lock type=task slug=cross-job-ref-based-land-lock allAnswered=false -->
+<!-- dorfl-sidecar: item=task:cross-job-ref-based-land-lock type=task slug=cross-job-ref-based-land-lock allAnswered=false -->
 
 ## Q1
 
@@ -28,7 +28,7 @@ _Suggested default: Ship in-scope only if the reclaim answer is (a) TTL-in-value
 
 **Lock granularity: one global land-lock per repo, or per-target-branch?**
 
-> Open questions #3. Per-repo is simpler; per-branch matches future multi-branch land flows. Affects the ref name shape (e.g. `refs/agent-runner/land-lock` vs `refs/agent-runner/land-lock/<branch>`) and contention profile.
+> Open questions #3. Per-repo is simpler; per-branch matches future multi-branch land flows. Affects the ref name shape (e.g. `refs/dorfl/land-lock` vs `refs/dorfl/land-lock/<branch>`) and contention profile.
 
 _Suggested default: Per-target-branch — same implementation cost (just key the ref by branch) and future-proofs for multi-branch land; per-repo is a strict subset when only one branch is targeted._
 

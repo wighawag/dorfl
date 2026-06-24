@@ -61,7 +61,7 @@ The pi adapter already writes a session **`.jsonl` event log** to its `--session
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim do-watch --arbiter <remote>      # default --arbiter origin
+dorfl claim do-watch --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/do-watch <remote>/main
 # on completion, in the work branch's PR/merge:

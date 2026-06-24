@@ -84,7 +84,7 @@ We have now patched the SAME asymmetry FOUR times (PR #8 `do` agent-fail; PR #9 
 ### Claiming this slice
 
 ```sh
-agent-runner claim centralise-bounce-branch-push --arbiter <remote>
+dorfl claim centralise-bounce-branch-push --arbiter <remote>
 git fetch <remote> && git switch -c work/centralise-bounce-branch-push <remote>/main
 git mv work/in-progress/centralise-bounce-branch-push.md work/done/centralise-bounce-branch-push.md
 ```

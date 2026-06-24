@@ -82,7 +82,7 @@ clear implementation, rather than duplicating it.
 > leased-delete clear of such a lock. If a reaper flag already exists, route to
 > needs-attention.
 >
-> Domain vocabulary: the unified per-item lock is `refs/agent-runner/lock/<type>-<slug>`
+> Domain vocabulary: the unified per-item lock is `refs/dorfl/lock/<type>-<slug>`
 > on the arbiter (no heartbeat — so there is NO age-based auto-sweep anywhere; a
 > human asserts a lock is dead). The reconcile classes are `cleared-stale` (terminal
 > + active = orphaned), `kept-stuck` (terminal + stuck = human attention),

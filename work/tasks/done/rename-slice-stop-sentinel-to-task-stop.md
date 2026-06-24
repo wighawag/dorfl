@@ -37,7 +37,7 @@ Update the `STOP_SENTINEL_OPEN` / `STOP_SENTINEL_CLOSE` constants, the prompt te
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-slice-stop-sentinel-to-task-stop --arbiter <remote>
+dorfl claim rename-slice-stop-sentinel-to-task-stop --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-slice-stop-sentinel-to-task-stop <remote>/main
 git mv work/tasks/todo/rename-slice-stop-sentinel-to-task-stop.md work/tasks/done/rename-slice-stop-sentinel-to-task-stop.md
 ```

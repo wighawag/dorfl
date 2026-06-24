@@ -59,7 +59,7 @@ Preserve the providers' existing posture: the `outage`-vs-`unavailable` split st
 >
 > DECISION (record in a `## Decisions` block): `ghFailureReason` is a NON-exported local function in `issue-provider.ts`, not imported in `github.ts` — AND the shared surface is bigger than just it (both providers need the same `undefined`→"binary missing" / else-`ghFailureReason` PAIR). SHARE it: prefer (b) lift the whole undefined-vs-`RunResult`→reason-string pair into a small shared helper both import; else (a) export `ghFailureReason` and re-write the undefined guard at each call site. Avoid (c) duplicating into `github.ts` (re-creates the drift this slice closes). Pick the least-surprising option for the module conventions here.
 >
-> READ FIRST: `src/github.ts` `postPRComment()` (~L283) + the private `degrade()` helper (~L338–L343, the `unavailable`/`outage` `cause` split with the surviving string) and `runGh()` (returns `RunResult | undefined`) — paths ~as of 2026-06-11, confirm before editing (monorepo paths under `packages/agent-runner/src/`); `src/issue-provider.ts` `ghFailureReason()` (~L677) AND its TWO-ARM call sites (~L374–378, ~L408–419, ~L443–455 — the `result === undefined ? 'binary missing' : ghFailureReason(result)` idiom to mirror).
+> READ FIRST: `src/github.ts` `postPRComment()` (~L283) + the private `degrade()` helper (~L338–L343, the `unavailable`/`outage` `cause` split with the surviving string) and `runGh()` (returns `RunResult | undefined`) — paths ~as of 2026-06-11, confirm before editing (monorepo paths under `packages/dorfl/src/`); `src/issue-provider.ts` `ghFailureReason()` (~L677) AND its TWO-ARM call sites (~L374–378, ~L408–419, ~L443–455 — the `result === undefined ? 'binary missing' : ghFailureReason(result)` idiom to mirror).
 >
 > FIRST, check this slice against current reality (drift): confirm both hard-coded strings still survive in `github.ts` and that `ghFailureReason` still lives un-exported in `issue-provider.ts`. If the issue-side helper has already been lifted/exported, just reuse it; if `github.ts` has already been fixed, route to `needs-attention/` rather than building on a stale premise.
 >
@@ -70,7 +70,7 @@ Preserve the providers' existing posture: the `outage`-vs-`unavailable` split st
 ### Claiming this slice
 
 ```sh
-agent-runner claim github-provider-surface-real-gh-cause --arbiter origin
+dorfl claim github-provider-surface-real-gh-cause --arbiter origin
 git fetch origin && git switch -c work/github-provider-surface-real-gh-cause origin/main
 git mv work/in-progress/github-provider-surface-real-gh-cause.md work/done/github-provider-surface-real-gh-cause.md
 ```

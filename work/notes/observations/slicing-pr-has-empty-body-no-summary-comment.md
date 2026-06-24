@@ -13,8 +13,8 @@ PR #188 (the runner auto-slicing the `prompt-guidance-test-first` brief into 3 t
 
 The slicing path and the build path BOTH integrate through the shared core (`performIntegration`), but only the BUILD path supplies a PR body:
 
-- **Build path:** threads `body: agent.output` (the build agent's FINAL SUMMARY) into the propose-mode PR description (`packages/agent-runner/src/do.ts:1095` and `:2205`; "Half B (propose-mode PR body)").
-- **Slicing path** (`packages/agent-runner/src/slicing.ts`): integrates through `performIntegration` but passes NO equivalent body, so the PR degrades to `gh ... --fill` / empty (`github.ts`: "Absent body => degrades to gh pr create --fill").
+- **Build path:** threads `body: agent.output` (the build agent's FINAL SUMMARY) into the propose-mode PR description (`packages/dorfl/src/do.ts:1095` and `:2205`; "Half B (propose-mode PR body)").
+- **Slicing path** (`packages/dorfl/src/slicing.ts`): integrates through `performIntegration` but passes NO equivalent body, so the PR degrades to `gh ... --fill` / empty (`github.ts`: "Absent body => degrades to gh pr create --fill").
 
 So the gap is specific: the slicer never captures-and-threads a "here is what I sliced" summary the way the builder threads its final summary.
 

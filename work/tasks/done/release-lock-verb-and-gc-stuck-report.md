@@ -73,7 +73,7 @@ needs-attention rather than silently clean-release.
 >
 > Generalise the human-recovery surface from advancing-only to the unified lock. Read
 > the landed `release-advancing` verb + the `gc --ledger` advancing-marker report
-> (`packages/agent-runner/src/advancing-lock.ts` `listAdvancingMarkers`, the `gc.ts` /
+> (`packages/dorfl/src/advancing-lock.ts` `listAdvancingMarkers`, the `gc.ts` /
 > ledger-lint report, and slices `advancing-lock-human-release-verb-and-surface` /
 > `advancing-lock-release-crash-safe` in `work/done/`). Add `release-lock <item>`
 > (clears a NAMED unified lock) and a stuck/orphaned-lock report in `gc --ledger`. PRD

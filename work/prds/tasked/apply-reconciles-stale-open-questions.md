@@ -9,7 +9,7 @@ slug: apply-reconciles-stale-open-questions
 
 When the advance APPLY rung consumes a fully-answered sidecar, it does its load-bearing job correctly: flips `needsAnswers:false`, deletes the sidecar in the same commit (the `needsAnswers:false <=> no active sidecar` invariant), and folds the human's answers into a new `## Applied answers <date>` body section. VERIFIED working on `staging-surface-and-apply-promote-safety` (commit `2eeb56a`).
 
-But it leaves the body INTERNALLY CONTRADICTORY. `withAppliedAnswers` (`packages/agent-runner/src/apply-persist.ts`) is a pure APPEND (`${base}\n${appliedAnswersBlock}`, comment: "Append-only (a prior record stays)"). It never touches the pre-existing content the answers supersede:
+But it leaves the body INTERNALLY CONTRADICTORY. `withAppliedAnswers` (`packages/dorfl/src/apply-persist.ts`) is a pure APPEND (`${base}\n${appliedAnswersBlock}`, comment: "Append-only (a prior record stays)"). It never touches the pre-existing content the answers supersede:
 
 1. The original **`## Open questions`** section stays, listing every question as if still open, directly above the `## Applied answers` section that answers them.
 2. The brief's **Autonomy-notes** prose still says "Set `needsAnswers: true` ... Clear once answered" even though it is now `false`.

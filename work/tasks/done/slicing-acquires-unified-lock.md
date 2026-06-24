@@ -77,7 +77,7 @@ SCOPE here and owned by #9 (see the RE-SCOPED banner).
 > Make the SLICING lock ALSO acquire the unified per-item lock, IN ADDITION to
 > today's behaviour. Today it `git mv work/prd/<slug>.md → work/slicing/<slug>.md` as
 > a micro-commit raced via the shared-`main` CAS
-> (`packages/agent-runner/src/slicing-lock.ts`,
+> (`packages/dorfl/src/slicing-lock.ts`,
 > `acquireSlicingLock`/`releaseSlicingLock`), read it first, noting the release's
 > stale-edit (content-identity) check (exit 4 `stale`). KEEP all of that as-is. ADD:
 > on a successful acquire, ALSO acquire the unified per-item lock (`action: slice`)

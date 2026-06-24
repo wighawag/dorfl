@@ -20,7 +20,7 @@ aren't surfacing" and suspects their config, when the config is correct and the
 CI machinery has two concrete gaps:
 
 1. **Propose mode never enumerates lifecycle items.** The propose matrix is built
-   from `agent-runner scan --json` filtered on `eligibility.eligible == true`. A
+   from `dorfl scan --json` filtered on `eligibility.eligible == true`. A
    `needsAnswers:true` slice/PRD has `eligible:false` by construction, and
    untriaged observations are not in the scan's slice/PRD pools at all. So the
    surface/triage rungs never get a matrix leg — only fully-ready ungated items do

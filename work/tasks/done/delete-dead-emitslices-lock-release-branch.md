@@ -52,7 +52,7 @@ Promotes `work/observations/dead-emitslices-release-branch-wrong-destination.md`
 ### Claiming this slice
 
 ```sh
-agent-runner claim delete-dead-emitslices-lock-release-branch --arbiter origin
+dorfl claim delete-dead-emitslices-lock-release-branch --arbiter origin
 git fetch origin && git switch -c work/delete-dead-emitslices-lock-release-branch origin/main
 git mv work/in-progress/delete-dead-emitslices-lock-release-branch.md work/done/delete-dead-emitslices-lock-release-branch.md
 ```

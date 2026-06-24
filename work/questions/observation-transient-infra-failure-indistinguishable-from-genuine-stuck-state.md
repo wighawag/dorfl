@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:transient-infra-failure-indistinguishable-from-genuine-stuck-state type=observation slug=transient-infra-failure-indistinguishable-from-genuine-stuck-state allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:transient-infra-failure-indistinguishable-from-genuine-stuck-state type=observation slug=transient-infra-failure-indistinguishable-from-genuine-stuck-state allAnswered=false -->
 
 ## Q1
 

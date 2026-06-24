@@ -16,8 +16,8 @@ Rename the `LockAction` token `'slice'` → `'task'` end-to-end, a CLEAN BREAK (
 
 Concrete sites (verified 2026-06-23):
 
-- `packages/agent-runner/src/item-lock.ts:81` — `export type LockAction = 'implement' | 'slice' | 'advance';` → `'implement' | 'task' | 'advance'`.
-- `packages/agent-runner/src/tasking-lock.ts:191` — the writer `action: 'slice'` → `action: 'task'`.
+- `packages/dorfl/src/item-lock.ts:81` — `export type LockAction = 'implement' | 'slice' | 'advance';` → `'implement' | 'task' | 'advance'`.
+- `packages/dorfl/src/tasking-lock.ts:191` — the writer `action: 'slice'` → `action: 'task'`.
 - The serialisation is already generic (`item-lock.ts` `serialiseLockEntry` writes `action: ${e.action}`), so no format code changes — but the token VALUE persisted into the lock-ref body changes.
 - Every test asserting `action: 'slice'` / the tasking lock action (grep the test tree: `branch-namespace-collision`, `complete-lock-crash-safe`, `gc-reap-stale-locks`, the `tasking-lock`/`intake` lock tests, etc.) — update in the SAME task.
 
@@ -61,7 +61,7 @@ The action token is PERSISTED in the per-item lock-ref body (`action: slice`). E
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-lock-action-token-slice-to-task --arbiter <remote>
+dorfl claim rename-lock-action-token-slice-to-task --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-lock-action-token-slice-to-task <remote>/main
 git mv work/tasks/todo/rename-lock-action-token-slice-to-task.md work/tasks/done/rename-lock-action-token-slice-to-task.md
 ```

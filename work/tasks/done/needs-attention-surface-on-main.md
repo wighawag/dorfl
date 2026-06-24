@@ -50,7 +50,7 @@ The write seam's needs-attention transition is expressed as INTENT — "record s
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim needs-attention-surface-on-main --arbiter <remote>      # default --arbiter origin
+dorfl claim needs-attention-surface-on-main --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/needs-attention-surface-on-main <remote>/main
 # on completion, in the work branch's PR/merge:

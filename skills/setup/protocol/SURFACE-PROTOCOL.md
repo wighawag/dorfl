@@ -78,7 +78,7 @@ You stay **human-invokable**. A human with no runner can invoke this discipline 
 The hand-written sidecar shape (the SAME file is both human-readable on GitHub and machine-parseable — the machine fields hide in HTML comments that GitHub renders as nothing, the human content is real Markdown):
 
 ```
-<!-- agent-runner-sidecar: item=<type>:<slug> type=<type> slug=<slug> allAnswered=false -->
+<!-- dorfl-sidecar: item=<type>:<slug> type=<type> slug=<slug> allAnswered=false -->
 
 ## Q1
 

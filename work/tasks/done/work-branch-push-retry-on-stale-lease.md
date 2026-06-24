@@ -8,7 +8,7 @@ blockedBy: []
 
 When the requeue-continue path pushes the rebased `work/<slug>` branch to the arbiter with `--force-with-lease` and the push is REJECTED for a stale lease ("stale info"), **re-fetch the work branch ref, re-rebase onto current main, and retry the push** (bounded) instead of letting the whole run fail. Today (`materialiseAndOnboard` in `workspace.ts`) the continue path does a single `git push origin <branch>:<branch> --force-with-lease=<branch>`; if the remote `work/<slug>` ref moved since the mirror fetch (a requeue-continue churns it), the lease's expected value is stale and the push is rejected — so a fully GREEN, committed build (tests passed, Gate-2 approved) never opens its PR and the work is stranded in the job worktree.
 
-This is the observed incident: `advance-verb-resolver` built green (1467 tests, approved, commit `64b9501`) but the push failed with `--force-with-lease` "stale info"; the origin tip stayed the stale pre-requeue `f75ff55`, no PR opened, and the green work sat only in `/home/wighawag/.agent-runner/work/...` until recovered by hand.
+This is the observed incident: `advance-verb-resolver` built green (1467 tests, approved, commit `64b9501`) but the push failed with `--force-with-lease` "stale info"; the origin tip stayed the stale pre-requeue `f75ff55`, no PR opened, and the green work sat only in `/home/wighawag/.dorfl/work/...` until recovered by hand.
 
 ### Why a retry is SAFE here (the key invariant)
 
@@ -45,7 +45,7 @@ The `work/<slug>` branch is **unshared** — a requeued item is claimed by exact
 >
 > The retry is SAFE because the `work/<slug>` branch is UNSHARED (the arbiter CAS serialises the claim per slug — no rival writer), so re-observing the remote tip and rebasing our work onto it is correct. Stay within the existing guardrails: `--force-with-lease` re-leased against the freshly-fetched ref, NEVER bare `--force`, NEVER to main, work branch ONLY (ADR §11). A rebase CONFLICT on retry is the EXISTING abort → needs-attention path (never auto-resolve); the retry handles only the clean-rebase stale-lease case. Bound the retries (mirror the claim/slicing-lock `retries: 3` default) and fail with a clear message — keeping the green work recoverable — if still rejected after the cap.
 >
-> READ FIRST: `packages/agent-runner/src/workspace.ts` (`materialiseAndOnboard`, the `continueFromKept` branch: `rebaseContinuedBranchOntoMain` then `git push origin <branch>:<branch> --force-with-lease=<branch>`), the claim/`slicing-lock` retry-on-rejection loops for the bounded-retry pattern + exit-code conventions, and the ADR §10/§11 notes (rebase-not-merge; never `--force`, never to main). Detect the stale-lease rejection distinctly from other push failures.
+> READ FIRST: `packages/dorfl/src/workspace.ts` (`materialiseAndOnboard`, the `continueFromKept` branch: `rebaseContinuedBranchOntoMain` then `git push origin <branch>:<branch> --force-with-lease=<branch>`), the claim/`slicing-lock` retry-on-rejection loops for the bounded-retry pattern + exit-code conventions, and the ADR §10/§11 notes (rebase-not-merge; never `--force`, never to main). Detect the stale-lease rejection distinctly from other push failures.
 >
 > FIRST, check this slice against current reality (drift): confirm the continue-path push is still a single `--force-with-lease=<branch>` in `materialiseAndOnboard` and `rebaseContinuedBranchOntoMain` is still the onboard rebase. If they changed, reconcile against current code or route to `needs-attention/` with the discrepancy.
 >
@@ -56,7 +56,7 @@ The `work/<slug>` branch is **unshared** — a requeued item is claimed by exact
 ### Claiming this slice
 
 ```sh
-agent-runner claim work-branch-push-retry-on-stale-lease --arbiter origin
+dorfl claim work-branch-push-retry-on-stale-lease --arbiter origin
 git fetch origin && git switch -c work/work-branch-push-retry-on-stale-lease origin/main
 git mv work/in-progress/work-branch-push-retry-on-stale-lease.md work/done/work-branch-push-retry-on-stale-lease.md
 ```

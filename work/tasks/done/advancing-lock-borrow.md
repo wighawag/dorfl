@@ -43,9 +43,9 @@ This slice delivers acquire/release for the `advancing` borrow + the new-item cr
 
 > Build the `work/advancing/` CAS lock BORROW — a SHORT borrow shaped like `slicing/`, using the EXISTING CAS ledger-write primitive (no new lock semantics). Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The lock model", "Classify → lock → execute, and new-item creation", US #19–24). The lock-FOLDER encodes the ACTION (`advancing`); the entry name `<type>-<slug>` encodes IDENTITY (same type-encoded scheme as the sidecar, via the resolver). It is file-orthogonal to the tick classifier — build in parallel.
 >
-> Mirror `packages/agent-runner/src/slicing-lock.ts` (`acquireSlicingLock`/`releaseSlicingLock` — the CAS micro-commit / force-with-lease on a distinct branch ref, the winner/loser/exit-code shape) on a DISTINCT `advancing` ref so an advancing-borrow NEVER collides with a slicing-borrow or a build-claim on the same slug. Deliver new-item-creation-through-CAS (keyed on the NEW item's identity) as a reusable helper for the later triage rung. `needsAnswers` is the PURE answer-required axis (NOT a lock); the human edit-handshake becomes taking the `advancing` lock via CAS (supersedes `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`). Lock discipline: MANDATORY for the autonomous driver, no-op for a solo human.
+> Mirror `packages/dorfl/src/slicing-lock.ts` (`acquireSlicingLock`/`releaseSlicingLock` — the CAS micro-commit / force-with-lease on a distinct branch ref, the winner/loser/exit-code shape) on a DISTINCT `advancing` ref so an advancing-borrow NEVER collides with a slicing-borrow or a build-claim on the same slug. Deliver new-item-creation-through-CAS (keyed on the NEW item's identity) as a reusable helper for the later triage rung. `needsAnswers` is the PURE answer-required axis (NOT a lock); the human edit-handshake becomes taking the `advancing` lock via CAS (supersedes `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`). Lock discipline: MANDATORY for the autonomous driver, no-op for a solo human.
 >
-> READ FIRST: `packages/agent-runner/src/slicing-lock.ts` (the borrow to mirror), `packages/agent-runner/src/claim-cas.ts` + `ledger-write.ts` (the CAS primitive), the slug resolver `slug-namespace.ts` (the `<type>-<slug>` identity), and the existing CAS-seam tests (the two-concurrent-actors harness).
+> READ FIRST: `packages/dorfl/src/slicing-lock.ts` (the borrow to mirror), `packages/dorfl/src/claim-cas.ts` + `ledger-write.ts` (the CAS primitive), the slug resolver `slug-namespace.ts` (the `<type>-<slug>` identity), and the existing CAS-seam tests (the two-concurrent-actors harness).
 >
 > FIRST, check this slice against current reality (drift). The ledger CAS seam and the slicing lock are LANDED substrate (PRD 2026-06-09 UPDATE). If they landed differently than assumed, reconcile or route to `needs-attention/`.
 >
@@ -56,7 +56,7 @@ This slice delivers acquire/release for the `advancing` borrow + the new-item cr
 ### Claiming this slice
 
 ```sh
-agent-runner claim advancing-lock-borrow --arbiter origin
+dorfl claim advancing-lock-borrow --arbiter origin
 git fetch origin && git switch -c work/advancing-lock-borrow origin/main
 git mv work/in-progress/advancing-lock-borrow.md work/done/advancing-lock-borrow.md
 ```

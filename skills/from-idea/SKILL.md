@@ -13,7 +13,7 @@ It is an **on-ramp** (per `work/SKILL.md`'s taxonomy — a starting situation th
 ## What it is NOT (the boundaries that keep it thin)
 
 - **NOT a prd-producer of its own.** `to-prd` writes the prd (it owns the prd shape, the `work/protocol/prd-template.md`, the launch-snapshot banner, the `prds/ready/` target, the two autonomy axes). from-idea is the FRONT DOOR that calls it. Read the two names as a pair: `from-idea` owns the on-ramp (setup + the interview); `to-prd` is the synthesis primitive it hands the conversation to. Do not reimplement any of to-prd here.
-- **NOT a scaffolder of its own.** `setup` owns the `work/` skeleton, the `work/protocol/` docs, `CONTEXT.md`, the `.agent-runner.json` `verify`/`prepare` gate, and the empty-vs-populated detection. from-idea CALLS setup; it never hand-rolls a "is this a contract repo?" check or writes `CONTEXT.md` itself (that forks setup's detection and drifts). The one-way direction is fixed: **from-idea calls setup; setup never calls from-idea** (setup stays a focused adoption primitive). setup's empty-repo branch MAY _mention_ from-idea as the next step — a discoverability pointer, never an invocation.
+- **NOT a scaffolder of its own.** `setup` owns the `work/` skeleton, the `work/protocol/` docs, `CONTEXT.md`, the `.dorfl.json` `verify`/`prepare` gate, and the empty-vs-populated detection. from-idea CALLS setup; it never hand-rolls a "is this a contract repo?" check or writes `CONTEXT.md` itself (that forks setup's detection and drifts). The one-way direction is fixed: **from-idea calls setup; setup never calls from-idea** (setup stays a focused adoption primitive). setup's empty-repo branch MAY _mention_ from-idea as the next step — a discoverability pointer, never an invocation.
 - **NOT adversarial grilling.** Stress-testing a plan/design before building is the personal `grilling` skill's job. from-idea clarifies only enough to be prd-worthy and DEFERS the rest (see the interview floor below). If the user wants the idea grilled, that is a separate move after the prd lands.
 
 ## The sequence (honor BOTH human checkpoints; never auto-commit)
@@ -52,7 +52,7 @@ So you interview ONCE. When setup's A2 asks "what is this repo about?", you alre
 
 **Always invoke `setup`** — do NOT hand-roll a `test -d work/` to decide whether to. setup's A1 already detects empty-vs-populated and does the right thing in each case, and re-running it on an existing contract repo **re-syncs the `work/protocol/` docs** (the one legitimate clobber) so the repo picks up protocol updates. Skipping setup would skip that refresh and fork its detection logic.
 
-- **Empty / new repo (the common from-idea case):** setup does Phase A — scaffolds `work/`, copies `work/protocol/`, writes `CONTEXT.md` (from the description you gathered in step 1) and `.agent-runner.json` (the `verify`/`prepare` gate it detects, presented for confirmation at its HARD STOP). Phase B is empty.
+- **Empty / new repo (the common from-idea case):** setup does Phase A — scaffolds `work/`, copies `work/protocol/`, writes `CONTEXT.md` (from the description you gathered in step 1) and `.dorfl.json` (the `verify`/`prepare` gate it detects, presented for confirmation at its HARD STOP). Phase B is empty.
 - **Existing contract repo (adding a new idea to a repo already set up):** setup's Phase A is a near-no-op + protocol re-sync; the scaffold already exists. You then go straight to step 3. **Flag the Phase-B-hijack seam:** if the repo is populated with convertible material, be explicit that the intent is "scaffold/refresh and accept a NEW idea", not "migrate everything" — do not let setup's Phase-B conversion hijack the from-idea session. (A new idea is not migration of existing material.)
 
 Honor setup's HARD STOP: present the plan, wait for confirmation, then it scaffolds. Feed it the description from step 1 so its A2 does not re-ask.
@@ -71,7 +71,7 @@ Tell the user, concisely:
 
 - the repo is now contract-ready (what setup scaffolded / re-synced, the `verify` gate configured);
 - the prd written, by path — `work/prds/ready/<slug>.md` — left UNSTAGED for review, plus any `needsAnswers` questions it carries that a human must resolve before tasking;
-- **what's next on the main flow:** review the prd, then task it with `to-task` (or `agent-runner do prd:<slug>` once the runner is installed and the prd is agent-safe). If the idea has real design forks worth pressure-testing first, point at the `grilling` skill — explicitly NOT part of this on-ramp.
+- **what's next on the main flow:** review the prd, then task it with `to-task` (or `dorfl do prd:<slug>` once the runner is installed and the prd is agent-safe). If the idea has real design forks worth pressure-testing first, point at the `grilling` skill — explicitly NOT part of this on-ramp.
 
 **Git etiquette:** never stage, commit, or push — leave both setup's scaffold and to-prd's prd in the working tree for the user to inspect and commit (the producer-skill convention setup and to-prd both follow).
 

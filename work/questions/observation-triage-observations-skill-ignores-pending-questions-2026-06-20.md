@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:triage-observations-skill-ignores-pending-questions-2026-06-20 type=observation slug=triage-observations-skill-ignores-pending-questions-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:triage-observations-skill-ignores-pending-questions-2026-06-20 type=observation slug=triage-observations-skill-ignores-pending-questions-2026-06-20 allAnswered=false -->
 
 ## Q1
 

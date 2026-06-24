@@ -32,7 +32,7 @@ Add tests that PIN BOTH (a thrown wiring/config core error → `config-error`, w
 - [ ] A test pins `runOneItem`'s thrown-wiring-error path: a thrown `performIntegration` error (the no-`reviewGate`-wired misconfig, message containing "wiring bug") yields **`status: 'config-error'`** with the work preserved/surfaced and the tick CONTINUING (no crash). (Mirrors `test/do.test.ts:561` on the `run` side.)
 - [ ] A test pins `runOnce`'s settled-slot fallback: a forced uncaught worker throw yields `status: 'claim-error'` carrying the captured error message in `detail`.
 - [ ] No production code changes (tests-only diff outside any minimal test-seam hook genuinely required to force the throws — if a seam hook is needed, keep it test-only and document it).
-- [ ] Test isolation: temp `workspacesDir` + `isolatePiAgentDir`; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched.
+- [ ] Test isolation: temp `workspacesDir` + `isolatePiAgentDir`; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are untouched.
 - [ ] `pnpm format:check && pnpm build && pnpm test` green (this repo's gate).
 - [ ] On landing: mark `work/observations/run-thrown-core-error-labeled-agent-failed.md` RESOLVED (its divergence is closed by `3e7df84`; this slice pins it) — do NOT delete it on a stale basis; and discharge `work/observations/review-nits-run-daemon-reframe-2026-06-07.md`'s two nits (now covered by these tests).
 
@@ -55,7 +55,7 @@ Add tests that PIN BOTH (a thrown wiring/config core error → `config-error`, w
 ### Claiming this slice
 
 ```sh
-agent-runner claim run-internal-error-tests --arbiter origin
+dorfl claim run-internal-error-tests --arbiter origin
 git fetch origin && git switch -c work/run-internal-error-tests origin/main
 git mv work/in-progress/run-internal-error-tests.md work/done/run-internal-error-tests.md
 ```

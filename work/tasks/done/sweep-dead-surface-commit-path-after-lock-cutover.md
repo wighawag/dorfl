@@ -16,7 +16,7 @@ nothing produces a `git mv -> needs-attention/` move-only ledger commit to
 that move onto `main` is therefore dead code with no live caller (flagged by the
 9c/9d review nits).
 
-Remove, in `packages/agent-runner/src/ledger-write.ts`:
+Remove, in `packages/dorfl/src/ledger-write.ts`:
 
 - `publishSurfaceCommit` and its helper `readLedgerPlacement` (no live caller; the
   only mention is a doc-comment reference in `retry-backoff.ts`).
@@ -62,7 +62,7 @@ Behaviour must be UNCHANGED (this is dead code): the acceptance gate is the proo
 > (`bounceToStuckLock` -> `markStuckItemLock`), so the mode-M "observable
 > surface-on-`main`" path no longer has anything to surface. Delete the dead code:
 > `publishSurfaceCommit` + `readLedgerPlacement` + the `WORK_FOLDERS` const in
-> `packages/agent-runner/src/ledger-write.ts` (verify no live caller first:
+> `packages/dorfl/src/ledger-write.ts` (verify no live caller first:
 > `readLedgerPlacement` is called only by `publishSurfaceCommit`; `publishSurfaceCommit`
 > has no code caller, only a doc-comment mention in `retry-backoff.ts`). Resolve the
 > ENTANGLEMENT: `ApplyNeedsAttentionTransitionResult.surface?: SurfaceOutcome |

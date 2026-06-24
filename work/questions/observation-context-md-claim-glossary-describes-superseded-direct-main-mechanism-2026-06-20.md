@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:context-md-claim-glossary-describes-superseded-direct-main-mechanism-2026-06-20 type=observation slug=context-md-claim-glossary-describes-superseded-direct-main-mechanism-2026-06-20 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:context-md-claim-glossary-describes-superseded-direct-main-mechanism-2026-06-20 type=observation slug=context-md-claim-glossary-describes-superseded-direct-main-mechanism-2026-06-20 allAnswered=false -->
 
 ## Q1
 

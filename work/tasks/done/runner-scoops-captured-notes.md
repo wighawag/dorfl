@@ -38,7 +38,7 @@ Fix it ONCE here: a captured note is just another thing the agent EMITS that the
 
 > Extend the agent→runner reporting channel so the RUNNER scoops + reports agent-authored captured notes (`work/observations/*`, `work/findings/*`) on BOTH `do prd:` (slice) and `do <slice>` (build). Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (the PRECURSOR-NOTE fold-in "EXTEND this channel to agent-authored CAPTURED NOTES" — fix it ONCE, not a standalone fork) and `work/observations/runner-drops-agent-authored-captured-notes-on-slicing-commit.md`. Today `do prd:` commits only `work/backlog/*` and DROPS such notes. Keep Rule A (the agent does NO git — only writes the files) and extend Rule B (the runner scoops + reports). A captured note is just another thing the agent EMITS that the runner ROUTES — like the `## Decisions` block. Report exactly what landed (compose the landed honest-reporting substrate).
 >
-> READ FIRST: `packages/agent-runner/src/do.ts` (the `do prd:` slice-commit path that commits `work/backlog/*` — extend it to scoop the note buckets), the build integration path (`integration-core.ts`/`integrator.ts`), `agent-stop.ts` (the existing reporting channel / `## Decisions` block to mirror), and the failure-trio's honest-reporting code (PRD 2026-06-09 UPDATE).
+> READ FIRST: `packages/dorfl/src/do.ts` (the `do prd:` slice-commit path that commits `work/backlog/*` — extend it to scoop the note buckets), the build integration path (`integration-core.ts`/`integrator.ts`), `agent-stop.ts` (the existing reporting channel / `## Decisions` block to mirror), and the failure-trio's honest-reporting code (PRD 2026-06-09 UPDATE).
 >
 > FIRST, check this slice against current reality (drift). The reporting channel + `do prd:`-through-integration are LANDED substrate. If they landed differently, reconcile or route to `needs-attention/`.
 >
@@ -49,7 +49,7 @@ Fix it ONCE here: a captured note is just another thing the agent EMITS that the
 ### Claiming this slice
 
 ```sh
-agent-runner claim runner-scoops-captured-notes --arbiter origin
+dorfl claim runner-scoops-captured-notes --arbiter origin
 git fetch origin && git switch -c work/runner-scoops-captured-notes origin/main
 git mv work/in-progress/runner-scoops-captured-notes.md work/done/runner-scoops-captured-notes.md
 ```

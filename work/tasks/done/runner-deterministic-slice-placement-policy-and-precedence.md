@@ -80,7 +80,7 @@ staging folder + the placement seam introduced by the tracer slice.
 > `pre-backlog/` vs `backlog/` for the emitted slices.
 >
 > THE CONFIG KNOB: add `slicesLandIn` resolved per-repo like `slicingIntegration`
-> in `src/config.ts` (flag > env (`AGENT_RUNNER_SLICES_LAND_IN`) > per-repo > global
+> in `src/config.ts` (flag > env (`DORFL_SLICES_LAND_IN`) > per-repo > global
 > > built-in). Follow the `slicingIntegration` / `integration` resolution shape
 > exactly. The slicer reads the resolved placement; it never sets it itself.
 >
@@ -110,7 +110,7 @@ The first build was BLOCKED by Gate 2 (PR/code review) and routed to
 `needs-attention/` for a REAL defect, now fixed:
 
 - **The block:** the placement resolver (`src/placement.ts`), the `slicesLandIn`
-  config key, the `AGENT_RUNNER_SLICES_LAND_IN` env coercion, the per-repo
+  config key, the `DORFL_SLICES_LAND_IN` env coercion, the per-repo
   allowlist, and the direct `performSlice` tests were all in — but
   `config.slicesLandIn` and the `--slices-land-in` flag were NEVER threaded from
   `cli.ts` into the `DoOptions` the `do prd:` path builds. So the configured-default

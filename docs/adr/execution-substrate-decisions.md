@@ -9,7 +9,7 @@ created: 2026-06-03
 
 > **Note:** `claim.sh` was RETIRED on 2026-06-20 — see §9; the per-item lock ref superseded its direct-`main` claim mechanism.
 
-Captures the load-bearing decisions for how agent-runner runs work concurrently and safely, agreed during design before any of the B/C-tier tasks were built. The tasks `agent-workspaces`, `claim-command`, `arbiter-management`, `harness-pi`, `integration-github`, and `watch` all depend on these.
+Captures the load-bearing decisions for how dorfl runs work concurrently and safely, agreed during design before any of the B/C-tier tasks were built. The tasks `agent-workspaces`, `claim-command`, `arbiter-management`, `harness-pi`, `integration-github`, and `watch` all depend on these.
 
 ## 1. Jobs, not agents
 
@@ -19,8 +19,8 @@ There is **no long-lived "agent" identity**. The unit is a **job** = one claimed
 
 Full `git clone` per job gives the best isolation but costs disk + transfer. Instead:
 
-- **One bare hub mirror per repo** under `~/.agent-runner/repos/<host>/<org>/<name>.git` (shared object store, cheap; re-fetched from the arbiter).
-- **One git worktree per job**, checked out **outside** the hub at `~/.agent-runner/work/<work-id>/`, on branch `work/<slug>`.
+- **One bare hub mirror per repo** under `~/.dorfl/repos/<host>/<org>/<name>.git` (shared object store, cheap; re-fetched from the arbiter).
+- **One git worktree per job**, checked out **outside** the hub at `~/.dorfl/work/<work-id>/`, on branch `work/<slug>`.
 
 Worktrees share the hub's objects (cheap) yet have independent working trees (isolated). Git forbids the _same branch_ in two worktrees — but each job is a distinct slug ⇒ distinct work branch, so the constraint is **naturally avoided** by keying on the work item. (Claims serialize per slug via the arbiter CAS, so the same slug never runs twice concurrently.)
 
@@ -30,15 +30,15 @@ Worktrees share the hub's objects (cheap) yet have independent working trees (is
 
 From the arbiter remote URL, drop scheme/user/`.git`, and replace `.` → `-` per segment (lossless, reversible; avoids the dotted-segment hazard that trips some editors/tools and our own dotdir-pruning):
 
-- `git@github.com:wighawag/agent-runner.git`
-- hub (hierarchical): `repos/github-com/wighawag/agent-runner.git`
-- work-id (flat, deterministic, unique per claim): `github-com__wighawag__agent-runner__<slug>`
+- `git@github.com:wighawag/dorfl.git`
+- hub (hierarchical): `repos/github-com/wighawag/dorfl.git`
+- work-id (flat, deterministic, unique per claim): `github-com__wighawag__dorfl__<slug>`
 
 Hierarchical for hubs (groups by host/org); **flat** for work-ids (so listing / counting / GC of jobs is a flat `ls`).
 
-## 3. `~/.agent-runner/` is STATE, not cache
+## 3. `~/.dorfl/` is STATE, not cache
 
-The working area (hub mirrors + job worktrees) lives under a single visible `~/.agent-runner/` (config-overridable). It is treated as **state**, NOT cache.
+The working area (hub mirrors + job worktrees) lives under a single visible `~/.dorfl/` (config-overridable). It is treated as **state**, NOT cache.
 
 Why not `~/.cache`: a hub mirror _is_ regenerable (true cache), but a job worktree is **only conditionally** regenerable — before its branch is pushed to the arbiter it holds the ONLY copy of the agent's commits (and any uncommitted changes). Housing it under a cache dir invites the wrong reflex (OS cleaners, "clear caches" scripts, a human `rm -rf ~/.cache/*`) and risks destroying un-pushed work. So we classify the whole working area at the level of its most-precious member: **state**. The "safe to delete" property is enforced _behaviourally_ (§4), never _spatially_ by living in a cache dir.
 
@@ -80,21 +80,21 @@ The **universal, safety-bearing action is `git push`** to the arbiter; the revie
 
 **Honest up-front failure (the value `noPR` buys).** A `propose` run on a GitHub arbiter that INTENDS a PR (`noPR` unset) but where `gh` genuinely cannot open one must FAIL FAST — at the pre-flight-guard stage, BEFORE claim/onboard/build (alongside the dirty-tree / diverged-main guards) — rather than silently degrading to manual-PR instructions, so "I deliberately want no PR" is never confused with "I wanted a PR and silently didn't get one." The "can't open a PR" signal is a `gh` AUTH/AVAILABILITY **PROBE** (`GitHubProvider.available`, a `gh auth status`-style check), **NOT** "is a `providers.github` identity present": an absent identity falls back to AMBIENT `gh` auth (a developer's `gh auth login`, a CI `GITHUB_TOKEN`), the common local-dev case that WORKS — so the guard must NOT fire on absent-identity alone. The runtime manual-PR degrade is correspondingly NARROWED to the legitimate cases: `noPR: true` (intended) and a TRANSIENT mid-run `gh` outage (the probe passed up front but the API failed later) — the start-of-run unauthed case is now caught up front.
 
-## 7. Arbiters are precious DATA → `~/git/`, agent-runner-managed
+## 7. Arbiters are precious DATA → `~/git/`, dorfl-managed
 
-A local `--bare` arbiter (offline mode) is the **source of truth**, not cache or state — the thing §4's predicate proves everything else safe _against_. It must NOT live under `~/.agent-runner/` (a `gc`/cleanup mishap could nuke the only copy). Default location: **`~/git/<host>/<org>/<name>.git`** (hierarchical; visible, memorable, easy to back up / put on a synced/archived folder), overridable via `arbitersDir`. agent-runner _provisions/locates_ it (`arbiter init` from an existing repo, `arbiter status`) but treats its bytes as precious.
+A local `--bare` arbiter (offline mode) is the **source of truth**, not cache or state — the thing §4's predicate proves everything else safe _against_. It must NOT live under `~/.dorfl/` (a `gc`/cleanup mishap could nuke the only copy). Default location: **`~/git/<host>/<org>/<name>.git`** (hierarchical; visible, memorable, easy to back up / put on a synced/archived folder), overridable via `arbitersDir`. dorfl _provisions/locates_ it (`arbiter init` from an existing repo, `arbiter status`) but treats its bytes as precious.
 
 Three ownership tiers (do not conflate):
 
 | Tier | Role | Disposable | Location |
 | --- | --- | --- | --- |
 | your working repos | where you edit | no | `~/dev/...` |
-| hub mirrors + job worktrees | execution **state** | conditionally (§4) | `~/.agent-runner/` |
+| hub mirrors + job worktrees | execution **state** | conditionally (§4) | `~/.dorfl/` |
 | arbiters (offline) | **source of truth** | no | `~/git/...` |
 
 ## 8. The acceptance gate is a per-repo `verify` seam; authority differs by caller
 
-The gate that decides whether work is acceptable is a **per-repo declared command** (`verify` config, e.g. `pnpm -r build && test && format:check`), exposed as `agent-runner verify`. NOT per-task: a per-task gate would force a model to interpret prose to decide what "passing" means — putting an LLM inside the trust boundary, which is exactly where we want determinism. Per-repo config keeps the gate a dumb, auditable shell command (and means there is nothing to "cache" — the gate is known by reading config, no model call).
+The gate that decides whether work is acceptable is a **per-repo declared command** (`verify` config, e.g. `pnpm -r build && test && format:check`), exposed as `dorfl verify`. NOT per-task: a per-task gate would force a model to interpret prose to decide what "passing" means — putting an LLM inside the trust boundary, which is exactly where we want determinism. Per-repo config keeps the gate a dumb, auditable shell command (and means there is nothing to "cache" — the gate is known by reading config, no model call).
 
 One mechanism, two callers, different **authority**:
 
@@ -109,14 +109,14 @@ A possible later optimization is caching _test results_ (skip re-running when th
 >
 > **Verify-THEN-review on the SAME merged tree (MAINTAINER DECISION 2):** with the fresh gate ON, the Gate-2 REVIEW is RELOCATED to run AFTER the rebased-tip `verify`, inside the fresh gate worktree (on the rebased tip), so the "verify is the deterministic floor, runs FIRST; the Gate-2 review only on its green" invariant of this section holds on the tree that actually LANDS — verify-then-review, BOTH on the merged tree, never split across two trees. The ON-path band order is therefore `done-move → commit → rebase → verify (rebased tip) → review (rebased tip) → integrate`. When the fresh gate is OFF the review stays at the front on the pre-rebase checkout, right after the front `verify`, exactly as before (`verify (cwd) → review (cwd) → done-move → … → integrate`).
 
-## 9. agent-runner is the primary implementation; contract + `claim.sh` are the portable substrate
+## 9. dorfl is the primary implementation; contract + `claim.sh` are the portable substrate
 
-agent-runner and the `to-task` skill (the `work/` contract, `CLAIM-PROTOCOL.md`, `claim.sh`) are **one project / one vision**. agent-runner grows a first-class **`claim` command** (TS) that implements the same claim CAS as `claim.sh`, with identical exit-code semantics.
+dorfl and the `to-task` skill (the `work/` contract, `CLAIM-PROTOCOL.md`, `claim.sh`) are **one project / one vision**. dorfl grows a first-class **`claim` command** (TS) that implements the same claim CAS as `claim.sh`, with identical exit-code semantics.
 
 > **Note (ledger-transition seam):** the claim CAS's direct write to `main` described throughout this ADR is the **current (only) strategy** behind the ledger-transition seam (`docs/adr/claim-ledger-vs-protected-main.md`, accepted). The three `work/` transitions now route through that read+write seam; behaviour is byte-identical (one strategy, `main`-writing), but the `main`-write is no longer hard-wired — a future strategy could differ. This ADR's `main`-write descriptions remain accurate for today's single strategy.
 
 - The **contract docs stay tool-agnostic and primary** (the stable interface).
-- **`claim.sh` was RETIRED (2026-06-20).** It was originally retained as a zero-dependency, portable bootstrap / reference implementation of the claim CAS. That rationale lapsed: the claim mechanism moved to the per-item lock ref (`refs/agent-runner/lock/<entry>`, ADR `ledger-status-on-per-item-lock-refs`) and the body no longer moves to `in-progress/` on claim, so the script's `git mv work/backlog → work/in-progress` direct-`main` CAS implemented the SUPERSEDED mechanism against retired folder names. A zero-dep bootstrap that performs the OLD claim is worse than none (it would mis-claim against the current ledger), and the first-task bootstrap need is now served by `agent-runner claim` itself. The portable CLAIM PROTOCOL lives in `CLAIM-PROTOCOL.md` (tool-agnostic); only the drifted shell reference implementation is gone.
+- **`claim.sh` was RETIRED (2026-06-20).** It was originally retained as a zero-dependency, portable bootstrap / reference implementation of the claim CAS. That rationale lapsed: the claim mechanism moved to the per-item lock ref (`refs/dorfl/lock/<entry>`, ADR `ledger-status-on-per-item-lock-refs`) and the body no longer moves to `in-progress/` on claim, so the script's `git mv work/backlog → work/in-progress` direct-`main` CAS implemented the SUPERSEDED mechanism against retired folder names. A zero-dep bootstrap that performs the OLD claim is worse than none (it would mis-claim against the current ledger), and the first-task bootstrap need is now served by `dorfl claim` itself. The portable CLAIM PROTOCOL lives in `CLAIM-PROTOCOL.md` (tool-agnostic); only the drifted shell reference implementation is gone.
 - The other behaviours designed here (isolation §2, deletion §4, integration §6) are likewise **protocols**, not just features. Follow-up (own task, not these tasks): author companion contract docs in the skill repo (e.g. `EXECUTION-PROTOCOL.md`, `INTEGRATION-PROTOCOL.md`) once the implementation proves them out, so other tools can implement the same protocols.
 
 ## 10. Merge conflicts: rebase-or-abort, never auto-resolve
@@ -125,7 +125,7 @@ agent-runner and the `to-task` skill (the `work/` contract, `CLAIM-PROTOCOL.md`,
 
 - **Rarer, by design (tasking guidance):** prefer thin, file-orthogonal tasks; when two tasks are known to touch the same module, add a `blocked_by` to serialize them. This is the tasker's judgement (documented in the `to-task` skill), not enforced by tooling.
 - **Cheaper + safe, by tooling:** at integration time the runner / `complete` does a **deterministic rebase** of `work/<slug>` onto the latest `<arbiter>/main`. A **clean** rebase proceeds. A **conflicting** rebase is `git rebase --abort`ed, the job is marked **needs-attention**, and it is surfaced (the retained worktree is the signal; dovetails with `watch`'s surface-failures rail).
-- **Never auto-resolve.** agent-runner deterministically _attempts_ the rebase and _detects_ conflict; it does NOT pick `--ours`/`--theirs` or any heuristic, because a conflict resolution requires SEMANTIC judgement and a wrong-but- compiling merge is the worst outcome (it passes the gate, the code is broken). Resolution is a human task (or a future, explicitly conflict-prompted `resolve`-agent — distinct from the build agent, which still does no git).
+- **Never auto-resolve.** dorfl deterministically _attempts_ the rebase and _detects_ conflict; it does NOT pick `--ours`/`--theirs` or any heuristic, because a conflict resolution requires SEMANTIC judgement and a wrong-but- compiling merge is the worst outcome (it passes the gate, the code is broken). Resolution is a human task (or a future, explicitly conflict-prompted `resolve`-agent — distinct from the build agent, which still does no git).
 - The build agent is unaffected: it does no git writes (read-only `git log`/`diff` for context is fine). Rebase/integration/conflict-surfacing are the runner's.
 
 ## 11. Integration mode is resolved at integrate-time, per-repo, never at start-time
@@ -135,7 +135,7 @@ Whether work lands via `merge` (direct to main) or `propose` (push a branch + re
 Resolution precedence (highest first), identical for human and autonomous paths except the flag is human-only:
 
 1. `complete --merge` / `--propose` flag (human, per-invocation)
-2. per-repo config override (a committed repo-root `.agent-runner.json`)
+2. per-repo config override (a committed repo-root `.dorfl.json`)
 3. global config `integration`
 4. built-in default `propose`
 
@@ -155,23 +155,23 @@ Decisions:
 - **Return path:** a human resolves the cause and `git mv`s the item back to `backlog/` to be re-claimed (or resumes on its branch). It must not rot.
 - This unifies and subsumes the previously-separate "needs-attention surfacing" concern across the gate, conflict, ambiguity, and timeout outcomes.
 
-## 13. Model selection is agent-runner's (via the harness seam); auth/keys are the harness's
+## 13. Model selection is dorfl's (via the harness seam); auth/keys are the harness's
 
-The runner decides **which model** a job runs on; it never touches **credentials**. This is the clean boundary: model = routing intent agent-runner controls; API keys, OAuth, provider base URLs = the agent harness's job, out of scope for agent-runner (the harness — `pi`, or whatever `agentCmd` wraps — already does auth well, and a portable runner must not duplicate per-provider secret handling).
+The runner decides **which model** a job runs on; it never touches **credentials**. This is the clean boundary: model = routing intent dorfl controls; API keys, OAuth, provider base URLs = the agent harness's job, out of scope for dorfl (the harness — `pi`, or whatever `agentCmd` wraps — already does auth well, and a portable runner must not duplicate per-provider secret handling).
 
 Decisions:
 
 - **`model` is a first-class, harness-agnostic field** carried through the harness seam (`LaunchInput.model`). The CORE passes the _intent_ (a model id); the ADAPTER decides how that reaches its tool:
   - the **pi** adapter passes it natively (`--model <model>`);
-  - the **null/shell** adapter substitutes a `{model}` placeholder in `agentCmd` (degradation rules: placeholder + no model ⇒ a clear config error; no placeholder ⇒ run the command as-is — agent-runner offers model routing but never forces it, so a user who bakes the model into `agentCmd` or relies on the harness's own default is untouched). This mirrors §6's seam discipline: one declared intent, adapter-specific realization; the core stays tool-agnostic.
+  - the **null/shell** adapter substitutes a `{model}` placeholder in `agentCmd` (degradation rules: placeholder + no model ⇒ a clear config error; no placeholder ⇒ run the command as-is — dorfl offers model routing but never forces it, so a user who bakes the model into `agentCmd` or relies on the harness's own default is untouched). This mirrors §6's seam discipline: one declared intent, adapter-specific realization; the core stays tool-agnostic.
 
-- **`model` resolves per-repo, like `integration`/`verify`:** flag (`--model`) > **env (`AGENT_RUNNER_*`)** > per-repo `.agent-runner.json` > global > default (unset). So `model` joins `REPO_ALLOWED_KEYS` — choosing the model for _this repo's_ work is a legitimate repo property. `harness` (which adapter) is likewise repo-appropriate and allowed per-repo; `piBin` and `agentCmd` stay **host-only** (rejected per-repo) because they are machine paths/commands, not repo policy.
+- **`model` resolves per-repo, like `integration`/`verify`:** flag (`--model`) > **env (`DORFL_*`)** > per-repo `.dorfl.json` > global > default (unset). So `model` joins `REPO_ALLOWED_KEYS` — choosing the model for _this repo's_ work is a legitimate repo property. `harness` (which adapter) is likewise repo-appropriate and allowed per-repo; `piBin` and `agentCmd` stay **host-only** (rejected per-repo) because they are machine paths/commands, not repo policy.
 
-- **Host-only keys come from a PER-MACHINE source — never the committed repo file.** This is the sharpened principle: a host-only key (`piBin`, `agentCmd`, `roots`, `maxParallel`, …) must be supplied by a _per-machine_ source — a CLI flag, an **`AGENT_RUNNER_*` environment variable**, or the global `~/.config/agent-runner/config.json` — and is rejected (ignored + reported) if it appears in the committed `.agent-runner.json`. The per-repo allow/reject split (`REPO_ALLOWED_KEYS`/`REPO_REJECTED_KEYS`) governs ONLY the committed repo file; it does **not** constrain env. Env is a legitimate per-machine source (exactly like a flag or the global file), so it may set **any** `Config` key, host-only included — it is simply the per-machine source a CI job actually has without writing a file. This de-risks per-job CI config and lets every future key (e.g. `model`) inherit env support uniformly.
+- **Host-only keys come from a PER-MACHINE source — never the committed repo file.** This is the sharpened principle: a host-only key (`piBin`, `agentCmd`, `roots`, `maxParallel`, …) must be supplied by a _per-machine_ source — a CLI flag, an **`DORFL_*` environment variable**, or the global `~/.config/dorfl/config.json` — and is rejected (ignored + reported) if it appears in the committed `.dorfl.json`. The per-repo allow/reject split (`REPO_ALLOWED_KEYS`/`REPO_REJECTED_KEYS`) governs ONLY the committed repo file; it does **not** constrain env. Env is a legitimate per-machine source (exactly like a flag or the global file), so it may set **any** `Config` key, host-only included — it is simply the per-machine source a CI job actually has without writing a file. This de-risks per-job CI config and lets every future key (e.g. `model`) inherit env support uniformly.
 
-- **The env layer: `AGENT_RUNNER_<SCREAMING_SNAKE(key)>`, typed + loud.** Env vars are named by mechanically uppercasing the camelCase `Config` key (`agentCmd` → `AGENT_RUNNER_AGENT_CMD`, `perRepoMax` → `AGENT_RUNNER_PER_REPO_MAX`). Each is coerced per the key's type and an invalid value **fails loudly** (naming the offending variable), never silently ignored: booleans accept only `true`/`false`; numbers reject NaN; enums validate against their union; list keys split on comma (cross-platform); strings pass verbatim. Absent env leaves built-in floors/defaults untouched; the global `.config` file keeps working (env is additive). Full chain (highest wins): `flag > ENV (AGENT_RUNNER_*) > per-repo > global > built-in default`.
+- **The env layer: `DORFL_<SCREAMING_SNAKE(key)>`, typed + loud.** Env vars are named by mechanically uppercasing the camelCase `Config` key (`agentCmd` → `DORFL_AGENT_CMD`, `perRepoMax` → `DORFL_PER_REPO_MAX`). Each is coerced per the key's type and an invalid value **fails loudly** (naming the offending variable), never silently ignored: booleans accept only `true`/`false`; numbers reject NaN; enums validate against their union; list keys split on comma (cross-platform); strings pass verbatim. Absent env leaves built-in floors/defaults untouched; the global `.config` file keeps working (env is additive). Full chain (highest wins): `flag > ENV (DORFL_*) > per-repo > global > built-in default`.
 
-- **Auth stays in the harness, always.** agent-runner sets no API keys, writes no `auth.json`/`models.json`, and reads no secrets. (The CI `install-ci` work — separate prd — wires harness auth as a harness concern, mirroring whitesmith.)
+- **Auth stays in the harness, always.** dorfl sets no API keys, writes no `auth.json`/`models.json`, and reads no secrets. (The CI `install-ci` work — separate prd — wires harness auth as a harness concern, mirroring whitesmith.)
 
 - **Per-ROLE model (build vs task vs review vs grilling) is STAGED, not built now.** A single `model` covers the build path today. Each future capability brings its own role override _as it becomes real_ (e.g. `auto-slice` adds a `task` model; review adds a `review` model) — resolved as role-override > base `model`, then through the per-repo chain. We do NOT spec the role map up front (it would be config for capabilities that don't exist yet — speculative generality that goes stale). The `model` field is shaped so a later `perRole` map layers on without breaking it.
 

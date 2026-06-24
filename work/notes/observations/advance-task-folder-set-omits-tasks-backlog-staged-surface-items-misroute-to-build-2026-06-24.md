@@ -38,14 +38,14 @@ under `tasks/backlog/`.)
 The CI `enumerate` job's `jq` emits lifecycle surface/apply items as explicit
 `task:<slug>` (`.namespace + ":" + .slug`). Staged backlog tasks reach that pool
 because **`surfaceStaging` defaults to `true`**: `gatherLifecycleInPlace` /
-`gatherLifecycleMirror` (`packages/agent-runner/src/lifecycle-gather.ts`) widen
+`gatherLifecycleMirror` (`packages/dorfl/src/lifecycle-gather.ts`) widen
 the surface candidate set to `tasks/backlog/` + `prds/proposed/` when the gate is
 on (prd `staging-surface-and-apply-promote-safety` F2).
 
 But the advance classifier's folder set does NOT include staging:
 
 ```
-// packages/agent-runner/src/advance.ts:377
+// packages/dorfl/src/advance.ts:377
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-todo', 'in-progress', 'done'],   // <-- no 'tasks-backlog'
 	prd: ['prds-ready', 'prds-tasked'],            // <-- no 'prds-proposed'
@@ -95,13 +95,13 @@ folder set the rung-CLASSIFIER reads, not to what is build-eligible.
 
 ## Refs
 
-- `packages/agent-runner/src/advance.ts:377` (`FOLDERS_FOR_TYPE`), `:383`
+- `packages/dorfl/src/advance.ts:377` (`FOLDERS_FOR_TYPE`), `:383`
   (`readNeedsAnswers`), `:756` (`findItemPath`)
-- `packages/agent-runner/src/apply-persist.ts:36` (`APPLY_LIFECYCLE_FOLDERS`, the
+- `packages/dorfl/src/apply-persist.ts:36` (`APPLY_LIFECYCLE_FOLDERS`, the
   staging-inclusive sibling)
-- `packages/agent-runner/src/lifecycle-gather.ts:84-95` (surfaceStaging widening,
+- `packages/dorfl/src/lifecycle-gather.ts:84-95` (surfaceStaging widening,
   in-place) and `:204-211` (mirror)
-- `packages/agent-runner/src/claim-cas.ts:250,270,332` (the failing claim + message)
+- `packages/dorfl/src/claim-cas.ts:250,270,332` (the failing claim + message)
 - `.github/workflows/advance-lifecycle.yml` (the `enumerate` `jq` that emits
   `task:<slug>` for `lifecycle.surface[]`)
 - prd `staging-surface-and-apply-promote-safety` (F2, the surfaceStaging design)

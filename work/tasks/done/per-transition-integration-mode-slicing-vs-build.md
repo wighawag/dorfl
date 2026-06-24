@@ -47,7 +47,7 @@ explicit --propose / --merge flag        ← ALWAYS wins (the operator typed it)
 ```
 For the **build** transition: unchanged from today (`flag > integration (env/per-repo/global) > default`).
 
-The existing `--propose`/`--merge` flags are TRANSITION-AGNOSTIC: each command runs ONE transition, so a single flag is unambiguous (a flag on a `do` build overrides the build mode; a flag on a slicing run overrides the slicing mode). No new per-transition FLAG is required. A `--slicing-integration` flag / `AGENT_RUNNER_SLICING_INTEGRATION` env MAY be added for parity with `integration`'s resolution chain, but the per-repo config key is the slice's core deliverable.
+The existing `--propose`/`--merge` flags are TRANSITION-AGNOSTIC: each command runs ONE transition, so a single flag is unambiguous (a flag on a `do` build overrides the build mode; a flag on a slicing run overrides the slicing mode). No new per-transition FLAG is required. A `--slicing-integration` flag / `DORFL_SLICING_INTEGRATION` env MAY be added for parity with `integration`'s resolution chain, but the per-repo config key is the slice's core deliverable.
 
 ### NOT intake's `{slice, prd}` — a DIFFERENT resolver (do not unify; lens 4)
 
@@ -68,7 +68,7 @@ So "slice" (intake's emitted artifact) and "slicing" (the act of slicing a PRD) 
 - [ ] The PRD-slicing transition uses `slicingIntegration ?? integration`; the slice-BUILD transition keeps using `integration`. A test asserts a repo with `integration:"propose"` + `slicingIntegration:"merge"` lands the slice FILES on main (no PR) when slicing a PRD AND opens a PR when building a slice.
 - [ ] The split happens at the option-threading caller (`do.ts`/advance/`cli.ts` resolve `slicingIntegration ?? integration` for the value threaded into the slicing transition); `slicing.ts` still takes ONE resolved `options.integration` (its signature need not change). A test pins the caller threads the slicing-resolved mode.
 - [ ] An explicit `--merge`/`--propose` flag ALWAYS wins over the config for the transition that command performs. A test pins `--propose` on a `slicingIntegration:"merge"` repo opens a PR for the slicing transition, and `--merge` on an `integration:"propose"` repo lands code on main when building.
-- [ ] `slicingIntegration` resolves `flag > env (AGENT_RUNNER_SLICING_INTEGRATION, if added) > per-repo > global > (fall back to) integration > default 'propose'`. A test pins the fall-back-to-`integration` step.
+- [ ] `slicingIntegration` resolves `flag > env (DORFL_SLICING_INTEGRATION, if added) > per-repo > global > (fall back to) integration > default 'propose'`. A test pins the fall-back-to-`integration` step.
 - [ ] Back-compat: a repo WITHOUT `slicingIntegration` behaves EXACTLY as today (slicing uses `integration`). The ~8 `config.integration` consumers in `cli.ts` and the intake default (`cli.ts` ~L2888) are UNCHANGED. A test/read confirms no consumer breaks.
 - [ ] intake's `{slice, prd}` per-outcome integration is UNTOUCHED (it never reads `slicingIntegration`). A test/read confirms intake still resolves its own `{slice, prd}` from flags + `config.integration`, independent of the new key.
 - [ ] `CONTEXT.md` glossary (the "integration mode" entry, ~L40, + "Claim & integration terms" ~L35) pins the new key: `slicingIntegration` (the per-TRANSITION slicing override, inside-boundary, operator/config-resolved) vs intake `{slice,prd}` (per-EMITTED-TYPE, front-door, author-trust-resolved) — distinct concepts, not to be re-forked.

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22 type=observation slug=advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22 type=observation slug=advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22 allAnswered=false -->
 
 ## Q1
 

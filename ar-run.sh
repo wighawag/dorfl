@@ -5,7 +5,7 @@
 #   claim+onboard (start) -> generate prompt -> run agent (pi -p) -> gate+integrate
 #   (complete) -> tidy the local work branch.
 #
-# SUPERSEDED BY `agent-runner do <slug>` (the in-place worker — THE CI COMMAND).
+# SUPERSEDED BY `dorfl do <slug>` (the in-place worker — THE CI COMMAND).
 # As of the `do-in-place` slice, `do <slug>` IS this script, in code: it refuses
 # on a dirty tree, then composes start -> (autonomous prompt-fed harness run) ->
 # complete IN THE CURRENT CHECKOUT, then exits. `do --propose` (the default) is
@@ -16,11 +16,11 @@
 # This script is KEPT (not deleted) as the maintainer's live, battle-tested
 # manual driver while `do` proves out and the rest of phase 2 lands; removing it
 # is a maintainer-owned follow-up cleanup, not an automatic side-effect. Prefer
-# `agent-runner do <slug>` for new use.
+# `dorfl do <slug>` for new use.
 #
-# This is the MANUAL equivalent of what `agent-runner do <slug>` now automates
+# This is the MANUAL equivalent of what `dorfl do <slug>` now automates
 # (claim -> isolated agent -> acceptance gate -> integrate). It runs in this repo
-# (the monorepo whose `packages/agent-runner` implements the commands).
+# (the monorepo whose `packages/dorfl` implements the commands).
 #
 # Usage:
 #   ./ar-run.sh <slug> [--propose] [--watch]
@@ -37,8 +37,8 @@
 # Notes:
 # - A child process cannot cd your parent shell, so this is a SCRIPT (its internal
 #   cd affects only itself) — execute it, don't source it.
-# - The CLI is invoked via `node packages/agent-runner/dist/cli.js` (not a global
-#   `agent-runner` binary, which may not be on PATH). Override with AR_CLI=...
+# - The CLI is invoked via `node packages/dorfl/dist/cli.js` (not a global
+#   `dorfl` binary, which may not be on PATH). Override with AR_CLI=...
 #   Requires a built dist (`pnpm -r build`). `pi` must be on PATH; `pi -p` runs
 #   non-interactively and exits — it prints little, so a long run can look idle.
 
@@ -46,8 +46,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# How to invoke the agent-runner CLI (overridable; defaults to the built dist).
-AR_CLI="${AR_CLI:-node $REPO/packages/agent-runner/dist/cli.js}"
+# How to invoke the dorfl CLI (overridable; defaults to the built dist).
+AR_CLI="${AR_CLI:-node $REPO/packages/dorfl/dist/cli.js}"
 
 slug=""
 integration="merge"

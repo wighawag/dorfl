@@ -1,7 +1,7 @@
 ---
 title: run --once — claim N eligible items, run an agent in isolation, integrate
 slug: run-once
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [5, 6, 7, 8, 10, 12]
@@ -9,7 +9,7 @@ covers: [5, 6, 7, 8, 10, 12]
 
 ## What to build
 
-The `agent-runner run --once` command: claim up to N eligible items, run a configured agent on each in an isolated worktree/clone, integrate the results, then stop (supervised — increment B from the PRD).
+The `dorfl run --once` command: claim up to N eligible items, run a configured agent on each in an isolated worktree/clone, integrate the results, then stop (supervised — increment B from the PRD).
 
 A thin path through every layer, reusing the `scan` core for the queue:
 
@@ -39,7 +39,7 @@ A thin path through every layer, reusing the `scan` core for the queue:
 
 ## Prompt
 
-> Build `agent-runner run --once` (increment B). It consumes the `scan` core (config, detection, eligibility) to get the eligible cross-repo queue, then for up to `maxParallel` items (≤ `perRepoMax` per repo): claim atomically via the existing `skills/to-slices/scripts/claim.sh` (from the `to-slices` skill — atomic CAS push to the arbiter remote; exit 0 = claimed, exit 2 = lost the race, skip), run the configured `agentCmd` in an isolated worktree/clone, and integrate.
+> Build `dorfl run --once` (increment B). It consumes the `scan` core (config, detection, eligibility) to get the eligible cross-repo queue, then for up to `maxParallel` items (≤ `perRepoMax` per repo): claim atomically via the existing `skills/to-slices/scripts/claim.sh` (from the `to-slices` skill — atomic CAS push to the arbiter remote; exit 0 = claimed, exit 2 = lost the race, skip), run the configured `agentCmd` in an isolated worktree/clone, and integrate.
 >
 > Division of labor: the spawned agent ONLY edits code and makes the acceptance tests pass. The RUNNER owns every git-state transition — the claim, the `git mv` to `work/done/`, the work commit, and integration. The prompt the runner gives `agentCmd` must say this in-band ("do not commit/push; do not move work/ files") rather than relying on any host global agent config, since other users won't have your `AGENTS.md`. Before any `git mv`, `mkdir -p` the target `work/<status>/` (it may not exist yet — git doesn't track empty dirs); don't create `.gitkeep` placeholders.
 >

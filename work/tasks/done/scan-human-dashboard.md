@@ -1,7 +1,7 @@
 ---
 title: scan human dashboard — group items by who-can-take-it
 slug: scan-human-dashboard
-prd: agent-runner
+prd: dorfl
 blockedBy: [scan]
 covers: [1, 4, 9]
 ---
@@ -38,7 +38,7 @@ End-to-end (read-only, building on the existing `scan` core — no new claiming 
 
 ## Prompt
 
-> Enhance `agent-runner scan` (in `packages/agent-runner/`) so its output is a human decision dashboard. Read the source PRD (`work/prd/agent-runner.md`) and the existing `scan` implementation + tests first; reuse its config/detection/ eligibility/frontmatter core — this is a presentation + categorisation change, read-only, no claiming or execution.
+> Enhance `dorfl scan` (in `packages/dorfl/`) so its output is a human decision dashboard. Read the source PRD (`work/prd/dorfl.md`) and the existing `scan` implementation + tests first; reuse its config/detection/ eligibility/frontmatter core — this is a presentation + categorisation change, read-only, no claiming or execution.
 >
 > Group every `work/backlog/` item by who-can-take-it, derived from the `afk` gate and `blocked_by` status (deps resolved against the SAME repo's `work/done/`):
 >
@@ -48,7 +48,7 @@ End-to-end (read-only, building on the existing `scan` core — no new claiming 
 >
 > Target output shape (illustrative):
 >
->     agent-runner  (/path/to/repo)
+>     dorfl  (/path/to/repo)
 >
 >       Runner-eligible now (autonomous can claim):
 >         (none)

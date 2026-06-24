@@ -64,7 +64,7 @@ OUTPUT `IntegrationCoreResult`: `{ outcome: 'completed' | 'gate-failed' | 'revie
 ### Claiming this slice
 
 ```sh
-agent-runner claim extract-integration-core --arbiter <remote>      # default --arbiter origin
+dorfl claim extract-integration-core --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/extract-integration-core <remote>/main
 git mv work/in-progress/extract-integration-core.md work/done/extract-integration-core.md
 ```

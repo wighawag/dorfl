@@ -8,7 +8,7 @@ covers: []
 
 ## What to build
 
-> Self-contained UX/robustness fix derived from a LIVE signal (running `scan`/ `status` inside the agent-runner repo gave a dead-end "No participating repos found" even though the cwd IS a participating repo). It has no command-surface user story of its own (`covers: []`) — it refines the §5/§6 scan/status surface.
+> Self-contained UX/robustness fix derived from a LIVE signal (running `scan`/ `status` inside the dorfl repo gave a dead-end "No participating repos found" even though the cwd IS a participating repo). It has no command-surface user story of its own (`covers: []`) — it refines the §5/§6 scan/status surface.
 
 Make `scan` and `status`, **when run inside a participating repo**, ALSO report that CURRENT repo — as a **clearly-labelled, separately-counted LOCAL section** — in addition to the cross-repo REGISTRY view. Today both commands read ONLY the registry (the hub-mirror set under `<workspacesDir>/repos/`), so standing inside a `work/`-bearing repo that is not registered yields a dead-end "No participating repos found." That is a real UX failure: the tool is literally inside a participating repo and claims to see nothing.
 
@@ -18,7 +18,7 @@ Make `scan` and `status`, **when run inside a participating repo**, ALSO report 
 - **Render it as a DISTINCT, labelled section** — e.g. a `This repo (local working tree):` block, with its OWN count — ABOVE/beside the `Registered repos:` block. **NEVER merge the counts into one grand total** (see the consistency rule below).
 - **Fetch the cwd repo's OWN arbiter first** (the fetch-first discipline, extended to the local repo — see the dedicated section below), so the divergence line is honest; warn + fall back to last-known on a failed fetch (same as `scan-status-fetch-first`).
 - **Self-registration empty-state hint.** When the cwd repo participates but is NOT in the registry, the local section says so and teaches the fix, e.g.:
-  > This repo participates (N backlog item(s)) but is **not registered** — `run`/ `scan` across machines won't see it until `agent-runner remote add . --local` (or `remote add <its-url>`). This replaces the current dead-end "No participating repos found" message when you are standing in a participating repo.
+  > This repo participates (N backlog item(s)) but is **not registered** — `run`/ `scan` across machines won't see it until `dorfl remote add . --local` (or `remote add <its-url>`). This replaces the current dead-end "No participating repos found" message when you are standing in a participating repo.
 
 ### Fetch-first ALSO applies to the cwd repo (the maintainer's explicit ask)
 
@@ -89,7 +89,7 @@ The registry invariant is narrow: the autonomous DAEMON (`run`) and the arbiter 
 ### Claiming this slice
 
 ```sh
-agent-runner claim scan-status-read-cwd-repo --arbiter <remote>      # default --arbiter origin
+dorfl claim scan-status-read-cwd-repo --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/scan-status-read-cwd-repo <remote>/main
 git mv work/in-progress/scan-status-read-cwd-repo.md work/done/scan-status-read-cwd-repo.md
 ```

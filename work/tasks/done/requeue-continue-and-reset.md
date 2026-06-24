@@ -61,7 +61,7 @@ Three changes (one keystone behaviour + a destructive opt-out + a handoff note):
 ### Claiming this slice
 
 ```sh
-agent-runner claim requeue-continue-and-reset --arbiter <remote>
+dorfl claim requeue-continue-and-reset --arbiter <remote>
 git fetch <remote> && git switch -c work/requeue-continue-and-reset <remote>/main
 git mv work/in-progress/requeue-continue-and-reset.md work/done/requeue-continue-and-reset.md
 ```

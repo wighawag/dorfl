@@ -151,7 +151,7 @@ Scope:
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-in-place-publishes-treeless-results --arbiter origin
+dorfl claim advance-in-place-publishes-treeless-results --arbiter origin
 git fetch origin && git switch -c work/advance-in-place-publishes-treeless-results origin/main
 git mv work/in-progress/advance-in-place-publishes-treeless-results.md work/done/advance-in-place-publishes-treeless-results.md
 ```

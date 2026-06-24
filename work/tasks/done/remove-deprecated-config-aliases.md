@@ -9,7 +9,7 @@ covers: []
 
 ## What to build
 
-Delete the deprecated `allowAgents -> autoBuild` config-key alias and ALL its supporting machinery, since there is no external user owed a migration window. After this slice, `allowAgents` (the key, the env var `AGENT_RUNNER_ALLOW_AGENTS`, and the `--allow-agents`/`--no-allow-agents` flags) is simply GONE; only `autoBuild` remains.
+Delete the deprecated `allowAgents -> autoBuild` config-key alias and ALL its supporting machinery, since there is no external user owed a migration window. After this slice, `allowAgents` (the key, the env var `DORFL_ALLOW_AGENTS`, and the `--allow-agents`/`--no-allow-agents` flags) is simply GONE; only `autoBuild` remains.
 
 The alias spans several files (verified 2026-06-12):
 
@@ -23,9 +23,9 @@ This is a DESIGN STANCE for the repo, not just this alias: while there are no ex
 
 ## Acceptance criteria
 
-- [ ] `allowAgents` is fully removed: no `CONFIG_KEY_ALIASES` entry, no `--allow-agents`/`--no-allow-agents` flags, no `AGENT_RUNNER_ALLOW_AGENTS` env handling. Only `autoBuild` (`--auto-build`, `AGENT_RUNNER_AUTO_BUILD`, the `.agent-runner.json` key) remains.
+- [ ] `allowAgents` is fully removed: no `CONFIG_KEY_ALIASES` entry, no `--allow-agents`/`--no-allow-agents` flags, no `DORFL_ALLOW_AGENTS` env handling. Only `autoBuild` (`--auto-build`, `DORFL_AUTO_BUILD`, the `.dorfl.json` key) remains.
 - [ ] Any machinery that becomes DEAD once the last alias is gone (`applyConfigKeyAliases`, `aliasDeprecationMessage`, `coercionForAlias`, `legacyEnvVarName`, and the `CONFIG_KEY_ALIASES`-iterating loops) is removed, NOT left as unused code. If the whole `config-alias.ts` module becomes empty, delete it and its imports. (Cleanup-vs-behaviour: confirm nothing else still depends on these before deleting.)
-- [ ] Tests that asserted the deprecated-alias behaviour are removed (not skipped); no test still references `allowAgents`/`AGENT_RUNNER_ALLOW_AGENTS`/`--allow-agents`.
+- [ ] Tests that asserted the deprecated-alias behaviour are removed (not skipped); no test still references `allowAgents`/`DORFL_ALLOW_AGENTS`/`--allow-agents`.
 - [ ] A config file or env using `allowAgents` now does whatever an UNKNOWN key does (it is no longer specially handled), confirm that is the existing unknown-key behaviour (ignored or rejected per the repo's contract), not a crash.
 - [ ] No shared/global location is written outside temp fixtures by any new/changed test.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
@@ -49,6 +49,6 @@ This is a DESIGN STANCE for the repo, not just this alias: while there are no ex
 >
 > BUILD: remove the alias entry, the now-dead machinery, the CLI flag + source-detection branch + help, and the env legacy path. Remove the tests that asserted the deprecated behaviour (delete, don't skip).
 >
-> TEST: no test references `allowAgents`/`AGENT_RUNNER_ALLOW_AGENTS`/`--allow-agents`; `autoBuild` still resolves through the full `flag > env > per-repo > global > default` chain unchanged; a config with `allowAgents` falls through to the normal unknown-key behaviour (not a crash). House style; isolate shared/global locations.
+> TEST: no test references `allowAgents`/`DORFL_ALLOW_AGENTS`/`--allow-agents`; `autoBuild` still resolves through the full `flag > env > per-repo > global > default` chain unchanged; a config with `allowAgents` falls through to the normal unknown-key behaviour (not a crash). House style; isolate shared/global locations.
 >
 > "Done" = `allowAgents` is gone everywhere, dead machinery removed, `autoBuild` unaffected, no stale tests, and the gate is green.

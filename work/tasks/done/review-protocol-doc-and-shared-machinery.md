@@ -27,7 +27,7 @@ End-to-end path:
 - [ ] `REVIEW-PROTOCOL.md` carries the full review discipline (content lifted from `skills/review/SKILL.md`) and a prose description of the emitted verdict shape.
 - [ ] `resolveProtocolDoc(name, cwd)` exists with the documented precedence (override > target-repo > vendored > dev-walk); a resolver test mirroring the previous `resolveClaimProtocolPath` tests covers each rung for `CLAIM-PROTOCOL.md` AND `REVIEW-PROTOCOL.md`.
 - [ ] All previous `resolveClaimProtocolPath` call sites use the generalised resolver; the old name is removed (no alias — no external users owed migration).
-- [ ] `vendor-protocol.mjs` vendors the SET (driven by one declared list); a build of `packages/agent-runner` ships `dist/protocol/CLAIM-PROTOCOL.md` AND `dist/protocol/REVIEW-PROTOCOL.md`.
+- [ ] `vendor-protocol.mjs` vendors the SET (driven by one declared list); a build of `packages/dorfl` ships `dist/protocol/CLAIM-PROTOCOL.md` AND `dist/protocol/REVIEW-PROTOCOL.md`.
 - [ ] `setup` test asserts the new doc lands in `work/protocol/` of the target repo and that `work/protocol/VERSION` is bumped.
 - [ ] The four review prompt builders each REFERENCE the resolved `REVIEW-PROTOCOL.md` and the shared verdict-contract helper; NONE re-inline the lenses or the verdict contract (prompt-snapshot tests assert no review-discipline prose remains in the builders).
 - [ ] One unified verdict type + one parser is used by all four review-gate routing sites; the old `SliceReviewVerdict` type is removed.
@@ -50,11 +50,11 @@ End-to-end path:
 >
 > Code touchpoints (verify before editing):
 >
-> - `packages/agent-runner/src/review-gate.ts` — `buildReviewPrompt`, `buildSliceAcceptancePrompt`, `ReviewVerdict`, `parseReviewVerdict`.
-> - `packages/agent-runner/src/intake.ts` — `buildLoneSliceReviewPrompt`.
-> - `packages/agent-runner/src/slicer-review-loop.ts` — `buildSliceReviewPrompt`, `SliceReviewVerdict`.
-> - `packages/agent-runner/src/` — wherever `resolveClaimProtocolPath` is defined and called.
-> - `packages/agent-runner/scripts/vendor-protocol.mjs` — generalise to a set.
+> - `packages/dorfl/src/review-gate.ts` — `buildReviewPrompt`, `buildSliceAcceptancePrompt`, `ReviewVerdict`, `parseReviewVerdict`.
+> - `packages/dorfl/src/intake.ts` — `buildLoneSliceReviewPrompt`.
+> - `packages/dorfl/src/slicer-review-loop.ts` — `buildSliceReviewPrompt`, `SliceReviewVerdict`.
+> - `packages/dorfl/src/` — wherever `resolveClaimProtocolPath` is defined and called.
+> - `packages/dorfl/scripts/vendor-protocol.mjs` — generalise to a set.
 > - `skills/setup/` — Phase A copy step (it already copies the directory, so just add the doc to the source).
 > - `skills/review/SKILL.md` — thin to a pointer.
 > - `work/protocol/REVIEW-PROTOCOL.md` (new mirror) — keep byte-identical to `skills/setup/protocol/REVIEW-PROTOCOL.md` (this repo's two-place protocol discipline — see `AGENTS.md`).

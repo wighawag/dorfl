@@ -1,16 +1,16 @@
 ---
 name: drive-tasks
 disable-model-invocation: true
-description: 'The supervised conductor: build every ready work/ task in a loop via agent-runner, reviewing each diff and merging, until none can advance. Requires the agent-runner CLI.'
+description: 'The supervised conductor: build every ready work/ task in a loop via dorfl, reviewing each diff and merging, until none can advance. Requires the dorfl CLI.'
 ---
 
 # drive-tasks
 
-**Be the conductor, not the player.** `agent-runner do task:<slug> --isolated` already builds ONE task autonomously (claim → build agent → acceptance gate → optional Gate-2 review → PR) in a worktree off the arbiter. `drive-tasks` is the layer ABOVE: it looks at the _whole_ board, checks each ready task is still _fresh_, decides _what_ to build and in _what order_, drives `do` per task, then acts as a **third reviewer** (Gate-3, the conductor's own diff-vs-criteria pass — see step 4b) over each PR before merging it.
+**Be the conductor, not the player.** `dorfl do task:<slug> --isolated` already builds ONE task autonomously (claim → build agent → acceptance gate → optional Gate-2 review → PR) in a worktree off the arbiter. `drive-tasks` is the layer ABOVE: it looks at the _whole_ board, checks each ready task is still _fresh_, decides _what_ to build and in _what order_, drives `do` per task, then acts as a **third reviewer** (Gate-3, the conductor's own diff-vs-criteria pass — see step 4b) over each PR before merging it.
 
-It is a **methodology skill** (prose you follow), like `to-task` / `review` — NOT a runner command. **Precondition:** it drives the **`agent-runner` CLI** over a repo using the **`work/` contract** — if neither is present, this skill does not apply. (It is the ONE skill that leans on the runner CLI directly; that is its job. The other skills stay protocol-native.) It composes:
+It is a **methodology skill** (prose you follow), like `to-task` / `review` — NOT a runner command. **Precondition:** it drives the **`dorfl` CLI** over a repo using the **`work/` contract** — if neither is present, this skill does not apply. (It is the ONE skill that leans on the runner CLI directly; that is its job. The other skills stay protocol-native.) It composes:
 
-- **`agent-runner do task:<slug> --isolated`** — the per-task worker (build + acceptance gate + optional PR/code-review gate), run `--isolated` ALWAYS (a job worktree off the arbiter, never the human checkout). The harness, model, acceptance gate, review mode, and integration mode all come from agent-runner CONFIG (per-repo / global) — do NOT hardcode them; `--isolated` is the one flag this skill pins, and any other flag (`--review`/`--merge`/…) is a user-confirmed per-run override only.
+- **`dorfl do task:<slug> --isolated`** — the per-task worker (build + acceptance gate + optional PR/code-review gate), run `--isolated` ALWAYS (a job worktree off the arbiter, never the human checkout). The harness, model, acceptance gate, review mode, and integration mode all come from dorfl CONFIG (per-repo / global) — do NOT hardcode them; `--isolated` is the one flag this skill pins, and any other flag (`--review`/`--merge`/…) is a user-confirmed per-run override only.
 - **`review`** (`skills/review/`) — the discipline for your own diff-vs-criteria pass over each opened PR.
 - **`to-task`** (`skills/to-task/`) — for the forward-note step and any re-tasking the human asks for.
 
@@ -37,7 +37,7 @@ The loop, selection, freshness check, Gate-3 review, and stuck-set are exactly a
 
 ## When to use vs. not
 
-- **Use** to take a `work/tasks/ready/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the agent-runner worker through a phase of task-building; as the building engine `orchestrate` delegates to.
+- **Use** to take a `work/tasks/ready/` from "N ready tasks" to "no ready task can advance", building + reviewing + merging each, in dependency-and-practical order; to conduct the dorfl worker through a phase of task-building; as the building engine `orchestrate` delegates to.
 - **Don't** use it as the unattended daemon — that's `run` (genuine parallelism, no human). `drive-tasks` is **one task at a time, end-to-end**. Don't use it to _author_ tasks from scratch (that's `to-task`), or to _task prds / triage observations / fill judgement gaps / answer scattered open questions across the whole tree_ (that's `orchestrate`). Don't use it to FORCE a blocked task — it respects the gate.
 
 ## The golden rules (do not violate)
@@ -70,7 +70,7 @@ Either way the discipline is the same: do as much as can be done, then surface t
 
 When a task has routed to needs-attention (a red gate / Gate-2 block / rebase conflict / a build-time STOP marks its per-item lock `state: stuck`), its body carries the reason and its `work/<type>-<slug>` branch is **preserved on the arbiter** — nothing is lost. Whether you can re-drive it depends on the reason:
 
-- **A fixable problem the agent can resolve on a retry** — a real bug the gate caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human question. Recover it with **`agent-runner requeue <slug> --arbiter origin`** (DEFAULT = keep + continue: releases the stuck lock; the body is already resting in the pool `tasks/ready/`, and the branch is left UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise handoff with **`-m "<what to fix>"`** (appended to the body). Then `do task:<slug>` again: the re-claim CONTINUES from the kept branch, and the merged `agent-prompt-continue-context` puts the prior work + the needs-attention reason
+- **A fixable problem the agent can resolve on a retry** — a real bug the gate caught, a scoping miss, a flaky-test red — is a CONDUCTOR move, not a human question. Recover it with **`dorfl requeue <slug> --arbiter origin`** (DEFAULT = keep + continue: releases the stuck lock; the body is already resting in the pool `tasks/ready/`, and the branch is left UNTOUCHED so the next claim CONTINUES from its tip). Optionally add a precise handoff with **`-m "<what to fix>"`** (appended to the body). Then `do task:<slug>` again: the re-claim CONTINUES from the kept branch, and the merged `agent-prompt-continue-context` puts the prior work + the needs-attention reason
   - your `-m` note into the agent's prompt — so it BUILDS ON the good code and fixes the gap rather than restarting.
 - **A genuine human-decision block** — the task is ambiguous / drifted / rests on an unresolved fork — is NOT something a retry fixes. Leave it parked; it is a stuck-set question (ask it if a human is present, else report it). Do NOT requeue a task whose premise is wrong — re-scope it first (that is `orchestrate`/human work).
 - **`requeue --reset`** (DISCARD + fresh: deletes the remote branch first, then releases the lock so the next claim starts CLEAN) is for when the kept work is worthless. It is guarded and NEVER the default — only on an explicit human call; the conductor's default recovery is keep+continue.
@@ -101,7 +101,7 @@ In this mode the READY computation reads **`work/tasks/backlog/`** instead of `w
 
 - **READY** = every `blockedBy` is in `work/tasks/done/` AND `needsAnswers !== true` AND `humanOnly !== true` — the SAME gating, just over the staging set (and, when the caller scopes the run to specific slugs, restricted to those). `blockedBy` still resolves against `work/tasks/done/` exactly as in the default; deps held in `tasks/backlog/` (or `tasks/ready/`) that are not yet `done/` are BLOCKED, so honour the same dependency ordering.
 - **GATED** (`needsAnswers`/`humanOnly`) and **BLOCKED** mean exactly what they mean above; a `humanOnly`/`needsAnswers` staged task is NEVER agent-buildable here either.
-- The build is the SAME `agent-runner do task:<slug> --isolated`, the SAME Gate-3 diff-vs-criteria review, the SAME merge-via-PR-comment, and the SAME accumulate-don't-block stuck-set. (The staged task must be on the arbiter's `main` for the isolated build to see it — per [Selection + isolation](#selection--isolation), push it and its deps first if they are local-only.)
+- The build is the SAME `dorfl do task:<slug> --isolated`, the SAME Gate-3 diff-vs-criteria review, the SAME merge-via-PR-comment, and the SAME accumulate-don't-block stuck-set. (The staged task must be on the arbiter's `main` for the isolated build to see it — per [Selection + isolation](#selection--isolation), push it and its deps first if they are local-only.)
 
 This mode exists so a caller who has already decided a set of staged tasks is good can have the conductor build them straight from `tasks/backlog/` without first promoting them into `tasks/ready/`. It does NOT relax the review-first nature of staging for any OTHER caller or run; it is a per-invocation, explicitly-requested override of the read location only.
 
@@ -134,12 +134,12 @@ From the READY set, order by: (a) **dependency** (a task that unlocks others fir
 **4a. Build it** — ALWAYS `--isolated`:
 
 ```sh
-agent-runner do task:<slug> --isolated
+dorfl do task:<slug> --isolated
 ```
 
-**`--isolated` is the one flag this skill mandates. Everything else — review mode, integration mode, harness, model — is LET TO CONFIG** (resolved `flag > env > per-repo > global > default`), so do NOT hardcode `--review`/`--propose`/`--merge` here: the repo's `.agent-runner.json` decides, and `do --propose` is already the default. (`--isolated` reads the target repo's committed `.agent-runner.json` from the arbiter's main, so per-repo `harness`/`verify`/`noPR`/`review` apply automatically — no `--harness`/env workaround.) **At the START of a drive, CONFIRM the run mode with the user** — do they want Gate 2 (`--review`, off by default — the human-first family default), and propose vs merge integration? — and add `--review` / `--merge` / etc. as explicit per-run OVERRIDES only when the user asks; otherwise let config drive every build of the drive.
+**`--isolated` is the one flag this skill mandates. Everything else — review mode, integration mode, harness, model — is LET TO CONFIG** (resolved `flag > env > per-repo > global > default`), so do NOT hardcode `--review`/`--propose`/`--merge` here: the repo's `.dorfl.json` decides, and `do --propose` is already the default. (`--isolated` reads the target repo's committed `.dorfl.json` from the arbiter's main, so per-repo `harness`/`verify`/`noPR`/`review` apply automatically — no `--harness`/env workaround.) **At the START of a drive, CONFIRM the run mode with the user** — do they want Gate 2 (`--review`, off by default — the human-first family default), and propose vs merge integration? — and add `--review` / `--merge` / etc. as explicit per-run OVERRIDES only when the user asks; otherwise let config drive every build of the drive.
 
-After a failed/aborted isolated run, a stale job worktree can linger and block the next build's mirror fetch — run `agent-runner gc` (or `gc --force --yes` once you've confirmed the work is safe on the arbiter) to reap it before continuing. Use a **generous timeout** — `do` runs a build agent + the full gate + (if enabled) the Gate-2 review and can take well over an hour for a big task. If you interrupt it, KILL the spawned `do`/agent process tree explicitly (an abort of your wrapper does NOT stop the child); the isolated worktree is then reaped/recovered via `gc` + the kept arbiter branch (your checkout is untouched).
+After a failed/aborted isolated run, a stale job worktree can linger and block the next build's mirror fetch — run `dorfl gc` (or `gc --force --yes` once you've confirmed the work is safe on the arbiter) to reap it before continuing. Use a **generous timeout** — `do` runs a build agent + the full gate + (if enabled) the Gate-2 review and can take well over an hour for a big task. If you interrupt it, KILL the spawned `do`/agent process tree explicitly (an abort of your wrapper does NOT stop the child); the isolated worktree is then reaped/recovered via `gc` + the kept arbiter branch (your checkout is untouched).
 
 - **Non-zero exit** (red gate / Gate-2 block / rebase conflict) → the item is now in needs-attention (its lock is `state: stuck`) with its reason in the body and its branch preserved on the arbiter. STOP that task (golden rule 2), skip its dependents, move to the next INDEPENDENT ready task. If the reason is a FIXABLE problem (not a human-decision block), it is recoverable IN-LOOP via `requeue` + re-`do` (continues from the kept branch) — see [Recovering a needs-attention item](#recovering-a-needs-attention-item-requeue); otherwise it becomes a stuck-set question.
 
@@ -161,7 +161,7 @@ gh pr merge <n> --squash --delete-branch
 
 Use `--body-file` (PR bodies are backtick-heavy and break inline `--body` shell quoting).
 
-> PROVIDER ASSUMPTION: the verdict-as-PR-comment + `gh pr merge` flow above assumes **`--propose` mode + a GitHub arbiter** (the only review-surface this skill knows today). In `--merge` mode `do` integrates directly with no PR — then your Gate-3 diff review still applies, but you record the verdict in the task/observation, not a PR comment, and there is nothing to `gh pr merge`. A non-GitHub arbiter has no `gh` at all. Making the approval/merge surface provider-agnostic (a likely future `agent-runner` command, e.g. an `approve`/`land` verb) is NOT built yet; until then this step is GitHub-propose-specific — adapt the merge mechanics to the repo's actual integration mode.
+> PROVIDER ASSUMPTION: the verdict-as-PR-comment + `gh pr merge` flow above assumes **`--propose` mode + a GitHub arbiter** (the only review-surface this skill knows today). In `--merge` mode `do` integrates directly with no PR — then your Gate-3 diff review still applies, but you record the verdict in the task/observation, not a PR comment, and there is nothing to `gh pr merge`. A non-GitHub arbiter has no `gh` at all. Making the approval/merge surface provider-agnostic (a likely future `dorfl` command, e.g. an `approve`/`land` verb) is NOT built yet; until then this step is GitHub-propose-specific — adapt the merge mechanics to the repo's actual integration mode.
 
 **4d. Re-sync + re-evaluate:** recompute the READY set from the ARBITER (read-only) — `git fetch origin` and read the refreshed `origin/main` `work/` state (or use the mirror-side scan). You do NOT need to mutate a working checkout to do this:
 
@@ -169,7 +169,7 @@ Use `--body-file` (PR bodies are backtick-heavy and break inline `--body` shell 
 git fetch origin   # then read origin/main's work/ state to recompute the ready set
 ```
 
-Builds run `--isolated` on the arbiter, NOT your checkout, so a `git fetch` against the arbiter is all you need to RECOMPUTE the READY set — there is no local rebase dance, no branch switch, and no clean-tree precondition for the next dispatch (per golden rule 7, do not `git checkout`/`pull` INTO the human's working tree as a driving side-effect; if you are driving from a scratch clone you own, fast-forwarding IT is fine). If the next `do` runs from a BUILT copy of agent-runner (e.g. a local checkout of this very repo), rebuild it so the merge you just made is in the binary the next `do` invokes. The merge landed `work/tasks/done/<slug>.md` on `main`; any task blocked only by it is now unlocked. Recompute the READY set (steps 0–1, including a fresh freshness check on newly-unlocked tasks) and continue.
+Builds run `--isolated` on the arbiter, NOT your checkout, so a `git fetch` against the arbiter is all you need to RECOMPUTE the READY set — there is no local rebase dance, no branch switch, and no clean-tree precondition for the next dispatch (per golden rule 7, do not `git checkout`/`pull` INTO the human's working tree as a driving side-effect; if you are driving from a scratch clone you own, fast-forwarding IT is fine). If the next `do` runs from a BUILT copy of dorfl (e.g. a local checkout of this very repo), rebuild it so the merge you just made is in the binary the next `do` invokes. The merge landed `work/tasks/done/<slug>.md` on `main`; any task blocked only by it is now unlocked. Recompute the READY set (steps 0–1, including a fresh freshness check on newly-unlocked tasks) and continue.
 
 ### 5. CONTINUE until nothing can advance
 
@@ -205,7 +205,7 @@ This skill builds READY TASKS. Two things sit ABOVE it, sharing its loop shape:
 - **`orchestrate`** — the human-in-the-loop META conductor: surveys _everything_ (observations / ideas / prds / tasks), advances what it can (tasking prds, triaging), fills judgement gaps with the human conversationally until new tasks are READY, then **delegates the building to THIS skill** and surfaces the stuck-set to the human.
 - **`advance`** — the AUTONOMOUS, file-mediated version of the same idea, driven by `run`/CI with a `work/questions/` sidecar. `drive-tasks` + `orchestrate` are the human-agency, synchronous siblings of `advance`; they share the same tick contract.
 
-The conductor is **tick-agnostic**: today the per-item action is `agent-runner do task:<slug>` (build a task); as `advance`-class ticks land (task / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
+The conductor is **tick-agnostic**: today the per-item action is `dorfl do task:<slug>` (build a task); as `advance`-class ticks land (task / triage / surface / apply), the SAME loop applies — only the per-item command in step 4a changes. (Mirrors the loop/tick split in `run`: the conductor is a _loop_; the per-item command is the _tick_.)
 
 ## Pitfalls
 

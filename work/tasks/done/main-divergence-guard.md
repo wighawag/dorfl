@@ -60,7 +60,7 @@ This is the load-bearing part. In `complete` merge mode, after the work is pushe
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim main-divergence-guard --arbiter <remote>      # default --arbiter origin
+dorfl claim main-divergence-guard --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/main-divergence-guard <remote>/main
 # on completion, in the work branch's PR/merge:

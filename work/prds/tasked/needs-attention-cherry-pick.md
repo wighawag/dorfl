@@ -10,7 +10,7 @@ sliceAfter: [ledger-transition-seam]
 
 When a claimed slice gets stuck, the runner `git mv`s it `in-progress → needs-attention` **on the `work/<slug>` branch only**. On `main` the slice still sits in `work/in-progress/` (where the claim landed), so anything reading `main` — `scan`, a fresh checkout, another machine — sees a normal in-progress item and **cannot tell "stuck" from "actively being worked."** The stuck state is invisible at the operational surface.
 
-On an unprotected-`main` repo (the common case agent-runner serves today) there is a clean fix: **surface the stuck state on `main` by cherry-picking the needs-attention move commit to `main`.** Then `main` reflects reality (`work/needs-attention/<slug>.md`), `scan`/`status` see it with no new mechanism, and it travels cross-machine for free. This is the "easy add" noted in `work/ideas/needs-attention-surfacing.md`.
+On an unprotected-`main` repo (the common case dorfl serves today) there is a clean fix: **surface the stuck state on `main` by cherry-picking the needs-attention move commit to `main`.** Then `main` reflects reality (`work/needs-attention/<slug>.md`), `scan`/`status` see it with no new mechanism, and it travels cross-machine for free. This is the "easy add" noted in `work/ideas/needs-attention-surfacing.md`.
 
 This PRD delivers that surfacing, built **against the ledger-transition write seam** (the `ledger-transition-seam` PRD must be sliced first) so it is expressed as a transition strategy concern, not bolted onto the move code.
 

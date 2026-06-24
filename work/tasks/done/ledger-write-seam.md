@@ -29,7 +29,7 @@ The seam's signature must be **storage-agnostic** (a semantic "apply this transi
 
 ## Prompt
 
-> Introduce the **write half** of the ledger-transition seam in `agent-runner` and route the claim through it. This is a PURE REFACTOR — observable behaviour must be byte-identical to today; you are adding indirection, not behaviour.
+> Introduce the **write half** of the ledger-transition seam in `dorfl` and route the claim through it. This is a PURE REFACTOR — observable behaviour must be byte-identical to today; you are adding indirection, not behaviour.
 >
 > READ FIRST: `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted — esp. "The decided design: a ledger-transition seam"), `CONTEXT.md` (claim/ integration terms), and `src/claim-cas.ts` (the current claim CAS: the `--force-with-lease=main:<base>` micro-commit, its exit codes, the dirty-tree refusal, the no-op guard, the verify step). The claim is one of THREE `work/` transitions (claim / complete / needs-attention); this slice does CLAIM only and defines the seam the other two will route through.
 >
@@ -45,7 +45,7 @@ The seam's signature must be **storage-agnostic** (a semantic "apply this transi
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim ledger-write-seam --arbiter <remote>      # default --arbiter origin
+dorfl claim ledger-write-seam --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/ledger-write-seam <remote>/main
 # on completion, in the work branch's PR/merge:

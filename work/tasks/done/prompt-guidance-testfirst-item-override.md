@@ -12,7 +12,7 @@ Let a single task or brief override the repo-level `promptGuidance.testFirst` po
 
 End-to-end behaviour:
 
-1. Task frontmatter (the shape parsed in `packages/agent-runner/src/frontmatter.ts` and consumed wherever the prompt-assembly path reads the task) accepts an optional `promptGuidance.testFirst: true | false`. Omitted ⇒ inherit the resolved repo policy from the sibling tracer slice. Present ⇒ overrides for THIS item only.
+1. Task frontmatter (the shape parsed in `packages/dorfl/src/frontmatter.ts` and consumed wherever the prompt-assembly path reads the task) accepts an optional `promptGuidance.testFirst: true | false`. Omitted ⇒ inherit the resolved repo policy from the sibling tracer slice. Present ⇒ overrides for THIS item only.
 2. Brief frontmatter accepts the SAME key, with the SAME meaning, so a maintainer can pin the nudge for an entire brief's worth of tasks at the brief level (the per-task override still wins over the per-brief override).
 3. Precedence becomes (highest → lowest): per-task frontmatter > per-brief frontmatter (if the task carries a `brief:`) > resolved repo policy (CLI flag > env > per-repo > global > default `false`, from the sibling slice). Document this in the same place the existing `humanOnly`/`autoBuild` precedence is documented (`work/protocol/WORK-CONTRACT.md`); keep the SOURCE in `skills/setup/protocol/WORK-CONTRACT.md` and mirror to `work/protocol/`.
 4. The prompt-assembly seam built in the sibling tracer uses the per-item-resolved value (not the repo-only value) when assembling the worker prompt.
@@ -42,7 +42,7 @@ End-to-end behaviour:
 >
 > DOMAIN VOCAB: `repo policy` (the resolved value from CLI/env/config); `per-item override` (frontmatter on task or brief that supersedes the repo policy for that item); `precedence chain` (the documented ordering already used by `humanOnly`/`autoBuild`).
 >
-> WHERE TO LOOK: the frontmatter parser + types in `packages/agent-runner/src/frontmatter.ts`; the prompt-assembly site in `packages/agent-runner/src/prompt.ts` (where the blocker reads the resolved repo policy — extend it to read the item-level override too); the contract doc `skills/setup/protocol/WORK-CONTRACT.md` (SOURCE) + `work/protocol/WORK-CONTRACT.md` (MIRROR, byte-identical); the templates `task-template.md` and `brief-template.md` in the same two locations.
+> WHERE TO LOOK: the frontmatter parser + types in `packages/dorfl/src/frontmatter.ts`; the prompt-assembly site in `packages/dorfl/src/prompt.ts` (where the blocker reads the resolved repo policy — extend it to read the item-level override too); the contract doc `skills/setup/protocol/WORK-CONTRACT.md` (SOURCE) + `work/protocol/WORK-CONTRACT.md` (MIRROR, byte-identical); the templates `task-template.md` and `brief-template.md` in the same two locations.
 >
 > SEAMS TO TEST AT: the prompt-assembly seam, parameterised over (repo-resolved × brief-override × task-override) to cover the precedence matrix. The frontmatter-parsing seam for type rejection (a `promptGuidance.testFirst: "yes"` string is rejected the same way a string `humanOnly` is). Do NOT test process-level behaviour ("the agent really wrote a test first") — out of scope.
 >

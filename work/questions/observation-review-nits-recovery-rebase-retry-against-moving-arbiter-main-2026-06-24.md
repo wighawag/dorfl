@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-recovery-rebase-retry-against-moving-arbiter-main-2026-06-24 type=observation slug=review-nits-recovery-rebase-retry-against-moving-arbiter-main-2026-06-24 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-recovery-rebase-retry-against-moving-arbiter-main-2026-06-24 type=observation slug=review-nits-recovery-rebase-retry-against-moving-arbiter-main-2026-06-24 allAnswered=false -->
 
 ## Q1
 
@@ -16,7 +16,7 @@ _Suggested default: promote-task — small follow-up task to transcribe the in-c
 
 **Nit #2 — do you ratify `DEFAULT_RECOVERY_REBASE_RETRIES = 4` (5 total attempts) as the shipped default, or do you want it changed?**
 
-> Finding #2: cap chosen without an empirical anchor — the live incident only quantifies bursts qualitatively as 'tens of commits over a few seconds'. The Race-1 cap is 1000 (a liveness ceiling, deliberately different shape), so this 4 is a small bounded ride-out cap. Reviewer flags for human ratification because the value lands in default behaviour. Source: packages/agent-runner/src/integration-core.ts:247.
+> Finding #2: cap chosen without an empirical anchor — the live incident only quantifies bursts qualitatively as 'tens of commits over a few seconds'. The Race-1 cap is 1000 (a liveness ceiling, deliberately different shape), so this 4 is a small bounded ride-out cap. Reviewer flags for human ratification because the value lands in default behaviour. Source: packages/dorfl/src/integration-core.ts:247.
 
 _Suggested default: keep — 4 is plausible for a ride-out-an-advance-burst cap; ratify as-is and record the ratification in the `## Decisions` block from Nit #1._
 

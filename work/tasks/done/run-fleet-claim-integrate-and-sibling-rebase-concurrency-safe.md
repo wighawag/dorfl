@@ -72,7 +72,7 @@ Once both races are closed and the concurrent-`run` tests prove same-repo parall
 ### Claiming this slice
 
 ```sh
-agent-runner claim run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe --arbiter origin
+dorfl claim run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe --arbiter origin
 git fetch origin && git switch -c work/run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/in-progress/run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe.md work/done/run-fleet-claim-integrate-and-sibling-rebase-concurrency-safe.md

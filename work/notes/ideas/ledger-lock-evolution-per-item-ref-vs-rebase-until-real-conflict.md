@@ -153,7 +153,7 @@ worth exploring; this document now covers both.
 NOT how the CODE reads state. Every machine reader ALREADY reads committed git via `ls-tree`/`show`
 from a REF (a bare mirror's `main`), NOT from a working-tree `ls` (`ledger-read.ts`, `scan.ts`,
 `status.ts`, `claim-cas.ts` all probe `<arbiter>/main:work/...` or `<mirror>/main:work/...`). And a
-generated dashboard ALREADY exists (`agent-runner status` / `scan`) that humans run to see jobs +
+generated dashboard ALREADY exists (`dorfl status` / `scan`) that humans run to see jobs +
 needs-attention. So E is specifically "a HUMAN can `ls` the working tree and see status", which is
 separable from both "the code can read status" (it reads a ref) and "a human can see status at all"
 (they run `status`). Dropping E does NOT break any reader; it only removes the constraint that forced
@@ -170,7 +170,7 @@ FOR THIS SET.
 ### Requirement SET 2, VISIBILITY DROPPED (E removed entirely)
 
 > Maintainer decision 2026-06-17: explore the set where HUMAN WORKING-TREE VISIBILITY is NOT a
-> requirement. Humans use `agent-runner status` (a generated view); they do NOT need to read raw
+> requirement. Humans use `dorfl status` (a generated view); they do NOT need to read raw
 > `work/` status folders. The referenceable files (backlog/done/prd/prd-sliced) MAY still be glanceable
 > as a convenience, but it is no longer a CONSTRAINT, so the design is free to put status anywhere the
 > code can read it cheaply on a bare arbiter.
@@ -282,7 +282,7 @@ Does it fix issue 3 (cross-action exclusion)? **No**, orthogonal (see `## Cross-
 ### C3, OFF-MAIN PER-ITEM REF (the earlier-REJECTED D4, reopened).
 
 Move the advancing marker (and potentially claim/slicing) OFF main's tree onto dedicated git refs , 
-e.g. `refs/agent-runner/advancing/<entry>` whose existence IS the lock (create-only push). No file in
+e.g. `refs/dorfl/advancing/<entry>` whose existence IS the lock (create-only push). No file in
 main's tree.
 
 - **A ✔**, a create-only / CAS ref push is atomic (one winner).
@@ -759,7 +759,7 @@ Why this is STRICTLY cleaner than C5/C6 on issue 2 (true for BOTH C7 variants):
 
 ### The honest costs of the Set-2 shapes (the price of dropping E)
 
-1. **A human can no longer `git clone` + `ls work/` and see the board.** They run `agent-runner
+1. **A human can no longer `git clone` + `ls work/` and see the board.** They run `dorfl
    status`/`scan` (which already exist, now the primary way), or `git show <ledger-ref>:work/...`. For a
    project whose CONTEXT.md prizes the readable `work/` tree this is the real loss, exactly the
    requirement being dropped, named honestly. (Agents are UNAFFECTED, they read content from the
@@ -845,7 +845,7 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 >    claim/intermediate writes from `main` (the ADR's actual boundary, genuinely valuable), but the
 >    durable promotions still reach `main`, on a protected `main` those must route through the existing
 >    PR-merge path. C8 makes protected-main TRACTABLE, it does not fully solve it for free.
-> 4. **Lock ref = `refs/agent-runner/locks` (a HIDDEN, non-branch ref), NOT a branch.** Accidental
+> 4. **Lock ref = `refs/dorfl/locks` (a HIDDEN, non-branch ref), NOT a branch.** Accidental
 >    deletion = "all locks released," RECOVERABLE (work is safe on the `work/<slug>` branches + `main`),
 >    blast radius FAR smaller than a `--force` to `main`. Plus one selection-hot-path retarget
 >    (`backlog/` is no longer the clean claimable pool; readers must subtract lock-held slugs).
@@ -872,7 +872,7 @@ line, and it is the one the maintainer drew.
    Everything TRANSIENT that is today a `main` folder-move (claim , in-progress, surface ,
    needs-attention, slicing-lock , slicing/) STOPS being a `main` move and becomes lock-ref state. The
    clean rule: **durable resting record , stays a file on `main`; transient hold , the lock ref.**
-3. **ONE lock per item, on a dedicated lock ref (`refs/agent-runner/locks`).** Claiming/implementing a
+3. **ONE lock per item, on a dedicated lock ref (`refs/dorfl/locks`).** Claiming/implementing a
    slice, slicing a PRD, and advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on
    the item identity (`<type>-<slug>`). The lock ref holds one entry per HELD item; the CAS happens
    here. They are the SAME lock, so they are MUTUALLY EXCLUSIVE BY CONSTRUCTION. **The lock entry is a
@@ -1031,13 +1031,13 @@ direct leased CAS ff as today, no PR needed. So: full win for claim everywhere; 
 direct on unprotected `main`, PR-routed on protected `main`.
 
 **Amendment 4, the lock ref is a hidden non-branch ref (objection 4, the maintainer's question).**
-- **Use `refs/agent-runner/locks` (or similar), NOT `refs/heads/*`.** A branch shows in the GitHub UI
+- **Use `refs/dorfl/locks` (or similar), NOT `refs/heads/*`.** A branch shows in the GitHub UI
   branch list (noise), appears in `git branch -a`, is caught by "delete merged branches" automation,
-  and invites manual deletion. `refs/agent-runner/*` is invisible to the GitHub UI and to a default
+  and invites manual deletion. `refs/dorfl/*` is invisible to the GitHub UI and to a default
   `git clone` (default refspecs fetch only `refs/heads/*` + `refs/tags/*`), pushed/fetched only by the
   runner's explicit refspec. CAVEAT to verify before building: some hosts restrict pushing custom
   `refs/*` under an org ruleset, on a bare `file://` arbiter custom refs work freely (kill criterion
-  safe); confirm GitHub accepts `refs/agent-runner/*` under the target ruleset, else fall back to a
+  safe); confirm GitHub accepts `refs/dorfl/*` under the target ruleset, else fall back to a
   protection-exempt well-known branch.
 - **Accidental deletion = "all locks released," RECOVERABLE, not catastrophic.** The WORK is safe (it
   lives on the `work/<slug>` branches; content on `main`), the lock ref holds only who-holds-what. Worst
@@ -1072,7 +1072,7 @@ or PR-merge) all HOLD.
 ### The C8 lock-entry STATE MACHINE (the two-axis record, in full)
 
 The lock entry is the single source of truth for an item's TRANSIENT state. It is keyed by item
-identity (`<type>-<slug>`) on `refs/agent-runner/locks`, exists ONLY while a hold is active, and is
+identity (`<type>-<slug>`) on `refs/dorfl/locks`, exists ONLY while a hold is active, and is
 absent when the item is at rest. Its body is a two-axis record:
 
 ```
@@ -1609,7 +1609,7 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
 
 **IF Set 2 is chosen (visibility dropped, the 2026-06-17 direction), the actionable form changes to:**
 
-4. **C8 (the lock ref + the two-axis lock-entry state machine)**, build `refs/agent-runner/locks` as the
+4. **C8 (the lock ref + the two-axis lock-entry state machine)**, build `refs/dorfl/locks` as the
    per-item lock substrate; generalise the landed advancing-lock into the unified claim/slice/advance
    lock with the `{action, state, holder, since, reason?}` record + the state machine above; retarget
    `main` to hold CONTENT + durable resting records only (`done`, `prd-sliced`, `out-of-scope`); split
@@ -1617,7 +1617,7 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
    pool readers (`scan`/`select-priority`/claimability) to subtract lock-held slugs; build C2 ON the
    lock ref. Acceptance: all three issues hold by construction (race tests for the unified lock prove
    atomic exclusion across claim/slice/advance on one item); `done`+stale-lock reconciliation is
-   crash-safe; the lock ref is a hidden `refs/agent-runner/*` ref; eligibility stays offline on `main`.
+   crash-safe; the lock ref is a hidden `refs/dorfl/*` ref; eligibility stays offline on `main`.
    On a PROTECTED `main`, the durable promotions route through the PR-merge path (Amendment 3), design
    that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries PRD.
 5. **Kanban `staging/pool` position split for BOTH slices and PRDs (its OWN idea/PRD, orthogonal to the

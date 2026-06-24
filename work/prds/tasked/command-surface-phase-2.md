@@ -12,7 +12,7 @@ sliceAfter: []
 
 ## Problem Statement
 
-The `agent-runner` command surface grew slice-by-slice into an **incoherent set**. `docs/adr/command-surface-and-journeys.md` resolved this on paper — it defines one coherent two-axis model (**target** = the registry / one repo × **doer** = agent / human) with a clean command set — but **only the docs are reconciled**. The running code still embodies the old, drifted model:
+The `dorfl` command surface grew slice-by-slice into an **incoherent set**. `docs/adr/command-surface-and-journeys.md` resolved this on paper — it defines one coherent two-axis model (**target** = the registry / one repo × **doer** = agent / human) with a clean command set — but **only the docs are reconciled**. The running code still embodies the old, drifted model:
 
 - there is **no registry** — repos are discovered by walking config `roots`, and the registered set is a config list, not the set of hub mirrors on disk;
 - `arbiter init` / `arbiter status` are their own subcommands instead of folding into `remote add --local` / `status`;

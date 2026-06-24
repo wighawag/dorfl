@@ -12,7 +12,7 @@ that is being rewritten by SIBLING runs WHILE it rebases, so a purely TRANSIENT
 race no longer surfaces as a `rebase-conflict` / needs-attention.
 
 The recovery tail (`recoverAlreadyCommitted` in the integration-core module,
-`packages/agent-runner/src/integration-core.ts`) does, today, a SINGLE shot:
+`packages/dorfl/src/integration-core.ts`) does, today, a SINGLE shot:
 
 ```
 git fetch <arbiter> +refs/heads/main:refs/remotes/<arbiter>/main
@@ -52,7 +52,7 @@ The cap is the give-up bound, not a heuristic.
 
 USE THE CONTENTION MODEL, NOT THE OUTAGE BACKOFF HELPER. The repo deliberately
 keeps TWO distinct retry models, and they MUST NOT be conflated (see the
-doc-comment at the top of `packages/agent-runner/src/retry-backoff.ts`):
+doc-comment at the top of `packages/dorfl/src/retry-backoff.ts`):
 
   - OUTAGE (`retryWithBackoff` / `DEFAULT_BACKOFF`): the remote is
     UNREACHABLE/flaky; wait with EXPONENTIAL temporal backoff because the remote
@@ -89,7 +89,7 @@ outage backoff.
 
 ### Why this was raised (the live incident, 2026-06-21)
 
-`agent-runner advance task:reaper-no-lock-outcome-benign-not-lost --propose
+`dorfl advance task:reaper-no-lock-outcome-benign-not-lost --propose
 --watch --arbiter origin` ran under CI, built green (gate passed: build + 2407
 tests + format), and then FAILED at the recovery-integration step with:
 
@@ -237,7 +237,7 @@ cleanly (whichever lands second adds its option to the shared rebase call).
 >
 > FIRST, check this task against current reality (it is a launch snapshot and may
 > have DRIFTED): confirm `recoverAlreadyCommitted` in
-> `packages/agent-runner/src/integration-core.ts` still does a SINGLE
+> `packages/dorfl/src/integration-core.ts` still does a SINGLE
 > fetch-then-rebase and returns `outcome: 'rebase-conflict'` on the first non-zero
 > rebase. ALSO check whether `disable-rename-detection-on-continue-rebase` has
 > landed and whether the recovery rebase already carries `-Xno-renames` /
@@ -359,7 +359,7 @@ cleanly (whichever lands second adds its option to the shared rebase call).
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim recovery-rebase-retry-against-moving-arbiter-main --arbiter <remote>
+dorfl claim recovery-rebase-retry-against-moving-arbiter-main --arbiter <remote>
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/recovery-rebase-retry-against-moving-arbiter-main <remote>/main
 # on completion, in the work branch's PR/merge:

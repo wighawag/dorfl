@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:review-nits-prompt-guidance-test-first-2026-06-21 type=task slug=review-nits-prompt-guidance-test-first-2026-06-21 allAnswered=false -->
+<!-- dorfl-sidecar: item=task:review-nits-prompt-guidance-test-first-2026-06-21 type=task slug=review-nits-prompt-guidance-test-first-2026-06-21 allAnswered=false -->
 
 ## Q1
 
@@ -16,9 +16,9 @@ _Suggested default: Pre-decide replace-vs-append = 'replace' (the brief's 'stren
 
 **Should the env-var name be pinned at slicing time, and if so to what exact spelling?**
 
-> Observation nit #2: keystone slice §2 of 'End-to-end behaviour' hedges with 'AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST or whatever matches existing naming'. Downstream tests need a concrete name. Existing env vars in the codebase set the convention (rg for AGENT_RUNNER_ to confirm before picking).
+> Observation nit #2: keystone slice §2 of 'End-to-end behaviour' hedges with 'DORFL_PROMPT_GUIDANCE_TEST_FIRST or whatever matches existing naming'. Downstream tests need a concrete name. Existing env vars in the codebase set the convention (rg for DORFL_ to confirm before picking).
 
-_Suggested default: Yes — pin it. `AGENT_RUNNER_PROMPT_GUIDANCE_TEST_FIRST` if that matches existing `AGENT_RUNNER_*` SHOUTY_SNAKE convention; otherwise adopt whatever pattern the existing env vars already use, verbatim._
+_Suggested default: Yes — pin it. `DORFL_PROMPT_GUIDANCE_TEST_FIRST` if that matches existing `DORFL_*` SHOUTY_SNAKE convention; otherwise adopt whatever pattern the existing env vars already use, verbatim._
 
 <!-- q2 fields: id=q2 -->
 

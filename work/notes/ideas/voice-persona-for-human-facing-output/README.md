@@ -9,4 +9,4 @@ Supporting files for the idea `../voice-persona-for-human-facing-output.md`. Exp
   npx tsx work/notes/ideas/voice-persona-for-human-facing-output/demo.ts
   ```
 
-When this idea ripens into a brief/task, the real `voice.ts` will live under `packages/agent-runner/src/` and be wired into curated call sites; this folder stays as the exploration record.
+When this idea ripens into a brief/task, the real `voice.ts` will live under `packages/dorfl/src/` and be wired into curated call sites; this folder stays as the exploration record.

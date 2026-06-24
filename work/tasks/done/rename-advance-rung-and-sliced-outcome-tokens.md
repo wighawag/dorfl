@@ -64,7 +64,7 @@ Update the ~15 test files asserting `'sliced'`.
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-advance-rung-and-sliced-outcome-tokens --arbiter <remote>
+dorfl claim rename-advance-rung-and-sliced-outcome-tokens --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-advance-rung-and-sliced-outcome-tokens <remote>/main
 git mv work/tasks/todo/rename-advance-rung-and-sliced-outcome-tokens.md work/tasks/done/rename-advance-rung-and-sliced-outcome-tokens.md
 ```

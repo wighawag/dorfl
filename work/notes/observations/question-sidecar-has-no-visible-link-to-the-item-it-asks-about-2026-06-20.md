@@ -12,7 +12,7 @@ A question/answer sidecar (`work/questions/<type>-<slug>.md`, `src/sidecar.ts`)
 identifies the item it asks about ONLY via machine state inside an HTML comment:
 
 ```
-<!-- agent-runner-sidecar: item=task:foo type=task slug=foo allAnswered=false -->
+<!-- dorfl-sidecar: item=task:foo type=task slug=foo allAnswered=false -->
 ```
 
 GitHub and VSCode render HTML comments as NOTHING (that invisibility is deliberate

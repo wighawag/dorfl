@@ -90,7 +90,7 @@ no false positives may be introduced.
 > flat `work/backlog/...`.)
 >
 > Where to look. The guard is the work-layout guard source-scanning test in the
-> agent-runner package's test suite (a detector + `src/`-relative scan, the same
+> dorfl package's test suite (a detector + `src/`-relative scan, the same
 > house style as the ledger-lint and flag-cleanup-renames guards). The matcher is
 > `buildPathLiteralRegex` (specifically the `refPrefix` / `segment` parts and the
 > anchored `^...$` regex it returns. The currently-shipped form is roughly:
@@ -148,7 +148,7 @@ no false positives may be introduced.
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim <slug> --arbiter <remote>      # default --arbiter origin
+dorfl claim <slug> --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/<slug> <remote>/main
 # on completion, in the work branch's PR/merge:

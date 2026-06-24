@@ -9,7 +9,7 @@ needsAnswers: true
 
 ## What was seen
 
-While reviewing a new src file (`packages/agent-runner/src/item-lock-ref.ts`), the
+While reviewing a new src file (`packages/dorfl/src/item-lock-ref.ts`), the
 VSCode editor showed type errors:
 
 ```
@@ -21,10 +21,10 @@ Cannot find name 'process'. ... @types/node ... ts(2591)
 
 ## Why this is an EDITOR issue, not a code/build defect (VERIFIED)
 
-- **The authoritative compiler is CLEAN.** `cd packages/agent-runner && npx tsc
+- **The authoritative compiler is CLEAN.** `cd packages/dorfl && npx tsc
   --noEmit` exits 0; `pnpm -r build` (which runs `tsc`) is green; the full gate
   (`pnpm -r build && pnpm -r test && pnpm format:check`) passes (2242 tests).
-- **`@types/node` IS installed** (`packages/agent-runner/node_modules/@types/node`,
+- **`@types/node` IS installed** (`packages/dorfl/node_modules/@types/node`,
   v25.x).
 - **The flagged file uses Node globals EXACTLY as existing src files do.**
   `node:crypto` is imported by `src/ledger-write.ts` too; `NodeJS.ProcessEnv` is
@@ -33,7 +33,7 @@ Cannot find name 'process'. ... @types/node ... ts(2591)
 - **The SAME VSCode errors appear on those EXISTING files**, not just the new one
  , confirmed by the maintainer. So the signal is workspace-wide, not file-specific.
 
-The tsconfig (`packages/agent-runner/tsconfig.json`) has NO `types` field, so it
+The tsconfig (`packages/dorfl/tsconfig.json`) has NO `types` field, so it
 picks up `@types/*` AMBIENTLY (including `@types/node`), which is why `tsc`
 resolves them. VSCode's TypeScript server is resolving a DIFFERENT context (a
 stale TS server, the wrong/workspace-root tsconfig, or a not-yet-resolved pnpm
@@ -62,8 +62,8 @@ short-circuited with "tsc is clean; restart the TS server."
 
 ## Refs
 
-- New file that surfaced it: `packages/agent-runner/src/item-lock-ref.ts` (the
+- New file that surfaced it: `packages/dorfl/src/item-lock-ref.ts` (the
   per-item-lock-ref tracer; uses `node:crypto` + `NodeJS.ProcessEnv` + `process.env`
   like `src/ledger-write.ts`).
-- `packages/agent-runner/tsconfig.json` (no `types` field; ambient `@types/*`).
+- `packages/dorfl/tsconfig.json` (no `types` field; ambient `@types/*`).
 - Authoritative check: `npx tsc --noEmit` (exit 0).

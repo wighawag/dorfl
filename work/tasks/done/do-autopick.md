@@ -64,7 +64,7 @@ This slice adds the SELECTION-and-ordering layer (auto-pick / count / multi-arg 
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim do-autopick --arbiter <remote>      # default --arbiter origin
+dorfl claim do-autopick --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/do-autopick <remote>/main
 # on completion, in the work branch's PR/merge:

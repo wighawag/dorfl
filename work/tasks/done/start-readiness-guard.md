@@ -1,7 +1,7 @@
 ---
 title: start/claim readiness guard — refuse unmet blockedBy (warn on needsAnswers) with an override
 slug: start-readiness-guard
-prd: agent-runner
+prd: dorfl
 blockedBy: []
 covers: []
 ---
@@ -20,7 +20,7 @@ The distinction that drives the behaviour (do NOT relitigate):
 
 Reuse, do not reinvent: `resolveBlockedBy(blockedBy, doneSlugs)` already exists in `eligibility.ts`. `start` must now read the slice's frontmatter (parse the file on `<arbiter>/main`, the same source of truth it uses for the folder) to get `blockedBy` / `needsAnswers`, and resolve `blockedBy` against the set of slugs in that repo's `work/done/` on the arbiter.
 
-Scope: the readiness check sits BEFORE the claim CAS (so a not-ready slice is never claimed). It applies to both `agent-runner claim` and `agent-runner start` (start sequences claim, so put the check where both get it — e.g. in the claim path, or shared and called by both). The override flag (e.g. `--force` / `--ignore-not-ready`) bypasses both the `blockedBy` refusal and the `needsAnswers` warning, loudly.
+Scope: the readiness check sits BEFORE the claim CAS (so a not-ready slice is never claimed). It applies to both `dorfl claim` and `dorfl start` (start sequences claim, so put the check where both get it — e.g. in the claim path, or shared and called by both). The override flag (e.g. `--force` / `--ignore-not-ready`) bypasses both the `blockedBy` refusal and the `needsAnswers` warning, loudly.
 
 ## Acceptance criteria
 
@@ -39,7 +39,7 @@ Scope: the readiness check sits BEFORE the claim CAS (so a not-ready slice is ne
 
 ## Prompt
 
-> Add a readiness guard to the human `start` / `claim` path in `agent-runner` so it refuses to claim a slice that is not ready, instead of claiming purely on the folder. READ FIRST: `packages/agent-runner/src/start.ts` (note it decides on the FOLDER on `<arbiter>/main` and never parses frontmatter today), `packages/agent-runner/src/claim-cas.ts` (the CAS `start` sequences), and `packages/agent-runner/src/eligibility.ts` (REUSE `resolveBlockedBy`). Also `skills/to-slices/WORK-CONTRACT.md` for the two-axis gate semantics.
+> Add a readiness guard to the human `start` / `claim` path in `dorfl` so it refuses to claim a slice that is not ready, instead of claiming purely on the folder. READ FIRST: `packages/dorfl/src/start.ts` (note it decides on the FOLDER on `<arbiter>/main` and never parses frontmatter today), `packages/dorfl/src/claim-cas.ts` (the CAS `start` sequences), and `packages/dorfl/src/eligibility.ts` (REUSE `resolveBlockedBy`). Also `skills/to-slices/WORK-CONTRACT.md` for the two-axis gate semantics.
 >
 > Behaviour: before the claim CAS runs, read the slice's frontmatter from `<arbiter>/main` (same source of truth as the folder check) to get `blockedBy` and `needsAnswers`. (1) If any `blockedBy` slug is NOT in that repo's `work/done/` on the arbiter → REFUSE by default (claim nothing), message naming the missing slugs. (2) If `needsAnswers: true` → print a loud WARNING but still claim. (3) An override flag (`--force` or `--ignore-not-ready`) bypasses the refusal and silences the warning, printing a loud "guard overridden" notice. Do NOT gate on `humanOnly` here — the human path is never bound by it. Do NOT change the autonomous `run --once`/`scan`/`eligibility` behaviour (it already filters correctly). Apply to BOTH `claim` and `start` (start sequences claim, so place the check where both inherit it). Reuse `resolveBlockedBy`; don't reimplement dep resolution.
 >

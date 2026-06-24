@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:work-layout-guard-test-flaky-under-parallel-load-2026-06-22 type=observation slug=work-layout-guard-test-flaky-under-parallel-load-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:work-layout-guard-test-flaky-under-parallel-load-2026-06-22 type=observation slug=work-layout-guard-test-flaky-under-parallel-load-2026-06-22 allAnswered=false -->
 
 ## Q1
 

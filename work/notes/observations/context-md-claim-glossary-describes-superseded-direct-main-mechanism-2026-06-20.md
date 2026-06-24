@@ -26,7 +26,7 @@ The per-item-lock-refs migration LANDED (tasks `claim-acquires-unified-lock-no-b
 `cutover-retire-slicing-advancing-markers-and-trim-folder-sets` in `work/tasks/done/`;
 ADR `ledger-status-on-per-item-lock-refs`). Current reality:
 
-- A claim ACQUIRES the item's per-item lock `refs/agent-runner/lock/<entry>`
+- A claim ACQUIRES the item's per-item lock `refs/dorfl/lock/<entry>`
   (`action: implement`) and writes NOTHING to `main` — the body STAYS in
   `work/tasks/todo/` (`claim-cas.ts`: "the body STAYS at `work/backlog/<slug>.md`,
   the claimable predicate is 'in `backlog/` on `main` AND no lock held'").
@@ -49,7 +49,7 @@ framing changed under the migration.
 ## Refs
 
 - `CONTEXT.md` ~L40 — the `claim (CAS)` glossary entry.
-- `packages/agent-runner/src/claim-cas.ts` — the current per-item-lock claim (body
+- `packages/dorfl/src/claim-cas.ts` — the current per-item-lock claim (body
   stays in `todo/`, no `main` write).
 - `docs/adr/ledger-status-on-per-item-lock-refs.md` — the decision.
 - Sibling already-discharged note: `claim-sh-still-describes-superseded-direct-main-claim`

@@ -31,7 +31,7 @@ This is the unlock for a trustworthy `do <slug> --merge` (and, once `do-autopick
 
 Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` + `ResolvedRepoConfig`, alongside `integration`/`allowAgents`/`model`):
 
-- **`review`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved **flag (`--review`/`--no-review`) > per-repo `.agent-runner.json` > global > default false** — the SAME chain `integration`/`allowAgents` use.
+- **`review`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved **flag (`--review`/`--no-review`) > per-repo `.dorfl.json` > global > default false** — the SAME chain `integration`/`allowAgents` use.
 - **`autoMerge`** (bool, default **OFF**) — on an `approve`, allow the resolved `merge` integration to proceed autonomously. Same precedence chain. **Repo policy only.** A non-`approve` verdict NEVER auto-merges regardless. (If `autoMerge` is off but `review` is on, review still runs and blocks/approves, but a human does the merge — i.e. review is advisory-but-blocking; `--propose` still applies.)
 - **`reviewModel`** (string, optional) — the model the REVIEW agent runs on (de-correlation from the builder). Resolved like `model` (flag > env > per-repo > global > default = unset → no forced model). Distinct from the builder's `model`.
 - **`reviewMaxRounds`** (number, default a small N e.g. 2) — bound the revise↔review loop. On exhaustion, **ERROR OUT** and force `needs-attention/` (never silently merge or loop), per the maintainer decision.
@@ -49,7 +49,7 @@ Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` + `R
 - [ ] A non-`approve` verdict NEVER auto-merges, regardless of `autoMerge`.
 - [ ] The `reviewModel` override reaches the review-agent launch via the existing `LaunchInput.model` / `substituteModel` seam (no new model mechanism).
 - [ ] Tests cover the new behaviour, stubbing BOTH the review agent (return a canned `approve`/`block` verdict — no real model) AND, where exercised, the integration/git via the existing `do`/`complete` test harness (local `--bare` arbiter, temp dirs). No network, no real GitHub, no real model.
-- [ ] **Test isolation (shared-write-location rule, WORK-CONTRACT):** the `do`/`complete` tests already isolate `workspacesDir` + `PI_CODING_AGENT_DIR` (`isolatePiAgentDir`) and assert the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are UNTOUCHED — this slice keeps that intact (the review agent writes nothing outside its scratch context).
+- [ ] **Test isolation (shared-write-location rule, WORK-CONTRACT):** the `do`/`complete` tests already isolate `workspacesDir` + `PI_CODING_AGENT_DIR` (`isolatePiAgentDir`) and assert the real `~/.dorfl/` + `~/.pi/agent/sessions/` are UNTOUCHED — this slice keeps that intact (the review agent writes nothing outside its scratch context).
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -72,14 +72,14 @@ Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` + `R
 >
 > READ FIRST: `skills/review/SKILL.md` (the verdict shape `{verdict, findings[ severity, question, context]}` you parse); `src/complete.ts` (`performComplete` — the gate→done-move→integrate flow and `routeToNeedsAttention`); `src/do.ts` (`performDo` — outcome mapping + `surfaceArbiter`); `src/repo-config.ts` + `src/config.ts` (the per-repo precedence to mirror); `src/harness.ts` (`LaunchInput`, `substituteModel`); `src/verify.ts` (`runVerify`/`VerifyConfig`); ADR `execution-substrate-decisions.md` §8 (the determinism boundary — review is a JUDGEMENT gate on top of the model-free `verify` floor, never a replacement) and §13 (the staged `review` role + model override).
 >
-> TDD with vitest, house style (local `--bare` arbiter, temp dirs, stubbed harness/review-agent, `isolatePiAgentDir` to scratch): a stubbed `approve` integrates (and merges only with `autoMerge` on); a stubbed `block` routes to needs-attention and never merges; `verify` still runs first and is never skipped; the four config keys resolve via the precedence chain; `reviewMaxRounds` exhaustion errors out to needs-attention; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (local `--bare` arbiter, temp dirs, stubbed harness/review-agent, `isolatePiAgentDir` to scratch): a stubbed `approve` integrates (and merges only with `autoMerge` on); a stubbed `block` routes to needs-attention and never merges; `verify` still runs first and is never skipped; the four config keys resolve via the precedence chain; `reviewMaxRounds` exhaustion errors out to needs-attention; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are untouched. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-gate-pr --arbiter <remote>      # default --arbiter origin
+dorfl claim review-gate-pr --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/review-gate-pr <remote>/main
 git mv work/in-progress/review-gate-pr.md work/done/review-gate-pr.md
 ```

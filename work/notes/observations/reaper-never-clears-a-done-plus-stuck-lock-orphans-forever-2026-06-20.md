@@ -9,7 +9,7 @@ needsAnswers: false
 
 ## What was seen
 
-A lingering lock `refs/agent-runner/lock/slice-claim-cas-spinner` survived
+A lingering lock `refs/dorfl/lock/slice-claim-cas-spinner` survived
 `gc --ledger --reap-stale-locks`. The lock entry:
 
 ```
@@ -23,7 +23,7 @@ reason: continuing the kept work/slice-claim-cas-spinner: rebase ... conflicted 
 The item `claim-cas-spinner` is TERMINAL on `main` (it is in `work/tasks/done/`, merged
 2026-06-20 via PR #140). So this is a `done`-on-main + `stuck`-lock combination. The
 reaper did not clear it; it had to be removed by a manual
-`git push origin --delete refs/agent-runner/lock/slice-claim-cas-spinner`.
+`git push origin --delete refs/dorfl/lock/slice-claim-cas-spinner`.
 
 ## Root cause (verified against item-lock.ts)
 
@@ -62,7 +62,7 @@ still kept.
 
 ## Refs
 
-- `packages/agent-runner/src/item-lock.ts` \u2014 `reapStaleItemLocks` scope fence
+- `packages/dorfl/src/item-lock.ts` \u2014 `reapStaleItemLocks` scope fence
   (`cleared-stale` only) + `reconcileItemLockAgainstMain` classification.
 - `docs/adr/ledger-status-on-per-item-lock-refs.md` \u2014 `done` + `stuck` co-existence +
   "main record authoritative over a stale lock".

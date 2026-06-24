@@ -19,7 +19,7 @@ Let the human-facing PROSE of the tool optionally take on a persona, while every
 
 TWO orthogonal config fields, each resolved the same way as the other config axes (flag > env, derived via `brand.envPrefix` > per-repo > global > default): `voice` (WHERE the persona reaches) and `voiceCasing` (HOW it is cased — see below).
 
-`voice` (resolved via `AGENT_RUNNER_VOICE`):
+`voice` (resolved via `DORFL_VOICE`):
 
 - **`plain` (DEFAULT)** — no persona anywhere. The tool speaks like a tool. Zero behaviour change; this is what every existing user gets.
 - **`cli`** — the persona bleeds into the CLI's OWN human-facing messages only (greetings, help banner, success/failure lines, the propose "next step" block, spinners, `status` narration). It must NOT bleed into the `work/` artifacts the agent writes (commits, slice/brief files, PR bodies) and NOT into produced code.
@@ -62,7 +62,7 @@ This makes the persona surface THREE orthogonal knobs: `voice` (WHERE) × `voice
 
 ## A Hebrew-style font is NOT a CLI capability (recorded so it is not re-asked)
 
-Golem speech in the books is set in a Hebrew-like display font. A CLI CANNOT reproduce that: a command-line program emits only bytes (characters + ANSI escapes for color/bold); the TYPEFACE is the terminal emulator's setting, chosen by the USER, not by the program. So `agent-runner` cannot render Dorfl's words in a Hebrew-style font the way the printed page does. The honest options:
+Golem speech in the books is set in a Hebrew-like display font. A CLI CANNOT reproduce that: a command-line program emits only bytes (characters + ANSI escapes for color/bold); the TYPEFACE is the terminal emulator's setting, chosen by the USER, not by the program. So `dorfl` cannot render Dorfl's words in a Hebrew-style font the way the printed page does. The honest options:
 
 - **ANSI styling only (safe, already planned)** — bold/color/dim, i.e. the `voiceEmphasis: bold` channel. Changes weight, not typeface. Portable.
 - **Unicode look-alike characters — DO NOT.** Hebrew letters that resemble Latin, or "faux" styled alphabets, break copy-paste, grep, screen readers, and width math, and would corrupt the FACTS / leak persona onto machine-read paths. Rejected on principle (the golem does not disguise its words as other words).

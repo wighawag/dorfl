@@ -24,7 +24,7 @@ So the practical pressure is to reach for the destructive option, and in this ca
 
 ## Why it matters
 
-- The conflict here was NOT a genuine content clash between two real lines of development. It was the slice `.md` lifecycle move (needs-attention ↔ backlog ↔ done) plus accumulated appended `-m` handoff notes, conflicting because of agent-runner's own incomplete mirror state. A trivial, mechanical conflict in protocol bookkeeping should be AUTO-RESOLVABLE (the runner owns both sides of a `.md` lifecycle move), not a wall that forces discarding the code.
+- The conflict here was NOT a genuine content clash between two real lines of development. It was the slice `.md` lifecycle move (needs-attention ↔ backlog ↔ done) plus accumulated appended `-m` handoff notes, conflicting because of dorfl's own incomplete mirror state. A trivial, mechanical conflict in protocol bookkeeping should be AUTO-RESOLVABLE (the runner owns both sides of a `.md` lifecycle move), not a wall that forces discarding the code.
 - Routing CORRECT work to needs-attention and then nudging the user to `--reset` it inverts the protocol's intent: needs-attention is for genuine blocks, and the kept-branch-continue feature exists precisely to PRESERVE good work across requeues. A bookkeeping rebase conflict defeats both.
 
 ## What SHOULD happen
@@ -62,7 +62,7 @@ RESOLVED (delete from this note's scope):
   PLAIN rebase with NO runner-authored move-only commit to self-conflict on (the old
   `drop-bookkeeping-rebase` machinery was DELETED). Task
   `continue-rebase-auto-resolves-protocol-bookkeeping-conflicts` is in `tasks/done/`.
-  So a single agent no longer hits a human-surfacing rebase conflict from agent-runner's
+  So a single agent no longer hits a human-surfacing rebase conflict from dorfl's
   OWN bookkeeping of its slug; only GENUINE content conflicts surface, which was the
   whole point. The specific run in "What was seen" (a `.md`-lifecycle-move self-conflict)
   can no longer occur.

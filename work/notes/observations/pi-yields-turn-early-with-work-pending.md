@@ -15,14 +15,14 @@ CLARIFICATION (corrects an earlier framing): this is NOT a tool call that hung o
 
 ## Why it matters
 
-- It is a **pi harness-level behaviour**, NOT an agent-runner protocol issue: nothing in the `work/` contract or the runner caused it, and the runner cannot detect or recover from it (the runner does not own the conversation turn; pi decided to yield).
+- It is a **pi harness-level behaviour**, NOT an dorfl protocol issue: nothing in the `work/` contract or the runner caused it, and the runner cannot detect or recover from it (the runner does not own the conversation turn; pi decided to yield).
 - It **silently pauses an otherwise-healthy session**. A long autonomous stretch (e.g. a conductor drive working through several steps) can look "done" or hung when in fact pi has just handed the turn back early with work still pending, indistinguishable at a glance from the agent legitimately finishing. The only recovery seen is a human typing `continue`, which is impossible in a truly unattended run.
 - It is **rare but recurring**: the maintainer reports seeing this "time to time when in conversation, quite rare but it happens." So it is intermittent and not reproducible on demand, which makes it easy to misread as the agent being finished.
 
 ## Scope / provenance
 
 - This is an EXTERNAL (harness) behaviour, captured as a spotted signal, not verified ground truth about a known pi code path. It is filed here so the pattern is recorded and can be correlated if it recurs (e.g. against pi version, session length, or what the agent was mid-doing when it yielded).
-- Distinct from `pi-harness-jsonl-reliance.md` (that is about agent-runner's `.jsonl`-scraping coupling); this one is about pi's own turn-ending / yield-to-user decision.
+- Distinct from `pi-harness-jsonl-reliance.md` (that is about dorfl's `.jsonl`-scraping coupling); this one is about pi's own turn-ending / yield-to-user decision.
 - Cross-ref: the drive-backlog `interrupt footgun` is a DIFFERENT failure (a killed wrapper leaving a live child still editing); this is roughly the inverse, a live session that ends its turn early and waits for the user when it could have continued.
 
 ## Candidate follow-ups (not actioned)

@@ -19,7 +19,7 @@ drive explicitly). Underneath, the real axis is **attended/interactive vs
 unattended/autonomous**; "laptop vs CI" is just the usual instance of it.
 
 CI already has a clean, high-precedence per-machine lever: the workflow's
-`AGENT_RUNNER_*` env block (the env layer sits ABOVE the committed per-repo file —
+`DORFL_*` env block (the env layer sits ABOVE the committed per-repo file —
 see the precedence chain below). The LAPTOP does not have an equivalent that is
 both (a) high-precedence (able to override a value the repo committed) and (b)
 stable across invocations. Its only per-machine sources are flag (per-invocation,
@@ -32,7 +32,7 @@ The existing precedence chain (recorded in `execution-substrate-decisions.md` §
 and stated identically in `config.ts`/`repo-config.ts`/`env-config.ts`) is:
 
 ```
-flag > ENV (AGENT_RUNNER_*) > per-repo committed (.agent-runner.json) > global > built-in default
+flag > ENV (DORFL_*) > per-repo committed (.dorfl.json) > global > built-in default
 ```
 
 ### Why the existing ordering is RIGHT and is NOT reversed by this ADR
@@ -48,12 +48,12 @@ the multi-repo story. So per-repo committed stays ABOVE global. The genuine gap 
 NOT the ordering; it is that the laptop lacks a per-machine layer ABOVE the
 committed repo file (the slot env occupies for CI).
 
-### Why a gitignored `.agent-runner.local.json` was REJECTED
+### Why a gitignored `.dorfl.local.json` was REJECTED
 
 The obvious `.env.local` analogue dies on the runner's execution substrate
 (`execution-substrate-decisions.md` §2). The runner NEVER operates on the user's
 editable checkout: it materialises a FRESH `git worktree` per job at
-`~/.agent-runner/work/<work-id>/`, checked out from the bare HUB MIRROR, itself
+`~/.dorfl/work/<work-id>/`, checked out from the bare HUB MIRROR, itself
 fetched from the arbiter. A gitignored file lives only in the user's working tree;
 it is by definition never committed, so it never reaches the arbiter, never reaches
 the hub mirror, and never appears in the job worktree. The runner would never see
@@ -70,7 +70,7 @@ and flags.
 ### 1. New precedence chain
 
 ```
-flag > ENV (AGENT_RUNNER_*) > override:per-repo > override:global("*") > per-repo committed > global > built-in default
+flag > ENV (DORFL_*) > override:per-repo > override:global("*") > per-repo committed > global > built-in default
 ```
 
 - **Below flag and below env** — a one-off `--merge` and CI's env layer must still
@@ -87,20 +87,20 @@ flag > ENV (AGENT_RUNNER_*) > override:per-repo > override:global("*") > per-rep
 
 ### 2. One file, hub-keyed, with a `"*"` global-default bucket
 
-A single file `~/.config/agent-runner/config.override.json` (i.e.
+A single file `~/.config/dorfl/config.override.json` (i.e.
 `<configDir>/config.override.json`, the same directory as the global `config.json`).
 Shape:
 
 ```json
 {
   "*": { "autoBuild": false },
-  "github-com/wighawag/agent-runner": { "integration": "merge" }
+  "github-com/wighawag/dorfl": { "integration": "merge" }
 }
 ```
 
 - **The repo key is the HUB KEY**, not a filesystem path —
   `encodeRepoKey(arbiterUrl)` (`repo-mirror.ts`), e.g.
-  `github-com/wighawag/agent-runner`. This is the single load-bearing choice that
+  `github-com/wighawag/dorfl`. This is the single load-bearing choice that
   makes the override survive the mirror model where `.local` failed: the hub key
   resolves IDENTICALLY from the user's interactive checkout AND from a throwaway
   job worktree, because it is derived from the arbiter URL, not from where the
@@ -141,7 +141,7 @@ useful and consistent with how env already behaves.
 This deliberately does NOT introduce a `ci: {}` / `runner: {}` namespace, and does
 NOT make CI a second policy surface. The ADR `ci-config-policy-and-gate-family`
 decided "CI is not a special policy surface": CI is the same engine tuned by the
-same `Config` chain, with the workflow's `AGENT_RUNNER_*` env as its per-machine
+same `Config` chain, with the workflow's `DORFL_*` env as its per-machine
 override. This ADR keeps that intact and symmetrical: ONE `Config` schema, ONE
 resolution chain; CI's per-machine lever is env, the laptop's is
 `config.override.json`. The operator-context difference ("attended vs unattended")
@@ -156,7 +156,7 @@ conceptual cost; a profile axis can layer on later if a real need appears.
 
 - **Reverse global > per-repo.** Rejected: breaks the committed-repo-policy
   promise and the multi-repo story (see Context).
-- **Gitignored `.agent-runner.local.json`.** Rejected: invisible to the runner's
+- **Gitignored `.dorfl.local.json`.** Rejected: invisible to the runner's
   hub-mirror + job-worktree substrate (see Context).
 - **A `ci: {}` / `runner: {}` config split.** Rejected: re-litigates
   `ci-config-policy-and-gate-family` without a motivating case (see §5).

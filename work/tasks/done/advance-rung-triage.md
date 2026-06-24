@@ -19,7 +19,7 @@ This rung is sequenced AFTER `advance-rung-apply` to serialize the shared rung-e
   - **`autoTriage` exception (high bar):** if `autoTriage` is on AND the case is a no-question one (exact-duplicate → suggest delete; unambiguous map onto an existing item), auto-disposition it WITHOUT a question. NEVER auto-delete a non-duplicate; NEVER auto-promote a judgement call.
 - **Promote → CAS-create a new backlog stub (US #24):** an answered "promote" drafts a new `work/backlog/<new-slug>.md` routed THROUGH the CAS keyed on the NEW item's identity (reuse the new-item-creation helper from `advancing-lock-borrow`), records the triage, and deletes the sidecar.
 - **Keep / delete:** "keep" → `triaged:keep` marker, drops out of the pool (shared with the apply rung's keep handling); "delete" → recommend deletion (the HUMAN deletes per the capture-bucket contract — the agent never auto-deletes a non-duplicate signal).
-- **Add the `autoTriage` repo-config key** (default off) to `repo-config.ts`'s allowed keys, resolved through the SAME chain as `allowAgents`/`autoSlice` (`flag > AGENT_RUNNER_* env > .agent-runner.json > global > default false`). The triage rung RESPECTS it; surface + apply stay always-allowed.
+- **Add the `autoTriage` repo-config key** (default off) to `repo-config.ts`'s allowed keys, resolved through the SAME chain as `allowAgents`/`autoSlice` (`flag > DORFL_* env > .dorfl.json > global > default false`). The triage rung RESPECTS it; surface + apply stay always-allowed.
 
 ## Acceptance criteria
 
@@ -39,7 +39,7 @@ This rung is sequenced AFTER `advance-rung-apply` to serialize the shared rung-e
 
 > Build the observation TRIAGE rung + the NEW `autoTriage` gate. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #16/17/23/24/30, "Per-item-type transitions", "Repo-config: a FLAT per-action gate family", "Observation-triage option-c"). Triage is QUESTION-GATED by default (surface promote/keep/delete and WAIT — never decide "worth building?" autonomously). A conservative `autoTriage`-gated exception (high bar) auto-dispositions ONLY no-question cases (exact-duplicate → suggest delete; unambiguous map onto an existing item) — NEVER auto-delete a non-duplicate, NEVER auto-promote a judgement call. An answered "promote" CAS-creates a new `work/backlog/<new-slug>.md` keyed on the NEW item's identity (reuse the new-item-creation CAS helper from `advancing-lock-borrow`). "keep" → `triaged:keep` drop-out; "delete" → recommend deletion (human deletes). Add the `autoTriage` key to `repo-config.ts` (default off, standard resolution chain); surface + apply stay always-allowed.
 >
-> READ FIRST: `packages/agent-runner/src/repo-config.ts` (`REPO_ALLOWED_KEYS` + `resolveRepoConfig` — add `autoTriage` alongside `allowAgents`/`autoSlice`), the new-item-creation CAS helper from `advancing-lock-borrow`, the surface rung (`advance-rung-surface`) and apply rung (`advance-rung-apply`) it reuses, and the capture-bucket contract (observations are append-only, leave by deletion — WORK-CONTRACT.md).
+> READ FIRST: `packages/dorfl/src/repo-config.ts` (`REPO_ALLOWED_KEYS` + `resolveRepoConfig` — add `autoTriage` alongside `allowAgents`/`autoSlice`), the new-item-creation CAS helper from `advancing-lock-borrow`, the surface rung (`advance-rung-surface`) and apply rung (`advance-rung-apply`) it reuses, and the capture-bucket contract (observations are append-only, leave by deletion — WORK-CONTRACT.md).
 >
 > FIRST, check this slice against current reality (drift). If a dependency landed differently than assumed, reconcile or route to `needs-attention/`.
 >
@@ -50,7 +50,7 @@ This rung is sequenced AFTER `advance-rung-apply` to serialize the shared rung-e
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-rung-triage --arbiter origin
+dorfl claim advance-rung-triage --arbiter origin
 git fetch origin && git switch -c work/advance-rung-triage origin/main
 git mv work/in-progress/advance-rung-triage.md work/done/advance-rung-triage.md
 ```

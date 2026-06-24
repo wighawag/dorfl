@@ -6,7 +6,7 @@ RESOLVED (open question 1 traced): NOT a live surfacing bug. `status()` reads LO
 
 Discovered while attempting a "full internal consistency" pass on `needs-attention.ts` (after the doc-drift fixes that updated the file HEADER + CONTEXT.md to the lock model). Attempting to make the in-function comments match the lock-model header REVEALED that the inconsistency is in the CODE, not the comments: some needs-attention code is still folder-based. So the file is internally inconsistent because the cutover is half-done, NOT because comments drifted. Editing the comments to claim a complete cutover would make the docs LIE. Captured instead of edited (stop-and-ask, not guess).
 
-## Verified state (grep + read, packages/agent-runner/src/)
+## Verified state (grep + read, packages/dorfl/src/)
 
 WRITE side (correctly cut over):
 - `routeToNeedsAttention` (+ its header, just doc-fixed): a bounce is a PURE LOCK AMEND via the seam (`bounceToStuckLock` -> `markStuckItemLock`), `state: active -> stuck`, reason/questions on the lock entry. NO `git mv`, NO on-`main` surface. Header + inner comments consistent. GOOD.
@@ -19,7 +19,7 @@ READ / SURFACE side (NOT cut over):
 
 ## The contradiction this creates
 
-The just-corrected `needs-attention.ts` header + CONTEXT.md now (correctly) say stuck is lock-`state: stuck` with NO `work/needs-attention/` folder and NO on-`main` surface, and that the human surface is `agent-runner status`/`scan` reading lock refs. But the LIVE `readNeedsAttentionItems` + `ledger-read`'s `needsAttention` arm still read a `work/needs-attention/` FOLDER as the "look here" surface. If the write side never writes that folder, this read path now surfaces NOTHING (or only stale pre-cutover files) -- which is EXACTLY the "needs-attention has no human-visible outcome" gap captured in `work/notes/observations/needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21.md`. This finding is the CODE-LEVEL ROOT of that observation: `status`'s needs-attention surface is reading a folder that is no longer populated.
+The just-corrected `needs-attention.ts` header + CONTEXT.md now (correctly) say stuck is lock-`state: stuck` with NO `work/needs-attention/` folder and NO on-`main` surface, and that the human surface is `dorfl status`/`scan` reading lock refs. But the LIVE `readNeedsAttentionItems` + `ledger-read`'s `needsAttention` arm still read a `work/needs-attention/` FOLDER as the "look here" surface. If the write side never writes that folder, this read path now surfaces NOTHING (or only stale pre-cutover files) -- which is EXACTLY the "needs-attention has no human-visible outcome" gap captured in `work/notes/observations/needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21.md`. This finding is the CODE-LEVEL ROOT of that observation: `status`'s needs-attention surface is reading a folder that is no longer populated.
 
 ## RESOLUTION (question 1 traced in `status.ts`)
 

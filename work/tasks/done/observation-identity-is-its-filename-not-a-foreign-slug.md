@@ -114,7 +114,7 @@ but this is a frontmatter identity correction, not a rewrite of the captured sig
       `advance-lifecycle-dispatch-gate-inputs`, OR a forced gate in a test), the
       triage legs for the migrated observations no longer fail — END-TO-END proof the
       bug is closed. (This slice + that one together restore safe triage; this slice
-      does NOT itself re-enable triage in `.agent-runner.json`.)
+      does NOT itself re-enable triage in `.dorfl.json`.)
 - [ ] `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
 ## Blocked by
@@ -161,7 +161,7 @@ but this is a frontmatter identity correction, not a rewrite of the captured sig
 > WHY: the CI lifecycle propose matrix (`ci-propose-matrix-enumerates-lifecycle-items`,
 > just landed) routed the triage pool through ~33 parallel legs and EVERY
 > review-nits observation failed to resolve — see the three source observations.
-> `observationTriage` is currently `off` in `.agent-runner.json` as a STOPGAP; this
+> `observationTriage` is currently `off` in `.dorfl.json` as a STOPGAP; this
 > slice is the real fix. Do NOT re-enable triage in the committed config here (that
 > is a separate human decision once this lands).
 >

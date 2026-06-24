@@ -58,7 +58,7 @@ Promotes `work/observations/intake-propose-title-degrades-output-file-read-befor
 ### Claiming this slice
 
 ```sh
-agent-runner claim intake-propose-title-from-drafted-slice --arbiter origin
+dorfl claim intake-propose-title-from-drafted-slice --arbiter origin
 git fetch origin && git switch -c work/intake-propose-title-from-drafted-slice origin/main
 git mv work/in-progress/intake-propose-title-from-drafted-slice.md work/done/intake-propose-title-from-drafted-slice.md
 ```

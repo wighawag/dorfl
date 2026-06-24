@@ -45,7 +45,7 @@ Update the commander wiring, help text, the arg validation/rejection messages (e
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-cli-verb-and-flags-do-prd-to-do-brief --arbiter <remote>
+dorfl claim rename-cli-verb-and-flags-do-prd-to-do-brief --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-cli-verb-and-flags-do-prd-to-do-brief <remote>/main
 git mv work/tasks/todo/rename-cli-verb-and-flags-do-prd-to-do-brief.md work/tasks/done/rename-cli-verb-and-flags-do-prd-to-do-brief.md
 ```

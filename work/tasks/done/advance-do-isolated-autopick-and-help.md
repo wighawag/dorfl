@@ -19,7 +19,7 @@ The capability is NOT missing: `do --isolated -n <x>` (and `do --isolated` with 
 
 This is already covered by a test: `test/do-isolated.test.ts:323` ("do --isolated — -n/auto-pick now SELECTS over the mirror-side pool (refusal removed)").
 
-The DEFECT is a stale help string. `packages/agent-runner/src/cli.ts:1453` (the `do` command's `--isolated` option description) STILL says:
+The DEFECT is a stale help string. `packages/dorfl/src/cli.ts:1453` (the `do` command's `--isolated` option description) STILL says:
 
 > "... the in-place-but-isolated form (a single named item; not for -n/auto-pick). ..."
 
@@ -50,7 +50,7 @@ The `advance-isolated-one-shot` slice mirrors `do --isolated` onto `advance`, IN
 
 ## Prompt
 
-> Fix a STALE help string and pin a real contract: agent-runner's `do --isolated` ALREADY supports `-n`/auto-pick/multi-arg over the mirror-side eligible-pool scan (the old `-n`×`--isolated`/`--remote` refusal was removed in `advance-drivers-and-gates` once `mirror-side-eligible-pool-scan` landed; the forms now route through `performDoRemoteAuto`/`performDoRemoteArgs` in `do-remote-auto.ts`, with each per-item `performDoRemote` re-`ensureMirror`+RE-FETCHING the same mirror so item N's worktree branches off a `main` containing item N-1's merge — FRESHNESS, each in its own job worktree; the selected SET is frozen up front, so this is not re-selection). But the `--isolated` option's help text at `packages/agent-runner/src/cli.ts:1453` STILL says "a single named item; not for -n/auto-pick" — contradicted by the code AND by `test/do-isolated.test.ts:323` ("refusal removed"). Fix the doc and lock the sequential-refetch contract with an explicit drain test.
+> Fix a STALE help string and pin a real contract: dorfl's `do --isolated` ALREADY supports `-n`/auto-pick/multi-arg over the mirror-side eligible-pool scan (the old `-n`×`--isolated`/`--remote` refusal was removed in `advance-drivers-and-gates` once `mirror-side-eligible-pool-scan` landed; the forms now route through `performDoRemoteAuto`/`performDoRemoteArgs` in `do-remote-auto.ts`, with each per-item `performDoRemote` re-`ensureMirror`+RE-FETCHING the same mirror so item N's worktree branches off a `main` containing item N-1's merge — FRESHNESS, each in its own job worktree; the selected SET is frozen up front, so this is not re-selection). But the `--isolated` option's help text at `packages/dorfl/src/cli.ts:1453` STILL says "a single named item; not for -n/auto-pick" — contradicted by the code AND by `test/do-isolated.test.ts:323` ("refusal removed"). Fix the doc and lock the sequential-refetch contract with an explicit drain test.
 >
 > FIRST, re-confirm against CURRENT code (drift): the `do` `--isolated` dispatch still routes `args.length===0 || count!==undefined` and `args.length>1` into `performDoRemoteAuto`/`performDoRemoteArgs` (the `isolatedNoRemote`/`--remote` shared block in `cli.ts` ~1721); `do-remote-auto.ts` still does `ensureMirror` once + `scanMirrorPool` + `selectPrioritised` + a sequential loop with per-item `performDoRemote` (which re-ensures/fetches the mirror); `cli.ts:1453` still carries the stale "not for -n/auto-pick" text. If it landed differently, reconcile or route to `needs-attention/`.
 >

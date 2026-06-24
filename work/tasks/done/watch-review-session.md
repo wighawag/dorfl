@@ -69,7 +69,7 @@ What the helper must encode (the parts that were inline in `do.ts`):
 ### Claiming this slice
 
 ```sh
-agent-runner claim watch-review-session --arbiter <remote>      # default --arbiter origin
+dorfl claim watch-review-session --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/watch-review-session <remote>/main
 git mv work/in-progress/watch-review-session.md work/done/watch-review-session.md
 ```

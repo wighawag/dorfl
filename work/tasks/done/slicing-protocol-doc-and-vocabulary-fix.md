@@ -38,14 +38,14 @@ End-to-end path:
 
 ## Prompt
 
-> FIRST, check this task against current reality: do BOTH blockers exist in `tasks/done/` (the keystone + the surface slice)? Re-confirm: (a) `buildSlicingBrief` in `packages/agent-runner/src/slicing.ts` STILL says "Use the **to-slices** skill" AND still mentions `work/backlog/` / `work/prd/` (the stale vocabulary the brief calls out); (b) `resolveProtocolDoc(name, cwd)` exists; (c) `vendor-protocol.mjs` vendors a SET. If the stale vocabulary has already been fixed in another slice, route to needs-attention with the discrepancy — do not silently skip the fix or build on a stale premise.
+> FIRST, check this task against current reality: do BOTH blockers exist in `tasks/done/` (the keystone + the surface slice)? Re-confirm: (a) `buildSlicingBrief` in `packages/dorfl/src/slicing.ts` STILL says "Use the **to-slices** skill" AND still mentions `work/backlog/` / `work/prd/` (the stale vocabulary the brief calls out); (b) `resolveProtocolDoc(name, cwd)` exists; (c) `vendor-protocol.mjs` vendors a SET. If the stale vocabulary has already been fixed in another slice, route to needs-attention with the discrepancy — do not silently skip the fix or build on a stale premise.
 >
 > Read the brief `work/briefs/ready/runner-invoked-disciplines-into-protocol.md` (Solution + D1, D2 + the "Bonus bug" paragraph + US #8). The vocabulary fix is in-scope precisely BECAUSE the relocation visits this exact prompt builder; doing it in passing is the cheapest moment.
 >
 > Code touchpoints:
 >
-> - `packages/agent-runner/src/slicing.ts` — `buildSlicingBrief` (the spawned-agent prompt the runner builds when slicing a brief). The slice parser lives here or in a sibling module — locate it and use it as the shape's source of truth (D2).
-> - `packages/agent-runner/scripts/vendor-protocol.mjs` — add `SLICING-PROTOCOL.md` to the declared set.
+> - `packages/dorfl/src/slicing.ts` — `buildSlicingBrief` (the spawned-agent prompt the runner builds when slicing a brief). The slice parser lives here or in a sibling module — locate it and use it as the shape's source of truth (D2).
+> - `packages/dorfl/scripts/vendor-protocol.mjs` — add `SLICING-PROTOCOL.md` to the declared set.
 > - `skills/setup/protocol/SLICING-PROTOCOL.md` (new), mirrored byte-identically into `work/protocol/`.
 > - `skills/to-task/SKILL.md` — thin to a pointer; keep `disable-model-invocation: true` (this skill is user-invoked, unlike `review` / `surface-questions`).
 >

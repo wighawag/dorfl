@@ -50,7 +50,7 @@ Make agent-failure behave like a gate-failure: **commit + push + route to needs-
 ### Claiming this slice
 
 ```sh
-agent-runner claim agent-fail-saves-work --arbiter <remote>
+dorfl claim agent-fail-saves-work --arbiter <remote>
 git fetch <remote> && git switch -c work/agent-fail-saves-work <remote>/main
 git mv work/in-progress/agent-fail-saves-work.md work/done/agent-fail-saves-work.md
 ```

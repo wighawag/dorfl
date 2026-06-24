@@ -33,7 +33,7 @@ While building `do --watch` (option (a): tail the pi session log, launch untouch
 2. **Adapter realisation — pi-only, clear error on null.**
    - **pi adapter:** interactive = `pi` **WITHOUT `--print`**, **inherited stdio** (`stdio: 'inherit'`), **no piped prompt**, run in `input.dir`, foreground. KEEP passing `--session <path>` so the human session is still recorded/visible (audit trail + the pi dashboard still apply). (The autonomous form stays `pi --print --session <path>` with the prompt on stdin, captured.)
    - **null/shell adapter:** `--agent` is **pi-only** — `launchInteractive` throws a CLEAR error ("interactive launch requires the pi harness; configure `harness: pi`"), mirroring `do-watch`'s fail-on-null decision. `agentCmd` is shaped for the captured autonomous path; "interactive" has no clean meaning there.
-3. **Liveness / return — a human session, NOT a tracked job.** It blocks the CLI in the foreground until the human exits, then returns control. It does NOT write a `.agent-runner-job.json` record, does NOT participate in the PID/liveness/`status`/ `gc` model, and does NOT auto-run the gate (no unattended completion). After exit the human is left on the onboarded `work/<slug>` branch and drives `complete`/ `requeue` themselves (the normal human face). `launchInteractive` returns void / an exit code only — nothing to record.
+3. **Liveness / return — a human session, NOT a tracked job.** It blocks the CLI in the foreground until the human exits, then returns control. It does NOT write a `.dorfl-job.json` record, does NOT participate in the PID/liveness/`status`/ `gc` model, and does NOT auto-run the gate (no unattended completion). After exit the human is left on the onboarded `work/<slug>` branch and drives `complete`/ `requeue` themselves (the normal human face). `launchInteractive` returns void / an exit code only — nothing to record.
 4. **Model routing — the resolved `model` (ADR §13: flag > env > per-repo > global) FLOWS INTO the interactive launch**, the same as the autonomous path, so the human starts pinned to the intended model (otherwise `start --agent --model X` would silently do nothing — a surprising inconsistency with `do`/`run`). The human may still switch models inside the pi session afterward (pi's own affordance); the LAUNCH respects the resolved routing.
 
 ## Acceptance criteria
@@ -42,9 +42,9 @@ While building `do --watch` (option (a): tail the pi session log, launch untouch
 - [ ] A NEW `launchInteractive(input)` method is added to the `Harness` seam (decision #1); the existing captured `launch` path is UNCHANGED (byte-identical — its tests pass unmodified).
 - [ ] pi adapter: `launchInteractive` runs `pi` WITHOUT `--print`, inherited stdio, no piped prompt, in `input.dir`, still passing `--session <path>` (decision #2).
 - [ ] null adapter: `launchInteractive` throws a clear pi-only error (decision #2).
-- [ ] It is NOT a tracked job: no `.agent-runner-job.json`, no PID/liveness record, no gate; it returns control on human exit, leaving them onboarded on `work/<slug>` (decision #3).
+- [ ] It is NOT a tracked job: no `.dorfl-job.json`, no PID/liveness record, no gate; it returns control on human exit, leaving them onboarded on `work/<slug>` (decision #3).
 - [ ] The resolved `model` (flag > env > per-repo > global) flows into the interactive pi launch (decision #4).
-- [ ] Tests assert an INTERACTIVE launch (inherited stdio / foreground, no prepared prompt) with the right cwd via `launchInteractive` (NOT the captured-`launch` stub); the null adapter's pi-only error; and that `--agent` does not write a job record. Use the house harness-stub + temp-dir isolation; assert the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched.
+- [ ] Tests assert an INTERACTIVE launch (inherited stdio / foreground, no prepared prompt) with the right cwd via `launchInteractive` (NOT the captured-`launch` stub); the null adapter's pi-only error; and that `--agent` does not write a job record. Use the house harness-stub + temp-dir isolation; assert the real `~/.dorfl/` + `~/.pi/agent/sessions/` are untouched.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -67,7 +67,7 @@ While building `do --watch` (option (a): tail the pi session log, launch untouch
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim agent-interactive-launch --arbiter <remote>      # default --arbiter origin
+dorfl claim agent-interactive-launch --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/agent-interactive-launch <remote>/main
 # on completion, in the work branch's PR/merge:

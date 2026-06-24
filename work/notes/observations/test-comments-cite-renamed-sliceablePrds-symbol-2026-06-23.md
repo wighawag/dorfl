@@ -5,7 +5,7 @@ needsAnswers: true
 # 2026-06-23: test comments/describe-names still cite the renamed `sliceablePrds` symbol (now `taskableBriefs`)
 
 The live src helper was renamed `sliceablePrds` -> `taskableBriefs`
-(`packages/agent-runner/src/select-priority.ts:111`), but several TEST comments
+(`packages/dorfl/src/select-priority.ts:111`), but several TEST comments
 and one describe-block NAME still cite the old symbol, so they reference a name
 that no longer exists in src:
 - `test/scan.test.ts:396` — comment "REUSES `sliceablePrds` (the SAME `autoslice-gate` predicate...)".

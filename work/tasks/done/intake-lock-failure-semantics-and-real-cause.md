@@ -8,9 +8,9 @@ covers: []
 
 ## What to build
 
-The `intake <N>` processing-lock (`src/issue-provider.ts` label ops + `src/intake.ts` acquire/release) collapsed every non-zero `gh` exit into a single hard-coded "`gh` is unavailable or unauthenticated" message + a silent best-effort degrade. On a fresh repo (the lock label `agent-runner:processing` never created) this both MISATTRIBUTED the cause and proceeded lock-less. Fix the lock's failure semantics end-to-end:
+The `intake <N>` processing-lock (`src/issue-provider.ts` label ops + `src/intake.ts` acquire/release) collapsed every non-zero `gh` exit into a single hard-coded "`gh` is unavailable or unauthenticated" message + a silent best-effort degrade. On a fresh repo (the lock label `dorfl:processing` never created) this both MISATTRIBUTED the cause and proceeded lock-less. Fix the lock's failure semantics end-to-end:
 
-1. **Surface the REAL cause.** The label-op result carries the actual `gh` stderr (e.g. `'agent-runner:processing' not found`), never a hard-coded auth guess — so the cause is diagnosable.
+1. **Surface the REAL cause.** The label-op result carries the actual `gh` stderr (e.g. `'dorfl:processing' not found`), never a hard-coded auth guess — so the cause is diagnosable.
 2. **FAIL, don't silently degrade, when a MEANINGFUL lock is unacquirable.** The label ops gain a three-way outcome — `applied` / `unsupported` / `failed`:
    - **already held by another run** → back off (`locked`, exit 0). _(unchanged)_
    - **`unsupported`** (provider has NO label concept at all) → the ONLY legitimate degrade-to-best-effort (the spec's provider-pluggability; a non-GitHub provider without labels).

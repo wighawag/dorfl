@@ -42,7 +42,7 @@ ONE strategy = current behaviour. The reason-block-in-the-body (never a frontmat
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim ledger-write-seam-needs-attention --arbiter <remote>      # default --arbiter origin
+dorfl claim ledger-write-seam-needs-attention --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/ledger-write-seam-needs-attention <remote>/main
 # on completion, in the work branch's PR/merge:

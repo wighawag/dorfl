@@ -56,7 +56,7 @@ Mirror the structure/voice of `skills/to-slices/SKILL.md` and `skills/to-prd/`.
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim review-skill --arbiter <remote>      # default --arbiter origin
+dorfl claim review-skill --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/review-skill <remote>/main
 # on completion, in the work branch's PR/merge:

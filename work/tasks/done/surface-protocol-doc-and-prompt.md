@@ -36,14 +36,14 @@ End-to-end path:
 
 ## Prompt
 
-> FIRST, check this task against current reality: does the keystone slice (`review-protocol-doc-and-shared-machinery`) actually exist in `tasks/done/`? If not, you cannot start (`blockedBy` must resolve). Re-confirm: (a) `resolveProtocolDoc(name, cwd)` is the resolver in use; (b) `vendor-protocol.mjs` vendors a SET driven by a declared list; (c) `setup` already copies the whole `skills/setup/protocol/` directory; (d) `buildSurfacePrompt` (in `packages/agent-runner/src/surface-gate.ts`) still says "Run the `surface-questions` skill" and still partially re-inlines the two laws.
+> FIRST, check this task against current reality: does the keystone slice (`review-protocol-doc-and-shared-machinery`) actually exist in `tasks/done/`? If not, you cannot start (`blockedBy` must resolve). Re-confirm: (a) `resolveProtocolDoc(name, cwd)` is the resolver in use; (b) `vendor-protocol.mjs` vendors a SET driven by a declared list; (c) `setup` already copies the whole `skills/setup/protocol/` directory; (d) `buildSurfacePrompt` (in `packages/dorfl/src/surface-gate.ts`) still says "Run the `surface-questions` skill" and still partially re-inlines the two laws.
 >
 > Read the brief `work/briefs/ready/runner-invoked-disciplines-into-protocol.md` (Solution + D1, D2, D3). This is RELOCATION, not re-authoring — the surface discipline text moves VERBATIM from `skills/surface-questions/SKILL.md` into the new protocol doc (Out of Scope in the brief pins this).
 >
 > Code touchpoints:
 >
-> - `packages/agent-runner/src/surface-gate.ts` — `buildSurfacePrompt`, `parseSurfaceEmit`.
-> - `packages/agent-runner/scripts/vendor-protocol.mjs` — add `SURFACE-PROTOCOL.md` to the declared set.
+> - `packages/dorfl/src/surface-gate.ts` — `buildSurfacePrompt`, `parseSurfaceEmit`.
+> - `packages/dorfl/scripts/vendor-protocol.mjs` — add `SURFACE-PROTOCOL.md` to the declared set.
 > - `skills/setup/protocol/SURFACE-PROTOCOL.md` (new), mirrored into `work/protocol/` byte-identically (the two-place discipline — see this repo's `AGENTS.md`).
 > - `skills/surface-questions/SKILL.md` — thin to a pointer.
 >

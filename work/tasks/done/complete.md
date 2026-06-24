@@ -1,7 +1,7 @@
 ---
 title: complete — gate, mark done, commit, and integrate a work item
 slug: complete
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [verify, claim-command]
 covers: [12, 7, 8]
@@ -9,7 +9,7 @@ covers: [12, 7, 8]
 
 ## What to build
 
-`agent-runner complete [<slug>] [--skip-verify] [--type <t>] [--message <s>] [--arbiter <remote>]` — the human "finish this" command that runs the same back-half the autonomous runner runs: gate -> mark done -> commit -> integrate. Dual-use: this is the finish/integration logic `run-once`/`watch` reuse.
+`dorfl complete [<slug>] [--skip-verify] [--type <t>] [--message <s>] [--arbiter <remote>]` — the human "finish this" command that runs the same back-half the autonomous runner runs: gate -> mark done -> commit -> integrate. Dual-use: this is the finish/integration logic `run-once`/`watch` reuse.
 
 Resolved design points (were ambiguous; now decided):
 
@@ -21,7 +21,7 @@ Resolved design points (were ambiguous; now decided):
 
 End-to-end, on a `work/<slug>` branch (slug inferred from the branch if omitted):
 
-1. **Gate**: run `agent-runner verify` (the per-repo gate). Abort with a clear message if it fails. `--skip-verify` skips it (human-only escape hatch; the autonomous runner never skips — ADR §8). Bad work never proceeds to done.
+1. **Gate**: run `dorfl verify` (the per-repo gate). Abort with a clear message if it fails. `--skip-verify` skips it (human-only escape hatch; the autonomous runner never skips — ADR §8). Bad work never proceeds to done.
 2. **Mark done**: `mkdir -p work/done` then `git mv work/in-progress/<slug>.md work/done/<slug>.md` (target dir created first — git doesn't track empty dirs).
 3. **Commit**: `git add -A` (the agent's uncommitted work + the `git mv`) and make ONE atomic commit with the completed-slice message `<type>(<slug>): <summary>; done` (`<type>`/`<summary>` from flags/defaults above; CLAIM-PROTOCOL "completed-slice commit message"). Error if there is nothing to commit.
 4. **Rebase-before-integrate** (ADR §10): `git fetch` + rebase `work/<slug>` onto the latest `<arbiter>/main`. Clean -> continue. Conflict -> `git rebase --abort` and STOP with a clear needs-attention message (the human resolves; `complete` never auto-resolves).
@@ -51,9 +51,9 @@ Scope: minimal-but-useful now — gate + done-move + commit + push, full auto-me
 
 ## Prompt
 
-> Implement `agent-runner complete [<slug>] [--skip-verify] [--type <t>] [--message <s>] [--arbiter <remote>]` in `packages/agent-runner/`: the human finish-and-integrate command. READ FIRST: ADR §4/§6/§8/§10 in `docs/adr/execution-substrate-decisions.md` (deletion/integration/gate/ conflict), CLAIM-PROTOCOL.md (completed-slice commit message; done-move), and the existing `verify.ts`, `integrate.ts`, and `config.ts`.
+> Implement `dorfl complete [<slug>] [--skip-verify] [--type <t>] [--message <s>] [--arbiter <remote>]` in `packages/dorfl/`: the human finish-and-integrate command. READ FIRST: ADR §4/§6/§8/§10 in `docs/adr/execution-substrate-decisions.md` (deletion/integration/gate/ conflict), CLAIM-PROTOCOL.md (completed-slice commit message; done-move), and the existing `verify.ts`, `integrate.ts`, and `config.ts`.
 >
-> On a `work/<slug>` branch (infer slug from the branch if omitted): run `agent-runner verify` and abort if it fails (`--skip-verify` skips — human-only; the autonomous runner never skips). On pass: `mkdir -p work/done`, `git mv` in-progress->done, then `git add -A` (the build agent left its work UNCOMMITTED — stage everything) and make ONE atomic commit `<type>(<slug>): <summary>; done` (`--type` default `feat`; `--message` default = slice `title`); error if nothing to commit. Rebase onto the latest `<arbiter>/main` (ADR §10: clean continues; conflict -> `git rebase --abort` + stop, needs-attention; never auto-resolve). Then integrate per config `integration`: `merge` = push to `<arbiter>/main` AND sync the local clone to the new main (end on up-to-date local main); `propose` = push the branch + report the next step (full provider PR deferred to the integration seam). `--arbiter` defaults to `origin`. NEVER `--force` to main.
+> On a `work/<slug>` branch (infer slug from the branch if omitted): run `dorfl verify` and abort if it fails (`--skip-verify` skips — human-only; the autonomous runner never skips). On pass: `mkdir -p work/done`, `git mv` in-progress->done, then `git add -A` (the build agent left its work UNCOMMITTED — stage everything) and make ONE atomic commit `<type>(<slug>): <summary>; done` (`--type` default `feat`; `--message` default = slice `title`); error if nothing to commit. Rebase onto the latest `<arbiter>/main` (ADR §10: clean continues; conflict -> `git rebase --abort` + stop, needs-attention; never auto-resolve). Then integrate per config `integration`: `merge` = push to `<arbiter>/main` AND sync the local clone to the new main (end on up-to-date local main); `propose` = push the branch + report the next step (full provider PR deferred to the integration seam). `--arbiter` defaults to `origin`. NEVER `--force` to main.
 >
 > ALSO (Q4 debt): the canonical integration vocab is `merge` | `propose`, but the code still uses the old `pr`. Rename `pr` -> `propose` across `config.ts` (`IntegrationMode` + default), `integrate.ts`, and run-once call sites, keeping existing tests green. This is the same finish/integration back-half the autonomous run-once/watch will reuse.
 >

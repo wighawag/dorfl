@@ -36,7 +36,7 @@ So this slice is **Option A — materialise-then-reuse** (the smaller, lower-ris
 - [ ] Claim ↔ worktree-create ↔ start compose with NO double-claim and NO branch conflict (claim, then worktree off the post-claim main, then start plain-switches the existing branch). `start`/`complete` are proven to work against a job-worktree `cwd` (a test exercises the full pipeline there).
 - [ ] Teardown re-applies the §4 predicate (`reapJob`): reaps iff clean AND on the arbiter, retains otherwise. The human area (`humanWorktreesDir`) is NEVER written.
 - [ ] `--propose`/`--merge` and slug resolution behave identically to `do-in-place`.
-- [ ] **Test isolation (shared-write-location rule, WORK-CONTRACT):** tests point `workspacesDir` at a temp dir AND `PI_CODING_AGENT_DIR` at a scratch dir, and assert the real `~/.agent-runner/` AND `~/.pi/agent/sessions/` are UNTOUCHED after the run. (Use the `isolatePiAgentDir` helper.)
+- [ ] **Test isolation (shared-write-location rule, WORK-CONTRACT):** tests point `workspacesDir` at a temp dir AND `PI_CODING_AGENT_DIR` at a scratch dir, and assert the real `~/.dorfl/` AND `~/.pi/agent/sessions/` are UNTOUCHED after the run. (Use the `isolatePiAgentDir` helper.)
 - [ ] Tests (local `--bare` arbiter as the registered remote, temp agents' area, stubbed harness): `do --remote` runs end-to-end in a job worktree; an unregistered remote is auto-registered; teardown reaps a clean+pushed job and retains a dirty one.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
@@ -57,14 +57,14 @@ So this slice is **Option A — materialise-then-reuse** (the smaller, lower-ris
 >
 > Implement `--remote` selection + auto-mirror; CLAIM first, then materialise the worktree off the post-claim fresh main, then run start/agent/complete against the worktree dir; teardown via `reapJob`. Use `workspacesDir`, never `humanWorktreesDir`.
 >
-> TDD with vitest, house style (local `--bare` arbiter, temp `workspacesDir`, `isolatePiAgentDir` to scratch, stubbed harness): end-to-end in a job worktree; auto-register an unknown remote; reap-clean / retain-dirty; assert the human area AND the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are never touched. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (local `--bare` arbiter, temp `workspacesDir`, `isolatePiAgentDir` to scratch, stubbed harness): end-to-end in a job worktree; auto-register an unknown remote; reap-clean / retain-dirty; assert the human area AND the real `~/.dorfl/` + `~/.pi/agent/sessions/` are never touched. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim do-remote --arbiter <remote>      # default --arbiter origin
+dorfl claim do-remote --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/do-remote <remote>/main
 git mv work/in-progress/do-remote.md work/done/do-remote.md
 ```

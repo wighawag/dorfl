@@ -49,7 +49,7 @@ The two DRIVERS (one-shot sequential / loop) and `-n`, plus the per-action gates
 >
 > Shapes: `advance <slug>` (bare = slice), `advance prd:<slug>`, `advance obs:<slug>` (NEW namespace), `advance` (bare eligible-set — wire to single named item or stub with a clear "needs the driver slice" error, recorded in `## Decisions`). Extend `slug-namespace.ts` with the `obs:` namespace (it has `slice`/`prd` today); keep the bare-slug cross-check as `do` has it. Classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only; a loser backs off having spent ~nothing.
 >
-> READ FIRST: `packages/agent-runner/src/cli.ts` (how `do`/`do prd:` are wired as verbs — add `advance` as a SIBLING), `packages/agent-runner/src/slug-namespace.ts` (`parseSlugArg`/`resolveSlug` — add the `obs:` namespace), the tick classifier from `advance-tick-classifier`, the `advancing` lock from `advancing-lock-borrow`, and `packages/agent-runner/src/do.ts` (the `do`/`do prd:` machinery to ORCHESTRATE).
+> READ FIRST: `packages/dorfl/src/cli.ts` (how `do`/`do prd:` are wired as verbs — add `advance` as a SIBLING), `packages/dorfl/src/slug-namespace.ts` (`parseSlugArg`/`resolveSlug` — add the `obs:` namespace), the tick classifier from `advance-tick-classifier`, the `advancing` lock from `advancing-lock-borrow`, and `packages/dorfl/src/do.ts` (the `do`/`do prd:` machinery to ORCHESTRATE).
 >
 > FIRST, check this slice against current reality (drift). The resolver + `do prd:` routing-through-integration are LANDED substrate (PRD 2026-06-09 UPDATE). If they landed differently, reconcile or route to `needs-attention/`.
 >
@@ -60,7 +60,7 @@ The two DRIVERS (one-shot sequential / loop) and `-n`, plus the per-action gates
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-verb-resolver --arbiter origin
+dorfl claim advance-verb-resolver --arbiter origin
 git fetch origin && git switch -c work/advance-verb-resolver origin/main
 git mv work/in-progress/advance-verb-resolver.md work/done/advance-verb-resolver.md
 ```

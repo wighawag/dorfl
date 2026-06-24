@@ -142,7 +142,7 @@ one (create, gated), that distinction must be added before apply mints followups
 `observationTriage` and `surfaceBlockers` join the gate family as first-class
 `Config` members threading the SAME 5 points the existing gates use: `config.ts`
 (field + default), `repo-config.ts` `REPO_ALLOWED_KEYS` (per-repo
-`.agent-runner.json`), `env-config.ts` `KEY_COERCIONS` (the `AGENT_RUNNER_*` layer;
+`.dorfl.json`), `env-config.ts` `KEY_COERCIONS` (the `DORFL_*` layer;
 `observationTriage` is an ENUM coercion like `integration`), the CLI flags
 (`do-config.ts`/`cli.ts`), and the read site at the advance lifecycle rungs.
 
@@ -159,27 +159,27 @@ lifecycle (triage / surface / apply) for free, with no separate mode to discover
 two gates are no-ops there, correctly the calm build-only shape by construction.
 
 Because they are normal `Config` fields, CI gets env-controllability for FREE: a
-`AGENT_RUNNER_*` env var (or a GitHub repo variable) in the workflow CAN set them,
-and the SAME `.agent-runner.json` the laptop uses applies in CI too. CI stops being
+`DORFL_*` env var (or a GitHub repo variable) in the workflow CAN set them,
+and the SAME `.dorfl.json` the laptop uses applies in CI too. CI stops being
 a special policy surface.
 
 **The env layer is the OPTIONAL CI-only override, NOT the carrier of defaults**
 (task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16). The emitted
-advance workflow INTENTIONALLY ships with NO `AGENT_RUNNER_AUTO_BUILD` /
-`AGENT_RUNNER_AUTO_TASK` / `AGENT_RUNNER_OBSERVATION_TRIAGE` /
-`AGENT_RUNNER_SURFACE_BLOCKERS` env line at all. The earlier draft baked "calm
+advance workflow INTENTIONALLY ships with NO `DORFL_AUTO_BUILD` /
+`DORFL_AUTO_TASK` / `DORFL_OBSERVATION_TRIAGE` /
+`DORFL_SURFACE_BLOCKERS` env line at all. The earlier draft baked "calm
 defaults" into that env block (`AUTO_BUILD: 'true'`, `AUTO_TASK: 'true'`,
 `OBSERVATION_TRIAGE: 'off'`, `SURFACE_BLOCKERS: 'false'`), but the precedence is
 `flag > env > per-repo > global > default`, so the env layer FORCED itself over
-the repo's own `.agent-runner.json` — a user who set `surfaceBlockers: true` or
+the repo's own `.dorfl.json` — a user who set `surfaceBlockers: true` or
 `observationTriage: 'ask'` in committed config saw it silently shadowed in CI. The
 workflow now carries no gate env, so CI resolves the four gates from per-repo
 config (then global, then `DEFAULT_CONFIG`) like any other consumer. The trade-off
 accepted head-on: a CONFIG-LESS repo lands on the strict built-in defaults
 (`autoBuild: false`, `autoTask: false`, `observationTriage: 'off'`,
 `surfaceBlockers: false`) and CI claims nothing until the user opts in — by either
-setting the gate(s) in `.agent-runner.json` (governs everywhere) OR adding the
-`AGENT_RUNNER_*` env var to the workflow themselves (the explicit, opt-in CI-only
+setting the gate(s) in `.dorfl.json` (governs everywhere) OR adding the
+`DORFL_*` env var to the workflow themselves (the explicit, opt-in CI-only
 override the env layer is FOR). `install-ci` prints a completion message that
 names both enable paths so the now-quiet default is not a surprise.
 
@@ -189,8 +189,8 @@ names both enable paths so the now-quiet default is not a surprise.
 shell. It is re-run only to rotate auth or upgrade the workflow itself. EVERYTHING a
 user might change their mind about (the gates above, `integration` propose/merge —
 where `merge` auto-lands on a green gate / review approve and `propose` is a human
-checkpoint, no separate auto-merge knob — and `review`) is an `AGENT_RUNNER_*` env var / repo variable / committed
-`.agent-runner.json` key, edited WITHOUT re-running `install-ci`. The workflow is a
+checkpoint, no separate auto-merge knob — and `review`) is an `DORFL_*` env var / repo variable / committed
+`.dorfl.json` key, edited WITHOUT re-running `install-ci`. The workflow is a
 thin shell that inherits repo config + optional env overrides.
 
 ### 7. Workflow shape: dynamic matrix for propose, sequential for merge
@@ -199,7 +199,7 @@ One fixed workflow file carries both shapes, selected at runtime by a dispatch
 input / repo variable (no re-install):
 
 - **propose → a DYNAMIC matrix** (the default): an `enumerate` job runs
-  `agent-runner scan --json | jq` to emit a DEDUPLICATED list of eligible item ids;
+  `dorfl scan --json | jq` to emit a DEDUPLICATED list of eligible item ids;
   the matrix fans out one leg per id; each leg `advance <id> --propose` opens its own
   independent PR.
 - **merge → a SINGLE SEQUENTIAL job** (`advance -n <x> --merge`): merge-mode items
@@ -242,7 +242,7 @@ CLEAN REPLACEMENTS, not aliased migrations. `autoTriage` is DELETED outright (no
 aliased to `observationTriage`); the existing `allowAgents -> autoBuild` alias is
 ALSO removed (task `remove-deprecated-config-aliases`). A value-migrating alias
 would additionally have been a trap here: the env legacy-alias path coerces the OLD
-var with the NEW key's coercion, so `AGENT_RUNNER_AUTO_TRIAGE=false` against an enum
+var with the NEW key's coercion, so `DORFL_AUTO_TRIAGE=false` against an enum
 coercion would THROW. Avoided by not aliasing. Reinstate the alias discipline only
 once the tool has real downstream users owed a migration window.
 
@@ -250,7 +250,7 @@ once the tool has real downstream users owed a migration window.
 
 - The gate family is coherent: `autoBuild`/`autoTask` (build/task) + `observationTriage`/`surfaceBlockers` (the two question sources), all per-repo + env + flag.
 - CI policy is fully expressible by config/env; `install-ci` is genuinely one-time.
-- The emitted advance workflow carries NO `AGENT_RUNNER_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.agent-runner.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoTask off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
+- The emitted advance workflow carries NO `DORFL_*` gate env: CI resolves the four gates through `flag > env > per-repo > global > default` like any other consumer, so per-repo `.dorfl.json` is no longer silently shadowed. A config-less repo lands on the strict built-in `DEFAULT_CONFIG` (autoBuild/autoTask off, observationTriage `'off'`, surfaceBlockers false) — CI claims nothing until the user opts in via config or a hand-added env var. (Task `install-ci-emits-no-gate-env-let-config-decide`, 2026-06-16.)
 - The verb decision (`do` vs `advance`) is eliminated from CI; "calm build-only" is `advance` + both lifecycle gates off, not a different verb.
 - Engine work falls out (captured as `work/ideas/`): the `autoTriage -> observationTriage` 3-state migration; the `surfaceBlockers` gate; unifying `run` onto the advance tick.
 - Cross-refs: `command-surface-and-journeys.md` (the gate family + the autonomous face), `work/prds/tasked/runner-in-ci.md` ("Config & gate model in CI"), `config.ts`/`repo-config.ts`/`env-config.ts` (the gate-family plumbing), `advance-loop-driver.ts` ("run == CI: swap the tick, keep the loop").

@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-f3a-apply-resolves-item-by-identity-at-write-time-2026-06-22 type=observation slug=review-nits-f3a-apply-resolves-item-by-identity-at-write-time-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-f3a-apply-resolves-item-by-identity-at-write-time-2026-06-22 type=observation slug=review-nits-f3a-apply-resolves-item-by-identity-at-write-time-2026-06-22 allAnswered=false -->
 
 ## Q1
 
@@ -20,7 +20,7 @@ _Suggested default: promote-slice — finding #1 (the dual FOLDERS_FOR_TYPE / AP
 
 **Ratify: should APPLY_LIFECYCLE_FOLDERS (apply-persist.ts) and FOLDERS_FOR_TYPE (advance.ts) be unified, or is the staging-inclusive vs staging-exclusive asymmetry the intended permanent shape?**
 
-> packages/agent-runner/src/apply-persist.ts:30-37 vs packages/agent-runner/src/advance.ts:376-380. Apply's set deliberately includes staging folders (`tasks-backlog`, `briefs-proposed`) so the re-resolver can see a concurrent promote that just moved the item OUT of staging — the F2 staging-surfacing case this prefactor enables. Advance's set is staging-exclusive. The slice prompt asked the agent to 'reuse the resolver's shape rather than inventing a new one'; sidecarPathFor's identity shape was reused, but the folder list forked.
+> packages/dorfl/src/apply-persist.ts:30-37 vs packages/dorfl/src/advance.ts:376-380. Apply's set deliberately includes staging folders (`tasks-backlog`, `briefs-proposed`) so the re-resolver can see a concurrent promote that just moved the item OUT of staging — the F2 staging-surfacing case this prefactor enables. Advance's set is staging-exclusive. The slice prompt asked the agent to 'reuse the resolver's shape rather than inventing a new one'; sidecarPathFor's identity shape was reused, but the folder list forked.
 
 _Suggested default: Keep the asymmetry but express it as one function: e.g. lifecycleFoldersFor(type, { includeStaging: boolean }) with a single source of truth and the two call-sites passing the flag. Captures the intentional difference without two parallel constants._
 
@@ -32,7 +32,7 @@ _Suggested default: Keep the asymmetry but express it as one function: e.g. life
 
 **Ratify: extending `vanished` to mean 'reached a terminal folder (cancelled / briefs-dropped / needs-attention)' between capture and write — is that the intended interpretation of acceptance criterion 4 ('item removed entirely')?**
 
-> packages/agent-runner/src/apply-persist.ts:20-29, 386-400; test 'VANISHED: ... sidecar UNTOUCHED'. Terminal-only folders are excluded from the apply re-resolver, so a concurrent terminal-move surfaces as `vanished` (clean exit, no commit, sidecar untouched, human can rerun). Recorded as a code comment; not in the done record's Decisions block (because there is no Decisions block — see next finding).
+> packages/dorfl/src/apply-persist.ts:20-29, 386-400; test 'VANISHED: ... sidecar UNTOUCHED'. Terminal-only folders are excluded from the apply re-resolver, so a concurrent terminal-move surfaces as `vanished` (clean exit, no commit, sidecar untouched, human can rerun). Recorded as a code comment; not in the done record's Decisions block (because there is no Decisions block — see next finding).
 
 _Suggested default: Yes — treating a terminal as 'vanished from the apply path' is the correct generalisation: the item is no longer in a state where apply should write to it, and leaving the sidecar untouched keeps the operation reversible. Worth stating once in the brief/ADR for the slice that promotes finding #1._
 

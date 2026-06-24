@@ -15,7 +15,7 @@ The `do-watch` slice conflated the two formats (it told the implementer to match
 
 ### The REAL session-log format (parse THIS)
 
-Verified shapes from a real `.agent-runner-pi-session/*.jsonl`:
+Verified shapes from a real `.dorfl-pi-session/*.jsonl`:
 
 - A record is `{"type":"message", "message":{"role":"user"|"assistant", "content":[...]}}`.
 - **Assistant text:** on `message.role == "assistant"`, the `content[]` parts with `{"type":"text","text":"..."}` \u2014 concatenate/emit the text.
@@ -47,7 +47,7 @@ Verified shapes from a real `.agent-runner-pi-session/*.jsonl`:
 >
 > Rewrite the classifier to the SESSION-LOG shape: walk `type:"message"` records; on `role:"assistant"` emit `content[]` `type:"text"` text and `\u25b6 <name>` for `content[]` `type:"toolCall"` parts; emit `\u2713 agent finished` on PROCESS EXIT (the log has no `agent_end`); skip the rest. Keep TS-only parsing (no `jq`), the TTY/`NO_COLOR` colour rule, and the rest of `do --watch` (concurrent tail, `launchAsync`, fail-on-null-harness) UNCHANGED \u2014 only the event classifier was wrong.
 >
-> READ FIRST — the AUTHORITATIVE sources: (1) `@earendil-works/pi-coding-agent` EXPORTS `SessionEntry` / `SessionMessageEntry` — type the parser against those (agent-runner already imports from this package), do NOT hand-roll the schema. (2) `~/dev/github/wighawag/pi-remote`'s `server/src/session-pool.ts` ~L529–L577 is a COMPLETE reference parser of this exact `.jsonl` (`type:'message'` → `role` → `content[]` block walk over `thinking`/`text`/`toolCall`, incl. edge cases `tc.name||tc.toolName`, `tc.arguments||tc.args`, content-as-string) — mirror it. Then (3) `src/watch-session.ts` (the wrong classifier + `extractAssistantText`, which already reads `content[].text` \u2014 it is keyed on the wrong `type`), the `do-watch` done file, and a REAL session log under a `.agent-runner-pi-session/*.jsonl` (capture a small one as the test fixture; if none is handy, generate via a `do --harness pi` run). CRITICAL: the existing tests passed because they used a SYNTHETIC `--mode json` fixture \u2014 replace it with a real session-log-shaped fixture so this bug cannot recur green.
+> READ FIRST — the AUTHORITATIVE sources: (1) `@earendil-works/pi-coding-agent` EXPORTS `SessionEntry` / `SessionMessageEntry` — type the parser against those (dorfl already imports from this package), do NOT hand-roll the schema. (2) `~/dev/github/wighawag/pi-remote`'s `server/src/session-pool.ts` ~L529–L577 is a COMPLETE reference parser of this exact `.jsonl` (`type:'message'` → `role` → `content[]` block walk over `thinking`/`text`/`toolCall`, incl. edge cases `tc.name||tc.toolName`, `tc.arguments||tc.args`, content-as-string) — mirror it. Then (3) `src/watch-session.ts` (the wrong classifier + `extractAssistantText`, which already reads `content[].text` \u2014 it is keyed on the wrong `type`), the `do-watch` done file, and a REAL session log under a `.dorfl-pi-session/*.jsonl` (capture a small one as the test fixture; if none is handy, generate via a `do --harness pi` run). CRITICAL: the existing tests passed because they used a SYNTHETIC `--mode json` fixture \u2014 replace it with a real session-log-shaped fixture so this bug cannot recur green.
 >
 > TDD with vitest, house style: a real-shaped session `.jsonl` \u2192 tool starts + assistant text surfaced, other record types skipped; finished-on-exit. "Done" = acceptance criteria met and the gate green.
 
@@ -57,7 +57,7 @@ Verified shapes from a real `.agent-runner-pi-session/*.jsonl`:
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim do-watch-session-log-format --arbiter <remote>      # default --arbiter origin
+dorfl claim do-watch-session-log-format --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/do-watch-session-log-format <remote>/main
 # on completion, in the work branch's PR/merge:

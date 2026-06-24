@@ -37,7 +37,7 @@ Gates compose cleanly + ORTHOGONALLY: a pool gated OFF (`observationTriage: off`
 
 ## Acceptance criteria
 
-- [ ] `selectionOrder` is a `Config` field threading the full gate-family chain (`config.ts` default, `repo-config.ts` `REPO_ALLOWED_KEYS`, `env-config.ts` `KEY_COERCIONS` via the existing `'list'` coercion so `AGENT_RUNNER_SELECTION_ORDER=build,slice,surface,triage` works, and a CLI flag), resolving `flag > env > per-repo > global > default`.
+- [ ] `selectionOrder` is a `Config` field threading the full gate-family chain (`config.ts` default, `repo-config.ts` `REPO_ALLOWED_KEYS`, `env-config.ts` `KEY_COERCIONS` via the existing `'list'` coercion so `DORFL_SELECTION_ORDER=build,slice,surface,triage` works, and a CLI flag), resolving `flag > env > per-repo > global > default`.
 - [ ] PRESET-OR-LIST resolution (pure, unit-tested as a table): a single recognized keyword (`drain`/`groom`) expands to its list; anything else is parsed as an explicit pool-name list; an unknown pool name or unknown single keyword FAILS LOUDLY naming the offending value. (For the env `'list'` form, a single-element list whose one element is a preset keyword also expands, decide + test that case.)
 - [ ] `apply` is ALWAYS first and is NOT nameable in `selectionOrder` (naming it is ignored or a usage error, decide + test). `selectPrioritised` prepends the apply pool ahead of the configured four.
 - [ ] `selectPrioritised` orders the (up to) five pools per the resolved order + `apply`-first, then truncates to `count` (the existing count semantics unchanged). Tested: each preset produces its documented order; an explicit list is honoured; `count` truncation respects the order.
@@ -54,7 +54,7 @@ Gates compose cleanly + ORTHOGONALLY: a pool gated OFF (`observationTriage: off`
 
 - The exact preset SET (`drain`, `groom`, and whether a third like `balanced` earns its place, default NO, keep it small per the minimize-head-space stance).
 - Whether naming `apply` in `selectionOrder` is silently ignored vs a usage error (lean: usage error, it signals a misunderstanding).
-- The env single-element-list-that-is-a-preset case (`AGENT_RUNNER_SELECTION_ORDER=drain` ⇒ a one-element list `['drain']` ⇒ expand the preset). Confirm the `'list'` coercion + the resolver compose correctly.
+- The env single-element-list-that-is-a-preset case (`DORFL_SELECTION_ORDER=drain` ⇒ a one-element list `['drain']` ⇒ expand the preset). Confirm the `'list'` coercion + the resolver compose correctly.
 - Interaction with `count` across five pools + apply-first (apply items first, then the ordered remainder, truncated): confirm this reads sensibly for `-n` and matches the create-vs-consume intent.
 
 ## Prompt
@@ -69,7 +69,7 @@ Gates compose cleanly + ORTHOGONALLY: a pool gated OFF (`observationTriage: off`
 >   - REMOVE `prdsFirst` (no alias, no external users); `drain` reproduces its default, `[slice, build, ...]` reproduces `prdsFirst: true`.
 >   - Gates compose ORTHOGONALLY: a gated-off pool is absent from enumeration, so it drops out of the order (a no-op, not an error). `selectionOrder` ranks what is PRESENT.
 >
-> BUILD: the `Config` field + full chain (REPO_ALLOWED_KEYS, the existing `'list'` env coercion so `AGENT_RUNNER_SELECTION_ORDER` works, a CLI flag); the pure preset-or-list resolver (unit-tested as a table); `selectPrioritised` applying apply-first + the resolved order + `count`; remove `prdsFirst` everywhere.
+> BUILD: the `Config` field + full chain (REPO_ALLOWED_KEYS, the existing `'list'` env coercion so `DORFL_SELECTION_ORDER` works, a CLI flag); the pure preset-or-list resolver (unit-tested as a table); `selectPrioritised` applying apply-first + the resolved order + `count`; remove `prdsFirst` everywhere.
 >
 > TEST (TDD, vitest, house style): the resolver table (preset expansion, explicit list, unknown-name loud failure, the env single-keyword case); each preset's order; apply-always-first; `count` truncation respects order; a gated-off pool drops out without error; the `drain` default == today's two-pool default. Isolate shared/global locations.
 >

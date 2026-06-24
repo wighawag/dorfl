@@ -88,7 +88,7 @@ DISTINGUISH the two failure timings (do not conflate):
 ### Claiming this slice
 
 ```sh
-agent-runner claim stale-lease-retry-all-push-sites-and-treeless-surface --arbiter origin
+dorfl claim stale-lease-retry-all-push-sites-and-treeless-surface --arbiter origin
 git fetch origin && git switch -c work/stale-lease-retry-all-push-sites-and-treeless-surface origin/main
 git mv work/in-progress/stale-lease-retry-all-push-sites-and-treeless-surface.md work/done/stale-lease-retry-all-push-sites-and-treeless-surface.md
 ```

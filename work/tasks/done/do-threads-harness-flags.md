@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained bug fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted in live use: `agent-runner do --watch <slug> --harness pi` errored `no agentCmd configured` despite `--harness pi`.
+> Self-contained bug fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted in live use: `dorfl do --watch <slug> --harness pi` errored `no agentCmd configured` despite `--harness pi`.
 
 The `do` command **declares** `--harness`, `--agent-cmd`, `--pi-bin`, and `--model` options (and `DoFlags` captures them), but its action **never threads them into the resolved config** \u2014 it passes only `{integration}` to `resolveRepoConfig`:
 
@@ -25,7 +25,7 @@ So `config.harness` falls back to the file/default (unset \u2192 null adapter), 
 
 - Reuse / mirror the existing override-building (`runFlagOverrides` or the per-key mapping it does); do NOT invent a parallel mechanism.
 - Honour the same host-only / per-repo rules `resolveRepoConfig` already enforces (`piBin`/`agentCmd` are host-only, etc.) \u2014 passing them as FLAGS is a legitimate per-machine source, same as `run`.
-- After the fix, `agent-runner do --harness pi <slug>` resolves `config.harness === 'pi'` and does NOT require `agentCmd`; `--agent-cmd`/`--pi-bin`/`--model` likewise take effect.
+- After the fix, `dorfl do --harness pi <slug>` resolves `config.harness === 'pi'` and does NOT require `agentCmd`; `--agent-cmd`/`--pi-bin`/`--model` likewise take effect.
 
 ## Acceptance criteria
 
@@ -55,7 +55,7 @@ So `config.harness` falls back to the file/default (unset \u2192 null adapter), 
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim do-threads-harness-flags --arbiter <remote>      # default --arbiter origin
+dorfl claim do-threads-harness-flags --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/do-threads-harness-flags <remote>/main
 # on completion, in the work branch's PR/merge:

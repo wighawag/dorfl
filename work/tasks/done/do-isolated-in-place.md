@@ -75,7 +75,7 @@ Today (`src/cli.ts`, the `do` action body ~L1224): only two shapes exist — in-
 ### Claiming this slice
 
 ```sh
-agent-runner claim do-isolated-in-place --arbiter origin
+dorfl claim do-isolated-in-place --arbiter origin
 git fetch origin && git switch -c work/do-isolated-in-place origin/main
 git mv work/in-progress/do-isolated-in-place.md work/done/do-isolated-in-place.md
 ```

@@ -11,20 +11,20 @@ covers: []
 
 ## The defect (verify against current code before fixing)
 
-The same-slug CAS-race "2 winners" flake survived its own fix. #90 made the racing tests use DISTINCT committer identities (`racerEnv`/`raceClone` in `packages/agent-runner/test/helpers/gitRepo.ts`) so the two racers' commits get distinct shas and the loser loses through the real CAS. That fixed the TEST but not the PRODUCT: it rests on the assumption — stated verbatim in the `racerEnv` docstring (`gitRepo.ts` ~L46-53) — that "in PRODUCTION two racers are distinct principals on distinct machines, so their commits carry distinct identities/timestamps ⇒ distinct shas." **That assumption is FALSE in real scenarios:**
+The same-slug CAS-race "2 winners" flake survived its own fix. #90 made the racing tests use DISTINCT committer identities (`racerEnv`/`raceClone` in `packages/dorfl/test/helpers/gitRepo.ts`) so the two racers' commits get distinct shas and the loser loses through the real CAS. That fixed the TEST but not the PRODUCT: it rests on the assumption — stated verbatim in the `racerEnv` docstring (`gitRepo.ts` ~L46-53) — that "in PRODUCTION two racers are distinct principals on distinct machines, so their commits carry distinct identities/timestamps ⇒ distinct shas." **That assumption is FALSE in real scenarios:**
 
 - One runner (`run --advance` / drive-backlog) advancing two same-slug items, or two workers under ONE bot identity, produces SAME-identity concurrent racers; and
 - git commit timestamps have 1-second resolution, so **same identity + same tree + same message + same base within one second ⇒ IDENTICAL sha in production too.**
 
 So the create-CAS can yield two winners with same-identity racers, and #90 only HID it (it removed the fixture's sha-collision, not the product's exposure to one).
 
-**The actual mechanism (verified against current `src/`):** `packages/agent-runner/src/ledger-write.ts` `currentLedgerWrite.applyTransition` (~L343-391) is the CAS: it pushes `<localBranch>:main --force-with-lease=main:<expectedBase>`, then on push success FETCHes and verifies `arbiterHead === head`. When two racers build the SAME commit sha X off the same base:
+**The actual mechanism (verified against current `src/`):** `packages/dorfl/src/ledger-write.ts` `currentLedgerWrite.applyTransition` (~L343-391) is the CAS: it pushes `<localBranch>:main --force-with-lease=main:<expectedBase>`, then on push success FETCHes and verifies `arbiterHead === head`. When two racers build the SAME commit sha X off the same base:
 
 1. the first push fast-forwards `main` to X;
 2. the second racer's push of the SAME X degrades to "Everything up-to-date" — git exits 0, and `--force-with-lease=main:<base>` has nothing to reject because the desired tip is ALREADY there;
 3. the verify `arbiterHead === head` is then `X === X` ⇒ TRUE, so BOTH racers return `published`.
 
-The post-push verify cannot distinguish "I won the push" from "someone else's IDENTICAL commit was already there." In `packages/agent-runner/src/advancing-lock.ts` `createAttempt` (~L767-855), the create commit is built with the DETERMINISTIC message `advance: create ${path} (by ${ctx.by})` (~L805) off `${arbiter}/main` — exactly the same-sha-prone input — and its publish comment (~L820-825) asserts "our lease fails ⇒ rejected", which is precisely the assumption that breaks under same-identity racers. The same degeneracy exists for EVERY caller of `applyTransition`, since any two racers building identical commits hit the same "up-to-date" no-op.
+The post-push verify cannot distinguish "I won the push" from "someone else's IDENTICAL commit was already there." In `packages/dorfl/src/advancing-lock.ts` `createAttempt` (~L767-855), the create commit is built with the DETERMINISTIC message `advance: create ${path} (by ${ctx.by})` (~L805) off `${arbiter}/main` — exactly the same-sha-prone input — and its publish comment (~L820-825) asserts "our lease fails ⇒ rejected", which is precisely the assumption that breaks under same-identity racers. The same degeneracy exists for EVERY caller of `applyTransition`, since any two racers building identical commits hit the same "up-to-date" no-op.
 
 ## What to build
 
@@ -37,9 +37,9 @@ This is a PRESCRIPTIVE fix, not a reproduce-then-decide investigation. Make each
 2. **Harden the verify's intent (state the invariant, the nonce makes it naturally distinguishable).** After a successful-looking push, "up-to-date with no change of our making" must be treated as REJECTED, not published. With the nonce, a no-op up-to-date push can only mean "someone else's commit (different nonce ⇒ different sha) is already there" — which is a LOSS. Assert the invariant in the seam: the loser must come back `rejected` both because the push is genuinely rejected by the lease AND because the post-push verify no longer spuriously passes. Keep the existing "push reported success but `<arbiter>/main` is not our commit ⇒ rejected" guard and make sure it now FIRES for the loser instead of being bypassed by the sha coincidence.
 
 3. **Test the fix at the PRODUCT layer (the INVERSE of #90).** Add a regression test that races two creators/promoters with IDENTICAL committer identity (NOT `raceClone`/`racerEnv` distinct identities — same `GIT_*` env / same local `user.*`) against the same slug/base, and asserts EXACTLY ONE winner deterministically. This is the scenario #90's helper assumed away; it must now pass because the CAS itself serialises via the nonce, not via sha-distinctness. Mirror the existing same-slug race tests:
-   - `packages/agent-runner/test/advance-triage.test.ts` (~L379-414, "a same-slug new-item race ⇒ exactly one promote creates") — add the identical-identity variant alongside the distinct-identity one;
-   - `packages/agent-runner/test/triage-persist.test.ts` (~L203-240, the sibling two-racing-promote test) — same.
-   - Register the new identical-identity test so it runs under REAL contention (full parallel load). Today `advance-triage.test.ts` and `triage-persist.test.ts` are NOT in `RACE_SENSITIVE` in `packages/agent-runner/vitest.config.ts` (they run in the `parallel` project). To model contention faithfully, either add the relevant file(s) to `RACE_SENSITIVE` or place the new test where it runs under the `sequential` race-sensitive project — decide and document which, and ensure the `won/lost.toHaveLength(1)` invariant holds with NO identity distinctness.
+   - `packages/dorfl/test/advance-triage.test.ts` (~L379-414, "a same-slug new-item race ⇒ exactly one promote creates") — add the identical-identity variant alongside the distinct-identity one;
+   - `packages/dorfl/test/triage-persist.test.ts` (~L203-240, the sibling two-racing-promote test) — same.
+   - Register the new identical-identity test so it runs under REAL contention (full parallel load). Today `advance-triage.test.ts` and `triage-persist.test.ts` are NOT in `RACE_SENSITIVE` in `packages/dorfl/vitest.config.ts` (they run in the `parallel` project). To model contention faithfully, either add the relevant file(s) to `RACE_SENSITIVE` or place the new test where it runs under the `sequential` race-sensitive project — decide and document which, and ensure the `won/lost.toHaveLength(1)` invariant holds with NO identity distinctness.
 
 4. **Reframe the `racerEnv`/`raceClone` docstring** (`gitRepo.ts` ~L40-82) so it no longer claims "distinct identities in production ⇒ distinct shas." The helper is now a CONVENIENCE for modelling distinct principals, NOT the thing that makes the CAS correct. Document that the CAS is correct ON ITS OWN (via the nonce) even under IDENTICAL identities; `racerEnv`/`raceClone` remain available for tests that want to model distinct principals.
 
@@ -66,7 +66,7 @@ This is a PRESCRIPTIVE fix, not a reproduce-then-decide investigation. Make each
 
 ## Prompt
 
-> Make the agent-runner ledger-write CAS AUTHORITATIVE for SAME-IDENTITY, SAME-CONTENT racers. Today the same-slug "2 winners" race can still happen in PRODUCTION (PR #90 only fixed the TEST): when two racers share one bot identity and build the SAME tree + message off the SAME base within one second (git timestamps are 1-second resolution), they produce an IDENTICAL commit sha X. The first push fast-forwards `main` to X; the second push of the SAME X degrades to "Everything up-to-date" (git exits 0, the lease has nothing to reject), and the post-push verify `arbiterHead === head` is `X === X` ⇒ TRUE — so BOTH return `published`. This is a PRODUCT defect, not a test artifact. This is a PRESCRIPTIVE fix: implement the nonce, do not re-litigate.
+> Make the dorfl ledger-write CAS AUTHORITATIVE for SAME-IDENTITY, SAME-CONTENT racers. Today the same-slug "2 winners" race can still happen in PRODUCTION (PR #90 only fixed the TEST): when two racers share one bot identity and build the SAME tree + message off the SAME base within one second (git timestamps are 1-second resolution), they produce an IDENTICAL commit sha X. The first push fast-forwards `main` to X; the second push of the SAME X degrades to "Everything up-to-date" (git exits 0, the lease has nothing to reject), and the post-push verify `arbiterHead === head` is `X === X` ⇒ TRUE — so BOTH return `published`. This is a PRODUCT defect, not a test artifact. This is a PRESCRIPTIVE fix: implement the nonce, do not re-litigate.
 >
 > THE FIX: inject a per-attempt RANDOM nonce (e.g. a `CAS-Nonce: <random>` trailer in the transition commit message, via `crypto.randomUUID()`/`randomBytes`) wherever the transition commit MESSAGE is composed, so EVERY `applyTransition` caller's commit sha is unique. Two concurrent same-identity racers then get DISTINCT shas, the loser's `--force-with-lease=main:<base>` push is GENUINELY REJECTED (main moved past `<base>`, not a no-op up-to-date), and the verify correctly fails for the loser. Use a FRESH nonce per ATTEMPT (per retry of the refetch loop), not once per process. ALSO harden the verify intent: a "push reported up-to-date / no change of our making" outcome must be classified REJECTED, never published (the nonce makes this naturally distinguishable — state the invariant).
 >
@@ -84,7 +84,7 @@ This is a PRESCRIPTIVE fix, not a reproduce-then-decide investigation. Make each
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim cas-create-nonce-authoritative-same-identity --arbiter origin
+dorfl claim cas-create-nonce-authoritative-same-identity --arbiter origin
 # then start work on the updated main:
 git fetch origin && git switch -c work/cas-create-nonce-authoritative-same-identity origin/main
 # on completion, in the work branch's PR/merge:

@@ -14,7 +14,7 @@ The maintainer wants to **batch the judgement**: collect every open question —
 
 ## Solution
 
-A runner-agnostic **`batch-qa` skill** (adopt-the-contract methodology → a SKILL, not an `agent-runner` command, per `docs/adr/methodology-and-skills.md` §8 and the `review` PRD's precedent). It runs a two-phase, iterating loop over the work items:
+A runner-agnostic **`batch-qa` skill** (adopt-the-contract methodology → a SKILL, not an `dorfl` command, per `docs/adr/methodology-and-skills.md` §8 and the `review` PRD's precedent). It runs a two-phase, iterating loop over the work items:
 
 0. **BOUND the batch (self-limiting, no orchestration).** The human describes the set at invocation in natural language ("just the observations", "the autoslice PRDs", "the stuck slices", "everything"). The skill SELECTS from items that are **still unresolved** (state lives in the items, not in a side-ledger — see below), narrows by the human's description, and self-limits to a context-sized chunk if the set is still large. The batch file's HEADER records exactly which items are in THIS batch ("the items being studied").
 1. **GATHER pass (B→A).** Read the targeted items and produce questions, by scope:
@@ -125,13 +125,13 @@ work/questions/<date>-batch.md
 - **`humanOnly`: OMITTED (DECIDED 2026-06-06).** Originally set, then dropped on review: the design is fully decided and the `review` dependency closed, so this PRD is cleanly auto-sliceable — there is no judgement left that requires a human to drive the slicing. (The emitted slices are gated on their own build-nature; a slice like "parse frontmatter + collect `needsAnswers` items" is plainly agent-buildable.)
 - **`needsAnswers`:** none open. The earlier open dependency question — how `batch-qa` obtains its review (B) pass when no `review` skill existed — is RESOLVED (2026-06-06): the review PROTOCOL was split out of `review.md` into its own skill PRD (`work/prd/review-skill.md`), built first, and `batch-qa` `sliceAfter: [review-skill]` composes it. `batch-qa` depends only on the small skill, never on the heavy review gates. Everything else (scope set, one-file/no-parallelism, soft-floor stop, one-step invariant, the `to-slices` composition, per-scope question kinds) was already decided.
 
-> Implementation & testing detail moved to the slice (`work/backlog/batch-qa.md`). Note: `batch-qa` is a pure-prose METHODOLOGY skill (like `review`) — there is NO code, NO runner command, and NO test harness; its acceptance is doc-shaped (the discipline + the no-write / one-step / soft-floor / compose-review-and-to-slices rules are stated clearly enough to follow). An optional thin `agent-runner` convenience command could mechanise the scan LATER (Out of Scope) — that is where any code/tests would live, not in this skill.
+> Implementation & testing detail moved to the slice (`work/backlog/batch-qa.md`). Note: `batch-qa` is a pure-prose METHODOLOGY skill (like `review`) — there is NO code, NO runner command, and NO test harness; its acceptance is doc-shaped (the discipline + the no-write / one-step / soft-floor / compose-review-and-to-slices rules are stated clearly enough to follow). An optional thin `dorfl` convenience command could mechanise the scan LATER (Out of Scope) — that is where any code/tests would live, not in this skill.
 
 ## Out of Scope
 
 - **Parallel fan-out / context-splitting orchestration — REJECTED.** We considered splitting a large set across parallel review sub-contexts that merge into one batch file. Rejected in favour of **sequential self-bounding batches** (the human describes the set; the skill bounds to a context-sized chunk; run again for the next subset; state lives in the items so selection is stateless): it needs ZERO orchestration and no merge step, and the human answers sequentially anyway. The only cost is wall-clock (sequential runs), which is the right trade for a human-in-the-loop tool.
 - **`ideas/`** — excluded by decision (incubating, no readiness gate).
-- **A thin `agent-runner` convenience command** wrapping the mechanical scan — the skill stays authoritative; a command is optional and later (mirrors `setup`).
+- **A thin `dorfl` convenience command** wrapping the mechanical scan — the skill stays authoritative; a command is optional and later (mirrors `setup`).
 - **Replacing the per-item gates** — `batch-qa` feeds them, never replaces them.
 - **`in-progress/` slices** — default to `backlog/`; including in-progress is a later toggle if useful (an in-progress item is mid-build, less likely to need batch triage).
 - **Advancing an item MORE than one step in a single pass** — out by the one-step invariant. A promoted observation becomes a `needsAnswers: true` stub and STOPS; a PRD answered THIS run lands `needsAnswers: false` and STOPS (sliced on the next run); fleshing things out is always a SEPARATE later run.

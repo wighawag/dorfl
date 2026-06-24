@@ -28,13 +28,13 @@ The git ledger is split by what each kind of state actually is:
   `taskedAfter → prds/tasked/`, the durable "won't-proceed").
 - **Transient STATUS + LOCKS live on PER-ITEM lock refs**, NOT in main's tree. `in-progress`,
   `needs-attention`, `tasking`, and `advancing` collapse into ONE lock per item, keyed by item
-  identity, on a hidden `refs/agent-runner/lock/<entry>` ref (or a single `refs/agent-runner/locks`
+  identity, on a hidden `refs/dorfl/lock/<entry>` ref (or a single `refs/dorfl/locks`
   ref namespace). The lock's existence/content IS the transient state; a two-axis entry records
   `action: implement|task|advance` × `state: active|stuck` (+ reason). `in-progress` = lock held
   active for implement; `needs-attention` = lock held stuck.
 
 This is deliberately available ONLY because human working-tree visibility of transient status is
-DROPPED as a requirement: humans use `agent-runner status`/`scan` (a generated view that reads the
+DROPPED as a requirement: humans use `dorfl status`/`scan` (a generated view that reads the
 lock refs) rather than `ls work/in-progress/`. Content and durable records stay `ls`-able on `main`.
 
 ## Why
@@ -88,7 +88,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
   the stale lock. `done` + a stuck lock can legitimately co-exist.
 - `status`/`scan` become (partly) network-bound: the operational "what's in flight" view fetches the
   lock refs; eligibility/selection stay offline on `main`.
-- The lock ref is a HIDDEN `refs/agent-runner/*` ref (not a branch): invisible in the GitHub UI and
+- The lock ref is a HIDDEN `refs/dorfl/*` ref (not a branch): invisible in the GitHub UI and
   to a default clone. Accidental deletion = "all locks released", recoverable (work is on the
   `work/<slug>` branches + `main`), blast radius far smaller than a `--force` to `main`.
 - Recovery generalises the landed advancing-lock crash-safety: `release-lock <item>` + a stuck-lock

@@ -37,7 +37,7 @@ compatibility, no deprecation shim — explicit maintainer instruction):
    `LedgerTodoItem` → `LedgerReadyItem`, `readLocalTodo` → `readLocalReady`,
    `scan.TodoItem` alias → `ReadyItem`, so the pool noun is coherent in the code.
 4. **Config placement VALUE**: `tasksLandIn`'s pool value `'todo'` → `'ready'`.
-   The CLI flag `--tasks-land-in`, the env enum (`AGENT_RUNNER_TASKS_LAND_IN`),
+   The CLI flag `--tasks-land-in`, the env enum (`DORFL_TASKS_LAND_IN`),
    and the `TasksLandIn` type all take `'pre-backlog' | 'ready'`. CLEAN BREAK: the
    old `'todo'` spelling is NOT accepted (no shim, no warning). The task-side now
    mirrors the brief-side `'ready'` pool value spelling.

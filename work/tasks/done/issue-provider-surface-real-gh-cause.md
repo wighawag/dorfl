@@ -63,7 +63,7 @@ Promotes two observations (2026-06-10): `createlabel-failure-masked-by-original-
 ### Claiming this slice
 
 ```sh
-agent-runner claim issue-provider-surface-real-gh-cause --arbiter origin
+dorfl claim issue-provider-surface-real-gh-cause --arbiter origin
 git fetch origin && git switch -c work/issue-provider-surface-real-gh-cause origin/main
 git mv work/in-progress/issue-provider-surface-real-gh-cause.md work/done/issue-provider-surface-real-gh-cause.md
 ```

@@ -60,7 +60,7 @@ Reframe `run` to the ADR §3 model: the **cross-repo, parallel, forever-looping 
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim run-daemon-reframe --arbiter <remote>      # default --arbiter origin
+dorfl claim run-daemon-reframe --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/run-daemon-reframe <remote>/main
 # on completion, in the work branch's PR/merge:

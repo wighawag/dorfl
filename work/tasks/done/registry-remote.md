@@ -27,7 +27,7 @@ The **registry** command group, establishing the ADR §1 model: _the registered 
 
 Key = `host/org/name` (today's `encodeRepoKey`, unchanged) — collapses ssh/https/scp for one repo onto one mirror, keeps different hosts/projects distinct. NOTE on module homes (so you don't chase ghosts): `encodeRepoKey` + `ensureMirror`
 
-- `createJob` live in `src/workspace.ts` / `src/repo-mirror.ts` (not a single `repo-mirror.ts`); `arbiterInit`/`arbiterStatus`/`assertBare` are in `src/arbiter.ts`; `isParticipatingRepo`/`detectRepos` are in `src/detect.ts`; the read seam is `src/ledger-read.ts`. Tests live in `packages/agent-runner/test/`, not co-located.
+- `createJob` live in `src/workspace.ts` / `src/repo-mirror.ts` (not a single `repo-mirror.ts`); `arbiterInit`/`arbiterStatus`/`assertBare` are in `src/arbiter.ts`; `isParticipatingRepo`/`detectRepos` are in `src/detect.ts`; the read seam is `src/ledger-read.ts`. Tests live in `packages/dorfl/test/`, not co-located.
 
 ## Acceptance criteria
 
@@ -50,7 +50,7 @@ Key = `host/org/name` (today's `encodeRepoKey`, unchanged) — collapses ssh/htt
 >
 > FIRST run the drift check (this slice is a launch snapshot): confirm `config.ts` still has `roots`, `arbiter.ts` still has `arbiterInit`/`arbiterStatus` as their own `arbiter` subcommands in `cli.ts`, `repo-mirror.ts`'s `ensureMirror`/ `encodeRepoKey`, and `detect.ts`'s `isParticipatingRepo`. If a dependency landed differently, route to needs-attention with the discrepancy (WORK-CONTRACT.md "Drift is a needs-attention signal"), do not build on a stale premise.
 >
-> READ FIRST: ADR `command-surface-and-journeys` §1, `docs/adr/execution-substrate- decisions.md` §7 (arbiters are precious DATA under `arbitersDir`, never `~/.agent-runner`), `work/observations/hub-mirror-key-ignores-transport.md` (the transport guard — guard on the `org/name` project-identity tail, NOT the URL; precedent: `assertBare` in `arbiter.ts`), `src/repo-mirror.ts` (`ensureMirror`, `encodeRepoKey`), `src/arbiter.ts` (`arbiterInit`/`arbiterStatus` to fold), `src/detect.ts` (`isParticipatingRepo` to reuse for `remote find`), `src/config.ts` (the `roots` field to remove), `src/scan.ts` (it calls `detectRepos({roots,...})` — rewire to enumerate mirrors), `src/status.ts` (its `repoRoots` come from `detectRepos` — rewire; also where arbiter state now folds in), and `src/cli.ts` (the `arbiter` group + the `--root`/`--include`/`--exclude` flags + `flagOverrides`, and where `remote` lands).
+> READ FIRST: ADR `command-surface-and-journeys` §1, `docs/adr/execution-substrate- decisions.md` §7 (arbiters are precious DATA under `arbitersDir`, never `~/.dorfl`), `work/observations/hub-mirror-key-ignores-transport.md` (the transport guard — guard on the `org/name` project-identity tail, NOT the URL; precedent: `assertBare` in `arbiter.ts`), `src/repo-mirror.ts` (`ensureMirror`, `encodeRepoKey`), `src/arbiter.ts` (`arbiterInit`/`arbiterStatus` to fold), `src/detect.ts` (`isParticipatingRepo` to reuse for `remote find`), `src/config.ts` (the `roots` field to remove), `src/scan.ts` (it calls `detectRepos({roots,...})` — rewire to enumerate mirrors), `src/status.ts` (its `repoRoots` come from `detectRepos` — rewire; also where arbiter state now folds in), and `src/cli.ts` (the `arbiter` group + the `--root`/`--include`/`--exclude` flags + `flagOverrides`, and where `remote` lands).
 >
 > CRITICAL #1: removing `roots` is NOT a field deletion — it is rewiring `scan`/`status` discovery from a roots walk to enumerating the registered hub-mirror set. Provide one "list registered mirrors" primitive (shared with `remote ls`) and point `scan`/`status` at it. Keep `isParticipatingRepo` (it serves `remote find`). Do NOT invent a new include/exclude-over-mirrors model — drop `--root`; if `--include`/`--exclude` are meaningless without `roots`, remove them and note it.
 >
@@ -66,7 +66,7 @@ Key = `host/org/name` (today's `encodeRepoKey`, unchanged) — collapses ssh/htt
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim registry-remote --arbiter <remote>      # default --arbiter origin
+dorfl claim registry-remote --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/registry-remote <remote>/main
 # on completion, in the work branch's PR/merge:

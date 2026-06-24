@@ -17,7 +17,7 @@ IN THIS FILE (often via the GitHub web UI), so readability matters most exactly 
 New shape (canonical serialiser output):
 
 - An identity HTML comment at the top carrying the machine frontmatter (`item`, `type`, `slug`,
-  `allAnswered`), e.g. `<!-- agent-runner-sidecar: ... -->`. GitHub renders HTML comments as NOTHING.
+  `allAnswered`), e.g. `<!-- dorfl-sidecar: ... -->`. GitHub renders HTML comments as NOTHING.
 - Per entry: the question as a BOLD line, context as a BLOCKQUOTE, the suggested default as ITALIC,
   then a per-entry machine HTML comment (`<!-- qN fields: id=q1 answered=false disposition=keep -->`),
   then a fixed labelled answer region the human types prose under
@@ -74,7 +74,7 @@ format (serialise + parse) and the human-facing skill doc.
 > accepted decision and carries the three ratified trade-offs (semantic round-trip, heading-delimited
 > answer, clean cutover + migrate). Do NOT re-open those; implement them.
 >
-> The code seam is `packages/agent-runner/src/sidecar.ts` — `serialiseSidecar`, `parseSidecar`, and the
+> The code seam is `packages/dorfl/src/sidecar.ts` — `serialiseSidecar`, `parseSidecar`, and the
 > `blockField` helper (the current `key: |` block-scalar emitter, which goes away). The model
 > (`SidecarModel`/`SidecarEntry`) is UNCHANGED; only the on-disk text format changes. The new format:
 > an identity HTML comment at the top (item/type/slug/allAnswered); per entry a bold question line, a
@@ -96,7 +96,7 @@ format (serialise + parse) and the human-facing skill doc.
 > `advance-loop` brief's "sidecar FORMAT (RESOLVED here)" section
 > (`work/briefs/tasked/advance-loop.md`) to the ADR.
 >
-> Rewrite `packages/agent-runner/test/sidecar.test.ts` for the new format (serialise shape, parse-back,
+> Rewrite `packages/dorfl/test/sidecar.test.ts` for the new format (serialise shape, parse-back,
 > semantic round-trip, tolerant human-only-answer edit, heading-delimited answer including one with a
 > literal `---`, disposition survival, `allAnswered` derivation). "Done" =
 > `pnpm -r build && pnpm -r test && pnpm format:check` green. Test on throwaway repos + a

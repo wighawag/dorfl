@@ -62,7 +62,7 @@ Apply the chosen fix as a SHARED helper so every two-racer CAS test that exhibit
 ### Claiming this slice
 
 ```sh
-agent-runner claim triage-cas-race-test-models-real-contention --arbiter origin
+dorfl claim triage-cas-race-test-models-real-contention --arbiter origin
 git fetch origin && git switch -c work/triage-cas-race-test-models-real-contention origin/main
 git mv work/in-progress/triage-cas-race-test-models-real-contention.md work/done/triage-cas-race-test-models-real-contention.md
 ```

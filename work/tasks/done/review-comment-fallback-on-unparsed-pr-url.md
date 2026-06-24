@@ -8,7 +8,7 @@ covers: []
 
 ## What to build
 
-Close the audit-trail visibility gap where a Gate-2 review comment is **silently dropped** even though a PR was really opened. Today, when `gh pr create` succeeds (exit 0) but agent-runner cannot PARSE the PR URL out of its stdout, the GitHub provider's `openRequest` returns `{opened: true}` with NO `url`. The in-core review comment poster (`integration-core.ts` step 6) gates on `integration.url !== undefined`, so it cleanly NO-OPs — and the human/operator loses the posted review on a PR that genuinely exists.
+Close the audit-trail visibility gap where a Gate-2 review comment is **silently dropped** even though a PR was really opened. Today, when `gh pr create` succeeds (exit 0) but dorfl cannot PARSE the PR URL out of its stdout, the GitHub provider's `openRequest` returns `{opened: true}` with NO `url`. The in-core review comment poster (`integration-core.ts` step 6) gates on `integration.url !== undefined`, so it cleanly NO-OPs — and the human/operator loses the posted review on a PR that genuinely exists.
 
 Make the provider FALL BACK: when a PR was opened but its URL is unknown, post the review comment by resolving the PR from the pushed branch (`gh pr comment <branch> --body-file …`, or `gh pr view <branch> --json url` then comment), instead of dropping it. If even the fallback can't resolve a PR (truly no PR found), THEN it is an honest no-op (preserve the existing "no PR ⇒ clean no-op" rule) — but only after trying.
 
@@ -42,20 +42,20 @@ The result is consistent with the slice that introduced it ("no PR url ⇒ clean
 
 ## Prompt
 
-> Close an audit-trail gap: when `gh pr create` opens a PR (exit 0) but agent-runner can't PARSE the PR URL from its stdout, the Gate-2 review comment is currently dropped silently (the in-core poster gates on `integration.url !== undefined`). Make the GitHub provider FALL BACK to commenting on the PR resolved from the pushed `work/<slug>` branch, instead of no-op'ing. Only when NO PR is resolvable at all is it an honest no-op (preserve the existing "no PR ⇒ clean no-op" rule). Source: `work/observations/review-nits-review-gate-pr-comment-2026-06-07.md` (READ IT FIRST; delete it as part of this slice once the behaviour lands).
+> Close an audit-trail gap: when `gh pr create` opens a PR (exit 0) but dorfl can't PARSE the PR URL from its stdout, the Gate-2 review comment is currently dropped silently (the in-core poster gates on `integration.url !== undefined`). Make the GitHub provider FALL BACK to commenting on the PR resolved from the pushed `work/<slug>` branch, instead of no-op'ing. Only when NO PR is resolvable at all is it an honest no-op (preserve the existing "no PR ⇒ clean no-op" rule). Source: `work/observations/review-nits-review-gate-pr-comment-2026-06-07.md` (READ IT FIRST; delete it as part of this slice once the behaviour lands).
 >
 > READ FIRST: `src/github.ts` `openRequest` (~line 213 — the `{opened:true, url:undefined}` degradation on an unparseable create-URL; this is where the branch-resolved comment fallback lives) + `selectProvider`/`NoneProvider`; `src/integration-core.ts` step 6 (the review-comment poster — the `integration.url !== undefined` gate to relax so it can post on an opened-but-URL- less request via the branch); `test/review-gate-pr-comment.test.ts` (the existing comment tests + the equivalence test to strengthen). Keep the seam discipline: the provider owns the `gh` mechanics, the core owns "post the verdict as a comment".
 >
 > Also fold in the second (benign) nit from the source observation: strengthen the "comment is advisory / decision unchanged" test to use the SAME GitHub provider with commenting on vs off (not the commenting provider vs `NoneProvider`), so it isolates that commenting changes no gate/verdict/merge logic.
 >
-> TDD with vitest, house style (stub `gh pr create` to exit 0 with an unparseable stdout, and `gh pr view`/`gh pr comment` to resolve the branch's PR; temp dirs; assert the real `~/.agent-runner/` is untouched): the fallback POSTS when the create-URL is unparseable but a PR exists; a clean no-op when no PR is resolvable; `NoneProvider` posts nothing; the verdict/gate/mode/merge logic is unchanged. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (stub `gh pr create` to exit 0 with an unparseable stdout, and `gh pr view`/`gh pr comment` to resolve the branch's PR; temp dirs; assert the real `~/.dorfl/` is untouched): the fallback POSTS when the create-URL is unparseable but a PR exists; a clean no-op when no PR is resolvable; `NoneProvider` posts nothing; the verdict/gate/mode/merge logic is unchanged. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-comment-fallback-on-unparsed-pr-url --arbiter origin
+dorfl claim review-comment-fallback-on-unparsed-pr-url --arbiter origin
 git fetch origin && git switch -c work/review-comment-fallback-on-unparsed-pr-url origin/main
 git mv work/in-progress/review-comment-fallback-on-unparsed-pr-url.md work/done/review-comment-fallback-on-unparsed-pr-url.md
 ```

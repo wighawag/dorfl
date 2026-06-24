@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=task:apply-rung-merge-disposition type=task slug=apply-rung-merge-disposition allAnswered=false -->
+<!-- dorfl-sidecar: item=task:apply-rung-merge-disposition type=task slug=apply-rung-merge-disposition allAnswered=false -->
 
 ## Q1
 
@@ -16,7 +16,7 @@ _Suggested default: (a) honour-and-land when the rebased tip is green — the pr
 
 **Sub-question to OQ6: if both ship (a as default + b as opt-in strictness), what flag/config axis controls (b), and what is its default?**
 
-> Posed verbatim as the sub-question in the task's `## Open questions` block. Only relevant if the answer to the parent question is 'ship both'; if (a)-only or (b)-only is chosen this sub-question collapses. Needs to name the config surface (e.g. a per-repo `.agent-runner.json` key, a per-question opt-in on the surfacer, or a CLI flag on the apply rung) consistent with how the existing `promote-slice`/`dropped` dispatch in `triage-persist.ts` is configured.
+> Posed verbatim as the sub-question in the task's `## Open questions` block. Only relevant if the answer to the parent question is 'ship both'; if (a)-only or (b)-only is chosen this sub-question collapses. Needs to name the config surface (e.g. a per-repo `.dorfl.json` key, a per-question opt-in on the surfacer, or a CLI flag on the apply rung) consistent with how the existing `promote-slice`/`dropped` dispatch in `triage-persist.ts` is configured.
 
 _Suggested default: Off by default (strict re-surface disabled); expose as a single repo-level config key on the arbiter/advance config rather than a per-question knob, mirroring how other apply-rung policies are configured._
 

@@ -23,7 +23,7 @@
  *
  * NOTE: this spike INLINES the TTY/NO_COLOR rule (mirroring `output.ts`'s
  * `shouldUseColor`) so the demo is self-contained outside the src tree. When
- * this ripens into `packages/agent-runner/src/voice.ts`, replace the inlined
+ * this ripens into `packages/dorfl/src/voice.ts`, replace the inlined
  * `shouldUseColor` below with an import from `./output.js`.
  *   - It WRAPS messages; the caller always supplies BOTH the plain text and the
  *     persona text, so the facts (slug, branch, reason, exit code) survive at

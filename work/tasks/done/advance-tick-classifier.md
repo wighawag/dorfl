@@ -62,7 +62,7 @@ The state machine is per-item-TYPE (slice / PRD / observation) — encode the pe
 >
 > Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon must never spin hot). A subset of answered entries → SKIP. The state machine is per-item-TYPE (slice / PRD / observation); encode the transition-table CELLS, but only CLASSIFY them here — execution is later.
 >
-> READ FIRST: `packages/agent-runner/src/categorise.ts` and `packages/agent-runner/src/eligibility.ts` (the pure classify + table-test pattern to mirror); the sidecar model from `advance-sidecar-contract` (its `allAnswered`/`pendingEntries`); `packages/agent-runner/src/frontmatter.ts` (reading `needsAnswers`).
+> READ FIRST: `packages/dorfl/src/categorise.ts` and `packages/dorfl/src/eligibility.ts` (the pure classify + table-test pattern to mirror); the sidecar model from `advance-sidecar-contract` (its `allAnswered`/`pendingEntries`); `packages/dorfl/src/frontmatter.ts` (reading `needsAnswers`).
 >
 > FIRST, check this slice against current reality (drift). If `advance-sidecar-contract` landed with a different model shape than assumed, reconcile (or route to `needs-attention/`) rather than building on a stale premise.
 >
@@ -73,7 +73,7 @@ The state machine is per-item-TYPE (slice / PRD / observation) — encode the pe
 ### Claiming this slice
 
 ```sh
-agent-runner claim advance-tick-classifier --arbiter origin
+dorfl claim advance-tick-classifier --arbiter origin
 git fetch origin && git switch -c work/advance-tick-classifier origin/main
 git mv work/in-progress/advance-tick-classifier.md work/done/advance-tick-classifier.md
 ```

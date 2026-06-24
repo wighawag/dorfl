@@ -1,9 +1,9 @@
-# agent-runner — the ISSUE INTAKE trigger in CI (capability D: consider incoming
+# dorfl — the ISSUE INTAKE trigger in CI (capability D: consider incoming
 # issues → task/prd, PLUS insertion point E: surface the review verdict into the
-# issue thread, prd runner-in-ci). EMITTED by `agent-runner install-ci`; the human
+# issue thread, prd runner-in-ci). EMITTED by `dorfl install-ci`; the human
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
-# WHAT IT DOES — `agent-runner intake <N>` reads issue #N + its comment thread,
+# WHAT IT DOES — `dorfl intake <N>` reads issue #N + its comment thread,
 # runs a prompt→verdict decision (ask / task / PRD / bounce), and dispatches it.
 # CI owns ONLY the trigger + the merge-vs-propose POLICY + the delivery surface;
 # the TRANSFORM is the engine's (the Out-of-Scope fence — CI re-implements none of
@@ -12,7 +12,7 @@
 # point E) — REUSED, not a new review mechanism.
 #
 # TRIGGERS (capability D): an OPENED issue, a CREATED issue comment, and the
-# `agent-runner:intake` label. A CREATED comment is the (re-)evaluation
+# `dorfl:intake` label. A CREATED comment is the (re-)evaluation
 # trigger; an EDITED comment is deliberately NOT a trigger (the ID-based
 # `seen=<ids>` watermark catches new comments; editing a prior comment never
 # re-triggers). CONVENTION: if you edit a previous comment to answer intake's
@@ -75,12 +75,12 @@ permissions:
   issues: write
 
 env:
-  # ── The engine GATE FAMILY, surfaced as the AGENT_RUNNER_* env block ─────────
+  # ── The engine GATE FAMILY, surfaced as the DORFL_* env block ─────────
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME .agent-runner.json the laptop uses applies here; this env
+  # > default. The SAME .dorfl.json the laptop uses applies here; this env
   # block is the optional CI-only override. Change behaviour by editing these
-  # values (or a GitHub repo variable / .agent-runner.json key) — NOT by re-running
+  # values (or a GitHub repo variable / .dorfl.json key) — NOT by re-running
   # install-ci (ADR §6: install-ci is one-time).
   #
   # `intake` itself is GATE-FREE (the explicit invocation is its own
@@ -89,8 +89,8 @@ env:
   # DEFAULTS: both off ⇒ the next step is a HUMAN, so the gate-derived mode is the
   # permissive merge side; author-trust then forces propose for a task from an
   # untrusted author.
-  AGENT_RUNNER_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
-  AGENT_RUNNER_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted prd next?
+  DORFL_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
+  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted prd next?
 
 jobs:
   intake:
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
         with:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -126,7 +126,7 @@ jobs:
           set -euo pipefail
 
           # PRD flag: gate-derived only (author-trust does NOT bite a prd).
-          if [ "${AGENT_RUNNER_AUTO_TASK}" = "true" ]; then
+          if [ "${DORFL_AUTO_TASK}" = "true" ]; then
             prd_flag="--propose-prd"
           else
             prd_flag="--merge-prd"
@@ -142,7 +142,7 @@ jobs:
 
           # TASK flag: propose if the agent will auto-build it (gate ON) OR the
           # author is untrusted; merge ONLY when both are safe.
-          if [ "${AGENT_RUNNER_AUTO_BUILD}" = "true" ] || [ "${trusted}" != "true" ]; then
+          if [ "${DORFL_AUTO_BUILD}" = "true" ] || [ "${trusted}" != "true" ]; then
             task_flag="--propose-task"
           else
             task_flag="--merge-task"
@@ -177,7 +177,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          agent-runner intake "${{ github.event.issue.number }}" \
+          dorfl intake "${{ github.event.issue.number }}" \
             "${{ steps.policy.outputs.prd_flag }}" \
             "${{ steps.policy.outputs.task_flag }}" \
             "${{ steps.policy.outputs.origin_trust_flag }}" \

@@ -39,7 +39,7 @@ This is a real, observed defect: a concurrent autonomous `requeue` (`advance-ver
 >
 > Preserve EVERY existing behaviour — default keep+continue (branch untouched), `--reset` (delete remote branch first; `--arbiter` required), `-m/--message` (dated handoff note, append-only, both modes), and the HUMAN identity attribution (ambient `process.env`, never `config.identity`). Change ONLY where the transition writes: the arbiter ref via the shared CAS, not the cwd working tree. Tree-less is orthogonal to attribution — the commit stays the human's. `--cwd` becomes purely an origin source (to resolve the arbiter remote), never a write target.
 >
-> READ FIRST: `packages/agent-runner/src/cli.ts` (the `requeue` command — `.command('requeue <slug>')` — and how it calls `applyReturnToBacklogTransition`), `packages/agent-runner/src/ledger-write.ts` (`applyReturnToBacklogTransition` + the CAS write seam), `performClaim` / the claim CAS (in `claim-cas.ts`, used from `cli.ts`/`do.ts` — the tree-less CAS claim move), and `work/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md`. Reuse the claim/`ledger-write` CAS path — do NOT hand-roll a second push+lease+verify. Resolve the `claim`/`requeue` inconsistency toward the safe tree-less mechanism.
+> READ FIRST: `packages/dorfl/src/cli.ts` (the `requeue` command — `.command('requeue <slug>')` — and how it calls `applyReturnToBacklogTransition`), `packages/dorfl/src/ledger-write.ts` (`applyReturnToBacklogTransition` + the CAS write seam), `performClaim` / the claim CAS (in `claim-cas.ts`, used from `cli.ts`/`do.ts` — the tree-less CAS claim move), and `work/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md`. Reuse the claim/`ledger-write` CAS path — do NOT hand-roll a second push+lease+verify. Resolve the `claim`/`requeue` inconsistency toward the safe tree-less mechanism.
 >
 > FIRST, check this slice against current reality (drift): confirm `claim` is still tree-less via `performClaim`/the `ledger-write` CAS seam and that `requeue` still does an in-cwd `git mv`+commit. If either has changed, reconcile against the current code or route to `needs-attention/` with the discrepancy.
 >
@@ -50,7 +50,7 @@ This is a real, observed defect: a concurrent autonomous `requeue` (`advance-ver
 ### Claiming this slice
 
 ```sh
-agent-runner claim requeue-treeless-transition --arbiter origin
+dorfl claim requeue-treeless-transition --arbiter origin
 git fetch origin && git switch -c work/requeue-treeless-transition origin/main
 git mv work/in-progress/requeue-treeless-transition.md work/done/requeue-treeless-transition.md
 ```

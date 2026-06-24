@@ -89,7 +89,7 @@ never written down (see the Decisions criterion below).
 > signal”).
 >
 > Where to look (by concept, not brittle paths — verified at task-birth in the
-> item-lock module, `packages/agent-runner/src/item-lock.ts`):
+> item-lock module, `packages/dorfl/src/item-lock.ts`):
 >   - `reapStaleItemLocks` — the human-invoked sweep. The `for` loop over
 >     `report.locks`; the `if (reconcile === 'cleared-stale')` arm and its inner
 >     `rec.outcome` dispatch. The bug is the trailing `else` that maps any non
@@ -126,7 +126,7 @@ never written down (see the Decisions criterion below).
 > is NOT this bug and stays `error` — do NOT extend the benign treatment to it.
 >
 > Test seam: the existing two-reaper race test in
-> `packages/agent-runner/test/gc-reap-stale-locks.test.ts` ("two concurrent
+> `packages/dorfl/test/gc-reap-stale-locks.test.ts` ("two concurrent
 > reapers on the same stale lock"). It seeds a held active lock made terminal-on
 > -main (a stale lock), then runs two clones' sweeps with `Promise.all` against the
 > SAME `--bare` `file://` arbiter. TIGHTEN it: assert exactly one reaper reports
@@ -179,7 +179,7 @@ classification, keep it scoped to that.)
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim <slug> --arbiter <remote>      # default --arbiter origin
+dorfl claim <slug> --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/<slug> <remote>/main
 # on completion, in the work branch's PR/merge:

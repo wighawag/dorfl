@@ -9,7 +9,7 @@ covers: []
 
 ### The principle (the human's framing — this is the acceptance bar)
 
-**A single agent working SEQUENTIALLY on its own slice must NEVER hit a rebase/conflict that requires a human to resolve, when the only thing diverging is agent-runner's OWN bookkeeping of that same slug.** A self-conflict (the agent's own earlier move-only commit colliding with the runner's own later tree-less move of the same `.md`) is a DESIGN DEFECT, not a legitimate human-surface. Genuine CODE conflicts (two real lines of development) still surface — those are real. The whole job of this slice is to close every self-conflict path so the ONLY rebase conflicts that ever reach a human are genuine content conflicts.
+**A single agent working SEQUENTIALLY on its own slice must NEVER hit a rebase/conflict that requires a human to resolve, when the only thing diverging is dorfl's OWN bookkeeping of that same slug.** A self-conflict (the agent's own earlier move-only commit colliding with the runner's own later tree-less move of the same `.md`) is a DESIGN DEFECT, not a legitimate human-surface. Genuine CODE conflicts (two real lines of development) still surface — those are real. The whole job of this slice is to close every self-conflict path so the ONLY rebase conflicts that ever reach a human are genuine content conflicts.
 
 ### VERIFIED against the code — the EXACT gap (do not re-derive; confirm against `src/`)
 

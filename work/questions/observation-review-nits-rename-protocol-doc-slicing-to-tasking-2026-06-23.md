@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-rename-protocol-doc-slicing-to-tasking-2026-06-23 type=observation slug=review-nits-rename-protocol-doc-slicing-to-tasking-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-rename-protocol-doc-slicing-to-tasking-2026-06-23 type=observation slug=review-nits-rename-protocol-doc-slicing-to-tasking-2026-06-23 allAnswered=false -->
 
 ## Q1
 

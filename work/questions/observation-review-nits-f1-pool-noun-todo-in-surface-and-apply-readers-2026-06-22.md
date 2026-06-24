@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-f1-pool-noun-todo-in-surface-and-apply-readers-2026-06-22 type=observation slug=review-nits-f1-pool-noun-todo-in-surface-and-apply-readers-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-f1-pool-noun-todo-in-surface-and-apply-readers-2026-06-22 type=observation slug=review-nits-f1-pool-noun-todo-in-surface-and-apply-readers-2026-06-22 allAnswered=false -->
 
 ## Q1
 
@@ -40,7 +40,7 @@ _Suggested default: promote-slice — small follow-up: retarget tests onto `'tod
 
 **Is the new helper `warnDeprecatedConfigValues` the intended FUTURE pattern for all value-renames (in which case it should be refactored to a table-driven shape like the existing `DEPRECATED_CONFIG_KEYS` so a second entry does not require touching the function body, and the env-side migration should call it instead of open-coding the same rename), or is it deliberately a one-off shim sized to today's single rename?**
 
-> `packages/agent-runner/src/config.ts` added `warnDeprecatedConfigValues` as a hand-rolled `if (parsed.slicesLandIn === 'backlog') …` block; its sibling `warnDeprecatedConfigKeys` is table-driven and mutates by DELETING the key, whereas the new helper mutates by REPLACING the value in place. `env-config.ts` open-codes the same migration inline at the `envOverrides` coercion site rather than calling the shared helper — so the codebase now has three slightly different shapes for 'rename-shim'.
+> `packages/dorfl/src/config.ts` added `warnDeprecatedConfigValues` as a hand-rolled `if (parsed.slicesLandIn === 'backlog') …` block; its sibling `warnDeprecatedConfigKeys` is table-driven and mutates by DELETING the key, whereas the new helper mutates by REPLACING the value in place. `env-config.ts` open-codes the same migration inline at the `envOverrides` coercion site rather than calling the shared helper — so the codebase now has three slightly different shapes for 'rename-shim'.
 
 _Suggested default: keep — record the intent as 'one-off shim for now; generalise to table-driven on the SECOND value rename' in the same Decisions block proposed above; no code change yet._
 

@@ -7,7 +7,7 @@ source: pi source (pinned local checkout ~/dev/github/wighawag/pi/packages/codin
 
 # pi session storage contract (verified external ground truth)
 
-Durable reference for how the **pi** coding-agent reads/writes/discovers session files, so any agent-runner slice that integrates with pi sessions can rely on it WITHOUT re-deriving (and re-missing) pieces. This is a `finding` (verified EXTERNAL/domain ground truth about a tool agent-runner integrates with), not an ADR (our decision) or an observation (unverified). Verified against the pinned pi source files named below + live tests; re-confirm against the pinned source if pi changes (a slice's drift check).
+Durable reference for how the **pi** coding-agent reads/writes/discovers session files, so any dorfl slice that integrates with pi sessions can rely on it WITHOUT re-deriving (and re-missing) pieces. This is a `finding` (verified EXTERNAL/domain ground truth about a tool dorfl integrates with), not an ADR (our decision) or an observation (unverified). Verified against the pinned pi source files named below + live tests; re-confirm against the pinned source if pi changes (a slice's drift check).
 
 Source files (pinned): `packages/coding-agent/src/core/session-manager.ts`, `packages/coding-agent/src/main.ts` (`resolveSessionPath`), `packages/coding-agent/src/config.ts` (`getAgentDir`/`getSessionsDir`, `ENV_AGENT_DIR`/`ENV_SESSION_DIR`), `packages/coding-agent/src/cli/args.ts`.
 
@@ -48,10 +48,10 @@ A session file's first line is the header record:
 
 pi's `config.ts`:
 
-- **`PI_CODING_AGENT_DIR`** (`${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`) — overrides the **agent dir** (`getAgentDir`, with `~` tilde expansion); when set, ALL of pi's default session paths move under `<that>/sessions/`. Anything that REPLICATES pi's default-dir resolution (rather than importing) MUST honour this var too, or it writes sessions where pi/pi-remote don't look (sessions go invisible). agent-runner's `session-path.ts piAgentDir()` honours it as of the session-path-pi-default slice's follow-up.
-- **`PI_CODING_AGENT_SESSION_DIR`** (`..._CODING_AGENT_SESSION_DIR`) — overrides the **sessions dir specifically** (lower-level than the agent dir; itself overridden by `--session-dir`). agent-runner does NOT honour this one — its own `sessionsDir` config key plays that role.
+- **`PI_CODING_AGENT_DIR`** (`${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`) — overrides the **agent dir** (`getAgentDir`, with `~` tilde expansion); when set, ALL of pi's default session paths move under `<that>/sessions/`. Anything that REPLICATES pi's default-dir resolution (rather than importing) MUST honour this var too, or it writes sessions where pi/pi-remote don't look (sessions go invisible). dorfl's `session-path.ts piAgentDir()` honours it as of the session-path-pi-default slice's follow-up.
+- **`PI_CODING_AGENT_SESSION_DIR`** (`..._CODING_AGENT_SESSION_DIR`) — overrides the **sessions dir specifically** (lower-level than the agent dir; itself overridden by `--session-dir`). dorfl does NOT honour this one — its own `sessionsDir` config key plays that role.
 
-## 5. Practical rules for agent-runner slices touching pi sessions
+## 5. Practical rules for dorfl slices touching pi sessions
 
 - Generate `--session <absolute .jsonl>`, **unique per launch**; never `--session <bare-id>`. Spawn pi with `cwd =` the repo/worktree (grouping).
 - Default the sessions root to pi's per-cwd default (a first-level child of the sessions root) so `do`/manual work co-locate and the dashboard sees them; allow an arbitrary override folder (its dashboard visibility is pi-remote's concern).

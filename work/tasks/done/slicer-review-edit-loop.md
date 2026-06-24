@@ -55,7 +55,7 @@ This routing was previously planned as a separate `autoslice-confidence` slice. 
 - [ ] The `review` skill is REUSED (no re-authored protocol); the loop wires edit-application + routing around it.
 - [ ] The verdict routing (folded in from the deleted `autoslice-confidence`) is implemented HERE as the loop's sink — the three outcomes above. (No sibling slice/PRD edits: that reconciliation was done at slice-authoring time.)
 - [ ] Tests (stub the review agent's verdict + edits; stub the harness; temp dirs): a converging loop (findings → edits → clean) lands improved slices; a persistent-block loop hits `maxReview` and rejects via needsAnswers / PRD→needs-attention; M>1 invokes the loop in fresh contexts; the human path is unaffected. No real model, no network.
-- [ ] **Test isolation (shared-write rule):** any slice-file writes happen under a temp work tree; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are UNTOUCHED (reuse `isolatePiAgentDir`).
+- [ ] **Test isolation (shared-write rule):** any slice-file writes happen under a temp work tree; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are UNTOUCHED (reuse `isolatePiAgentDir`).
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -74,14 +74,14 @@ This routing was previously planned as a separate `autoslice-confidence` slice. 
 >
 > READ FIRST: `skills/review/SKILL.md` (the protocol to RUN — lenses + destination check + the M×N / "second instance is a signal" disciplines); `work/prd/review.md` RESOLVED DESIGN; `work/backlog/autoslice-command.md` + its module (the `do prd:` path); `src/needs-attention.ts` + `ledger-write-seam-needs-attention` (the sink); `src/repo-config.ts` + `src/config.ts` (the per-repo precedence for `maxReview`); `src/harness.ts` (`LaunchInput`/`launch` — a fresh context per M is a fresh launch; `LaunchResult.output` carries the agent's verdict, slice `harness-agent-output`).
 >
-> TDD with vitest, house style (stub the review agent's verdict+edits, stub harness, temp work tree, `isolatePiAgentDir`): converging loop lands improved slices; persistent-block hits `maxReview` → reject via needsAnswers / PRD→needs-attention; M>1 fresh re-executions; human path unaffected; real `~/.agent-runner/` + `~/.pi/agent/sessions/` untouched. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (stub the review agent's verdict+edits, stub harness, temp work tree, `isolatePiAgentDir`): converging loop lands improved slices; persistent-block hits `maxReview` → reject via needsAnswers / PRD→needs-attention; M>1 fresh re-executions; human path unaffected; real `~/.dorfl/` + `~/.pi/agent/sessions/` untouched. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim slicer-review-edit-loop --arbiter <remote>      # default --arbiter origin
+dorfl claim slicer-review-edit-loop --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/slicer-review-edit-loop <remote>/main
 git mv work/in-progress/slicer-review-edit-loop.md work/done/slicer-review-edit-loop.md
 ```

@@ -16,7 +16,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 2. **`to-prd`**: turn the current conversation plus codebase understanding into a prd file in `work/prds/ready/`. The LAUNCH snapshot, not maintained.
 3. **`to-task`**: task a prd (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
 4. **Build the ready tasks. Pick the conductor:**
-   - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `agent-runner do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the agent-runner CLI. You are present.
+   - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `dorfl do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the dorfl CLI. You are present.
    - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / prds / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".
 
 ## On-ramps
@@ -46,4 +46,4 @@ General engineering disciplines that are NOT part of the `work/` contract — `g
 
 ## Note for autonomous runners
 
-`agent-runner` execution does NOT load these `SKILL.md` files. It assembles its prompt from the vendored `work/protocol/` docs in-band. These skills are for the INTERACTIVE / orchestrating agent. A discipline that must reach the autonomous worker (e.g. TDD) belongs IN-BAND in the task body / CLAIM-PROTOCOL, not in a skill the CI worker can't see.
+`dorfl` execution does NOT load these `SKILL.md` files. It assembles its prompt from the vendored `work/protocol/` docs in-band. These skills are for the INTERACTIVE / orchestrating agent. A discipline that must reach the autonomous worker (e.g. TDD) belongs IN-BAND in the task body / CLAIM-PROTOCOL, not in a skill the CI worker can't see.

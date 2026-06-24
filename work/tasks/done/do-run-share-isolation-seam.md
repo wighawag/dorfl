@@ -49,7 +49,7 @@ If `inPlaceStrategy.prepare()`'s onboarding turns out to NOT be byte-equivalent 
 - [ ] Every in-place `do` outcome is preserved byte-for-byte: completed; lost (exit 2); contended (exit 3); refused (in-progress without `--resume`, dirty, diverged, done/absent); the §10 continue-rebase-conflict → needs-attention; the success integrate (propose/merge) — all identical to today.
 - [ ] `run` and `do --remote` are UNTOUCHED (their existing tests pass unchanged); no duplicate isolation logic is introduced.
 - [ ] If `inPlaceStrategy.prepare()`'s onboarding was not already equivalent to `performStart`'s in-place onboarding, the gap is closed IN THE STRATEGY and a test pins the equivalence.
-- [ ] **Test isolation:** in-place/do tests keep temp `workspacesDir` + `isolatePiAgentDir`; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are untouched.
+- [ ] **Test isolation:** in-place/do tests keep temp `workspacesDir` + `isolatePiAgentDir`; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are untouched.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Prompt
@@ -70,12 +70,12 @@ If `inPlaceStrategy.prepare()`'s onboarding turns out to NOT be byte-equivalent 
 
 ### Claiming this slice
 
-This item is in `work/needs-attention/` with its work branch preserved on the arbiter. Recover via the human face: `agent-runner requeue do-run-share-isolation-seam` (the re-scoped body above will be re-claimed). The original premise-drift report stays on the preserved `work/do-run-share-isolation-seam` branch.
+This item is in `work/needs-attention/` with its work branch preserved on the arbiter. Recover via the human face: `dorfl requeue do-run-share-isolation-seam` (the re-scoped body above will be re-claimed). The original premise-drift report stays on the preserved `work/do-run-share-isolation-seam` branch.
 
 ```sh
-agent-runner requeue do-run-share-isolation-seam --arbiter origin   # → backlog, branch kept
+dorfl requeue do-run-share-isolation-seam --arbiter origin   # → backlog, branch kept
 # then build it (continues from the kept branch, with this re-scoped body):
-agent-runner do slice:do-run-share-isolation-seam --harness pi --review --propose
+dorfl do slice:do-run-share-isolation-seam --harness pi --review --propose
 ```
 
 ## Needs attention

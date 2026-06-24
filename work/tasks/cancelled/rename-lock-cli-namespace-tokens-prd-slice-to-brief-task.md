@@ -26,7 +26,7 @@ reason: superseded
 
 Rename the namespaced item-identity TOKENS used on per-item lock refs and in the CLI/advance argument grammar from `prd:`/`slice:` to `brief:`/`task:`, end-to-end (lock acquire/release/status/scan, the advance tick arg resolver, the apply/surface identity strings, and every place that parses or constructs `<type>:<slug>`). This is a CLEAN BREAK (Decision 1): no dual-read of old tokens.
 
-Because existing per-item lock refs in a live arbiter are keyed by the OLD token (`refs/agent-runner/lock/prd-<slug>` / `slice-<slug>` and the `action`/identity body), they become unreachable after the cutover. Provide the one-shot recovery: ensure `gc --ledger` (the existing stuck/orphan-lock report + `release-lock`) can NAME and clear an old-token lock, and document the manual sweep step in the cutover notes. Do NOT add a long-lived back-compat reader.
+Because existing per-item lock refs in a live arbiter are keyed by the OLD token (`refs/dorfl/lock/prd-<slug>` / `slice-<slug>` and the `action`/identity body), they become unreachable after the cutover. Provide the one-shot recovery: ensure `gc --ledger` (the existing stuck/orphan-lock report + `release-lock`) can NAME and clear an old-token lock, and document the manual sweep step in the cutover notes. Do NOT add a long-lived back-compat reader.
 
 GENERATED CI is in scope: the CI template emitters (`advance-ci-template.ts`, `advance-lifecycle-template.ts`, `close-job-template.ts`, `intake-trigger-template.ts`) bake the `prd:`/`slice:` namespace tokens into the workflow YAML they emit (e.g. `advance prd:<slug>` legs, `.namespace + ":" + .slug` jq). These MUST be renamed WITH the tokens or freshly-generated CI emits dead `prd:`/`slice:` legs against a runner that no longer understands them. Rename the emitted tokens and update the template-snapshot tests in this task. (Agents never edit `.github/workflows/*` directly — you edit the EMITTERS, the source; see CONTEXT.md.)
 
@@ -60,7 +60,7 @@ GENERATED CI is in scope: the CI template emitters (`advance-ci-template.ts`, `a
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-lock-cli-namespace-tokens-prd-slice-to-brief-task --arbiter <remote>
+dorfl claim rename-lock-cli-namespace-tokens-prd-slice-to-brief-task --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-lock-cli-namespace-tokens-prd-slice-to-brief-task <remote>/main
 # on completion:
 git mv work/tasks/todo/rename-lock-cli-namespace-tokens-prd-slice-to-brief-task.md work/tasks/done/rename-lock-cli-namespace-tokens-prd-slice-to-brief-task.md

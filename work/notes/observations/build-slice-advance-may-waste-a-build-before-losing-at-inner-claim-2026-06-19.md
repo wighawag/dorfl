@@ -31,7 +31,7 @@ this note implies, and the two "obvious" fixes are respectively already-done or
 deliberately-rejected, so what remains is a marginal residual, not buildable work.
 
 Mechanism, precisely. The exclusion order is: a claim/build holds the per-item lock
-`refs/agent-runner/lock/<entry>`, lands the DURABLE `main` move FIRST, then releases
+`refs/dorfl/lock/<entry>`, lands the DURABLE `main` move FIRST, then releases
 the lock SECOND (`complete.ts` `releaseClaimLockAfterDurableMove`, slice
 `complete-lock-then-durable-main-move-crash-safe`). So a loser B can only waste a
 build if B enumerated the item as eligible AND then acquired the now-free lock at a

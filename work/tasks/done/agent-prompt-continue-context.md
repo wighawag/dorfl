@@ -49,7 +49,7 @@ This composes the complete handoff: prior diff (what) + reason (why it stalled) 
 ### Claiming this slice
 
 ```sh
-agent-runner claim agent-prompt-continue-context --arbiter <remote>
+dorfl claim agent-prompt-continue-context --arbiter <remote>
 git fetch <remote> && git switch -c work/agent-prompt-continue-context <remote>/main
 git mv work/in-progress/agent-prompt-continue-context.md work/done/agent-prompt-continue-context.md
 ```

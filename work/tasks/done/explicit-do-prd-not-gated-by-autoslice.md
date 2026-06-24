@@ -11,7 +11,7 @@ Fix the build/slice **gate asymmetry**: `do prd:<slug>` currently refuses an EXP
 
 End-to-end behaviour after this slice:
 
-- `do prd:<slug>` (an EXPLICITLY-named PRD) **slices regardless of the `autoSlice` policy** — naming the PRD IS the authorization, exactly as `do <slice>` builds a named slice regardless of `allowAgents`. (No more `AGENT_RUNNER_AUTO_SLICE=true` workaround for an explicit slice-now.)
+- `do prd:<slug>` (an EXPLICITLY-named PRD) **slices regardless of the `autoSlice` policy** — naming the PRD IS the authorization, exactly as `do <slice>` builds a named slice regardless of `allowAgents`. (No more `DORFL_AUTO_SLICE=true` workaround for an explicit slice-now.)
 - The **item-readiness axes still bind** on the explicit path: a `humanOnly: true` PRD (a human must drive the slicing) and a `needsAnswers: true` PRD (open questions) are STILL refused for the agent `doer`, and `sliceAfter` ordering is STILL enforced. Only the repo's `autoSlice` POLICY is dropped from the explicit path. (These are the PRD's own readiness, not the repo's auto-pick policy.)
 - The **auto-pick pool is UNCHANGED**: `do` (no arg) / `do -n <x>` still build the sliceable-PRD pool through `autoslice-gate`'s predicate (which includes `autoSlice`) in `do-autopick.ts`, so an unselected/ineligible PRD is still never auto-picked. The policy keeps doing its real job (pool eligibility) — it just stops double-gating the explicit named dispatch.
 - The HUMAN `doer` path is unchanged (already unbound by the gate).

@@ -1,5 +1,5 @@
 ---
-title: "Move every runner-invoked discipline (review, surface-questions, slicing) into work/protocol/ so spawned-agent prompts work in every set-up repo, not just agent-runner's own"
+title: "Move every runner-invoked discipline (review, surface-questions, slicing) into work/protocol/ so spawned-agent prompts work in every set-up repo, not just dorfl's own"
 slug: runner-invoked-disciplines-into-protocol
 ---
 
@@ -7,7 +7,7 @@ slug: runner-invoked-disciplines-into-protocol
 
 ## Problem Statement
 
-**The runner hands spawned agents prompts that say "use the `X` skill", but the skill exists only in agent-runner's OWN repo.** It works here purely because agent-runner is the repo that builds agent-runner (the `skills/` tree is a sibling). A target repo that ran `setup` does NOT get the skills (setup copies `work/protocol/` docs but, per `methodology-and-skills.md` §6, deliberately does NOT copy skills), and the npm package vendors only `CLAIM-PROTOCOL.md`. So in any consumer repo the spawned agent is told to apply a discipline that is not present. It never errors (the gate parses whatever JSON returns); it silently degrades.
+**The runner hands spawned agents prompts that say "use the `X` skill", but the skill exists only in dorfl's OWN repo.** It works here purely because dorfl is the repo that builds dorfl (the `skills/` tree is a sibling). A target repo that ran `setup` does NOT get the skills (setup copies `work/protocol/` docs but, per `methodology-and-skills.md` §6, deliberately does NOT copy skills), and the npm package vendors only `CLAIM-PROTOCOL.md`. So in any consumer repo the spawned agent is told to apply a discipline that is not present. It never errors (the gate parses whatever JSON returns); it silently degrades.
 
 There are THREE such runner-invoked disciplines, across SEVEN prompt builders:
 
@@ -40,10 +40,10 @@ This fixes portability AND de-duplication in one move, for all three disciplines
 
 ## User Stories
 
-1. As a maintainer of a repo that adopted the work/ contract (NOT agent-runner's own repo), I want review, question-surfacing, AND slicing to apply their FULL discipline, so quality matches agent-runner's own repo and nothing silently degrades.
+1. As a maintainer of a repo that adopted the work/ contract (NOT dorfl's own repo), I want review, question-surfacing, AND slicing to apply their FULL discipline, so quality matches dorfl's own repo and nothing silently degrades.
 2. As the runner, I want to resolve each discipline doc from `work/protocol/<DISCIPLINE>-PROTOCOL.md` (target-repo copy first, vendored package copy as fallback), so every spawned agent has its discipline in-band, never depending on a host-installed skill.
 3. As `setup`, I want to copy ALL discipline docs into every target repo's `work/protocol/` (re-synced, version-stamped) like the other protocol docs, so adopting the contract adopts its review/surface/slicing standards.
-4. As the agent-runner package, I want the discipline docs vendored into `dist/protocol/` (like `CLAIM-PROTOCOL.md`), so an installed CLI running against a not-yet-set-up repo still has them.
+4. As the dorfl package, I want the discipline docs vendored into `dist/protocol/` (like `CLAIM-PROTOCOL.md`), so an installed CLI running against a not-yet-set-up repo still has them.
 5. As a contributor editing a discipline, I want ONE source of truth per discipline (its protocol doc), so editing it does not require touching the skill AND the prompt builders, and they cannot drift.
 6. As the review-gate code, I want ONE verdict type and ONE JSON-verdict-contract helper shared across the four review builders, so the output contract is stated once.
 7. As a human, I want each `SKILL.md` to stay my entry point (a thin pointer to its protocol doc), so I can still invoke the discipline interactively without the standard living in two places.

@@ -54,7 +54,7 @@ The emitted question shape must MATCH the sidecar entry fields from `advance-sid
 ### Claiming this slice
 
 ```sh
-agent-runner claim surface-questions-skill --arbiter origin
+dorfl claim surface-questions-skill --arbiter origin
 git fetch origin && git switch -c work/surface-questions-skill origin/main
 git mv work/in-progress/surface-questions-skill.md work/done/surface-questions-skill.md
 ```

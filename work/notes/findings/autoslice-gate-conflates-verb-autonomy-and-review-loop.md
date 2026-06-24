@@ -15,7 +15,7 @@ A maintainer grilling pass (2026-06-08, prompted by "why is enabling auto-slice 
   1. **Refuses to slice** unless `needsAnswers !== true && humanOnly !== true && autoSlice && sliceAfter-satisfied` (`resolveAgentGate`, `slicing.ts:515`).
   2. Takes the CAS slicing **lock**.
   3. Runs the **review→edit→converge loop** (`slicing.ts:288`, fenced behind `doer === 'agent'`; wired unconditionally for `do prd:` at `cli.ts:1373`).
-- `autoSlice` resolves `flag > AGENT_RUNNER_AUTO_SLICE env > per-repo > global > default false` — but **the `--auto-slice` FLAG layer was never registered** (no CLI option; the `autoslice-gate` review-nit already noted this). So today a human can only enable it via env or a committed config file — which is why the Q-D test-drive had to use `AGENT_RUNNER_AUTO_SLICE=1`.
+- `autoSlice` resolves `flag > DORFL_AUTO_SLICE env > per-repo > global > default false` — but **the `--auto-slice` FLAG layer was never registered** (no CLI option; the `autoslice-gate` review-nit already noted this). So today a human can only enable it via env or a committed config file — which is why the Q-D test-drive had to use `DORFL_AUTO_SLICE=1`.
 
 ## The conflation (the bug)
 

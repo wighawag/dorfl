@@ -1,7 +1,7 @@
 ---
 title: harness adapter — pi (liveness + invocation)
 slug: harness-pi
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [6, 11]
@@ -9,7 +9,7 @@ covers: [6, 11]
 
 ## What to build
 
-The concrete **pi** adapter for the harness seam introduced by `agent-workspaces` (ADR §5, `docs/adr/execution-substrate-decisions.md`). pi is the first real agent harness agent-runner drives.
+The concrete **pi** adapter for the harness seam introduced by `agent-workspaces` (ADR §5, `docs/adr/execution-substrate-decisions.md`). pi is the first real agent harness dorfl drives.
 
 End-to-end:
 
@@ -25,7 +25,7 @@ Keep pi specifics behind the adapter interface; the core stays harness-agnostic.
 - [ ] A `pi` harness adapter implements the seam from `agent-workspaces`.
 - [ ] It launches a pi agent in the job worktree with the standard work-agent prompt (wrapper + slice `## Prompt`).
 - [ ] Liveness reports PID-alive plus a reference to the pi session dir/log; not mtime-based.
-- [ ] `agent-runner status` shows pi job liveness via the adapter.
+- [ ] `dorfl status` shows pi job liveness via the adapter.
 - [ ] A hung/dead pi agent is detectable so `watch`'s rails can act.
 - [ ] Tests cover liveness reporting and invocation wiring (mock/stub the pi CLI where running real pi in CI is impractical; document the seam contract).
 
@@ -35,7 +35,7 @@ Keep pi specifics behind the adapter interface; the core stays harness-agnostic.
 
 ## Prompt
 
-> Implement the **pi** harness adapter for `agent-runner`, fulfilling the harness seam created by the `agent-workspaces` slice. READ FIRST: ADR §5 in `docs/adr/execution-substrate-decisions.md`, the harness-seam code from `agent-workspaces`, and the PRD's decisions on the agentCmd prompt (constant wrapper + slice `## Prompt`) plus CLAIM-PROTOCOL's "prompt handed to the work agent".
+> Implement the **pi** harness adapter for `dorfl`, fulfilling the harness seam created by the `agent-workspaces` slice. READ FIRST: ADR §5 in `docs/adr/execution-substrate-decisions.md`, the harness-seam code from `agent-workspaces`, and the PRD's decisions on the agentCmd prompt (constant wrapper + slice `## Prompt`) plus CLAIM-PROTOCOL's "prompt handed to the work agent".
 >
 > The adapter must: launch a pi agent in a job's worktree with the standard work-agent prompt; report liveness from pi-native signals (PID alive + a pointer to the pi session dir/log — NOT mtime); and integrate with `status` and with `watch`'s timeout/failure rails. Keep all pi specifics behind the seam interface.
 >

@@ -1,7 +1,7 @@
 ---
 title: unify-claim — retire the claim.sh wrapper; use the in-process claim everywhere
 slug: unify-claim
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [run-once, claim-command]
 covers: [5]
@@ -14,7 +14,7 @@ Consolidate on a SINGLE claim implementation. Today there are two, used by diffe
 - `src/claim-cas.ts` (`performClaim`) — the in-process TS claim (from `claim-command`); used by the human surface (`cli.ts` claim, `start.ts`).
 - `src/claim.ts` (`claimItem`/`claimItemAsync`) — a wrapper that shells out to the portable `claim.sh`; still used by `src/run.ts` (the autonomous `run-once`), because run-once was built before the in-process version existed.
 
-This slice makes `run-once` (and anything else) use the in-process `performClaim`, then removes the `claim.sh` wrapper. After this, agent-runner never executes `claim.sh` — `claim.sh` remains ONLY as the `to-slices` skill's portable, zero-dependency reference/bootstrap (it is no longer an agent-runner runtime dependency).
+This slice makes `run-once` (and anything else) use the in-process `performClaim`, then removes the `claim.sh` wrapper. After this, dorfl never executes `claim.sh` — `claim.sh` remains ONLY as the `to-slices` skill's portable, zero-dependency reference/bootstrap (it is no longer an dorfl runtime dependency).
 
 End-to-end:
 
@@ -39,7 +39,7 @@ End-to-end:
 
 ## Prompt
 
-> Unify `agent-runner`'s claiming on the in-process implementation and retire the `claim.sh` wrapper, in `packages/agent-runner/`. READ FIRST: `src/claim-cas.ts` (`performClaim`, the in-process claim to standardise on), `src/claim.ts` (the wrapper to remove), `src/run.ts` + `test/run.test.ts` (the consumer to switch), and `docs/adr/execution-substrate-decisions.md` §9 (agent-runner is the primary claim impl; `claim.sh` stays as the portable reference). Follow `AGENTS.md`.
+> Unify `dorfl`'s claiming on the in-process implementation and retire the `claim.sh` wrapper, in `packages/dorfl/`. READ FIRST: `src/claim-cas.ts` (`performClaim`, the in-process claim to standardise on), `src/claim.ts` (the wrapper to remove), `src/run.ts` + `test/run.test.ts` (the consumer to switch), and `docs/adr/execution-substrate-decisions.md` §9 (dorfl is the primary claim impl; `claim.sh` stays as the portable reference). Follow `AGENTS.md`.
 >
 > Switch `run.ts` to `performClaim`, preserving run-once behaviour (green→done, red→stays in-progress, concurrency caps, and the genuinely-simultaneous two-runner race = exactly one winner). Reconcile any wrapper-vs-performClaim differences (async racing, exit-code mapping, dirty-tree refusal). Remove `src/claim.ts` + its `index.ts` re-exports + the `claim.sh` resolver; delete or fold `test/claim.test.ts` (race coverage already in `claim-cas.test.ts`); update `run.test.ts` to drive the in-process claim against a local `--bare` arbiter. Leave `skills/to-slices/scripts/claim.sh` untouched (portable reference only).
 >

@@ -47,7 +47,7 @@ Frontmatter (matching the `observations/` convention): `title`, `date`, `status:
 - [ ] The review VERDICT, routing (approve→integrate / block→needs-attention), and gate decision are UNCHANGED (this is post-decision capture only; assert the decision is identical with and without the observation write).
 - [ ] Works on ALL integration paths (merge / propose / CI) AND both callers (`do` AND `run`) — since the write lives in the shared `integration-core.ts`. A test exercises the merge path (no PR) and asserts the observation lands; a `run` path test (or a core-level test) asserts the fleet path also writes it.
 - [ ] Tests (stubbed review agent returning an approve + non-blocking findings): observation written with the right name + content; zero-nit approve writes nothing; block writes none. No real model/network.
-- [ ] **Test isolation:** observation writes go to a temp work tree; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are UNTOUCHED.
+- [ ] **Test isolation:** observation writes go to a temp work tree; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are UNTOUCHED.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -64,14 +64,14 @@ Frontmatter (matching the `observations/` convention): `title`, `date`, `status:
 >
 > READ FIRST: `src/integration-core.ts` (`performIntegration` — the `review`/approve block, the done-move step 2 + `git add -A` step 3 it sweeps into; THIS is where the write goes, shared by `do` AND `run`); `src/review-gate.ts` (`ReviewVerdict`/ `ReviewFinding`, `severity`); `src/ledger-write.ts` (`applyNeedsAttentionTransition` — the BLOCK-path precedent, NOT the model for the approve write); an existing `work/observations/*.md` (the frontmatter/shape to match); `work/findings/review-nonblocking-findings-disposition.md` (the decisions).
 >
-> TDD with vitest, house style (stub the review agent's approve+findings, temp work tree, isolatePiAgentDir): approve-with-nits writes one correctly-named observation with the findings; zero-nit approve writes nothing; block writes none; the merge path (no PR) still lands the observation; the gate decision is identical with/ without the write; real ~/.agent-runner + ~/.pi/agent/sessions untouched. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (stub the review agent's approve+findings, temp work tree, isolatePiAgentDir): approve-with-nits writes one correctly-named observation with the findings; zero-nit approve writes nothing; block writes none; the merge path (no PR) still lands the observation; the gate decision is identical with/ without the write; real ~/.dorfl + ~/.pi/agent/sessions untouched. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim review-nits-observation --arbiter <remote>      # default --arbiter origin
+dorfl claim review-nits-observation --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/review-nits-observation <remote>/main
 git mv work/in-progress/review-nits-observation.md work/done/review-nits-observation.md
 ```

@@ -1,5 +1,5 @@
-# agent-runner — the ISSUE CLOSE-JOB in CI (capability E, prd runner-in-ci).
-# EMITTED by `agent-runner install-ci`; the human commits it. DO NOT hand-edit a
+# dorfl — the ISSUE CLOSE-JOB in CI (capability E, prd runner-in-ci).
+# EMITTED by `dorfl install-ci`; the human commits it. DO NOT hand-edit a
 # copy — re-run install-ci to upgrade the shell.
 #
 # TRIGGER — a MERGE to main. There is NO native "PR merged" event, so this uses
@@ -9,7 +9,7 @@
 #     actually CLOSE issues — a `pull_request` event from a FORK gets a read-only
 #     token and could not close (a real limitation we deliberately avoid).
 #
-# WHAT IT DOES — `agent-runner close-merged-issues` resolves which source issue(s)
+# WHAT IT DOES — `dorfl close-merged-issues` resolves which source issue(s)
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
 #   * the RESOLUTION (resolveClosingIssue): a lone task closes its own `issue:`;
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/agent-runner-setup
+      - uses: ./.github/actions/dorfl-setup
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs
@@ -65,4 +65,4 @@ jobs:
         # seam — all UNCHANGED engine pieces, consumed not re-built.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: agent-runner close-merged-issues
+        run: dorfl close-merged-issues

@@ -32,10 +32,7 @@ function show(casing: 'title' | 'caps' | 'plain') {
 		'pushed      :',
 		flavour(ctx, 'Pushed work/foo.', DORFL_LINES.pushedPropose),
 	);
-	console.log(
-		'signature   :',
-		flavour(ctx, 'agent-runner', DORFL_LINES.signature),
-	);
+	console.log('signature   :', flavour(ctx, 'dorfl', DORFL_LINES.signature));
 }
 
 show('title');

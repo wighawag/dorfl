@@ -9,7 +9,7 @@ status: incubating
 
 > Captured 2026-06-11 from a design chat (superseding the narrower
 > `agent-vs-ambient-identity-pair` draft). The trigger: `drive-backlog` builds via
-> `agent-runner do` (which runs under the configured bot `identity`) but does its
+> `dorfl do` (which runs under the configured bot `identity`) but does its
 > OWN approve/comment/merge — and indeed any `git commit` / `gh` write — as the
 > raw ambient shell identity. Designing an `approve` verb to fix that surfaced a
 > bigger shape: there is a THIRD actor (the assistant: an agent in conversation
@@ -83,7 +83,7 @@ to the assistant verbs**:
 
 - `drive-backlog` golden rule 4 + step 4c currently TELL the conductor to run
   `gh pr comment` + `gh pr merge` directly. Those instructions get rewritten to
-  `agent-runner approve …`.
+  `dorfl approve …`.
 - More broadly: an in-conversation agent should be steered away from
   `git commit` / `git push` / `gh <write>` toward the assistant verbs, so
   attribution actually holds in practice.

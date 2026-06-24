@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:needs-attention-test-cleanup-enotempty-flake type=observation slug=needs-attention-test-cleanup-enotempty-flake allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:needs-attention-test-cleanup-enotempty-flake type=observation slug=needs-attention-test-cleanup-enotempty-flake allAnswered=false -->
 
 ## Q1
 
@@ -6,7 +6,7 @@
 
 > File: work/notes/observations/needs-attention-test-cleanup-enotempty-flake.md.
 >
-> Original signal (2026-06-18): intermittent failure of `test/needs-attention.test.ts > readNeedsAttentionItems lists the stuck items with their reason` under full `pnpm -r test` with `Error: ENOTEMPTY: directory not empty, rmdir '/tmp/agent-runner-needs-attention-…/project'` from `cleanup()` in `test/helpers/gitRepo.ts`. Re-running the file in isolation passes. Diagnosed as a cleanup race between in-flight git/fs ops and `rmSync(root, {recursive:true, force:true})`, not a correctness issue.
+> Original signal (2026-06-18): intermittent failure of `test/needs-attention.test.ts > readNeedsAttentionItems lists the stuck items with their reason` under full `pnpm -r test` with `Error: ENOTEMPTY: directory not empty, rmdir '/tmp/dorfl-needs-attention-…/project'` from `cleanup()` in `test/helpers/gitRepo.ts`. Re-running the file in isolation passes. Diagnosed as a cleanup race between in-flight git/fs ops and `rmSync(root, {recursive:true, force:true})`, not a correctness issue.
 >
 > Applied-answers block (2026-06-22) records the decision verbatim as `promote-slice (small, localised)` and notes the cited line number is stale (`:102` → actually `:150`). However: (i) `promote-slice` is NOT one of the protocol's allowed dispositions (`promote-task | promote-adr | keep | delete | dropped | needs-attention`) — `promote-task` is the closest match; (ii) `needsAnswers:` in the frontmatter is `false`, so the engine will not re-surface it; (iii) no matching task/brief exists in `work/tasks/` or `work/briefs/` (grep for `enotempty`/`gitRepo.ts`/`test-cleanup` finds none). So the item is in an in-between state: judged but not routed, and not eligible for re-surfacing without this re-triage.
 

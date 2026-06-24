@@ -42,11 +42,11 @@ Route `runOneItem`'s per-item back-half (`src/run.ts`, steps 5–7: gate → don
 - [ ] **Review wiring threaded through `run`:** `RunOnceOptions` + `OneItemContext` carry `reviewGate?`; the CLI `run` command resolves `review`/`autoMerge`/ `reviewModel`/`reviewMaxRounds` (flag>env>per-repo>global>default, like `do`), adds the `--review`/`--no-review` (+ sibling) flags, and passes `reviewGate: config.review ? harnessReviewGate() : undefined` into `runOnce`.
 - [ ] **Review-gated:** with `review` on and a stubbed `block` verdict (injected `reviewGate`), a `run` item routes to needs-attention and is NOT integrated (mirrors `do`'s review test).
 - [ ] **PR title + body:** a `run` propose PR passes a synthesised single-line `--title` and a `--body` (from the agent's surfaced `output`) — a stubbed provider records the `gh` args; no `--fill` when title/body present.
-- [ ] **Per-repo, language-agnostic gate:** a repo whose `.agent-runner.json` sets a CUSTOM `verify` has THAT command run by `run` (NOT `pnpm -r test`); and a format-only failure (build+test green, format red) routes a `run` item to needs-attention (proving the full floor, not test-only).
+- [ ] **Per-repo, language-agnostic gate:** a repo whose `.dorfl.json` sets a CUSTOM `verify` has THAT command run by `run` (NOT `pnpm -r test`); and a format-only failure (build+test green, format red) routes a `run` item to needs-attention (proving the full floor, not test-only).
 - [ ] `defaultTestGate` and the `TestGate` type are deleted; `run`'s tests inject the gate via `verify: 'exit 0'` / `verify: 'exit 1'` (the same string-command stubs `do`'s tests use), assertions otherwise unchanged.
 - [ ] The TAIL mapping is correct: `completed`→`claimed-done` (+prUrl); `gate-failed`→`tests-failed`; `review-blocked`/`rebase-conflict`→ `needs-attention` (with the reason); `teardown` reap unchanged.
 - [ ] A THROWN core error (e.g. `review` on with no `reviewGate` — `performIntegration` throws a plain `Error`, unlike the data outcomes) is caught in `runOneItem` and turned into a saved/needs-attention `ItemResult`, NOT an uncaught crash of the tick (a test injects the misconfiguration / a throwing gate and asserts the item is routed, the worktree handled, and the run continues).
-- [ ] **Test isolation:** all writes go to temp work trees / scratch arbiters; the real `~/.agent-runner/` + `~/.pi/agent/sessions/` are UNTOUCHED.
+- [ ] **Test isolation:** all writes go to temp work trees / scratch arbiters; the real `~/.dorfl/` + `~/.pi/agent/sessions/` are UNTOUCHED.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
 ## Blocked by
@@ -65,14 +65,14 @@ Route `runOneItem`'s per-item back-half (`src/run.ts`, steps 5–7: gate → don
 >
 > READ FIRST: `src/run.ts` (`runOneItem` steps 5–7, `runAgent`, `ItemStatus`, `RunOnceOptions`/`OneItemContext` — NOTE they have NO review wiring today — `defaultTestGate`/`TestGate`, the `updateJobRecord`/`teardown` tail); `src/cli.ts` (the `run` command's `runOnce({config, workspace, onWarn})` call + the `do` command's review-flag resolution / `reviewFlagOverrides` / `harnessReviewGate()` to mirror); `src/integration-core.ts` (`performIntegration` from Slice 1); `src/do.ts` (`runDoAgent` — the output-surfacing + `performComplete` call to mirror); `src/complete.ts` (how `do` passes `surfaceArbiter`/`review`/`body`); the PRD + the two findings.
 >
-> TDD with vitest, house style (temp work trees, scratch arbiters, `isolatePiAgentDir`, stubbed provider + review agent): the four acceptance proofs (review-gated; title+body; custom `verify` honoured; format-only failure routes), the gate-stub re-pointing, real `~/.agent-runner` + sessions untouched. "Done" = acceptance criteria met and the gate green.
+> TDD with vitest, house style (temp work trees, scratch arbiters, `isolatePiAgentDir`, stubbed provider + review agent): the four acceptance proofs (review-gated; title+body; custom `verify` honoured; format-only failure routes), the gate-stub re-pointing, real `~/.dorfl` + sessions untouched. "Done" = acceptance criteria met and the gate green.
 
 ---
 
 ### Claiming this slice
 
 ```sh
-agent-runner claim run-through-integration-core --arbiter <remote>      # default --arbiter origin
+dorfl claim run-through-integration-core --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/run-through-integration-core <remote>/main
 git mv work/in-progress/run-through-integration-core.md work/done/run-through-integration-core.md
 ```

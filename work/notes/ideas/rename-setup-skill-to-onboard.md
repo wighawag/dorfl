@@ -20,7 +20,7 @@ The string `skills/setup/` and the skill name `setup` are **load-bearing as a PA
 
 - **The folder rename itself:** `skills/setup/` → `skills/onboard/`, including the protocol source-of-truth subtree `skills/setup/protocol/` → `skills/onboard/protocol/`.
 - **Build / runtime path resolution (the breakage risk):**
-  - `packages/agent-runner/src/vendor-protocol.mjs` — vendors the protocol docs FROM `skills/setup/protocol/` into the package; the build step that copies them as part of `pnpm build`.
+  - `packages/dorfl/src/vendor-protocol.mjs` — vendors the protocol docs FROM `skills/setup/protocol/` into the package; the build step that copies them as part of `pnpm build`.
   - `resolveClaimProtocolPath` / `resolveProtocolDoc` and any monorepo-relative walks that reference `skills/setup/protocol/...` (see `work/tasks/done/claim-protocol-path-target-repo-and-vendored.md`).
   - `package.json` `files` manifest and any path that ships the vendored protocol copy.
   - The doc-consistency test(s) that assert the vendored set matches the source.

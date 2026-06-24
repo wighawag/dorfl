@@ -61,9 +61,9 @@ Apply the `work/` contract (`work/protocol/WORK-CONTRACT.md`), especially:
 - **The spent drift-pointer:** the task/code it warned about already landed, and its warning was inlined into that artifact → **delete**.
 - **The fixed-defect note:** read the code; if the defect it describes is gone, the note is a tombstone → **delete** (optionally preserve the _why_ as a code/ADR note first).
 
-## Repo-specific trap (agent-runner)
+## Repo-specific trap (dorfl)
 
-`agent-runner` is both **author and user** of the protocol. The protocol **source of truth** is `skills/setup/protocol/`; `work/protocol/` is a propagated **copy**. NEVER edit `work/protocol/` alone — edit the source and mirror both (see that repo's `AGENTS.md`). Other repos have only `work/protocol/`.
+`dorfl` is both **author and user** of the protocol. The protocol **source of truth** is `skills/setup/protocol/`; `work/protocol/` is a propagated **copy**. NEVER edit `work/protocol/` alone — edit the source and mirror both (see that repo's `AGENTS.md`). Other repos have only `work/protocol/`.
 
 ## Guardrails
 

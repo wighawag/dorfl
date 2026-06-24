@@ -11,7 +11,7 @@ covers: [13, 15]
 The human-face additions of ADR §4 that are ready to build now — the in-place `resume` verb and `work-on` cd-by-default. (`--agent` interactive launch is split out into its own slice `agent-interactive-launch`, gated on an open seam question — see Out of Scope.)
 
 - **`resume <slug>` verb** — re-engage an already-in-progress item in the current checkout: switch to its `work/<slug>` branch WITHOUT claiming (the item is already `in-progress/`). This is its own documented verb; **`start --resume` becomes a hidden alias** (kept for muscle memory). The documented surface: `start` = begin work here, `resume` = continue here. (The behaviour already exists as `start --resume`/`performStart({resume})`; this slice promotes it to a verb + hides the alias.)
-- **`work-on` `cd`s you in by default** — the human parallel verb should drop the human into the new worktree. A binary cannot `cd` its parent shell, so this is via the documented shell wrapper (`work-on(){ cd "$(agent-runner work-on "$@" --print-dir)"; }`); make `--print-dir` the wrapper's plumbing (already exists) and ensure the default human-facing output guides the cd (the wrapper does the actual cd). Document the wrapper as the headline path; `--print-dir` is advanced/plumbing.
+- **`work-on` `cd`s you in by default** — the human parallel verb should drop the human into the new worktree. A binary cannot `cd` its parent shell, so this is via the documented shell wrapper (`work-on(){ cd "$(dorfl work-on "$@" --print-dir)"; }`); make `--print-dir` the wrapper's plumbing (already exists) and ensure the default human-facing output guides the cd (the wrapper does the actual cd). Document the wrapper as the headline path; `--print-dir` is advanced/plumbing.
 - **Migrate `work-on`'s remote form from POSITIONAL to the `--remote` FLAG.** Today `work-on` is `work-on <remoteOrSlug> [slug]` — positional disambiguation (one arg = in-repo slug; two args = `<remote> <slug>`). The ADR §4 surface is **`work-on --remote <r> <slug>`** (a flag), matching `do --remote`. Migrate the command to the `--remote` flag form (`work-on <slug>` in-repo; `work-on --remote <r> <slug>` remote) so the two verbs read consistently (`do ↔ work-on`, same target resolution: bare = current repo, `--remote` = anywhere). The underlying `performWorkOn({slug, remote})` already takes a `remote` separately from the slug — this is a CLI-surface change (how the two args are parsed), not a rewrite of `work-on.ts`'s logic.
 
 Both honour `slug-namespace-resolution`: `resume`/`work-on` are slice-only (accept bare + `slice:`, reject `prd:`).
@@ -47,7 +47,7 @@ Both honour `slug-namespace-resolution`: `resume`/`work-on` are slice-only (acce
 
 ```sh
 # atomically claim it (works with a GitHub remote OR a local --bare remote):
-agent-runner claim human-face-verbs --arbiter <remote>      # default --arbiter origin
+dorfl claim human-face-verbs --arbiter <remote>      # default --arbiter origin
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/human-face-verbs <remote>/main
 # on completion, in the work branch's PR/merge:

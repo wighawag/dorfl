@@ -30,7 +30,7 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 - [ ] Pure resolution function: given the flag set + the artifact type (`slice`/`prd`), returns the integration mode (`merge`/`propose`). Tested as a table: - unset ⇒ propose for both types; - `--merge` ⇒ merge both; `--propose` ⇒ propose both; - granular routes per type (`--merge-prd` merges a PRD, leaves a slice at default/aggregate); - granular OVERRIDES aggregate (`--merge --propose-slice` ⇒ PRD merge, slice propose); - same-type-both (`--merge-prd --propose-prd`, or `--merge-slice       --propose-slice`) ⇒ usage ERROR (clear message).
 - [ ] The resolved mode is threaded into `performIntegration` for the emitted artifact (assert via the integration harness: `intake <N> --merge-slice` on a stubbed `slice` verdict LANDS on `main`; default/`--propose-slice` opens a PR / leaves `main` untouched).
 - [ ] ask/bounce verdicts ignore the flags (no-op) — no integrate happens regardless of the flags.
-- [ ] The flags are wired into the `intake` command grammar (`cli.ts`) consistently with the rest of agent-runner's flag style.
+- [ ] The flags are wired into the `intake` command grammar (`cli.ts`) consistently with the rest of dorfl's flag style.
 - [ ] Tests STUB the seam + `gh`; mirror the repo's existing style.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 
@@ -55,7 +55,7 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 >
 > 1. A PURE resolution function over the flag set + the runtime artifact type → integration mode (`merge`/`propose`), with the override + usage-error rules above. This is the unit-test target (a resolution table). COMPOSE/EXTEND the EXISTING `resolveIntegrationMode` (`src/complete.ts`) for the aggregate `--merge`/`--propose` axis (reuse its mutual-exclusion + error message); layer the per-TYPE granular resolution + granular-overrides-aggregate on top — do NOT fork a second mode resolver.
 > 2. Flag wiring in the `intake` command grammar (`src/cli.ts`) for the four granular
->    - two aggregate flags, consistent with agent-runner's flag style.
+>    - two aggregate flags, consistent with dorfl's flag style.
 > 3. Thread the resolved mode into the dispatcher's existing `performIntegration` call (slices 1 + 2 already integrate at default propose — replace the hardcoded default with the resolved mode).
 >
 > SEAM TO TEST AT: the PURE resolution function (the table above) + the throwaway-git integration harness for one end-to-end check (`--merge-slice` lands on `main`; default/`--propose-slice` opens a PR / no `main` touch). STUB `gh` via the injectable `ghBin` (the `GitHubProvider` test seam), as the PR-provider tests do.

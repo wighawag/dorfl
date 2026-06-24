@@ -12,7 +12,7 @@ Teach the apply rung to RECONCILE the item body on the FULL-RESOLUTION route, no
 
 End-to-end thin slice:
 
-- Add a reconcile step in `packages/agent-runner/src/apply-persist.ts` (alongside / inside `withAppliedAnswers` or as a sibling helper composed into the resolve path) that strips a marker-fenced "open-questions" block from the item body. The marker convention is decided by the brief (D1): an HTML-comment fence pair, sibling-slice `templates-mark-transient-open-questions-block` introduces it in the templates. The strip is STRUCTURAL — it matches the marker pair, NOT the visible heading text.
+- Add a reconcile step in `packages/dorfl/src/apply-persist.ts` (alongside / inside `withAppliedAnswers` or as a sibling helper composed into the resolve path) that strips a marker-fenced "open-questions" block from the item body. The marker convention is decided by the brief (D1): an HTML-comment fence pair, sibling-slice `templates-mark-transient-open-questions-block` introduces it in the templates. The strip is STRUCTURAL — it matches the marker pair, NOT the visible heading text.
 - Wire the reconcile to fire ONLY on the FULL-RESOLUTION disposition (no follow-up questions appended, `needsAnswers` going to `false`). The re-pause route (`appendQuestions.length > 0`) keeps today's behaviour exactly: the open-questions block is legitimately still open and must stay (D3).
 - Backward compatibility: items authored without the marker pair are left as-is by the reconcile (no marker → nothing to strip → identical bytes to today, no regression). This covers both already-applied briefs (out of scope to retrofit, per the brief) and any non-template-authored items.
 - Tests, mirroring the existing apply-rung test pattern (throwaway git repos):
@@ -39,9 +39,9 @@ End-to-end thin slice:
 
 > Goal: make the apply rung RECONCILE the resolved item body on the full-resolution route — strip the now-stale marker-fenced open-questions block in the same atomic commit that records `## Applied answers` and deletes the sidecar. Read the source brief `work/briefs/ready/apply-reconciles-stale-open-questions.md` fully first (decisions D1 / D2 / D3 are the contract).
 >
-> Domain vocabulary: the "apply rung" is the advance engine's APPLY step (`applyAnsweredQuestions` in `packages/agent-runner/src/apply-persist.ts`); the "FULL-RESOLUTION route" clears `needsAnswers` and deletes the sidecar in one commit (vs. the RE-PAUSE route which appends follow-up questions and stays `needsAnswers:true`); the "open-questions block" is the transient body section the apply must strip when its questions have been answered; the "marker" is a structural HTML-comment fence pair the templates (sibling slice) introduce so apply doesn't have to guess at heading text.
+> Domain vocabulary: the "apply rung" is the advance engine's APPLY step (`applyAnsweredQuestions` in `packages/dorfl/src/apply-persist.ts`); the "FULL-RESOLUTION route" clears `needsAnswers` and deletes the sidecar in one commit (vs. the RE-PAUSE route which appends follow-up questions and stays `needsAnswers:true`); the "open-questions block" is the transient body section the apply must strip when its questions have been answered; the "marker" is a structural HTML-comment fence pair the templates (sibling slice) introduce so apply doesn't have to guess at heading text.
 >
-> Where to look in the codebase: `packages/agent-runner/src/apply-persist.ts` (this is the fix site — specifically `withAppliedAnswers` and the resolve path in `applyAnsweredQuestions`); `packages/agent-runner/src/sidecar*.ts` for the existing HTML-comment marker style to mirror; `packages/agent-runner/test/` for the apply-rung test pattern and the throwaway-git-repo helpers. The brief's "Fix site" line (D1) calls out this exact module.
+> Where to look in the codebase: `packages/dorfl/src/apply-persist.ts` (this is the fix site — specifically `withAppliedAnswers` and the resolve path in `applyAnsweredQuestions`); `packages/dorfl/src/sidecar*.ts` for the existing HTML-comment marker style to mirror; `packages/dorfl/test/` for the apply-rung test pattern and the throwaway-git-repo helpers. The brief's "Fix site" line (D1) calls out this exact module.
 >
 > Seam to test at: the `applyAnsweredQuestions` entry point — feed it a working tree with a sidecar of fully-answered entries and an item body that does (and separately does not) carry the marker pair; assert on the post-commit body, the sidecar's absence, and the frontmatter `needsAnswers` value. Also exercise the re-pause path (with `appendQuestions` non-empty) and assert the open-questions block is retained.
 >
@@ -56,7 +56,7 @@ End-to-end thin slice:
 ### Claiming this task
 
 ```sh
-agent-runner claim apply-reconciles-resolved-brief-body --arbiter origin
+dorfl claim apply-reconciles-resolved-brief-body --arbiter origin
 git fetch origin && git switch -c work/apply-reconciles-resolved-brief-body origin/main
 # on completion, in the work branch's PR/merge:
 git mv work/tasks/todo/apply-reconciles-resolved-brief-body.md work/tasks/done/apply-reconciles-resolved-brief-body.md

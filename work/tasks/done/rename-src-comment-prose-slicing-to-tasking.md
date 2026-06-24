@@ -10,7 +10,7 @@ covers: []
 
 ## What to build
 
-Sweep the retired slice/PRD/slicing/slicer vocabulary out of FREE-PROSE doc comments and USER-FACING message/help strings across `packages/agent-runner/src/*.ts`, replacing with task/brief/tasking where the word denotes the CURRENT concept. This is the prose residue left after the parent task's mechanical file+symbol renames.
+Sweep the retired slice/PRD/slicing/slicer vocabulary out of FREE-PROSE doc comments and USER-FACING message/help strings across `packages/dorfl/src/*.ts`, replacing with task/brief/tasking where the word denotes the CURRENT concept. This is the prose residue left after the parent task's mechanical file+symbol renames.
 
 Known high-residue modules (counts approximate, AFTER excluding the allowed-keep categories below): `do.ts` (~120 lines incl. outcome comments "the PRD was sliced", "the slicing gate refused", "stale slicing"), `ledger-read.ts` (~57: "PRD-existence read", "once SLICED it rests at", "the slicing lock no longer moves it"), `review-gate.ts` (~49: the review-PROMPT builder STRINGS fed to the review agent — "AGAINST the slice that specified them", "CROSS-SLICE", "code-vs-its-slice", "review of one slice"), `select-priority.ts` (~40), `prompt.ts` (~40), `close-job.ts` (~42: "a lone slice closes its own issue", "prd:<slug> slices"), `scan.ts` (~38), `item-lock.ts` (~21), `mirror-pool-scan.ts` (~15), plus the `cli.ts` USER-FACING `--help` strings the parent left (e.g. "auto-build undeclared … slices", "run one agent on a slice prompt", "claim a slice", "the slug to work on (bare = the slice)", "default drain = slices-first then PRDs-to-slice").
 
@@ -26,8 +26,8 @@ Where a comment describes a PAST state (e.g. "originally `work/slicing/`"), keep
 
 ## Acceptance criteria
 
-- [ ] No FREE-PROSE doc comment or user-facing message/help string in `packages/agent-runner/src/*.ts` uses slice/PRD/slicing/slicer for a CURRENT concept; the keep-verbatim categories above are preserved (and, where a kept token sits in otherwise-renamed prose, left intact).
-- [ ] The `cli.ts` `--help`/usage strings read task/brief/tasking consistently (a user running `agent-runner do --help` / `--help` sees no stray "slices"/"PRDs" for the current concepts).
+- [ ] No FREE-PROSE doc comment or user-facing message/help string in `packages/dorfl/src/*.ts` uses slice/PRD/slicing/slicer for a CURRENT concept; the keep-verbatim categories above are preserved (and, where a kept token sits in otherwise-renamed prose, left intact).
+- [ ] The `cli.ts` `--help`/usage strings read task/brief/tasking consistently (a user running `dorfl do --help` / `--help` sees no stray "slices"/"PRDs" for the current concepts).
 - [ ] No symbol, type, filename, config key, or wire-field is renamed here (those are owned by the parent + the config/CLI tasks); this is a PROSE-only sweep.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` stays green (run `pnpm format` after editing).
 - [ ] Any doc-consistency test asserting touched prose is updated in this task; suite green.
@@ -51,7 +51,7 @@ Where a comment describes a PAST state (e.g. "originally `work/slicing/`"), keep
 ### Claiming this task
 
 ```sh
-agent-runner claim rename-src-comment-prose-slicing-to-tasking --arbiter <remote>
+dorfl claim rename-src-comment-prose-slicing-to-tasking --arbiter <remote>
 git fetch <remote> && git switch -c work/rename-src-comment-prose-slicing-to-tasking <remote>/main
 git mv work/tasks/todo/rename-src-comment-prose-slicing-to-tasking.md work/tasks/done/rename-src-comment-prose-slicing-to-tasking.md
 ```

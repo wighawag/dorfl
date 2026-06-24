@@ -17,7 +17,7 @@ This naming is actually CONSISTENT with mainstream Kanban (checked against six
 sources: AgileSparks, Asana, ProofHub, Boards.cloud, Meister, Multiboard, web
 search 2026-06-20). In the standard intake pattern, `Backlog` = the wider pool of
 candidate work not yet committed, and the NEXT column (`To Do` / `Ready`) = work
-committed and READY TO PULL. So agent-runner's `backlog`=staging / `todo`=pool maps
+committed and READY TO PULL. So dorfl's `backlog`=staging / `todo`=pool maps
 onto the convention correctly. (Earlier in the originating conversation an agent
 mis-claimed `backlog` was a "false friend" meaning the ready queue — that was wrong;
 the sources confirm backlog is the not-yet-ready bucket in mainstream usage too.)

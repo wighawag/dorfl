@@ -52,7 +52,7 @@ Two changes:
 ### Claiming this slice
 
 ```sh
-agent-runner claim gate-fail-pushes-work-branch --arbiter <remote>
+dorfl claim gate-fail-pushes-work-branch --arbiter <remote>
 git fetch <remote> && git switch -c work/gate-fail-pushes-work-branch <remote>/main
 git mv work/in-progress/gate-fail-pushes-work-branch.md work/done/gate-fail-pushes-work-branch.md
 ```

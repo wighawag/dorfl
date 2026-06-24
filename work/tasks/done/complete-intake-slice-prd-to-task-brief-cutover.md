@@ -60,7 +60,7 @@ Immutable historical slugs and any genuinely-frozen reference. This is a clean b
 ### Claiming this task
 
 ```sh
-agent-runner claim complete-intake-slice-prd-to-task-brief-cutover --arbiter <remote>
+dorfl claim complete-intake-slice-prd-to-task-brief-cutover --arbiter <remote>
 git fetch <remote> && git switch -c work/complete-intake-slice-prd-to-task-brief-cutover <remote>/main
 git mv work/tasks/todo/complete-intake-slice-prd-to-task-brief-cutover.md work/tasks/done/complete-intake-slice-prd-to-task-brief-cutover.md
 ```

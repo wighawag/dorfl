@@ -101,7 +101,7 @@ The STOP verdict (Part A) is for when the agent CAN'T proceed. Part B is for whe
 ### Claiming this slice
 
 ```sh
-agent-runner claim agent-stop-signal --arbiter <remote>      # default --arbiter origin
+dorfl claim agent-stop-signal --arbiter <remote>      # default --arbiter origin
 git fetch <remote> && git switch -c work/agent-stop-signal <remote>/main
 git mv work/in-progress/agent-stop-signal.md work/done/agent-stop-signal.md
 ```

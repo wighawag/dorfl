@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset type=observation slug=rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset type=observation slug=rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset allAnswered=false -->
 
 ## Q1
 

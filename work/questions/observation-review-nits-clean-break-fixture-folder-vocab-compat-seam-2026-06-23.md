@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:review-nits-clean-break-fixture-folder-vocab-compat-seam-2026-06-23 type=observation slug=review-nits-clean-break-fixture-folder-vocab-compat-seam-2026-06-23 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:review-nits-clean-break-fixture-folder-vocab-compat-seam-2026-06-23 type=observation slug=review-nits-clean-break-fixture-folder-vocab-compat-seam-2026-06-23 allAnswered=false -->
 
 ## Q1
 

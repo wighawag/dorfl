@@ -1,4 +1,4 @@
-<!-- agent-runner-sidecar: item=observation:decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 type=observation slug=decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 allAnswered=false -->
+<!-- dorfl-sidecar: item=observation:decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 type=observation slug=decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 allAnswered=false -->
 
 ## Q1
 

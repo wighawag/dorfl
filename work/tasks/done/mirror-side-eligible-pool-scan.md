@@ -35,7 +35,7 @@ A MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs fro
 
 > Build the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from a BARE hub mirror's `main` (NOT an in-place checkout) — the isolated counterpart to `do-autopick`'s in-place scan. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (the "FOLD-IN: the mirror-side pool scan" note — design it ONCE so BOTH the `run` loop driver and the one-shot/CI `advance` driver consume the SAME scan; a standalone `do --remote -n` falls out as a thin caller; do NOT invent it twice) and US #25/27. `-n` stays ALWAYS SEQUENTIAL — this scan only ENUMERATES; parallelism is `run` or the CI matrix.
 >
-> Mirror the in-place pool scan but read the BARE mirror. READ FIRST: `packages/agent-runner/src/do-autopick.ts` (the in-place pool scan to mirror), `packages/agent-runner/src/eligibility.ts` + `slicing-eligibility.ts` (the predicates to REUSE — not re-derive), `packages/agent-runner/src/repo-mirror.ts` (the bare hub mirror), and the existing inline `-n`×`--remote` REFUSAL in `cli.ts` (the placeholder this scan replaces — but REMOVING the refusal is the caller/drivers' job, not this slice).
+> Mirror the in-place pool scan but read the BARE mirror. READ FIRST: `packages/dorfl/src/do-autopick.ts` (the in-place pool scan to mirror), `packages/dorfl/src/eligibility.ts` + `slicing-eligibility.ts` (the predicates to REUSE — not re-derive), `packages/dorfl/src/repo-mirror.ts` (the bare hub mirror), and the existing inline `-n`×`--remote` REFUSAL in `cli.ts` (the placeholder this scan replaces — but REMOVING the refusal is the caller/drivers' job, not this slice).
 >
 > FIRST, check this slice against current reality (drift). `do-autopick`, the mirror, and the eligibility predicates are LANDED substrate. If they landed differently, reconcile or route to `needs-attention/`.
 >
@@ -46,7 +46,7 @@ A MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs fro
 ### Claiming this slice
 
 ```sh
-agent-runner claim mirror-side-eligible-pool-scan --arbiter origin
+dorfl claim mirror-side-eligible-pool-scan --arbiter origin
 git fetch origin && git switch -c work/mirror-side-eligible-pool-scan origin/main
 git mv work/in-progress/mirror-side-eligible-pool-scan.md work/done/mirror-side-eligible-pool-scan.md
 ```

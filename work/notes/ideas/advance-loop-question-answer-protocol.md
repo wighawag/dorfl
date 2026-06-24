@@ -236,7 +236,7 @@ So a repo with every flag OFF still gets the QUESTION LOOP (agents surface quest
 
 ### Rename `allowAgents` → `autoBuild` (SEQUENCED LAST — after the rest)
 
-`allowAgents` reads like a master ("may agents act at all") but only gates BUILD — a naming trap once `autoSlice`/`autoTriage` siblings exist (a reader sets `allowAgents:false` expecting "no agent autonomy" but slice/triage have their own flags). Rename it to `autoBuild` so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). This is a BREAKING config rename (touches `.agent-runner.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT; precedent: `rename-reviewpr-to-review`). DO IT LAST — build the advance family with `allowAgents` named as-is, then rename as one clean isolated migration (with an alias/deprecation window) AFTER the advance work lands. Easier to sequence the rename alone than to entangle it with the feature.
+`allowAgents` reads like a master ("may agents act at all") but only gates BUILD — a naming trap once `autoSlice`/`autoTriage` siblings exist (a reader sets `allowAgents:false` expecting "no agent autonomy" but slice/triage have their own flags). Rename it to `autoBuild` so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). This is a BREAKING config rename (touches `.dorfl.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT; precedent: `rename-reviewpr-to-review`). DO IT LAST — build the advance family with `allowAgents` named as-is, then rename as one clean isolated migration (with an alias/deprecation window) AFTER the advance work lands. Easier to sequence the rename alone than to entangle it with the feature.
 
 ## batch-qa → `surface-questions` (RESOLVED 2026-06-07)
 

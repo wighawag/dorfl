@@ -1,7 +1,7 @@
 ---
 title: complete → needs-attention — route complete's failure paths to the stuck folder
 slug: complete-needs-attention
-prd: agent-runner
+prd: dorfl
 humanOnly: true
 blockedBy: [needs-attention]
 covers: [12]
@@ -35,7 +35,7 @@ End-to-end:
 
 ## Prompt
 
-> Route `agent-runner complete`'s failure paths through the `needs-attention` mechanism, in `packages/agent-runner/`. READ FIRST: the `needs-attention` slice (the move helper to call), ADR §10/§12, and the existing `complete.ts`. Follow `AGENTS.md`.
+> Route `dorfl complete`'s failure paths through the `needs-attention` mechanism, in `packages/dorfl/`. READ FIRST: the `needs-attention` slice (the move helper to call), ADR §10/§12, and the existing `complete.ts`. Follow `AGENTS.md`.
 >
 > When the gate fails (no `--skip-verify`) or a rebase conflicts, instead of aborting in place, record the reason and move the item `in-progress → needs-attention` via the shared helper, so it is surfaced by `status` and returnable to `backlog/`. Keep the success and `--skip-verify` paths unchanged; ensure no partial/half-moved state on failure.
 >
