@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-24
 reviewOf: frontmatter
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -54,3 +54,15 @@ Fixed in `frontmatter.ts`: `parseInlineList` now routes through a new quote-awar
 Verified: `dorfl scan --json` now reports `disable-rename-detection-on-continue-rebase` and `recovery-rebase-retry-against-moving-arbiter-main` as `eligibility.eligible: true` (phantom `"] # startable no"` dep gone). Gate green: build + 2593 tests + format:check.
 
 Tests added (`test/frontmatter.test.ts`): empty/non-empty inline `blockedBy` + `prdAfter` with trailing `# comment`, a `#`-inside-quoted-slug guard, and a parser↔template drift guard that parses the shipped `blockedBy: [] # ...` lines from `{skills/setup,work}/protocol/{task-template,WORK-CONTRACT}.md` to `[]`.
+
+## Applied answers 2026-06-24
+
+### q1: This observation has already been resolved in-place (see the '## Update 2026-06-24 — fixed' section): the `parseInlineList` flaw was fixed via a new quote-aware `inlineListInner(value)` helper, the parser↔template drift guard plus other fixtures were added in `test/frontmatter.test.ts`, and the gate is green (build + 2593 tests + format:check). How should the observation itself be routed now?
+
+dropped (reason: resolved in-place 2026-06-24). The quote-aware `inlineListInner()` fix shipped, the parser-template drift guard and other fixtures were added in `test/frontmatter.test.ts`, and the gate is green (build + 2593 tests + format:check). Nothing left for a follow-up task or ADR.
+
+disposition: dropped
+
+## Recommended: delete
+
+A human answered "delete": this item can be removed (git history is the archive). The agent leaves the deletion to the human per the capture-bucket contract.
