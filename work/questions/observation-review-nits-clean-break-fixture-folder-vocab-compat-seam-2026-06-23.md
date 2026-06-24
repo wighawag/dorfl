@@ -17,3 +17,5 @@ _Suggested default: delete — both nits are cosmetic-coherence / retrospective-
 <!-- q1 fields: id=q1 disposition=delete -->
 
 **Your answer** (write below this line):
+
+delete. Confirmed: both nits are cosmetic-coherence / retrospective-process notes on a landed, approved PR. The 'slicing'->'tasking' literal rename is verified correct (the probes are `.toBe(false)` absence assertions that pass regardless of the literal), and the missing `## Decisions` block is on an already-merged commit that cannot be retro-edited into work. Neither implies follow-up code. The general signal (prefer a `## Decisions` block when a non-obvious naming choice is made) is PR-authoring hygiene carried by reviewer habit, not a durable open observation.
