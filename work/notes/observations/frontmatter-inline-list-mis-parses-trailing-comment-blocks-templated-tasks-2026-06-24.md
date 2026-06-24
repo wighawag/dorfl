@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-24
 reviewOf: frontmatter
+needsAnswers: true
 ---
 
 ## What was seen
