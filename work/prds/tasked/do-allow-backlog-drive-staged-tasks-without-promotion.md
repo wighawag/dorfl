@@ -153,43 +153,10 @@ backlog mode actually work.
    promoting to the pool surrenders the item to any claimer, so "I want to drive
    this myself" = drive in place, never promote-then-drive.
 
-## Implementation Decisions
-
-- **Flag + resolver.** New `do` flag `--allow-backlog` (boolean, default off);
-  plumb to `resolveTask` which appends `'tasks-backlog'` to its search order when
-  set. The `done`-on-stranded-continue special case is unaffected.
-- **Claim predicate (OPEN — Q1).** Determine whether the claimable predicate
-  (`claim-cas.ts`, currently keyed on the pre-rename "backlog"=pool meaning) also
-  needs to accept a `tasks/backlog/`-resident task, or whether claim already
-  works unchanged. This is the difference between a resolver-only change and a
-  resolver+claim change — settle Q1 before tasking.
-- **Completion / done-move (OPEN — Q2).** The complete/integration path types
-  `source` as `tasks-ready | in-progress | needs-attention | done`
-  (`complete.ts:716`) — no `tasks-backlog`. Determine whether the "resolve the
-  actual source folder" logic (`complete.ts:641`) already covers a backlog-
-  resident task, or whether the union + resolver must gain `tasks-backlog`, so a
-  backlog-resolved build done-moves cleanly to `tasks/done/`.
-- **Leak-fence.** Assert (test) that `run`/auto-pick/`advance` paths never set
-  `--allow-backlog`; it is purely the explicit `do` CLI surface (+ `drive-tasks`
-  passing it on explicit human instruction).
-- **Doc-comment fix.** Correct `resolveTask`'s stale "backlog"-means-ready prose
-  (and `do.ts:98`) as part of the same change, since the function now genuinely
-  references `tasks-backlog`.
-- **Skill + protocol.** Update `drive-tasks` opt-in-backlog mode to dispatch
-  `--allow-backlog` and state the rationale; add the human-control-position
-  principle to WORK-CONTRACT.md (source + mirror).
-
-## Testing Decisions
-
-- A `do task:<slug> --allow-backlog` over a throwaway repo with the task ONLY in
-  `tasks/backlog/`: it resolves, builds, and the completed task lands in
-  `tasks/done/` (asserts the backlog→done move).
-- Without the flag, the same staged task fails to resolve (asserts the flag is
-  required to reach staging — no silent widening).
-- A leak-fence test: the `run`/auto-pick/`advance` claim path resolves only
-  `tasks-ready` regardless (asserts the flag cannot be reached autonomously).
-- Prior art: the existing `resolveTask` tests and the `do`/`run` integration
-  tests; the throwaway-git-repo pattern.
+> Tasked 2026-06-24. The launch-time Implementation/Testing detail has been
+> relocated into the emitted tasks (`work/tasks/backlog/`); the durable WHY is
+> kept in **Resolved decisions** above (including the rejected promote-on-claim
+> alternative). See the task map in Further Notes.
 
 ## Out of Scope
 
@@ -209,8 +176,15 @@ backlog mode actually work.
   race), fixed by tasking in place (TASKING-PROTOCOL.md §6 + the
   `observation-discharge-...` PRD). Instance 2 = this (task building;
   `tasks/backlog → ready` race). The WORK-CONTRACT principle (Resolved decision
-  5) is the generalisation so a third instance is caught by the doc, not
+  7) is the generalisation so a third instance is caught by the doc, not
   rediscovered.
+- **Task map (tasked 2026-06-24, born staged in `work/tasks/backlog/`):**
+  - `do-allow-backlog-flag-resolver-claim-and-done-move` — US #1,#2,#3,#4 (keystone; `blockedBy: []`).
+  - `allow-backlog-leak-fence-assertions` — US #4 (`blockedBy:` keystone).
+  - `resolvetask-stale-backlog-vocab-doc-fix` — US #7 (`blockedBy:` keystone; same files).
+  - `drive-tasks-dispatch-allow-backlog` — US #5 (`blockedBy:` keystone).
+  - `work-contract-staging-is-human-control-position` — US #6 (`blockedBy: []`, docs-only, parallel).
+  Chain: keystone → {leak-fence, doc-fix, drive-tasks} ; the WORK-CONTRACT task runs in parallel.
 - Key evidence: `prompt.ts:567` (`resolveTask` order `['in-progress',
   'tasks-ready']`); `run.ts:929` (hardcoded `source: 'tasks-ready'`, the
   structural fence); `do.ts:969`/`:2121` (the two `resolveTask` call sites);
