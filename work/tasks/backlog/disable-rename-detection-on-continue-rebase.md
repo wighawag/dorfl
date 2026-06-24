@@ -5,6 +5,32 @@ blockedBy: [] # startable now
 covers: [] # self-contained chore; no prd
 ---
 
+> CORRECTION (2026-06-24, after a FAILED first attempt — PR #224, closed unmerged):
+> the specific git knob this task originally named (`-Xno-renames` /
+> `merge.renames=false` / `diff.renames=false`) is the WRONG one and does NOT fix
+> the bug. The spurious conflict is a DIRECTORY-rename
+> (`CONFLICT (file location): … added in HEAD inside a directory that was
+> renamed …`), which is governed by **`merge.directoryRenames`**, not by
+> content-rename detection. Empirically verified on git 2.47.3 against this task's
+> own scenario (one sparse-folder `git mv` on the branch, a sibling file added into
+> that folder on main):
+>
+>   - plain `git rebase main` → CONFLICT
+>   - `git rebase -Xno-renames main` → still CONFLICT
+>   - `git -c merge.renames=false rebase main` → still CONFLICT
+>   - `git -c diff.renames=false rebase main` → still CONFLICT
+>   - **`git -c merge.directoryRenames=false rebase main` → CLEAN** (correct tree:
+>     the moved item lands in its target folder, the sibling files stay in the
+>     source folder)
+>
+> So the maintainer's rename-off-over-sentinel DECISION still stands (do NOT adopt
+> the sentinel route), but the mechanism is **`-c merge.directoryRenames=false`**
+> scoped to each rebase invocation. The first attempt shipped `-Xno-renames` at
+> three sites and its own regression test failed (`expected 'clean' to be
+> 'conflict'`) — that is the tell. Use `merge.directoryRenames=false`; do NOT
+> re-derive `-Xno-renames` from the stale prose below (the body has been corrected
+> to match, but this banner is the load-bearing summary).
+
 ## What to build
 
 Stop the runner's own continue/integration rebases from misreading a single
@@ -17,9 +43,10 @@ main that ADDED files into that same folder flags each new file as a SPURIOUS
 stuck-locks the branch, producing a FALSE needs-attention.
 
 The slice: pass rename-detection-OFF to every rebase invocation on the runner's
-continue/integration path (the `-Xno-renames` rebase strategy option, or the
-equivalent `merge.renames=false` / `diff.renames=false` config SCOPED to that one
-rebase invocation via `-c`). Scope it to the runner's own rebases ONLY; do not
+continue/integration path via `-c merge.directoryRenames=false` SCOPED to that one
+rebase invocation (NOT `-Xno-renames` / `merge.renames` / `diff.renames` — those
+control file-CONTENT rename detection and do NOT suppress this directory-rename
+conflict; see the CORRECTION banner). Scope it to the runner's own rebases ONLY; do not
 touch the repo's persistent git config, so a user's interactive `git rebase` is
 unaffected. The end-to-end behaviour to demonstrate: a done-move that empties a
 sparse folder, then a continue-rebase onto a main that added files into that
@@ -61,7 +88,8 @@ it MORE likely, not less: more folders, several often holding 0-1 files
 ### Approach decision: rename-off, NOT a per-folder sentinel (maintainer, 2026-06-20)
 
 The maintainer DECIDED the fix is to disable rename detection on the runner's
-continue-rebase (`-Xno-renames` / scoped `merge.renames=false`), and explicitly
+continue-rebase (scoped `-c merge.directoryRenames=false` — see the CORRECTION
+banner for why this specific knob, not `-Xno-renames`), and explicitly
 REJECTED the per-folder sentinel alternative (a `README.md` / `.gitkeep` in each
 work/ folder to keep it non-empty). Rationale to record in the done record / an ADR
 if it meets the ADR gate: the sentinel scheme would FIGHT the case where a user
@@ -71,12 +99,14 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 
 ## Acceptance criteria
 
-- [ ] The runner's continue/integration rebase disables git rename detection
-      (`-Xno-renames`, or a scoped `merge.renames=false`/`diff.renames=false` via
-      `-c` on the rebase invocation), so a single durable folder-transition `git mv`
-      out of a sparse folder is NOT read as a whole-directory rename. Every rebase
-      invocation on the continue/integration path carries it (including the
-      stale-lease re-rebase retries and the integrate-tail rebase), NOT just one.
+- [ ] The runner's continue/integration rebase disables git DIRECTORY-rename
+      detection via a scoped `-c merge.directoryRenames=false` on the rebase
+      invocation (NOT `-Xno-renames`/`merge.renames`/`diff.renames` — verified
+      ineffective; see the CORRECTION banner), so a single durable
+      folder-transition `git mv` out of a sparse folder is NOT read as a
+      whole-directory rename. Every rebase invocation on the continue/integration
+      path carries it (including the stale-lease re-rebase retries and the
+      integrate-tail rebase), NOT just one.
 - [ ] Rename-off is SCOPED to the runner's own rebase invocations; the repo's
       persistent git config is NOT modified, so a user's interactive git is
       unaffected (assert/structure the change so the global/repo config stays clean).
@@ -133,9 +163,11 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 >   - Locate EVERY rebase invocation on the continue/integration path (search the two
 >     modules above for `'rebase'` git args) and pass rename-detection-off, scoped to
 >     each invocation. The git rebases here go through the soft/hard git runners
->     (`gitSoft`/`gitHard`); add `-Xno-renames` to the rebase args, or front the
->     rebase with `-c merge.renames=false` (scoped via `-c`, NEVER a persistent
->     `git config` write). Do NOT set rename-off globally for the repo's git config.
+>     (`gitSoft`/`gitHard`); front the rebase with `-c merge.directoryRenames=false`
+>     (scoped via `-c`, NEVER a persistent `git config` write). Do NOT use
+>     `-Xno-renames` / `merge.renames` / `diff.renames` — verified INEFFECTIVE for
+>     this directory-rename conflict (see the CORRECTION banner at the top). Do NOT
+>     set rename-off globally for the repo's git config.
 >
 > Seams to test at: the `rebaseContinuedBranchOntoMain` helper is directly unit-
 > testable with throwaway repos + a local bare arbiter (see
@@ -164,8 +196,8 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 > the rebase machinery moved, do NOT build on the stale premise — route the task to
 > needs-attention with the discrepancy as the reason.
 >
-> RECORD non-obvious in-scope decisions you make while building (e.g. `-Xno-renames`
-> vs scoped `-c merge.renames=false`, or which exact invocations you touch). If a
+> RECORD non-obvious in-scope decisions you make while building (e.g. which exact
+> rebase invocations you touch with `-c merge.directoryRenames=false`). If a
 > choice meets the ADR gate (hard to reverse + surprising without context + a real
 > trade-off — see `docs/adr/` and `ADR-FORMAT.md`), write the durable WHY as an ADR;
 > otherwise note it briefly in the done record / PR description. The
