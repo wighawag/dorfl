@@ -1,8 +1,11 @@
 ---
-title: Git-integration tests time out at 5000ms under parallel load (pass in isolation)
-date: 2026-06-24
+title: git-integration-tests-time-out-under-parallel-load-2026-06-24
+slug: git-integration-tests-time-out-under-parallel-load-2026-06-24
 needsAnswers: true
+blockedBy: []
 ---
+
+## What to build
 
 ## What was seen
 
