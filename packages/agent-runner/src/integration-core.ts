@@ -31,6 +31,7 @@ import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
 import {parseFrontmatter} from './frontmatter.js';
 import {git, run, runAsync, type RunResult} from './git.js';
+import {realSleep, type Sleep} from './retry-backoff.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
 
@@ -206,11 +207,53 @@ const DEFAULT_MERGE_JITTER_MS = 25;
 
 /**
  * Promise-based sleep, used for the {@link DEFAULT_MERGE_JITTER_MS} merge-push
- * retry jitter (C2). Internal — the only sleep this module uses.
+ * retry jitter (C2). Internal — the legacy non-seamed sleep this module uses
+ * for the C2 jitter (kept for byte-for-byte compatibility with existing tests).
+ * The recovery-rebase loop uses the INJECTABLE {@link Sleep} seam from
+ * `retry-backoff.ts` instead, so its timeline is test-driveable.
  */
 function sleepMs(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * **Default cap on RE-FETCH+RE-REBASE attempts** in the committed-recovery tail
+ * (`recoverAlreadyCommitted`, task `recovery-rebase-retry-against-moving-arbiter
+ * -main`). The recovery's single fetch-then-rebase is a CONTENTION race against a
+ * concurrently-MOVING `<arbiter>/main` (a sibling `advance` run lands a burst of
+ * `advance: surface observation:…` commits); a one-shot rebase against a stale
+ * fetched base can conflict against a main that already moved AGAIN, surfacing a
+ * purely transient race as `rebase-conflict`. So the rebase is wrapped in a small
+ * bounded CONTENTION loop: re-fetch `<arbiter>/main` (it may have advanced) +
+ * re-rebase; on clean → integrate; on conflict → `--abort`, a small jitter sleep,
+ * try again. The cap stops the loop ONLY when every fresh-fetched attempt still
+ * conflicts (a genuinely persistent conflict ⇒ route to needs-attention exactly
+ * as today). Small on purpose — a few attempts ride out a `advance` burst (each
+ * burst is tens of commits over a few seconds); a real conflict surfaces fast.
+ *
+ * This is the CONTENTION model (instant re-fetch+rebuild, like `claim-cas.ts`
+ * and the Race-1 merge loop above), NOT the OUTAGE model in
+ * {@link file://./retry-backoff.ts} (exponential temporal backoff, the remote
+ * may come back). The two failure classes are deliberately kept SEPARATE; do not
+ * substitute `retryWithBackoff` here.
+ *
+ * Tests inject `recoveryRebaseRetries: 0` (no retry — the legacy one-shot shape)
+ * or a small explicit cap (assert the cap exhausts deterministically).
+ */
+const DEFAULT_RECOVERY_REBASE_RETRIES = 4;
+
+/**
+ * **Default max jitter (ms)** between recovery-rebase attempts — a SMALL
+ * livelock-breaking SPREAD between concurrent runners (NOT exponential outage
+ * backoff). Pure instant retry has a real hazard: two runners that begin
+ * retrying at the same instant re-fetch and re-rebase in LOCKSTEP, each moving
+ * the base the other just rebased onto, and can livelock. A uniformly-random
+ * `[0, mergeJitterMs]` ms sleep before each re-attempt de-correlates the two
+ * racers. Bounded and tiny — a contention nudge, not an outage wait. Tests pass
+ * `recoveryRebaseJitterMs: 0` for a deterministic latency-free loop, OR inject
+ * the `sleep`/`random` seams to drive the timeline reproducibly with a seeded RNG.
+ */
+const DEFAULT_RECOVERY_REBASE_JITTER_MS = 100;
 
 export interface IntegrationCoreInput {
 	/** The working clone/checkout (in-place) OR worktree dir the work branch lives in. */
@@ -452,6 +495,43 @@ export interface IntegrationCoreInput {
 	 */
 	mergeJitterMs?: number;
 	/**
+	 * **Committed-recovery rebase RE-FETCH+RE-REBASE cap** (task `recovery-rebase-
+	 * retry-against-moving-arbiter-main`). The recovery tail
+	 * ({@link recoverAlreadyCommitted}) wraps its rebase onto `<arbiter>/main` in a
+	 * bounded CONTENTION loop: on a conflicting rebase it `--abort`s, re-fetches
+	 * `<arbiter>/main` (it may have advanced — `advance` runs land bursts of
+	 * observation commits on main), and re-rebases, up to this cap of ADDITIONAL
+	 * attempts after the first one. Only after the cap is exhausted does it return
+	 * `rebase-conflict` exactly as today. Absent ⇒ {@link DEFAULT_RECOVERY_REBASE_
+	 * RETRIES}. Tests inject `0` for the legacy one-shot shape, or a small explicit
+	 * cap to assert the cap-exhausted route.
+	 */
+	recoveryRebaseRetries?: number;
+	/**
+	 * **Committed-recovery rebase JITTER (max ms)** between attempts — a SMALL
+	 * livelock-breaking SPREAD, NOT exponential outage backoff. Each post-conflict
+	 * sleep is a uniformly-random integer in `[0, recoveryRebaseJitterMs]` ms
+	 * (drawn via the injectable {@link recoveryRebaseRandom}). Defaults to
+	 * {@link DEFAULT_RECOVERY_REBASE_JITTER_MS}; tests pass `0` for a deterministic
+	 * zero-delay schedule.
+	 */
+	recoveryRebaseJitterMs?: number;
+	/**
+	 * **Injectable sleep seam** for the committed-recovery rebase retry loop —
+	 * reuses the {@link Sleep} type from `retry-backoff.ts` (the same seam
+	 * `run.ts` / `needs-attention.ts` use). Defaults to {@link realSleep}; tests
+	 * inject a capturing zero-sleep to assert the per-attempt delay schedule and to
+	 * drive a moving-base scenario between attempts.
+	 */
+	recoveryRebaseSleep?: Sleep;
+	/**
+	 * **Injectable RNG** for the recovery-rebase jitter — `() => number` returning
+	 * `[0, 1)` (same shape as `Math.random`). Defaults to `Math.random`; tests
+	 * inject a seeded RNG (or a fixed constant) so the captured jitter timeline is
+	 * reproducible.
+	 */
+	recoveryRebaseRandom?: () => number;
+	/**
 	 * Environment for the REVIEW-AGENT launch (Gate 2). Distinct from {@link env}
 	 * because the review agent is an AGENT — it must NOT carry the runner identity
 	 * (the agent must not act/commit as the bot; only the runner's own git
@@ -586,6 +666,10 @@ export async function performIntegration(
 			noPR: input.noPR,
 			providerInstance: input.providerInstance,
 			openPr: input.openPr,
+			recoveryRebaseRetries: input.recoveryRebaseRetries,
+			recoveryRebaseJitterMs: input.recoveryRebaseJitterMs,
+			recoveryRebaseSleep: input.recoveryRebaseSleep,
+			recoveryRebaseRandom: input.recoveryRebaseRandom,
 			env,
 			note,
 		});
@@ -1522,23 +1606,39 @@ async function recoverAlreadyCommitted(params: {
 		branch: string;
 		env?: NodeJS.ProcessEnv;
 	}) => void;
+	recoveryRebaseRetries?: number;
+	recoveryRebaseJitterMs?: number;
+	recoveryRebaseSleep?: Sleep;
+	recoveryRebaseRandom?: () => number;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntegrationCoreResult> {
 	const {cwd, arbiter, slug, branch, mode, env, note} = params;
+	const retries =
+		params.recoveryRebaseRetries ?? DEFAULT_RECOVERY_REBASE_RETRIES;
+	const jitterMs =
+		params.recoveryRebaseJitterMs ?? DEFAULT_RECOVERY_REBASE_JITTER_MS;
+	const sleep = params.recoveryRebaseSleep ?? realSleep;
+	const random = params.recoveryRebaseRandom ?? Math.random;
 
-	// Fetch `<arbiter>/main` into the tracking ref (the same explicit refspec the
-	// build path's step-4 fetch uses, so a bare-mirror worktree resolves it too).
-	await gitHard(
-		[
-			'fetch',
-			'--quiet',
-			arbiter,
-			`+refs/heads/main:refs/remotes/${arbiter}/main`,
-		],
-		cwd,
-		env,
-	);
+	// Helper: the explicit-refspec fetch (the build path's step-4 fetch shape — a
+	// bare-mirror worktree's remote has no fetch refspec, so `<arbiter>/main` would
+	// not otherwise resolve / would be stale). REUSED on EACH attempt (the root cause
+	// of the moving-base race is a stale SINGLE fetch — see the loop below).
+	const refetchMain = async (): Promise<void> => {
+		await gitHard(
+			[
+				'fetch',
+				'--quiet',
+				arbiter,
+				`+refs/heads/main:refs/remotes/${arbiter}/main`,
+			],
+			cwd,
+			env,
+		);
+	};
+
+	await refetchMain();
 
 	const tip = (
 		await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
@@ -1553,6 +1653,8 @@ async function recoverAlreadyCommitted(params: {
 	// UNSPOOFABLE detection: the kept tip ALREADY reachable on `<arbiter>/main`
 	// means the work is already integrated — a clean no-op, NEVER a re-integration.
 	// (`isAncestor` is the SAME reachability predicate `gc.ts` uses; do not fork it.)
+	// KEPT before the retry loop: a no-op MUST short-circuit before we burn any
+	// re-fetch/re-rebase budget.
 	if (isAncestor(cwd, tip, `refs/remotes/${arbiter}/main`, env)) {
 		const message =
 			`Nothing to recover for '${slug}': its work branch tip is already on ` +
@@ -1567,27 +1669,72 @@ async function recoverAlreadyCommitted(params: {
 	}
 
 	// The tip is genuinely AHEAD — rebase the kept commit onto the latest
-	// `<arbiter>/main`. A clean rebase continues; a CONFLICT is a genuine code
-	// conflict (NEVER auto-resolved): abort + surface as `rebase-conflict` (the kept
-	// commit stays on the branch, recoverable; the human resolves and re-runs).
+	// `<arbiter>/main`. A clean rebase continues; a CONFLICT is wrapped in a
+	// bounded CONTENTION loop (task `recovery-rebase-retry-against-moving-arbiter-
+	// main`): on each conflict `--abort`, sleep a small jitter, RE-FETCH
+	// `<arbiter>/main` (it may have advanced — `advance` runs land bursts of
+	// `advance: surface observation:…` commits on main, so a one-shot rebase against
+	// a stale fetched base can conflict against a main that already moved AGAIN),
+	// then re-rebase. Only after the cap exhausts (a freshly-fetched main STILL
+	// conflicts on every attempt) do we surface `rebase-conflict` (never auto-
+	// resolved, NEVER `--force` to main — the kept commit stays on the branch,
+	// recoverable; the human resolves and re-runs).
+	//
+	// This is the CONTENTION model (instant re-fetch+rebuild against the new base,
+	// like `claim-cas.ts` / the Race-1 merge loop above), NOT the OUTAGE model in
+	// `retry-backoff.ts` (exponential temporal backoff for an unreachable remote).
+	// The jitter is a SMALL livelock-breaking SPREAD (two runners that begin
+	// retrying at the same instant must NOT re-fetch/re-rebase in lockstep) — NOT
+	// exponential outage backoff. The `--abort` is unconditional on conflict (never
+	// leave the worktree mid-rebase between attempts).
+	//
+	// RECONCILE ARMS DECISION (this task): the recovery rebase is deliberately
+	// BARE — it does NOT layer the sibling-ledger / divergent-done-move arms the
+	// build path's `rebaseOntoMainWithReconcile()` carries. Reasoning: this tail
+	// integrates a branch whose done-move was ALREADY committed in a prior run, so
+	// there is no first-time slug relocation on THIS commit for the divergent-
+	// done-move reconcile to act on, and a sibling-slug ledger conflict on the
+	// re-fetched main is the same shape it would have hit on the original run (the
+	// recovery is not the place to grow new reconcile semantics).
+	//
+	// RENAME-DETECTION composition: the rebase invocation is written as a small
+	// args array so the sibling `disable-rename-detection-on-continue-rebase` task
+	// can slot `-Xno-renames` / `-c merge.renames=false` in at ONE site without
+	// regressing the loop.
 	note(
 		`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main…`,
 	);
-	const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
-	if (rebase.status !== 0) {
+	const rebaseArgs = (): string[] => ['rebase', `${arbiter}/main`];
+	let attempt = 0;
+	for (;;) {
+		const rebase = await gitSoft(rebaseArgs(), cwd, env);
+		if (rebase.status === 0) {
+			break; // clean rebase ⇒ fall through to integrate
+		}
+		// ALWAYS abort on conflict — never leave mid-rebase between attempts.
 		await gitSoft(['rebase', '--abort'], cwd, env);
-		const message =
-			`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main ` +
-			'conflicted; the rebase was aborted (never auto-resolved). The committed work ' +
-			'is intact on the branch (recoverable). Resolve against the latest main, then ' +
-			're-run.';
-		note(message);
-		return {
-			outcome: 'rebase-conflict',
-			routedToNeedsAttention: false,
-			branch,
-			reason: message,
-		};
+		if (attempt >= retries) {
+			const message =
+				`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main ` +
+				`conflicted on every attempt (${attempt + 1} total, against a freshly-` +
+				`fetched ${arbiter}/main each time); the rebase was aborted (never auto-` +
+				'resolved). The committed work is intact on the branch (recoverable). ' +
+				'Resolve against the latest main, then re-run.';
+			note(message);
+			return {
+				outcome: 'rebase-conflict',
+				routedToNeedsAttention: false,
+				branch,
+				reason: message,
+			};
+		}
+		// Small livelock-breaking jitter (contention spread, NOT outage backoff).
+		// Sleep happens BEFORE the re-fetch so a sleep-injection in tests can also
+		// drive the timeline (e.g. advance the arbiter between attempts).
+		const delay = jitterMs > 0 ? Math.floor(random() * (jitterMs + 1)) : 0;
+		await sleep(delay);
+		await refetchMain();
+		attempt++;
 	}
 
 	// Integrate the rebased kept commit through the SAME complete-transition
@@ -1610,7 +1757,13 @@ async function recoverAlreadyCommitted(params: {
 		cwd,
 		env,
 	});
-	note(`Recovered '${slug}': integrated the kept commit from ${branch}.`);
+	note(
+		attempt === 0
+			? `Recovered '${slug}': integrated the kept commit from ${branch}.`
+			: `Recovered '${slug}': integrated the kept commit from ${branch} ` +
+					`(absorbed a moving ${arbiter}/main across ${attempt} re-fetch+re-` +
+					`rebase attempt${attempt === 1 ? '' : 's'}).`,
+	);
 	return {
 		outcome: 'completed',
 		routedToNeedsAttention: false,
