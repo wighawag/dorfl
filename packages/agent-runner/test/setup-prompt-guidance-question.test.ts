@@ -43,7 +43,7 @@ describe('setup SKILL.md — the test-first nudge question (A-phase, folded in)'
 		// The canonical question phrasing. If a future edit accidentally adds a
 		// second round, this count goes >1 and the regression is caught.
 		const q =
-			/Should AFK builds in this repo default to writing the failing test BEFORE the production code\?/g;
+			/Should autonomous builds in this repo default to writing the failing test BEFORE the production code\?/g;
 		const matches = text.match(q) ?? [];
 		expect(matches.length).toBe(1);
 	});
