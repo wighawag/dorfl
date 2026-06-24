@@ -83,6 +83,7 @@ export type SidecarType = 'prd' | 'task' | 'observation';
  */
 export type SidecarDisposition =
 	| 'promote-task'
+	| 'promote-prd'
 	| 'promote-adr'
 	| 'keep'
 	| 'delete'
@@ -242,6 +243,7 @@ const ANSWER_MARKER = '**Your answer** (write below this line):';
 
 const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
 	'promote-task',
+	'promote-prd',
 	'promote-adr',
 	'keep',
 	'delete',

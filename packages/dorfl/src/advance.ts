@@ -669,17 +669,19 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 	// (US #24): the apply-persist deliberately does NOT treat `promote-*` as a
 	// terminal (it would plain-resolve THIS item) — the promotion is a NEW item's
 	// creation through the CAS, keyed on the new item's identity. Route it here.
-	if (
+	const promoteArtifact =
 		input.namespace === 'observation' &&
-		!(context.applyFollowups && context.applyFollowups.length > 0) &&
-		isPromoteAnswered(cwd, item)
-	) {
+		!(context.applyFollowups && context.applyFollowups.length > 0)
+			? answeredPromoteArtifact(cwd, item)
+			: undefined;
+	if (promoteArtifact !== undefined) {
 		const promote = context.promote ?? promoteObservation;
 		try {
 			const result = await promote({
 				cwd,
 				item,
 				itemPath,
+				artifact: promoteArtifact,
 				newSlug: context.promoteSlug,
 				arbiter: context.arbiter,
 				note,
@@ -785,29 +787,47 @@ function findItemPath(
 }
 
 /**
- * Does the OBSERVATION's answered sidecar carry a `promote-task`/`promote-adr`
- * disposition on an ANSWERED entry? The signal the apply rung uses to route to the
- * triage rung's new-item-creation CAS (US #24) instead of the plain resolve. Read
- * from disk (the classifier already confirmed all-answered; this only reads the
- * disposition). Absent/unreadable sidecar ⇒ not a promote (the plain apply path).
+ * Which artifact TYPE does the OBSERVATION's answered sidecar route to (or
+ * `undefined` for the plain apply path)? The signal the apply rung uses to route
+ * to the triage rung's new-item-creation CAS (US #24) instead of the plain
+ * resolve. A `promote-task`/`promote-adr` answer routes to a TASK; a `promote-prd`
+ * answer routes to a PRD (`prds/proposed/`, US #4) — both through the SAME
+ * `promoteObservation` writer, only the artifact differs. Read from disk (the
+ * classifier already confirmed all-answered; this only reads the disposition).
+ * Absent/unreadable sidecar ⇒ `undefined` (the plain apply path).
  */
-function isPromoteAnswered(cwd: string, item: string): boolean {
+function answeredPromoteArtifact(
+	cwd: string,
+	item: string,
+): 'task' | 'prd' | undefined {
 	const sidecarAbs = join(cwd, sidecarPathFor(item));
 	if (!existsSync(sidecarAbs)) {
-		return false;
+		return undefined;
 	}
 	let model;
 	try {
 		model = parseSidecar(readFileSync(sidecarAbs, 'utf8'));
 	} catch {
-		return false;
+		return undefined;
 	}
-	return model.entries.some(
-		(entry) =>
-			isEntryAnswered(entry) &&
-			(entry.disposition === 'promote-task' ||
-				entry.disposition === 'promote-adr'),
-	);
+	let sawTaskPromote = false;
+	for (const entry of model.entries) {
+		if (!isEntryAnswered(entry)) {
+			continue;
+		}
+		// A `promote-prd` answer takes precedence (the most-specific route): once a
+		// human has sized this signal as PRD-sized, mint the PRD.
+		if (entry.disposition === 'promote-prd') {
+			return 'prd';
+		}
+		if (
+			entry.disposition === 'promote-task' ||
+			entry.disposition === 'promote-adr'
+		) {
+			sawTaskPromote = true;
+		}
+	}
+	return sawTaskPromote ? 'task' : undefined;
 }
 
 /**

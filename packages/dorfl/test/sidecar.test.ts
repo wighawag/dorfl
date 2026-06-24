@@ -150,6 +150,23 @@ describe('parseSidecar — new human-readable format', () => {
 		expect(model.entries[0].disposition).toBe('promote-task');
 	});
 
+	it('accepts the `promote-prd` disposition (the observation→PRD route)', () => {
+		const text = [
+			'<!-- dorfl-sidecar: item=observation:prdprom type=observation slug=prdprom allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Promote as a PRD?**',
+			'',
+			'<!-- q1 fields: id=q1 disposition=promote-prd -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries[0].disposition).toBe('promote-prd');
+	});
+
 	it('hard-cutover: the legacy `promote-slice` disposition is no longer recognised and is parsed as undefined (no alias, aligned with the sibling task→task hard cutover)', () => {
 		const text = [
 			'<!-- dorfl-sidecar: item=observation:legacy type=observation slug=legacy allAnswered=false -->',
