@@ -1,6 +1,7 @@
 ---
 slug: needs-attention-test-cleanup-enotempty-flake
 needsAnswers: false
+triaged: keep
 ---
 
 2026-06-18 — saw `test/needs-attention.test.ts > readNeedsAttentionItems lists the stuck items with their reason` fail intermittently with `Error: ENOTEMPTY: directory not empty, rmdir '/tmp/dorfl-needs-attention-…/project'` from the `cleanup()` in `test/helpers/gitRepo.ts:102`. Re-running the file in isolation passes; full `pnpm -r test` was the failing site. Looks like a cleanup race between the test's still-finishing git/fs ops and `rmSync(root, {recursive: true, force: true})`, not a correctness issue. Out of scope for the de-overload-humanonly slice; flagging only.
@@ -15,3 +16,11 @@ promote-slice (small, localised). The cleanup race is real: the test-repo `clean
 
 Promoted to a new backlog task `work/tasks/ready/needs-attention-test-cleanup-enotempty-flake.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:needs-attention-test-cleanup-enotempty-flake` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation was already triaged as promoted; the promoted backlog task work/tasks/ready/needs-attention-test-cleanup-enotempty-flake.md carries the work. Observation itself notes 'Triaged: promoted' and 'resolved'.
