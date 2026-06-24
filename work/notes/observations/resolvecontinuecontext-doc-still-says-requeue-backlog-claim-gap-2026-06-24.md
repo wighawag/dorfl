@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # `resolveContinueContext` doc still says "requeue → backlog → claim gap" (backlog=pool)
 
 2026-06-24. While fixing the `resolveTask`/`do.ts` stale "backlog"-means-pool
