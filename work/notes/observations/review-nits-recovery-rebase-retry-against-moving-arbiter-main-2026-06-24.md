@@ -20,5 +20,28 @@ is their durable home for triage — promote-to-task / keep / delete.
   (packages/agent-runner/src/integration-core.ts (block-comment above the retry loop, 'RECONCILE ARMS DECISION (this task): the recovery rebase is deliberately BARE …').)
 - Cross-task interaction with the still-OPEN PR #224 `disable-rename-detection-on-continue-rebase`: both tasks edit rebase invocation sites in `integration-core.ts`. This task wrote the rebase call as a `rebaseArgs()` thunk explicitly to let rename-off 'slot in cleanly at ONE site' (good), and the done record should state 'sibling has NOT landed yet' per the task's instruction. That sibling-landed/not-landed line is not in the task body. Whoever merges second must add `-c merge.renames=false` / `-Xno-renames` to this one args site and run the moving-base tests with renames off.
   (`gh pr list` shows PR #224 OPEN as of 2026-06-24; integration-core.ts has the rebaseArgs thunk + comment but task body lacks the 'state which case held' note required by acceptance line.)
+
+## Update 2026-06-24 (sibling landed reality + WRONG-KNOB correction)
+
+The last bullet above is now superseded on two counts:
+
+- **PR #225 (this task) LANDED** and **PR #224 (the sibling
+  `disable-rename-detection-on-continue-rebase`) was CLOSED UNMERGED.** #224's
+  implementation used the WRONG git knob and its own regression test failed on its
+  branch. So nobody "merges second"; the sibling work is parked in
+  `work/tasks/backlog/disable-rename-detection-on-continue-rebase.md` for a correct
+  re-implementation. The `rebaseArgs()` thunk this task left in `integration-core.ts`
+  on `main` therefore does NOT yet carry any rename-off option — the corrected
+  sibling task will slot it in when re-done.
+
+- **The knob the bullet names is WRONG.** "add `-c merge.renames=false` /
+  `-Xno-renames`" does NOT suppress the conflict. That conflict is a
+  DIRECTORY-rename (`CONFLICT (file location): … added in HEAD inside a directory
+  that was renamed …`), governed by **`merge.directoryRenames`**, not
+  content-rename detection. Verified on git 2.47.3: plain rebase / `-Xno-renames` /
+  `-c merge.renames=false` / `-c diff.renames=false` all CONFLICT; only
+  `-c merge.directoryRenames=false` is CLEAN. When the parked sibling is re-done,
+  the thunk gets `-c merge.directoryRenames=false`, NOT `-Xno-renames`. (Full
+  evidence + corrected acceptance live in the parked task's CORRECTION banner.)
 - Minor module-local inconsistency: the Race-1 jitter still uses the local non-injectable `sleepMs` (kept 'for byte-for-byte compatibility with existing tests'), while the new recovery loop uses the `Sleep` seam from `retry-backoff.ts`. Two sleep primitives now coexist in one module. Acceptable as a localised choice; worth a follow-up note to unify the Race-1 jitter onto the same `Sleep` seam when convenient (the new recovery seam is strictly better — RNG also injected).
   (packages/agent-runner/src/integration-core.ts: sleepMs vs realSleep/Sleep used in recoverAlreadyCommitted; doc-comment on sleepMs explicitly notes the split.)

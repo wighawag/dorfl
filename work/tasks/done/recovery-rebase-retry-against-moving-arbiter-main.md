@@ -112,6 +112,16 @@ motivation for making the rebase absorb the burst itself.
 
 ### Relationship to `disable-rename-detection-on-continue-rebase` (READ BEFORE BUILDING)
 
+> CORRECTION (2026-06-24): where this section (and the prompt below) says the
+> sibling uses `-Xno-renames` / `merge.renames` / `diff.renames`, that is the WRONG
+> git knob — it does NOT suppress the spurious DIRECTORY-rename conflict
+> (`CONFLICT (file location)`), which is governed by `merge.directoryRenames`. The
+> sibling's first attempt (PR #224) was closed unmerged for this reason and the
+> task parked in `work/tasks/backlog/` with the correct mechanism
+> (`-c merge.directoryRenames=false`, verified on git 2.47.3). This done record is
+> left as-is otherwise (historical); read the parked sibling's CORRECTION banner
+> for the right knob.
+
 There is a SIBLING task, `disable-rename-detection-on-continue-rebase`, that
 turns OFF git rename detection on the runner's continue/integration rebases. The
 two are COMPLEMENTARY but NOT the same bug, and the builder of THIS task must not
