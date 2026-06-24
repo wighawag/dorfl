@@ -20,15 +20,23 @@ End-to-end behaviour:
   REASON recorded in the commit message (git history = archive).
 - On the conservative auto-disposition `duplicate` route: same — delete the note
   rather than appending a delete-recommendation marker and stamping `triaged:`.
-- Retire the now-dead resting-state machinery for NOTES: the `## Recommended:
-  delete` heading constant, and the `triaged:` stamping used to drop a note out
-  of the pool (a deleted note is out of the pool by being gone). Be careful to
-  scope this to the NOTE (observation) paths — do NOT touch the `delete`
-  disposition behaviour for WORK ITEMS (tasks/prds) if that shares code; a work
-  item has a terminal FOLDER and is not deleted.
+- Retire ONLY the now-dead resting-state machinery for the DROPPED/DUPLICATE
+  routes: the `## Recommended: delete` heading (and the `## Recommended: delete
+  (duplicate)` variant) and the `triaged:duplicate` stamp (a deleted note is out
+  of the pool by being gone, so the drop-out stamp is redundant once the note is
+  deleted).
+- DO NOT remove `triaged:keep` / the `keep` disposition machinery
+  (`resolveWithKeepMarker`): a `keep` answer is the human deciding to RETAIN the
+  observation as a live signal (NOT discharge it), so a kept note legitimately
+  stays in the inbox stamped `triaged:keep` and must keep working. Only
+  `dropped`/`delete`/`duplicate` discharge by deletion; `keep` is untouched.
+- Be careful to scope this to the NOTE (observation) paths — do NOT touch the
+  `delete` disposition behaviour for WORK ITEMS (tasks/prds) if that shares
+  code; a work item has a terminal FOLDER and is not deleted.
 
-Note: WORK ITEMS keep their existing terminal-folder routing; this task changes
-only how NOTES (observations) leave — by deletion.
+Note: WORK ITEMS keep their existing terminal-folder routing, and `keep`
+observations keep their `triaged:keep` resting state; this task changes only how
+DROPPED/DUPLICATE NOTES leave — by deletion.
 
 ## Acceptance criteria
 
@@ -63,7 +71,9 @@ only how NOTES (observations) leave — by deletion.
 > auto-disposition `duplicate` path (in the triage-persist module — today it
 > appends a delete-recommendation block and stamps `triaged:duplicate`). Replace
 > both "recommend + keep" behaviours with a `git rm` of the note, reason in the
-> commit message.
+> commit message. Leave the `keep` disposition (`resolveWithKeepMarker` /
+> `triaged:keep`) ALONE — a kept observation is deliberately retained as a live
+> signal and must still rest in the inbox; only dropped/delete/duplicate delete.
 >
 > CRITICAL scope fence: this is about NOTES (observations), which leave by
 > deletion (WORK-CONTRACT.md L59/L65/L74). WORK ITEMS (tasks/prds) have terminal
@@ -77,8 +87,9 @@ only how NOTES (observations) leave — by deletion.
 >
 > Seams to test at: the drop/duplicate routes over a throwaway git repo; assert
 > the note is gone, the reason is in the commit message, and no `## Recommended:
-> delete` / `triaged:` residue remains. Assert a work-item `delete`/terminal case
-> (if reachable through the same code) is unchanged.
+> delete` / `triaged:duplicate` residue remains. Assert that a `keep` answer
+> still stamps `triaged:keep` and retains the note, and that a work-item
+> `delete`/terminal case (if reachable through the same code) is unchanged.
 >
 > Companion: WORK-CONTRACT.md L65/L67 is amended by a SEPARATE docs task to
 > sanction deletion-on-apply; you do not edit the protocol doc here.
