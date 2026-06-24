@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was noticed
@@ -60,3 +60,8 @@ overrides one gate asserts both pool gates observe that same committed view.
 ### q1: Triage disposition for this observation: promote to a slice that unifies both pool gates onto the mirror-ref reader, keep as a recorded observation for later, or drop?
 
 promote-slice. Verified live divergence: the autoBuild gate uses the working-tree reader against the bare mirror (which cannot read a committed `.dorfl.json` → falls back to global/default), while the autoSlice + lifecycle gates use the mirror-ref reader (which CAN read the committed value). So a repo with a committed per-repo override of both gates gets disagreeing gates within one iteration. Fix: point the autoBuild gate at `resolveRepoConfigFromMirror` in the bare-mirror branch + test that a committed override is observed by both. Narrow (read-only scan, degrades to global fallback, never corrupts) but a real correctness divergence. Disposition: promote-slice.
+
+## Triaged: promoted
+
+Promoted to a new backlog task `work/tasks/ready/scan-autobuild-autoslice-resolved-by-two-different-readers-may-disagree-2026-06-20.md` (a human answered
+"promote"). This observation is resolved; the new item carries the work.
