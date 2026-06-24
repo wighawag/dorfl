@@ -4,6 +4,7 @@ slug: resolvetask-stale-backlog-vocab-doc-fix
 prd: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: [do-allow-backlog-flag-resolver-claim-and-done-move]
 covers: [7]
+humanOnly: true
 ---
 
 ## What to build
