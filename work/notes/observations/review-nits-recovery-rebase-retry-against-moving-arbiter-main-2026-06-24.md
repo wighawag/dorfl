@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'recovery-rebase-retry-against-moving-a
 date: 2026-06-24
 status: open
 reviewOf: recovery-rebase-retry-against-moving-arbiter-main
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
