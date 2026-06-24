@@ -372,10 +372,23 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * `prds/tasked` (tasked); while it is being tasked the body STAYS in
  * `prds/ready` (the lock no longer moves it), so `tasking/` is never a
  * frontmatter source.
+ *
+ * STAGING IS INCLUDED (`tasks-backlog` / `prds-proposed`): with `surfaceStaging`
+ * on (the user-visible default) the lifecycle surface pool enumerates
+ * `needsAnswers` items resting in STAGING as `task:`/`prd:` legs
+ * (`lifecycle-gather.ts`). The rung CLASSIFIER's signal read MUST see those
+ * staged bodies, or `needsAnswers` reads back `undefined`, the classifier
+ * mis-routes the item to the BUILD rung, and claim dies with "not found on
+ * origin/main" (observation
+ * `advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build`).
+ * This is the staging-inclusive set its sibling `apply-persist.ts`
+ * (`APPLY_LIFECYCLE_FOLDERS`) already uses — kept in step here. BUILD/claim
+ * eligibility is UNCHANGED (still pool-only; staging items stay non-claimable):
+ * only the rung-classifier's frontmatter-source folders widen.
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: ['tasks-todo', 'in-progress', 'done'],
-	prd: ['prds-ready', 'prds-tasked'],
+	task: ['tasks-backlog', 'tasks-todo', 'in-progress', 'done'],
+	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
 	observation: ['observations'],
 };
 

@@ -338,6 +338,28 @@ describe('readItemSignals \u2014 reads the two signals off disk (read-only)', ()
 		expect(signals.sidecar?.entries).toHaveLength(1);
 	});
 
+	// REGRESSION (observation
+	// `advance-task-folder-set-omits-tasks-backlog-staged-surface-items-misroute-to-build`):
+	// a `needsAnswers:true` task resting in STAGING (`tasks/backlog/`, fixture word
+	// `pre-backlog`) is enumerated as a `task:<slug>` SURFACE leg when surfaceStaging
+	// is on. `readItemSignals` MUST see its `needsAnswers` so the classifier routes it
+	// to the surface rung. If the task-folder set omits `tasks-backlog` the flag reads
+	// back `undefined`, the classifier mis-routes to build-task, and the leg dies in
+	// claim with "not found on origin/main".
+	it('reads needsAnswers from a task body resting in STAGING (tasks/backlog/)', () => {
+		writeItem('pre-backlog', 'staged.md', {
+			slug: 'staged',
+			needsAnswers: 'true',
+		});
+		const signals = readItemSignals({
+			repoPath: repoPath(),
+			type: 'task',
+			slug: 'staged',
+			item: 'task:staged',
+		});
+		expect(signals.needsAnswers).toBe(true);
+	});
+
 	it('reports needsAnswers:undefined + no sidecar for an item with neither', () => {
 		const signals = readItemSignals({
 			repoPath: repoPath(),
