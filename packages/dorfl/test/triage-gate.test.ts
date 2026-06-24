@@ -73,6 +73,28 @@ describe('parseTriageEmit — the conservative auto-disposition decision', () =>
 		expect(emit.auto).toBe(false);
 	});
 
+	it('NEVER auto-promotes: an emit naming `promote-prd` as the kind falls back to auto:false (US #5)', () => {
+		// The auto gate's disposition vocabulary is ONLY `duplicate`/`map` — sizing a
+		// signal into a task vs a PRD is a HUMAN judgement call, offered at the
+		// surface, NEVER an auto-pick. An emit that tries to auto-`promote-prd` is
+		// just another unrecognised kind: it must surface the question, never win.
+		const emit = parseTriageEmit(
+			JSON.stringify({
+				auto: true,
+				kind: 'promote-prd',
+				existing: 'prd:x',
+				reason: 'looks PRD-sized',
+			}),
+		);
+		expect(emit.auto).toBe(false);
+		// The auto-side type never carries a promote kind at all: an `auto:true` emit
+		// can only be `duplicate` or `map`, so `promote-prd` is unreachable as an
+		// auto-disposition by construction.
+		if (emit.auto) {
+			expect(['duplicate', 'map']).toContain(emit.kind);
+		}
+	});
+
 	it('throws when no `auto` field is present (the caller treats it as the safe path)', () => {
 		expect(() => parseTriageEmit('no json here')).toThrow(TriageParseError);
 		expect(() => parseTriageEmit(JSON.stringify({kind: 'duplicate'}))).toThrow(
@@ -89,5 +111,8 @@ describe('buildTriagePrompt — states the high bar plainly', () => {
 		expect(prompt).toContain('map');
 		expect(prompt).toContain('NEVER emit auto:true to PROMOTE');
 		expect(prompt).toContain('NEVER to DELETE a NON-duplicate');
+		// The auto gate never offers PRD-sizing either — `promote-prd` is a
+		// human-only disposition, so it is not in the auto gate's vocabulary.
+		expect(prompt).not.toContain('promote-prd');
 	});
 });

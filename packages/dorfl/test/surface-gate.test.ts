@@ -55,6 +55,24 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 		expect(emit.questions).toEqual([]);
 	});
 
+	it('keeps `promote-prd` as a human-choosable triage disposition (US #5)', () => {
+		// `promote-prd` is offered to a HUMAN at the surface alongside `promote-task`
+		// (sizing a signal task-vs-PRD is judgement). The surface whitelist must
+		// therefore admit it, exactly as it admits `promote-task`.
+		const emit = parseSurfaceEmit(
+			JSON.stringify({
+				item: 'observation:foo',
+				questions: [
+					{question: 'task or PRD?', disposition: 'promote-task'},
+					{question: 'spec-sized?', disposition: 'promote-prd'},
+				],
+			}),
+		);
+		expect(emit.questions).toHaveLength(2);
+		expect(emit.questions[0].disposition).toBe('promote-task');
+		expect(emit.questions[1].disposition).toBe('promote-prd');
+	});
+
 	it('drops an unknown disposition + an empty-question placeholder (normalises)', () => {
 		const emit = parseSurfaceEmit(
 			JSON.stringify({
@@ -90,11 +108,13 @@ describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestio
 			questions: [
 				{question: 'q1?', context: 'ctx', default: 'd'},
 				{question: 'q2?', disposition: 'promote-task'},
+				{question: 'q3?', disposition: 'promote-prd'},
 			],
 		};
 		expect(toNewQuestions(emit)).toEqual([
 			{question: 'q1?', context: 'ctx', default: 'd'},
 			{question: 'q2?', disposition: 'promote-task'},
+			{question: 'q3?', disposition: 'promote-prd'},
 		]);
 	});
 });
@@ -106,6 +126,10 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 		// Points at the protocol doc (in-band discipline), not at a host-installed skill.
 		expect(p).toMatch(/work\/protocol\/SURFACE-PROTOCOL\.md/);
 		expect(p).toMatch(/"questions"/);
+		// `promote-prd` is offered to the human alongside `promote-task` (US #5) — the
+		// surface is where the human sizes a signal task-vs-PRD.
+		expect(p).toContain('promote-prd');
+		expect(p).toContain('promote-task');
 		// Fresh-context surfacer that EDITS nothing and EMITS only (mirrors review).
 		expect(p).toMatch(/EMIT questions only|Do NOT edit/);
 		// The skill JUDGES, the engine PERSISTS — the division of labour is named.
