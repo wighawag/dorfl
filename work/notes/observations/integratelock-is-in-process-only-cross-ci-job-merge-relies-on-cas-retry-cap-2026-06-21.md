@@ -4,6 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-21
 needsAnswers: false
+triaged: keep
 ---
 
 # `integrateLock` is in-process only; cross-CI-job parallel merge relies on the CAS retry loop, whose cap (5) was sized for in-process siblings
@@ -65,3 +66,11 @@ cross-job concurrency-group mutex for the matrix width on purpose) into the
 spinning a standalone one. The general idempotency gap that produced the retry
 loop is tracked separately by
 `observation-triage-re-fires-when-task-for-observation-already-exists-2026-06-22`.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation was already promoted (triaged: promoted section appended) to the task of the same slug in work/tasks/todo/. The observation explicitly records the promotion and the task's `What to build` section references this exact observation slug — an unambiguous 1:1 map already captured.
