@@ -37,7 +37,10 @@ import {run} from '../src/git.js';
  *   - either APPENDS new questions (stays needsAnswers:true, re-pauses) OR resolves
  *     fully (clears needsAnswers + deletes the sidecar in the SAME commit);
  *   - an answer can disposition the item to ANY terminal (advance / dropped /
- *     needs-attention / keep / delete) via the `disposition` field;
+ *     needs-attention / keep / delete) via the `disposition` field — a `delete`/
+ *     `dropped` on an OBSERVATION discharges by DELETION (`git rm`, reason in the
+ *     commit message), a `delete` on a WORK ITEM keeps the recommend-and-retain
+ *     resting state (work items leave via a terminal FOLDER, not by deletion);
  *   - a "keep" answer stamps `triaged:keep` + drops out of the pool;
  *   - applying NEVER invents an answer (only applies human-authored answers);
  *   - a SUBSET-answered sidecar is NOT applied (the persist refuses it loudly — the
@@ -58,6 +61,11 @@ function filesInHeadCommit(repo: string): string[] {
 		.split('\n')
 		.map((l) => l.trim())
 		.filter((l) => l !== '');
+}
+
+/** The full HEAD commit message (subject + body). */
+function headCommitMessage(repo: string): string {
+	return gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
 }
 
 /** Does `HEAD:<path>` exist in the repo's index/tree? */
@@ -254,13 +262,13 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		expect(result.itemPath).toBe('work/prds/dropped/foo.md');
 	});
 
-	it('dropped on an OBSERVATION → recommends deletion (a note has NO terminal folder; it leaves by deletion)', () => {
+	it('dropped on an OBSERVATION → DISCHARGED BY DELETION (the note + sidecar git rm-ed in a standalone commit, reason in the message, no resting residue)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'note',
 			folder: 'observations',
 			type: 'observation',
 			questions: ['drop it?'],
-			answers: ['yes'],
+			answers: ['yes — out of scope now'],
 			dispositions: ['dropped'],
 		});
 
@@ -271,14 +279,20 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 			env: gitEnv(),
 		});
 
-		// No observation terminal exists, so a `dropped` disposition downgrades to a
-		// delete-recommendation: the Q&A resolves but the FILE stays (human deletes).
-		expect(result.outcome).toBe('delete-recommended');
+		// A note has NO terminal folder — it leaves the inbox by DELETION. The note
+		// AND its answered sidecar are gone; the human's reason rode the commit
+		// message (git history = archive), NOT a `## Recommended: delete` body marker.
+		expect(result.outcome).toBe('deleted');
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(true);
-		expect(readFileSync(join(repo, itemPath), 'utf8')).toContain(
-			'## Recommended: delete',
-		);
+		// The deletion is a STANDALONE commit removing BOTH paths.
+		const touched = filesInHeadCommit(repo);
+		expect(touched).toContain(itemPath);
+		expect(touched).toContain(sidecarPath);
+		expect(trackedInHead(repo, itemPath)).toBe(false);
+		expect(trackedInHead(repo, sidecarPath)).toBe(false);
+		// The reason is recorded in the commit MESSAGE, not in a lingering note.
+		expect(headCommitMessage(repo)).toContain('out of scope now');
 	});
 
 	it('needs-attention → resolves the Q&A AND bounces the item to work/needs-attention/', () => {
@@ -302,7 +316,7 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 		);
 	});
 
-	it('delete → resolves + RECOMMENDS deletion (the agent never auto-deletes the file)', () => {
+	it('delete on an OBSERVATION → DISCHARGED BY DELETION (the note is git rm-ed; no resting residue)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'dup',
 			folder: 'observations',
@@ -319,8 +333,33 @@ describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () =
 			env: gitEnv(),
 		});
 
+		expect(result.outcome).toBe('deleted');
+		// Both the note and its sidecar are gone; the reason is in the commit message.
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		expect(trackedInHead(repo, itemPath)).toBe(false);
+		expect(headCommitMessage(repo)).toContain('exact duplicate');
+	});
+
+	it('delete on a WORK ITEM (task) → RECOMMENDS deletion + RETAINS the file (work items leave via a terminal FOLDER, not by deletion — unchanged)', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			slug: 'wi',
+			type: 'task',
+			questions: ['scrap it?'],
+			answers: ['yes, but archive the body'],
+			dispositions: ['delete'],
+		});
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'task:wi',
+			itemPath,
+			env: gitEnv(),
+		});
+
+		// A work item is NEVER deleted — the recommend-and-retain resting state is
+		// preserved (only NOTES discharge by deletion). The Q&A resolves; the file stays.
 		expect(result.outcome).toBe('delete-recommended');
-		// The Q&A resolved (sidecar gone) but the FILE is still present (human deletes).
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		expect(existsSync(join(repo, itemPath))).toBe(true);
 		expect(readFileSync(join(repo, itemPath), 'utf8')).toContain(

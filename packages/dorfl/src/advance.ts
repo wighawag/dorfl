@@ -573,10 +573,11 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
  *     `ask`/`off` (and `off` + an explicit `obs:` runs in this `ask`-mode).
  *   - **`auto` exception:** ONLY under `observationTriage: 'auto'`, ask the
  *     {@link TriageGate} whether the observation is a no-question case. If it emits
- *     `auto: true` (`duplicate` → suggest delete; `map` → unambiguous map onto an
- *     existing item), the engine auto-dispositions it WITHOUT a question
- *     ({@link autoDispositionObservation}). It NEVER auto-deletes a non-duplicate
- *     (a `duplicate` only RECOMMENDS deletion — the human deletes) and NEVER
+ *     `auto: true` (`duplicate` → DELETE the redundant note; `map` → unambiguous
+ *     map onto an existing item), the engine auto-dispositions it WITHOUT a
+ *     question ({@link autoDispositionObservation}). It NEVER auto-deletes a
+ *     NON-duplicate (a `duplicate` discharges by deletion because it is a
+ *     redundant copy of an already-captured signal — nothing is lost) and NEVER
  *     auto-promotes a judgement call (`auto: false` ⇒ fall back to the surface
  *     question). Promotion is ALWAYS a human answer (the apply path).
  *
@@ -614,7 +615,9 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 		}
 		if (decision.auto === true) {
 			// A no-question case (duplicate / map) — auto-disposition WITHOUT a
-			// question. NEVER auto-deletes a non-duplicate; NEVER auto-promotes.
+			// question. `duplicate` discharges by deletion (redundant copy); `map`
+			// stamps triaged:keep. NEVER auto-deletes a NON-duplicate; NEVER
+			// auto-promotes.
 			const dispose = context.autoDisposition ?? autoDispositionObservation;
 			const result = dispose({
 				cwd,

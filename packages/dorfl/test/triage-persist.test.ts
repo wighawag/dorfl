@@ -6,6 +6,7 @@ import {
 	promoteObservation,
 } from '../src/triage-persist.js';
 import {isTriagedKeep} from '../src/apply-persist.js';
+import {run} from '../src/git.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import {
 	newSidecar,
@@ -29,8 +30,9 @@ import {
  * throwaway git repo (house CAS-seam style, the sibling of apply-persist.test.ts):
  *
  *   - {@link autoDispositionObservation}: the conservative auto-disposition WRITE
- *     (duplicate → recommend delete + triaged:duplicate; map → triaged:keep) — ONE
- *     commit, no lifecycle move, NEVER an auto-delete;
+ *     (duplicate → DISCHARGE BY DELETION, the redundant note git rm-ed in a
+ *     standalone commit with the reason in the message; map → triaged:keep) — ONE
+ *     commit, NEVER an auto-delete of a NON-duplicate signal;
  *   - {@link promoteObservation}: promote → new-item creation through the CAS keyed
  *     on the new identity + resolve the observation; a same-slug race ⇒ the loser
  *     fails the CAS.
@@ -63,7 +65,7 @@ function seedObs(repo: string, slug: string): string {
 }
 
 describe('autoDispositionObservation — the conservative no-question write', () => {
-	it('duplicate → RECOMMENDS deletion + triaged:duplicate, NEVER deletes (one commit)', () => {
+	it('duplicate → DISCHARGED BY DELETION (the redundant note is git rm-ed in a standalone commit, reason + duplicated-of in the message, no residue)', () => {
 		const repo = join(scratch.root, 'p');
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
@@ -81,19 +83,27 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 			reason: 'same signal',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('delete-recommended');
-		// The file is NOT deleted (the human deletes per the capture-bucket contract).
-		expect(existsSync(join(repo, itemPath))).toBe(true);
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(body).toContain('observation:orig');
-		expect(/^triaged:\s*duplicate/m.test(body)).toBe(true);
-		// Exactly one new commit touching ONLY the observation.
+		expect(result.outcome).toBe('deleted');
+		// A duplicate is a redundant copy — it leaves the inbox by being DELETED. No
+		// `## Recommended: delete (duplicate)` marker and no `triaged:duplicate` stamp
+		// linger; the note is simply gone, both on disk and in the tree.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		expect(
+			run('git', ['cat-file', '-e', `HEAD:${itemPath}`], repo, {env: gitEnv()})
+				.status,
+		).not.toBe(0);
+		// Exactly one new commit, a STANDALONE delete touching ONLY the observation.
 		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).not.toBe(before);
-		const touched = gitIn(['show', '--name-only', '--format=', 'HEAD'], repo)
+		const touched = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo)
 			.split('\n')
 			.map((l) => l.trim())
 			.filter(Boolean);
-		expect(touched).toEqual([itemPath]);
+		expect(touched).toEqual([`D\t${itemPath}`]);
+		// The duplicated-of identity + reason ride the commit MESSAGE (git history
+		// is the archive).
+		const commitMessage = gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
+		expect(commitMessage).toContain('observation:orig');
+		expect(commitMessage).toContain('same signal');
 	});
 
 	it('map → records the mapping + triaged:keep (drops out of the pool)', () => {

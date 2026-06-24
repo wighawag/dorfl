@@ -191,8 +191,8 @@ export type ApplyTerminal =
 	 * Moved to the regime's PER-REGIME "won't-proceed" terminal: a TASK to
 	 * `work/tasks/cancelled/`, a PRD to `work/prds/dropped/` (the slug-collision
 	 * fix, task `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
-	 * terminal folder, so a `dropped` disposition on one downgrades to
-	 * `delete-recommended` (notes leave by deletion). The specific REASON
+	 * terminal folder, so a `dropped` disposition on one is discharged by DELETION
+	 * (the `deleted` outcome — notes leave by being `git rm`-ed). The specific REASON
 	 * (`out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned`) lives in the
 	 * item BODY, not in the folder name. The OUTCOME word stays `dropped` for a
 	 * task/prd (the disposition kept its meaning; only the resolved PATH is
@@ -201,7 +201,22 @@ export type ApplyTerminal =
 	| 'dropped'
 	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
 	| 'needs-attention'
-	/** A "delete" answer RECOMMENDED deletion (the human deletes — never auto-delete). */
+	/**
+	 * A "delete"/"dropped" answer on an OBSERVATION DISCHARGED the note BY
+	 * DELETION: the note (and its answered sidecar, if any) were `git rm`-ed in a
+	 * STANDALONE commit, the reason recorded in the commit message (git history =
+	 * archive). A discharged note leaves the inbox by being GONE — there is no
+	 * resting `## Recommended: delete` marker and no `triaged:` stamp. This is the
+	 * apply rung applying the human's RATIFIED drop answer (human-authored, not a
+	 * unilateral agent destruction of a live signal).
+	 */
+	| 'deleted'
+	/**
+	 * A "delete" answer on a WORK ITEM (task/prd) RECOMMENDED deletion (the human
+	 * deletes — never auto-delete). Work items leave via a terminal FOLDER, not by
+	 * deletion, so a `delete` disposition on one keeps the recommend-and-retain
+	 * resting state; only observations discharge by deletion.
+	 */
 	| 'delete-recommended'
 	/**
 	 * The item file was GONE by the time apply tried to write (a concurrent
@@ -419,9 +434,11 @@ function stripOpenQuestionsBlocks(body: string): string {
  *      keep `needsAnswers:true`, re-pause (one commit, body + sidecar).
  *   2. **terminal disposition** — an answered entry carries a terminal
  *      `disposition` (`needs-attention` / `dropped` / `delete` / `keep`):
- *      resolve the item's Q&A (clear `needsAnswers` + delete the sidecar) AND
- *      execute the routing (a `git mv` to the terminal folder, a `triaged:keep`
- *      marker, or a delete recommendation) — all in ONE commit.
+ *      execute the routing — a `git mv` to the terminal folder (task/prd
+ *      `dropped`), a `triaged:keep` marker (`keep`), a work-item delete
+ *      RECOMMENDATION (task/prd `delete`), or — for an OBSERVATION `delete`/
+ *      `dropped` — DISCHARGE BY DELETION (`git rm` the note + sidecar in a
+ *      standalone commit, reason in the commit message; no resting marker).
  *   3. **resolve fully** (the default) — clear `needsAnswers` + delete the sidecar
  *      in ONE commit; the item advances toward build by its normal lifecycle.
  */
@@ -507,9 +524,10 @@ export function applyAnsweredQuestions(
 	const picked = pickTerminal(model.entries);
 	const itemType = resolveSidecarIdentity(item).type;
 	// A `dropped` disposition on an OBSERVATION has no terminal folder (notes leave
-	// by deletion), so it DOWNGRADES to a delete-recommendation — the note is never
-	// moved to a terminal. For a task/prd, `dropped` keeps routing to the regime's
-	// namespaced won't-proceed terminal (`tasks/cancelled` / `prds/dropped`).
+	// by deletion), so it routes to the `delete` discharge-by-deletion below — the
+	// note is `git rm`-ed, never moved to a terminal. For a task/prd, `dropped`
+	// keeps routing to the regime's namespaced won't-proceed terminal
+	// (`tasks/cancelled` / `prds/dropped`).
 	const terminal =
 		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
 			? 'delete'
@@ -520,6 +538,25 @@ export function applyAnsweredQuestions(
 	// deliberately untouched (D3): its open-questions block is still open.
 	const reconciledBody = stripOpenQuestionsBlocks(baseBody);
 	const resolvedBody = withAppliedAnswers(reconciledBody, model.entries);
+
+	// DISCHARGE BY DELETION (observation only): a `delete`/`dropped` answer on a
+	// NOTE removes it from the inbox by `git rm`, the reason in the commit message
+	// (git history = archive) — NOT a `## Recommended: delete` resting marker. The
+	// apply rung is applying the human's RATIFIED drop answer, so the deletion is
+	// human-authored. A WORK ITEM (task/prd) `delete` keeps the recommend-and-
+	// retain route below (work items leave via a terminal FOLDER, not by deletion).
+	if (terminal === 'delete' && itemType === 'observation') {
+		return deleteDischargedObservation({
+			cwd,
+			item,
+			itemPath,
+			reason: deleteReason(model.entries),
+			sidecarPath,
+			by,
+			env,
+			note,
+		});
+	}
 
 	if (terminal === 'keep') {
 		return resolveWithKeepMarker({
@@ -536,8 +573,10 @@ export function applyAnsweredQuestions(
 	}
 
 	// The plain resolve (default, and the body half of every terminal route): clear
-	// needsAnswers + delete the sidecar in ONE commit. A `delete` disposition adds
-	// the recommendation to the body; the human deletes the file (never auto-delete).
+	// needsAnswers + delete the sidecar in ONE commit. A WORK-ITEM (task/prd)
+	// `delete` disposition adds the recommendation to the body; the human deletes
+	// the file (never auto-delete). An OBSERVATION `delete` already returned above
+	// (discharged by deletion), so a `delete` reaching here is a work item.
 	const finalBody =
 		terminal === 'delete'
 			? appendDeleteRecommendation(resolvedBody)
@@ -627,6 +666,80 @@ function resolveWithKeepMarker(input: KeepInput): ApplyAnsweredQuestionsResult {
 	};
 }
 
+interface DeleteObservationInput {
+	cwd: string;
+	item: string;
+	itemPath: string;
+	/** The human's drop reason (their answer text), recorded in the commit message. */
+	reason: string;
+	sidecarPath: string;
+	by: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (m: string) => void;
+}
+
+/**
+ * DISCHARGE an OBSERVATION by DELETION (the `delete`/`dropped` route, US #2/#7):
+ * `git rm` the note AND its answered sidecar in ONE STANDALONE commit, the human's
+ * drop reason recorded in the commit MESSAGE (git history is the archive). There
+ * is no spawned artifact for a drop, so the deletion is a standalone commit (the
+ * `promote` route, by contrast, rides the new artifact's create commit).
+ *
+ * A discharged note leaves the inbox by being GONE — no `## Recommended: delete`
+ * body marker and no `triaged:` stamp remain (the resting-state machinery is
+ * retired for notes; a deleted note is out of the pool by being deleted). This is
+ * the apply rung applying the human's RATIFIED drop answer (the deletion is
+ * human-authored, satisfying the "never auto-delete a live signal" clause).
+ */
+function deleteDischargedObservation(
+	input: DeleteObservationInput,
+): ApplyAnsweredQuestionsResult {
+	const {cwd, item, itemPath, reason, sidecarPath, by, env, note} = input;
+	// `git rm` the note. The sidecar may not exist (a `dropped` answer can be
+	// authored without one); rm it too when present, so the discharge leaves no
+	// answered-sidecar residue. Both ride ONE commit.
+	const rmPaths = [itemPath];
+	if (existsSync(join(cwd, sidecarPath))) {
+		rmPaths.push(sidecarPath);
+	}
+	gitHard(['rm', '--quiet', '--', ...rmPaths], cwd, env);
+	const reasonLine = reason.trim() === '' ? '(no reason given)' : reason.trim();
+	const subject = `advance: ${item} → deleted (by ${by})`;
+	const messageBody =
+		`Discharged by deletion (the human's ratified drop answer authors it; ` +
+		`git history is the archive).\n\nreason: ${reasonLine}`;
+	gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
+	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
+	const message =
+		`applied ${item} → deleted (note git rm-ed in a standalone commit; reason in ` +
+		'the commit message, git history is the archive).';
+	note(message);
+	return {
+		outcome: 'deleted',
+		commit,
+		sidecarPath,
+		itemPath,
+		message,
+	};
+}
+
+/**
+ * The human's drop REASON for an observation discharge — their answer text on the
+ * entries that carry the terminal `delete`/`dropped` disposition (verbatim, never
+ * invented). Joined when more than one such entry was answered.
+ */
+function deleteReason(entries: SidecarEntry[]): string {
+	return entries
+		.filter(
+			(e) =>
+				(e.disposition === 'delete' || e.disposition === 'dropped') &&
+				isEntryAnswered(e),
+		)
+		.map((e) => e.answer.trim())
+		.filter((a) => a !== '')
+		.join('; ');
+}
+
 interface MoveTerminalInput {
 	cwd: string;
 	item: string;
@@ -685,14 +798,19 @@ function moveResolvedItemToTerminal(
 	};
 }
 
-/** Marker heading for a delete recommendation appended to an item body. */
+/**
+ * Marker heading for a delete recommendation appended to a WORK-ITEM body. Only
+ * the task/prd `delete` route uses it now — an OBSERVATION `delete`/`dropped`
+ * discharges by DELETION (no resting marker), so a note never carries this.
+ */
 const DELETE_HEADING = '## Recommended: delete';
 
 /**
- * Append a delete RECOMMENDATION to an item body (the human deletes the file —
- * the agent NEVER auto-deletes a non-duplicate signal, per the capture-bucket
- * contract). Prose only; the recommendation is durable, the deletion is the
- * human's.
+ * Append a delete RECOMMENDATION to a WORK-ITEM body (the human deletes the file
+ * — the agent NEVER auto-deletes, per the capture-bucket contract). Prose only;
+ * the recommendation is durable, the deletion is the human's. This is the
+ * task/prd `delete` route ONLY — observations discharge by deletion and never
+ * reach here.
  */
 function appendDeleteRecommendation(body: string): string {
 	const base = body.replace(/\s*$/, '');

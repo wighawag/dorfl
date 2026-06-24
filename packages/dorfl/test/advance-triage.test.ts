@@ -42,13 +42,14 @@ import type {
  *   - QUESTION-GATED by DEFAULT: an untriaged observation surfaces a promote/keep/
  *     delete question and WAITS (no autonomous "worth building?" decision);
  *   - `observationTriage: 'auto'` gates a CONSERVATIVE auto-disposition — only
- *     duplicate→suggest-delete / unambiguous-map; NEVER auto-deletes a
- *     non-duplicate, NEVER auto-promotes a judgement call (an `auto:false` falls
+ *     duplicate→discharge-by-deletion / unambiguous-map; NEVER auto-deletes a
+ *     NON-duplicate, NEVER auto-promotes a judgement call (an `auto:false` falls
  *     back to the question);
  *   - an answered "promote" CAS-creates a new backlog item keyed on the new
  *     identity; a same-slug new-item race ⇒ the loser fails CAS;
- *   - "keep" → `triaged:keep` marker, drops out of the pool; "delete" → recommends
- *     deletion (the human deletes — never the agent);
+ *   - "keep" → `triaged:keep` marker, drops out of the pool; "delete"/"dropped" on
+ *     an observation → DISCHARGE BY DELETION (the note is git rm-ed, the human's
+ *     ratified answer authors it — no resting marker);
  *   - surface + apply remain ALWAYS allowed even with `observationTriage` in the
  *     question-gated `ask`/`off` modes.
  *
@@ -181,7 +182,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 });
 
 describe('advance — the observationTriage:auto exception bounds (high bar)', () => {
-	it('observationTriage auto + a DUPLICATE → auto-disposition WITHOUT a question (recommend delete, never auto-delete)', async () => {
+	it('observationTriage auto + a DUPLICATE → auto-disposition WITHOUT a question (DISCHARGE the redundant note BY DELETION)', async () => {
 		const {repo, itemPath} = seedObservation('dup');
 		const {gate: triage, spawns} = spyTriage({
 			auto: true,
@@ -213,13 +214,10 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		expect(
 			existsSync(join(repo, 'work', 'questions', 'observation-dup.md')),
 		).toBe(false);
-		// The observation is NOT deleted by the agent (the human deletes) — it stays,
-		// with a delete RECOMMENDATION + a triaged:duplicate marker (drops out of pool).
-		expect(existsSync(join(repo, itemPath))).toBe(true);
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(body).toContain('Recommended: delete (duplicate)');
-		expect(body).toContain('observation:original');
-		expect(/^triaged:\s*duplicate/m.test(body)).toBe(true);
+		// A duplicate is a redundant copy of an already-captured signal — it is
+		// DISCHARGED BY DELETION (the note is git rm-ed; no `Recommended: delete`
+		// marker and no `triaged:duplicate` stamp linger).
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 	});
 
 	it('observationTriage auto + a MAP → record the mapping + triaged:keep (drops out of the pool)', async () => {
@@ -285,10 +283,10 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		const dispose = (o: AutoDispositionOptions): AutoDispositionResult => {
 			calls.push(o);
 			return {
-				outcome: 'delete-recommended',
+				outcome: 'deleted',
 				commit: 'deadbeef',
 				itemPath: o.itemPath,
-				message: 'recommended',
+				message: 'deleted',
 			};
 		};
 		await performAdvance({
@@ -521,7 +519,7 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(isTriagedKeep(body)).toBe(true);
 	});
 
-	it('answered "delete" → recommends deletion (the human deletes — agent never auto-deletes)', async () => {
+	it('answered "delete" on an observation → DISCHARGED BY DELETION (the human\'s ratified drop answer authors the git rm; no resting residue)', async () => {
 		const {repo} = seedObservation('del');
 		const {itemPath, sidecarPath} = seedAnsweredObservation(
 			repo,
@@ -537,11 +535,9 @@ describe('advance — answered triage dispositions flow through the apply path',
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.exitCode).toBe(0);
-		// The file is NOT deleted by the agent — it stays with a delete recommendation.
-		expect(existsSync(join(repo, itemPath))).toBe(true);
+		// The note AND its sidecar leave the inbox by DELETION (the apply rung applies
+		// the human's ratified drop answer) — no `Recommended: delete` marker lingers.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(readFileSync(join(repo, itemPath), 'utf8')).toContain(
-			'Recommended: delete',
-		);
 	});
 });
