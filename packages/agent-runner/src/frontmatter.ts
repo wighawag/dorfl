@@ -153,8 +153,45 @@ function unquote(value: string): string {
 	return trimmed;
 }
 
+/**
+ * Extract the `[...]` body of a YAML flow-style inline list, IGNORING anything
+ * after the matching closing `]` (notably a trailing `# comment`, the documented
+ * house style on `blockedBy: [] # startable now`). Quote-aware: a `]` inside a
+ * single/double-quoted item is data, not the list terminator. Returns the inner
+ * text (between the brackets), or `undefined` if no matching `]` is found
+ * (malformed — caller treats it as empty).
+ */
+function inlineListInner(value: string): string | undefined {
+	const trimmed = value.trim();
+	if (trimmed[0] !== '[') {
+		return undefined;
+	}
+	let quote: "'" | '"' | undefined;
+	for (let i = 1; i < trimmed.length; i++) {
+		const ch = trimmed[i];
+		if (quote) {
+			if (ch === quote) {
+				quote = undefined;
+			}
+			continue;
+		}
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			continue;
+		}
+		if (ch === ']') {
+			return trimmed.slice(1, i);
+		}
+	}
+	return undefined;
+}
+
 function parseInlineList(value: string): string[] {
-	const inner = value.trim().slice(1, -1).trim();
+	const body = inlineListInner(value);
+	if (body === undefined) {
+		return [];
+	}
+	const inner = body.trim();
 	if (inner === '') {
 		return [];
 	}

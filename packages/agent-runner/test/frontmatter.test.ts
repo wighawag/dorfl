@@ -1,4 +1,7 @@
 import {describe, it, expect} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {
 	parseFrontmatter,
 	resolveClosingIssue,
@@ -62,6 +65,48 @@ describe('parseFrontmatter', () => {
 	it('returns empty blockedBy for an empty inline list', () => {
 		const md = ['---', 'slug: a', 'blockedBy: []', '---'].join('\n');
 		expect(parseFrontmatter(md).blockedBy).toEqual([]);
+	});
+
+	it('strips a trailing inline `# comment` on an EMPTY inline blockedBy (the shipped template style)', () => {
+		// `blockedBy: [] # startable now` is the documented house style in
+		// task-template.md / WORK-CONTRACT.md. The comment must NOT leak into the
+		// list as a phantom dependency (which silently marks the task ineligible /
+		// un-enumerated by the autonomous runner).
+		const md = ['---', 'slug: a', 'blockedBy: [] # startable now', '---'].join(
+			'\n',
+		);
+		expect(parseFrontmatter(md).blockedBy).toEqual([]);
+	});
+
+	it('strips a trailing inline `# comment` on a NON-empty inline blockedBy', () => {
+		const md = [
+			'---',
+			'slug: a',
+			'blockedBy: [foo, bar] # gated on these',
+			'---',
+		].join('\n');
+		expect(parseFrontmatter(md).blockedBy).toEqual(['foo', 'bar']);
+	});
+
+	it('strips a trailing inline `# comment` on an inline prdAfter list', () => {
+		const md = [
+			'---',
+			'slug: a',
+			'prdAfter: [x] # taskable after x',
+			'---',
+		].join('\n');
+		expect(parseFrontmatter(md).prdAfter).toEqual(['x']);
+	});
+
+	it('does NOT treat a `#` INSIDE a quoted slug as a comment delimiter', () => {
+		// A `#` within a quoted list item is data, not a comment start.
+		const md = [
+			'---',
+			'slug: a',
+			"blockedBy: ['has#hash', plain] # real comment",
+			'---',
+		].join('\n');
+		expect(parseFrontmatter(md).blockedBy).toEqual(['has#hash', 'plain']);
 	});
 
 	it('parses a block-style (multi-line) blockedBy list', () => {
@@ -435,4 +480,34 @@ describe('setFrontmatterMarker', () => {
 		const md = '---\nslug: foo\nno closing fence here\n';
 		expect(setFrontmatterMarker(md, 'needsAnswers', 'true')).toBe(md);
 	});
+});
+
+describe('parseFrontmatter — the SHIPPED templates parse coherently (parser ⟷ template drift guard)', () => {
+	// The trailing-`# comment` inline-list style is the documented house style in
+	// the canonical templates `setup` propagates to every repo. If the parser ever
+	// regresses on it, a task authored straight from the template is silently
+	// marked ineligible and never auto-built. Pin the contract by parsing the REAL
+	// shipped template lines.
+	const here = dirname(fileURLToPath(import.meta.url));
+	const repoRoot = join(here, '..', '..', '..');
+
+	for (const rel of [
+		'skills/setup/protocol/task-template.md',
+		'skills/setup/protocol/WORK-CONTRACT.md',
+		'work/protocol/task-template.md',
+		'work/protocol/WORK-CONTRACT.md',
+	]) {
+		it(`the \`blockedBy: [] # ...\` line in ${rel} parses to []`, () => {
+			const text = readFileSync(join(repoRoot, rel), 'utf8');
+			const line = text
+				.split('\n')
+				.find((l) => /^blockedBy:\s*\[\]\s*#/.test(l));
+			expect(
+				line,
+				`expected a templated \`blockedBy: [] # ...\` in ${rel}`,
+			).toBeDefined();
+			const md = ['---', 'slug: a', line as string, '---'].join('\n');
+			expect(parseFrontmatter(md).blockedBy).toEqual([]);
+		});
+	}
 });
