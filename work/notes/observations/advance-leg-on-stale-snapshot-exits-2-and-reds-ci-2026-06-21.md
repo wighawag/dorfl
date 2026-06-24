@@ -3,7 +3,7 @@ title: A stale-snapshot `advance` leg (item already done/removed) exits 2 and RE
 type: observation
 status: spotted
 spotted: 2026-06-21
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -138,3 +138,8 @@ Lean: a NEW distinct tolerated non-zero code (skip recorded, still observable), 
 ### q3: Should the benign-skip behaviour be the DEFAULT for all callers, or gated behind an opt-in flag (e.g. `--quiet-if-gone`) that CI sets while interactive humans keep the loud exit-2?
 
 Flag-gated (e.g. `--quiet-if-gone`) set by the matrix leg in the workflow; keep the interactive default LOUD so a human who typos an already-done slug still gets the error. INDEPENDENTLY and regardless of the flag, ALWAYS fix the message conflation so the three cases (terminal / staged-but-not-pool / nowhere) are distinguishable in output, that fix is wanted on its own merits.
+
+## Triaged: promoted
+
+Promoted to a new backlog task `work/tasks/ready/advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21.md` (a human answered
+"promote"). This observation is resolved; the new item carries the work.
