@@ -1,6 +1,11 @@
 ---
-needsAnswers: true
+title: resolvecontinuecontext-doc-still-says-requeue-backlog-claim-gap-2026-06-24
+slug: resolvecontinuecontext-doc-still-says-requeue-backlog-claim-gap-2026-06-24
+needsAnswers: false
+blockedBy: []
 ---
+
+## What to build
 
 # `resolveContinueContext` doc still says "requeue → backlog → claim gap" (backlog=pool)
 
