@@ -1,10 +1,11 @@
 ---
-title: review-gate non-blocking nits for 'allow-backlog-leak-fence-assertions' (Gate 2 approve)
-date: 2026-06-24
-status: open
-reviewOf: allow-backlog-leak-fence-assertions
-needsAnswers: true
+title: review-nits-allow-backlog-leak-fence-assertions-2026-06-24
+slug: review-nits-allow-backlog-leak-fence-assertions-2026-06-24
+needsAnswers: false
+blockedBy: []
 ---
+
+## What to build
 
 ## Non-blocking review findings
 
