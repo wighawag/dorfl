@@ -61,7 +61,7 @@ function seedPrd(
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		prdAfter?: string[];
+		taskedAfter?: string[];
 	} = {},
 ): void {
 	const dir = join(repo, 'work', 'prds', 'ready');
@@ -69,7 +69,7 @@ function seedPrd(
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.prdAfter) lines.push(`prdAfter: [${fm.prdAfter.join(', ')}]`);
+	if (fm.taskedAfter) lines.push(`taskedAfter: [${fm.taskedAfter.join(', ')}]`);
 	lines.push('---', '', '# PRD');
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
@@ -77,7 +77,7 @@ function seedPrd(
 /**
  * Seed a TASKED PRD as RESIDENCE in `work/prds/tasked/` (the source of truth for
  * tasked-ness, task `prd-sliced-folder-step-a`) — it has left the to-task pool
- * (`work/prds/ready/`) and now resolves another PRD's `prdAfter` by FOLDER residence
+ * (`work/prds/ready/`) and now resolves another PRD's `taskedAfter` by FOLDER residence
  * (the `tasked:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedTaskedPrd(slug: string): void {
@@ -304,27 +304,27 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it('a humanOnly / needsAnswers PRD is excluded; a prdAfter-blocked one too', async () => {
+	it('a humanOnly / needsAnswers PRD is excluded; a taskedAfter-blocked one too', async () => {
 		seedPrd('human', {humanOnly: true});
 		seedPrd('asks', {needsAnswers: true});
-		seedPrd('beta', {prdAfter: ['alpha']}); // alpha not tasked
+		seedPrd('beta', {taskedAfter: ['alpha']}); // alpha not tasked
 		seedPrd('ready'); // the only taskable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
 		expect(args).toEqual(['prd:ready']);
 	});
 
-	it('a prdAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
+	it('a taskedAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
 		// beta's blocker alpha is UNTASKED ⇒ beta is excluded (alpha itself is
 		// taskable: the gate does not exclude an untasked PRD).
 		seedPrd('alpha');
-		seedPrd('beta', {prdAfter: ['alpha']});
+		seedPrd('beta', {taskedAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['prd:alpha']);
 
 		// Move alpha into `work/prds/tasked/` (the source of truth for tasked-ness) ⇒
-		// beta's prdAfter is satisfied (resolved against FOLDER residence) and beta
+		// beta's taskedAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-task pool (it now rests in
 		// prd-tasked/), so only beta is selectable.
 		seedTaskedPrd('alpha');

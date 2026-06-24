@@ -25,7 +25,7 @@ The git ledger is split by what each kind of state actually is:
   GENERALISES the previous `out-of-scope/`; the specific REASON — superseded /
   out-of-scope / duplicate / abandoned — lives in the item body as `reason:`). These are
   exactly the dependency-resolving / permanent records (`blockedBy → done/`,
-  `prdAfter → prds/tasked/`, the durable "won't-proceed").
+  `taskedAfter → prds/tasked/`, the durable "won't-proceed").
 - **Transient STATUS + LOCKS live on PER-ITEM lock refs**, NOT in main's tree. `in-progress`,
   `needs-attention`, `tasking`, and `advancing` collapse into ONE lock per item, keyed by item
   identity, on a hidden `refs/agent-runner/lock/<entry>` ref (or a single `refs/agent-runner/locks`
@@ -56,7 +56,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
    retrying-CAS / serialized-promote, that is the only place retry remains.)
 3. **It keeps content checked out and dependency resolution offline.** Unlike moving the whole `work/`
    tree off `main` (rejected: it strips tasks/prds/observations from a normal `git clone`), content
-   and durable records stay on `main`, so `blockedBy`/`prdAfter` resolve offline against `main`
+   and durable records stay on `main`, so `blockedBy`/`taskedAfter` resolve offline against `main`
    exactly as today, zero change to eligibility.
 4. **It incidentally makes protected-`main` TRACTABLE** (the contradiction the `claim-ledger-vs-
    protected-main` ADR opened with): claim + all intermediate state leave `main`, so an agent can

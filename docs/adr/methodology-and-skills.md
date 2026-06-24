@@ -45,7 +45,7 @@ Supersedes the single-`humanOnly` gate (which replaced the three-state `afk` + `
 - **The prd now CARRIES the gate (it did not before).** With auto-tasking, the human checkpoint that `to-task` step 4 ("quiz the user") used to provide is removed for the agent path. So whatever that quiz would have extracted must either be pre-committed OR the doc must say it isn't: `to-prd` sets `humanOnly` (decided) and/or `needsAnswers` + body questions (discovered); the auto-tasker refuses to task a prd with either flag. This is symmetric, not new machinery.
 - Runtime safety net unchanged: an agent that can't responsibly proceed bounces the item to `needs-attention/` (so the gate need not pre-catch everything).
 
-Field-naming: all frontmatter/config keys are **camelCase** (matches the JSON config + the TS parser; 1:1 property mapping). The `humanOnly`+`autoBuild` gate is already shipped (camelCase); `needsAnswers`, plus the `blocked_by`→`blockedBy` rename and `prdAfter`, are wired into the same eligibility path by a tracked migration task (not an inline change), keeping the build/test gate green.
+Field-naming: all frontmatter/config keys are **camelCase** (matches the JSON config + the TS parser; 1:1 property mapping). The `humanOnly`+`autoBuild` gate is already shipped (camelCase); `needsAnswers`, plus the `blocked_by`→`blockedBy` rename and `taskedAfter`, are wired into the same eligibility path by a tracked migration task (not an inline change), keeping the build/test gate green.
 
 ## 5. ADRs live in `docs/adr/`, CONTEXT.md at root, and follow the STANDARD ADR format
 

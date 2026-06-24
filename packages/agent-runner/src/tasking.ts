@@ -62,7 +62,7 @@ import type {ReviewGate} from './review-gate.js';
  * agent only EDITS files, the runner does ALL git):
  *
  *   1. **Resolve the gate** (agent path): refuse to task a prd that is
- *      `humanOnly`/`needsAnswers`, or whose `prdAfter` prds are not yet tasked.
+ *      `humanOnly`/`needsAnswers`, or whose `taskedAfter` prds are not yet tasked.
  *      The repo's `autoTask` POLICY also refuses on the AUTO-PICK pool path, but
  *      NOT when the prd was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <task>` builds regardless of
@@ -101,7 +101,7 @@ import type {ReviewGate} from './review-gate.js';
 /** The terminal status of one `do prd:<slug>` tasking run. */
 export type TaskOutcome =
 	| 'tasked' // gate passed (agent) / unbound (human) → lock → agent → committed
-	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/prdAfter)
+	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/taskedAfter)
 	| 'lock-lost' // the lock was lost/contended (another tasker holds it)
 	| 'agent-failed' // the agent invocation itself errored
 	| 'stale' // the held prd was edited under the lock → the tasking is stale
@@ -176,7 +176,7 @@ export interface PerformTaskOptions {
 	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent tasking gate drops the
 	 * `autoTask` policy term and binds ONLY the prd's own readiness axes
-	 * (`humanOnly`/`needsAnswers`) + `prdAfter`. Defaults `false`. Both the
+	 * (`humanOnly`/`needsAnswers`) + `taskedAfter`. Defaults `false`. Both the
 	 * explicit `do prd:` dispatch AND the auto-pick path pass `true` here: the
 	 * auto-pick POOL (`do-autopick.ts`) is the single `autoTask`-enforcement point
 	 * (a pool-ineligible prd is never selected), so once a prd is dispatched its
@@ -1170,20 +1170,20 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
 /**
  * Resolve the AGENT tasking gate for `slug`: the pure predicate
  * (`needsAnswers !== true && humanOnly !== true && autoTask`) plus the
- * cross-prd `prdAfter` ordering, resolved against `work/prds/tasked/` residence of
+ * cross-prd `taskedAfter` ordering, resolved against `work/prds/tasked/` residence of
  * the prds present in the checkout.
  */
 function resolveAgentGate(
 	cwd: string,
 	slug: string,
-	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; prdAfter: string[]},
+	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; taskedAfter: string[]},
 	autoTask: boolean | undefined,
 	explicit: boolean,
 ): TaskingEligibilityResult {
 	return resolveTaskingEligibility({
 		humanOnly: prdFm.humanOnly,
 		needsAnswers: prdFm.needsAnswers,
-		prdAfter: prdFm.prdAfter,
+		taskedAfter: prdFm.taskedAfter,
 		taskedSlugs: readTaskedSlugs(cwd),
 		autoTask: autoTask ?? false,
 		explicit,
@@ -1217,9 +1217,9 @@ function gateRefusalReason(
 	) {
 		reasons.push("the repo's autoTask policy is off");
 	}
-	if (!eligibility.prdAfter.satisfied) {
+	if (!eligibility.taskedAfter.satisfied) {
 		reasons.push(
-			`prdAfter prd(s) not yet tasked: ${eligibility.prdAfter.missing.join(', ')}`,
+			`taskedAfter prd(s) not yet tasked: ${eligibility.taskedAfter.missing.join(', ')}`,
 		);
 	}
 	const why =
@@ -1232,7 +1232,7 @@ function gateRefusalReason(
  * in `work/prds/tasked/` (the tasked resting state, task `prd-sliced-folder-step-a`
  * / prd `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
  * is the source of truth; the `tasked:` frontmatter marker was removed entirely in
- * `remove-sliced-marker-step-b` and is NOT consulted. So `prdAfter` resolves
+ * `remove-sliced-marker-step-b` and is NOT consulted. So `taskedAfter` resolves
  * against `prd-tasked/` residence
  * (mirroring `blockedBy` -> `done/`). A missing folder reads as empty. The slug is
  * read from each file's frontmatter `slug:`, falling back to the filename — the same

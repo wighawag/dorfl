@@ -30,7 +30,7 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  * tasking / `do prd:` work reuses).
  *
  * This mirrors the field-level namespace split the contract already makes (task
- * `blockedBy` resolves against tasks; prd `prdAfter` against prds); the
+ * `blockedBy` resolves against tasks; prd `taskedAfter` against prds); the
  * `task:`/`prd:` prefixes are the command-line form of that one rule.
  */
 

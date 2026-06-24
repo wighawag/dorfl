@@ -124,7 +124,7 @@ export async function performDoAuto(
 		slug: prd.slug,
 		humanOnly: prd.humanOnly,
 		needsAnswers: prd.needsAnswers,
-		prdAfter: prd.prdAfter,
+		taskedAfter: prd.taskedAfter,
 	}));
 	const eligiblePrds = taskablePrds({
 		candidates: prdCandidates,

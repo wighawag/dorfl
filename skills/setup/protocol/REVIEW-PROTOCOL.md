@@ -54,7 +54,7 @@ Do the artifacts COMPOSE, and do they obey the contract?
 - **Composition:** handoffs (one task ships a stub another fills), shared helpers with no owner, two tasks editing the SAME file/command in parallel (a merge conflict waiting to happen — should carry a `blockedBy` to serialise), one task deleting another's live tooling, cross-task side-effects.
 - **Contract conformance (assume these rules; flag violations):**
   - **status = folder**, never a frontmatter field; **one file per item**; **no shared index/manifest**.
-  - **content-derived slug**, never a counter; **camelCase** field names (`humanOnly`, `needsAnswers`, `blockedBy`, `prdAfter`).
+  - **content-derived slug**, never a counter; **camelCase** field names (`humanOnly`, `needsAnswers`, `blockedBy`, `taskedAfter`).
   - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its prd; a falsely-complete `needsAnswers:false` is a defect.
   - **`blockedBy` / `prd` / `covers`** present and correct (`prd` required iff `covers` is set); deps reference real slugs.
   - **bucket polarity** for notes: _observation_ = spotted/unverified (append-only); _finding_ = verified EXTERNAL/domain ground truth; _ADR_ = a decision WE made + why (in `docs/adr/`). A note in the wrong bucket is a finding.

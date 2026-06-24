@@ -80,8 +80,8 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 				// gated out
 				'prd-human.md': prd({slug: 'prd-human', humanOnly: 'true'}),
 				'prd-asks.md': prd({slug: 'prd-asks', needsAnswers: 'true'}),
-				// prdAfter not satisfied (untasked-dep is NOT in prd-tasked/)
-				'after.md': prd({slug: 'after', prdAfter: '[untasked-dep]'}),
+				// taskedAfter not satisfied (untasked-dep is NOT in prd-tasked/)
+				'after.md': prd({slug: 'after', taskedAfter: '[untasked-dep]'}),
 			},
 		});
 
@@ -142,10 +142,10 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 		expect(result.prds.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
-	it('resolves blockedBy / prdAfter against the mirror own folders (per-repo, like in-place)', async () => {
+	it('resolves blockedBy / taskedAfter against the mirror own folders (per-repo, like in-place)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
-			prd: {'after.md': prd({slug: 'after', prdAfter: '[alpha]'})},
+			prd: {'after.md': prd({slug: 'after', taskedAfter: '[alpha]'})},
 		});
 		const cfg = mergeConfig({autoBuild: true, autoTask: true});
 
@@ -166,7 +166,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
 			done: {'a.md': task({slug: 'a'})},
 			prd: {
-				'after.md': prd({slug: 'after', prdAfter: '[alpha]'}),
+				'after.md': prd({slug: 'after', taskedAfter: '[alpha]'}),
 			},
 			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		});
@@ -191,7 +191,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			done: {'dep.md': task({slug: 'dep'})},
 			prd: {
 				'taskme.md': prd({slug: 'taskme'}),
-				'after.md': prd({slug: 'after', prdAfter: '[alpha]'}),
+				'after.md': prd({slug: 'after', taskedAfter: '[alpha]'}),
 			},
 			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		};
@@ -234,7 +234,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 					slug: p.slug,
 					humanOnly: p.humanOnly,
 					needsAnswers: p.needsAnswers,
-					prdAfter: p.prdAfter,
+					taskedAfter: p.taskedAfter,
 				})),
 			taskedSlugs: (
 				await import('../src/ledger-read.js')

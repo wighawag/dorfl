@@ -118,7 +118,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		writePrd('prd', 'beta.md', {
 			slug: 'beta',
 			needsAnswers: 'true',
-			prdAfter: '[alpha]',
+			taskedAfter: '[alpha]',
 		});
 		writePrd('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
 
@@ -130,12 +130,12 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 			file: 'alpha.md',
 			slug: 'alpha',
 			humanOnly: true,
-			prdAfter: [],
+			taskedAfter: [],
 		});
 		expect(pool.prds[1]).toMatchObject({
 			slug: 'beta',
 			needsAnswers: true,
-			prdAfter: ['alpha'],
+			taskedAfter: ['alpha'],
 		});
 	});
 
@@ -419,7 +419,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 				'beta.md': prd({
 					slug: 'beta',
 					needsAnswers: 'true',
-					prdAfter: '[alpha]',
+					taskedAfter: '[alpha]',
 				}),
 				'gamma.md': prd({slug: 'gamma', humanOnly: 'true'}),
 			},
@@ -435,7 +435,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			file: 'beta.md',
 			slug: 'beta',
 			needsAnswers: true,
-			prdAfter: ['alpha'],
+			taskedAfter: ['alpha'],
 		});
 		expect(pool.prds[1]).toMatchObject({slug: 'gamma', humanOnly: true});
 		// Tasked-ness is RESIDENCE in prd-tasked/ (the folder is the source of truth).

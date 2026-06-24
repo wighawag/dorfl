@@ -88,14 +88,14 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).blockedBy).toEqual(['foo', 'bar']);
 	});
 
-	it('strips a trailing inline `# comment` on an inline prdAfter list', () => {
+	it('strips a trailing inline `# comment` on an inline taskedAfter list', () => {
 		const md = [
 			'---',
 			'slug: a',
-			'prdAfter: [x] # taskable after x',
+			'taskedAfter: [x] # taskable after x',
 			'---',
 		].join('\n');
-		expect(parseFrontmatter(md).prdAfter).toEqual(['x']);
+		expect(parseFrontmatter(md).taskedAfter).toEqual(['x']);
 	});
 
 	it('does NOT treat a `#` INSIDE a quoted slug as a comment delimiter', () => {
@@ -126,31 +126,37 @@ describe('parseFrontmatter', () => {
 		expect(parseFrontmatter(md).blockedBy).toEqual([]);
 	});
 
-	it('parses prd-level prdAfter (inline list)', () => {
+	it('parses prd-level taskedAfter (inline list)', () => {
 		const md = [
 			'---',
 			'slug: my-prd',
-			'prdAfter: [other-prd, third-prd]',
+			'taskedAfter: [other-prd, third-prd]',
 			'---',
 		].join('\n');
-		expect(parseFrontmatter(md).prdAfter).toEqual(['other-prd', 'third-prd']);
+		expect(parseFrontmatter(md).taskedAfter).toEqual([
+			'other-prd',
+			'third-prd',
+		]);
 	});
 
-	it('parses a block-style prdAfter list', () => {
+	it('parses a block-style taskedAfter list', () => {
 		const md = [
 			'---',
 			'slug: my-prd',
-			'prdAfter:',
+			'taskedAfter:',
 			'  - other-prd',
 			'  - third-prd',
 			'---',
 		].join('\n');
-		expect(parseFrontmatter(md).prdAfter).toEqual(['other-prd', 'third-prd']);
+		expect(parseFrontmatter(md).taskedAfter).toEqual([
+			'other-prd',
+			'third-prd',
+		]);
 	});
 
-	it('returns empty prdAfter when omitted', () => {
+	it('returns empty taskedAfter when omitted', () => {
 		const md = ['---', 'slug: my-prd', '---'].join('\n');
-		expect(parseFrontmatter(md).prdAfter).toEqual([]);
+		expect(parseFrontmatter(md).taskedAfter).toEqual([]);
 	});
 
 	it('the HARD CUTOVER: the pre-rename `brief:` and `briefAfter:` keys are NOT parsed (no old field name)', () => {
@@ -163,9 +169,9 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		// The old keys are inert text now — neither maps to the new fields.
-		// (`prd:`/`prdAfter:` are the LIVE keys after the brief->prd rename.)
+		// (`prd:`/`taskedAfter:` are the LIVE keys after the brief->prd rename.)
 		expect(fm.prd).toBeUndefined();
-		expect(fm.prdAfter).toEqual([]);
+		expect(fm.taskedAfter).toEqual([]);
 	});
 
 	// ── Origin-trust PROVENANCE (task untrusted-origin-forces-build-propose) ────
@@ -222,21 +228,21 @@ describe('parseFrontmatter', () => {
 		expect(fm.originTrust).toBeUndefined();
 	});
 
-	it('reads a full prd frontmatter block (humanOnly/needsAnswers/prdAfter)', () => {
+	it('reads a full prd frontmatter block (humanOnly/needsAnswers/taskedAfter)', () => {
 		const md = [
 			'---',
 			'title: Historical Store',
 			'slug: historical-store',
 			'humanOnly: true',
 			'needsAnswers: true',
-			'prdAfter: [foundations]',
+			'taskedAfter: [foundations]',
 			'---',
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('historical-store');
 		expect(fm.humanOnly).toBe(true);
 		expect(fm.needsAnswers).toBe(true);
-		expect(fm.prdAfter).toEqual(['foundations']);
+		expect(fm.taskedAfter).toEqual(['foundations']);
 	});
 
 	it('parses a prd-only `issue: N` link as a number (intake prd-emit)', () => {
@@ -314,7 +320,7 @@ describe('parseFrontmatter', () => {
 		expect(fm.humanOnly).toBeUndefined();
 		expect(fm.needsAnswers).toBeUndefined();
 		expect(fm.blockedBy).toEqual([]);
-		expect(fm.prdAfter).toEqual([]);
+		expect(fm.taskedAfter).toEqual([]);
 	});
 
 	it('ignores keys appearing after the frontmatter block', () => {

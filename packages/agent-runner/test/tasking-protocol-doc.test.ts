@@ -68,7 +68,7 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		expect(doc).toMatch(/file-orthogonal/i);
 		// The prd-vs-task gate disjointness.
 		expect(doc).toMatch(/DISJOINT/);
-		expect(doc).toMatch(/prdAfter/);
+		expect(doc).toMatch(/taskedAfter/);
 		// The prose-description of the emitted task shape (D2).
 		expect(doc).toMatch(/emitted task shape/i);
 		expect(doc).toMatch(/\btitle\b/);
@@ -265,6 +265,6 @@ describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointe
 		expect(skill).not.toMatch(/tracer bullet/i);
 		expect(skill).not.toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(skill).not.toMatch(/file-orthogonal/i);
-		expect(skill).not.toMatch(/`prdAfter` \(cross-prd order\)/);
+		expect(skill).not.toMatch(/`taskedAfter` \(cross-prd order\)/);
 	});
 });

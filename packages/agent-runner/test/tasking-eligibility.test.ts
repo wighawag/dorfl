@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest';
 import {
 	resolveTaskGate,
-	resolveTaskAfter,
+	resolveTaskedAfter,
 	resolveTaskingEligibility,
 } from '../src/tasking-eligibility.js';
 
@@ -74,12 +74,12 @@ describe('resolveTaskGate — explicit naming satisfies the autoTask policy term
 	});
 });
 
-describe('resolveTaskingEligibility — explicit drops the policy term but keeps prdAfter', () => {
-	it('explicit + autoTask OFF + no prdAfter ⇒ taskable', () => {
+describe('resolveTaskingEligibility — explicit drops the policy term but keeps taskedAfter', () => {
+	it('explicit + autoTask OFF + no taskedAfter ⇒ taskable', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			prdAfter: [],
+			taskedAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
@@ -88,25 +88,25 @@ describe('resolveTaskingEligibility — explicit drops the policy term but keeps
 		expect(r.gatePass).toBe(true);
 	});
 
-	it('explicit + autoTask OFF but an UNTASKED prdAfter ⇒ gate passes, still blocked', () => {
+	it('explicit + autoTask OFF but an UNTASKED taskedAfter ⇒ gate passes, still blocked', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			prdAfter: ['other'],
+			taskedAfter: ['other'],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
 		});
 		expect(r.gatePass).toBe(true);
 		expect(r.taskable).toBe(false);
-		expect(r.prdAfter.missing).toEqual(['other']);
+		expect(r.taskedAfter.missing).toEqual(['other']);
 	});
 
 	it('explicit + humanOnly ⇒ never (the readiness axis binds)', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			prdAfter: [],
+			taskedAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: false,
 			explicit: true,
@@ -116,53 +116,53 @@ describe('resolveTaskingEligibility — explicit drops the policy term but keeps
 	});
 });
 
-describe('resolveTaskAfter — against `work/prds/tasked/` residence (not done/)', () => {
-	it('is satisfied when prdAfter is empty', () => {
-		const r = resolveTaskAfter([], new Set());
+describe('resolveTaskedAfter — against `work/prds/tasked/` residence (not done/)', () => {
+	it('is satisfied when taskedAfter is empty', () => {
+		const r = resolveTaskedAfter([], new Set());
 		expect(r.satisfied).toBe(true);
 		expect(r.missing).toEqual([]);
 	});
 
 	it('is satisfied when every listed PRD is already tasked', () => {
-		const r = resolveTaskAfter(['a', 'b'], new Set(['a', 'b', 'c']));
+		const r = resolveTaskedAfter(['a', 'b'], new Set(['a', 'b', 'c']));
 		expect(r.satisfied).toBe(true);
 		expect(r.missing).toEqual([]);
 	});
 
 	it('is unsatisfied and reports the untasked PRDs', () => {
-		const r = resolveTaskAfter(['a', 'b'], new Set(['a']));
+		const r = resolveTaskedAfter(['a', 'b'], new Set(['a']));
 		expect(r.satisfied).toBe(false);
 		expect(r.missing).toEqual(['b']);
 	});
 
 	it('reports all missing when none are tasked', () => {
-		const r = resolveTaskAfter(['a', 'b'], new Set());
+		const r = resolveTaskedAfter(['a', 'b'], new Set());
 		expect(r.satisfied).toBe(false);
 		expect(r.missing).toEqual(['a', 'b']);
 	});
 
 	it('preserves declaration order in the missing list', () => {
-		const r = resolveTaskAfter(['z', 'a', 'm'], new Set(['a']));
+		const r = resolveTaskedAfter(['z', 'a', 'm'], new Set(['a']));
 		expect(r.missing).toEqual(['z', 'm']);
 	});
 });
 
-describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fixtures)', () => {
+describe('resolveTaskingEligibility — gate × taskedAfter (tasked-vs-untasked fixtures)', () => {
 	const cases: Array<{
 		humanOnly: boolean | undefined;
 		needsAnswers: boolean | undefined;
 		autoTask: boolean;
-		prdAfter: string[];
+		taskedAfter: string[];
 		tasked: Set<string>;
 		taskable: boolean;
 		gatePass: boolean;
 	}> = [
-		// undeclared + autoTask on + no prdAfter ⇒ taskable
+		// undeclared + autoTask on + no taskedAfter ⇒ taskable
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: true,
 			gatePass: true,
@@ -172,7 +172,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			prdAfter: ['other'],
+			taskedAfter: ['other'],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: true,
@@ -182,7 +182,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			prdAfter: ['other'],
+			taskedAfter: ['other'],
 			tasked: new Set(['other']),
 			taskable: true,
 			gatePass: true,
@@ -192,17 +192,17 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: false,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
 		},
-		// humanOnly + autoTask on ⇒ never (gate fails regardless of prdAfter)
+		// humanOnly + autoTask on ⇒ never (gate fails regardless of taskedAfter)
 		{
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoTask: true,
-			prdAfter: ['other'],
+			taskedAfter: ['other'],
 			tasked: new Set(['other']),
 			taskable: false,
 			gatePass: false,
@@ -212,7 +212,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: undefined,
 			needsAnswers: true,
 			autoTask: true,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -222,7 +222,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: false,
 			needsAnswers: true,
 			autoTask: true,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -232,7 +232,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: true,
 			needsAnswers: true,
 			autoTask: true,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
@@ -242,17 +242,17 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			humanOnly: true,
 			needsAnswers: undefined,
 			autoTask: false,
-			prdAfter: [],
+			taskedAfter: [],
 			tasked: new Set(),
 			taskable: false,
 			gatePass: false,
 		},
-		// multiple prdAfter, one untasked ⇒ blocked though gate passes
+		// multiple taskedAfter, one untasked ⇒ blocked though gate passes
 		{
 			humanOnly: undefined,
 			needsAnswers: undefined,
 			autoTask: true,
-			prdAfter: ['a', 'b'],
+			taskedAfter: ['a', 'b'],
 			tasked: new Set(['a']),
 			taskable: false,
 			gatePass: true,
@@ -263,10 +263,10 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 		const label =
 			`humanOnly=${String(c.humanOnly)} needsAnswers=${String(c.needsAnswers)} ` +
 			`autoTask=${c.autoTask} ` +
-			`prdAfter=${
-				c.prdAfter.length === 0
+			`taskedAfter=${
+				c.taskedAfter.length === 0
 					? 'none'
-					: c.prdAfter.every((s) => c.tasked.has(s))
+					: c.taskedAfter.every((s) => c.tasked.has(s))
 						? 'tasked'
 						: 'untasked'
 			}`;
@@ -274,7 +274,7 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 			const r = resolveTaskingEligibility({
 				humanOnly: c.humanOnly,
 				needsAnswers: c.needsAnswers,
-				prdAfter: c.prdAfter,
+				taskedAfter: c.taskedAfter,
 				taskedSlugs: c.tasked,
 				autoTask: c.autoTask,
 			});
@@ -283,15 +283,15 @@ describe('resolveTaskingEligibility — gate × prdAfter (tasked-vs-untasked fix
 		});
 	}
 
-	it('reports the untasked PRDs when blocked by prdAfter', () => {
+	it('reports the untasked PRDs when blocked by taskedAfter', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: undefined,
-			prdAfter: ['other'],
+			taskedAfter: ['other'],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});
-		expect(r.prdAfter.satisfied).toBe(false);
-		expect(r.prdAfter.missing).toEqual(['other']);
+		expect(r.taskedAfter.satisfied).toBe(false);
+		expect(r.taskedAfter.missing).toEqual(['other']);
 	});
 });

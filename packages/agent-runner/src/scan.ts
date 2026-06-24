@@ -124,7 +124,7 @@ export interface ScannedItem extends ReadyItem {
  * task carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
  * | "prd:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
- * gate + the `humanOnly`/`needsAnswers`/`prdAfter` predicates of `taskablePrds`
+ * gate + the `humanOnly`/`needsAnswers`/`taskedAfter` predicates of `taskablePrds`
  * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the task-only `items[]` because
  * tasks and prds are different verbs and project to different `task:`/`prd:`
@@ -248,7 +248,7 @@ export function scorePrds(
 				slug: p.slug,
 				humanOnly: p.humanOnly,
 				needsAnswers: p.needsAnswers,
-				prdAfter: p.prdAfter,
+				taskedAfter: p.taskedAfter,
 			})),
 			taskedSlugs: pool.taskedSlugs,
 			autoTask,

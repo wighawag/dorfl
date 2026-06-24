@@ -884,7 +884,7 @@ export async function promoteFromPreBacklog(
  * `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md` as a durable `main` move
  * (tree-less CAS via {@link runTreelessLedgerMove}). After this transition
  * the prd is in the auto-task POOL and eligible to be auto-tasked (subject
- * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`prdAfter` gates,
+ * to the existing `autoTask`/`humanOnly`/`needsAnswers`/`taskedAfter` gates,
  * which are UNCHANGED — the staging/pool split changes only WHICH folder is
  * the auto-task pool, not the gates).
  *

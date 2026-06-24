@@ -677,7 +677,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// it, or the auto-pick POOL already filtered it on `autoTask` before
 			// dispatching here — the single policy-enforcement point). So the tasking gate
 			// drops the `autoTask` policy term and binds only the prd's own readiness
-			// (`humanOnly`/`needsAnswers`) + `prdAfter`, EXACTLY as `do <task>` builds a
+			// (`humanOnly`/`needsAnswers`) + `taskedAfter`, EXACTLY as `do <task>` builds a
 			// named task regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
 			explicit: true,
@@ -1818,7 +1818,7 @@ export async function performDoRemote(
 				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
 				// tasking gate drops the policy term — only the prd's own readiness +
-				// `prdAfter` bind, mirroring the build path vs `autoBuild`.
+				// `taskedAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				agentRunner: options.agentRunner,
 				harness: options.harness,

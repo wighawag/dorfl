@@ -121,13 +121,13 @@ export interface LedgerPrdItem {
 	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
 	needsAnswers: boolean | undefined;
 	/** Prd-only cross-prd order: prd slugs that must already be TASKED first. */
-	prdAfter: string[];
+	taskedAfter: string[];
 }
 
 /**
  * The prd pool of ONE repo, resolved from `work/prds/ready/` (the auto-task candidate
  * source). Carries every prd's gate axes PLUS the set of already-TASKED slugs so
- * the selection layer can resolve each prd's `prdAfter` against `work/prds/tasked/`
+ * the selection layer can resolve each prd's `taskedAfter` against `work/prds/tasked/`
  * RESIDENCE (task `prd-sliced-folder-step-a` / prd `slicing-coherence` US #9): the
  * FOLDER is the source of truth, like `done/` for tasks (the auto-tasker reads
  * folder-residence; the `tasked:` marker was removed in
@@ -138,7 +138,7 @@ export interface LedgerPrdItem {
 export interface LedgerPrdPool {
 	/** Every prd in `work/prds/ready/`, sorted by slug. */
 	prds: LedgerPrdItem[];
-	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `prdAfter`). */
+	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 }
 
@@ -309,9 +309,9 @@ export interface LedgerReadStrategy {
 	/**
 	 * Enumerate the repo's prd pool from `work/prds/ready/` (the auto-task candidate
 	 * source for the `do`/`run` "tasks-first then prds to task" priority, ADR
-	 * §3). Returns every prd's gate axes (`humanOnly`/`needsAnswers`/`prdAfter`)
+	 * §3). Returns every prd's gate axes (`humanOnly`/`needsAnswers`/`taskedAfter`)
 	 * PLUS the set of already-TASKED slugs so the selection layer can resolve
-	 * `prdAfter` against `work/prds/tasked/` residence (the FOLDER is the source of
+	 * `taskedAfter` against `work/prds/tasked/` residence (the FOLDER is the source of
 	 * truth) and apply `autoslice-gate`'s
 	 * predicate. This is the SAME prd read path {@link resolvePrdExistence} uses,
 	 * widened from a single-slug existence check to a full enumeration — NOT a
@@ -432,7 +432,7 @@ function readLocalPrdStaging(repoPath: string): LedgerPrdItem[] {
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			prdAfter: fm.prdAfter,
+			taskedAfter: fm.taskedAfter,
 		});
 	}
 	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -504,10 +504,10 @@ function findPrdFileBySlug(
  * priority's prd source) — the SAME prd read path {@link findPrdFileBySlug} uses,
  * widened from a single-slug existence check to a full enumeration. Each prd's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
- * its gate axes (`humanOnly`/`needsAnswers`/`prdAfter`) parsed. The
+ * its gate axes (`humanOnly`/`needsAnswers`/`taskedAfter`) parsed. The
  * already-TASKED set is RESIDENCE in `work/prds/tasked/` (task
  * `prd-sliced-folder-step-a` / prd `slicing-coherence` US #9): the FOLDER is the
- * source of truth (the build-machine `done/` analogue), so `prdAfter` resolves
+ * source of truth (the build-machine `done/` analogue), so `taskedAfter` resolves
  * against `prds/tasked/` residence (mirroring `blockedBy` -> `done/`). The `tasked:`
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
  * matches `tasking.ts`'s `readTaskedSlugs`. Missing folders read as empty.
@@ -523,7 +523,7 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			prdAfter: fm.prdAfter,
+			taskedAfter: fm.taskedAfter,
 		});
 	}
 	prds.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -709,7 +709,7 @@ async function readPrdStagingFromTree(
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			prdAfter: fm.prdAfter,
+			taskedAfter: fm.taskedAfter,
 		});
 	}
 	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -740,7 +740,7 @@ async function readPrdPoolFromTree(
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
 			needsAnswers: fm.needsAnswers,
-			prdAfter: fm.prdAfter,
+			taskedAfter: fm.taskedAfter,
 		});
 	}
 	prds.sort((a, b) => a.slug.localeCompare(b.slug));

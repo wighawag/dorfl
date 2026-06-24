@@ -425,7 +425,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 		expect(prd!.eligibility.eligible).toBe(true);
 	});
 
-	it('gates humanOnly / needsAnswers / unsatisfied prdAfter PRDs out of the taskable pool', () => {
+	it('gates humanOnly / needsAnswers / unsatisfied taskedAfter PRDs out of the taskable pool', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writePrd('repo', 'prd', 'human.md', {slug: 'human', humanOnly: 'true'});
 		writePrd('repo', 'prd', 'asks.md', {
@@ -434,7 +434,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 		});
 		writePrd('repo', 'prd', 'after.md', {
 			slug: 'after',
-			prdAfter: '[dep]',
+			taskedAfter: '[dep]',
 		});
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
@@ -473,10 +473,10 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 		).toBe(true);
 	});
 
-	it('a prdAfter dep already in work/prds/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
+	it('a taskedAfter dep already in work/prds/tasked/ unblocks the PRD (folder-residence is the truth)', () => {
 		writePrd('repo', 'prd', 'after.md', {
 			slug: 'after',
-			prdAfter: '[dep]',
+			taskedAfter: '[dep]',
 		});
 		writePrd('repo', 'prd-tasked', 'dep.md', {slug: 'dep'});
 		const report = scanRepoPaths(

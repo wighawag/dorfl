@@ -45,7 +45,7 @@ import type {
  *       PRD `pre-prd/ \u2192 prd/` on the arbiter and the same slug becomes
  *       auto-sliceable. There is no agent-facing path that performs the
  *       promotion (asserted structurally: no agent surface imports it);
- *   (d) the `prdAfter` (against `work/prds/tasked/`) and `blockedBy`
+ *   (d) the `taskedAfter` (against `work/prds/tasked/`) and `blockedBy`
  *       (against `work/tasks/done/`) resolution is UNCHANGED \u2014 PRD US #14.
  */
 
@@ -263,7 +263,7 @@ describe('STEP A (PRD) \u2014 work/prds/ready/ STILL means the auto-slice POOL (
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
-			prdAfter: [],
+			taskedAfter: [],
 			taskedSlugs: new Set(),
 		});
 		// The gate itself is open (no axes block it); the POSITION (residence
@@ -380,13 +380,13 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 	});
 });
 
-describe('STEP A (PRD) \u2014 prdAfter (prd-tasked/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
-	it('prdAfter still resolves against work/prds/tasked/ residence \u2014 not work/prds/proposed/, not work/prds/ready/', () => {
+describe('STEP A (PRD) \u2014 taskedAfter (prd-tasked/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
+	it('taskedAfter still resolves against work/prds/tasked/ residence \u2014 not work/prds/proposed/, not work/prds/ready/', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// Seed an already-tasked PRD into work/prds/tasked/, AND a counterpart in
-		// the STAGING pre-prd/ folder. `prdAfter` resolution must read
+		// the STAGING pre-prd/ folder. `taskedAfter` resolution must read
 		// `prd-tasked/` for its satisfied set \u2014 the staging folder must not
-		// satisfy a `prdAfter` dependency.
+		// satisfy a `taskedAfter` dependency.
 		mkdirSync(join(repo, 'work', 'prds', 'tasked'), {recursive: true});
 		writeFileSync(
 			join(repo, 'work', 'prds', 'tasked', 'already-tasked.md'),
@@ -408,29 +408,29 @@ describe('STEP A (PRD) \u2014 prdAfter (prd-tasked/) and blockedBy (done/) resol
 		expect(pool.taskedSlugs.has('already-tasked')).toBe(true);
 		expect(pool.taskedSlugs.has('staged-not-tasked')).toBe(false);
 
-		// `prdAfter: [already-tasked]` is satisfied (the tasked set includes it).
+		// `taskedAfter: [already-tasked]` is satisfied (the tasked set includes it).
 		const okIfPriorTasked = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
-			prdAfter: ['already-tasked'],
+			taskedAfter: ['already-tasked'],
 			taskedSlugs: pool.taskedSlugs,
 		});
 		expect(okIfPriorTasked.taskable).toBe(true);
-		expect(okIfPriorTasked.prdAfter.satisfied).toBe(true);
+		expect(okIfPriorTasked.taskedAfter.satisfied).toBe(true);
 
-		// `prdAfter: [staged-not-tasked]` is NOT satisfied \u2014 a STAGED PRD
+		// `taskedAfter: [staged-not-tasked]` is NOT satisfied \u2014 a STAGED PRD
 		// (residence in `work/prds/proposed/`) does NOT count as already-tasked.
 		const blockedByStaged = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,
 			autoTask: true,
-			prdAfter: ['staged-not-tasked'],
+			taskedAfter: ['staged-not-tasked'],
 			taskedSlugs: pool.taskedSlugs,
 		});
 		expect(blockedByStaged.taskable).toBe(false);
-		expect(blockedByStaged.prdAfter.satisfied).toBe(false);
-		expect(blockedByStaged.prdAfter.missing).toEqual(['staged-not-tasked']);
+		expect(blockedByStaged.taskedAfter.satisfied).toBe(false);
+		expect(blockedByStaged.taskedAfter.missing).toEqual(['staged-not-tasked']);
 	});
 
 	it('blockedBy still resolves against work/tasks/done/ residence \u2014 unchanged by the PRD staging split', () => {

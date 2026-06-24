@@ -4,7 +4,7 @@ slug: <url-safe-slug>
 # issue: 123          # optional: the issue this prd was spawned from (the surviving thread)
 # humanOnly: true     # optional: a HUMAN must drive the tasking of this prd (a decision). OMIT otherwise.
 # needsAnswers: true  # optional: open questions block AUTO-tasking (spec incomplete). OMIT otherwise. List the questions in the body.
-# prdAfter: []      # optional: prd slugs that must be TASKED first (so this prd's tasks can reference their slugs in blockedBy).
+# taskedAfter: []      # optional: prd slugs that must be TASKED first (so this prd's tasks can reference their slugs in blockedBy).
 # promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for every task this prd fans out, regardless of the repo's resolved policy. A per-task override still wins over this. OMIT to inherit the repo policy. NEVER an acceptance criterion — `verify` still decides pass/fail.
 ---
 

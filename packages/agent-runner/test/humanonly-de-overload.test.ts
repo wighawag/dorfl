@@ -88,7 +88,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: true,
 			needsAnswers: undefined,
-			prdAfter: [],
+			taskedAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});
@@ -100,7 +100,7 @@ describe('PRD `humanOnly` (UNCHANGED) — still blocks auto-tasking', () => {
 		const r = resolveTaskingEligibility({
 			humanOnly: undefined,
 			needsAnswers: true,
-			prdAfter: [],
+			taskedAfter: [],
 			taskedSlugs: new Set(),
 			autoTask: true,
 		});

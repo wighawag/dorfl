@@ -43,7 +43,7 @@ function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
 		slug,
 		humanOnly: undefined,
 		needsAnswers: undefined,
-		prdAfter: [],
+		taskedAfter: [],
 		...extra,
 	};
 }
@@ -72,8 +72,8 @@ describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', 
 		expect(out).toEqual([]);
 	});
 
-	it('prdAfter gates against the TASKED markers, not done/', () => {
-		const candidates = [prd('beta', {prdAfter: ['alpha']})];
+	it('taskedAfter gates against the TASKED markers, not done/', () => {
+		const candidates = [prd('beta', {taskedAfter: ['alpha']})];
 		// alpha not yet tasked ⇒ beta not taskable.
 		expect(
 			taskablePrds({candidates, taskedSlugs: new Set(), autoTask: true}),

@@ -189,7 +189,7 @@ export async function scanMirrorPool(
 			slug: p.slug,
 			humanOnly: p.humanOnly,
 			needsAnswers: p.needsAnswers,
-			prdAfter: p.prdAfter,
+			taskedAfter: p.taskedAfter,
 		})),
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: repoConfig.autoTask,

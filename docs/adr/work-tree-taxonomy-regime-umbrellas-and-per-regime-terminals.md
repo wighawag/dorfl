@@ -40,7 +40,7 @@ terminal with a DELIBERATELY DIFFERENT word (`tasks/cancelled` vs `prds/dropped`
 
 The vocabulary follows the folders: a unit of buildable work is a **task**, a
 decomposable spec is a **prd**; `do task:` / `do prd:`, frontmatter `prd:` /
-`prdAfter:`, lock-ref entries `task-<slug>` / `prd-<slug>`. `observation` /
+`taskedAfter:`, lock-ref entries `task-<slug>` / `prd-<slug>`. `observation` /
 `obs:` is unchanged.
 
 ## Why

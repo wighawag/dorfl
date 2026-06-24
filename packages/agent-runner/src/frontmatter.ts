@@ -101,7 +101,7 @@ export interface Frontmatter {
 	 * omitted or empty. Parsed here so the auto-tasker can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
-	prdAfter: string[];
+	taskedAfter: string[];
 	/**
 	 * The per-item override layer for the `promptGuidance` NUDGE namespace
 	 * (task `prompt-guidance-testfirst-item-override`, prd US #5). A task or
@@ -323,7 +323,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		needsAnswers: undefined,
 		triaged: undefined,
 		blockedBy: [],
-		prdAfter: [],
+		taskedAfter: [],
 		promptGuidance: {testFirst: undefined},
 	};
 	if (block === undefined) {
@@ -385,7 +385,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			// observation out of the triage pool. An empty value reads as undefined
 			// (undeclared — still untriaged).
 			result.triaged = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'blockedBy' || key === 'prdAfter') {
+		} else if (key === 'blockedBy' || key === 'taskedAfter') {
 			let list: string[];
 			if (rawValue.startsWith('[')) {
 				list = parseInlineList(rawValue);
@@ -412,7 +412,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 			if (key === 'blockedBy') {
 				result.blockedBy = list;
 			} else {
-				result.prdAfter = list;
+				result.taskedAfter = list;
 			}
 		}
 	}

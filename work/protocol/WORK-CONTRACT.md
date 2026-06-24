@@ -61,7 +61,7 @@ work/
 ### Three governance regimes + the substrate split (the key distinctions)
 
 - **Work items' DURABLE positions are the folder** (prds: `prds/proposed`/`prds/ready`/`prds/tasked`/`prds/dropped`; tasks: `tasks/backlog`/`tasks/ready`/`tasks/done`/`tasks/cancelled`): **status = the folder**, transitions are `git mv` on `main`, each has one destiny. This is the conflict-safe core for the durable resting records. The ONLY moves ever made on `main` are these durable resting transitions: `tasks/ready → tasks/done`, `prds/ready → prds/tasked`, `tasks/ready → tasks/cancelled` (and `prds/ready → prds/dropped`). The per-regime terminals (`tasks/cancelled/`, `prds/dropped/`) are where an item that will not proceed for ANY reason (superseded, out-of-scope, duplicate, abandoned/obsolete) rests, with the REASON in the body (`reason:` line). They are deliberately NAMED differently per regime — see the slug-collision note above.
-- **Transient status + locks are NOT on `main`** — they are per-item lock refs. `in-progress`/`needs-attention`/`tasking`/`advancing` are lock-ref state, not folders. A work branch cut from `main` therefore inherits NO transient status, so a continue/rebase is a plain rebase with nothing to drop. Eligibility/dependency resolution stay OFFLINE on `main` (`blockedBy → tasks/done/`, `prdAfter → prds/tasked/`); only the operational "what's in flight" view (`status`/`scan`) reads the lock refs.
+- **Transient status + locks are NOT on `main`** — they are per-item lock refs. `in-progress`/`needs-attention`/`tasking`/`advancing` are lock-ref state, not folders. A work branch cut from `main` therefore inherits NO transient status, so a continue/rebase is a plain rebase with nothing to drop. Eligibility/dependency resolution stay OFFLINE on `main` (`blockedBy → tasks/done/`, `taskedAfter → prds/tasked/`); only the operational "what's in flight" view (`status`/`scan`) reads the lock refs.
 - **Capture buckets** (`notes/ideas`/`notes/observations`/`notes/findings`) are **NOT work items** and are **exempt from status = folder** — they are _notes_, not units of work. They do not move through statuses; they sit in their bucket, and the folder is the inbox (`ls work/notes/observations/` = the live signal list). They leave only by **deletion** (git history is the archive). A note may _spawn_ work (a task, an idea, an ADR) created independently — the note does not "become" or `git mv` into that work; it is simply deleted once it is no longer a useful signal. **Operational discharge test for a promoted note:** a note is dischargeable (deletable) the moment a **self-contained** artifact carries its signal — verify the spawned task/ADR actually contains the mechanism + fix shape (not just a back-pointer), then delete the note. Do NOT keep it until the spawned work lands in `tasks/done/`: a note stops being a live _signal_ the moment it is captured into actionable work, not when that work completes. If the spawned artifact is NOT self-contained, the bug is the artifact (fix it to carry the signal), not a reason to keep the note.
 
 > **Every capture-bucket note and every work item has a DIRECTION and a LIVENESS — never manufacture a backward artifact to look compliant.** Forward artifacts — a `tasks/ready/` task, an _open_ `notes/observations/` signal — describe work that is **pending or currently-signalled**, never the past. So: work that is **already done** does NOT get a task or observation back-filled to narrate it (a `tasks/ready/` task with pre-ticked acceptance criteria is a changelog wearing a spec's shape); completed work is recorded as a `tasks/done/` record landed _with_ the code plus the commit message, owned by whoever does the git transition. And a captured note is LIVE: it leaves the inbox **by deletion** the moment it stops being a live signal — a note annotated "resolved" and kept is a contradiction (there is no `resolved` status; discharge it by deleting it, its lasting product being the task/ADR/commit it spawned). This binds an agent invoked **outside** the runner too: building directly is fine when asked, but do not retroactively mint forward artifacts for it afterward.
@@ -138,7 +138,7 @@ This is the generalisation of the git-config isolation tests already do (`GIT_CO
 
 ## Field-naming convention
 
-All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `prdAfter`, `autoBuild`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
+All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAnswers`, `blockedBy`, `taskedAfter`, `autoBuild`) — matching the JSON config and the TypeScript that parses them (1:1 property mapping, no snake↔camel translation layer). No exceptions.
 
 ## Frontmatter (YAML)
 
@@ -166,7 +166,7 @@ slug: historical-store
 issue: 123 # optional: the issue this prd was spawned from (the surviving thread)
 humanOnly: true # optional: a human must drive the TASKING of this prd. true | omitted.
 needsAnswers: true # optional: open questions block AUTO-tasking this prd. true | omitted.
-prdAfter: [] # optional: prd slugs that must be TASKED first (see below). [] = taskable now.
+taskedAfter: [] # optional: prd slugs that must be TASKED first (see below). [] = taskable now.
 promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for every task this prd fans out, regardless of the repo's resolved policy. A per-task override still wins over this. true | false | omitted (= inherit repo policy). See "`promptGuidance.*` per-item override" below.
 # tasked-ness has NO frontmatter marker: it is RESIDENCE in work/prds/tasked/ (the release transition moves the prd there).
 ---
@@ -241,14 +241,14 @@ Key rules:
 - **Code/implementation review is on the branch/PR path** — a code diff cannot be folder-gated. The position gate above is SCOPED to LEDGER-FILE output (tasking); the branch-based build review is unaffected.
 - **`humanOnly` survives every mode.** A `humanOnly: true` task in the pool is still not agent-claimable — the position gate and the `humanOnly` gate are orthogonal.
 
-### `prdAfter` — prd tasking-order (enforced against `work/prds/tasked/`, NOT `tasks/done/`)
+### `taskedAfter` — prd tasking-order (enforced against `work/prds/tasked/`, NOT `tasks/done/`)
 
-`prdAfter: [other-prd]` on a prd is **distinct from** task `blockedBy`, and named differently because it gates a different verb against a different signal:
+`taskedAfter: [other-prd]` on a prd is **distinct from** task `blockedBy`, and named differently because it gates a different verb against a different signal:
 
 - **task `blockedBy`** gates **building** a task, resolved against `tasks/done/`.
-- **prd `prdAfter`** gates **tasking** a prd, resolved against `work/prds/tasked/` residence (i.e. the listed prds must already be tasked — reside in `work/prds/tasked/` — so this prd's emitted tasks can reference the real slugs of those prds' tasks in their `blockedBy`). This mirrors `blockedBy` → `tasks/done/` exactly: ordering resolves against folder residence, not a frontmatter marker.
+- **prd `taskedAfter`** gates **tasking** a prd, resolved against `work/prds/tasked/` residence (i.e. the listed prds must already be tasked — reside in `work/prds/tasked/` — so this prd's emitted tasks can reference the real slugs of those prds' tasks in their `blockedBy`). This mirrors `blockedBy` → `tasks/done/` exactly: ordering resolves against folder residence, not a frontmatter marker.
 
-It waits on **tasked-ness (`work/prds/tasked/`), not `tasks/done/`** on purpose: the reason B waits for A is that B's tasks need A's slugs to _exist_, which happens the moment A is tasked — not when A is fully built. Build-ordering between A's and B's actual work is then expressed where it belongs, in B's individual tasks' `blockedBy` (against `tasks/done/`). Enforced for the auto-tasker (it skips a prd whose `prdAfter` prds do not yet reside in `work/prds/tasked/`); a human may task anyway.
+It waits on **tasked-ness (`work/prds/tasked/`), not `tasks/done/`** on purpose: the reason B waits for A is that B's tasks need A's slugs to _exist_, which happens the moment A is tasked — not when A is fully built. Build-ordering between A's and B's actual work is then expressed where it belongs, in B's individual tasks' `blockedBy` (against `tasks/done/`). Enforced for the auto-tasker (it skips a prd whose `taskedAfter` prds do not yet reside in `work/prds/tasked/`); a human may task anyway.
 
 ### The `prd` link (required _when `covers` is set_)
 

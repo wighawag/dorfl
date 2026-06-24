@@ -88,14 +88,14 @@ export interface PrdCandidate {
 	slug: string;
 	humanOnly: HumanOnlyGate;
 	needsAnswers: HumanOnlyGate;
-	prdAfter: string[];
+	taskedAfter: string[];
 }
 
 /** Inputs to {@link taskablePrds}: the raw prd pool + the gate context. */
 export interface TaskablePrdsInput {
 	/** Every prd enumerated from `work/prds/ready/` (the auto-task candidate source). */
 	candidates: PrdCandidate[];
-	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `prdAfter`). */
+	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autoslice-gate`'s per-repo key). */
 	autoTask: boolean;
@@ -105,7 +105,7 @@ export interface TaskablePrdsInput {
  * Filter a raw prd pool down to the TASKABLE prds, in declaration order, using
  * `autoslice-gate`'s pure predicate ({@link resolveTaskingEligibility}) — NOT a
  * reinvented eligibility model. A prd is taskable iff `needsAnswers !== true &&
- * humanOnly !== true && autoTask` AND every `prdAfter` prd is already tasked.
+ * humanOnly !== true && autoTask` AND every `taskedAfter` prd is already tasked.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
  */
 export function taskablePrds(input: TaskablePrdsInput): PrdCandidate[] {
@@ -114,7 +114,7 @@ export function taskablePrds(input: TaskablePrdsInput): PrdCandidate[] {
 			resolveTaskingEligibility({
 				humanOnly: prd.humanOnly,
 				needsAnswers: prd.needsAnswers,
-				prdAfter: prd.prdAfter,
+				taskedAfter: prd.taskedAfter,
 				taskedSlugs: input.taskedSlugs,
 				autoTask: input.autoTask,
 			}).taskable,

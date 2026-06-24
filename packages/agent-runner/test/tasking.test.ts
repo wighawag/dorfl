@@ -52,7 +52,7 @@ function seedPrd(
 	fm: {
 		humanOnly?: boolean;
 		needsAnswers?: boolean;
-		prdAfter?: string[];
+		taskedAfter?: string[];
 		/**
 		 * Emit an INERT `tasked:` line (the marker was removed in
 		 * remove-tasked-marker-step-b — the parser ignores it). Only used to PROVE a
@@ -68,8 +68,8 @@ function seedPrd(
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
 	if (fm.needsAnswers) lines.push('needsAnswers: true');
-	if (fm.prdAfter && fm.prdAfter.length > 0) {
-		lines.push(`prdAfter: [${fm.prdAfter.join(', ')}]`);
+	if (fm.taskedAfter && fm.taskedAfter.length > 0) {
+		lines.push(`taskedAfter: [${fm.taskedAfter.join(', ')}]`);
 	}
 	if (fm.tasked) lines.push(`tasked: ${fm.tasked}`);
 	lines.push(
@@ -250,10 +250,10 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.message).toMatch(/needsAnswers/);
 	});
 
-	it('EXPLICIT still refuses an unsatisfied prdAfter (ordering binds regardless of explicit)', async () => {
+	it('EXPLICIT still refuses an unsatisfied taskedAfter (ordering binds regardless of explicit)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'dep');
-		seedPrd(repo, 'it', {prdAfter: ['dep']});
+		seedPrd(repo, 'it', {taskedAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -265,16 +265,16 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/prdAfter/);
+		expect(result.message).toMatch(/taskedAfter/);
 		// The autoTask policy is NEVER the named reason on the explicit path.
 		expect(result.message).not.toMatch(/autoTask/);
 	});
 
-	it('refuses when a prdAfter PRD is not yet tasked (names it)', async () => {
+	it('refuses when a taskedAfter PRD is not yet tasked (names it)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` exists but is NOT tasked; `it` prdAfter: [dep].
+		// `dep` exists but is NOT tasked; `it` taskedAfter: [dep].
 		seedPrd(repo, 'dep');
-		seedPrd(repo, 'it', {prdAfter: ['dep']});
+		seedPrd(repo, 'it', {taskedAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -286,16 +286,16 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		});
 		expect(result.outcome).toBe('gate-refused');
 		expect(result.message).toMatch(/dep/);
-		expect(result.message).toMatch(/prdAfter/);
+		expect(result.message).toMatch(/taskedAfter/);
 	});
 
-	it('passes the gate once the prdAfter PRD IS tasked', async () => {
+	it('passes the gate once the taskedAfter PRD IS tasked', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` is TASKED — it RESIDES in work/prds/tasked/ (the source of truth), not
-		// a `tasked:` marker in work/prds/ready/. `it`'s prdAfter resolves against that
+		// a `tasked:` marker in work/prds/ready/. `it`'s taskedAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
 		seedPrd(repo, 'dep', {inPrdTasked: true});
-		seedPrd(repo, 'it', {prdAfter: ['dep']});
+		seedPrd(repo, 'it', {taskedAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -307,14 +307,14 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 		expect(result.outcome).toBe('tasked');
 	});
 
-	it('STILL refuses when the prdAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
+	it('STILL refuses when the taskedAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// `dep` sits in work/prds/ready/ with a leftover (INERT) `tasked:` line but is NOT in
 		// prd-tasked/. Folder residence is the SOLE source of truth — the marker was
 		// removed in remove-tasked-marker-step-b, so the line is ignored and does NOT
-		// satisfy prdAfter.
+		// satisfy taskedAfter.
 		seedPrd(repo, 'dep', {tasked: '2026-06-01'});
-		seedPrd(repo, 'it', {prdAfter: ['dep']});
+		seedPrd(repo, 'it', {taskedAfter: ['dep']});
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,

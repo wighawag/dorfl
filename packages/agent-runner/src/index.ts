@@ -110,13 +110,13 @@ export {
 } from './eligibility.js';
 
 export type {
-	TaskAfterResult,
+	TaskedAfterResult,
 	TaskingEligibilityInput,
 	TaskingEligibilityResult,
 } from './tasking-eligibility.js';
 export {
 	resolveTaskGate,
-	resolveTaskAfter,
+	resolveTaskedAfter,
 	resolveTaskingEligibility,
 } from './tasking-eligibility.js';
 
