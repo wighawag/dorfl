@@ -15,3 +15,5 @@ _Suggested default: dropped — overtaken by events; CONTEXT.md no longer contai
 <!-- q1 fields: id=q1 disposition=dropped -->
 
 **Your answer** (write below this line):
+
+dropped (reason: superseded by current CONTEXT.md state). The `claim (CAS)` glossary entry now describes the per-item-lock-ref model (the claim writes nothing to `main`); no `direct-main micro-commit` / ledger-transition-seam text remains to rewrite, per the item's own applied-answers re-verification.

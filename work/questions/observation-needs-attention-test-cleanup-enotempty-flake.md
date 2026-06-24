@@ -15,3 +15,5 @@ _Suggested default: promote-task — author a small slice in `work/tasks/` to (a
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task (translating the human's already-applied `promote-slice` intent into the protocol's vocabulary). Author a small slice that makes `cleanup()` in `test/helpers/gitRepo.ts` await in-flight git/fs ops and/or retry `rmSync` on ENOTEMPTY (the real `rmSync` is at `:150`, not the stale `:102`), then delete this observation once the slice is queued.

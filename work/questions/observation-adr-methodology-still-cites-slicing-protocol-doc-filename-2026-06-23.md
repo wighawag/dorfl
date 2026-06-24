@@ -11,3 +11,5 @@ _Suggested default: dropped — superseded by current reality (no dangling filen
 <!-- q1 fields: id=q1 disposition=dropped -->
 
 **Your answer** (write below this line):
+
+dropped (reason: superseded by current docs state). Verified: `grep -n 'SLICING-PROTOCOL' docs/adr/methodology-and-skills.md` returns no matches; line 81 already cites `TASKING-PROTOCOL.md`; the residual `slicing`/`slice` prose (lines 38/44/49) is intentional historical decision-record text grandfathered by the §0 forward note at line 14. No dangling filename and no ADR sweep needed.

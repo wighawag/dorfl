@@ -19,3 +19,5 @@ _Suggested default: promote-task, option (a) — serialise this specific test (e
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task, option (a) — serialise this specific test (e.g. `describe.sequential` or run outside the parallel pool), mirroring the `serialise-review-gate-test-under-parallel-load` precedent. Option (b) was already tried in PR #90 and the flake survived; the product CAS is sound, so this is a test-only concern.

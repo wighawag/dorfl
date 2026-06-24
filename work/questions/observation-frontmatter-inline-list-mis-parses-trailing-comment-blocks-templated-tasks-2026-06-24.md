@@ -11,3 +11,5 @@ _Suggested default: dropped — the signal has fully landed (code fix + the requ
 <!-- q1 fields: id=q1 disposition=dropped -->
 
 **Your answer** (write below this line):
+
+dropped (reason: resolved in-place 2026-06-24). The quote-aware `inlineListInner()` fix shipped, the parser-template drift guard and other fixtures were added in `test/frontmatter.test.ts`, and the gate is green (build + 2593 tests + format:check). Nothing left for a follow-up task or ADR.

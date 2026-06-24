@@ -14,3 +14,5 @@ _Suggested default: delete (ratify the already-applied human answer; no follow-u
 <!-- q1 fields: id=q1 disposition=delete -->
 
 **Your answer** (write below this line):
+
+delete. Ratify the already-applied human answer: the two Gate-2 nits (cosmetic 'slicing'->'tasking' in three test files + missing `## Decisions` block on a landed PR) need no follow-up task and no ADR. Git history is the archive.

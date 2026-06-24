@@ -24,6 +24,8 @@ _Suggested default: delete — purely a ratification note for a justified, gate-
 
 **Your answer** (write below this line):
 
+delete. Ratify the gate-forced edit of `docs/ci/advance-loop.yml.template` (the workflow SEED, not a `.github/workflows/*` file): `advance-ci-template.test.ts:36-37,106` asserts `/\.repos\[\]\.briefs\[\]\?/`, so leaving the seed on `.prds[]` would have failed the gate. Justified, no follow-up action.
+
 ## Q3
 
 **Nit 3 — ratify the agent's side-output observation `work/notes/observations/recursive-test-run-occasional-flake-2026-06-23.md` capturing a transient `pnpm -r test` flake. The bucket is correct (observation = spotted/unverified, append-only) and it self-scopes as 'not in this task'. It was simply not listed in a Decisions block. Accept as ratified (DELETE the nit) or keep as a standing signal?**
@@ -35,6 +37,8 @@ _Suggested default: delete — capturing a flake signal is the contract of the o
 <!-- q3 fields: id=q3 disposition=delete -->
 
 **Your answer** (write below this line):
+
+delete. Ratify the side-output observation `recursive-test-run-occasional-flake-2026-06-23.md`: the bucket is correct (observation = spotted/unverified, append-only) and it self-scopes as out-of-task. Capturing a flake signal is exactly the observations-bucket contract; no action beyond noting it was correct.
 
 ## Q4
 

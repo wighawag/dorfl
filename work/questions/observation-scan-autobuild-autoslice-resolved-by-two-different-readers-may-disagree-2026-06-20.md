@@ -18,3 +18,5 @@ _Suggested default: promote-task — author the slice exactly as the body's 'App
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task (translating the applied `promote-slice` answer into the engine's vocabulary). Author the slice the body's Applied-answers section endorses: in `scan.ts` switch the autoBuild gate's bare-mirror branch from `resolveRepoConfig` to `resolveRepoConfigFromMirror` so both pool gates share the mirror-ref view, plus a regression test where a mirror's committed `.dorfl.json` overrides one gate and both pool gates are asserted to observe the same committed view.

@@ -12,6 +12,8 @@ _Suggested default: dropped — superseded by `briefs/tasked/land-time-reverify-
 
 **Your answer** (write below this line):
 
+dropped — superseded by `briefs/tasked/land-time-reverify-and-parallel-merge-ceiling.md`, which cites this observation in its launch snapshot, names the same seams (`integrateLock`, `mergeRetries`, the cross-job CAS loop), and has already resolved the decision (mergeRetries floor + ref-based cross-job land-lock accelerator + GitHub Actions concurrency as optional host sugar) into its planned ADR `land-is-rebase-reverify-advance-one-primitive-two-frontends` and stories #5/#13. Record `reason: superseded by briefs/tasked/land-time-reverify-and-parallel-merge-ceiling.md` in the task body before routing to `tasks/cancelled/`. Q2 and Q3 are moot under this disposition (they only apply if the task is KEPT).
+
 ## Q2
 
 **If instead this task is KEPT as a standalone item (rejecting the supersession above), what is its precise buildable scope: (a) author the ADR alone (`land-is-rebase-reverify-advance-one-primitive-two-frontends`, or a narrower `cas-is-the-cross-runner-queue` ADR), (b) implement the scaled-`mergeRetries` precedence-chain config NOW (flag > env > per-repo > global > default, default unchanged), (c) implement the portable ref-based cross-job land-lock NOW (`refs/dorfl/land-lock` CAS-claim with a TTL/stale-reclaim story), or (d) some combination — and how does that scope avoid colliding with the brief's slices once it produces them?**

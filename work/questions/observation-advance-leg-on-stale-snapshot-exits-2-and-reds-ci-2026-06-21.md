@@ -14,3 +14,5 @@ _Suggested default: promote-task — the human's recorded answer was `promote-sl
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task (the human's recorded `promote-slice` answer maps to `promote-task` in the engine's vocabulary). The slice carries: (a) the message-disambiguation fix at `src/claim-cas.ts:270`/`:332` distinguishing terminal / staged-but-not-pool / nowhere (unconditional); and (b) a `--quiet-if-gone` (or equivalent) flag the CI matrix leg sets, mapping the already-terminal case to a NEW distinct tolerated non-zero exit (parallel to `contended`=exit 3) while the interactive default stays loud exit 2.

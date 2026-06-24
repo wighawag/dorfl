@@ -11,3 +11,5 @@ _Suggested default: delete — the single instance has been fixed on main and a 
 <!-- q1 fields: id=q1 disposition=delete -->
 
 **Your answer** (write below this line):
+
+delete. The single offending instance was fixed on main and a fresh scan finds no remaining live-inbox test assertions; the audit is effectively discharged by that one fix. The hazard pattern stays recorded in the audit-already-done note. Re-promote to a real task only if a later scan surfaces a pattern the grep missed.

@@ -12,6 +12,8 @@ _Suggested default: delete — re-check shows the diff is now clean; the finding
 
 **Your answer** (write below this line):
 
+delete. Re-check confirms the drift is gone: `diff skills/setup/protocol/WORK-CONTRACT.md work/protocol/WORK-CONTRACT.md` produces no output. The finding is stale; nothing to fix.
+
 ## Q2
 
 **Nit 2 — five non-obvious design decisions from the `prompt-guidance-testfirst-item-override` slice were not recorded in a `## Decisions` block. How should they be triaged: (a) DOTTED scalar `promptGuidance.testFirst` via widening the top-level key regex to `[A-Za-z0-9_.]+` (frontmatter.ts:306) vs. nested YAML mapping; (b) brief lookup order `briefs/ready/<slug>.md` then `briefs/tasked/<slug>.md` (prompt.ts:`findBriefPath`); (c) a task with no `brief:` may still carry the override (chore symmetry with `humanOnly`); (d) a missing brief file is SILENT fall-through to repo policy (no error/warning); (e) `dorfl prompt` now performs additional file I/O per invocation (re-reads task and possibly a brief file). Promote one ADR covering all five, promote individual ADRs/tasks, keep open for later, or accept as ratified (record in a follow-up Decisions note) and delete?**
