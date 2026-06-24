@@ -11,3 +11,5 @@ _Suggested default: promote-task — small, mechanical, two-part fix (log line +
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task — a small mechanical two-part fix: correct the misleading runtime log line at `integration-core.ts:2042` and sweep the ~30 stale `work/observations/` JSDoc/comment paths to `work/notes/observations/`. Either mint a fresh task or fold into the existing folder-taxonomy-reorg PRD follow-up so the comment-residue tail ships with the rest of the reorg.

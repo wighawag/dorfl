@@ -11,3 +11,5 @@ _Suggested default: promote-task — mint a task to either bump `testTimeout` on
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task — mint a task to either bump `testTimeout` on the git-integration test files (or their vitest project) to a value comfortable under loaded CI, or cap the suite's pool size, so a loaded box stops flaking these. (This is the same signal the build agent captured during the surface-promote-prd task — one observation, one task.)

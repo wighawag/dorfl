@@ -11,3 +11,5 @@ _Suggested default: promote-adr — finding (2) ('a leak-fence task whose fence 
 <!-- q1 fields: id=q1 disposition=promote-adr -->
 
 **Your answer** (write below this line):
+
+keep — the observation itself is the durable record of these two non-blocking nits, and no code/doc change is owed (the commit is landed; both in-scope calls were sound). The "leak-fence ships assertions-only when the fence is already structurally closed" / "optional PRD-decision guards land with their keystone task, not the fence task" conventions are a one-off shape so far (n=1); promoting an ADR now would over-formalise. Re-promote to promote-adr only if the same nit recurs on a future fence-style task.

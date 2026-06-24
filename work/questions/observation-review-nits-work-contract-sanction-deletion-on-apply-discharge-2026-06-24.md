@@ -19,3 +19,5 @@ _Suggested default: promote-task — a single small cleanup task ('WORK-CONTRACT
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task — one small cleanup task on `WORK-CONTRACT.md:70` covering nits #1 + #3 (drop `duplicate` from the disposition list; anchor the self-quoted clause; verify the `promote-prd` reference is consistent) and dropping stale nit #2 in the same motion. Edit the SOURCE `skills/setup/protocol/` + mirror byte-identically into `work/protocol/` per AGENTS.md.

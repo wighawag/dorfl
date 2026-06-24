@@ -17,3 +17,5 @@ _Suggested default: promote-task — file a small doc-fix task to tighten the qu
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task — file a small doc-fix task to tighten the quoted error string in `skills/drive-tasks/SKILL.md` (match it exactly to what `do` emits, or mark it illustrative); a 1-line change whose durable home is the SKILL itself, not this note.

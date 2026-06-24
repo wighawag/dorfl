@@ -11,3 +11,5 @@ _Suggested default: keep — record the flake; promote to a task only once it re
 <!-- q1 fields: id=q1 disposition=keep -->
 
 **Your answer** (write below this line):
+
+keep — record the flake as a watch-item. It is rare, self-clearing on rerun, and the suspected root cause (ldenv mode-name handling under concurrent invocation) is UPSTREAM of this repo, so a task now would chase an upstream cause on thin evidence. Promote to a task only once it recurs frequently enough to actually red the gate.

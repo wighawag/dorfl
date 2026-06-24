@@ -12,6 +12,8 @@ _Suggested default: dropped — ratified as good capture hygiene; the captured o
 
 **Your answer** (write below this line):
 
+dropped — ratified as good capture hygiene; the captured observation `git-integration-tests-time-out-under-parallel-load-2026-06-24` is a legitimate inbox signal and is triaged on its own surface pass (it is being promoted to a task), so THIS nit needs no further action.
+
 ## Q2
 
 **What becomes of the unreachable-assertion nit in `triage-gate.test.ts` (the US#5 `if (emit.auto) { expect(['duplicate','map']).toContain(emit.kind); }` block guarded by a preceding `expect(emit.auto).toBe(false)`)?**
@@ -23,3 +25,5 @@ _Suggested default: dropped — harmless and arguably self-documenting; not wort
 <!-- q2 fields: id=q2 disposition=dropped -->
 
 **Your answer** (write below this line):
+
+dropped — the guarded `if (emit.auto) { ... }` assertion is harmless and self-documenting (it encodes the US#5 invariant that `observationTriage: auto` NEVER picks promote-prd, behind the `expect(emit.auto).toBe(false)` it sits under). Not worth a task.

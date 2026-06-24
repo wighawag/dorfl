@@ -11,3 +11,5 @@ _Suggested default: promote-task — a sibling one-line doc-vocab fix task (e.g.
 <!-- q1 fields: id=q1 disposition=promote-task -->
 
 **Your answer** (write below this line):
+
+promote-task — a sibling one-line doc-vocab fix task (e.g. `resolvecontinuecontext-stale-backlog-vocab-doc-fix`) mirroring the just-landed `resolvetask-stale-backlog-vocab-doc-fix`: the stale-"backlog"-means-pool hazard, the fix, and the rationale are identical and already vetted. Comments only, no behaviour change.
