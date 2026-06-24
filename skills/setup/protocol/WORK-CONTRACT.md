@@ -21,8 +21,10 @@ work/
   # ---- tasks/ — the BUILD board: DURABLE status IS the folder; FLOW via `git mv` on `main` ----
   # Task lifecycle (staging → pool → terminal):
   tasks/
-    backlog/<slug>.md      # STAGING: a task not yet admitted to the agent pool
-                           #   (review-first / untrusted output lands here; a human promotes)
+    backlog/<slug>.md      # STAGING: a task not yet admitted to the agent pool —
+                           #   review-first admission AND the human-control position
+                           #   (untrusted output lands here; a human promotes, OR drives
+                           #   it IN PLACE via `do --allow-backlog` — never promote-then-drive)
     ready/<slug>.md        # the AGENT POOL: built tasks, grabbable items eligible to claim
     done/<slug>.md         # completed (moved here durably on `main` at integration)
     cancelled/<slug>.md    # the task regime's "won't-proceed" terminal (lightweight ADR);
@@ -32,8 +34,10 @@ work/
   # ---- prds/ — the PRD lifecycle: DURABLE status IS the folder; FLOW via `git mv` on `main` ----
   # Prd lifecycle (staging → pool → tasked / terminal):
   prds/
-    proposed/<slug>.md     # STAGING: a prd not yet admitted to the auto-task pool
-                           #   (untrusted/agent-authored output lands here; a human promotes)
+    proposed/<slug>.md     # STAGING: a prd not yet admitted to the auto-task pool —
+                           #   review-first admission AND the human-control position
+                           #   (untrusted/agent-authored output lands here; a human promotes,
+                           #   OR tasks it IN PLACE — TASKING-PROTOCOL.md §6 — never promote-then-task)
     ready/<slug>.md        # the AUTO-TASK POOL: prds eligible to be tasked into tasks
     tasked/<slug>.md       # TASKED, resting prds — the prd `done/` analogue; the
                            #   SOURCE OF TRUTH for tasked-ness (see note below)
@@ -217,6 +221,7 @@ Authority: a per-item override binds the AGENT exactly like the gate-family over
 Three orthogonal axes, each meaning EXACTLY one thing:
 
 - **POSITION (folder, runner-deterministic, STRUCTURAL).** Whether a task is in the agent POOL (`work/tasks/ready/`) or in STAGING (`work/tasks/backlog/`) is computed by the runner from unforgeable inputs (the `originTrust` stamp, the per-repo placement policy, explicit operator flags). "A human should review this before an agent acts on it" is encoded HERE — the task is BIRTHED in `work/tasks/backlog/` (not eligible) and a human promotes the approved ones into `work/tasks/ready/`. The agent CREATES only in the staging folder; the runner OWNS every move + promotion.
+  - **Staging is review-first admission AND the human-control position — the same folder carries BOTH.** A staging folder (`work/tasks/backlog/`, `work/prds/proposed/`) is not just "not-yet-reviewed"; it is also where an item rests so a HUMAN can drive it WITHOUT an autonomous claimer competing. Promoting an item into the POOL (`work/tasks/ready/`, `work/prds/ready/`) is EXACTLY what makes it claimable-by-anyone: the moment it lands in the pool, an autonomous claimer can grab it — a CI `advance` leg or a local `run` daemon (both are pool-only by construction). So **promote-then-drive opens a COMPETITION WINDOW** (the autonomous claimer races the human who meant to drive the work). The safe path is the inverse: a human who wants to drive an item themselves DRIVES IT IN PLACE from staging, and promotes only when (if ever) they want to hand it to the pool. The two drive-in-place mechanisms: a PRD is **tasked in place** from `work/prds/proposed/` (TASKING-PROTOCOL.md §6), and a task is **built in place** from `work/tasks/backlog/` via `do --allow-backlog`. "I want to drive this myself" therefore means "drive it in place", never "promote, then race to claim it first".
 - **NATURE (`humanOnly`, agent/human judgement, ADVISORY).** Task `humanOnly: true` means "an agent must NEVER AUTONOMOUSLY take this BY NATURE" — the rare hard case (release/secrets/security/AGENTS.md-rule) that **survives even when the task resides in the pool `work/tasks/ready/`**. The autonomy gate predicate above is exactly this: a `humanOnly: true` task is never AUTONOMOUSLY claimed (it drops out of `run`/`advance`/auto-pick selection and the conductor's READY set), even from `work/tasks/ready/`. It is NOT, however, unbuildable: an EXPLICIT human-driven `dorfl do task:<slug>` (or `claim`) STILL builds it — the readiness guard does not consult `humanOnly` on the human path (a human is never bound by `humanOnly`; it means "a human must DRIVE this"), and explicit dispatch gates on the item's own readiness, not the autonomy policy (the pool gates the policy, not the explicit claim). So the invariant is precise: `humanOnly` gates AUTONOMOUS SELECTION, never an explicit human action. Prd `humanOnly` gates auto-tasking; no folder substitute, because the tasker's input is a single prd — it must be flagged in-band.
   - As a corollary, `humanOnly` CAN be used off-label as a "keep CI/`run`/auto-pick OFF this task while I drive it by hand" latch (it excludes the task from every autonomous claimer, while explicit `do task:<slug>` still builds it). PREFER POSITION (leave it in staging `work/tasks/backlog/`) for that intent; reserve the flag for the genuine never-by-nature case. If you do use it as a latch, strip it once the task lands so it does not falsely mark the done record never-by-nature.
 - **DISCOVERED (`needsAnswers`, agent judgement, ADVISORY).** Open questions block autonomous work.
