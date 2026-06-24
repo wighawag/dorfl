@@ -1,10 +1,11 @@
 ---
-title: Stale `work/observations/` path in a runtime LOG message + ~30 JSDoc/comments after the notes/ taxonomy reorg (misleads agents into the wrong folder)
-date: 2026-06-24
-status: open
-noticedDuring: dogfood of the observation-discharge PRD (a prior agent wrote a note into work/observations/ instead of work/notes/observations/)
-needsAnswers: true
+title: stale-work-observations-path-in-log-and-jsdoc-after-notes-taxonomy-reorg-2026-06-24
+slug: stale-work-observations-path-in-log-and-jsdoc-after-notes-taxonomy-reorg-2026-06-24
+needsAnswers: false
+blockedBy: []
 ---
+
+## What to build
 
 ## What I noticed
 
