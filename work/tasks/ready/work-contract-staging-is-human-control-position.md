@@ -4,6 +4,7 @@ slug: work-contract-staging-is-human-control-position
 prd: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: []
 covers: [6]
+humanOnly: true
 ---
 
 ## What to build
