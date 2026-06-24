@@ -249,9 +249,9 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 		expect(
 			existsSync(join(repo, 'work', 'questions', 'observation-dup.md')),
 		).toBe(false);
-		// Recommend-delete + triaged:duplicate marker (the agent never auto-deletes).
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(/^triaged:\s*duplicate/m.test(body)).toBe(true);
+		// A duplicate discharges BY DELETION (a redundant copy of an already-captured
+		// signal) — no `triaged:duplicate` resting stamp lingers; the note is gone.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 	});
 
 	it('ask ⇒ surfaces the question, NEVER consults the triage gate (the old autoTriage:false)', async () => {
