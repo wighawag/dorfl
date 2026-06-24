@@ -3,6 +3,7 @@ title: the same-slug promote CAS-race test in advance-triage.test.ts STILL flake
 date: 2026-06-13
 status: open
 needsAnswers: false
+triaged: keep
 ---
 
 ## What was observed
@@ -37,3 +38,11 @@ promote-slice, option (a): serialise the test (mirroring the `serialise-review-g
 
 Promoted to a new backlog task `work/tasks/ready/triage-cas-race-test-still-flakes-under-parallel-load.md` (a human answered
 "promote"). This observation is resolved; the new item carries the work.
+
+## Triaged: maps onto an existing item
+
+This observation maps UNAMBIGUOUSLY onto `task:triage-cas-race-test-still-flakes-under-parallel-load` (already
+covered there), so it is settled — marked triaged:keep and dropped out
+of the candidate pool (never re-asked).
+
+Reason: Observation has already been triaged and promoted to the same-named task in work/tasks/ready/; its body explicitly says 'Triaged: promoted' and points to that task. Unambiguous map; no human judgement required.
