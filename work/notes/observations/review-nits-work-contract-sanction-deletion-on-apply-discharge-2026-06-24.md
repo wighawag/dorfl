@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'work-contract-sanction-deletion-on-app
 date: 2026-06-24
 status: open
 reviewOf: work-contract-sanction-deletion-on-apply-discharge
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
