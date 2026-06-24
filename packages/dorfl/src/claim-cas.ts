@@ -83,6 +83,19 @@ export interface ClaimCasOptions {
 	 * the guard was overridden. Only meaningful with `humanPath`.
 	 */
 	override?: boolean;
+	/**
+	 * `--allow-backlog` (prd
+	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): WIDEN the claimable
+	 * predicate to ALSO accept a `tasks/backlog/`-resident body (staging), so a
+	 * human can drive a staged task in place WITHOUT promoting it to the pool. The
+	 * claim STAYS a pure per-item-lock acquire \u2014 it writes NOTHING to `main` and
+	 * does NOT `git mv` the body (the body stays in `tasks/backlog/`). Competitor
+	 * exclusion is the HELD LOCK (the pool scan subtracts held slugs folder-
+	 * agnostically), not the folder, so no move is needed. Default off \u21d2 the
+	 * predicate is "in `tasks/ready/` on `main` AND no lock held" exactly as today;
+	 * reachable ONLY via the explicit flag, never `run`/auto-pick/advance.
+	 */
+	allowBacklog?: boolean;
 	/** Environment for child git processes (identity etc.). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes (claim.sh writes these to stderr). */
@@ -248,7 +261,25 @@ async function runClaim(
 	}
 
 	const backlog = workItemRel('tasks-ready', `${slug}.md`);
+	const staged = workItemRel('tasks-backlog', `${slug}.md`);
 	const branch = workBranchRef('task', slug);
+
+	/**
+	 * The CLAIMABLE-RESIDENCE half of the predicate: the body rests in the pool
+	 * (`tasks/ready/`) on `<arbiter>/main`, OR \u2014 under `--allow-backlog` \u2014 in
+	 * `tasks/backlog/` (staging). The held-lock half is the create-only acquire.
+	 * Folder-agnostic exclusion is the lock, never the folder, so a staged body is
+	 * a legitimate claimable residence under the flag; otherwise staging is invisible.
+	 */
+	async function bodyRestsClaimable(): Promise<boolean> {
+		if (await catFileExists(`${arbiter}/main:${backlog}`, cwd, env)) {
+			return true;
+		}
+		return (
+			options.allowBacklog === true &&
+			(await catFileExists(`${arbiter}/main:${staged}`, cwd, env))
+		);
+	}
 
 	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (prd
 	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
@@ -259,15 +290,21 @@ async function runClaim(
 	// a protected-`main` repo can be claimed (claim touches no protected ref).
 	//
 	// A dry-run takes no lock (it mutates nothing) and just reports it WOULD claim.
+	/** The not-found diagnostic, naming the pool (and staging under the flag). */
+	const notFoundFallback =
+		options.allowBacklog === true
+			? `neither '${backlog}' nor '${staged}' found on ${arbiter}/main (already done/removed, or wrong slug).`
+			: `'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`;
+
 	if (dryRun) {
 		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-		if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
+		if (!(await bodyRestsClaimable())) {
 			const message = await lostMessage(
 				slug,
 				arbiter,
 				cwd,
 				env,
-				`'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`,
+				notFoundFallback,
 			);
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
@@ -316,20 +353,23 @@ async function runClaim(
 	}
 
 	try {
-		// CLAIMABLE PREDICATE (US #15): "in `backlog/` on `main` AND no lock held". The
-		// HELD-LOCK half is the create-only acquire above (a held slug already lost the
-		// race). Confirm the `backlog/` residence here — the body STAYS in `backlog/`
-		// (claim no longer moves it), so a `done`/absent item is not claimable: release
-		// the lock we just took (it never protected any in-flight work) and lose (exit 2).
+		// CLAIMABLE PREDICATE (US #15): "in `tasks/ready/` (the pool) on `main` AND no
+		// lock held" \u2014 widened under `--allow-backlog` to ALSO accept a
+		// `tasks/backlog/`-resident body (staging), so a human can drive a staged task
+		// in place. The HELD-LOCK half is the create-only acquire above (a held slug
+		// already lost the race). Confirm the residence here \u2014 the body STAYS where it
+		// rested (claim moves nothing, even under the flag), so a `done`/absent item is
+		// not claimable: release the lock we just took (it never protected any in-flight
+		// work) and lose (exit 2).
 		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-		if (!(await catFileExists(`${arbiter}/main:${backlog}`, cwd, env))) {
+		if (!(await bodyRestsClaimable())) {
 			await releaseHeldLock();
 			const message = await lostMessage(
 				slug,
 				arbiter,
 				cwd,
 				env,
-				`'${backlog}' not found on ${arbiter}/main (already done/removed, or wrong slug).`,
+				notFoundFallback,
 			);
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};

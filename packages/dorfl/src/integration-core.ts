@@ -11,6 +11,7 @@ import {join} from 'node:path';
 import {
 	LEDGER_STATUS_FOLDERS,
 	type LedgerStatusFolder,
+	type WorkFolderKey,
 	workItemPath,
 	workItemRel,
 	workFolderPath,
@@ -272,11 +273,15 @@ export interface IntegrationCoreInput {
 	 */
 	branch?: string;
 	/**
-	 * Which folder the item is being completed FROM: `backlog` (the normal,
+	 * Which folder the item is being completed FROM: `tasks-ready` (the normal,
 	 * freshly-built path — since claim no longer moves the body, a freshly-built
-	 * task RESTS in `backlog/` on `main`, task
+	 * task RESTS in the pool on `main`, task
 	 * `cutover-claim-body-stays-and-complete-sources-from-backlog`),
-	 * `needs-attention` (the runner-owned recovery path), or `done` (the
+	 * `tasks-backlog` (the `--allow-backlog` staged-drive path, prd
+	 * `do-allow-backlog-drive-staged-tasks-without-promotion`: a human drove a
+	 * STAGED task in place, so the done-move goes `tasks/backlog/ → tasks/done/`
+	 * DIRECTLY — the explicit drive IS the promotion, never bouncing through the
+	 * pool), `needs-attention` (the runner-owned recovery path), or `done` (the
 	 * CONTINUE-BUILD path, task `complete-builds-on-already-done-moved-continue`).
 	 * The HEAD resolved this; the core uses it for the done-move source folder and
 	 * the recovery rebase. IGNORED when {@link lifecycle} is set (a non-task move).
@@ -299,7 +304,12 @@ export interface IntegrationCoreInput {
 	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
 	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source: 'tasks-ready' | 'in-progress' | 'needs-attention' | 'done';
+	source:
+		| 'tasks-ready'
+		| 'tasks-backlog'
+		| 'in-progress'
+		| 'needs-attention'
+		| 'done';
 	/**
 	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
 	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
@@ -2208,7 +2218,25 @@ async function stagedCaptureNotes(
  * transient `in-progress`/`needs-attention` are GONE from `main`'s tree (they are
  * per-item lock-ref state now).
  */
-/** The result of {@link readArbiterLedgerPlacement}. */
+/**
+ * The folders {@link readArbiterLedgerPlacement} scans for a slug's source on the
+ * arbiter: the durable `LEDGER_STATUS_FOLDERS` (`tasks-ready`/`done`/`cancelled`)
+ * PLUS `tasks-backlog` (staging). Staging is included ONLY for the arbiter-side
+ * source RESOLUTION of a `--allow-backlog` done-move (prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion`) and the one-slug-one-
+ * folder guard over the malformed "same slug in `tasks/ready/` AND `tasks/backlog/`"
+ * state; it is DELIBERATELY NOT added to the shared `LEDGER_STATUS_FOLDERS` (which
+ * ledger-lint's duplicate detection + the sibling-ledger reconcile reuse and which
+ * deliberately omits the non-resting staging folder).
+ */
+const ARBITER_PLACEMENT_FOLDERS = [
+	...LEDGER_STATUS_FOLDERS,
+	'tasks-backlog',
+] as const satisfies readonly WorkFolderKey[];
+
+/** One of the folders the arbiter placement read scans. */
+type ArbiterPlacementFolder = (typeof ARBITER_PLACEMENT_FOLDERS)[number];
+
 /** The result of {@link readArbiterLedgerPlacement}. */
 interface ArbiterLedgerPlacement {
 	/**
@@ -2239,6 +2267,15 @@ interface ArbiterLedgerPlacement {
  * FAILS LOUD (returns an `error`) rather than silently pick one, UNLESS it is
  * PROVABLY SAFE (every copy is byte-identical, so the canonical `done/`
  * destination is unambiguous), mirroring the manual `279b542` cleanup.
+ *
+ * It scans {@link ARBITER_PLACEMENT_FOLDERS} — the durable `LEDGER_STATUS_FOLDERS`
+ * PLUS `tasks-backlog`, so a `--allow-backlog` staged drive (prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion`) whose done-move sources
+ * from `tasks/backlog/` is DISCOVERED here too (the arbiter is the authority for
+ * the actual source folder; the local `source` is the fallback). Including staging
+ * also makes the one-slug-one-folder guard cover the malformed "same slug in both
+ * `tasks/ready/` and `tasks/backlog/`" state (the prd's decision 5): it FAILS LOUD
+ * rather than the resolver silently arbitrating a collision the contract forbids.
  */
 function readArbiterLedgerPlacement(
 	cwd: string,
@@ -2247,8 +2284,8 @@ function readArbiterLedgerPlacement(
 	env: NodeJS.ProcessEnv | undefined,
 ): ArbiterLedgerPlacement {
 	const arbiterRef = `${arbiter}/main`;
-	const placements: {folder: LedgerStatusFolder; blob: string}[] = [];
-	for (const folder of LEDGER_STATUS_FOLDERS) {
+	const placements: {folder: ArbiterPlacementFolder; blob: string}[] = [];
+	for (const folder of ARBITER_PLACEMENT_FOLDERS) {
 		const path = workItemRel(folder, `${slug}.md`);
 		const ls = run('git', ['ls-tree', arbiterRef, path], cwd, {env});
 		const line = ls.stdout.trim();
@@ -2468,7 +2505,11 @@ async function reconcileDivergentDoneMove(params: {
 	slug: string;
 	branch: string;
 	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
-	localSource: 'tasks-ready' | 'in-progress' | 'needs-attention';
+	localSource:
+		| 'tasks-ready'
+		| 'tasks-backlog'
+		| 'in-progress'
+		| 'needs-attention';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<boolean> {
@@ -2495,9 +2536,12 @@ async function reconcileDivergentDoneMove(params: {
 	// Capture the slug's ledger content (our tip's done/ copy, or any source copy)
 	// BEFORE we reset — it is what lands in `done/`.
 	let ledgerContent: string | undefined;
-	const captureOrder: readonly LedgerStatusFolder[] = [
+	// Scan the ARBITER-placement set (durable folders PLUS `tasks-backlog`) so a
+	// `--allow-backlog` staged-drive's source copy is captured too. `done` first so
+	// our tip's already-moved copy wins.
+	const captureOrder: readonly ArbiterPlacementFolder[] = [
 		'done',
-		...LEDGER_STATUS_FOLDERS,
+		...ARBITER_PLACEMENT_FOLDERS,
 	];
 	for (const folder of captureOrder) {
 		const abs = workItemPath(cwd, folder, slug);
@@ -2528,7 +2572,10 @@ async function reconcileDivergentDoneMove(params: {
 	if (ledgerContent !== undefined) {
 		writeFileSync(donePath, ledgerContent);
 	}
-	for (const folder of LEDGER_STATUS_FOLDERS) {
+	// Sweep every non-`done` copy the arbiter could hold the slug in, INCLUDING
+	// `tasks-backlog` (a `--allow-backlog` staged drive), so the move is a MOVE not
+	// a copy.
+	for (const folder of ARBITER_PLACEMENT_FOLDERS) {
 		if (folder === 'done') {
 			continue;
 		}

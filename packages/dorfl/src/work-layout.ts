@@ -187,7 +187,10 @@ export function isWorkItemFile(name: string): boolean {
  * The TASK-RESOLUTION folders `resolveTask` (prompt.ts) walks, in precedence
  * order: `in-progress` over `tasks-ready`, with `done` appended only behind the
  * stranded-continue gate. Order is load-bearing — kept exactly as the original
- * union/array.
+ * union/array. (`tasks-backlog` is NOT in this DEFAULT order: it is appended at
+ * the LOWEST priority ONLY behind the explicit `--allow-backlog` flag, prd
+ * `do-allow-backlog-drive-staged-tasks-without-promotion` — see
+ * {@link TaskResolutionFolder}.)
  */
 export const TASK_RESOLUTION_FOLDERS = [
 	'in-progress',
@@ -195,8 +198,16 @@ export const TASK_RESOLUTION_FOLDERS = [
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the folders a task can be RESOLVED from (prompt.ts `TaskFolder`). */
-export type TaskResolutionFolder = (typeof TASK_RESOLUTION_FOLDERS)[number];
+/**
+ * One of the folders a task can be RESOLVED from (prompt.ts `TaskFolder`): the
+ * default {@link TASK_RESOLUTION_FOLDERS} PLUS `tasks-backlog`, which is reachable
+ * ONLY behind the explicit `--allow-backlog` flag (never on a default resolution).
+ * Kept off the default-order array on purpose so no autonomous path resolves
+ * staging.
+ */
+export type TaskResolutionFolder =
+	| (typeof TASK_RESOLUTION_FOLDERS)[number]
+	| 'tasks-backlog';
 
 /**
  * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside

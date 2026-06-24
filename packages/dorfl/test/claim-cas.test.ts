@@ -160,6 +160,66 @@ describe('performClaim — not claimable (exit 2)', () => {
 	});
 });
 
+describe('performClaim — --allow-backlog widens the claimable predicate', () => {
+	// prd `do-allow-backlog-drive-staged-tasks-without-promotion`: claim stays a
+	// PURE lock — it accepts a `tasks/backlog/`-resident body under the flag but
+	// writes NOTHING to main and moves nothing.
+	it('WITHOUT the flag: a staged-only task is NOT claimable (exit 2, lost)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		const result = await performClaim({
+			slug: 'staged',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(2);
+		expect(result.outcome).toBe('lost');
+		expect(result.message).toMatch(/not found on/);
+		// No lock was left behind (the claimability re-check released it).
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
+	});
+
+	it('WITH the flag: claims a staged task, holds the lock, leaves the body in tasks/backlog/ (NO main move)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const mainBefore = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		const result = await performClaim({
+			slug: 'staged',
+			cwd: repo,
+			arbiter: 'arbiter',
+			allowBacklog: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('claimed');
+		// The body STAYS in tasks/backlog/ — claim wrote nothing to main, moved nothing.
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(true);
+		expect(existsOnArbiterMain(repo, 'backlog', 'staged')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'in-progress', 'staged')).toBe(false);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		expect(gitIn(['rev-parse', 'arbiter/main'], repo).trim()).toBe(mainBefore);
+		// The per-item lock IS the claim.
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([
+			'task-staged',
+		]);
+	});
+
+	it('a protected-main repo can still be claimed under the flag (claim touches no main)', async () => {
+		// The claim acquires only the per-item lock ref; main is never pushed, so a
+		// protected `main` cannot reject it. We assert the proxy: NO main move.
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		const result = await performClaim({
+			slug: 'staged',
+			cwd: repo,
+			arbiter: 'arbiter',
+			allowBacklog: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(true);
+	});
+});
+
 describe('performClaim — usage / env errors (exit 1)', () => {
 	it('refuses on a dirty working tree', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);

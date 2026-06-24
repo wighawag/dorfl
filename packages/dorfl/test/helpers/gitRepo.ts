@@ -203,6 +203,14 @@ export function seedRepoWithArbiter(
 		needsAnswers?: boolean;
 		blockedBy?: string[];
 		promptBody?: string;
+		/**
+		 * Slugs to seed under `work/tasks/backlog/<slug>.md` (STAGING), in addition
+		 * to the pool `slugs` (which land in `work/tasks/ready/`). For the
+		 * `--allow-backlog` drive-a-staged-task tests (prd
+		 * `do-allow-backlog-drive-staged-tasks-without-promotion`): a task born in
+		 * staging that the operator drives in place without promoting it.
+		 */
+		staged?: string[];
 		/** Prd slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
 		prds?: string[];
 		/**
@@ -223,6 +231,13 @@ export function seedRepoWithArbiter(
 	mkdirSync(backlog, {recursive: true});
 	for (const slug of slugs) {
 		writeFileSync(join(backlog, `${slug}.md`), taskFile(slug, opts));
+	}
+	if (opts.staged && opts.staged.length > 0) {
+		const stagedDir = join(repo, 'work', 'tasks', 'backlog');
+		mkdirSync(stagedDir, {recursive: true});
+		for (const slug of opts.staged) {
+			writeFileSync(join(stagedDir, `${slug}.md`), taskFile(slug, opts));
+		}
 	}
 	if (opts.prds && opts.prds.length > 0) {
 		const prdDir = join(repo, 'work', 'prds', 'ready');
@@ -340,7 +355,12 @@ export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 /** Does `<arbiter>/main` currently track `work/<status>/<slug>.md`? */
 export function existsOnArbiterMain(
 	cwd: string,
-	status: 'backlog' | 'in-progress' | 'needs-attention' | 'done',
+	status:
+		| 'backlog'
+		| 'pre-backlog'
+		| 'in-progress'
+		| 'needs-attention'
+		| 'done',
 	slug: string,
 ): boolean {
 	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});

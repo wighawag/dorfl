@@ -161,6 +161,19 @@ export interface CompleteOptions {
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
+	 * **`--allow-backlog`** (prd
+	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): TREAT a
+	 * `tasks/backlog/`-resident body (staging) as a VALID build source, so a
+	 * staged task driven in place done-moves `tasks/backlog/ → tasks/done/`
+	 * directly. GATED on the explicit flag: WITHOUT it, a body resting in
+	 * `tasks/backlog/` is NOT a sanctioned completion position (a corrupt/wip
+	 * strand) and `complete` still REFUSES honestly — only the deliberate drive
+	 * promotes from staging. Default off ⇒ today's refusal-on-staging behaviour.
+	 * Threaded only by the `do … --allow-backlog` task-build path; no autonomous
+	 * caller sets it.
+	 */
+	allowBacklog?: boolean;
+	/**
 	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`). When
 	 * `true`, after the green `verify` and BEFORE the done-move, run the `review`
 	 * SKILL as a FRESH-CONTEXT agent (its own harness launch) and route its verdict:
@@ -651,10 +664,21 @@ async function runComplete(
 	// legacy/bounce surfaces that may still source from it until its folder removal
 	// (9c), and `needs-attention/` for the runner-owned recovery finish.
 	const backlog = workItemPath(cwd, 'tasks-ready', slug);
+	const staged = workItemPath(cwd, 'tasks-backlog', slug);
 	const inProgress = workItemPath(cwd, 'in-progress', slug);
 	const needsAttention = workItemPath(cwd, 'needs-attention', slug);
 	const done = workItemPath(cwd, 'done', slug);
 	const onBacklog = existsSync(backlog);
+	// `--allow-backlog` drive (prd
+	// `do-allow-backlog-drive-staged-tasks-without-promotion`): a staged task driven
+	// in place RESTS in `tasks/backlog/` (claim never moved it). Detect it as a build
+	// source so the done-move goes `tasks/backlog/ → tasks/done/` DIRECTLY (the
+	// human's explicit drive IS the promotion; it never bounces through the pool).
+	// LOWER priority than `tasks/ready/` so a same-slug pool copy wins the resolution.
+	// GATED on the explicit flag: WITHOUT it, a body in staging is a corrupt/wip
+	// strand `complete` must REFUSE (the honest "not finished, not done" position),
+	// NOT silently integrate — only the deliberate drive promotes from staging.
+	const onPreBacklog = options.allowBacklog === true && existsSync(staged);
 	const onInProgress = existsSync(inProgress);
 	const onNeedsAttention = existsSync(needsAttention);
 	// SELF-RENAMING FOLDER task backstop: the binary-known `work/done/<slug>.md`,
@@ -666,6 +690,7 @@ async function runComplete(
 	const onDone =
 		existsSync(done) ||
 		(!onBacklog &&
+			!onPreBacklog &&
 			!onInProgress &&
 			!onNeedsAttention &&
 			recordAtRenamedDonePosition(cwd, slug));
@@ -684,7 +709,7 @@ async function runComplete(
 	// re-push/double-integrate). Mutually exclusive with the build-path source +
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
 	const folderShapeStranded =
-		!onBacklog && !onInProgress && !onNeedsAttention && onDone;
+		!onBacklog && !onPreBacklog && !onInProgress && !onNeedsAttention && onDone;
 	// DIRTY-CONTINUE GATE (task `recover-autodetect-gated-on-nothing-to-commit`).
 	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
 	// a CONTINUE: a requeued task whose prior attempt already done-moved the slug
@@ -713,22 +738,30 @@ async function runComplete(
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
 	// task's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
-	const source: 'tasks-ready' | 'in-progress' | 'needs-attention' | 'done' =
-		dirtyContinue
-			? 'done'
-			: onBacklog
-				? 'tasks-ready'
-				: onInProgress
-					? 'in-progress'
+	const source:
+		| 'tasks-ready'
+		| 'tasks-backlog'
+		| 'in-progress'
+		| 'needs-attention'
+		| 'done' = dirtyContinue
+		? 'done'
+		: onBacklog
+			? 'tasks-ready'
+			: onInProgress
+				? 'in-progress'
+				: onPreBacklog
+					? 'tasks-backlog'
 					: 'needs-attention';
 	const sourcePath =
 		source === 'tasks-ready'
 			? backlog
-			: source === 'in-progress'
-				? inProgress
-				: source === 'needs-attention'
-					? needsAttention
-					: done;
+			: source === 'tasks-backlog'
+				? staged
+				: source === 'in-progress'
+					? inProgress
+					: source === 'needs-attention'
+						? needsAttention
+						: done;
 	if (dirtyContinue) {
 		// Announce LOUDLY (parallel to the `committedRecovery` recovery note above):
 		// the autonomous integrate path took the CONTINUE-BUILD branch, not the
