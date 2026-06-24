@@ -1,10 +1,11 @@
 ---
-title: review-gate non-blocking nits for 'work-contract-sanction-deletion-on-apply-discharge' (Gate 2 approve)
-date: 2026-06-24
-status: open
-reviewOf: work-contract-sanction-deletion-on-apply-discharge
-needsAnswers: true
+title: review-nits-work-contract-sanction-deletion-on-apply-discharge-2026-06-24
+slug: review-nits-work-contract-sanction-deletion-on-apply-discharge-2026-06-24
+needsAnswers: false
+blockedBy: []
 ---
+
+## What to build
 
 ## Non-blocking review findings
 
