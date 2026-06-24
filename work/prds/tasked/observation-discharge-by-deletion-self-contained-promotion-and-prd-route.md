@@ -47,24 +47,9 @@ The four launch questions were answered by the maintainer:
 3. **Promotion MUST be self-contained, including the scoping (mandatory, not optional).** On promote, the spawned artifact's body carries the observation's mechanism + fix shape AND its open questions copied into the artifact's `## Open questions` block, with `needsAnswers: true` set when questions remain. This is the precondition for safe deletion (else the residue is lost on delete), not a nice-to-have.
 4. **Two deletion-commit shapes, confirmed.** `promote` → the note `git rm` rides in the SAME atomic commit as the new artifact's CAS-create (a crash never leaves the note deleted without its successor, or vice versa; a CAS loser leaves the note intact for retry). `dropped`/`duplicate` → no spawned artifact, so the delete is a STANDALONE commit with the `reason:` in the commit message (git history = archive). A spawned artifact is NOT required for every deletion.
 
-## Implementation Decisions
-
-Decisions seeded at launch (to be confirmed/trimmed at tasking-time):
-
-- **Vocabulary.** Add `promote-prd` to `SidecarDisposition` (`sidecar.ts`) and its parse set. (Open whether `promote-brief` is also needed — defer unless the brief regime requires a distinct route; this PRD scopes `promote-prd`.)
-- **Promotion writer.** Rework `promoteObservation` (`triage-persist.ts`) to (i) build the spawned artifact's body FROM the observation's content (mechanism + fix + answered scoping → self-contained), (ii) BRANCH on the disposition's artifact type (task → `tasks-ready`; prd → `prds-proposed`) using the SAME `createItemThroughCas` writer for both (NOT intake's branch+integrate band), and (iii) `git rm` the observation in the SAME atomic commit as the create.
-- **Drop/delete writer.** In the `dropped`/`delete` route (`apply-persist.ts`), `git rm` the note (reason → commit message) INSTEAD of appending `## Recommended: delete` + stamping `triaged:`.
-- **Atomicity + CAS.** Reuse the `createItemThroughCas` guarantee that protects task promotion; the note-delete must be in the winning creator's commit so a CAS loser leaves the note intact for a retry (mirrors today's loser-backs-off behaviour).
-- **Protocol docs.** Amend `WORK-CONTRACT.md` L65/L67 (SOURCE `skills/setup/protocol/` + byte-identical `work/protocol/` mirror per AGENTS.md) to sanction deletion-on-apply and retire the resting-state machinery description.
-- **Auto gate.** `observationTriage: auto` MUST NOT auto-pick `promote-prd` (nor auto-promote at all — unchanged); `promote-prd` is a human answer only.
-
-## Testing Decisions
-
-- A promote (task) test: seed an observation with an answered sidecar, run the promote, assert the spawned task body CONTAINS the observation's mechanism text (self-containment) AND the observation file is gone (deleted) in the same commit.
-- A `promote-prd` test: same shape, asserting a `prds/proposed/<slug>.md` is created (through the SAME `createItemThroughCas` writer as the task path) and the note is deleted.
-- A `dropped` test: assert the note is `git rm`-ed with the reason in the commit message and NO `triaged:`/`## Recommended: delete` residue remains.
-- A CAS-loser test: a same-slug create race leaves the observation INTACT (unresolved) for a retry.
-- Prior art: the throwaway-git-repo test pattern already used by `triage-persist`/`apply-persist`; the existing observation→task CAS-create tests (the `promote-prd` test is the same shape with a `prds-proposed` target).
+> Tasked 2026-06-24. The launch-time Implementation/Testing detail has been
+> relocated into the emitted tasks (`work/tasks/backlog/`); the durable WHY is
+> kept in **Resolved decisions** above. See the task map in Further Notes.
 
 ## Out of Scope
 
@@ -77,3 +62,10 @@ Decisions seeded at launch (to be confirmed/trimmed at tasking-time):
 
 - Origin: `work/notes/observations/advance-promote-leaves-resolved-note-in-inbox-and-mints-non-self-contained-stub-2026-06-24.md` (Defects A/B/C + the maintainer ruling + file:line evidence). That observation should be discharged (deleted) when this PRD lands carrying its signal — which is itself an instance of the very behaviour this PRD fixes.
 - The three defects are one family: B (self-containment) is the prerequisite for A (delete-on-discharge), and C (PRD route) folds into the same `promoteObservation` rework as B (branch on artifact type at the same point self-containment is built).
+- **Task map (tasked 2026-06-24, born staged in `work/tasks/backlog/`):**
+  - `promotion-self-contained-body-and-delete-on-promote-task-route` — US #1,#3,#8 (keystone; `blockedBy: []`).
+  - `promote-prd-disposition-and-triage-local-cas-prd-writer` — US #4,#9 (`blockedBy:` the keystone).
+  - `delete-on-discharge-for-dropped-and-duplicate-routes` — US #2,#7 (`blockedBy: []`, file-orthogonal).
+  - `surface-promote-prd-as-human-only-disposition` — US #5 (`blockedBy:` the promote-prd writer).
+  - `work-contract-sanction-deletion-on-apply-discharge` — US #6 (`blockedBy: []`, docs-only).
+  Chain: keystone → promote-prd-writer → surface; drop-route and the doc task run in parallel.
