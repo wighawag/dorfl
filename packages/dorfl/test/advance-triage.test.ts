@@ -25,6 +25,7 @@ import {
 	seedRepoWithArbiter,
 	raceClone,
 	existsOnArbiterMain,
+	pathOnArbiterMain,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import type {
@@ -345,7 +346,7 @@ function seedAnsweredObservation(
 }
 
 describe('advance — answered triage dispositions flow through the apply path', () => {
-	it('answered "promote" → CAS-creates a new backlog item keyed on the new identity, resolves the observation', async () => {
+	it('answered "promote" → CAS-creates a SELF-CONTAINED task + DELETES the observation+sidecar in the same commit', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const {itemPath, sidecarPath} = seedAnsweredObservation(
 			seeded.repo,
@@ -367,16 +368,21 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('advanced');
 		expect(result.rung).toBe('apply');
-		// A NEW backlog item was CAS-created on the arbiter keyed on the promoted
-		// identity (the observation's slug by default) — the CAS publishes to
-		// arbiter/main, not the local working tree.
+		// A NEW task was CAS-created on the arbiter keyed on the promoted identity
+		// (the observation's slug by default) — the CAS publishes to arbiter/main.
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'prom')).toBe(true);
-		// The observation was RESOLVED (sidecar deleted + needsAnswers cleared) and
-		// records the promotion; it stays in observations/ (no lifecycle move).
-		expect(existsSync(join(seeded.repo, sidecarPath))).toBe(false);
-		const body = readFileSync(join(seeded.repo, itemPath), 'utf8');
-		expect(parseFrontmatter(body).needsAnswers).toBe(false);
-		expect(body).toContain('Triaged: promoted');
+		// The spawned task body carries the observation's signal (self-contained,
+		// not a back-pointer).
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/prom.md'],
+			seeded.repo,
+		);
+		expect(taskBody).toContain('A captured signal awaiting triage.');
+		expect(taskBody).not.toMatch(/Promoted from observation/i);
+		// The observation + its sidecar are DELETED on arbiter/main in the SAME
+		// commit as the create (discharge by deletion).
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
 	});
 
 	it('a same-slug new-item race ⇒ exactly one promote creates, the loser fails CAS', async () => {
