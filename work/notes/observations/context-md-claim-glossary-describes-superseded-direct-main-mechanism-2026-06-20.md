@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-20
 slug: context-md-claim-glossary-describes-superseded-direct-main-mechanism
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -60,3 +60,15 @@ framing changed under the migration.
 ### q1: Is this observation actionable as a slice (rewrite CONTEXT.md's `claim (CAS)` glossary entry — and any sibling 'ledger-transition seam' framing it implies — to match the per-item-lock-refs reality), or should it be folded into a broader CONTEXT.md docs-drift sweep, or dropped?
 
 DROP — overtaken by events. The load-bearing premise is no longer true: CONTEXT.md's `claim (CAS)` glossary entry already describes the per-item-lock-ref model ("acquiring an item's per-item lock ... the claim writes NOTHING to `main`"), and the status/needs-attention entries already state the transient states are "NO LONGER folders". No "direct-`main` micro-commit" or "ledger-transition seam" text remains to rewrite. Disposition: dropped.
+
+## Applied answers 2026-06-24
+
+### q1: What becomes of this observation — promote to a task (rewrite the glossary entry), keep watching, or drop?
+
+dropped (reason: superseded by current CONTEXT.md state). The `claim (CAS)` glossary entry now describes the per-item-lock-ref model (the claim writes nothing to `main`); no `direct-main micro-commit` / ledger-transition-seam text remains to rewrite, per the item's own applied-answers re-verification.
+
+disposition: dropped
+
+## Recommended: delete
+
+A human answered "delete": this item can be removed (git history is the archive). The agent leaves the deletion to the human per the capture-bucket contract.
