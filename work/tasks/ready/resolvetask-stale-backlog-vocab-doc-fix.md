@@ -53,3 +53,7 @@ End-to-end behaviour (comments/docs only, no behaviour change):
 > FIRST check against current reality: the keystone (this task's blocker) may
 > have already touched these comments — read what actually landed in
 > `tasks/done/` and only fix what is still stale.
+
+## Requeue 2026-06-24
+
+Gate bounced on a flaky 5s timeout in do-remote.test.ts:625 (unrelated to this comments-only change; passes in 384ms in isolation). Keep+continue: re-gate the kept tip.
