@@ -3,7 +3,7 @@ title: review-gate non-blocking nits for 'clean-break-fixture-folder-vocab-compa
 date: 2026-06-23
 status: open
 reviewOf: clean-break-fixture-folder-vocab-compat-seam
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Non-blocking review findings
@@ -22,6 +22,18 @@ is their durable home for triage — promote-to-task / keep / delete.
 ### q1: What becomes of this observation — the two non-blocking Gate-2 nits on 'clean-break-fixture-folder-vocab-compat-seam' (the cosmetic 'slicing'->'tasking' rename in three test files, and the missing '## Decisions' block on the PR)?
 
 delete. Confirmed: both nits are cosmetic-coherence / retrospective-process notes on a landed, approved PR. The 'slicing'->'tasking' literal rename is verified correct (the probes are `.toBe(false)` absence assertions that pass regardless of the literal), and the missing `## Decisions` block is on an already-merged commit that cannot be retro-edited into work. Neither implies follow-up code. The general signal (prefer a `## Decisions` block when a non-obvious naming choice is made) is PR-authoring hygiene carried by reviewer habit, not a durable open observation.
+
+disposition: delete
+
+## Recommended: delete
+
+A human answered "delete": this item can be removed (git history is the archive). The agent leaves the deletion to the human per the capture-bucket contract.
+
+## Applied answers 2026-06-24
+
+### q1: What becomes of this observation — the two non-blocking Gate-2 nits on 'clean-break-fixture-folder-vocab-compat-seam' (the cosmetic 'slicing'->'tasking' rename in three test files, and the missing '## Decisions' block on the PR)?
+
+delete. Ratify the already-applied human answer: the two Gate-2 nits (cosmetic 'slicing'->'tasking' in three test files + missing `## Decisions` block on a landed PR) need no follow-up task and no ADR. Git history is the archive.
 
 disposition: delete
 
