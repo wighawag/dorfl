@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'intake-default-scaffold-uses-shared-re
 date: 2026-06-25
 status: open
 reviewOf: intake-default-scaffold-uses-shared-renderer
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
