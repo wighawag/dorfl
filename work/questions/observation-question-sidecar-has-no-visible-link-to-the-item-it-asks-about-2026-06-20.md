@@ -1,0 +1,13 @@
+<!-- dorfl-sidecar: item=observation:question-sidecar-has-no-visible-link-to-the-item-it-asks-about-2026-06-20 type=observation slug=question-sidecar-has-no-visible-link-to-the-item-it-asks-about-2026-06-20 allAnswered=false -->
+
+## Q1
+
+**What should become of this signal: spec a task to add a human-visible Markdown link to the item near the top of the sidecar, fold it into the existing review-nits/readability work on the same surface, or drop it as a known-and-accepted limitation?**
+
+> Observation (status: spotted, needsAnswers: true) at work/notes/observations/question-sidecar-has-no-visible-link-to-the-item-it-asks-about-2026-06-20.md. CLAIM VERIFIED against current code: sidecar->item linkage is the HTML-comment `item=`/`type=`/`slug=` only; packages/dorfl/src/sidecar.ts line 51 says verbatim "There is NO back-pointer field in the item body", and sidecarPathFor (~L213) derives the path purely from identity as work/questions/<type>-<slug>.md. GitHub/VSCode render that comment as nothing, so a human reading a sidecar has no clickable jump to the task/brief/observation it concerns. The premise holds: the format-readability task `question-sidecar-human-readable-format` is DONE (work/tasks/done/), so the sidecar is now real Markdown where a relative link would render clickably. No existing task covers this specific visible-link idea (the related work/tasks/ready/review-nits-question-sidecar-human-readable-format-2026-06-20.md and the triaged:keep observation question-sidecar-renders-poorly-on-github.md are about render quality, not a back-pointer link). The observation itself flags one non-trivial wrinkle, which is why it was captured for a human rather than auto-triaged: the item MOVES between lifecycle folders (backlog/todo/done/cancelled) and the sidecar is identity-keyed precisely to survive those git mv's, so a static relative link goes stale on promotion/completion. The observation lists candidate mitigations (render current-folder link at serialise time and self-heal on next write; a folder-independent stable locator; or a best-effort link that degrades to harmless text) but decides none of them.
+
+_Suggested default: Spec a small task to add a serialise-time-regenerated, human-visible Markdown link line OUTSIDE the per-entry parse regions (alongside the identity comment), rendered to the item's current folder and accepting it can stale until the next re-serialise, with the hard constraint that it degrades to harmless text and never breaks the parser or the model-equal round-trip. If folder-staleness is judged not worth the upkeep, drop the observation as an accepted limitation instead._
+
+<!-- q1 fields: id=q1 -->
+
+**Your answer** (write below this line):
