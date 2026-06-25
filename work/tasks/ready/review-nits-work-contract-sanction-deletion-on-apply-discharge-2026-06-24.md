@@ -19,3 +19,7 @@ is their durable home for triage — promote-to-task / keep / delete.
   (skills/setup/protocol/WORK-CONTRACT.md:70 references `promote-prd`; SURFACE-PROTOCOL.md:58 disposition set does not include it yet)
 - The bullet quotes 'the "never auto-delete a signal; a human deletes" clause' as if that exact wording exists verbatim in the contract, but that precise phrase appears ONLY in this new bullet (and in the originating observation/task). The CONCEPT exists at L72 ('a note annotated "resolved" and kept is a contradiction... discharge it by deleting it') and in the bucket table ('leaves by deletion'), but no verbatim 'never auto-delete a signal; a human deletes' sentence is elsewhere in the doc. The quoting is self-coherent shorthand used consistently across this prd's artifacts, so impact is minimal, but a future reader searching for the quoted clause will not find it as written. Optional: anchor the reference to the actual L72 wording.
   (skills/setup/protocol/WORK-CONTRACT.md:70 quotes a clause whose verbatim text is not present elsewhere in WORK-CONTRACT.md)
+
+## Requeue 2026-06-25
+
+Requeued: promotion produced a body with no '## Prompt' section, so the dispatched build failed and left this lock state:stuck. See work/notes/observations/advance-promotion-builds-promptless-task-that-self-claims-stuck-2026-06-25.md. Body needs a '## Prompt' (or re-triage out of ready/) before re-claim. No work branch existed, so --reset.
