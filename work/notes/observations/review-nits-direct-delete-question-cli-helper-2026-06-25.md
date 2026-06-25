@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'direct-delete-question-cli-helper' (Ga
 date: 2026-06-25
 status: open
 reviewOf: direct-delete-question-cli-helper
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
