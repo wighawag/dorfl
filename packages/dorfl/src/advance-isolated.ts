@@ -298,7 +298,7 @@ export interface PerformAdvanceIsolatedMultiOptions extends SharedIsolatedContex
  * dependency-aware:** a `blockedBy` dependent ineligible at scan time is NOT
  * selected and is NOT drained in the same run — IDENTICAL to `do --isolated -n`
  * (dependency-aware scheduling is a SEPARATE cross-verb enhancement,
- * `work/observations/do-autopick-no-dependency-aware-scheduling.md`).
+ * `work/notes/observations/do-autopick-no-dependency-aware-scheduling.md`).
  */
 export async function performAdvanceIsolatedAuto(
 	options: PerformAdvanceIsolatedMultiOptions,

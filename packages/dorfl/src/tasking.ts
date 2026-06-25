@@ -603,7 +603,7 @@ export async function performTask(
 		// below would otherwise rebase a concurrent edit of the held prd body CLEANLY
 		// into prd/ (a rename+edit merge) while the tasks were cut from the OLD body —
 		// the exact silent stale-task drift the lock forbids
-		// (`work/observations/tasking-lock-does-not-stabilise-prd-content.md`). So we
+		// (`work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`). So we
 		// compare the CURRENTLY held `work/prds/ready/<slug>.md` blob on the arbiter against
 		// the snapshot the lock TOOK (`lockedBlob`); ANY change ⇒ STALE ⇒ fail loud,
 		// touch NOTHING (the lock stays held; a human re-tasks or routes to
@@ -652,7 +652,7 @@ export async function performTask(
 			// (terminal pass/fail). The task path NEVER exposes/consults
 			// `--review-max-rounds` — a gate is terminal, the rounds bound is an orphan
 			// that belongs to a future revise↔review loop (see
-			// `work/observations/reviewmaxrounds-on-wrong-concept.md`). This is
+			// `work/notes/observations/reviewmaxrounds-on-wrong-concept.md`). This is
 			// independently controllable from the tasker improver loop (`reviewLoop` /
 			// the `--tasker-loop*` family); toggling one does not affect the other.
 			review: options.review,

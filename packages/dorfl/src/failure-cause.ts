@@ -29,7 +29,7 @@
  * **`do` and `run` classify the SAME error the SAME way** by both routing their
  * thrown-core-error / failed-agent detail through THIS one function — closing the
  * cross-path divergence recorded in
- * `work/observations/run-thrown-core-error-labeled-agent-failed.md` (the SAME
+ * `work/notes/observations/run-thrown-core-error-labeled-agent-failed.md` (the SAME
  * thrown core error used to read as `usage-error` in `do` but `agent-failed` in
  * `run`).
  *

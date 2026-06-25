@@ -1121,7 +1121,7 @@ function runAgent(
 /**
  * SAVE the partial work of a FAILED agent instead of dropping it (closing the
  * fifth-and-last instance of the recurring asymmetry —
- * `work/observations/run-agent-failure-does-not-save-work.md`). `run`'s
+ * `work/notes/observations/run-agent-failure-does-not-save-work.md`). `run`'s
  * agent-failure return points (prompt-assembly fail / `runAgent` throw /
  * `agent.ok === false`) used to BARE-RETURN `agent-failed`, leaving whatever the
  * agent edited only on the LOCAL work branch in the (disposable, possibly remote)

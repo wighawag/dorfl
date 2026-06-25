@@ -242,7 +242,7 @@ export class ReplaceWouldStrandWorkError extends RegistryError {}
  * (`arbiterInit`, absorbing `arbiter init`) and registers THAT arbiter's mirror.
  *
  * Project-identity guard (anti-stranding, ADR §1 +
- * `work/observations/hub-mirror-key-ignores-transport.md`): if a sibling mirror
+ * `work/notes/observations/hub-mirror-key-ignores-transport.md`): if a sibling mirror
  * for the SAME project (same `projectIdFromKey` tail) already exists under a
  * DIFFERENT key (a transport mismatch OR a same-transport path/host collision),
  * refuse by default — registering the project under a second key would fork the

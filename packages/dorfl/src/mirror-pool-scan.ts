@@ -202,7 +202,7 @@ export async function scanMirrorPool(
 	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
-	// `needsAnswers` backlog/prds + their sidecars + `work/observations/`) and built
+	// `needsAnswers` backlog/prds + their sidecars + `work/notes/observations/`) and built
 	// through the SHARED enumeration unit the in-place caller uses — so the in-place
 	// + mirror-side selections AGREE. Create-gates default OFF (interim); apply
 	// (consume) is always present.

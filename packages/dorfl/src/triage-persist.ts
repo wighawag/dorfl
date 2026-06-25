@@ -125,7 +125,7 @@ export interface AutoDispositionOptions {
 	cwd: string;
 	/** The namespaced observation identity (`observation:<slug>`). */
 	item: string;
-	/** The observation file path RELATIVE to `cwd` (e.g. `work/observations/foo.md`). */
+	/** The observation file path RELATIVE to `cwd` (e.g. `work/notes/observations/foo.md`). */
 	itemPath: string;
 	/** The no-question case (`duplicate` / `map`). */
 	kind: TriageAutoKind;
@@ -220,7 +220,7 @@ export interface PromoteObservationOptions {
 	cwd: string;
 	/** The namespaced observation identity (`observation:<slug>`). */
 	item: string;
-	/** The observation file path RELATIVE to `cwd` (e.g. `work/observations/foo.md`). */
+	/** The observation file path RELATIVE to `cwd` (e.g. `work/notes/observations/foo.md`). */
 	itemPath: string;
 	/**
 	 * The artifact TYPE to mint, chosen by the AGENTIC apply VERDICT (task
