@@ -89,6 +89,13 @@ export {
 } from './item-path.js';
 
 export type {
+	DropSourceOptions,
+	DropSourceResult,
+	DropTerminal,
+} from './drop-source.js';
+export {DropSourceError, dropSource} from './drop-source.js';
+
+export type {
 	TickItem,
 	TickRungKind,
 	TickClassification,
