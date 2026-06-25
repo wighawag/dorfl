@@ -2,7 +2,7 @@ import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {boundaryLine} from './watch-session.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
-import type {NewQuestion, SidecarDisposition} from './sidecar.js';
+import type {NewQuestion} from './sidecar.js';
 
 /**
  * The **SURFACE gate** (prd `advance-loop`, task `advance-rung-surface`,
@@ -36,12 +36,15 @@ import type {NewQuestion, SidecarDisposition} from './sidecar.js';
  */
 
 /**
- * One question the `surface-questions` skill EMITS — the FOUR authoring fields of
+ * One question the `surface-questions` skill EMITS — the THREE authoring fields of
  * the sidecar entry shape (`skills/surface-questions/SKILL.md` → "The emitted
  * question shape"). It maps 1:1 onto {@link NewQuestion} (what the engine appends
  * to the sidecar), so the engine persists with ZERO translation. The skill does
  * NOT assign `id`/`answered`/`answer`/`allAnswered` — those are the sidecar's
- * machine-owned fields the engine owns.
+ * machine-owned fields the engine owns. A surfaced question is a PLAIN question:
+ * there is NO `disposition` token any more (task
+ * `agentic-apply-retire-disposition-vocabulary`) — what to DO with the answered
+ * signal is decided by the AGENTIC apply decision, not stamped on the question.
  */
 export interface SurfaceQuestion {
 	/** The question, verbatim. */
@@ -50,8 +53,6 @@ export interface SurfaceQuestion {
 	context?: string;
 	/** Optional suggested default (the humility aid; NEVER a decision). */
 	default?: string;
-	/** Optional triage/terminal routing — ONLY on a triage question. */
-	disposition?: SidecarDisposition;
 }
 
 /**
@@ -127,16 +128,6 @@ export function parseSurfaceEmit(output: string): SurfaceEmit {
 	return validateEmit(parsed);
 }
 
-const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-task',
-	'promote-prd',
-	'promote-adr',
-	'keep',
-	'delete',
-	'dropped',
-	'needs-attention',
-]);
-
 /** Validate a parsed object is a `{item?, questions:[…]}` shape; normalise it. */
 function validateEmit(parsed: unknown): SurfaceEmit {
 	if (typeof parsed !== 'object' || parsed === null) {
@@ -162,12 +153,6 @@ function validateEmit(parsed: unknown): SurfaceEmit {
 		if (typeof item.default === 'string' && item.default !== '') {
 			question.default = item.default;
 		}
-		if (
-			typeof item.disposition === 'string' &&
-			DISPOSITIONS.has(item.disposition)
-		) {
-			question.disposition = item.disposition as SidecarDisposition;
-		}
 		return question;
 	});
 	return {
@@ -192,9 +177,6 @@ export function toNewQuestions(emit: SurfaceEmit): NewQuestion[] {
 		}
 		if (q.default !== undefined) {
 			nq.default = q.default;
-		}
-		if (q.disposition !== undefined) {
-			nq.disposition = q.disposition;
 		}
 		return nq;
 	});
@@ -237,8 +219,7 @@ export function buildSurfacePrompt(item: string): string {
 		` "questions": [`,
 		`   {"question": "…",`,
 		`    "context": "…",`,
-		`    "default": "… (optional; omit if none)",`,
-		`    "disposition": "promote-task|promote-prd|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"}`,
+		`    "default": "… (optional; omit if none)"}`,
 		` ]}`,
 		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement);`,
 		`absence of the field is NOT. It is plain text inside the JSON string`,

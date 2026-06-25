@@ -131,13 +131,18 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 		],
 	};
 
-	it('the parser accepts a canonical emit (item + a mix of plain + triage questions)', () => {
+	it('the parser accepts a canonical emit (item + a mix of plain + triage questions); a legacy disposition token is parsed away', () => {
 		const parsed: SurfaceEmit = parseSurfaceEmit(JSON.stringify(fixture));
 		expect(parsed.item).toBe('task:foo');
 		expect(parsed.questions).toHaveLength(2);
 		expect(parsed.questions[0].context).toBe('src/foo.ts:42');
 		expect(parsed.questions[0].default).toBe('use A');
-		expect(parsed.questions[1].disposition).toBe('keep');
+		// The disposition VOCABULARY is retired (task
+		// `agentic-apply-retire-disposition-vocabulary`): a `disposition` token in the
+		// emit is now IGNORED — a surfaced question is plain. The doc PROSE still
+		// describes it (owned by the sibling prose task, blocked on this one).
+		expect('disposition' in parsed.questions[1]).toBe(false);
+		expect(parsed.questions[1].default).toBe('keep');
 	});
 
 	it('every field the fixture exercises is DESCRIBED in SURFACE-PROTOCOL.md (the doc mirrors the parser; D2)', () => {

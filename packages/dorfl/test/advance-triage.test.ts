@@ -14,10 +14,10 @@ import {
 	newSidecar,
 	serialiseSidecar,
 	type SidecarModel,
-	type SidecarDisposition,
 } from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
-import {isTriagedKeep} from '../src/apply-persist.js';
+import type {ApplyDecider} from '../src/apply-decide.js';
+import type {DecisionVerdict} from '../src/decision-engine.js';
 import {
 	makeScratch,
 	gitEnv,
@@ -47,9 +47,10 @@ import type {
  *     back to the question);
  *   - an answered "promote" CAS-creates a new backlog item keyed on the new
  *     identity; a same-slug new-item race ⇒ the loser fails CAS;
- *   - "keep" → `triaged:keep` marker, drops out of the pool; "delete"/"dropped" on
- *     an observation → DISCHARGE BY DELETION (the note is git rm-ed, the human's
- *     ratified answer authors it — no resting marker);
+ *   - an answered observation flows through the AGENTIC apply decision (the
+ *     subsumed triage): the agent's VERDICT chooses mint-task / mint-prd /
+ *     delete-source / ask-follow-up (NO disposition token, NO resting `triaged:keep`
+ *     state); a `delete` verdict DISCHARGES BY DELETION (the note is git rm-ed);
  *   - surface + apply remain ALWAYS allowed even with `observationTriage` in the
  *     question-gated `ask`/`off` modes.
  *
@@ -129,7 +130,6 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 				{
 					question: 'Promote, keep, or delete?',
 					context: 'a captured signal',
-					disposition: 'keep',
 				},
 			],
 		});
@@ -163,7 +163,7 @@ describe('advance — the TRIAGE rung is QUESTION-GATED by default', () => {
 		const {repo} = seedObservation('bar');
 		const {gate: surface, spawns} = spySurface({
 			item: 'observation:bar',
-			questions: [{question: 'promote/keep/delete?', disposition: 'keep'}],
+			questions: [{question: 'promote/keep/delete?'}],
 		});
 		const result = await performAdvance({
 			arg: 'obs:bar',
@@ -220,7 +220,7 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		expect(existsSync(join(repo, itemPath))).toBe(false);
 	});
 
-	it('observationTriage auto + a MAP → record the mapping + triaged:keep (drops out of the pool)', async () => {
+	it('observationTriage auto + a MAP → DISCHARGED BY DELETION (no more triaged:keep; the mapping rides the commit message)', async () => {
 		const {repo, itemPath} = seedObservation('map');
 		const {gate: triage} = spyTriage({
 			auto: true,
@@ -237,10 +237,12 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.exitCode).toBe(0);
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(body).toContain('maps onto an existing item');
-		expect(body).toContain('task:existing');
-		expect(isTriagedKeep(body)).toBe(true);
+		// There is no resting `triaged:keep` note any more: a `map` is settled onto its
+		// existing home, so it is DISCHARGED BY DELETION (mirroring `duplicate`). The
+		// note is gone; the mapped-onto identity + reason ride the commit message.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		const commitMessage = gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
+		expect(commitMessage).toContain('task:existing');
 	});
 
 	it('observationTriage auto but the gate says auto:false (a judgement call) → falls back to the QUESTION (no auto-promote)', async () => {
@@ -252,7 +254,7 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 		});
 		const {gate: surface, spawns: surfaceSpawns} = spySurface({
 			item: 'observation:judge',
-			questions: [{question: 'promote/keep/delete?', disposition: 'keep'}],
+			questions: [{question: 'promote/keep/delete?'}],
 		});
 		const result = await performAdvance({
 			arg: 'obs:judge',
@@ -306,14 +308,15 @@ describe('advance — the observationTriage:auto exception bounds (high bar)', (
 });
 
 /**
- * Seed an observation that is needsAnswers:true with a FULLY-answered sidecar
- * carrying a single disposition — exactly the `classify=apply` cell for an
- * answered triage. Used for the promote / keep / delete apply-path tests.
+ * Seed an observation that is needsAnswers:true with a FULLY-answered sidecar —
+ * exactly the `classify=apply` cell for an answered triage. The sidecar entry is
+ * BINARY (no disposition token any more); what to DO with the answer is decided by
+ * the AGENTIC apply decision (the injected {@link ApplyDecider}). Used for the
+ * mint / delete / ask apply-path tests.
  */
 function seedAnsweredObservation(
 	repo: string,
 	slug: string,
-	disposition: SidecarDisposition,
 ): {itemPath: string; sidecarPath: string} {
 	const itemPath = `work/notes/observations/${slug}.md`;
 	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
@@ -331,7 +334,7 @@ function seedAnsweredObservation(
 		].join('\n'),
 	);
 	let model: SidecarModel = newSidecar(`observation:${slug}`, [
-		{question: 'Promote, keep, or delete?', disposition},
+		{question: 'What becomes of this signal?'},
 	]);
 	model = {
 		...model,
@@ -343,22 +346,41 @@ function seedAnsweredObservation(
 	return {itemPath, sidecarPath};
 }
 
-describe('advance — answered triage dispositions flow through the apply path', () => {
-	it('answered "promote" → CAS-creates a SELF-CONTAINED task + DELETES the observation+sidecar in the same commit', async () => {
+/** An apply-decider stub: ignores its input + returns the given canned verdict. */
+function spyDecide(verdict: DecisionVerdict): {
+	decide: ApplyDecider;
+	calls: number;
+} {
+	const box = {calls: 0};
+	const decide: ApplyDecider = async () => {
+		box.calls++;
+		return verdict;
+	};
+	return {
+		decide,
+		get calls() {
+			return box.calls;
+		},
+	};
+}
+
+describe('advance — an answered observation flows through the AGENTIC apply decision', () => {
+	it('verdict task → mint-task: CAS-creates a SELF-CONTAINED task + DELETES the observation+sidecar in the same commit (artifact type from the VERDICT, not a promote field)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const {itemPath, sidecarPath} = seedAnsweredObservation(
 			seeded.repo,
 			'prom',
-			'promote-task',
 		);
 		gitIn(['add', '-A'], seeded.repo);
-		gitIn(['commit', '-q', '-m', 'seed answered promote'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
 		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
 
+		const {decide} = spyDecide({outcome: 'task'});
 		const result = await performAdvance({
 			arg: 'obs:prom',
 			cwd: seeded.repo,
 			arbiter: 'arbiter',
+			applyDecide: decide,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
@@ -366,43 +388,100 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('advanced');
 		expect(result.rung).toBe('apply');
-		// A NEW task was CAS-created on the arbiter keyed on the promoted identity
-		// (the observation's slug by default) — the CAS publishes to arbiter/main.
+		// A NEW task was CAS-created on the arbiter keyed on the observation's slug.
 		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'prom')).toBe(true);
-		// The spawned task body carries the observation's signal (self-contained,
-		// not a back-pointer).
+		// SELF-CONTAINMENT (decision 10): the spawned task carries the observation's
+		// signal (not a back-pointer) so it is buildable on its own.
 		const taskBody = gitIn(
 			['show', 'arbiter/main:work/tasks/ready/prom.md'],
 			seeded.repo,
 		);
 		expect(taskBody).toContain('A captured signal awaiting triage.');
-		expect(taskBody).not.toMatch(/Promoted from observation/i);
 		// The observation + its sidecar are DELETED on arbiter/main in the SAME
-		// commit as the create (discharge by deletion).
+		// commit as the create (delete-on-promote).
 		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
 		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
 	});
 
-	it('a same-slug new-item race ⇒ exactly one promote creates, the loser fails CAS', async () => {
+	it('verdict prd → mint-prd: the artifact type comes from the VERDICT (a PRD into prds/proposed)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		// Two clones each carrying the SAME answered observation, racing the same
-		// promoted backlog slug through the create CAS. Each clone gets a DISTINCT
-		// committer identity (raceClone) so the two create commits get DISTINCT shas
-		// (as two real machines would) and the loser loses through the genuine
-		// path-exists/lease CAS — NOT via a fixture sha-collision. See racerEnv.
+		seedAnsweredObservation(seeded.repo, 'prdprom');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const {decide} = spyDecide({outcome: 'prd'});
+		const result = await performAdvance({
+			arg: 'obs:prdprom',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			applyDecide: decide,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('advanced');
+		// A `prd` verdict mints into prds/proposed (NOT tasks/ready) — the verdict
+		// chose the artifact type.
+		expect(
+			pathOnArbiterMain(seeded.repo, 'work/prds/proposed/prdprom.md'),
+		).toBe(true);
+		expect(pathOnArbiterMain(seeded.repo, 'work/tasks/ready/prdprom.md')).toBe(
+			false,
+		);
+	});
+
+	it('SELF-CONTAINMENT regression: a verdict with a drafted body carries the answer(s) into the spawned artifact, source deleted in the same commit', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const {itemPath, sidecarPath} = seedAnsweredObservation(
+			seeded.repo,
+			'selfc',
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const {decide} = spyDecide({
+			outcome: 'task',
+			taskBody:
+				'## What to build\n\nDISTINCT-SELF-CONTAINED-MARKER carried from the answer.\n',
+		});
+		const result = await performAdvance({
+			arg: 'obs:selfc',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			applyDecide: decide,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+		});
+		expect(result.exitCode).toBe(0);
+		// The drafted, self-contained body landed in the spawned task…
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/selfc.md'],
+			seeded.repo,
+		);
+		expect(taskBody).toContain('DISTINCT-SELF-CONTAINED-MARKER');
+		// …and the source + sidecar were deleted in the SAME commit as the create.
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
+	});
+
+	it('a same-slug new-item race ⇒ exactly one mint creates, the loser fails CAS', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 		for (const dir of [a, b]) {
-			seedAnsweredObservation(dir, 'dupprom', 'promote-task');
+			seedAnsweredObservation(dir, 'dupprom');
 			gitIn(['add', '-A'], dir);
-			gitIn(['commit', '-q', '-m', 'answered promote'], dir);
+			gitIn(['commit', '-q', '-m', 'answered observation'], dir);
 		}
-
+		const {decide} = spyDecide({outcome: 'task'});
 		const [ra, rb] = await Promise.all([
 			performAdvance({
 				arg: 'obs:dupprom',
 				cwd: a,
 				arbiter: 'arbiter',
+				applyDecide: decide,
 				acquireLock: async () => ACQUIRED,
 				releaseLock: async () => RELEASED,
 			}),
@@ -410,11 +489,11 @@ describe('advance — answered triage dispositions flow through the apply path',
 				arg: 'obs:dupprom',
 				cwd: b,
 				arbiter: 'arbiter',
+				applyDecide: decide,
 				acquireLock: async () => ACQUIRED,
 				releaseLock: async () => RELEASED,
 			}),
 		]);
-
 		const won = [ra, rb].filter((r) => r.exitCode === 0);
 		const lost = [ra, rb].filter((r) => r.exitCode === 2);
 		expect(won).toHaveLength(1);
@@ -422,55 +501,11 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(lost[0].outcome).toBe('lost');
 	});
 
-	it('a same-slug new-item race with IDENTICAL committer identity ⇒ STILL exactly one promote creates (CAS serialises via the per-attempt nonce, not via sha-distinctness)', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, []);
-		// The INVERSE of the distinct-identity race above and the product-layer
-		// regression: both racers commit under the SAME committer identity (same
-		// user.name/user.email), build the SAME tree + message off the SAME base, so
-		// WITHOUT the seam's per-attempt CAS-Nonce their create commits would be
-		// byte-identical (one sha) and BOTH would spuriously verify as won. The nonce
-		// makes the two shas DISTINCT, so the loser's lease is genuinely rejected.
-		const a = seeded.clone('same-id-a');
-		const b = seeded.clone('same-id-b');
-		for (const dir of [a, b]) {
-			// IDENTICAL identity in both clones (NOT raceClone's distinct identities).
-			gitIn(['config', 'user.name', 'One Bot'], dir);
-			gitIn(['config', 'user.email', 'one-bot@example.com'], dir);
-			seedAnsweredObservation(dir, 'dupprom', 'promote-task');
-			gitIn(['add', '-A'], dir);
-			gitIn(['commit', '-q', '-m', 'answered promote'], dir);
-		}
-
-		const [ra, rb] = await Promise.all([
-			performAdvance({
-				arg: 'obs:dupprom',
-				cwd: a,
-				arbiter: 'arbiter',
-				acquireLock: async () => ACQUIRED,
-				releaseLock: async () => RELEASED,
-			}),
-			performAdvance({
-				arg: 'obs:dupprom',
-				cwd: b,
-				arbiter: 'arbiter',
-				acquireLock: async () => ACQUIRED,
-				releaseLock: async () => RELEASED,
-			}),
-		]);
-
-		const won = [ra, rb].filter((r) => r.exitCode === 0);
-		const lost = [ra, rb].filter((r) => r.exitCode === 2);
-		expect(won).toHaveLength(1);
-		expect(lost).toHaveLength(1);
-		expect(lost[0].outcome).toBe('lost');
-		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'dupprom')).toBe(true);
-	});
-
-	it('the promote new-item creation is routed THROUGH the injected CAS seam, keyed on the new identity', async () => {
+	it('the mint is routed THROUGH the injected promote/CAS seam, keyed on the new identity, artifact from the verdict', async () => {
 		const {repo} = seedObservation('seamprom');
-		seedAnsweredObservation(repo, 'seamprom', 'promote-task');
+		seedAnsweredObservation(repo, 'seamprom');
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'answered promote'], repo);
+		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
 
 		const calls: PromoteObservationOptions[] = [];
 		const promote = async (
@@ -484,9 +519,11 @@ describe('advance — answered triage dispositions flow through the apply path',
 				message: 'promoted',
 			};
 		};
+		const {decide} = spyDecide({outcome: 'task'});
 		const result = await performAdvance({
 			arg: 'obs:seamprom',
 			cwd: repo,
+			applyDecide: decide,
 			promote,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
@@ -494,50 +531,88 @@ describe('advance — answered triage dispositions flow through the apply path',
 		expect(result.exitCode).toBe(0);
 		expect(calls).toHaveLength(1);
 		expect(calls[0].item).toBe('observation:seamprom');
+		expect(calls[0].artifact).toBe('task');
 	});
 
-	it('answered "keep" → triaged:keep marker, the item drops out of the pool', async () => {
-		const {repo} = seedObservation('keep');
-		const {itemPath, sidecarPath} = seedAnsweredObservation(
-			repo,
-			'keep',
-			'keep',
-		);
+	it('verdict ask → ask-follow-up: appends qN+1 + re-pauses (needsAnswers stays true, prior answer preserved, one batch)', async () => {
+		const {repo} = seedObservation('askmore');
+		const {itemPath, sidecarPath} = seedAnsweredObservation(repo, 'askmore');
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'answered keep'], repo);
+		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
+
+		const {decide} = spyDecide({
+			outcome: 'ask',
+			question: 'Which subsystem does this touch?',
+		});
 		const result = await performAdvance({
-			arg: 'obs:keep',
+			arg: 'obs:askmore',
 			cwd: repo,
+			applyDecide: decide,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+		});
+		expect(result.exitCode).toBe(0);
+		// A re-pause idles the item (awaiting the human's new answer).
+		expect(result.outcome).toBe('no-op');
+		// The sidecar STILL exists; needsAnswers stays true (re-paused).
+		expect(existsSync(join(repo, sidecarPath))).toBe(true);
+		expect(
+			parseFrontmatter(readFileSync(join(repo, itemPath), 'utf8')).needsAnswers,
+		).toBe(true);
+		// q1 preserved (answer intact), q2 appended (the follow-up, pending).
+		const sidecarText = readFileSync(join(repo, sidecarPath), 'utf8');
+		expect(sidecarText).toContain('Which subsystem does this touch?');
+		expect(sidecarText).toMatch(/allAnswered=false/);
+	});
+
+	it('verdict delete → delete-source: DISCHARGED BY DELETION (the note + sidecar git rm-ed, the reason in the commit message; DIRECT, no confirm)', async () => {
+		const {repo} = seedObservation('del');
+		const {itemPath, sidecarPath} = seedAnsweredObservation(repo, 'del');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
+
+		const {decide} = spyDecide({
+			outcome: 'delete',
+			deleteReason: 'the answer says drop it — DISTINCT-DELETE-REASON',
+		});
+		const result = await performAdvance({
+			arg: 'obs:del',
+			cwd: repo,
+			applyDecide: decide,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('advanced');
-		// Sidecar resolved + the keep marker stamped (drops out of the pool).
+		// The note AND its sidecar leave the inbox by DELETION — no resting marker.
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(isTriagedKeep(body)).toBe(true);
+		// The reason rides the commit message (git history is the archive).
+		const commitMessage = gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
+		expect(commitMessage).toContain('DISTINCT-DELETE-REASON');
 	});
 
-	it('answered "delete" on an observation → DISCHARGED BY DELETION (the human\'s ratified drop answer authors the git rm; no resting residue)', async () => {
-		const {repo} = seedObservation('del');
-		const {itemPath, sidecarPath} = seedAnsweredObservation(
-			repo,
-			'del',
-			'delete',
-		);
+	it('a DISALLOWED `adr` verdict is REJECTED by the allowed-outcome guard, NOT dispatched (mint-adr is deferred)', async () => {
+		const {repo} = seedObservation('adrx');
+		const {itemPath, sidecarPath} = seedAnsweredObservation(repo, 'adrx');
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'answered delete'], repo);
+		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
+
+		const {decide} = spyDecide({outcome: 'adr', adrTitle: 'sneaky'});
 		const result = await performAdvance({
-			arg: 'obs:del',
+			arg: 'obs:adrx',
 			cwd: repo,
+			applyDecide: decide,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.exitCode).toBe(0);
-		// The note AND its sidecar leave the inbox by DELETION (the apply rung applies
-		// the human's ratified drop answer) — no `Recommended: delete` marker lingers.
-		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		// advance-apply's allowed SUBSET omits `adr` (the engine's superset keeps it);
+		// the guard rejects the verdict — it is a usage-error, NOT a dispatch.
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(result.message).toMatch(/allowed outcome|not an allowed/i);
+		// Nothing was minted or deleted (the source + sidecar are INTACT).
+		expect(existsSync(join(repo, itemPath))).toBe(true);
+		expect(existsSync(join(repo, sidecarPath))).toBe(true);
 	});
 });

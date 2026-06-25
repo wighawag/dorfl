@@ -1,7 +1,6 @@
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
-import {setFrontmatterMarker} from './frontmatter.js';
 import {workItemRel} from './work-layout.js';
 import {
 	createItemThroughCas,
@@ -21,16 +20,18 @@ import type {TriageAutoKind} from './triage-gate.js';
  * question-gated surface path (which reuses `surface-persist.ts` verbatim):
  *
  *   1. **the conservative auto-disposition** ({@link autoDispositionObservation},
- *      US #17, `observationTriage: 'auto'`-gated): record the no-question disposition on the
- *      UNTRIAGED observation in ONE local commit —
- *        - `duplicate` → DISCHARGE the note BY DELETION (`git rm` the duplicate in a
- *          standalone commit, the duplicated-of identity + reason in the commit
- *          message; git history = archive). A duplicate is a redundant copy of an
- *          already-captured signal, so deleting it loses nothing — it leaves the
- *          inbox by being gone, with no `## Recommended: delete` marker and no
- *          `triaged:` stamp; or
- *        - `map` → record the mapping onto the existing item + stamp `triaged:keep`
- *          (settled onto its existing home, drops out of the pool, never re-asked).
+ *      US #17, `observationTriage: 'auto'`-gated): act on the no-question case on
+ *      the UNTRIAGED observation in ONE local commit. BOTH no-question cases now
+ *      DISCHARGE the redundant note BY DELETION (there is no resting `triaged:keep`
+ *      state any more — task `agentic-apply-retire-disposition-vocabulary`):
+ *        - `duplicate` → `git rm` the duplicate in a standalone commit, the
+ *          duplicated-of identity + reason in the commit message (git history =
+ *          archive). A duplicate is a redundant copy of an already-captured signal,
+ *          so deleting it loses nothing; or
+ *        - `map` → the note is already covered by the existing item it maps onto, so
+ *          it is settled — `git rm` it in a standalone commit, the mapped-onto
+ *          identity + reason recorded in the commit message (mirroring `duplicate`).
+ *          There is no resting `triaged:keep` note any more.
  *   2. **promote → SELF-CONTAINED new-item creation + DELETE through the CAS**
  *      ({@link promoteObservation}, US #1/#3/#8): an ANSWERED "promote" drafts a
  *      new `work/tasks/ready/<new-slug>.md` whose body is built FROM the
@@ -57,12 +58,6 @@ import type {TriageAutoKind} from './triage-gate.js';
  * signal), which is NOT "auto-deleting a live signal". Promotion is ALWAYS a human
  * answer (the apply path), never an auto-disposition.
  */
-
-/** The marker the `map` auto-disposition stamps so the observation drops out of the pool. */
-const TRIAGED_KEEP = 'keep';
-
-/** Marker heading appended to the observation body on the `map` disposition (durable record). */
-const MAP_HEADING = '## Triaged: maps onto an existing item';
 
 function gitSoft(
 	args: string[],
@@ -147,19 +142,18 @@ export interface AutoDispositionOptions {
 
 export interface AutoDispositionResult {
 	/**
-	 * `deleted` (a `duplicate` case — the redundant note is `git rm`-ed in a
-	 * standalone commit, the reason in the message) or `kept` (a `map` case —
-	 * `triaged:keep`, drops out of the pool). NEVER an auto-delete of a
-	 * NON-duplicate signal.
+	 * Always `deleted`: BOTH no-question cases DISCHARGE the redundant note BY
+	 * DELETION (`git rm` in a standalone commit, the reason in the message). A
+	 * `duplicate` is a redundant copy of `existing`; a `map` is already covered by
+	 * `existing` — either way the note carries no unique signal, so it leaves the
+	 * inbox by being gone. There is no resting `triaged:keep` state any more (task
+	 * `agentic-apply-retire-disposition-vocabulary`). NEVER an auto-delete of a
+	 * NON-redundant signal.
 	 */
-	outcome: 'deleted' | 'kept';
+	outcome: 'deleted';
 	/** The commit sha the disposition produced. */
 	commit: string;
-	/**
-	 * The observation path (relative to `cwd`). For `map` it is UNCHANGED (no
-	 * lifecycle move). For `duplicate` it is the path the note WAS at before it was
-	 * deleted (the note is gone after this returns).
-	 */
+	/** The path the note WAS at before it was deleted (the note is gone after this returns). */
 	itemPath: string;
 	/** A human-readable summary. */
 	message: string;
@@ -167,19 +161,22 @@ export interface AutoDispositionResult {
 
 /**
  * Execute a CONSERVATIVE auto-disposition on an UNTRIAGED observation (US #17),
- * ONE local commit, no question surfaced. ONLY the two no-question cases:
+ * ONE local commit, no question surfaced. BOTH no-question cases DISCHARGE the
+ * redundant note BY DELETION (`git rm` in a STANDALONE commit, the mapped/
+ * duplicated-of identity + reason in the commit message; git history = archive).
+ * There is no resting `triaged:keep` state any more (task
+ * `agentic-apply-retire-disposition-vocabulary` — a signal is still-open,
+ * acted-on, or deleted):
  *
- *   - `duplicate` → DISCHARGE the redundant note BY DELETION: `git rm` it in a
- *     standalone commit, the duplicated-of identity + reason in the commit
- *     message (git history = archive). It leaves the inbox by being gone — no
- *     `## Recommended: delete` marker, no `triaged:` stamp; or
- *   - `map` → record the mapping onto the existing item + stamp `triaged:keep` (the
- *     observation is settled onto its existing home; it drops out of the pool).
+ *   - `duplicate` → the note is an EXACT duplicate of `existing` (already
+ *     captured); the original carries the signal, so the copy is deleted; or
+ *   - `map` → the note maps UNAMBIGUOUSLY onto `existing` (already covered there),
+ *     so it is settled — deleted, the mapping recorded in the commit message
+ *     (mirroring `duplicate`).
  *
  * It NEVER promotes (promotion is a human "worth building?" answer, the apply path)
- * and NEVER auto-deletes a NON-duplicate signal. A `map` NEVER moves folders (the
- * marker IS the disposition); a `duplicate` removes the note entirely (it is a
- * redundant copy — the original carries the signal, so nothing is lost).
+ * and NEVER auto-deletes a NON-redundant signal (the gate's high bar bounds it to
+ * `duplicate`/`map`, both of which carry no unique signal).
  */
 export function autoDispositionObservation(
 	options: AutoDispositionOptions,
@@ -194,51 +191,25 @@ export function autoDispositionObservation(
 	const reason = options.reason?.trim() ?? '';
 	const by = options.by || resolveBy(cwd, env);
 
-	if (kind === 'duplicate') {
-		// DISCHARGE BY DELETION: a duplicate is a redundant copy of `existing`, so
-		// `git rm` it in a STANDALONE commit (no spawned artifact for a duplicate),
-		// the duplicated-of identity + reason in the commit message. No body marker,
-		// no `triaged:` stamp — the note is out of the pool by being gone.
-		gitHard(['rm', '--quiet', '--', itemPath], cwd, env);
-		const subject = `advance: triage ${item} → duplicate (by ${by})`;
-		const messageBody =
-			`Discharged by deletion: an EXACT duplicate of ${existing} (already ` +
-			`captured; the original carries the signal, git history is the archive).` +
-			(reason !== '' ? `\n\nreason: ${reason}` : '');
-		gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
-		const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
-		const message =
-			`auto-triaged ${item} → duplicate of ${existing}: DELETED the note in a ` +
-			'standalone commit (reason in the commit message, git history is the archive).';
-		note(message);
-		return {outcome: 'deleted', commit, itemPath, message};
-	}
-
-	const body = readItem(cwd, itemPath, env);
-	const marked = setFrontmatterMarker(
-		appendBlock(body, MAP_HEADING, [
-			`This observation maps UNAMBIGUOUSLY onto \`${existing}\` (already`,
-			'covered there), so it is settled — marked triaged:keep and dropped out',
-			'of the candidate pool (never re-asked).',
-			...(reason !== '' ? ['', `Reason: ${reason}`] : []),
-		]),
-		'triaged',
-		TRIAGED_KEEP,
-	);
-	const message =
-		`auto-triaged ${item} → maps onto ${existing} (triaged:keep; drops out of ` +
-		'the pool, never re-asked).';
-
-	writeFileSync(join(cwd, itemPath), marked);
-	gitHard(['add', '--', itemPath], cwd, env);
-	gitHard(
-		['commit', '--quiet', '-m', `advance: triage ${item} → ${kind} (by ${by})`],
-		cwd,
-		env,
-	);
+	// DISCHARGE BY DELETION (both cases): `git rm` the redundant note in a STANDALONE
+	// commit (no spawned artifact), the relationship + reason in the commit message.
+	// No body marker, no `triaged:` stamp — the note is out of the pool by being gone.
+	gitHard(['rm', '--quiet', '--', itemPath], cwd, env);
+	const relationship =
+		kind === 'duplicate'
+			? `an EXACT duplicate of ${existing} (already captured; the original carries the signal`
+			: `mapped UNAMBIGUOUSLY onto ${existing} (already covered there; the existing item carries the signal`;
+	const subject = `advance: triage ${item} → ${kind} (by ${by})`;
+	const messageBody =
+		`Discharged by deletion: ${relationship}, git history is the archive).` +
+		(reason !== '' ? `\n\nreason: ${reason}` : '');
+	gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
 	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
+	const message =
+		`auto-triaged ${item} → ${kind} of ${existing}: DELETED the note in a ` +
+		'standalone commit (relationship + reason in the commit message, git history is the archive).';
 	note(message);
-	return {outcome: 'kept', commit, itemPath, message};
+	return {outcome: 'deleted', commit, itemPath, message};
 }
 
 // --- Promote → new-item creation through the CAS (US #24) -----------------
@@ -251,10 +222,11 @@ export interface PromoteObservationOptions {
 	/** The observation file path RELATIVE to `cwd` (e.g. `work/observations/foo.md`). */
 	itemPath: string;
 	/**
-	 * The artifact TYPE to mint: `'task'` → `work/tasks/ready/<slug>.md` (the
-	 * default, the `promote-task` route); `'prd'` → `work/prds/proposed/<slug>.md`
-	 * (the `promote-prd` route — a PRD-sized signal lands in `proposed/` staging,
-	 * which a human later promotes to `ready/`). BOTH go through the SAME
+	 * The artifact TYPE to mint, chosen by the AGENTIC apply VERDICT (task
+	 * `agentic-apply-retire-disposition-vocabulary` — NOT a human `promote-*` field
+	 * any more): `'task'` → `work/tasks/ready/<slug>.md` (the default); `'prd'` →
+	 * `work/prds/proposed/<slug>.md` (a PRD-sized signal lands in `proposed/`
+	 * staging, which a human later promotes to `ready/`). BOTH go through the SAME
 	 * triage-local {@link createItemThroughCas} writer (one local commit through the
 	 * CAS) — NOT intake's branch+integrate band — so the CAS-loser-backs-off
 	 * guarantee and the same-commit note deletion are uniform across the two routes.
@@ -496,12 +468,3 @@ function stripFrontmatter(content: string): string {
 		.join('\n')
 		.replace(/^\n+/, '');
 }
-
-/** Append a `## heading` block to a body (append-only; the body is the durable record). */
-function appendBlock(body: string, heading: string, lines: string[]): string {
-	const base = body.replace(/\s*$/, '');
-	return [base, '', heading, '', ...lines, ''].join('\n');
-}
-
-// Re-export the heading constant the tests assert against.
-export {MAP_HEADING};

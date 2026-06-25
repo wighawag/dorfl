@@ -51,7 +51,6 @@ export {
 
 export type {
 	SidecarType,
-	SidecarDisposition,
 	SidecarEntry,
 	SidecarModel,
 	SidecarIdentity,
@@ -82,11 +81,12 @@ export type {
 	ApplyAnsweredQuestionsOptions,
 	ApplyAnsweredQuestionsResult,
 } from './apply-persist.js';
+export {ApplyPersistError, applyAnsweredQuestions} from './apply-persist.js';
+
 export {
-	ApplyPersistError,
-	applyAnsweredQuestions,
-	isTriagedKeep,
-} from './apply-persist.js';
+	APPLY_LIFECYCLE_FOLDERS,
+	resolveItemPathByIdentity,
+} from './item-path.js';
 
 export type {
 	TickItem,

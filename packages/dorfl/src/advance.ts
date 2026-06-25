@@ -37,7 +37,17 @@ import {
 	type PromoteObservationOptions,
 	type PromoteObservationResult,
 } from './triage-persist.js';
-import {isEntryAnswered} from './sidecar.js';
+import {
+	decide,
+	DisallowedOutcomeError,
+	type DecisionVerdict,
+} from './decision-engine.js';
+import {
+	APPLY_ALLOWED_OUTCOMES,
+	buildApplyDecisionInput,
+	harnessApplyDecider,
+	type ApplyDecider,
+} from './apply-decide.js';
 import {
 	persistSurfacedQuestions,
 	type SurfacePersistOptions,
@@ -227,6 +237,22 @@ export interface AdvanceContext {
 	 * tests drive the append-re-pause path) WITHOUT inventing an ANSWER.
 	 */
 	applyFollowups?: NewQuestion[];
+	/**
+	 * The AGENTIC apply DECISION seam (task
+	 * `agentic-apply-retire-disposition-vocabulary`): the fresh-context decision
+	 * agent the apply rung runs on a fully-answered OBSERVATION to choose what to DO
+	 * with the signal (`mint-task | mint-prd | delete-source | ask-follow-up`),
+	 * grounded in the source's full context. It is the injected
+	 * {@link ApplyDecider} the shared `decide(input, allowedOutcomes)` engine runs;
+	 * tests inject a CANNED verdict (no model). `undefined` ⇒ the apply rung defaults
+	 * to {@link harnessApplyDecider} (a NullHarness, no real model) so the seam is
+	 * never a crash — but the CLI threads the real harness-backed decider. The
+	 * verdict's type SELECTION (task vs prd) replaces the retired `promote-*`
+	 * disposition token; `adr` is DEFERRED (not in the allowed set yet).
+	 */
+	applyDecide?: ApplyDecider;
+	/** The model the apply-DECISION agent runs on (de-correlated, like `surfaceModel`). */
+	applyModel?: string;
 	/**
 	 * The 3-state `observationTriage` policy (ADR `ci-config-policy-and-gate-
 	 * family` §2) read at the triage rung. It governs the rung-internal
@@ -566,11 +592,13 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
  * high bar) may auto-disposition ONLY the no-question cases:
  *
  *   - **default (question-gated):** delegate to {@link surfaceRung} — spawn the
- *     `surface-questions` agent (it emits the triage promote/keep/delete question
- *     with a `disposition`) and the ENGINE persists the sidecar + `needsAnswers`.
- *     The disposition routing is then executed by the APPLY rung when the human
- *     answers. Surface stays ALWAYS allowed (US #23) — this path runs under
- *     `ask`/`off` (and `off` + an explicit `obs:` runs in this `ask`-mode).
+ *     `surface-questions` agent (it emits a PLAIN "what becomes of this signal?"
+ *     question — NO disposition token any more, task
+ *     `agentic-apply-retire-disposition-vocabulary`) and the ENGINE persists the
+ *     sidecar + `needsAnswers`. When the human answers, the AGENTIC apply decision
+ *     (not a stamped token) reads the answer + source and chooses what to DO.
+ *     Surface stays ALWAYS allowed (US #23) — this path runs under `ask`/`off`
+ *     (and `off` + an explicit `obs:` runs in this `ask`-mode).
  *   - **`auto` exception:** ONLY under `observationTriage: 'auto'`, ask the
  *     {@link TriageGate} whether the observation is a no-question case. If it emits
  *     `auto: true` (`duplicate` → DELETE the redundant note; `map` → unambiguous
@@ -615,9 +643,10 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 		}
 		if (decision.auto === true) {
 			// A no-question case (duplicate / map) — auto-disposition WITHOUT a
-			// question. `duplicate` discharges by deletion (redundant copy); `map`
-			// stamps triaged:keep. NEVER auto-deletes a NON-duplicate; NEVER
-			// auto-promotes.
+			// question. BOTH discharge the redundant note BY DELETION (a duplicate is a
+			// redundant copy; a map is already covered by the item it maps onto). There
+			// is no resting `triaged:keep` state any more. NEVER auto-deletes a
+			// NON-redundant signal; NEVER auto-promotes.
 			const dispose = context.autoDisposition ?? autoDispositionObservation;
 			const result = dispose({
 				cwd,
@@ -633,27 +662,45 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 		// `auto: false` ⇒ a judgement call. Fall through to the surface question.
 	}
 
-	// DEFAULT (question-gated): surface the promote/keep/delete question + WAIT.
-	// This REUSES the surface rung verbatim (the `surface-questions` skill emits the
-	// triage question with a `disposition`); the apply rung executes the answer.
+	// DEFAULT (question-gated): surface a PLAIN "what becomes of this signal?"
+	// question + WAIT. This REUSES the surface rung verbatim (the `surface-questions`
+	// skill emits the triage question — NO disposition token any more, task
+	// `agentic-apply-retire-disposition-vocabulary`); the AGENTIC apply decision
+	// reads the human's answer + source and decides what to DO when it is answered.
 	return surfaceRung(input);
 }
 
 /**
- * The APPLY rung BODY (task `advance-rung-apply`, US #11/14/15/29/30): when the
- * classifier says `apply` (ALL sidecar entries answered), apply the HUMAN's
- * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
- * sidecar contract's {@link applyAtomic}) — then EITHER append newly-discovered
- * questions (stay `needsAnswers:true`, re-pause) OR resolve fully (clear
- * `needsAnswers` + DELETE the sidecar in the SAME commit) OR disposition the item
- * to a terminal (advance / dropped / needs-attention / keep / delete).
+ * The APPLY rung BODY (task `advance-rung-apply`; AGENTIC apply, task
+ * `agentic-apply-retire-disposition-vocabulary`): when the classifier says `apply`
+ * (ALL sidecar entries answered), apply the HUMAN's answers.
+ *
+ * For a fully-answered OBSERVATION (and no caller-supplied follow-up batch), the
+ * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
+ * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
+ * type/context)` via the injected {@link ApplyDecider}, allowing the LAUNCH set
+ * `{task | prd | delete | ask}` (= `{mint-task | mint-prd | delete-source |
+ * ask-follow-up}`; `adr` is DEFERRED — a stubbed `adr` verdict is rejected by the
+ * engine's allowed-outcome guard, never dispatched). The verdict ROUTES:
+ *   - `ask` → the EXISTING append/re-pause loop ({@link applyAnsweredQuestions}
+ *     with the follow-up appended; `needsAnswers:true` stays, re-pause in one
+ *     commit);
+ *   - `task` / `prd` → {@link promoteObservation} (mint a SELF-CONTAINED artifact +
+ *     `git rm` the source + sidecar in the SAME atomic commit); the artifact type
+ *     comes from the agent's VERDICT, NOT a human `promote-*` field;
+ *   - `delete` → {@link applyAnsweredQuestions} discharge-by-deletion (`git rm`
+ *     source + sidecar in one revertible commit, the reason in the commit message).
+ *
+ * For a TASK/PRD (answering its OWN open questions) or a caller-supplied follow-up
+ * batch, it delegates straight to {@link applyAnsweredQuestions} (resolve fully /
+ * re-pause) — the lifecycle path is untouched (a task/prd is dropped by its own
+ * lifecycle, not by a question answer).
  *
  * Under the `advancing` CAS lock (held by {@link performAdvance} BEFORE this runs
- * — so the work is POST-lock, winner-only), it delegates to the engine-owned
- * {@link applyAnsweredQuestions} persist (sibling of the surface rung's persist).
- * ALWAYS allowed (no gate). NEVER invents an answer — it applies ONLY the
- * human-authored `answer:` text + `disposition:` field; a subset-answered sidecar
- * is not even classified `apply` (the classifier NO-OPs), asserted in the persist.
+ * — so the work is POST-lock, winner-only). ALWAYS allowed (no gate). NEVER
+ * invents an answer — it applies ONLY the human-authored `answer:` text; a
+ * subset-answered sidecar is not even classified `apply` (the classifier NO-OPs),
+ * asserted in the persist.
  */
 async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 	const {item, context} = input;
@@ -665,47 +712,17 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 		return vanishedSkip({rung: 'apply', item});
 	}
 
-	// OBSERVATION → an answered "promote" is the triage rung's new-item creation
-	// (US #24): the apply-persist deliberately does NOT treat `promote-*` as a
-	// terminal (it would plain-resolve THIS item) — the promotion is a NEW item's
-	// creation through the CAS, keyed on the new item's identity. Route it here.
-	const promoteArtifact =
+	// AGENTIC APPLY for an answered OBSERVATION (the subsumed triage rung): run the
+	// shared decision engine over the answer(s) + source, route the verdict. A
+	// caller-supplied follow-up batch (`applyFollowups`) bypasses the decision and
+	// re-pauses directly (a test/driver hook). TASK/PRD items resolve in place
+	// (their own lifecycle), so they skip the decision and fall through to the
+	// persist below.
+	const runAgenticDecision =
 		input.namespace === 'observation' &&
-		!(context.applyFollowups && context.applyFollowups.length > 0)
-			? answeredPromoteArtifact(cwd, item)
-			: undefined;
-	if (promoteArtifact !== undefined) {
-		const promote = context.promote ?? promoteObservation;
-		try {
-			const result = await promote({
-				cwd,
-				item,
-				itemPath,
-				artifact: promoteArtifact,
-				newSlug: context.promoteSlug,
-				arbiter: context.arbiter,
-				note,
-			});
-			return {
-				exitCode: result.exitCode,
-				outcome:
-					result.outcome === 'promoted'
-						? 'advanced'
-						: result.outcome === 'lost'
-							? 'lost'
-							: result.outcome === 'contended'
-								? 'contended'
-								: 'usage-error',
-				message: result.message,
-			};
-		} catch (err) {
-			const detail = err instanceof Error ? err.message : String(err);
-			return {
-				exitCode: 1,
-				outcome: 'usage-error',
-				message: `promote ${item}: ${detail}`,
-			};
-		}
+		!(context.applyFollowups && context.applyFollowups.length > 0);
+	if (runAgenticDecision) {
+		return applyAgenticDecision(input, itemPath);
 	}
 
 	const apply = context.applyPersist ?? applyAnsweredQuestions;
@@ -787,47 +804,165 @@ function findItemPath(
 }
 
 /**
- * Which artifact TYPE does the OBSERVATION's answered sidecar route to (or
- * `undefined` for the plain apply path)? The signal the apply rung uses to route
- * to the triage rung's new-item-creation CAS (US #24) instead of the plain
- * resolve. A `promote-task`/`promote-adr` answer routes to a TASK; a `promote-prd`
- * answer routes to a PRD (`prds/proposed/`, US #4) — both through the SAME
- * `promoteObservation` writer, only the artifact differs. Read from disk (the
- * classifier already confirmed all-answered; this only reads the disposition).
- * Absent/unreadable sidecar ⇒ `undefined` (the plain apply path).
+ * The AGENTIC apply DECISION for a fully-answered OBSERVATION (task
+ * `agentic-apply-retire-disposition-vocabulary`): run the shared
+ * `decide(input, allowedOutcomes)` engine over the answer(s) + source, then ROUTE
+ * the verdict. The artifact-type selection (task vs prd) comes from the agent's
+ * VERDICT, NOT a human `promote-*` field (which is retired). Replaces the old
+ * `answeredPromoteArtifact` + disposition picker.
+ *
+ *   - `ask` → append the follow-up question(s) + re-pause (the EXISTING loop, via
+ *     {@link applyAnsweredQuestions}'s `appendQuestions`);
+ *   - `task` / `prd` → {@link promoteObservation} (mint self-contained + delete
+ *     source in the same atomic commit);
+ *   - `delete` → {@link applyAnsweredQuestions}'s discharge-by-deletion (`git rm`
+ *     source + sidecar in one revertible commit, the reason in the message).
+ *
+ * A disallowed `adr` verdict is rejected by the engine's allowed-outcome guard
+ * ({@link DisallowedOutcomeError}) and mapped onto a usage-error — never
+ * dispatched (the `mint-adr` route is the follow-on task).
  */
-function answeredPromoteArtifact(
-	cwd: string,
-	item: string,
-): 'task' | 'prd' | undefined {
-	const sidecarAbs = join(cwd, sidecarPathFor(item));
-	if (!existsSync(sidecarAbs)) {
-		return undefined;
+async function applyAgenticDecision(
+	input: RungExecInput,
+	itemPath: string,
+): Promise<RungExecResult> {
+	const {item, context} = input;
+	const note = context.note ?? (() => {});
+	const cwd = context.cwd;
+
+	const decisionInput = buildApplyDecisionInput({
+		item,
+		type: sidecarTypeFor(input.namespace),
+		itemPath,
+		cwd,
+		model: context.applyModel,
+	});
+	if (decisionInput === undefined) {
+		// No sidecar / item to decide over (a sibling leg removed it between classify
+		// and run) — the same benign clean-exit the persist's vanished branch gives.
+		return vanishedSkip({rung: 'apply', item});
 	}
-	let model;
+
+	const decider = context.applyDecide ?? harnessApplyDecider();
+	let verdict: DecisionVerdict;
 	try {
-		model = parseSidecar(readFileSync(sidecarAbs, 'utf8'));
-	} catch {
-		return undefined;
+		verdict = await decide(decisionInput, decider, APPLY_ALLOWED_OUTCOMES);
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		// A DisallowedOutcomeError (e.g. a stubbed `adr` verdict) and an agent-failed
+		// parse both degrade HONESTLY onto a usage-error — never a silent dispatch.
+		const label =
+			err instanceof DisallowedOutcomeError
+				? `apply ${item}: the decision verdict is not an allowed outcome (${detail})`
+				: `apply ${item}: the decision agent produced no usable verdict (${detail})`;
+		return {exitCode: 1, outcome: 'usage-error', message: label};
 	}
-	let sawTaskPromote = false;
-	for (const entry of model.entries) {
-		if (!isEntryAnswered(entry)) {
-			continue;
+
+	if (verdict.outcome === 'ask') {
+		// ask-follow-up → the EXISTING append/re-pause loop. One BATCH of follow-ups.
+		const apply = context.applyPersist ?? applyAnsweredQuestions;
+		const question = (verdict.question ?? '').trim();
+		if (question === '') {
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: the decision agent chose 'ask' but emitted no follow-up question.`,
+			};
 		}
-		// A `promote-prd` answer takes precedence (the most-specific route): once a
-		// human has sized this signal as PRD-sized, mint the PRD.
-		if (entry.disposition === 'promote-prd') {
-			return 'prd';
-		}
-		if (
-			entry.disposition === 'promote-task' ||
-			entry.disposition === 'promote-adr'
-		) {
-			sawTaskPromote = true;
+		try {
+			const result = apply({
+				cwd,
+				item,
+				itemPath,
+				appendQuestions: [{question}],
+				note,
+			});
+			return {
+				exitCode: 0,
+				outcome: result.outcome === 'vanished' ? 'vanished' : 'no-op',
+				message: result.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: ${detail}`,
+			};
 		}
 	}
-	return sawTaskPromote ? 'task' : undefined;
+
+	if (verdict.outcome === 'task' || verdict.outcome === 'prd') {
+		// mint-task / mint-prd → CAS-create a SELF-CONTAINED artifact + delete the
+		// source + sidecar in the SAME commit (delete-on-promote, preserved). The
+		// verdict's drafted body (when present) seeds the new item; else the writer
+		// builds a self-contained body FROM the observation (carrying the answers +
+		// open-question scoping). The artifact type is the agent's VERDICT.
+		const promote = context.promote ?? promoteObservation;
+		const draftedBody =
+			verdict.outcome === 'task' ? verdict.taskBody : verdict.prdBody;
+		const draftedSlug =
+			verdict.outcome === 'task' ? verdict.taskSlug : verdict.prdSlug;
+		try {
+			const result = await promote({
+				cwd,
+				item,
+				itemPath,
+				artifact: verdict.outcome,
+				newSlug: context.promoteSlug ?? draftedSlug,
+				...(draftedBody !== undefined && draftedBody.trim() !== ''
+					? {stubContent: draftedBody}
+					: {}),
+				arbiter: context.arbiter,
+				note,
+			});
+			return {
+				exitCode: result.exitCode,
+				outcome:
+					result.outcome === 'promoted'
+						? 'advanced'
+						: result.outcome === 'lost'
+							? 'lost'
+							: result.outcome === 'contended'
+								? 'contended'
+								: 'usage-error',
+				message: result.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: ${detail}`,
+			};
+		}
+	}
+
+	// delete-source → discharge by deletion (DIRECT, no confirm — decision 12). The
+	// human's answer is the source of truth; the deletion is a single revertible
+	// commit with the reason in the message.
+	const apply = context.applyPersist ?? applyAnsweredQuestions;
+	try {
+		const result = apply({
+			cwd,
+			item,
+			itemPath,
+			discharge: {reason: verdict.deleteReason ?? ''},
+			note,
+		});
+		return {
+			exitCode: 0,
+			outcome: result.outcome === 'vanished' ? 'vanished' : 'advanced',
+			message: result.message,
+		};
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: `apply ${item}: ${detail}`,
+		};
+	}
 }
 
 /**
@@ -988,6 +1123,8 @@ export async function performAdvance(
 				surfacePersist: options.surfacePersist,
 				applyPersist: options.applyPersist,
 				applyFollowups: options.applyFollowups,
+				applyDecide: options.applyDecide,
+				applyModel: options.applyModel,
 				observationTriage: options.observationTriage,
 				triageGate: options.triageGate,
 				triageModel: options.triageModel,

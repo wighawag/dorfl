@@ -27,10 +27,12 @@ import {workItemRel} from './work-layout.js';
  *   - Per entry: a `## Qn` heading (entry separator + answer boundary), a BOLD
  *     question line, a BLOCKQUOTE context, an ITALIC suggested-default
  *     (`_Suggested default: …_`), a per-entry HTML COMMENT carrying
- *     `id=…` (and optional `disposition=…` and an explicit `answered=…` OVERRIDE
- *     when it disagrees with the answer-derived predicate), a fixed answer
- *     marker `**Your answer** (write below this line):`, then the human's
- *     answer prose.
+ *     `id=…` (and an explicit `answered=…` OVERRIDE when it disagrees with the
+ *     answer-derived predicate), a fixed answer marker
+ *     `**Your answer** (write below this line):`, then the human's answer prose.
+ *     (The `disposition=…` field is RETIRED — task
+ *     `agentic-apply-retire-disposition-vocabulary`; an entry is binary, and a
+ *     stale `disposition=` token in an old sidecar is parsed away.)
  *   - The answer is HEADING-DELIMITED: it spans from the answer marker up to
  *     the next entry `## ` heading (NOT a `---` rule), so a literal `---`
  *     inside an answer cannot break parsing.
@@ -40,8 +42,8 @@ import {workItemRel} from './work-layout.js';
  * answer marker with no format knowledge.
  *
  * Round-trip is **SEMANTIC** (model-equal, not byte-equal): a parse → serialise
- * canonicalises whitespace; the MODEL (entries, ids, answers, answered-state,
- * dispositions) is preserved. The load-bearing rules are kept:
+ * canonicalises whitespace; the MODEL (entries, ids, answers, answered-state) is
+ * preserved. The load-bearing rules are kept:
  *
  *   - **Identity-keyed, NOT folder-keyed.** The path is derived PURELY from the
  *     item's NAMESPACED identity (`<type>-<slug>`, `:`→`-` for the filename),
@@ -69,27 +71,6 @@ import {workItemRel} from './work-layout.js';
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
 export type SidecarType = 'prd' | 'task' | 'observation';
 
-/**
- * The optional triage/terminal routing an answered triage entry carries.
- *
- * `dropped` is the GENERIC "won't-proceed" terminal — it routes the item to its
- * per-regime terminal (`work/tasks/cancelled/` for a task, `work/prds/dropped/`
- * for a prd; the flat top-level `work/dropped/` was retired by the
- * `folder-taxonomy-reorg-and-rename` migration as a slug-collision fix). It
- * GENERALISES the previous `out-of-scope` disposition: the specific REASON an
- * item was dropped (`superseded by <x>` / `out-of-scope` / `duplicate` /
- * `abandoned`) lives in the item BODY (a `reason:` line), NOT in the disposition
- * or the folder — status is the folder (WORK-CONTRACT rule 3).
- */
-export type SidecarDisposition =
-	| 'promote-task'
-	| 'promote-prd'
-	| 'promote-adr'
-	| 'keep'
-	| 'delete'
-	| 'dropped'
-	| 'needs-attention';
-
 /** One question entry in the sidecar (the per-entry source of truth). */
 export interface SidecarEntry {
 	/** Stable, monotonic id (`q1`, `q2`, …); never reused once minted. */
@@ -111,8 +92,6 @@ export interface SidecarEntry {
 	 * `undefined` ⇒ no override (the answered-ness derives from `answer`).
 	 */
 	answeredOverride?: boolean;
-	/** Optional triage/terminal routing (only on triage entries). */
-	disposition?: SidecarDisposition;
 }
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
@@ -241,16 +220,6 @@ export function sidecarPathFor(identity: string): string {
 /** The fixed answer marker the human types prose under. */
 const ANSWER_MARKER = '**Your answer** (write below this line):';
 
-const DISPOSITIONS: ReadonlySet<string> = new Set<SidecarDisposition>([
-	'promote-task',
-	'promote-prd',
-	'promote-adr',
-	'keep',
-	'delete',
-	'dropped',
-	'needs-attention',
-]);
-
 // --- Parse ----------------------------------------------------------------
 
 /** Pull the next monotonic id given the highest existing id number. */
@@ -314,7 +283,6 @@ function parseIdentityComment(line: string): IdentityFields | undefined {
 interface EntryFields {
 	id?: string;
 	answered?: boolean;
-	disposition?: SidecarDisposition;
 }
 
 /** Parse a per-entry `<!-- qN fields: key=val … -->` HTML comment. */
@@ -342,8 +310,6 @@ function parseEntryComment(line: string): EntryFields | undefined {
 			} else if (value === 'false') {
 				out.answered = false;
 			}
-		} else if (key === 'disposition' && DISPOSITIONS.has(value)) {
-			out.disposition = value as SidecarDisposition;
 		}
 	}
 	return out;
@@ -357,7 +323,6 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	let inBlockquote = false;
 	let defaultVal: string | undefined;
 	let answeredOverride: boolean | undefined;
-	let disposition: SidecarDisposition | undefined;
 	let answerStart = -1;
 
 	for (let i = 0; i < lines.length; i++) {
@@ -373,9 +338,6 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 			}
 			if (entryFields.answered !== undefined) {
 				answeredOverride = entryFields.answered;
-			}
-			if (entryFields.disposition !== undefined) {
-				disposition = entryFields.disposition;
 			}
 			inBlockquote = false;
 			continue;
@@ -441,9 +403,6 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	}
 	if (finalOverride !== undefined) {
 		entry.answeredOverride = finalOverride;
-	}
-	if (disposition !== undefined) {
-		entry.disposition = disposition;
 	}
 	return entry;
 }
@@ -532,9 +491,9 @@ function blockquote(value: string): string[] {
  * HTML comment at the top carries `item`/`type`/`slug` + the derived
  * `allAnswered` mirror; each entry is a `## Qn` heading, a bold question line,
  * a blockquote context (when non-empty), an italic suggested-default (when
- * present), a per-entry HTML comment carrying `id` (and `disposition` and an
- * explicit `answered` override when it disagrees with the derived predicate),
- * the fixed answer marker, then the answer prose. Round-trip is SEMANTIC:
+ * present), a per-entry HTML comment carrying `id` (and an explicit `answered`
+ * override when it disagrees with the derived predicate), the fixed answer
+ * marker, then the answer prose. Round-trip is SEMANTIC:
  * `parseSidecar(serialiseSidecar(m))` recovers an equal MODEL; re-serialising
  * canonicalises the text.
  */
@@ -574,9 +533,6 @@ export function serialiseSidecar(model: SidecarModel): string {
 		} else if (entry.answeredOverride === false && derivedAnswered) {
 			fields.push('answered=false');
 		}
-		if (entry.disposition !== undefined) {
-			fields.push(`disposition=${entry.disposition}`);
-		}
 		out.push(`<!-- ${entry.id} fields: ${fields.join(' ')} -->`);
 		out.push('');
 		out.push(ANSWER_MARKER);
@@ -597,7 +553,6 @@ export interface NewQuestion {
 	question: string;
 	context?: string;
 	default?: string;
-	disposition?: SidecarDisposition;
 }
 
 /**
@@ -621,9 +576,6 @@ export function appendQuestions(
 		};
 		if (q.default !== undefined) {
 			entry.default = q.default;
-		}
-		if (q.disposition !== undefined) {
-			entry.disposition = q.disposition;
 		}
 		entries.push(entry);
 	}

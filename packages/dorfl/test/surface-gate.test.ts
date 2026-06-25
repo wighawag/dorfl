@@ -36,7 +36,6 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 					{
 						question: 'promote or keep?',
 						context: 'an exact duplicate of bar',
-						disposition: 'keep',
 					},
 				],
 			}),
@@ -47,7 +46,8 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 		expect(emit.questions).toHaveLength(2);
 		expect(emit.questions[0].context).toBe('src/foo.ts:10');
 		expect(emit.questions[0].default).toBe('use A');
-		expect(emit.questions[1].disposition).toBe('keep');
+		// A surfaced question is a PLAIN question — no disposition field any more.
+		expect('disposition' in emit.questions[1]).toBe(false);
 	});
 
 	it('an EMPTY questions array is VALID (the honest "no open judgement" result)', () => {
@@ -55,10 +55,10 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 		expect(emit.questions).toEqual([]);
 	});
 
-	it('keeps `promote-prd` as a human-choosable triage disposition (US #5)', () => {
-		// `promote-prd` is offered to a HUMAN at the surface alongside `promote-task`
-		// (sizing a signal task-vs-PRD is judgement). The surface whitelist must
-		// therefore admit it, exactly as it admits `promote-task`.
+	it('IGNORES any disposition token on a surfaced question (the vocabulary is retired — a question is plain)', () => {
+		// The disposition vocabulary is gone (task
+		// `agentic-apply-retire-disposition-vocabulary`): a surfaced question carries
+		// NO disposition token; what to DO with the answer is the agentic decision.
 		const emit = parseSurfaceEmit(
 			JSON.stringify({
 				item: 'observation:foo',
@@ -69,11 +69,11 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 			}),
 		);
 		expect(emit.questions).toHaveLength(2);
-		expect(emit.questions[0].disposition).toBe('promote-task');
-		expect(emit.questions[1].disposition).toBe('promote-prd');
+		expect('disposition' in emit.questions[0]).toBe(false);
+		expect('disposition' in emit.questions[1]).toBe(false);
 	});
 
-	it('drops an unknown disposition + an empty-question placeholder (normalises)', () => {
+	it('drops an empty-question placeholder (normalises); any disposition token is ignored', () => {
 		const emit = parseSurfaceEmit(
 			JSON.stringify({
 				questions: [
@@ -82,10 +82,10 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 				],
 			}),
 		);
-		// The all-whitespace question is dropped; the bogus disposition is omitted.
+		// The all-whitespace question is dropped; the disposition token is omitted.
 		expect(emit.questions).toHaveLength(1);
 		expect(emit.questions[0].question).toBe('real?');
-		expect(emit.questions[0].disposition).toBeUndefined();
+		expect('disposition' in emit.questions[0]).toBe(false);
 	});
 
 	it('throws SurfaceParseError on no {questions} / invalid JSON (never a silent surface)', () => {
@@ -103,18 +103,18 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 });
 
 describe('toNewQuestions — the emit shape maps 1:1 onto the sidecar NewQuestion', () => {
-	it('carries question/context/default/disposition through with zero translation', () => {
+	it('carries question/context/default through with zero translation (no disposition field)', () => {
 		const emit: SurfaceEmit = {
 			questions: [
 				{question: 'q1?', context: 'ctx', default: 'd'},
-				{question: 'q2?', disposition: 'promote-task'},
-				{question: 'q3?', disposition: 'promote-prd'},
+				{question: 'q2?'},
+				{question: 'q3?'},
 			],
 		};
 		expect(toNewQuestions(emit)).toEqual([
 			{question: 'q1?', context: 'ctx', default: 'd'},
-			{question: 'q2?', disposition: 'promote-task'},
-			{question: 'q3?', disposition: 'promote-prd'},
+			{question: 'q2?'},
+			{question: 'q3?'},
 		]);
 	});
 });
@@ -126,10 +126,9 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 		// Points at the protocol doc (in-band discipline), not at a host-installed skill.
 		expect(p).toMatch(/work\/protocol\/SURFACE-PROTOCOL\.md/);
 		expect(p).toMatch(/"questions"/);
-		// `promote-prd` is offered to the human alongside `promote-task` (US #5) — the
-		// surface is where the human sizes a signal task-vs-PRD.
-		expect(p).toContain('promote-prd');
-		expect(p).toContain('promote-task');
+		// The disposition vocabulary is retired: the surface prompt no longer offers a
+		// `disposition` token (the agentic apply decision sizes the signal).
+		expect(p).not.toContain('disposition');
 		// Fresh-context surfacer that EDITS nothing and EMITS only (mirrors review).
 		expect(p).toMatch(/EMIT questions only|Do NOT edit/);
 		// The skill JUDGES, the engine PERSISTS — the division of labour is named.

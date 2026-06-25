@@ -20,12 +20,14 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * (the capture-bucket contract: an observation is left by deletion BY A HUMAN). So
  * the ONLY auto-dispositions this gate may return are:
  *
- *   - `duplicate` — an EXACT duplicate of an existing item → RECOMMEND deletion
- *     (the human still deletes per the capture-bucket contract; the agent only
- *     recommends, exactly as the apply rung's `delete` disposition does); or
- *   - `map` — an UNAMBIGUOUS map onto an existing item → record the mapping +
- *     `triaged:keep` (the observation is settled onto its existing home; it drops
- *     out of the pool, never re-asked).
+ *   - `duplicate` — an EXACT duplicate of an existing item → DISCHARGE the
+ *     redundant note BY DELETION (it is a redundant copy of an already-captured
+ *     signal, so nothing is lost); or
+ *   - `map` — an UNAMBIGUOUS map onto an existing item → DISCHARGE the redundant
+ *     note BY DELETION too (it is already covered by the item it maps onto, so it
+ *     carries no unique signal; the mapping is recorded in the commit message).
+ *     There is no resting `triaged:keep` state any more (task
+ *     `agentic-apply-retire-disposition-vocabulary`).
  *
  * It is the DIRECT mirror of `surface-gate.ts`'s spawn→emit→parse seam, with a
  * narrower emitted payload (`{auto, …}` rather than `{questions}`). Production
@@ -38,7 +40,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
 export type TriageAutoKind =
 	/** An EXACT duplicate of an existing item → recommend deletion (human deletes). */
 	| 'duplicate'
-	/** An UNAMBIGUOUS map onto an existing item → record the mapping + `triaged:keep`. */
+	/** An UNAMBIGUOUS map onto an existing item → discharge the redundant note by deletion. */
 	| 'map';
 
 /**
@@ -176,8 +178,8 @@ export function buildTriagePrompt(item: string): string {
 		`    (same signal, already captured) → the engine RECOMMENDS deletion (a human`,
 		`    still deletes it, per the capture-bucket contract); or`,
 		`  - "map": this observation UNAMBIGUOUSLY maps onto ONE existing item (it is`,
-		`    already covered there) → the engine records the mapping and marks it`,
-		`    triaged:keep so it drops out of the pool.`,
+		`    already covered there) → the engine DISCHARGES the redundant note by`,
+		`    deletion, recording the mapping in the commit message.`,
 		``,
 		`NEVER emit auto:true to PROMOTE (drafting a new task is "is this worth`,
 		`building?" — ALWAYS a human call) and NEVER to DELETE a NON-duplicate signal`,
