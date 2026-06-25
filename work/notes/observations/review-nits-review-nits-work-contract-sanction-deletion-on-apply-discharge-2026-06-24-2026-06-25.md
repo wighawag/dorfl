@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'review-nits-work-contract-sanction-del
 date: 2026-06-25
 status: open
 reviewOf: review-nits-work-contract-sanction-deletion-on-apply-discharge-2026-06-24
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
