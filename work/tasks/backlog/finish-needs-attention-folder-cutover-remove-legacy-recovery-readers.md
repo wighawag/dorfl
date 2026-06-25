@@ -51,16 +51,24 @@ the scope fence).
 
 ## Acceptance criteria
 
-- [ ] REPO-WIDE CLOSURE (the real definition of done): no EXECUTABLE folder probe
-      of `work/needs-attention/` remains anywhere in `packages/dorfl/src/`. A
-      probe = an `existsSync`/`source`-resolution/`workItemPath(..., 'needs-attention', ...)`
-      read that can drive control flow. The probe sites are spread across MORE
-      files than the named seams below (verified 2026-06-25:
-      `complete.ts`, `do.ts`, `status.ts`, `recover-isolated.ts`, `integrator.ts`,
-      and `integration-core.ts`); audit ALL of them, not only the headline ones.
-      EXCLUDED from this closure (must NOT be touched): `run.ts`'s `needsAttention`
-      job counter, deliberately-historical comments/ADR citations, and ALL
-      `in-progress` probes (out of scope per the scope fence).
+- [ ] REPO-WIDE CLOSURE (the real definition of done): no EXECUTABLE
+      `work/needs-attention/` FOLDER PROBE remains anywhere in
+      `packages/dorfl/src/`. A folder probe = an
+      `existsSync(...)` / `source`-resolution / `workItemPath(..., 'needs-attention', ...)`
+      read of the FOLDER that can drive control flow. Run
+      `grep -rn "needs-attention" packages/dorfl/src/` as the closure scan, then
+      CLASSIFY every hit into one of four kinds and act only on the first:
+      (1) FOLDER PROBE - in scope, remove/justify (e.g. `complete.ts`'s
+      `existsSync(workItemPath(cwd, 'needs-attention', slug))` at ~L669/683, the
+      `needs-attention.ts` requeue probe arm, any `integration-core.ts` re-gate
+      branch). (2) JOB-RECORD STATE - the `state === 'needs-attention'` / outcome
+      enum used by the `jobs`/`run` machinery (e.g. `status.ts` job state,
+      `integrator.ts` `outcome: 'needs-attention'`, `run.ts`'s counter): NOT a
+      folder probe, LEAVE IT. (3) HISTORICAL PROSE / ADR citation: LEAVE IT.
+      (4) `in-progress` reference: out of scope, LEAVE IT. The closure holds when
+      no kind-(1) folder probe survives - NOT when the grep is empty (kinds 2-4
+      legitimately remain). Do not trust the file list above as exhaustive or as
+      all-in-scope; classify each hit yourself.
 - [ ] `complete.ts`'s source-folder resolution no longer falls back to a
       `work/needs-attention/` FILE probe that cannot be produced: the
       `existsSync(needsAttention)` / `onNeedsAttention` -> `source: 'needs-attention'`
@@ -154,22 +162,24 @@ sweep finding was wrong about a rename direction, so verify):
   the word stays where it names the lock state. You are removing the FOLDER
   implementation, not the concept.
 
-WHERE TO LOOK (by symbol/concept, line numbers drift). The `needs-attention`
-folder-probe sites are spread WIDER than the headline seams - audit the FULL set,
-not just the obvious ones (verified 2026-06-25 these carry executable
-needs-attention probes): `complete.ts` (the `onNeedsAttention` /
-`source: 'needs-attention'` chain + the `complete-from-needs-attention` recovery
-doc-comment), `needs-attention.ts` (the requeue resolver's
-`['tasks-backlog','in-progress','needs-attention']` probe - remove the
-needs-attention arm only), `integration-core.ts` (the needs-attention re-gate
-branches), `do.ts`, `status.ts`, `recover-isolated.ts`, `integrator.ts`. Also the
-folder-set constants in `work-layout.ts` / `item-path.ts` and the export surface
-`index.ts`, and the `cli.ts` requeue help (~L3207). The repo-wide grep
-`grep -rn "needs-attention" packages/dorfl/src/` is your CLOSURE check (every
-remaining hit must be either historical prose, the `run.ts` counter, or an
-in-progress reference). Behavioural tests: `complete-from-needs-attention.test.ts`,
-`requeue-treeless-transition.test.ts`, `needs-attention-as-stuck-lock-state.test.ts`,
-`integration-core.test.ts`, `needs-attention.test.ts`.
+WHERE TO LOOK (by symbol/concept, line numbers drift). The CONFIRMED FOLDER-PROBE
+seams (verified 2026-06-25): `complete.ts` (the `existsSync(workItemPath(..., 'needs-attention', ...))`
+at ~L669/683, the `onNeedsAttention` / `source: 'needs-attention'` chain + the
+`complete-from-needs-attention` recovery doc-comment) and `needs-attention.ts`
+(the requeue resolver's `['tasks-backlog','in-progress','needs-attention']` probe
+- remove the needs-attention arm only); plus `integration-core.ts`'s
+needs-attention re-gate branches (verify each is a folder probe vs an
+outcome-enum before touching). Then run the repo-wide closure grep
+`grep -rn "needs-attention" packages/dorfl/src/` and CLASSIFY every hit (folder
+probe / job-record state / historical prose / in-progress) per the closure AC -
+do NOT assume a file is in scope just because it matches the word. Known NON-probe
+hits to LEAVE: `status.ts` and `integrator.ts` use `needs-attention` as a JOB/run
+state or outcome enum (the `run.ts` collision class), not a work-item folder.
+Also: the folder-set constants in `work-layout.ts` / `item-path.ts`, the export
+surface `index.ts`, and the `cli.ts` requeue help (~L3207). Behavioural tests:
+`complete-from-needs-attention.test.ts`, `requeue-treeless-transition.test.ts`,
+`needs-attention-as-stuck-lock-state.test.ts`, `integration-core.test.ts`,
+`needs-attention.test.ts`.
 
 FOUR traps that will make this go wrong if ignored:
 1. NAME COLLISION: `run.ts` has its OWN `needsAttention` (a per-run outcome
