@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'promotion-buildPromotedBody-uses-share
 date: 2026-06-25
 status: open
 reviewOf: promotion-buildPromotedBody-uses-shared-renderer
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
