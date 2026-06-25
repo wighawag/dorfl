@@ -335,3 +335,26 @@ git fetch <remote> && git switch -c work/<slug> <remote>/main
 # on completion, in the work branch's PR/merge:
 git mv work/tasks/ready/<slug>.md work/tasks/done/<slug>.md
 ```
+
+## Requeue handoff (Gate-2 block — 2026-06-25, FIXABLE, continue from kept branch)
+
+A prior build of this task reached Gate-1 green (2647 tests) but Gate-2 BLOCKED it
+for ONE additive gap, and the kept work branch (`work/task-agentic-apply-retire-disposition-vocabulary`)
+holds all the good work. CONTINUE from that branch; do NOT restart. The block:
+
+> The agentic apply engine + the `applyDecide`/`applyModel` plumbing through
+> `AdvanceContext` are DONE on the kept branch. But `cli.ts` NEVER wires a real
+> harness-backed apply decider at the three advance entry points, so production
+> falls back to `harnessApplyDecider()` with a `NullHarness` + empty agentCmd,
+> which THROWS — the apply rung errors and an answered observation can never
+> mint/delete/ask. US #2 is unreachable in production. Unit tests pass only
+> because they inject a stubbed `ApplyDecider`, masking the missing wiring.
+
+FIX (additive only — keep everything else from the kept branch):
+- At the SAME three `cli.ts` sites where `surfaceGate`/`triageGate` are wired
+  (treeless advance entry ~L416-425, isolated ~L2644-2656, in-place ~L2769-2779),
+  ALSO set `applyDecide: harnessApplyDecider({harness, agentCmd: config.agentCmd})`
+  and `applyModel: config.model`.
+- Add a test/guard asserting the production `AdvanceContext` has a non-null apply
+  decider (mirror how the surface/triage gate wiring is verified), so this can't
+  regress.
