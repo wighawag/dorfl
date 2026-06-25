@@ -63,3 +63,7 @@ Grep anchor: `work/observations/` (the short path) vs the correct
 `work/notes/observations/`. Runtime log site: `integration-core.ts` ~L2042
 (`Recorded ... non-blocking review nit(s) ... in work/observations/`). Layout
 truth: `work-layout.ts:88`.
+
+## Requeue 2026-06-25
+
+Requeued: promotion produced a body with no '## Prompt' section, so the dispatched build failed and left this lock state:stuck. See work/notes/observations/advance-promotion-builds-promptless-task-that-self-claims-stuck-2026-06-25.md. Body needs a '## Prompt' (or re-triage out of ready/) before re-claim. No work branch existed, so --reset.
