@@ -73,6 +73,14 @@ parallel; both depend only on the keystone.
 > 'prd'` block) and that the pre-claim guard still lives in `claim-cas.ts`. If any
 > moved, route to needs-attention.
 >
+> FORWARD-NOTE (from the keystone's Gate-2 review, PR #247): the shared
+> `renderTaskBody`'s default empty-prompt seed is `Build the task described
+> above.`, which DIFFERS from `buildPromotedBody`'s current empty-mechanism seed
+> `Build the task '<slug>', described above.`. To keep promotion's output
+> byte-for-byte, pass the slug-bearing seed INTO `renderTaskBody` explicitly
+> (do not rely on the renderer's generic default) — otherwise the empty-mechanism
+> case changes. Assert this in a test.
+>
 > Rewire buildPromotedBody (task AND prd artifact paths) to the shared renderer and
 > DELETE its hand-rolled `## Prompt` block. Touch RENDERING only: do NOT alter the
 > `promoteObservation` / `createItemThroughCas` writer, the atomic create+delete
