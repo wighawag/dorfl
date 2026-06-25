@@ -45,6 +45,7 @@ import {
 	type IntakeMarkerKind,
 } from './intake-marker.js';
 import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
+import {renderTaskBody, renderPrdBody} from './buildable-body.js';
 
 /**
  * **`intake <N>`** (prd `issue-intake`, task `intake-tracer-slice-outcome`): the
@@ -1577,7 +1578,7 @@ function resolvePrdSlug(verdict: IntakeVerdict): string {
  * `prd:` (prd `issue-intake` decision table). When the agent drafted no body, a thin default
  * scaffold keeps the file a valid task.
  */
-function renderBacklogTask(params: {
+export function renderBacklogTask(params: {
 	slug: string;
 	title: string;
 	body: string | undefined;
@@ -1602,22 +1603,23 @@ function renderBacklogTask(params: {
 	}
 	lines.push('covers: []', 'blockedBy: []', '---');
 	const frontmatter = lines.join('\n');
+	// The drafted body (agent-authored, headings and all) is wrapped VERBATIM.
+	// Only the empty-body DEFAULT SCAFFOLD is sourced from the shared section
+	// skeleton owner (`renderTaskBody`, prd
+	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US #2),
+	// so intake's fallback and promotion's body cannot drift on section
+	// names/order. The shared renderer ends its body with a trailing newline (its
+	// last line is a blank); intake owns the single trailing `\n` in the join
+	// below, so we `trimEnd()` the renderer output to stay byte-for-byte identical
+	// to the pre-rewire literal.
 	const drafted =
 		body && body.trim() !== ''
 			? body.trim()
-			: [
-					'## What to build',
-					'',
-					title,
-					'',
-					'## Acceptance criteria',
-					'',
-					'- [ ] the issue is resolved',
-					'',
-					'## Prompt',
-					'',
-					`> Resolve issue #${issueNumber}: ${title}`,
-				].join('\n');
+			: renderTaskBody({
+					whatToBuild: title,
+					acceptanceCriteria: '- [ ] the issue is resolved',
+					prompt: `Resolve issue #${issueNumber}: ${title}`,
+				}).trimEnd();
 	return `${frontmatter}\n\n${drafted}\n`;
 }
 
@@ -1633,7 +1635,7 @@ function renderBacklogTask(params: {
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
  * default scaffold keeps the file a valid prd that `do prd:` can later task.
  */
-function renderPrd(params: {
+export function renderPrd(params: {
 	slug: string;
 	title: string;
 	body: string | undefined;
@@ -1672,22 +1674,21 @@ function renderPrd(params: {
 	}
 	lines.push('---');
 	const frontmatter = lines.join('\n');
+	// As with `renderBacklogTask`: the drafted PRD body is wrapped VERBATIM; only
+	// the empty-body DEFAULT SCAFFOLD is sourced from the shared section skeleton
+	// owner (`renderPrdBody` with `solution` + `userStories`, prd
+	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US #2),
+	// so intake's PRD fallback and promotion's PRD body cannot drift. `trimEnd()`
+	// drops the renderer's trailing blank line so intake's single trailing `\n`
+	// (owned by the join below) keeps the bytes identical to the pre-rewire literal.
 	const drafted =
 		body && body.trim() !== ''
 			? body.trim()
-			: [
-					'## Problem Statement',
-					'',
-					`Transformed from issue #${issueNumber}: ${title}`,
-					'',
-					'## Solution',
-					'',
-					'(to be detailed; this prd needs tasking via `do prd:`).',
-					'',
-					'## User Stories',
-					'',
-					`1. As a user, I want issue #${issueNumber} addressed.`,
-				].join('\n');
+			: renderPrdBody({
+					problemStatement: `Transformed from issue #${issueNumber}: ${title}`,
+					solution: '(to be detailed; this prd needs tasking via `do prd:`).',
+					userStories: `1. As a user, I want issue #${issueNumber} addressed.`,
+				}).trimEnd();
 	return `${frontmatter}\n\n${drafted}\n`;
 }
 
