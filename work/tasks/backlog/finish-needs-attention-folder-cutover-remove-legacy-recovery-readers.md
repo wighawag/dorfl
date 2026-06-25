@@ -45,8 +45,9 @@ are deliberately-historical prose that must STAY. Read the per-area notes.
 
 The end state: the live stuck/recovery surface is unchanged (stuck items still
 surface via lock refs; a good-but-stuck item is still recoverable), but the dead
-`needs-attention/`-as-folder and stray `in-progress/`-as-folder recovery probes
-are gone, with each kept/cut choice recorded.
+`needs-attention/`-as-folder recovery probes are gone, with each kept/cut choice
+recorded. `in-progress/` probes are deliberately LEFT for a separate task (see
+the scope fence).
 
 ## Acceptance criteria
 
@@ -128,17 +129,22 @@ per-item-lock cutover (`cutover-needs-attention-becomes-lock-stuck-recovery-surf
 "stuck / needs-attention" state OFF a `work/needs-attention/` folder and ONTO the
 per-item lock ref (`state: stuck`), and moved claim OFF writing `work/in-progress/`.
 The READ surface was already cleaned. What is LEFT is the orphaned folder-RECOVERY
-code: `complete.ts` / `integration-core.ts` / `needs-attention.ts` still PROBE
-`work/needs-attention/` (and the stray `work/in-progress/`) as a SOURCE folder,
-even though nothing writes those files anymore. Remove the genuinely-dead probes
-and document any you keep.
+code: `complete.ts` / `integration-core.ts` / `needs-attention.ts` (and a wider
+set of files, see WHERE TO LOOK) still PROBE `work/needs-attention/` as a SOURCE
+folder, even though nothing writes those files anymore. Remove the genuinely-dead
+needs-attention probes and document any you keep. SCOPE FENCE: `work/in-progress/`
+is OUT of this task (a separate, undiagnosed concern with a LIVE folder-based
+decision in `start.ts`); do not remove its probes, even though it looks similarly
+dead - capture it as a follow-up if you confirm it is unwritten.
 
 GROUND TRUTH to confirm first (do NOT trust this snapshot blindly - a sibling
 sweep finding was wrong about a rename direction, so verify):
-- Nothing WRITES `work/needs-attention/<slug>.md` or `work/in-progress/<slug>.md`
-  as a file. Confirm: grep for a real `git mv`/`writeFile` INTO those folders and
-  expect only comments. The bounce is `applyNeedsAttentionTransition` (a lock
-  amend); claim leaves the body in `tasks/backlog/`.
+- Nothing WRITES `work/needs-attention/<slug>.md` as a file. Confirm: grep for a
+  real `git mv`/`writeFile` INTO that folder and expect only comments (the
+  `source`-parameterised done-move never sources `needs-attention` once nothing
+  writes it there). The bounce is `applyNeedsAttentionTransition` (a lock amend);
+  claim leaves the body in `tasks/backlog/`. (Do NOT extend this deletion to
+  `work/in-progress/` - that is a separate task; see the scope fence.)
 - Therefore `complete.ts`'s `existsSync(needsAttention)` fallback (the final else
   of its `source` chain) and the `complete-from-needs-attention` re-gate-from-
   folder path can no longer fire in the normal flow. Prove it before deleting,
@@ -165,20 +171,20 @@ in-progress reference). Behavioural tests: `complete-from-needs-attention.test.t
 `requeue-treeless-transition.test.ts`, `needs-attention-as-stuck-lock-state.test.ts`,
 `integration-core.test.ts`, `needs-attention.test.ts`.
 
-THREE traps that will make this go wrong if ignored:
+FOUR traps that will make this go wrong if ignored:
 1. NAME COLLISION: `run.ts` has its OWN `needsAttention` (a per-run outcome
    counter `needsAttention: number`, and `updateJobRecord({state: 'needs-attention'})`
    job state). It is UNRELATED to the work-item folder and must stay untouched.
    Verify each `needsAttention` hit's MEANING before touching it.
-4. IN-PROGRESS IS OUT OF SCOPE: this task removes the `needs-attention` folder
+2. IN-PROGRESS IS OUT OF SCOPE: this task removes the `needs-attention` folder
    probes ONLY. `work/in-progress/` is a separate concern with LIVE folder-based
    decisions (`start.ts`); do not remove its probes here, even though it looks
    similarly dead. Capture it as a follow-up if you confirm it is unwritten.
-2. TOMBSTONE / BEHAVIOURAL TESTS: tests that set up a `work/needs-attention/`
+3. TOMBSTONE / BEHAVIOURAL TESTS: tests that set up a `work/needs-attention/`
    fixture are pinning a real capability (recover a stuck item) or guarding "the
    folder stays empty". Retarget them to the lock model so they still assert the
    capability; do NOT delete a test just to make the build green.
-3. HISTORICAL PROSE: keep the "no `git mv` to needs-attention/" negative framing,
+4. HISTORICAL PROSE: keep the "no `git mv` to needs-attention/" negative framing,
    ADR-§12 citations, and `work-layout.ts`'s lock-ref-state explanations. A grep
    that hits zero is NOT the goal; correct history must survive.
 
@@ -199,7 +205,8 @@ and historical prose are untouched, and
 
 Provenance: sidecar rebuild sweep finding C and the human's "should we not finish
 the move and remove transitions code?"; diagnosis 2026-06-25 confirmed no live
-writer of the needs-attention/in-progress folders. Companion to the prose-only
+writer of the needs-attention folder (in-progress is a separate, undiagnosed
+follow-up). Companion to the prose-only
 `reconcile-stuck-notice-strings-to-lock-state-model`. Builds on the careful
 precedent set by done task
 `remove-dead-needs-attention-folder-readers-after-lock-cutover` (same judgement
