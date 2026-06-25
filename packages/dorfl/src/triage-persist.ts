@@ -8,6 +8,7 @@ import {
 } from './advancing-lock.js';
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
+import {renderTaskBody, renderPrdBody} from './buildable-body.js';
 
 /**
  * The engine-owned TRIAGE PERSIST (prd `advance-loop`, task `advance-rung-triage`,
@@ -387,12 +388,17 @@ export async function promoteObservation(
  *
  * The `## Prompt` (task only) is the STRUCTURAL dispatchability the validator
  * `resolveTask`/`extractPromptSection` (`prompt.ts`) requires: without it a
- * dispatched build throws "has no '## Prompt' section". We mirror the thin
- * `## Prompt` shape intake's `renderTask` default scaffold emits (a blockquote
- * seeded from the observation's mechanism prose) so the producer and the consumer
- * agree on the buildable-task schema. (Interim: PRD
- * `centralize-buildable-task-renderer-shared-by-intake-and-promotion` later folds
- * this synthesis into the ONE shared renderer.)
+ * dispatched build throws "has no '## Prompt' section". The body BELOW the
+ * frontmatter (lead section + mechanism prose + optional `## Open questions` +
+ * the task-only `## Prompt`) is rendered by the SHARED owner of the
+ * buildable-task/PRD schema, {@link renderTaskBody} / {@link renderPrdBody}
+ * (`buildable-body.ts`), so the producer and the consumer cannot drift apart
+ * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion`,
+ * US #3/#5/#6). This function owns only the FRONTMATTER writer; the section
+ * skeleton lives in the one renderer. The empty-mechanism `## Prompt` seed is
+ * passed EXPLICITLY (`Build the task '<slug>', described above.`) so promotion's
+ * output is byte-for-byte unchanged — it differs from the renderer's generic
+ * `Build the task described above.` default.
  *
  * Composition rule (recorded in the done record `## Decisions`): the split point
  * is the observation's FIRST `## Open questions` heading (any later sibling text
@@ -407,9 +413,7 @@ function buildPromotedBody(
 ): string {
 	const {mechanism, openQuestions} = splitObservationBody(observation);
 	const hasQuestions = openQuestions.trim() !== '';
-	const leadHeading =
-		artifact === 'prd' ? '## Problem Statement' : '## What to build';
-	const lines: string[] = [
+	const frontmatter: string[] = [
 		'---',
 		`title: ${slug}`,
 		`slug: ${slug}`,
@@ -419,32 +423,39 @@ function buildPromotedBody(
 		...(artifact === 'prd' ? [] : ['blockedBy: []']),
 		'---',
 		'',
-		leadHeading,
-		'',
-		mechanism.trim() === ''
-			? '(no mechanism/fix prose was carried from the observation.)'
-			: mechanism.trim(),
-		'',
 	];
-	if (hasQuestions) {
-		lines.push('## Open questions', '', openQuestions.trim(), '');
+	// The body BELOW the frontmatter is rendered by the SHARED schema owner so the
+	// section skeleton has one home, not two (prd
+	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A PRD
+	// goes through `renderPrdBody` (no `## Prompt`); a task through
+	// `renderTaskBody` (always a `## Prompt`).
+	if (artifact === 'prd') {
+		return (
+			frontmatter.join('\n') +
+			renderPrdBody({
+				problemStatement: mechanism,
+				openQuestions,
+			})
+		);
 	}
-	// A TASK must carry a `## Prompt` to be dispatchable (the validator
-	// `extractPromptSection` rejects a body without one). Seed it from the
-	// observation's mechanism prose as a blockquote (the thin shape intake's
-	// `renderTask` scaffold uses); a PRD is not dispatched, so it gets none.
-	if (artifact !== 'prd') {
-		const seed =
-			mechanism.trim() === ''
-				? `Build the task '${slug}', described above.`
-				: mechanism.trim();
-		const quoted = seed
-			.split('\n')
-			.map((line) => (line === '' ? '>' : `> ${line}`))
-			.join('\n');
-		lines.push('## Prompt', '', quoted, '');
-	}
-	return lines.join('\n');
+	// Pass the slug-bearing empty-mechanism seed EXPLICITLY: the renderer's generic
+	// default is `Build the task described above.`, but promotion has always seeded
+	// the empty-mechanism case with the slug (`Build the task '<slug>', described
+	// above.`), so we keep that byte-for-byte by handing the seed in rather than
+	// relying on the renderer default. A non-empty mechanism seeds the `## Prompt`
+	// from the mechanism prose (the renderer blockquotes it).
+	const promptSeed =
+		mechanism.trim() === ''
+			? `Build the task '${slug}', described above.`
+			: mechanism;
+	return (
+		frontmatter.join('\n') +
+		renderTaskBody({
+			whatToBuild: mechanism,
+			openQuestions,
+			prompt: promptSeed,
+		})
+	);
 }
 
 /**

@@ -337,6 +337,72 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(extractPromptSection(taskBody)).toContain(MECHANISM_SIGNAL);
 	});
 
+	it('the EMPTY-MECHANISM case keeps the slug-bearing `## Prompt` seed byte-for-byte (not the shared renderer default)', async () => {
+		// The shared `renderTaskBody` default empty-prompt seed is `Build the task
+		// described above.`, but promotion has always seeded the empty-mechanism case
+		// with the SLUG (`Build the task '<slug>', described above.`). The rewire must
+		// pass that slug-bearing seed in EXPLICITLY so promotion's output is
+		// unchanged (keystone Gate-2 forward-note, PR #247). Seed an observation whose
+		// body carries ONLY a `## Open questions` heading — no mechanism prose before
+		// it — so the empty-mechanism branch fires.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = `work/notes/observations/empty-mech.md`;
+		mkdirSync(join(seeded.repo, 'work', 'notes', 'observations'), {
+			recursive: true,
+		});
+		writeFileSync(
+			join(seeded.repo, itemPath),
+			[
+				'---',
+				'title: empty-mech',
+				'needsAnswers: true',
+				'---',
+				'',
+				'## Open questions',
+				'',
+				`1. ${OPEN_QUESTION_SIGNAL}`,
+				'',
+			].join('\n'),
+		);
+		let model: SidecarModel = newSidecar('observation:empty-mech', [
+			{question: 'Promote?', disposition: 'promote-task'},
+		]);
+		model = {
+			...model,
+			entries: model.entries.map((e) => ({...e, answer: 'yes'})),
+		};
+		mkdirSync(join(seeded.repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(
+			join(seeded.repo, 'work/questions/observation-empty-mech.md'),
+			serialiseSidecar(model),
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:empty-mech',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/empty-mech.md'],
+			seeded.repo,
+		);
+		// The slug-bearing seed survives byte-for-byte — NOT the renderer's generic
+		// `Build the task described above.` default.
+		expect(extractPromptSection(taskBody)).toBe(
+			"Build the task 'empty-mech', described above.",
+		);
+		expect(taskBody).not.toContain('Build the task described above.');
+		// Still dispatchable: the body carries a non-empty `## Prompt` the validator
+		// accepts (no missing-`## Prompt` throw).
+		expect(extractPromptSection(taskBody)).toBeDefined();
+	});
+
 	it('honours an explicit newSlug (the promoted identity, keyed by the new path)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const itemPath = seedAnsweredPromote(seeded.repo, 'src');
