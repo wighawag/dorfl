@@ -332,7 +332,7 @@ export function extractRequeueNotes(content: string): string[] {
  * common case, a first attempt or a `requeue --reset` that deleted the branch).
  *
  * The reason + handoff note(s) are read from the item BODY (the ledger file the
- * caller already resolved), so they survive the requeue → backlog → claim gap
+ * caller already resolved), so they survive the requeue → tasks-ready (the pool) → claim gap
  * and cross machines. The ref names match the two onboarding paths:
  *   - in-place clone:  branchRef=`<arbiter>/work/<slug>`, mainRef=`<arbiter>/main`
  *   - bare hub mirror: branchRef=`work/<slug>`,           mainRef=`main`
