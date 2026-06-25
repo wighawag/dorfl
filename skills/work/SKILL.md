@@ -24,7 +24,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 A starting situation that generates work, then merges onto the main flow.
 
 - **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be prd-worthy, then sequence `setup` (onboard the `work/` contract) and `to-prd` (synthesize the idea into a prd in `work/prds/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the prd-producer (it calls `to-prd`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
-- **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend a disposition, the human decides, execute. Promotes notes into tasks/prds/ADRs (composes `to-task`) or deletes them.
+- **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend an outcome, the human decides, execute. Promotes notes into tasks/prds/ADRs (composes `to-task`) or directly deletes them (`git rm` / `dorfl drop`).
 
 ## Cross-cutting disciplines (model-invoked, so the agent may also reach for these itself)
 

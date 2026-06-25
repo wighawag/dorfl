@@ -1,12 +1,12 @@
 ---
 name: triage-observations
 disable-model-invocation: true
-description: 'Drain the work/notes/observations/ inbox one note at a time, human-in-the-loop: investigate each, recommend a disposition, the human decides, execute.'
+description: 'Drain the work/notes/observations/ inbox one note at a time, human-in-the-loop: investigate each, recommend an outcome, the human decides, execute.'
 ---
 
 # Triage observations
 
-Drain `work/notes/observations/` toward a **live-only inbox**: every note that survives is still a useful signal; everything else is discharged. You are the investigator + recommender; the **human owns every disposition call**.
+Drain `work/notes/observations/` toward a **live-only inbox**: every note that survives is still a useful signal; everything else is discharged. You are the investigator + recommender; the **human owns every call**.
 
 > An observation is a **spotted, unverified, often-stale signal** — NOT ground truth. The whole value of this loop is _investigating before judging_: "this is surely irrelevant now" must become a real check against current code, which sometimes agrees and sometimes doesn't.
 
@@ -16,28 +16,32 @@ Default to **alphabetical order** (the folder listing — `ls work/notes/observa
 
 1. **READ** the observation in full.
 2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, prds, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE?
-3. **RECOMMEND** exactly one disposition (below), with reasoning grounded in what you found — not a guess.
+3. **RECOMMEND** exactly one outcome (the recommendation set below), with reasoning grounded in what you found — not a guess.
 4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this prd's untasked state intentional?") as an explicit question.
-5. **EXECUTE** the chosen disposition. For light dispositions (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-task, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
-6. **UPDATE** a running checklist of dispositions so the session has an at-a-glance summary.
+5. **EXECUTE** the chosen outcome. For light ones (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-task, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
+6. **UPDATE** a running checklist of outcomes so the session has an at-a-glance summary.
 
-## The disposition vocabulary
+## The recommendation set
 
-| disposition | when | execution |
+This is THIS skill's own human-workflow recommendation set — the small menu of things a human can decide to do with an investigated note. It is NOT the engine's old `disposition=` token vocabulary (that token round-trip is retired: an answered question is now read by the agentic apply decision, not routed through a stamped token). Here you simply recommend one of these in plain terms and the human ratifies it.
+
+| recommendation | when | execution |
 | --- | --- | --- |
 | **leave** | still a live, useful signal; just not acting now | nothing (note stays) |
-| **delete** | no longer a live signal — its work landed, the defect is fixed, or it was promoted into a self-contained task/ADR | `git rm` the file |
+| **delete** | no longer a live signal — its work landed, the defect is fixed, or it was promoted into a self-contained task/ADR | the direct delete: `git rm` the file (or `dorfl drop obs:<slug>`, which also removes any question sidecar), reason in the commit message |
 | **make a task** | there is buildable residue worth promoting | hand off a fresh-context prompt (below); do NOT write the task inline |
 | **amend** | still live but inaccurate/stale; the _record_ should be corrected | edit the note (observations are append-only in spirit — prefer an `## Update` over rewriting what was seen) — small in-loop edits are fine; hand off if it needs real investigation |
 | **fold-into-ADR / code comment** | the durable _why_ belongs in an ADR or a code comment, not the inbox | hand off a fresh-context prompt (below) when non-trivial; do the note + delete inline only when it is a genuine one-liner |
 
 A note's liveness test is **"is this still a useful signal?"** — NOT "has the work it points at completed?".
 
+> **Throwing a signal away is a DIRECT delete, not a token.** When the call is to discard a note, you (or the human) just delete it: `git rm` the file, or `dorfl drop <identity>` (the one-line CLI helper, which removes the source AND its question sidecar in one revertible commit with the reason in the message). It does NOT round-trip through the decision engine — there is no `delete`/`dropped` token to stamp. Promotion is the mirror: minting a self-contained task/prd/ADR that carries the signal, after which the note discharges by deletion.
+
 ## Hand off heavy work as a fresh-context prompt
 
-The triage loop **decides**; it does NOT carry out the follow-on build inline. When a disposition needs real work, produce a **copy-pasteable prompt** for the human to run in a FRESH context, and STOP there (don't also try to do the work).
+The triage loop **decides**; it does NOT carry out the follow-on build inline. When a recommendation needs real work, produce a **copy-pasteable prompt** for the human to run in a FRESH context, and STOP there (don't also try to do the work).
 
-> **CRITICAL — match the prompt's DELIVERABLE to the disposition, not to the feature.** A **make-task** hand-off must produce a prompt whose deliverable is **a markdown TASK FILE in `work/tasks/backlog/`** (per the task template) — NOT a prompt that implements the feature/fixes the bug in code. The observation is being _promoted into a tracked work item_, not built. A prompt that says "implement X / fix Y / write the code and tests" is the WRONG output here — that conflates promoting the work with doing it. The task itself is the deliverable; building it is a separate, later step the task will drive. (Likewise a **fold-into-ADR** hand-off delivers an ADR edit, not code.)
+> **CRITICAL — match the prompt's DELIVERABLE to the outcome, not to the feature.** A **make-task** hand-off must produce a prompt whose deliverable is **a markdown TASK FILE in `work/tasks/backlog/`** (per the task template) — NOT a prompt that implements the feature/fixes the bug in code. The observation is being _promoted into a tracked work item_, not built. A prompt that says "implement X / fix Y / write the code and tests" is the WRONG output here — that conflates promoting the work with doing it. The task itself is the deliverable; building it is a separate, later step the task will drive. (Likewise a **fold-into-ADR** hand-off delivers an ADR edit, not code.)
 
 Rules for the prompt:
 
@@ -68,7 +72,7 @@ Apply the `work/` contract (`work/protocol/WORK-CONTRACT.md`), especially:
 ## Guardrails
 
 - **Investigate, don't assume.** A confident "this is obsolete" is a _hypothesis_ until checked against the code.
-- **Never auto-decide.** Recommend → WAIT → execute. The human owns the call.
+- **Never auto-decide.** Recommend → WAIT → execute. The human owns the call. (Likewise, throwing a note away is the human's DIRECT delete — `git rm` / `dorfl drop` — not a token routed through the engine.)
 - **Self-containment is a precondition for promote-then-delete.** If you make a task and delete the note, the task must stand alone.
 - **Clean tree before writing.** Confirm the repo is ready for writes (the human will say so); commit in scoped commits as you go.
 - **One at a time, human's order.** Don't fan out across the inbox.
