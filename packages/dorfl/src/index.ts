@@ -383,6 +383,18 @@ export type {
 export {performIntake, buildIntakeDecisionPrd} from './intake.js';
 
 export type {
+	DecisionOutcome,
+	DecisionVerdict,
+	DecisionDecider,
+} from './decision-engine.js';
+export {
+	decide,
+	parseDecisionVerdict,
+	DisallowedOutcomeError,
+	EmptyAllowedOutcomesError,
+} from './decision-engine.js';
+
+export type {
 	IntakeEventKind,
 	IntakeEventDecision,
 	IntakeEvent,
