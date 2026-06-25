@@ -28,6 +28,13 @@
  *     mechanism prose, and NO `## Acceptance criteria`. Reproduced by omitting
  *     `acceptanceCriteria` and passing the open-questions block + the seed prose.
  *
+ * Symmetrically, {@link renderPrdBody} owns the FULL PRD section schema both PRD
+ * producers need: intake's default PRD scaffold is `## Problem Statement` +
+ * `## Solution` + `## User Stories` (reproduced by passing all three), while
+ * promotion's structured PRD body is `## Problem Statement` + optional
+ * `## Open questions` (reproduced by omitting `solution`/`userStories`). Each
+ * optional section is emitted only when its input is non-empty.
+ *
  * `## Prompt` is TASK-ONLY: a PRD is not dispatched by `do`/`run`, so a PRD body
  * carries none (the symmetric reason the task body MUST carry one — the consumer
  * `extractPromptSection`/`resolveTask` in `prompt.ts` throws "has no '## Prompt'
@@ -122,6 +129,18 @@ export interface RenderPrdBodyInput {
 	 */
 	problemStatement: string;
 	/**
+	 * The `## Solution` prose (markdown). OMIT it (or pass empty) to drop the
+	 * section — promotion's structured PRD body carries no Solution section, intake's
+	 * default PRD scaffold does.
+	 */
+	solution?: string;
+	/**
+	 * The `## User Stories` block (markdown, e.g. a numbered list). OMIT it (or pass
+	 * empty) to drop the section — promotion's structured PRD body carries no User
+	 * Stories section, intake's default PRD scaffold does.
+	 */
+	userStories?: string;
+	/**
 	 * The `## Open questions` block (markdown). OMIT it (or pass empty) to drop the
 	 * section. A PRD carries NO `## Prompt` (it is not dispatched).
 	 */
@@ -129,11 +148,14 @@ export interface RenderPrdBodyInput {
 }
 
 /**
- * Render a PRD body (the markdown AFTER the frontmatter fence). Emits
- * `## Problem Statement` then `## Open questions` (only when given), and NEVER a
+ * Render a PRD body (the markdown AFTER the frontmatter fence). Emits, in the
+ * canonical order, `## Problem Statement`, then `## Solution`, `## User Stories`,
+ * and `## Open questions` (each only when its input is given), and NEVER a
  * `## Prompt` — a PRD is a spec, not a dispatchable task. The symmetric twin of
- * {@link renderTaskBody}, sharing the open-questions skeleton so the two artifact
- * shapes cannot drift apart.
+ * {@link renderTaskBody}, owning the FULL PRD section schema both producers need
+ * (intake's default scaffold supplies Problem Statement + Solution + User Stories;
+ * promotion's structured body supplies Problem Statement + optional Open
+ * questions) so the two artifact shapes cannot drift apart.
  */
 export function renderPrdBody(input: RenderPrdBodyInput): string {
 	const lines: string[] = [
@@ -144,6 +166,16 @@ export function renderPrdBody(input: RenderPrdBodyInput): string {
 			: input.problemStatement.trim(),
 		'',
 	];
+
+	const solution = (input.solution ?? '').trim();
+	if (solution !== '') {
+		lines.push('## Solution', '', solution, '');
+	}
+
+	const userStories = (input.userStories ?? '').trim();
+	if (userStories !== '') {
+		lines.push('## User Stories', '', userStories, '');
+	}
 
 	const openQuestions = (input.openQuestions ?? '').trim();
 	if (openQuestions !== '') {
