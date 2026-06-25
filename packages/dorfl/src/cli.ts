@@ -127,6 +127,7 @@ import {
 	listPromotable,
 } from './needs-attention.js';
 import {parseSlugArg} from './slug-namespace.js';
+import {dropSource} from './drop-source.js';
 import {arbiterStatus, DEFAULT_ARBITER_REMOTE} from './arbiter.js';
 import {
 	resolveTaskOnlyArg,
@@ -788,6 +789,12 @@ interface ReleaseLockFlags {
 	config?: string;
 	cwd?: string;
 	arbiter?: string;
+}
+
+interface DropFlags {
+	config?: string;
+	cwd?: string;
+	reason?: string;
 }
 
 interface RemoteAddFlags {
@@ -3371,6 +3378,63 @@ export function buildProgram(): Command {
 			}
 			console.error(`error: ${result.message}`);
 			process.exit(1);
+		});
+
+	// `drop <slug>` (prd `agentic-question-resolution-retire-disposition-vocabulary`,
+	// US #5/#11; task `direct-delete-question-cli-helper`): the DIRECT "throw it
+	// away" verb — `git rm` a source item AND its question sidecar (when present) in
+	// ONE revertible commit, the reason in the commit MESSAGE (git history is the
+	// archive). It does NOT round-trip through the decision engine or spawn an agent
+	// (that is the SEPARATE agentic `delete-source` verdict in apply-persist.ts);
+	// this is the human/skill/CLI no-ceremony delete of decision 7. DISTINCT from
+	// the existing `remote rm` (the hub-MIRROR deleter) — different concern, no
+	// collision. A LOCAL one-commit primitive over the working tree (like apply): it
+	// does NOT touch the arbiter; the human pushes/integrates the revertible commit
+	// however they normally do.
+	program
+		.command('drop <slug>')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'DIRECTLY delete a source item + its question sidecar (when present) in ONE revertible commit — the "I just want to throw this away" path that does NOT round-trip through the decision engine or any agent. Resolves the source by its namespaced identity (`task:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` = task), `git rm`s the source AND its sidecar together, and records your --reason in the commit MESSAGE (git history is the archive). A single revertible commit, so a wrong delete is recoverable via `git revert`. DISTINCT from `remote rm` (the hub-mirror deleter). A LOCAL working-tree commit (like the apply rung); it does not touch the arbiter — push/integrate it as you normally would. If the named source is already gone it is a clean no-op (nothing to throw away).',
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--cwd <dir>',
+			'the working clone the revertible delete commit is made in (default: cwd)',
+		)
+		.option(
+			'--reason <text>',
+			'why you are throwing this away — recorded in the commit MESSAGE (git history is the archive). Optional; recorded as "(no reason given)" when omitted.',
+		)
+		.action((slug: string, flags: DropFlags) => {
+			const cwd = flags.cwd ?? process.cwd();
+			// `drop` is a DIRECT HUMAN action (like the apply rung's local commit): the
+			// delete/commit is THEIRS, so thread the ambient env explicitly.
+			const env = process.env;
+			const note = (message: string) => console.error(`>> ${message}`);
+			const result = dropSource({
+				cwd,
+				item: slug,
+				reason: flags.reason,
+				env,
+				note,
+			});
+			if (result.outcome === 'not-found') {
+				// Nothing to throw away (the source is already gone). A clean exit-0
+				// no-op, NOT a failure — deleting something already absent is success.
+				console.log(
+					`Nothing to drop for '${result.item}' — no source item resolves by identity (already gone).`,
+				);
+				return;
+			}
+			console.log(
+				`Dropped '${result.item}'${
+					result.sidecarPath ? ' + its sidecar' : ''
+				} in one revertible commit (${result.commit?.slice(
+					0,
+					8,
+				)}; reason in the message). Recover with \`git revert\` if this was wrong.`,
+			);
 		});
 
 	program
