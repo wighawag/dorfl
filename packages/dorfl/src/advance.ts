@@ -37,6 +37,7 @@ import {
 	type PromoteObservationOptions,
 	type PromoteObservationResult,
 } from './triage-persist.js';
+import {mintAdr, type MintAdrOptions, type MintAdrResult} from './mint-adr.js';
 import {
 	decide,
 	DisallowedOutcomeError,
@@ -241,14 +242,15 @@ export interface AdvanceContext {
 	 * The AGENTIC apply DECISION seam (task
 	 * `agentic-apply-retire-disposition-vocabulary`): the fresh-context decision
 	 * agent the apply rung runs on a fully-answered OBSERVATION to choose what to DO
-	 * with the signal (`mint-task | mint-prd | delete-source | ask-follow-up`),
+	 * with the signal (`mint-task | mint-prd | mint-adr | delete-source |
+	 * ask-follow-up`),
 	 * grounded in the source's full context. It is the injected
 	 * {@link ApplyDecider} the shared `decide(input, allowedOutcomes)` engine runs;
 	 * tests inject a CANNED verdict (no model). `undefined` ⇒ the apply rung defaults
 	 * to {@link harnessApplyDecider} (a NullHarness, no real model) so the seam is
 	 * never a crash — but the CLI threads the real harness-backed decider. The
-	 * verdict's type SELECTION (task vs prd) replaces the retired `promote-*`
-	 * disposition token; `adr` is DEFERRED (not in the allowed set yet).
+	 * verdict's type SELECTION (task vs prd vs adr) replaces the retired `promote-*`
+	 * disposition token; `adr` is now WIRED (task `agentic-apply-mint-adr-route`).
 	 */
 	applyDecide?: ApplyDecider;
 	/** The model the apply-DECISION agent runs on (de-correlated, like `surfaceModel`). */
@@ -293,6 +295,15 @@ export interface AdvanceContext {
 	promote?: (
 		options: PromoteObservationOptions,
 	) => Promise<PromoteObservationResult>;
+	/**
+	 * Mint an ADR from an answered observation (the agentic `mint-adr` verdict, task
+	 * `agentic-apply-mint-adr-route`): CAS-create `docs/adr/<slug>.md` keyed on the
+	 * NEW ADR's identity, with the source + sidecar deleted in the SAME commit. The
+	 * SIBLING of {@link promote} for the `docs/adr/` target (an ADR lands OUTSIDE the
+	 * work board, so it is a distinct route, not a `promoteObservation` artifact
+	 * type). Tests inject a spy; production uses {@link mintAdr}.
+	 */
+	mintAdr?: (options: MintAdrOptions) => Promise<MintAdrResult>;
 	/**
 	 * The NEW backlog slug an answered promote drafts. `undefined` ⇒ the promote
 	 * defaults to the observation's own slug. Lets a test (or a future driver) steer
@@ -678,13 +689,17 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * For a fully-answered OBSERVATION (and no caller-supplied follow-up batch), the
  * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
  * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
- * type/context)` via the injected {@link ApplyDecider}, allowing the LAUNCH set
- * `{task | prd | delete | ask}` (= `{mint-task | mint-prd | delete-source |
- * ask-follow-up}`; `adr` is DEFERRED — a stubbed `adr` verdict is rejected by the
- * engine's allowed-outcome guard, never dispatched). The verdict ROUTES:
+ * type/context)` via the injected {@link ApplyDecider}, allowing the set
+ * `{task | prd | adr | delete | ask}` (= `{mint-task | mint-prd | mint-adr |
+ * delete-source | ask-follow-up}`; `adr` is now WIRED by task
+ * `agentic-apply-mint-adr-route`, which added the {@link mintAdr} route). The
+ * verdict ROUTES:
  *   - `ask` → the EXISTING append/re-pause loop ({@link applyAnsweredQuestions}
  *     with the follow-up appended; `needsAnswers:true` stays, re-pause in one
  *     commit);
+ *   - `adr` → {@link mintAdr} (mint a SELF-CONTAINED ADR into `docs/adr/` + `git
+ *     rm` the source + sidecar in the SAME atomic commit; the SIBLING route for the
+ *     off-board target);
  *   - `task` / `prd` → {@link promoteObservation} (mint a SELF-CONTAINED artifact +
  *     `git rm` the source + sidecar in the SAME atomic commit); the artifact type
  *     comes from the agent's VERDICT, NOT a human `promote-*` field;
@@ -815,12 +830,15 @@ function findItemPath(
  *     {@link applyAnsweredQuestions}'s `appendQuestions`);
  *   - `task` / `prd` → {@link promoteObservation} (mint self-contained + delete
  *     source in the same atomic commit);
+ *   - `adr` → {@link mintAdr} (mint a self-contained ADR into `docs/adr/` + delete
+ *     source in the same atomic commit; the SIBLING route for the off-board target,
+ *     task `agentic-apply-mint-adr-route`);
  *   - `delete` → {@link applyAnsweredQuestions}'s discharge-by-deletion (`git rm`
  *     source + sidecar in one revertible commit, the reason in the message).
  *
- * A disallowed `adr` verdict is rejected by the engine's allowed-outcome guard
- * ({@link DisallowedOutcomeError}) and mapped onto a usage-error — never
- * dispatched (the `mint-adr` route is the follow-on task).
+ * The allowed set is `{task | prd | adr | delete | ask}`; a verdict outside it is
+ * rejected by the engine's allowed-outcome guard ({@link DisallowedOutcomeError})
+ * and mapped onto a usage-error — never dispatched.
  */
 async function applyAgenticDecision(
 	input: RungExecInput,
@@ -920,6 +938,54 @@ async function applyAgenticDecision(
 				exitCode: result.exitCode,
 				outcome:
 					result.outcome === 'promoted'
+						? 'advanced'
+						: result.outcome === 'lost'
+							? 'lost'
+							: result.outcome === 'contended'
+								? 'contended'
+								: 'usage-error',
+				message: result.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: ${detail}`,
+			};
+		}
+	}
+
+	if (verdict.outcome === 'adr') {
+		// mint-adr → CAS-create a SELF-CONTAINED ADR into `docs/adr/` + delete the
+		// source + sidecar in the SAME commit (delete-on-promote, preserved via the
+		// shared create-CAS). An ADR lives OUTSIDE the work board, so this is the
+		// SIBLING route (NOT a `promoteObservation` artifact type). The verdict's
+		// drafted body (when present) seeds the ADR; else `mintAdr` builds a
+		// self-contained body FROM the observation + the answered question(s).
+		const mint = context.mintAdr ?? mintAdr;
+		const answers = decisionInput.sidecar.entries.map((e) => ({
+			question: e.question,
+			answer: e.answer,
+		}));
+		try {
+			const result = await mint({
+				cwd,
+				item,
+				itemPath,
+				adrSlug: context.promoteSlug ?? verdict.adrSlug,
+				...(verdict.adrTitle !== undefined ? {adrTitle: verdict.adrTitle} : {}),
+				...(verdict.adrBody !== undefined && verdict.adrBody.trim() !== ''
+					? {adrBody: verdict.adrBody}
+					: {}),
+				answers,
+				arbiter: context.arbiter,
+				note,
+			});
+			return {
+				exitCode: result.exitCode,
+				outcome:
+					result.outcome === 'minted'
 						? 'advanced'
 						: result.outcome === 'lost'
 							? 'lost'
@@ -1130,6 +1196,7 @@ export async function performAdvance(
 				triageModel: options.triageModel,
 				autoDisposition: options.autoDisposition,
 				promote: options.promote,
+				mintAdr: options.mintAdr,
 				promoteSlug: options.promoteSlug,
 				note,
 			},

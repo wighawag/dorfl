@@ -28,13 +28,15 @@ import {
  * outcomes the apply rung allows. The artifact-type SELECTION (task vs prd) comes
  * from the agent's VERDICT, NOT a human `promote-*` field.
  *
- * **The LAUNCH allowed set** (the SUBSET the apply rung passes to `decide`):
- * `{task | prd | delete | ask}` \u2014 i.e. `{mint-task | mint-prd | delete-source |
- * ask-follow-up}`. `adr` is DEFERRED (no ADR-mint path exists yet; the follow-on
- * task `agentic-apply-mint-adr-route` widens the set). The shared engine's verdict
- * union KEEPS `adr` in its superset; the apply rung simply does not PERMIT it yet,
- * so a (stubbed) `adr` verdict is rejected by the engine's allowed-outcome guard,
- * never dispatched.
+ * **The allowed set** (the SUBSET the apply rung passes to `decide`):
+ * `{task | prd | adr | delete | ask}` \u2014 i.e. `{mint-task | mint-prd | mint-adr |
+ * delete-source | ask-follow-up}`. `adr` was DEFERRED at the keystone launch (no
+ * ADR-mint path existed yet) and is now WIRED by the follow-on task
+ * `agentic-apply-mint-adr-route`, which added the {@link
+ * import('./mint-adr.js').mintAdr} route and widened this set. Intake's set is
+ * UNCHANGED (`{task | prd | ask | bounce}`) \u2014 the engine stays outcome-AGNOSTIC
+ * (PRD decision 14), so widening this caller's subset does NOT touch intake or the
+ * engine's superset union.
  *
  * The INPUT adapter ({@link buildApplyDecisionInput}) sits HERE in the caller, not
  * in the engine (the engine threads `input` opaquely) \u2014 decision 3: the input
@@ -42,10 +44,16 @@ import {
  * adapter.
  */
 
-/** The LAUNCH allowed-outcome set the apply rung permits (NO `adr` \u2014 deferred). */
+/**
+ * The allowed-outcome set the apply rung permits. `adr` is now INCLUDED (task
+ * `agentic-apply-mint-adr-route` widened the keystone's launch subset, which had
+ * deferred it). The engine's superset still carries `adr` either way (it is
+ * outcome-agnostic); this is purely the CALLER's permitted subset.
+ */
 export const APPLY_ALLOWED_OUTCOMES: readonly DecisionOutcome[] = [
 	'task',
 	'prd',
+	'adr',
 	'delete',
 	'ask',
 ];
@@ -128,8 +136,9 @@ export function buildApplyDecisionInput(opts: {
  * the human's recorded ANSWER(S) + the SOURCE item and emit a single
  * `{outcome, \u2026}` verdict ({@link parseDecisionVerdict} reads it). The agent decides
  * what to DO with the answered signal \u2014 mint a self-contained task, mint a PRD,
- * delete the source, or ask one BATCH of follow-up questions \u2014 grounded in the
- * source's full context. It writes NOTHING (the engine acts on the verdict).
+ * mint an ADR, delete the source, or ask one BATCH of follow-up questions \u2014
+ * grounded in the source's full context. It writes NOTHING (the engine acts on
+ * the verdict).
  *
  * Mirrors {@link import('./surface-gate.js').buildSurfacePrompt} /
  * {@link import('./intake.js').buildIntakeDecisionPrd}: a fresh-context agent that
@@ -162,6 +171,10 @@ export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
 		`    "taskTitle":"\u2026","taskBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
 		`  - "prd": mint a PRD from this signal (a larger, coherent piece of work).`,
 		`    Emit {"outcome":"prd","prdSlug":"\u2026","prdTitle":"\u2026","prdBody":"\u2026"}.`,
+		`  - "adr": the answer SETTLES an architectural decision worth recording. Mint`,
+		`    a self-contained ADR (docs/adr/, the context/decision/why shape) carrying`,
+		`    the WHY from the answer(s). Emit {"outcome":"adr","adrSlug":"\u2026",`,
+		`    "adrTitle":"\u2026","adrBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
 		`  - "delete": the answer means this signal should be DROPPED. Emit`,
 		`    {"outcome":"delete","deleteReason":"\u2026"} (a single revertible deletion;`,
 		`    the reason rides the commit message, git history is the archive).`,

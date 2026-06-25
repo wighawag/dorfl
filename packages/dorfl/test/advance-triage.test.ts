@@ -10,6 +10,7 @@ import type {
 	PromoteObservationOptions,
 	PromoteObservationResult,
 } from '../src/triage-persist.js';
+import type {MintAdrOptions, MintAdrResult} from '../src/mint-adr.js';
 import {
 	newSidecar,
 	serialiseSidecar,
@@ -592,27 +593,78 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		expect(commitMessage).toContain('DISTINCT-DELETE-REASON');
 	});
 
-	it('a DISALLOWED `adr` verdict is REJECTED by the allowed-outcome guard, NOT dispatched (mint-adr is deferred)', async () => {
-		const {repo} = seedObservation('adrx');
-		const {itemPath, sidecarPath} = seedAnsweredObservation(repo, 'adrx');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
+	it('verdict adr → mint-adr: CAS-creates a SELF-CONTAINED ADR in docs/adr/ + DELETES the observation+sidecar in the same commit (the off-board sibling route)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const {itemPath, sidecarPath} = seedAnsweredObservation(
+			seeded.repo,
+			'adrx',
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
 
-		const {decide} = spyDecide({outcome: 'adr', adrTitle: 'sneaky'});
+		const {decide} = spyDecide({
+			outcome: 'adr',
+			adrTitle: 'Record the settled decision',
+		});
 		const result = await performAdvance({
 			arg: 'obs:adrx',
-			cwd: repo,
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
 			applyDecide: decide,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		// advance-apply's allowed SUBSET omits `adr` (the engine's superset keeps it);
-		// the guard rejects the verdict — it is a usage-error, NOT a dispatch.
-		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toMatch(/allowed outcome|not an allowed/i);
-		// Nothing was minted or deleted (the source + sidecar are INTACT).
-		expect(existsSync(join(repo, itemPath))).toBe(true);
-		expect(existsSync(join(repo, sidecarPath))).toBe(true);
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('advanced');
+		expect(result.rung).toBe('apply');
+		// The ADR landed in docs/adr/ on arbiter/main (NOT in work/).
+		expect(pathOnArbiterMain(seeded.repo, 'docs/adr/adrx.md')).toBe(true);
+		const adrBody = gitIn(
+			['show', 'arbiter/main:docs/adr/adrx.md'],
+			seeded.repo,
+		);
+		// SELF-CONTAINMENT: the ADR carries the decision's WHY (the answer) + the
+		// source context, so it reads alone (the precondition for the source delete).
+		expect(adrBody).toContain('# ADR: Record the settled decision');
+		expect(adrBody).toContain('A captured signal awaiting triage.');
+		expect(adrBody).toContain('answered');
+		// The observation + its sidecar are DELETED on arbiter/main in the SAME commit
+		// as the ADR create (delete-on-promote).
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
+	});
+
+	it('mint-adr is routed THROUGH the injected mintAdr seam (the sibling of promote), keyed on the new ADR identity', async () => {
+		const {repo} = seedObservation('adrseam');
+		seedAnsweredObservation(repo, 'adrseam');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
+
+		const calls: MintAdrOptions[] = [];
+		const mintAdr = async (o: MintAdrOptions): Promise<MintAdrResult> => {
+			calls.push(o);
+			return {
+				outcome: 'minted',
+				exitCode: 0,
+				adrPath: 'docs/adr/adrseam.md',
+				message: 'minted',
+			};
+		};
+		const {decide} = spyDecide({outcome: 'adr', adrTitle: 'seam'});
+		const result = await performAdvance({
+			arg: 'obs:adrseam',
+			cwd: repo,
+			applyDecide: decide,
+			mintAdr,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('advanced');
+		expect(calls).toHaveLength(1);
+		expect(calls[0].item).toBe('observation:adrseam');
+		// The answered question(s) are threaded so the built body is self-contained.
+		expect(calls[0].answers?.length).toBeGreaterThan(0);
 	});
 });

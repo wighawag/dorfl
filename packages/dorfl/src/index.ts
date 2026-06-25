@@ -83,6 +83,9 @@ export type {
 } from './apply-persist.js';
 export {ApplyPersistError, applyAnsweredQuestions} from './apply-persist.js';
 
+export type {MintAdrOptions, MintAdrResult} from './mint-adr.js';
+export {MintAdrError, mintAdr, buildAdrBody, adrItemRel} from './mint-adr.js';
+
 export {
 	APPLY_LIFECYCLE_FOLDERS,
 	resolveItemPathByIdentity,
