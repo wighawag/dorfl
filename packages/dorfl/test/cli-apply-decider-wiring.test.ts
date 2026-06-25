@@ -70,15 +70,18 @@ describe('cli.ts wires a real apply decider at every advance entry point', () =>
 		expect(applyModelSites.length).toBe(triageSites.length);
 	});
 
-	it('the apply rung permits the LAUNCH subset only (no adr at launch)', () => {
-		// The deferred-adr boundary is part of the same reachability contract: a
-		// reachable rung must still reject a disallowed `adr` verdict.
+	it('the apply rung permits the full subset including adr (mint-adr is now WIRED)', () => {
+		// `adr` was DEFERRED at the keystone launch and is now WIRED by task
+		// `agentic-apply-mint-adr-route` (which added the mintAdr route). The reachable
+		// rung now PERMITS an `adr` verdict (routed to docs/adr/), so the allowed set
+		// is the full `{task | prd | adr | delete | ask}`.
 		expect([...APPLY_ALLOWED_OUTCOMES].sort()).toEqual([
+			'adr',
 			'ask',
 			'delete',
 			'prd',
 			'task',
 		]);
-		expect(APPLY_ALLOWED_OUTCOMES).not.toContain('adr');
+		expect(APPLY_ALLOWED_OUTCOMES).toContain('adr');
 	});
 });
