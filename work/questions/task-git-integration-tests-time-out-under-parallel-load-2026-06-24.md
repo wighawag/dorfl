@@ -12,6 +12,8 @@ _Suggested default: Add test/complete-self-renaming-folder-task.test.ts and test
 
 **Your answer** (write below this line):
 
+Use the THIRD option: add `test/complete-self-renaming-folder-task.test.ts` and `test/do-isolated.test.ts` to the existing `RACE_SENSITIVE` array in `packages/dorfl/vitest.config.ts` so they run in the already-defined non-file-parallel `sequential` project. Do NOT raise `testTimeout` and do NOT cap global parallelism. Reason: both files are squarely in the documented git-`file://`/`--bare`-arbiter class (`seedRepoWithArbiter`, `performComplete`/`performClaim`, `performDoRemote(Auto)`, writing main) that the `sequential` project exists to isolate; they were simply missed from the list. This is the repo's already-chosen, documented remedy ("without slowing the whole suite or masking anything with retries"), it keeps the fast pure-logic tests fully parallel, and it avoids a `testTimeout` bump that would only widen a window that hides real future regressions. Add a short comment next to the two new entries explaining the class (mirroring the existing entries, e.g. do-remote.test.ts), and record the choice + rationale in a `## Decisions` note as the task prompt asks.
+
 ## Q2
 
 **The task's `## What to build` section is empty while `needsAnswers: true`. Should the build scope be exactly 'move the two named test files into the non-file-parallel project (or whichever remedy is chosen above)', or is a broader audit intended (e.g. sweeping all remaining git-heavy tests not yet in RACE_SENSITIVE)?**
@@ -23,3 +25,5 @@ _Suggested default: Scope it minimally: only the two files observed to time out 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Scope it MINIMALLY: only the two named files (`complete-self-renaming-folder-task.test.ts` and `do-isolated.test.ts`), via the remedy in Q1. No logic change to the tests; no broader sweep. If a wider audit of git-heavy tests not yet in `RACE_SENSITIVE` is warranted, file it as a SEPARATE follow-up task rather than expanding this one.
