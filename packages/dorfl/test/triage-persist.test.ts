@@ -7,6 +7,7 @@ import {
 } from '../src/triage-persist.js';
 import {run} from '../src/git.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
+import {extractPromptSection, resolveTask} from '../src/prompt.js';
 import {
 	newSidecar,
 	serialiseSidecar,
@@ -222,6 +223,16 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(taskBody).toContain(OPEN_QUESTION_SIGNAL);
 		expect(parseFrontmatter(taskBody).needsAnswers).toBe(true);
 
+		// DISPATCHABILITY (US #1 residual): the spawned task carries a real
+		// `## Prompt` section the dispatch validator (`extractPromptSection`,
+		// reused by `resolveTask`/the prompt assembly) accepts WITHOUT throwing
+		// "has no '## Prompt' section". The prompt is SEEDED from the observation's
+		// mechanism prose (the real signal), not an empty/placeholder-only prompt.
+		expect(taskBody).toContain('## Prompt');
+		const prompt = extractPromptSection(taskBody);
+		expect(prompt).toBeDefined();
+		expect(prompt).toContain(MECHANISM_SIGNAL);
+
 		// The observation + its sidecar are DELETED on the arbiter (discharge by
 		// deletion).
 		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(false);
@@ -240,6 +251,36 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(touched).toContain(`A\twork/tasks/ready/prom.md`);
 		expect(touched).toContain(`D\t${itemPath}`);
 		expect(touched).toContain(`D\t${sidecarPath}`);
+	});
+
+	it('the spawned task is DISPATCHABLE: resolveTask accepts it without the missing-`## Prompt` throw', async () => {
+		// End-to-end check that promotion produces a body the build path's validator
+		// (`resolveTask` → `extractPromptSection`) accepts: a promptless promoted body
+		// is exactly the bug this task removes, so resolving the promoted task on its
+		// own checkout must NOT throw.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'dispatchable');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:dispatchable',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+
+		// Bring the freshly-created task body into the working tree (it was written
+		// straight onto arbiter/main via the CAS) so `resolveTask` can read it from
+		// `work/tasks/ready/`, the pool it resolves.
+		gitIn(['fetch', '-q', 'arbiter'], seeded.repo);
+		gitIn(['checkout', '-q', '-B', 'main', 'arbiter/main'], seeded.repo);
+		expect(() => resolveTask(seeded.repo, 'dispatchable')).not.toThrow();
+		const resolved = resolveTask(seeded.repo, 'dispatchable');
+		expect(resolved.taskPrompt).toContain(MECHANISM_SIGNAL);
 	});
 
 	it('a promoted observation with NO open questions clears needsAnswers on the task', async () => {
@@ -291,6 +332,9 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(taskBody).toContain(MECHANISM_SIGNAL);
 		expect(taskBody).not.toContain('## Open questions');
 		expect(parseFrontmatter(taskBody).needsAnswers).toBe(false);
+		// Still dispatchable even with no open-questions block: the `## Prompt` is
+		// seeded from the mechanism prose, so the validator accepts it.
+		expect(extractPromptSection(taskBody)).toContain(MECHANISM_SIGNAL);
 	});
 
 	it('honours an explicit newSlug (the promoted identity, keyed by the new path)', async () => {
@@ -507,6 +551,9 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 		expect(prdBody).toContain('## Open questions');
 		expect(prdBody).toContain(OPEN_QUESTION_SIGNAL);
 		expect(parseFrontmatter(prdBody).needsAnswers).toBe(true);
+		// A PRD is NOT dispatched by `do`/`run`, so it carries NO `## Prompt` (that
+		// section is the task-only dispatchability schema).
+		expect(prdBody).not.toContain('## Prompt');
 
 		// The observation + its sidecar are DELETED on the arbiter (discharge by
 		// deletion), riding the SAME atomic commit as the PRD create.

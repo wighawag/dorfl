@@ -378,10 +378,21 @@ export async function promoteObservation(
  * that block carries content (so deleting the note loses no scoping residue).
  *
  * The artifact TYPE selects the frontmatter + lead heading: a `task` gets
- * `## What to build` + `blockedBy: []` (the buildable-task shape); a `prd` gets
- * `## Problem Statement` (the PRD-spec shape, with no `blockedBy` — a PRD is not a
- * blockable task). BOTH carry the SAME transcribed mechanism prose + open-question
- * block, so a PRD minted into `proposed/` is just as self-contained as a task.
+ * `## What to build` + `blockedBy: []` + a `## Prompt` (the buildable-task shape);
+ * a `prd` gets `## Problem Statement` (the PRD-spec shape, with no `blockedBy` —
+ * a PRD is not a blockable task — and no `## Prompt`, since a PRD is not
+ * dispatched by `do`/`run`). BOTH carry the SAME transcribed mechanism prose +
+ * open-question block, so a PRD minted into `proposed/` is just as self-contained
+ * as a task.
+ *
+ * The `## Prompt` (task only) is the STRUCTURAL dispatchability the validator
+ * `resolveTask`/`extractPromptSection` (`prompt.ts`) requires: without it a
+ * dispatched build throws "has no '## Prompt' section". We mirror the thin
+ * `## Prompt` shape intake's `renderTask` default scaffold emits (a blockquote
+ * seeded from the observation's mechanism prose) so the producer and the consumer
+ * agree on the buildable-task schema. (Interim: PRD
+ * `centralize-buildable-task-renderer-shared-by-intake-and-promotion` later folds
+ * this synthesis into the ONE shared renderer.)
  *
  * Composition rule (recorded in the done record `## Decisions`): the split point
  * is the observation's FIRST `## Open questions` heading (any later sibling text
@@ -417,6 +428,21 @@ function buildPromotedBody(
 	];
 	if (hasQuestions) {
 		lines.push('## Open questions', '', openQuestions.trim(), '');
+	}
+	// A TASK must carry a `## Prompt` to be dispatchable (the validator
+	// `extractPromptSection` rejects a body without one). Seed it from the
+	// observation's mechanism prose as a blockquote (the thin shape intake's
+	// `renderTask` scaffold uses); a PRD is not dispatched, so it gets none.
+	if (artifact !== 'prd') {
+		const seed =
+			mechanism.trim() === ''
+				? `Build the task '${slug}', described above.`
+				: mechanism.trim();
+		const quoted = seed
+			.split('\n')
+			.map((line) => (line === '' ? '>' : `> ${line}`))
+			.join('\n');
+		lines.push('## Prompt', '', quoted, '');
 	}
 	return lines.join('\n');
 }

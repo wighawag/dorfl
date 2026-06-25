@@ -1,5 +1,6 @@
 import {runAsync, type RunResult} from './git.js';
 import {acquireItemLock, releaseItemLock, heldTaskSlugs} from './item-lock.js';
+import {extractPromptSection} from './prompt.js';
 import {resolveReadiness} from './readiness.js';
 import {workBranchRef} from './slug-namespace.js';
 import {workItemRel} from './work-layout.js';
@@ -271,14 +272,56 @@ async function runClaim(
 	 * Folder-agnostic exclusion is the lock, never the folder, so a staged body is
 	 * a legitimate claimable residence under the flag; otherwise staging is invisible.
 	 */
-	async function bodyRestsClaimable(): Promise<boolean> {
+	async function claimableBodyRel(): Promise<string | undefined> {
 		if (await catFileExists(`${arbiter}/main:${backlog}`, cwd, env)) {
-			return true;
+			return backlog;
 		}
-		return (
+		if (
 			options.allowBacklog === true &&
 			(await catFileExists(`${arbiter}/main:${staged}`, cwd, env))
+		) {
+			return staged;
+		}
+		return undefined;
+	}
+	async function bodyRestsClaimable(): Promise<boolean> {
+		return (await claimableBodyRel()) !== undefined;
+	}
+
+	/**
+	 * PRE-CLAIM WELL-FORMEDNESS GUARD (this task's interim guard against the
+	 * promptless-promoted-task strand). The validator `resolveTask` /
+	 * `extractPromptSection` (`prompt.ts`) requires a task body to carry a
+	 * `## Prompt` section; it runs at DISPATCH (`do.ts` step 5), AFTER the claim,
+	 * so a body missing `## Prompt` was caught only post-claim — the failure routed
+	 * to `saveAgentFailure`, which left the lock `state: stuck`. We run the SAME
+	 * validator (`extractPromptSection`, the single source of truth for "what makes
+	 * a task dispatchable") HERE, BEFORE the lock is acquired, so a malformed body
+	 * from ANY source (promotion, hand-authored, externally edited) is refused with a
+	 * clean usage error and NO lock is taken. `bodyRel` is the resolved claimable
+	 * residence (`tasks/ready/` or, under the flag, `tasks/backlog/`). A genuinely
+	 * absent body is NOT this guard's concern (the claimability check returns `lost`
+	 * separately) — this only fires when a body that DOES rest claimable lacks a
+	 * `## Prompt`.
+	 */
+	async function assertBodyWellFormed(bodyRel: string): Promise<void> {
+		const show = await gitSoft(
+			['show', `${arbiter}/main:${bodyRel}`],
+			cwd,
+			env,
 		);
+		if (show.status !== 0) {
+			// The body vanished between the residence check and this read — leave it to
+			// the claimability path to report `lost`; do not synthesise a guard error.
+			return;
+		}
+		if (extractPromptSection(show.stdout) === undefined) {
+			throw new ClaimUsageError(
+				`'${slug}' (${bodyRel}) has no '## Prompt' section, so it is not ` +
+					'dispatchable — add a `## Prompt` section to the task body before ' +
+					'claiming it. NO lock was acquired.',
+			);
+		}
 	}
 
 	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (prd
@@ -298,7 +341,8 @@ async function runClaim(
 
 	if (dryRun) {
 		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-		if (!(await bodyRestsClaimable())) {
+		const bodyRel = await claimableBodyRel();
+		if (bodyRel === undefined) {
 			const message = await lostMessage(
 				slug,
 				arbiter,
@@ -309,9 +353,25 @@ async function runClaim(
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
 		}
+		// A dry-run still runs the pre-claim well-formedness guard so it reports a
+		// promptless body as a usage error rather than "would claim" it.
+		await assertBodyWellFormed(bodyRel);
 		const message = `DRY-RUN: would acquire the per-item lock for '${slug}' (body stays in work/backlog/).`;
 		note(message);
 		return {exitCode: 0, outcome: 'claimed', message};
+	}
+
+	// PRE-CLAIM WELL-FORMEDNESS GUARD: fetch + read the claimable body and refuse a
+	// task missing its `## Prompt` BEFORE the lock is acquired (so a malformed body
+	// never strands a `state: stuck` lock at dispatch). A genuinely absent body is
+	// left to the post-lock claimability re-check to report as `lost`; this guard
+	// only fires for a body that DOES rest claimable but is not dispatchable.
+	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+	{
+		const bodyRel = await claimableBodyRel();
+		if (bodyRel !== undefined) {
+			await assertBodyWellFormed(bodyRel);
+		}
 	}
 
 	// Acquire the lock FIRST. A lock `lost` (someone already holds this SAME item's
