@@ -1,0 +1,13 @@
+<!-- dorfl-sidecar: item=observation:decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 type=observation slug=decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22 allAnswered=false -->
+
+## Q1
+
+**What becomes of this signal? The `## Decisions` block convention is mandated but repeatedly skipped (decisions land in JSDoc / the observation instead) and then routinely waived as 'fine' on triage. Pick one: (ENFORCE) make `## Decisions` a checked acceptance/CI gate; (RELAX) redefine the convention as 'a durable record ANYWHERE checkable' (JSDoc at the choice site, a Decisions block, or an observation, with a link); (HYBRID) keep `## Decisions` required for slice-level judgement calls but bless JSDoc-at-the-choice-site for narrow parser/predicate invariants — which needs the 'slice-level decision' vs 'local code invariant' line drawn crisply. Or: drop the observation as a non-issue. Whichever is chosen, the prompt/template language must be updated to match.**
+
+> work/notes/observations/decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22.md (status: open, needsAnswers: true). Evidence: across one 2026-06-22 `answer-questions` triage the same shape recurred in FIVE review-nit sidecars — a slice asked to record an in-scope non-obvious decision in a `## Decisions` block did make the decision and recorded it durably (module JSDoc next to the code, or the observation note) but NOT in a literal `## Decisions` block; the commit/PR body was empty of it. All five were ratified keep/dropped ('the existing record is the durable home'), which is itself the evidence the convention is waived in practice. Verified against current reality: the convention lives in `work/protocol/CLAIM-PROTOCOL.md:137-138` ('end your report with a "## Decisions" block, one entry per decision') and `work/protocol/task-template.md:52` ('RECORD non-obvious in-scope decisions'); WORK-CONTRACT.md does NOT mention it. The note explicitly does NOT pick a direction — it is flagged as a JUDGEMENT call for the maintainer ('Open question to NOT guess ... Surfaced, never auto-decided').
+
+_Suggested default: Lean RELAX (or HYBRID): rewrite CLAIM-PROTOCOL.md / task-template.md from 'add a `## Decisions` block' to 'record the decision durably and link it (JSDoc at the choice site, a Decisions block, or an observation)', since that matches what builders actually do and what the human keeps ratifying, and costs zero new gate machinery — but this is the maintainer's call, not to be auto-decided. NOTE: any change is a protocol-doc edit and MUST be mirrored byte-identically between `skills/setup/protocol/` and `work/protocol/` per AGENTS.md._
+
+<!-- q1 fields: id=q1 -->
+
+**Your answer** (write below this line):
