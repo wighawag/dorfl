@@ -109,6 +109,7 @@ import {renderPrompt} from './prompt.js';
 import {resolvePromptGuidance} from './config.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
 import {sweepRemoteMergedBranches} from './reap-branches.js';
+import {sweepOrphanSidecars} from './orphan-sidecar.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -3029,30 +3030,58 @@ export function buildProgram(): Command {
 			// (works on a `--bare` arbiter); NEVER `--force` (a merged ref needs none),
 			// NEVER touches an in-flight branch.
 			if (flags.remoteBranches) {
+				const sweepCwd = flags.cwd ?? process.cwd();
 				const sweep = sweepRemoteMergedBranches({
-					cwd: flags.cwd ?? process.cwd(),
+					cwd: sweepCwd,
 					arbiter: flags.arbiter ?? 'origin',
 					dryRun: flags.dryRun === true,
 					note: (message) => console.error(`>> ${message}`),
 				});
+				// The ORPHAN-SIDECAR sweep (prd
+				// `agentic-question-resolution-retire-disposition-vocabulary`, US #10) rides
+				// the SAME `--remote-branches` invocation the SCHEDULED CI lifecycle workflow
+				// runs (`dorfl gc --remote-branches --arbiter origin`) — so the reap of a
+				// `work/questions/<type>-<slug>.md` whose source item was deleted out-of-band
+				// actually FIRES on the cron tick (not behind an un-passed flag). It operates
+				// on the WORKING TREE of the checkout `gc` runs in (the same `cwd` the branch
+				// sweep targets) — CI checks out the repo — so no arbiter ref query is needed
+				// beyond the by-identity source-existence check
+				// (`resolveItemPathByIdentity`). A `git rm` deletion (notes/sidecars leave by
+				// deletion; git history is the archive), so a wrong source-delete is
+				// recoverable from history. Honours `--dry-run` (report-only preview).
+				const orphans = sweepOrphanSidecars({
+					cwd: sweepCwd,
+					dryRun: flags.dryRun === true,
+					note: (message) => console.error(`>> ${message}`),
+				});
 				if (flags.json) {
-					console.log(JSON.stringify(sweep, null, 2));
+					console.log(
+						JSON.stringify({...sweep, orphanSidecars: orphans}, null, 2),
+					);
 					return;
 				}
 				if (flags.dryRun === true) {
 					for (const w of sweep.wouldReap) {
 						console.log(`  [would-reap] ${w.branch} \u2014 merged`);
 					}
+					for (const w of orphans.wouldReap) {
+						console.log(`  [would-reap] ${w.path} \u2014 orphan sidecar`);
+					}
 				} else {
 					for (const r of sweep.reaped) {
 						console.log(`  [reaped]   ${r.branch} \u2014 merged`);
+					}
+					for (const r of orphans.reaped) {
+						console.log(`  [reaped]   ${r.path} \u2014 orphan sidecar`);
 					}
 				}
 				for (const ret of sweep.retained) {
 					console.log(`  [retained] ${ret.branch} \u2014 ${ret.reasonText}`);
 				}
 				const reapedCount =
-					flags.dryRun === true ? sweep.wouldReap.length : sweep.reaped.length;
+					flags.dryRun === true
+						? sweep.wouldReap.length + orphans.wouldReap.length
+						: sweep.reaped.length + orphans.reaped.length;
 				const verb = flags.dryRun === true ? 'would reap' : 'reaped';
 				console.log(
 					`Summary: ${reapedCount} ${verb}, ${sweep.retained.length} retained.`,
