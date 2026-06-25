@@ -306,17 +306,22 @@ export interface IntegrationCoreInput {
 	 * {@link committedRecovery} only when it is CLEAN; they cannot both be set
 	 * for the same call). See `docs/adr/continue-build-already-done-moved.md`.
 	 */
-	source:
-		| 'tasks-ready'
-		| 'tasks-backlog'
-		| 'in-progress'
-		| 'needs-attention'
-		| 'done';
+	// `needs-attention` was a recovery source in the legacy folder model; it is
+	// gone (task `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`).
+	// The retired folder is no longer written, so a recovery `complete` sources
+	// from `tasks-ready` (the pool position, where claim now leaves the body)
+	// like a normal build.
+	source: 'tasks-ready' | 'tasks-backlog' | 'in-progress' | 'done';
 	/**
-	 * True iff completing FROM `needs-attention/` (a recovery finish). A red re-gate
-	 * here keeps the item in needs-attention/ (no re-route); the rebase drops the
-	 * historical needs-attention move-only commit so it does not conflict with the
-	 * surfaced state on main.
+	 * Vestigial: was `true` when completing FROM `work/needs-attention/` (a
+	 * recovery finish under the legacy folder model). The per-item-lock cutover
+	 * (`cutover-needs-attention-becomes-lock-stuck-recovery-surface`) retired
+	 * that folder — a stuck item is now the lock `state: stuck` and the body
+	 * stays in `tasks/ready/`, so a recovery `complete` is structurally a normal
+	 * build. EVERY caller now passes `false`; the field is preserved on the input
+	 * type only so callers compile unchanged — every branch that read it has been
+	 * deleted (the `if (recovering)` re-gate paths). A future cross-caller change
+	 * can remove the field; out of this task's scope.
 	 */
 	recovering: boolean;
 	/**
@@ -768,23 +773,6 @@ export async function performIntegration(
 		}
 		if (!prep.passed) {
 			const reason = `prepare (env-prep) failed (exit ${prep.exitCode})`;
-			if (recovering) {
-				// RECOVERY path, RED prepare: the item is ALREADY in needs-attention/.
-				// A still-broken env keeps it there (no re-route, no double reason), just
-				// like a still-red gate.
-				const message =
-					`Env-prep (prepare) still failed (exit ${prep.exitCode}); '${slug}' stays ` +
-					'in work/needs-attention/ (the environment could not be made ready, so ' +
-					'the acceptance gate cannot be trusted). Fix the prepare command, then ' +
-					'retry.';
-				note(message);
-				return {
-					outcome: 'prepare-failed',
-					routedToNeedsAttention: false,
-					branch,
-					reason: message,
-				};
-			}
 			// Bounce from in-progress/ straight to needs-attention/ (the SAME seam a red
 			// gate uses) — recording the prepare-failed reason + committing the move
 			// (with the agent's uncommitted work) as ONE atomic transition. We NEVER
@@ -823,24 +811,6 @@ export async function performIntegration(
 	} else if (!freshWorktreeGate) {
 		note('Running the acceptance gate (verify)…');
 		const gate = await runVerify({cwd, verify: input.verify, env});
-		if (!gate.passed && recovering) {
-			// RECOVERY path, RED re-gate: the item is ALREADY in needs-attention/ (this
-			// is a finish-the-stuck-item attempt, not a fresh in-progress completion).
-			// The gate stays authoritative — a still-red item is NOT completed; it
-			// simply STAYS in needs-attention/ (no re-route, no re-surface, no double
-			// reason block). --skip-verify remains the only, human-only, loud override.
-			const message =
-				`Acceptance gate still failed (exit ${gate.exitCode}); '${slug}' stays in ` +
-				'work/needs-attention/ (the cause is not actually fixed). Fix the work, ' +
-				'or use --skip-verify to override.';
-			note(message);
-			return {
-				outcome: 'gate-failed',
-				routedToNeedsAttention: false,
-				branch,
-				reason: message,
-			};
-		}
 		if (!gate.passed) {
 			// Don't leave the item dangling in in-progress/: route it to
 			// needs-attention/ with the reason (ADR §12) THROUGH the ledger write
@@ -1292,20 +1262,6 @@ export async function performIntegration(
 					gated.kind === 'prepare'
 						? `Env-prep (prepare) failed (exit ${gated.exitCode})`
 						: `Acceptance gate failed (exit ${gated.exitCode})`;
-				if (recovering) {
-					const message =
-						`${what} on the rebased tip; '${slug}' stays in ` +
-						'work/needs-attention/ (the cause is not actually fixed). Fix the ' +
-						'work, or use --skip-verify to override.';
-					note(message);
-					return {
-						outcome,
-						routedToNeedsAttention: false,
-						branch,
-						commitMessage,
-						reason: message,
-					};
-				}
 				const reason =
 					gated.kind === 'prepare'
 						? `prepare (env-prep) failed (exit ${gated.exitCode}) on the rebased tip`
@@ -2507,11 +2463,7 @@ async function reconcileDivergentDoneMove(params: {
 	slug: string;
 	branch: string;
 	/** The folder the LOCAL done-move removed the slug from (its `git mv` source). */
-	localSource:
-		| 'tasks-ready'
-		| 'tasks-backlog'
-		| 'in-progress'
-		| 'needs-attention';
+	localSource: 'tasks-ready' | 'tasks-backlog' | 'in-progress';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<boolean> {

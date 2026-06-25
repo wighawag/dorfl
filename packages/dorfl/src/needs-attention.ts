@@ -1,4 +1,4 @@
-import {existsSync, rmSync} from 'node:fs';
+import {rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -235,48 +235,6 @@ export interface SurfaceToNeedsAttentionResult {
 	commitMessage?: string;
 	/** When NOT moved, why (no arbiter, item not on the arbiter, contention exhausted). */
 	reasonNotMoved?: string;
-}
-
-/**
- * The folder the item to route currently lives in. Probes `in-progress/` (the
- * test-gate path, before the done-move) and `done/` (the rebase-conflict path,
- * after it) FIRST, then `needs-attention/` itself.
- *
- * The `needs-attention/` arm makes the route an IDEMPOTENT RE-SURFACE: on an
- * onboard-time CONTINUE rebase-conflict the worktree is cut from the kept
- * `work/<slug>` branch, whose tree ALREADY holds the item in
- * `needs-attention/<slug>.md` (from the prior bounce). Without this arm the probe
- * returned `undefined` ⇒ `{moved: false}` ⇒ no surface re-publish, so a `main`
- * that currently shows the item elsewhere (e.g. `in-progress/` after a re-claim)
- * went STALE. Recognising `needs-attention/` lets the route re-publish the
- * surface (the move becomes a no-op-content self-move the caller handles). It is
- * probed LAST so a real pre-needs-attention source (`in-progress/`/`done/`) still
- * wins when the item is mid-transition.
- */
-function findSourceFolder(
-	cwd: string,
-	slug: string,
-): {rel: string; abs: string} | undefined {
-	// `backlog` is probed FIRST: since claim no longer moves the body (task
-	// `cutover-claim-body-stays-and-complete-sources-from-backlog`), a freshly-built
-	// task that hits a red gate / agent failure STILL RESTS in `work/backlog/` (the
-	// claim never relocated it), so the wip-save bounce must be able to source the
-	// move from there. `in-progress` is retained for the legacy/recovery surfaces; on
-	// the rebase-conflict path (after the done-move) the body is in `done/`.
-	const lookupFolders: readonly WorkFolderKey[] = [
-		'tasks-ready',
-		'in-progress',
-		'done',
-		'needs-attention',
-	];
-	for (const folder of lookupFolders) {
-		const rel = workItemRel(folder, `${slug}.md`);
-		const abs = join(cwd, rel);
-		if (existsSync(abs)) {
-			return {rel, abs};
-		}
-	}
-	return undefined;
 }
 
 /**
@@ -1296,45 +1254,6 @@ function pathInCommit(
 	return (
 		run('git', ['cat-file', '-e', `${commit}:${path}`], cwd, {env}).status === 0
 	);
-}
-
-/**
- * Resolve the slug's ACTUAL current folder ON THE ARBITER for a requeue source
- * (arbiter-is-truth; we read the arbiter ref, not the cwd tree). `requeue`
- * recovers a task stuck in `needs-attention/` (the resolved-surface path) OR in
- * `in-progress/` (a claim that never surfaced — an un-surfaced abort, a killed
- * run, or an in-place requeue note; defect 2, story 4). Returns the source
- * `work/<folder>/<slug>.md` rel path the move should relocate FROM, or
- * `undefined` when the slug is in NEITHER (nothing to requeue). `needs-attention/`
- * is probed first so a task mid-transition that briefly appears in both resolves
- * to its surfaced state; in practice the one-slug-one-folder invariant means at
- * most one holds it.
- */
-async function resolveRequeueSourceRel(
-	arbiter: string,
-	slug: string,
-	cwd: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<string | undefined> {
-	const requeueSources: readonly WorkFolderKey[] = [
-		'needs-attention',
-		'in-progress',
-	];
-	for (const folder of requeueSources) {
-		const rel = workItemRel(folder, `${slug}.md`);
-		if (
-			(
-				await gitSoftAsync(
-					['cat-file', '-e', `${arbiter}/main:${rel}`],
-					cwd,
-					env,
-				)
-			).status === 0
-		) {
-			return rel;
-		}
-	}
-	return undefined;
 }
 
 /**
