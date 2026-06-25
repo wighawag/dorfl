@@ -19,3 +19,7 @@ function) still reads "they survive the requeue → backlog → claim gap". Here
 two-meanings-one-word hazard, but outside this task's named scope
 (`resolveTask` + `do.ts`), so left untouched. A one-line reword (`backlog` →
 `tasks-ready`/`the pool`) would de-stale it.
+
+## Requeue 2026-06-25
+
+Requeued: promotion produced a body with no '## Prompt' section, so the dispatched build failed and left this lock state:stuck. See work/notes/observations/advance-promotion-builds-promptless-task-that-self-claims-stuck-2026-06-25.md. Body needs a '## Prompt' (or re-triage out of ready/) before re-claim. No work branch existed (build never started), so --reset.
