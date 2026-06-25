@@ -211,6 +211,22 @@ const RACE_SENSITIVE = [
 	// above; run it sequentially for the same deterministic claim/main-CAS reasoning
 	// as claim-acquires-unified-lock.test.ts / advancing-acquires-unified-lock.test.ts.
 	'test/advance-exclusion-via-inner-lock.test.ts',
+	// The self-renaming-folder DIRTY-CONTINUE keystone: drives real git against a
+	// --bare arbiter via `seedRepoWithArbiter` + `performComplete`, continuing a
+	// kept work branch and writing main (the rename-aware integration push). It is
+	// the git-`file://`-CAS race class above; under file-parallel pressure the
+	// DIRTY-CONTINUE case (~L160) exceeds the default 5s per-test timeout (passes
+	// 17/17 in isolation in ~5s). Run it sequentially for the same deterministic
+	// claim/main-CAS reasoning as do.test.ts / do-remote.test.ts.
+	'test/complete-self-renaming-folder-task.test.ts',
+	// The isolated-`do` SEQUENTIAL-REFETCH FRESHNESS drain (~L445): drives
+	// `performDoRemote(Auto)` against a --bare arbiter (hub mirror + job worktree),
+	// runs the pipeline, AND writes main (the autonomous needs-attention surfacing)
+	// repeatedly across rungs. It is the git-`file://`-CAS race class above; under
+	// file-parallel pressure the sequential-refetch drain exceeds the default 5s
+	// per-test timeout (passes in isolation in ~5s). Run it sequentially for the
+	// same deterministic claim/main-CAS reasoning as do-remote.test.ts.
+	'test/do-isolated.test.ts',
 ];
 
 export default defineConfig({
