@@ -1,0 +1,15 @@
+<!-- dorfl-sidecar: item=observation:answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 type=observation slug=answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22 allAnswered=false -->
+
+## Q1
+
+**What becomes of this signal? The observation reports a silent-stall failure mode: an observation whose human triage answer (e.g. promote-slice) is written into an in-BODY 'Applied answers' block instead of a question sidecar is invisible to the engine — it stays untriaged (no `triaged:` marker), the surfacer no-ops it (the body reads as settled so nothing new is asked), and promote can never fire (no answered sidecar to consume), so it no-ops on every propose tick at exit 0 forever. Should this be (a) closed as a pure convention fix (author the sidecar / fix the one stuck observation, then delete this observation), (b) sliced into an engine-robustness task (detect the limbo and report it loudly instead of a silent exit-0 no-op, and/or stop the surfacer staying silent when there is no sidecar and no `triaged:` marker), (c) both, or (d) kept/dropped some other way?**
+
+> Source: work/notes/observations/answered-observation-body-block-is-invisible-to-promote-path-needs-sidecar-2026-06-22.md (frontmatter needsAnswers: true, status: spotted, no `triaged:` marker). The observation explicitly says 'The idea (NOT decided here)' and 'A human decides whether to slice the engine-robustness part or just fix the convention for this one observation', i.e. it leaves the disposition genuinely open.
+>
+> Claim re-verified against current reality (2026-06-22): the cited code still backs the mechanism, though it has MOVED from bare `src/` to `packages/dorfl/src/` (the observation's refs read `src/triage-persist.ts:294`, `src/advance.ts`, `src/ledger-read.ts:473` — now under packages/dorfl/src/). `promoteObservation` still exists (packages/dorfl/src/triage-persist.ts:305) and its doc still states promote consumes an ANSWERED 'promote' sidecar. The stuck observation it points at — work/notes/observations/advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21.md — is STILL present with no observation question sidecar (work/questions/observation-advance-leg-on-stale-...md is absent; only a task- sidecar for that slug exists), so the described limbo is real and unresolved.
+
+_Suggested default: Lean (a)/(c): the observation itself notes 'one channel, the sidecar, keeps the loop honest' and that honouring an in-body disposition is 'probably not' right — so do NOT honour body prose; fix the convention for the one stuck observation, and only slice the engine-robustness 'surface the limbo loudly' part if the silent-stall trap is judged worth the engine work. Note the code refs need re-pointing to packages/dorfl/src/ if any task is minted._
+
+<!-- q1 fields: id=q1 -->
+
+**Your answer** (write below this line):
