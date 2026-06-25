@@ -109,15 +109,87 @@ export function parseReviewVerdict(output: string): ReviewVerdict {
 			'review agent produced no parseable {verdict, findings} result',
 		);
 	}
+	const slice = output.slice(span.start, span.end);
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(output.slice(span.start, span.end));
-	} catch (err) {
-		throw new ReviewParseError(
-			`review verdict was not valid JSON: ${(err as Error).message}`,
-		);
+		// STRICT FIRST: already-valid JSON parses here and is returned UNTOUCHED —
+		// the repair pass never runs for it (no chance to alter a correct payload).
+		parsed = JSON.parse(slice);
+	} catch (strictErr) {
+		// ONE lenient repair pass for the CONTROL-CHAR class (raw newline / tab / CR /
+		// other C0 char left unescaped inside a string field, common on large diffs +
+		// weaker models). The repair is NARROW: it only escapes control chars INSIDE
+		// strings; it NEVER touches JSON structure or token values (no trailing-comma
+		// stripping, no quoting bare tokens, no coercion), so it can never launder a
+		// genuinely-malformed or meaningfully-WRONG verdict into a false approve/block.
+		// A still-failing parse re-throws the ORIGINAL strict error (so direction-1's
+		// `runGate2Review` catch routes it to needs-attention, never a silent approve).
+		// NOTE the boundary: this does NOT fix an unescaped inner double-quote (which
+		// mis-bounds the extracted span before repair even runs); that class is handled
+		// by routing (direction 1) + the tightened contract (direction 3).
+		try {
+			parsed = JSON.parse(repairJsonControlChars(slice));
+		} catch {
+			throw new ReviewParseError(
+				`review verdict was not valid JSON: ${(strictErr as Error).message}`,
+			);
+		}
 	}
+	// A repaired parse STILL flows through validation, so a repaired
+	// `{"verdict":"maybe"}` (valid JSON, invalid VALUE) still throws here — the
+	// repair recovers SYNTAX, never bypasses the verdict-VALUE contract.
 	return validateVerdict(parsed);
+}
+
+/**
+ * The NARROW lenient repair (direction 2): walk the extracted JSON slice and
+ * escape any raw control char (a C0 char `< 0x20`, which JSON forbids inside a
+ * string literal) that appears INSIDE a string. OUTSIDE a string the structure
+ * is left byte-for-byte untouched. Escape-tracking is load-bearing: an escaped
+ * `\"` must NOT be read as the string's closing quote (or a following raw
+ * newline would be mis-handled). This recovers ONLY the control-char class; it
+ * performs NO structural change and NO token coercion, so it cannot turn a real
+ * reject into a false approve.
+ */
+function repairJsonControlChars(text: string): string {
+	let out = '';
+	let inString = false;
+	let escaped = false;
+	for (let i = 0; i < text.length; i++) {
+		const ch = text[i];
+		const code = ch.charCodeAt(0);
+		if (inString) {
+			if (escaped) {
+				out += ch;
+				escaped = false;
+				continue;
+			}
+			if (ch === '\\') {
+				out += ch;
+				escaped = true;
+				continue;
+			}
+			if (ch === '"') {
+				out += ch;
+				inString = false;
+				continue;
+			}
+			if (code < 0x20) {
+				if (ch === '\n') out += '\\n';
+				else if (ch === '\t') out += '\\t';
+				else if (ch === '\r') out += '\\r';
+				else out += '\\u' + code.toString(16).padStart(4, '0');
+				continue;
+			}
+			out += ch;
+			continue;
+		}
+		if (ch === '"') {
+			inString = true;
+		}
+		out += ch;
+	}
+	return out;
 }
 
 function validateVerdict(parsed: unknown): ReviewVerdict {
@@ -232,7 +304,9 @@ export function verdictContractPrompt(): string {
 		'',
 		'Emit a single JSON object of this exact shape (see',
 		'`work/protocol/REVIEW-PROTOCOL.md` \u2192 "Your output" for the prose-described',
-		'contract this mirrors):',
+		'contract this mirrors). The example below is EXPANDED over several lines for',
+		'READABILITY, but you MUST emit it MINIFIED \u2014 ONE single line, no newlines',
+		'between the keys:',
 		'',
 		'```json',
 		'{"verdict": "approve" | "block",',
@@ -258,6 +332,19 @@ export function verdictContractPrompt(): string {
 		'- The optional channels (`review`, `edits`, `edit`, `questions`,',
 		'  `uncertainTasks`, `decompositionUnclear`) are OPT-IN: only fill the ones',
 		"  the caller's framing names. Unused channels are ignored.",
+		'',
+		'### Keep the JSON PARSEABLE (this is where weak models fail)',
+		'',
+		'A malformed verdict strands the work, so emit DEFENSIVELY:',
+		'- Emit it MINIFIED: ONE single line, no pretty-printing, no blank lines.',
+		'- INSIDE every string value, do NOT use a literal double-quote `"`. If you',
+		'  must quote something in prose, PARAPHRASE it or use SINGLE quotes \u2014 a',
+		'  dropped escape on an inner `"` is the #1 cause of an unparseable verdict.',
+		'- Keep every string field SHORT and SINGLE-LINE. Do NOT embed a raw newline,',
+		'  tab, or other control char in a string; if you genuinely need a break, write',
+		'  the two characters `\\n` (a backslash then n), never a real newline.',
+		'- Keep the LONGEST field (`review`) under ~1500 characters; say less, not',
+		'  more. A long, multi-paragraph field is exactly what corrupts the JSON.',
 	].join('\n');
 }
 

@@ -72,6 +72,17 @@ const CONFIG_ERROR_SIGNATURES = [
  * string) — deliberately conservative: anything not matched stays `agent-failed`.
  */
 const TRANSIENT_INFRA_SIGNATURES = [
+	// A Gate-2 review verdict the runner could not PARSE (malformed JSON from the
+	// review agent, common on large diffs + weaker models). This is `transient-infra`,
+	// NOT `agent-failed`/`config-error`: the WORK is fine and the wiring is fine; the
+	// STOCHASTIC gate output misbehaved, so re-running the SAME work is the natural
+	// recovery (and the parser's repair pass + the tightened contract make a re-run far
+	// more likely to parse). Matches both `parseReviewVerdict` throw phrasings ("review
+	// verdict was not valid JSON" and "produced no parseable {verdict, findings}") and
+	// the core's "verdict could not be parsed" wrapper.
+	/review verdict was not valid JSON/i,
+	/verdict could not be parsed/i,
+	/no parseable \{verdict/i,
 	/\bECONN(?:REFUSED|RESET|ABORTED)\b/i,
 	/\bETIMEDOUT\b/i,
 	/\bENOTFOUND\b/i,

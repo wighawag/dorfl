@@ -103,6 +103,7 @@ export type CompleteOutcome =
 	| 'prepare-failed' // the env-prep step (prepare) was red — env not ready, verify not run
 	| 'gate-failed' // the acceptance gate was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
+	| 'review-unparseable' // Gate 2 ran but its verdict JSON was malformed/unparseable — work-preserving route, classified `transient-infra` (NOT a reviewer block)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
 	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
 	| 'strand-surfaced' // autonomous source-strand refusal (or empty-staged) surfaced to needs-attention on the arbiter (parity with run's never-strand-in-in-progress posture)
@@ -928,6 +929,20 @@ async function runComplete(
 		return {
 			exitCode: 1,
 			outcome: 'review-blocked',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
+			message: core.reason ?? '',
+		};
+	}
+	if (core.outcome === 'review-unparseable') {
+		// Gate 2 RAN but its verdict was UNPARSEABLE (malformed JSON). The core already
+		// routed it work-preservingly via `applyNeedsAttentionTransition` (branch pushed +
+		// surfaced on the autonomous path). Map it 1:1 like the other routed failures; the
+		// `do`/`run` tail re-labels its cause `transient-infra` (NOT a reviewer block) off
+		// the parse-failure phrase in `core.reason`.
+		return {
+			exitCode: 1,
+			outcome: 'review-unparseable',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
 			message: core.reason ?? '',

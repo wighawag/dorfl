@@ -1211,6 +1211,25 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			message: completed.message,
 		};
 	}
+	if (completed.outcome === 'review-unparseable') {
+		// Gate 2 RAN but its verdict was UNPARSEABLE (malformed JSON). The core already
+		// routed it work-preservingly (branch pushed + surfaced). This is the FAILURE-
+		// CAUSE axis, NOT a reviewer block: classify the parse-failure phrase the core
+		// recorded → `transient-infra` (re-run the SAME work: the gate output is
+		// stochastic + the parser now repairs the control-char class, so a re-run is far
+		// more likely to parse). Same `classifyFailureCause` `run` uses, so `do`/`run`
+		// agree on the label. (`classifyFailureCause` only EVER returns config/transient/
+		// agent-failed; the malformed-JSON signature lands transient-infra, never a
+		// silent success.)
+		const cause = classifyFailureCause(completed.message);
+		return {
+			exitCode: 1,
+			outcome: failureCauseToDoOutcome(cause),
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
 	if (
 		completed.outcome === 'prepare-failed' ||
 		completed.outcome === 'gate-failed' ||
@@ -2326,6 +2345,24 @@ async function runRemotePipeline(
 		return {
 			exitCode: 0,
 			outcome: 'completed',
+			slug,
+			branch,
+			message: completed.message,
+		};
+	}
+	if (completed.outcome === 'review-unparseable') {
+		// Gate 2 RAN but its verdict was UNPARSEABLE (malformed JSON). The core already
+		// routed it work-preservingly (branch pushed + surfaced). FAILURE-CAUSE axis, NOT
+		// a reviewer block: classify the parse-failure phrase → `transient-infra` (re-run
+		// the SAME work), the SAME convergence in-place `do`/`run` apply, so `do --remote`
+		// agrees on the label. The job worktree is RETAINED by the §4 reap (a
+		// not-provably-safe tree); hand the operator the recover-one-liner like the other
+		// retained-tree failures.
+		note(recoverIsolatedOneLiner(slug));
+		const cause = classifyFailureCause(completed.message);
+		return {
+			exitCode: 1,
+			outcome: failureCauseToDoOutcome(cause),
 			slug,
 			branch,
 			message: completed.message,

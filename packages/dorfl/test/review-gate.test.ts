@@ -290,6 +290,79 @@ describe('parseReviewVerdict — reads the review SKILL verdict shape', () => {
 	});
 });
 
+describe('parseReviewVerdict — lenient control-char repair (direction 2)', () => {
+	// The repair escapes raw control chars INSIDE strings only, on a strict-parse
+	// failure. It NEVER touches structure/tokens, runs on the EXTRACTED SLICE, and a
+	// still-failing parse re-throws ReviewParseError (so direction 1 routes it).
+
+	it('repairs a raw newline inside the `review` string field', () => {
+		// A literal newline inside the string value (NOT the escaped \n sequence) is
+		// invalid JSON; the repair escapes it. Build it WITHOUT JSON.stringify so the
+		// control char is genuinely raw in the slice.
+		const output =
+			'{"verdict":"block","findings":[],"review":"line one\nline two"}';
+		const v = parseReviewVerdict(output);
+		expect(v.verdict).toBe('block');
+		expect(v.review).toBe('line one\nline two');
+	});
+
+	it('repairs a raw newline AND tab inside a finding `context`', () => {
+		const output =
+			'{"verdict":"block","findings":[{"severity":"blocking",' +
+			'"question":"q","context":"a\tb\nc"}]}';
+		const v = parseReviewVerdict(output);
+		expect(v.verdict).toBe('block');
+		expect(v.findings[0].context).toBe('a\tb\nc');
+	});
+
+	it('repairs a tab+CR, recovering the routing channels (verdict + findings)', () => {
+		const output = '{"verdict":"approve","findings":[],"review":"ok\t\rdone"}';
+		const v = parseReviewVerdict(output);
+		expect(v.verdict).toBe('approve');
+		expect(v.review).toBe('ok\t\rdone');
+	});
+
+	it('keeps escape-tracking: an escaped \\" then a raw newline is repaired, not mis-bounded', () => {
+		// The `\"` is an ESCAPED quote INSIDE the string (it must NOT close the string),
+		// then a raw newline follows that must still be escaped by the repair.
+		const output =
+			'{"verdict":"block","findings":[],"review":"he said \\"hi\\"\nthere"}';
+		const v = parseReviewVerdict(output);
+		expect(v.verdict).toBe('block');
+		expect(v.review).toBe('he said "hi"\nthere');
+	});
+
+	it('a genuinely TRUNCATED payload (unterminated string) STILL throws (repair cannot save it)', () => {
+		// An unterminated string is not a control-char problem; the repair cannot fix
+		// it, so it falls through to the direction-1 needs-attention route. Never a
+		// silent approve.
+		expect(() =>
+			parseReviewVerdict('{"verdict":"approve","findings":[],"review":"unterm'),
+		).toThrow(ReviewParseError);
+	});
+
+	it('already-valid minified JSON is UNTOUCHED (strict parse wins; repair never runs)', () => {
+		// A `review` carrying a CORRECTLY-escaped \n must survive byte-for-byte — if the
+		// repair ran on valid input it could double-escape. Strict-first guarantees it.
+		const v = parseReviewVerdict(
+			'{"verdict":"approve","findings":[],"review":"already \\n escaped"}',
+		);
+		expect(v.verdict).toBe('approve');
+		expect(v.review).toBe('already \n escaped');
+	});
+
+	it('a repaired-but-invalid-VALUE verdict STILL throws via validateVerdict (repair does not bypass validation)', () => {
+		// The raw newline makes it un-strict-parseable; the repair fixes the JSON SYNTAX,
+		// but `verdict:"maybe"` is still an invalid VALUE — validation throws. The repair
+		// recovers syntax, never launders a bad verdict into approve/block.
+		expect(() =>
+			parseReviewVerdict(
+				'{"verdict":"maybe","findings":[],"review":"line\none"}',
+			),
+		).toThrow(ReviewParseError);
+	});
+});
+
 describe('buildReviewPrompt — frames code-vs-its-task + the required output', () => {
 	it('names the slug, the in-band REVIEW-PROTOCOL.md, and demands the JSON verdict shape', () => {
 		const p = buildReviewPrompt('my-task');

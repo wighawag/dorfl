@@ -107,6 +107,8 @@ Several caller-specific optional channels MAY ride on the same JSON object. They
 
 Any unrecognised field is ignored by the parser; the caller routes on `verdict`/`findings` plus the channels its prompt asked for.
 
+**Keep the JSON parseable** (a malformed verdict strands the work). Emit defensively: emit it MINIFIED on ONE single line; do NOT use a literal double-quote `"` inside any string value (paraphrase, or use single quotes — a dropped escape on an inner `"` is the most common corruption); keep every string field SHORT and SINGLE-LINE (write `\n` literally, never embed a real newline / tab / control char); and cap the longest field (`review`) at roughly 1500 characters — say less, not more.
+
 ### How callers route your verdict (not your job — for orientation only)
 
 - a **review GATE** routes a `block` → set `needsAnswers: true` on the artifact (question in its body) or mark its per-item lock `state: stuck` (needs-attention); `approve` → let it land / auto-merge.
