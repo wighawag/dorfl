@@ -11,15 +11,25 @@ After the per-item-lock cutover (`cutover-needs-attention-becomes-lock-stuck-rec
 a stuck bounce is a LOCK AMEND (`state: stuck` on the item's lock ref), NOT a
 `git mv` into a `work/needs-attention/` folder. The bounce seam itself is already
 cut over (`do.ts` calls `applyNeedsAttentionTransition`, the lock-amend seam),
-but a handful of USER-FACING strings still tell the human the item was "routed to
-work/needs-attention/", a folder path that no longer exists. This task is a
-PROSE-ONLY reconcile of those strings so the message matches reality (the item is
-marked stuck on its lock). No behaviour change, no machinery touched.
+but a handful of USER-FACING strings in `do.ts` still tell the human the item was
+"routed to work/needs-attention/", a folder path that no longer exists. This task
+is a PROSE-ONLY reconcile of those `do.ts` strings (and the one stale `do.ts`
+comment beside them) so the message matches reality (the item is marked stuck on
+its lock). No behaviour change, no machinery touched.
 
 This is deliberately scoped SMALL and separate from the larger dead-folder-reader
 removal (see the sibling task
 `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`): this one
-only edits human-visible message text and is safe to land on its own.
+only edits human-visible `do.ts` message text and is safe to land on its own.
+
+SCOPE FENCE (why `cli.ts` is NOT here): the `requeue` command help in `cli.ts`
+ALSO names a `work/needs-attention/<slug>.md` file, but that help text is
+ACCURATELY describing current code: the requeue resolver (`returnToBacklog` in
+`needs-attention.ts`) STILL has a live `needs-attention/` probe arm. Whether that
+help should be reworded depends on whether the sibling task KEEPS or REMOVES that
+probe, so the `cli.ts` requeue help is the sibling task's job, NOT this one. This
+task touches `do.ts` ONLY (the build-failure notices, which fire purely as
+post-bounce reporting of the lock amend and depend on no folder probe).
 
 IMPORTANT vocabulary (verify against the code, a sibling sweep finding had a
 rename direction backwards): `needs-attention` is the CURRENT name for the stuck
@@ -38,14 +48,16 @@ stuck on its lock (reason: ...)".
       was marked stuck on its lock, or the stuck-mark failed), preserving the
       existing interpolations (`report.fragment`, `routed.reasonNotMoved`,
       `reason`).
-- [ ] The `requeue` command help text in `cli.ts` (currently around line 3207)
-      no longer claims it recovers a task from a `work/needs-attention/<slug>.md`
-      FILE; it describes recovering a `state: stuck` item (resolved from its lock
-      / current folder). Keep the rest of the help (DEFAULT keep+continue,
-      `--reset`, `-m`, the tree-less CAS note) intact.
-- [ ] No CODE path, type, or control flow is changed: this is string text only.
-      A diff shows only string-literal edits (and at most a touched comment if it
-      sat inside an edited template literal).
+- [ ] The stale `do.ts` COMMENT beside those notices (currently ~line 1415,
+      "`git mv` the item to needs-attention/ with the reason in the body ...") is
+      reconciled too: the bounce is a lock amend, not a `git mv`, so the comment
+      should describe the lock-amend reality.
+- [ ] `cli.ts` is NOT touched by this task (the `requeue` help is the sibling
+      reader-removal task's job; see the scope fence above). A diff shows no
+      change to `cli.ts`.
+- [ ] No CODE path, type, or control flow is changed: this is `do.ts` string +
+      comment text only. A diff shows only string-literal and comment edits in
+      `do.ts`.
 - [ ] Deliberately-HISTORICAL references are LEFT ALONE: ADR-§12 citations, the
       "there is NO `git mv` to needs-attention/" negative framing in
       `needs-attention.ts`, and `run.ts`'s `state: 'needs-attention'` JOB-record
@@ -85,12 +97,11 @@ Where to look (by string, re-confirm line numbers, they drift):
   "... could not route to work/needs-attention/ ..."). These are produced right
   after the `applyNeedsAttentionTransition` (lock-amend) call, so the folder
   wording is the stale part; keep the `report.fragment` / `routed.reasonNotMoved`
-  / `reason` interpolations.
-- `packages/dorfl/src/cli.ts`: the `requeue` command `.description(...)` (~3207),
-  the "Recovers a task stuck in EITHER work/needs-attention/<slug>.md ... OR
-  work/in-progress/<slug>.md ..." sentence. Reword to recovering a `state: stuck`
-  item resolved on the arbiter, without naming a needs-attention FILE; keep the
-  rest of the help verbatim.
+  / `reason` interpolations. Also reconcile the adjacent stale comment (~1415)
+  that still says "`git mv` the item to needs-attention/".
+- Do NOT edit `cli.ts`. The `requeue` help there names a needs-attention file
+  because the requeue resolver STILL probes that folder; rewording it is the
+  sibling reader-removal task's call (it depends on whether that probe survives).
 
 Do NOT touch: `run.ts`'s `updateJobRecord({state: 'needs-attention', ...})` (a
 JOB-record state for the `jobs` dashboard, unrelated to the work-item folder);
@@ -103,12 +114,13 @@ new wording (keep it strict). Otherwise no new test is needed for a string-only
 change; the build/test/format gate is the floor.
 
 FIRST, check this task against current reality (launch snapshot, may have
-drifted): confirm the strings still say "work/needs-attention/" and that the
-bounce is the lock-amend seam. If the strings are already reconciled, this task
-is overtaken, say so and discharge rather than inventing work.
+drifted): confirm the `do.ts` strings still say "work/needs-attention/" and that
+the bounce is the lock-amend seam. If the strings are already reconciled, this
+task is overtaken, say so and discharge rather than inventing work.
 
-Done = the listed strings describe the lock-stuck reality, no code/types/flow
-changed, historical references and `run.ts`'s job-state untouched, and
+Done = the listed `do.ts` strings + the adjacent stale comment describe the
+lock-stuck reality, `cli.ts` is untouched, no code/types/flow changed, historical
+references and `run.ts`'s job-state untouched, and
 `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 
 Provenance: sidecar rebuild sweep finding C, source observation
