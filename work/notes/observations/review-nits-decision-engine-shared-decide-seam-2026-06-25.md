@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'decision-engine-shared-decide-seam' (G
 date: 2026-06-25
 status: open
 reviewOf: decision-engine-shared-decide-seam
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
