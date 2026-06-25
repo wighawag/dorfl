@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'triage-observations-skill-retire-dispo
 date: 2026-06-25
 status: open
 reviewOf: triage-observations-skill-retire-disposition-vocabulary
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
