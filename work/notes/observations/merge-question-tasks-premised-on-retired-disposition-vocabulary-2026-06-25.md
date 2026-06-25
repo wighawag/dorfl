@@ -1,6 +1,7 @@
 ---
 title: merge-question tasks are premised on the now-retired disposition vocabulary
 date: 2026-06-25
+needsAnswers: true
 ---
 
 ## What was noticed
