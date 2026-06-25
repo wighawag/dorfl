@@ -102,6 +102,7 @@ import {
 import {harnessReviewGate, harnessTaskAcceptanceGate} from './review-gate.js';
 import {harnessSurfaceGate} from './surface-gate.js';
 import {harnessTriageGate} from './triage-gate.js';
+import {harnessApplyDecider} from './apply-decide.js';
 import {harnessTaskReviewGate} from './tasker-review-loop.js';
 import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
@@ -419,6 +420,8 @@ function buildRegistrySetAdvanceTick(options: {
 				doOptions,
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 				surfaceModel: config.model,
+				applyDecide: harnessApplyDecider({harness, agentCmd: config.agentCmd}),
+				applyModel: config.model,
 				observationTriage: config.observationTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
@@ -2647,6 +2650,11 @@ export function buildProgram(): Command {
 						agentCmd: remoteConfig.agentCmd,
 					}),
 					surfaceModel: remoteConfig.model,
+					applyDecide: harnessApplyDecider({
+						harness: isoHarness,
+						agentCmd: remoteConfig.agentCmd,
+					}),
+					applyModel: remoteConfig.model,
 					observationTriage: remoteConfig.observationTriage,
 					triageGate: harnessTriageGate({
 						harness: isoHarness,
@@ -2772,6 +2780,8 @@ export function buildProgram(): Command {
 				doOptions,
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
 				surfaceModel: config.model,
+				applyDecide: harnessApplyDecider({harness, agentCmd: config.agentCmd}),
+				applyModel: config.model,
 				observationTriage: config.observationTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
