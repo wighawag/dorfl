@@ -2,7 +2,7 @@
 title: sidecar rebuild sweep (delete-then-surface) findings and drift catalogue
 date: 2026-06-25
 status: spotted
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was done
