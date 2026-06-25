@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'extend-renderprdbody-with-solution-and
 date: 2026-06-25
 status: open
 reviewOf: extend-renderprdbody-with-solution-and-userstories-inputs
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
