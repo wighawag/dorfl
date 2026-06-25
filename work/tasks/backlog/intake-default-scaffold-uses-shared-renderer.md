@@ -89,3 +89,7 @@ File-orthogonal to the promotion rewire (`triage-persist.ts`).
 > Keep the edit confined to `intake.ts` + its test (file-orthogonal to the
 > promotion rewire). Record any non-obvious decision in the done record. Finish
 > green: `pnpm -r build && pnpm -r test && pnpm format:check`.
+
+## Requeue 2026-06-25
+
+Re-scoped per human decision (option 2): the keystone renderPrdBody is being EXTENDED to carry optional ## Solution + ## User Stories inputs (new task extend-renderprdbody-with-solution-and-userstories-inputs), so intake's PRD default scaffold CAN then be sourced byte-for-byte. This task now blockedBy that extension. No prior work to keep (it correctly STOPPED without building), so --reset.
