@@ -422,8 +422,14 @@ function buildPromotedBody(
 		// `blockedBy`.
 		...(artifact === 'prd' ? [] : ['blockedBy: []']),
 		'---',
-		'',
 	];
+	// One BLANK line separates the closing frontmatter fence from the rendered
+	// body (`---\n\n## ...`): the shared renderer starts AT its first heading with no
+	// leading blank, so the separator is owned here. This keeps promotion's output
+	// byte-for-byte identical to the pre-rewire hand-rolled body (which placed an
+	// empty array element between the `---` fence and the lead heading) and matches
+	// what intake will emit once it adopts the same renderer.
+	const fenceToBody = frontmatter.join('\n') + '\n\n';
 	// The body BELOW the frontmatter is rendered by the SHARED schema owner so the
 	// section skeleton has one home, not two (prd
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A PRD
@@ -431,7 +437,7 @@ function buildPromotedBody(
 	// `renderTaskBody` (always a `## Prompt`).
 	if (artifact === 'prd') {
 		return (
-			frontmatter.join('\n') +
+			fenceToBody +
 			renderPrdBody({
 				problemStatement: mechanism,
 				openQuestions,
@@ -449,7 +455,7 @@ function buildPromotedBody(
 			? `Build the task '${slug}', described above.`
 			: mechanism;
 	return (
-		frontmatter.join('\n') +
+		fenceToBody +
 		renderTaskBody({
 			whatToBuild: mechanism,
 			openQuestions,
