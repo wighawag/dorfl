@@ -53,7 +53,7 @@ import {workItemRel} from './work-layout.js';
  * acquire-time snapshot) now lives at the integrate seam (`tasking.ts`
  * `heldPrdIsStale`, comparing `work/prds/ready/<slug>.md`) — relocated because the
  * completing transition, not the release, owns the commit. See
- * `work/observations/tasking-lock-does-not-stabilise-prd-content.md`.
+ * `work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`.
  *
  * This module provides the lock PRIMITIVES only. The orchestrating `do prd:<slug>`
  * tasking command (`tasking.ts`) acquires, drives the agent's tasking, integrates

@@ -18,7 +18,7 @@ import type {SelectedLifecyclePools} from './select-priority.js';
  * module only reads the inputs that logic needs from each substrate:
  *
  *   - IN-PLACE (sync, a working checkout) \u2014 {@link gatherLifecycleInPlace}: reads
- *     `work/observations/` + the per-item `work/questions/<type>-<slug>.md` sidecar
+ *     `work/notes/observations/` + the per-item `work/questions/<type>-<slug>.md` sidecar
  *     through the read seam + the filesystem, exactly as the in-place build-pool
  *     scan + `readItemSignals` already read in-place.
  *   - MIRROR-SIDE (async, a bare hub mirror's committed `main`) \u2014
@@ -105,7 +105,7 @@ function blockedItemsInPlace(
 
 /**
  * Gather + build the lifecycle pools for an IN-PLACE working checkout (sync).
- * Reads `work/observations/` + the per-item sidecar state through the read seam +
+ * Reads `work/notes/observations/` + the per-item sidecar state through the read seam +
  * the filesystem, then hands them to the shared {@link buildLifecyclePools}. The
  * gates default BOTH OFF (the interim hardcoded-off, calm by default).
  */

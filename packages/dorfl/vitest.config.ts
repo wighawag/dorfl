@@ -177,7 +177,7 @@ const RACE_SENSITIVE = [
 	// isolation). Keep it out of file-parallel pressure so the gate is
 	// deterministic; the source fix is the separate
 	// `null-harness-prompt-write-epipe-tolerant` task. See
-	// work/observations/review-gate-test-epipe-under-parallel-load.md.
+	// work/notes/observations/review-gate-test-epipe-under-parallel-load.md.
 	'test/review-gate.test.ts',
 	// The FRESH-WORKTREE GATE run-fleet tests + the same-repo concurrent `run`/
 	// `runLoop` merge tests (task

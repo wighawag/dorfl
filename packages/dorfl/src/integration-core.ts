@@ -975,7 +975,7 @@ export async function performIntegration(
 	}
 	// SCOOP + REPORT agent-authored CAPTURED NOTES (task `runner-scoops-captured-notes`,
 	// advance-loop's reporting-channel fold-in). A rung's agent may write capture-bucket
-	// files (`work/observations/*`, `work/findings/*`) during its run — its `capture-signal`
+	// files (`work/notes/observations/*`, `work/findings/*`) during its run — its `capture-signal`
 	// reflex — but it does NO git (Rule A). The `git add -A` above already SWEEPS them into
 	// THIS one runner-owned commit (the same way the review-nits observation rides it), so
 	// they are TRACKED, not dropped/untracked. Rule B is extended HERE: the runner REPORTS
@@ -1954,7 +1954,7 @@ export function composeProposeBody(input: {
 
 /**
  * On a review APPROVE that carries ≥1 NON-BLOCKING finding, write ONE per-run
- * observation `work/observations/review-nits-<slug>-<YYYY-MM-DD>.md` capturing all
+ * observation `work/notes/observations/review-nits-<slug>-<YYYY-MM-DD>.md` capturing all
  * of this run's non-blocking nits, so they get a durable, contract-native home
  * instead of evaporating (the block path already routes BLOCKING findings to
  * needs-attention/; the approve path dropped non-blocking ones — see
@@ -1970,7 +1970,7 @@ export function composeProposeBody(input: {
  * ONE-per-RUN (a content-derived, dated name), never an append to a shared ledger
  * — the dated `<slug>-<date>` name makes a later-abandoned run's nit-observation
  * trivially findable + deletable (lifecycle hygiene). Frontmatter mirrors the
- * `work/observations/*.md` convention (`title` / `date` / `status: open`) plus a
+ * `work/notes/observations/*.md` convention (`title` / `date` / `status: open`) plus a
  * `reviewOf:` back-pointer to the slug it came from, so it gets triaged like any
  * observation. (Identity stays the FILENAME — no `slug:` frontmatter — so the
  * lifecycle enumerate→resolve round-trip is total; see task
@@ -1997,7 +1997,7 @@ function writeReviewNitsObservation(params: {
 	);
 	params.note(
 		`Recorded ${nits.length} non-blocking review nit(s) for '${params.slug}' ` +
-			`in work/observations/${filename}.`,
+			`in ${workItemRel('observations', filename)}.`,
 	);
 }
 
@@ -2109,7 +2109,7 @@ const CAPTURE_NOTE_DIRS = [
 /**
  * SCOOP + REPORT the agent-authored CAPTURED NOTES this run's atomic commit is
  * landing (task `runner-scoops-captured-notes`). A rung's agent writes
- * capture-bucket files (`work/observations/*`, `work/findings/*`) but does NO git
+ * capture-bucket files (`work/notes/observations/*`, `work/findings/*`) but does NO git
  * (Rule A); the caller's `git add -A` already STAGED them into THIS commit, so
  * they are tracked, not dropped. This extends Rule B: the runner REPORTS exactly
  * which note files landed — read from the STAGED set (`git diff --cached`), so it
@@ -2139,7 +2139,7 @@ async function reportScoopedNotes(
 }
 
 /**
- * The repo-relative paths of the capture-bucket files (`work/observations/*`,
+ * The repo-relative paths of the capture-bucket files (`work/notes/observations/*`,
  * `work/findings/*`) STAGED for THIS commit — i.e. new-or-changed vs HEAD, exactly
  * what the runner is about to land. Read via `git diff --cached --name-only` so it
  * reflects the real staged set (`git add -A` already ran), filtered to the capture

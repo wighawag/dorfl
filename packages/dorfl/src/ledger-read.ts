@@ -143,16 +143,16 @@ export interface LedgerPrdPool {
 }
 
 /**
- * One OBSERVATION's lifecycle-pool fields, as resolved from `work/observations/`
+ * One OBSERVATION's lifecycle-pool fields, as resolved from `work/notes/observations/`
  * (the triage candidate source for the advance auto-pick lifecycle pools, task
  * `advance-autopick-lifecycle-pools`). An observation with NO `triaged:` marker is
  * UNTRIAGED (still in the triage pool); a non-empty `triaged:` value (`keep` /
  * `duplicate`) means it is SETTLED and DROPS OUT of the pool (US #30). This is the
- * FIRST read of `work/observations/` in the seam — `scan`/eligibility read only
+ * FIRST read of `work/notes/observations/` in the seam — `scan`/eligibility read only
  * `backlog`/`done`/`prds*`.
  */
 export interface LedgerObservationItem {
-	/** Filename within `work/observations/` (e.g. `stray-note.md`). */
+	/** Filename within `work/notes/observations/` (e.g. `stray-note.md`). */
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
 	slug: string;
@@ -175,7 +175,7 @@ export interface LocalLedgerState {
 	/** Slugs present in `work/done/` (per-repo; resolves `blockedBy`). */
 	doneSlugs: Set<string>;
 	/**
-	 * `work/observations/*.md` items (sorted by slug) — the triage candidate source
+	 * `work/notes/observations/*.md` items (sorted by slug) — the triage candidate source
 	 * for the advance auto-pick lifecycle pools (task
 	 * `advance-autopick-lifecycle-pools`). UNTRIAGED observations (no `triaged:`
 	 * marker) are the triage pool; SETTLED ones (`triaged:` non-empty) drop out.
@@ -449,7 +449,7 @@ function readLocalDoneSlugs(repoPath: string): Set<string> {
 }
 
 /**
- * Read `work/observations/*.md` (slug-sorted) from the local tree.
+ * Read `work/notes/observations/*.md` (slug-sorted) from the local tree.
  *
  * Identity rule (task `observation-identity-is-its-filename-not-a-foreign-slug`):
  * an observation's IDENTITY is its FILENAME, NEVER a foreign frontmatter `slug:`.
@@ -762,7 +762,7 @@ async function readPrdPoolFromTree(
 }
 
 /**
- * Parse `<ref>:work/observations/*.md` into items, sorted by slug. Identity is the
+ * Parse `<ref>:work/notes/observations/*.md` into items, sorted by slug. Identity is the
  * FILENAME (mirrors {@link readLocalObservations}) so the in-place + mirror
  * enumerations agree, and a foreign frontmatter `slug:` cannot break the
  * enumerate→resolve round-trip.

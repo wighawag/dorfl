@@ -417,7 +417,7 @@ export async function returnToBacklog(
 	// or commits in the cwd working tree (so a `requeue` in a shared checkout can no
 	// longer sweep up a concurrent writer's uncommitted files — the `8c92f63`
 	// incident, see
-	// `work/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md`).
+	// `work/notes/observations/drive-backlog-skill-assumes-in-place-do-not-remote.md`).
 	// `--cwd` is purely the ORIGIN SOURCE (it resolves the arbiter remote + holds
 	// the object store the plumbing writes into), never a write TARGET. A tree-less
 	// CAS needs a ref to push to, so an `arbiter` is REQUIRED (parity with `claim`).
@@ -492,7 +492,7 @@ export async function returnToBacklog(
 		const branch = workBranchRef('task', slug);
 		// LOCAL-FIRST: the tracking ref `branchAheadOf` reads (the one whose
 		// staleness today silently turns `--reset` into a no-op — verified live in
-		// `work/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`,
+		// `work/notes/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`,
 		// where `--reset` deleted the arbiter branch but the local tracking ref
 		// survived and resurrected a "continue" on the next `do`). Both deletes
 		// are best-effort — their absence is fine, what matters is they are not

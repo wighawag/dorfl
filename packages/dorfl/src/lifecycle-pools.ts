@@ -17,7 +17,7 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  *
  * It is ONE shared unit reused by BOTH the in-place caller (`performAdvanceAuto`)
  * and the mirror-side caller (`scanMirrorPool` \u2192 the loop/CI drivers), NOT two
- * divergent enumerations. The per-substrate I/O (reading `work/observations/` +
+ * divergent enumerations. The per-substrate I/O (reading `work/notes/observations/` +
  * the per-item sidecar state) is done CALLER-SIDE through the read seam (sync
  * in-place, async mirror-ref) and the already-resolved inputs are handed here \u2014
  * exactly as `taskablePrds` is fed by each caller. This unit is then pure: no I/O.
@@ -110,7 +110,7 @@ export interface LifecyclePoolsInput {
 	/** The repo whose lifecycle items these are (carried onto each selected item). */
 	repoPath: string;
 	/**
-	 * Every observation in `work/observations/` (the read seam's new observation
+	 * Every observation in `work/notes/observations/` (the read seam's new observation
 	 * read). SETTLED ones (`triaged:` non-empty) are excluded here; only UNTRIAGED
 	 * observations feed the triage sub-pool.
 	 */
