@@ -1,5 +1,5 @@
 ---
-title: review-nits-drive-tasks-dispatch-allow-backlog-2026-06-24
+title: Tighten the no-flag error-string quote in drive-tasks SKILL.md
 slug: review-nits-drive-tasks-dispatch-allow-backlog-2026-06-24
 needsAnswers: false
 blockedBy: []
@@ -7,15 +7,39 @@ blockedBy: []
 
 ## What to build
 
-## Non-blocking review findings
+Fix a small doc inaccuracy in `skills/drive-tasks/SKILL.md` (the opt-in-backlog
+bullet). It paraphrases the no-flag failure as throwing
+`no task '<slug>' found in tasks/ready/`, but the real error
+(`packages/dorfl/src/prompt.ts:~630`) lists ALL searched folders, e.g.
+`no task '<slug>' found in in-progress/, tasks/ready/` (the search `order` is
+`['in-progress','tasks-ready']`, joined). Tighten the quote to match the real
+string, or mark it illustrative, so a reader debugging the message is not
+surprised it also names `in-progress/`. Skill-doc only; no contract depends on
+the exact string.
 
-The PR/code review gate (Gate 2) APPROVED 'drive-tasks-dispatch-allow-backlog' but raised the
-following non-blocking findings (nits). They do not block integration; this
-is their durable home for triage — promote-to-task / keep / delete.
+## Acceptance criteria
 
-- The skill paraphrases the no-flag failure as throwing `no task '<slug>' found in tasks/ready/`, but the real error (prompt.ts:630) lists ALL searched folders, e.g. `no task '<slug>' found in in-progress/, tasks/ready/`. Worth tightening the quote (or marking it illustrative) so a reader debugging the message isn't surprised it also names `in-progress/`?
-  (skills/drive-tasks/SKILL.md, opt-in-backlog bullet vs packages/dorfl/src/prompt.ts:600-630 — `order = ['in-progress','tasks-ready']`, `searched = order.map(...).join(', ')`. Pure doc illustration; no contract depends on the exact string, so no one is bitten.)
+- [ ] The quoted error string in the drive-tasks opt-in-backlog bullet either
+      matches the real `resolveTask` error (naming all searched folders) or is
+      explicitly marked illustrative.
+- [ ] Skill-doc only; no code change.
+- [ ] Acceptance gate green: `pnpm -r build && pnpm -r test && pnpm format:check`.
 
-## Requeue 2026-06-25
+## Blocked by
 
-Requeued: promotion produced a body with no '## Prompt' section, so the dispatched build failed and left this lock state:stuck. See work/notes/observations/advance-promotion-builds-promptless-task-that-self-claims-stuck-2026-06-25.md. Body needs a '## Prompt' (or re-triage out of ready/) before re-claim. No work branch existed, so --reset.
+- None — can start immediately.
+
+## Prompt
+
+> Goal: tighten the illustrative error-string quote in
+> `skills/drive-tasks/SKILL.md` (opt-in-backlog section) so it matches what
+> `resolveTask` actually throws.
+>
+> Where to look: `skills/drive-tasks/SKILL.md` (the opt-in-backlog bullet quoting
+> `no task '<slug>' found in tasks/ready/`) vs `packages/dorfl/src/prompt.ts`
+> ~L600-630, where `searched = order.map(...).join(', ')` over
+> `order = ['in-progress','tasks-ready']` — so the real message names
+> `in-progress/` too. Either reproduce the real string or mark the quote
+> illustrative. Note: `skills/drive-tasks/SKILL.md` is this repo's own copy
+> (the `~/.agents/skills/drive-tasks/` path resolves to the same repo); edit it
+> in place. Doc only; keep the gate green.
