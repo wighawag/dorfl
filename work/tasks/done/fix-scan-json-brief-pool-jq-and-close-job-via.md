@@ -59,3 +59,31 @@ dorfl claim fix-scan-json-brief-pool-jq-and-close-job-via --arbiter <remote>
 git fetch <remote> && git switch -c work/fix-scan-json-brief-pool-jq-and-close-job-via <remote>/main
 git mv work/tasks/todo/fix-scan-json-brief-pool-jq-and-close-job-via.md work/tasks/done/fix-scan-json-brief-pool-jq-and-close-job-via.md
 ```
+
+---
+
+## Update 2026-06-25 (backwards-premised: this record's fixes describe a REGRESSION)
+
+This task was authored with the rename direction BACKWARDS. `prd` is the NEW,
+current vocabulary; `brief` is the RETIRED old word (confirmed by the human).
+Both "fixes" therefore demanded renaming current vocabulary back to the retired
+word, and were correctly never applied:
+
+- **Fix 1** (`scan --json` key `.prds[]` -> `.briefs[]`): NOT a bug. On `main`
+  `scan.ts` emits `prds: ScannedPrd[]` and the emitted matrix `jq` reads
+  `.repos[].prds[]?` + `.cwd.repo.prds[]?`, and they MATCH on the new word `prd`.
+  The premise "RepoReport TS field is now `briefs`" is false.
+- **Fix 2** (`close-job.ts` `via: 'prd'` -> `via: 'brief'`): NOT stale.
+  `close-job.ts` (`via: 'issue' | 'prd'`, the `via: 'prd'` literals, the
+  `cand.via === 'prd'` branch, `closeComment`) and `frontmatter.ts`
+  `resolveClosingIssue` (returns `{via: 'prd'; prd}` and reads `frontmatter.prd`)
+  are CORRECT current vocabulary. The test asserting `.via).toBe('prd')` is right.
+
+So this record's done-criteria (`.briefs[]`, `via: 'issue' | 'brief'`) describe a
+regression and should not be treated as outstanding work. The two observations it
+claimed to close were themselves backwards-premised and have been discharged via
+`dorfl drop` (`close-job-via-prd-code-literal-vs-renamed-brief-field`,
+`scan-json-prds-key-vs-jq-path-possible-mismatch`). Kept as a record (not
+deleted) because it is a `done/` artifact; this update is the correction trail.
+Source: sidecar rebuild sweep finding B, corrected by the human's note that
+`prd` is the new word.
