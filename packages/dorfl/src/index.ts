@@ -42,6 +42,12 @@ export {
 export type {EnvMap} from './env-config.js';
 export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 
+export type {
+	RenderTaskBodyInput,
+	RenderPrdBodyInput,
+} from './buildable-body.js';
+export {renderTaskBody, renderPrdBody} from './buildable-body.js';
+
 export type {Frontmatter} from './frontmatter.js';
 export {
 	parseFrontmatter,
