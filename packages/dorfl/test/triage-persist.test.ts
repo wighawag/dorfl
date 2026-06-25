@@ -5,7 +5,6 @@ import {
 	autoDispositionObservation,
 	promoteObservation,
 } from '../src/triage-persist.js';
-import {isTriagedKeep} from '../src/apply-persist.js';
 import {run} from '../src/git.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import {
@@ -30,9 +29,10 @@ import {
  * throwaway git repo (house CAS-seam style, the sibling of apply-persist.test.ts):
  *
  *   - {@link autoDispositionObservation}: the conservative auto-disposition WRITE
- *     (duplicate → DISCHARGE BY DELETION, the redundant note git rm-ed in a
- *     standalone commit with the reason in the message; map → triaged:keep) — ONE
- *     commit, NEVER an auto-delete of a NON-duplicate signal;
+ *     — BOTH no-question cases DISCHARGE the redundant note BY DELETION (git rm-ed
+ *     in a standalone commit with the relationship + reason in the message; there
+ *     is no resting triaged:keep state any more) — ONE commit, NEVER an
+ *     auto-delete of a NON-redundant signal;
  *   - {@link promoteObservation}: promote → new-item creation through the CAS keyed
  *     on the new identity + resolve the observation; a same-slug race ⇒ the loser
  *     fails the CAS.
@@ -106,7 +106,7 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 		expect(commitMessage).toContain('same signal');
 	});
 
-	it('map → records the mapping + triaged:keep (drops out of the pool)', () => {
+	it('map → DISCHARGED BY DELETION (no more triaged:keep; the note git rm-ed in a standalone commit, the mapped-onto + reason in the message)', () => {
 		const repo = join(scratch.root, 'p');
 		mkdirSync(repo, {recursive: true});
 		gitIn(['init', '-q', '-b', 'main'], repo);
@@ -120,12 +120,24 @@ describe('autoDispositionObservation — the conservative no-question write', ()
 			itemPath,
 			kind: 'map',
 			existing: 'task:home',
+			reason: 'already covered there',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('kept');
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		expect(body).toContain('task:home');
-		expect(isTriagedKeep(body)).toBe(true);
+		// There is no resting `triaged:keep` note any more: a `map` is already covered
+		// by the item it maps onto, so it is DISCHARGED BY DELETION (mirroring
+		// `duplicate`). The note is gone, both on disk and in the tree.
+		expect(result.outcome).toBe('deleted');
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		const touched = gitIn(['show', '--name-status', '--format=', 'HEAD'], repo)
+			.split('\n')
+			.map((l) => l.trim())
+			.filter(Boolean);
+		expect(touched).toEqual([`D\t${itemPath}`]);
+		// The mapped-onto identity + reason ride the commit MESSAGE (git history is
+		// the archive).
+		const commitMessage = gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
+		expect(commitMessage).toContain('task:home');
+		expect(commitMessage).toContain('already covered there');
 	});
 });
 

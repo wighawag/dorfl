@@ -1,0 +1,226 @@
+import {existsSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {NullHarness, type Harness} from './harness.js';
+import {launchWithOptionalWatch} from './agent-launch.js';
+import {parseSidecar, sidecarPathFor, type SidecarModel} from './sidecar.js';
+import {
+	type DecisionDecider,
+	type DecisionOutcome,
+	type DecisionVerdict,
+	parseDecisionVerdict,
+} from './decision-engine.js';
+
+/**
+ * The **AGENTIC apply DECIDER** (prd
+ * `agentic-question-resolution-retire-disposition-vocabulary` US #1/#2/#3, task
+ * `agentic-apply-retire-disposition-vocabulary`) — the input-ADAPTER + prompt +
+ * production decider for the apply rung's call into the SHARED
+ * `decide(input, allowedOutcomes)` engine (`decision-engine.ts`). It is the apply
+ * rung's analogue of intake's decision seam and `surface-gate.ts` / `triage-gate.ts`:
+ * the agent JUDGES (reads the human's answer(s) + the SOURCE item and returns a
+ * verdict); the engine VALIDATES it against the allowed set; the apply rung ACTS.
+ *
+ * This is the SUBSUME of the old disposition vocabulary: there is no longer a
+ * `disposition=` token the surface rung stamps and the apply rung executes. When a
+ * fully-answered OBSERVATION reaches the apply rung, this decider reads the answer
+ * + the source's FULL context (body, type, surrounding signal — decision 3, the
+ * analogue of intake reading the whole issue thread) and returns ONE of the LAUNCH
+ * outcomes the apply rung allows. The artifact-type SELECTION (task vs prd) comes
+ * from the agent's VERDICT, NOT a human `promote-*` field.
+ *
+ * **The LAUNCH allowed set** (the SUBSET the apply rung passes to `decide`):
+ * `{task | prd | delete | ask}` \u2014 i.e. `{mint-task | mint-prd | delete-source |
+ * ask-follow-up}`. `adr` is DEFERRED (no ADR-mint path exists yet; the follow-on
+ * task `agentic-apply-mint-adr-route` widens the set). The shared engine's verdict
+ * union KEEPS `adr` in its superset; the apply rung simply does not PERMIT it yet,
+ * so a (stubbed) `adr` verdict is rejected by the engine's allowed-outcome guard,
+ * never dispatched.
+ *
+ * The INPUT adapter ({@link buildApplyDecisionInput}) sits HERE in the caller, not
+ * in the engine (the engine threads `input` opaquely) \u2014 decision 3: the input
+ * adapter is per-front-door and NOT forced to be shared with intake's issue-thread
+ * adapter.
+ */
+
+/** The LAUNCH allowed-outcome set the apply rung permits (NO `adr` \u2014 deferred). */
+export const APPLY_ALLOWED_OUTCOMES: readonly DecisionOutcome[] = [
+	'task',
+	'prd',
+	'delete',
+	'ask',
+];
+
+/**
+ * The input the apply decider reads: the answered source item + its answered
+ * sidecar. The decision is grounded in the source's FULL context (body, type,
+ * surrounding signal), not just the latest answer text (decision 3).
+ */
+export interface ApplyDecisionInput {
+	/** The namespaced source identity (`observation:<slug>` at launch). */
+	item: string;
+	/** The source item's type. */
+	type: SidecarModel['type'];
+	/** The source item's body (full context for the decision). */
+	itemBody: string;
+	/** The answered sidecar model (the human's recorded answers + the questions). */
+	sidecar: SidecarModel;
+	/** The working clone/checkout the decision runs in. */
+	cwd: string;
+	/** The model the apply-decision agent runs on (`undefined` \u21d2 the harness default). */
+	model?: string;
+	/** Environment for the decision-agent launch. */
+	env?: NodeJS.ProcessEnv;
+	/** The HOST-ONLY sessions root the decision session FILE is generated under. */
+	sessionsDir?: string;
+}
+
+/**
+ * The apply-decider SEAM: read the apply input and return a {@link DecisionVerdict}.
+ * Injected by tests (a CANNED verdict, no real model); production uses
+ * {@link harnessApplyDecider}. It is the apply rung's {@link DecisionDecider}
+ * specialised to {@link ApplyDecisionInput}.
+ */
+export type ApplyDecider = DecisionDecider<ApplyDecisionInput>;
+
+/**
+ * Build the apply-decision INPUT for an answered source item: read its body (from
+ * the working tree) + parse its answered sidecar. The adapter boundary the engine
+ * never sees (it threads this opaquely to the decider). Returns `undefined` when
+ * there is no sidecar or no item file (the apply rung handles those upstream).
+ */
+export function buildApplyDecisionInput(opts: {
+	item: string;
+	type: SidecarModel['type'];
+	itemPath: string;
+	cwd: string;
+	model?: string;
+	env?: NodeJS.ProcessEnv;
+	sessionsDir?: string;
+}): ApplyDecisionInput | undefined {
+	const sidecarAbs = join(opts.cwd, sidecarPathFor(opts.item));
+	if (!existsSync(sidecarAbs)) {
+		return undefined;
+	}
+	const itemAbs = join(opts.cwd, opts.itemPath);
+	if (!existsSync(itemAbs)) {
+		return undefined;
+	}
+	let sidecar: SidecarModel;
+	try {
+		sidecar = parseSidecar(readFileSync(sidecarAbs, 'utf8'));
+	} catch {
+		return undefined;
+	}
+	return {
+		item: opts.item,
+		type: opts.type,
+		itemBody: readFileSync(itemAbs, 'utf8'),
+		sidecar,
+		cwd: opts.cwd,
+		model: opts.model,
+		env: opts.env,
+		sessionsDir: opts.sessionsDir,
+	};
+}
+
+/**
+ * Render the apply-decision agent PROMPT: instruct a fresh-context agent to read
+ * the human's recorded ANSWER(S) + the SOURCE item and emit a single
+ * `{outcome, \u2026}` verdict ({@link parseDecisionVerdict} reads it). The agent decides
+ * what to DO with the answered signal \u2014 mint a self-contained task, mint a PRD,
+ * delete the source, or ask one BATCH of follow-up questions \u2014 grounded in the
+ * source's full context. It writes NOTHING (the engine acts on the verdict).
+ *
+ * Mirrors {@link import('./surface-gate.js').buildSurfacePrompt} /
+ * {@link import('./intake.js').buildIntakeDecisionPrd}: a fresh-context agent that
+ * EDITS nothing and EMITS one structured object the ENGINE routes/persists.
+ */
+export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
+	const answers = input.sidecar.entries
+		.map((e) => `- ${e.question.trim()}\n  ANSWER: ${e.answer.trim()}`)
+		.join('\n');
+	return [
+		`You are a FRESH-CONTEXT decision agent for the answered work/ item`,
+		`"${input.item}" (type: ${input.type}). The human has answered every open`,
+		`question; decide what to DO with this signal, grounded in the source's FULL`,
+		`context (its body + type + the answers), NOT just the latest answer text.`,
+		`You write NOTHING \u2014 no file edit, no git, no commit (the advance ENGINE acts`,
+		`on what you emit). You JUDGE; the engine ACTS.`,
+		``,
+		`The source item body:`,
+		`---`,
+		input.itemBody.trim(),
+		`---`,
+		``,
+		`The human's answers:`,
+		answers,
+		``,
+		`Choose ONE outcome and emit a single JSON object (no prose OUTSIDE it):`,
+		`  - "task": mint a SELF-CONTAINED task from this signal. Carry the answer(s)`,
+		`    + any remaining open-question scoping into the drafted body so the task is`,
+		`    buildable on its own. Emit {"outcome":"task","taskSlug":"\u2026",`,
+		`    "taskTitle":"\u2026","taskBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
+		`  - "prd": mint a PRD from this signal (a larger, coherent piece of work).`,
+		`    Emit {"outcome":"prd","prdSlug":"\u2026","prdTitle":"\u2026","prdBody":"\u2026"}.`,
+		`  - "delete": the answer means this signal should be DROPPED. Emit`,
+		`    {"outcome":"delete","deleteReason":"\u2026"} (a single revertible deletion;`,
+		`    the reason rides the commit message, git history is the archive).`,
+		`  - "ask": you need more from the human before acting. Emit`,
+		`    {"outcome":"ask","question":"\u2026"} \u2014 ask everything you still need as ONE`,
+		`    batch (never a drip); the engine appends it and re-pauses.`,
+		``,
+		`Do NOT emit any other outcome. It is plain text inside the JSON string`,
+		`(escape newlines as \\n).`,
+	].join('\n');
+}
+
+/** What a harness-backed apply decider needs to launch the decision agent. */
+export interface HarnessApplyDeciderOptions {
+	/** The harness seam used to launch the fresh-context decision agent. */
+	harness?: Harness;
+	/** The agent command the null/shell adapter shells out to (`{model}`-aware). */
+	agentCmd?: string;
+	/**
+	 * Read the decision agent's textual output for parsing. Production reads
+	 * `launched.output` (the ANSWER channel); tests inject `readOutput` to stub a
+	 * canned verdict string.
+	 */
+	readOutput?: (output: string | undefined) => string;
+}
+
+/**
+ * The PRODUCTION apply decider: launch a fresh-context agent through the EXISTING
+ * harness seam (routing an optional `model` via `LaunchInput.model` \u2014 the \u00a713
+ * model-routing intent, NOT a new mechanism), then PARSE the emitted verdict via
+ * the SHARED {@link parseDecisionVerdict}. The DIRECT mirror of
+ * `harnessSurfaceGate` / `harnessTriageGate`: a SEPARATE harness launch (fresh
+ * context) in the same checkout `cwd`, fed {@link buildApplyDecisionPrompt}; a
+ * DISTINCT session id (`<item>-apply-decide`) so its session never collides with a
+ * build / review / surface / triage session.
+ */
+export function harnessApplyDecider(
+	options: HarnessApplyDeciderOptions = {},
+): ApplyDecider {
+	const harness = options.harness ?? new NullHarness();
+	const readOutput = options.readOutput ?? ((output) => output ?? '');
+	return async (input: ApplyDecisionInput): Promise<DecisionVerdict> => {
+		const sessionId = `${input.item.replace(/:/g, '-')}-apply-decide`;
+		const launched = await launchWithOptionalWatch({
+			harness,
+			dir: input.cwd,
+			slug: input.item,
+			command: options.agentCmd ?? '',
+			prompt: buildApplyDecisionPrompt(input),
+			model: input.model,
+			sessionId,
+			sessionsDir: input.sessionsDir,
+			env: input.env,
+		});
+		if (!launched.ok) {
+			throw new Error(
+				`apply-decision agent launch failed${launched.detail ? `: ${launched.detail}` : ''}`,
+			);
+		}
+		return parseDecisionVerdict(readOutput(launched.output));
+	};
+}

@@ -4,7 +4,6 @@ import {mkdirSync, writeFileSync, existsSync, readFileSync} from 'node:fs';
 import {
 	applyAnsweredQuestions,
 	ApplyPersistError,
-	isTriagedKeep,
 	resolveItemPathByIdentity,
 	OPEN_QUESTIONS_MARKER_OPEN,
 	OPEN_QUESTIONS_MARKER_CLOSE,
@@ -14,7 +13,6 @@ import {
 	parseSidecar,
 	serialiseSidecar,
 	type SidecarModel,
-	type SidecarDisposition,
 } from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import {
@@ -35,13 +33,15 @@ import {run} from '../src/git.js';
  *   - all-answered → apply the HUMAN's answers ATOMICALLY (item body + sidecar in
  *     ONE commit, via the sidecar contract's atomic-apply);
  *   - either APPENDS new questions (stays needsAnswers:true, re-pauses) OR resolves
- *     fully (clears needsAnswers + deletes the sidecar in the SAME commit);
- *   - an answer can disposition the item to ANY terminal (advance / dropped /
- *     needs-attention / keep / delete) via the `disposition` field — a `delete`/
- *     `dropped` on an OBSERVATION discharges by DELETION (`git rm`, reason in the
- *     commit message), a `delete` on a WORK ITEM keeps the recommend-and-retain
- *     resting state (work items leave via a terminal FOLDER, not by deletion);
- *   - a "keep" answer stamps `triaged:keep` + drops out of the pool;
+ *     fully (clears needsAnswers + deletes the sidecar in the SAME commit) OR
+ *     discharges the source BY DELETION (`discharge` set — `git rm` source +
+ *     sidecar in a standalone revertible commit, the reason in the message);
+ *   - the disposition VOCABULARY is GONE (task
+ *     `agentic-apply-retire-disposition-vocabulary`): there is no `disposition`
+ *     field, no most-decisive picker, no `keep`/`triaged:keep`. A sidecar entry is
+ *     BINARY (no-answer | answered); what to DO with an answered observation is the
+ *     AGENTIC apply decision (advance.ts), which routes here (re-pause / discharge /
+ *     via promoteObservation for a mint);
  *   - applying NEVER invents an answer (only applies human-authored answers);
  *   - a SUBSET-answered sidecar is NOT applied (the persist refuses it loudly — the
  *     classifier NO-OPs it before it ever reaches here).
@@ -87,7 +87,6 @@ function seed(opts: {
 	type?: string;
 	questions: string[];
 	answers?: (string | undefined)[];
-	dispositions?: (SidecarDisposition | undefined)[];
 }): {repo: string; itemPath: string; sidecarPath: string} {
 	const slug = opts.slug ?? 'foo';
 	const folder = opts.folder ?? 'backlog';
@@ -117,9 +116,8 @@ function seed(opts: {
 
 	let model: SidecarModel = newSidecar(
 		`${type}:${slug}`,
-		opts.questions.map((q, i) => ({
+		opts.questions.map((q) => ({
 			question: q,
-			disposition: opts.dispositions?.[i],
 		})),
 	);
 	model = {
@@ -206,215 +204,79 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 	});
 });
 
-describe('applyAnsweredQuestions — disposition to ANY terminal (US #29)', () => {
-	it('dropped on a TASK → resolves the Q&A AND moves to work/tasks/cancelled/ (the task regime terminal)', () => {
-		const {repo, itemPath, sidecarPath} = seed({
-			questions: ['ship it?'],
-			answers: ['no'],
-			dispositions: ['dropped'],
-		});
-
-		const result = applyAnsweredQuestions({
-			cwd: repo,
-			item: 'task:foo',
-			itemPath,
-			env: gitEnv(),
-		});
-
-		expect(result.outcome).toBe('dropped');
-		// The Q&A was resolved (sidecar deleted) and the item moved folders.
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'foo.md'))).toBe(
-			true,
-		);
-		expect(result.itemPath).toBe('work/tasks/cancelled/foo.md');
-	});
-
-	it('dropped on a PRD → moves to work/prds/dropped/ (the prd regime terminal; the per-regime split, no slug collision)', () => {
-		const {repo, itemPath, sidecarPath} = seed({
-			slug: 'foo',
-			folder: 'prd',
-			type: 'prd',
-			questions: ['ship it?'],
-			answers: ['no'],
-			dispositions: ['dropped'],
-		});
-
-		const result = applyAnsweredQuestions({
-			cwd: repo,
-			item: 'prd:foo',
-			itemPath,
-			env: gitEnv(),
-		});
-
-		expect(result.outcome).toBe('dropped');
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(false);
-		// A dropped PRD lands in prds/dropped/, NOT tasks/cancelled/ — so a
-		// task-drop and a prd-drop sharing the slug `foo` never collide.
-		expect(existsSync(join(repo, 'work', 'prds', 'dropped', 'foo.md'))).toBe(
-			true,
-		);
-		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'foo.md'))).toBe(
-			false,
-		);
-		expect(result.itemPath).toBe('work/prds/dropped/foo.md');
-	});
-
-	it('dropped on an OBSERVATION → DISCHARGED BY DELETION (the note + sidecar git rm-ed in a standalone commit, reason in the message, no resting residue)', () => {
+describe('applyAnsweredQuestions — discharge by deletion (the delete-source verdict)', () => {
+	it('discharge on an OBSERVATION → the note + sidecar git rm-ed in a STANDALONE revertible commit, reason in the message, no resting residue', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'note',
 			folder: 'observations',
 			type: 'observation',
 			questions: ['drop it?'],
 			answers: ['yes — out of scope now'],
-			dispositions: ['dropped'],
 		});
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
 			item: 'observation:note',
 			itemPath,
+			discharge: {reason: 'yes — out of scope now'},
 			env: gitEnv(),
 		});
 
-		// A note has NO terminal folder — it leaves the inbox by DELETION. The note
-		// AND its answered sidecar are gone; the human's reason rode the commit
-		// message (git history = archive), NOT a `## Recommended: delete` body marker.
+		// The note leaves the inbox by DELETION. The note AND its answered sidecar
+		// are gone; the reason rode the commit MESSAGE (git history = archive), NOT a
+		// resting body marker.
 		expect(result.outcome).toBe('deleted');
 		expect(existsSync(join(repo, itemPath))).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		// The deletion is a STANDALONE commit removing BOTH paths.
 		const touched = filesInHeadCommit(repo);
 		expect(touched).toContain(itemPath);
 		expect(touched).toContain(sidecarPath);
 		expect(trackedInHead(repo, itemPath)).toBe(false);
 		expect(trackedInHead(repo, sidecarPath)).toBe(false);
-		// The reason is recorded in the commit MESSAGE, not in a lingering note.
 		expect(headCommitMessage(repo)).toContain('out of scope now');
 	});
 
-	it('needs-attention → resolves the Q&A AND bounces the item to work/needs-attention/', () => {
-		const {repo, itemPath, sidecarPath} = seed({
-			questions: ['unclear?'],
-			answers: ['take it to a human'],
-			dispositions: ['needs-attention'],
-		});
-
-		const result = applyAnsweredQuestions({
-			cwd: repo,
-			item: 'task:foo',
-			itemPath,
-			env: gitEnv(),
-		});
-
-		expect(result.outcome).toBe('needs-attention');
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'foo.md'))).toBe(
-			true,
-		);
-	});
-
-	it('delete on an OBSERVATION → DISCHARGED BY DELETION (the note is git rm-ed; no resting residue)', () => {
-		const {repo, itemPath, sidecarPath} = seed({
-			slug: 'dup',
-			folder: 'observations',
-			type: 'observation',
-			questions: ['keep or drop?'],
-			answers: ['drop — exact duplicate'],
-			dispositions: ['delete'],
-		});
-
-		const result = applyAnsweredQuestions({
-			cwd: repo,
-			item: 'observation:dup',
-			itemPath,
-			env: gitEnv(),
-		});
-
-		expect(result.outcome).toBe('deleted');
-		// Both the note and its sidecar are gone; the reason is in the commit message.
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(trackedInHead(repo, itemPath)).toBe(false);
-		expect(headCommitMessage(repo)).toContain('exact duplicate');
-	});
-
-	it('delete on a WORK ITEM (task) → RECOMMENDS deletion + RETAINS the file (work items leave via a terminal FOLDER, not by deletion — unchanged)', () => {
+	it('discharge fires DIRECT (no preview/confirm) on a WORK ITEM too — same mechanism, source git rm-ed', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'wi',
 			type: 'task',
 			questions: ['scrap it?'],
-			answers: ['yes, but archive the body'],
-			dispositions: ['delete'],
+			answers: ['yes, the human ratified the drop'],
 		});
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
 			item: 'task:wi',
 			itemPath,
+			discharge: {reason: 'yes, the human ratified the drop'},
 			env: gitEnv(),
 		});
 
-		// A work item is NEVER deleted — the recommend-and-retain resting state is
-		// preserved (only NOTES discharge by deletion). The Q&A resolves; the file stays.
-		expect(result.outcome).toBe('delete-recommended');
+		// delete-source is uniform across source types (decision 6): the source is
+		// git rm-ed in one revertible commit, the reason in the message.
+		expect(result.outcome).toBe('deleted');
+		expect(existsSync(join(repo, itemPath))).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(true);
-		expect(readFileSync(join(repo, itemPath), 'utf8')).toContain(
-			'## Recommended: delete',
-		);
+		expect(headCommitMessage(repo)).toContain('ratified the drop');
 	});
 
-	it('the most-decisive terminal wins when dispositions are spread across entries', () => {
-		// keep + dropped + needs-attention present → needs-attention (most decisive).
-		const {repo, itemPath} = seed({
-			questions: ['q1?', 'q2?', 'q3?'],
-			answers: ['a', 'b', 'c'],
-			dispositions: ['keep', 'dropped', 'needs-attention'],
+	it('re-pause WINS over a discharge (you cannot discharge a source you are still asking about)', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			questions: ['A?'],
+			answers: ['a'],
 		});
 		const result = applyAnsweredQuestions({
 			cwd: repo,
 			item: 'task:foo',
 			itemPath,
+			appendQuestions: [{question: 'follow-up?'}],
+			discharge: {reason: 'should not fire'},
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('needs-attention');
-		expect(existsSync(join(repo, 'work', 'needs-attention', 'foo.md'))).toBe(
-			true,
-		);
-	});
-});
-
-describe('applyAnsweredQuestions — a "keep" answer drops the item out of the pool (US #30)', () => {
-	it('stamps triaged:keep + resolves the Q&A in one commit; the item is never re-asked', () => {
-		const {repo, itemPath, sidecarPath} = seed({
-			slug: 'note',
-			folder: 'observations',
-			type: 'observation',
-			questions: ['promote/keep/delete?'],
-			answers: ['keep — settled, no action'],
-			dispositions: ['keep'],
-		});
-
-		const result = applyAnsweredQuestions({
-			cwd: repo,
-			item: 'observation:note',
-			itemPath,
-			env: gitEnv(),
-		});
-
-		expect(result.outcome).toBe('kept');
-		const body = readFileSync(join(repo, itemPath), 'utf8');
-		// triaged:keep marker present → drops out of the candidate pool.
-		expect(isTriagedKeep(body)).toBe(true);
-		// The Q&A is resolved: needsAnswers cleared + sidecar deleted (same commit).
-		expect(parseFrontmatter(body).needsAnswers).toBe(false);
-		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		const touched = filesInHeadCommit(repo);
-		expect(touched).toContain(itemPath);
-		expect(touched).toContain(sidecarPath);
+		expect(result.outcome).toBe('repaused');
+		// The source is INTACT — re-pause took precedence over the discharge.
+		expect(existsSync(join(repo, itemPath))).toBe(true);
+		expect(existsSync(join(repo, sidecarPath))).toBe(true);
 	});
 });
 

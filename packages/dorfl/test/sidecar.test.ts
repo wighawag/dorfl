@@ -108,7 +108,7 @@ describe('parseSidecar — new human-readable format', () => {
 		expect(() => parseSidecar(text)).toThrow(SidecarParseError);
 	});
 
-	it('parses an optional default and a disposition (in the entry comment)', () => {
+	it('parses an optional default (the disposition VOCABULARY is retired: a `disposition=` token in the entry comment is IGNORED, an entry is binary)', () => {
 		const text = [
 			'<!-- dorfl-sidecar: item=observation:dup type=observation slug=dup allAnswered=false -->',
 			'',
@@ -120,6 +120,8 @@ describe('parseSidecar — new human-readable format', () => {
 			'',
 			'_Suggested default: keep_',
 			'',
+			// A legacy `disposition=` token is IGNORED (the field no longer exists on
+			// the entry shape; what to DO with the answer is the agentic decision).
 			'<!-- q1 fields: id=q1 disposition=keep -->',
 			'',
 			'**Your answer** (write below this line):',
@@ -127,13 +129,14 @@ describe('parseSidecar — new human-readable format', () => {
 		].join('\n');
 		const model = parseSidecar(text);
 		expect(model.entries[0].default).toBe('keep');
-		expect(model.entries[0].disposition).toBe('keep');
 		expect(model.entries[0].context).toBe(
 			'Body has a clear conservative routing.',
 		);
+		// No `disposition` field on the entry any more.
+		expect('disposition' in model.entries[0]).toBe(false);
 	});
 
-	it('accepts the renamed `promote-task` disposition (the post-vocab-cutover value)', () => {
+	it('a legacy disposition token (e.g. promote-task) is parsed away (an entry is binary)', () => {
 		const text = [
 			'<!-- dorfl-sidecar: item=observation:prom type=observation slug=prom allAnswered=false -->',
 			'',
@@ -147,10 +150,11 @@ describe('parseSidecar — new human-readable format', () => {
 			'',
 		].join('\n');
 		const model = parseSidecar(text);
-		expect(model.entries[0].disposition).toBe('promote-task');
+		expect('disposition' in model.entries[0]).toBe(false);
+		expect(model.entries[0].id).toBe('q1');
 	});
 
-	it('accepts the `promote-prd` disposition (the observation→PRD route)', () => {
+	it('another legacy disposition token (promote-prd) is also parsed away', () => {
 		const text = [
 			'<!-- dorfl-sidecar: item=observation:prdprom type=observation slug=prdprom allAnswered=false -->',
 			'',
@@ -164,10 +168,11 @@ describe('parseSidecar — new human-readable format', () => {
 			'',
 		].join('\n');
 		const model = parseSidecar(text);
-		expect(model.entries[0].disposition).toBe('promote-prd');
+		expect('disposition' in model.entries[0]).toBe(false);
+		expect(model.entries[0].id).toBe('q1');
 	});
 
-	it('hard-cutover: the legacy `promote-slice` disposition is no longer recognised and is parsed as undefined (no alias, aligned with the sibling task→task hard cutover)', () => {
+	it('any disposition token (e.g. the legacy promote-slice) is parsed away — the vocabulary is fully retired', () => {
 		const text = [
 			'<!-- dorfl-sidecar: item=observation:legacy type=observation slug=legacy allAnswered=false -->',
 			'',
@@ -181,7 +186,7 @@ describe('parseSidecar — new human-readable format', () => {
 			'',
 		].join('\n');
 		const model = parseSidecar(text);
-		expect(model.entries[0].disposition).toBeUndefined();
+		expect('disposition' in model.entries[0]).toBe(false);
 	});
 });
 
@@ -293,19 +298,18 @@ describe('serialiseSidecar — canonical shape + semantic round-trip', () => {
 		expect(reparsed.entries[0].context).toBe('no rush');
 	});
 
-	it('preserves a disposition on round-trip', () => {
+	it('does NOT serialise any disposition field (the vocabulary is retired — entries are binary)', () => {
 		const model = newSidecar('observation:dup', [
 			{
 				question: 'promote, keep, or delete?',
 				context: 'an observation',
 				default: 'keep',
-				disposition: 'keep',
 			},
 		]);
 		const out = serialiseSidecar(model);
-		expect(out).toContain('disposition=keep');
+		expect(out).not.toContain('disposition=');
 		const reparsed = parseSidecar(out);
-		expect(reparsed.entries[0].disposition).toBe('keep');
+		expect('disposition' in reparsed.entries[0]).toBe(false);
 	});
 });
 

@@ -6,7 +6,6 @@ import {
 	newSidecar,
 	serialiseSidecar,
 	type SidecarModel,
-	type SidecarDisposition,
 } from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import type {
@@ -68,7 +67,6 @@ function seedAnsweredItem(opts: {
 	slug?: string;
 	questions?: string[];
 	answeredCount?: number;
-	dispositions?: (SidecarDisposition | undefined)[];
 }): {repo: string; itemPath: string; sidecarPath: string} {
 	const slug = opts.slug ?? 'foo';
 	const questions = opts.questions ?? ['A?', 'B?'];
@@ -98,9 +96,8 @@ function seedAnsweredItem(opts: {
 
 	let model: SidecarModel = newSidecar(
 		`task:${slug}`,
-		questions.map((q, i) => ({
+		questions.map((q) => ({
 			question: q,
-			disposition: opts.dispositions?.[i],
 		})),
 	);
 	model = {
@@ -257,24 +254,25 @@ describe('advance — the APPLY rung applies the human answers through the engin
 		expect(calls).toEqual([]);
 	});
 
-	it('a disposition terminal (dropped on a task) flows through the engine end-to-end → tasks/cancelled', async () => {
+	it('a TASK answering its OWN open questions resolves in place (the lifecycle path is untouched — no disposition terminal any more)', async () => {
 		const {repo, itemPath, sidecarPath} = seedAnsweredItem({
-			slug: 'oos',
+			slug: 'res',
 			questions: ['ship?'],
-			dispositions: ['dropped'],
 		});
 		const result = await performAdvance({
-			arg: 'oos',
+			arg: 'res',
 			cwd: repo,
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('advanced');
+		// The Q&A resolved in place: the sidecar is gone, the item stays (a task is
+		// dropped by its own lifecycle, NOT by a question answer).
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(existsSync(join(repo, itemPath))).toBe(false);
-		expect(existsSync(join(repo, 'work', 'tasks', 'cancelled', 'oos.md'))).toBe(
-			true,
-		);
+		expect(existsSync(join(repo, itemPath))).toBe(true);
+		expect(
+			parseFrontmatter(readFileSync(join(repo, itemPath), 'utf8')).needsAnswers,
+		).toBe(false);
 	});
 });

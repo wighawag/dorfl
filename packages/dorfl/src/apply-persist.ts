@@ -1,129 +1,79 @@
-import {existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {workFolderPath, workFolderPrefix, workItemRel} from './work-layout.js';
 import {run, type RunResult} from './git.js';
-import {setFrontmatterMarker} from './frontmatter.js';
 import {applyAtomic, type ApplyAtomicResult} from './sidecar-apply.js';
 import {
 	allAnswered,
 	appendQuestions,
-	isEntryAnswered,
 	parseSidecar,
-	resolveSidecarIdentity,
 	sidecarPathFor,
 	type NewQuestion,
-	type SidecarDisposition,
 	type SidecarEntry,
 	type SidecarModel,
 } from './sidecar.js';
-import type {SidecarType} from './sidecar.js';
-import type {WorkFolderKey} from './work-layout.js';
+import {
+	APPLY_LIFECYCLE_FOLDERS,
+	resolveItemPathByIdentity,
+} from './item-path.js';
 
 /**
- * The lifecycle folders an item may rest in at APPLY-write-time, BY TYPE — the
- * scan set for the identity-keyed item-path resolver below. Includes the
- * STAGING folders (`tasks-backlog`, `prds-proposed`) on purpose: a concurrent
- * `promote` may have just `git mv`'d the item from staging into the pool
- * between this apply's CAPTURE and WRITE, and the apply must resolve to the
- * post-move path — the whole point of folder-agnostic apply (F3a of prd
- * `staging-surface-and-apply-promote-safety`). Terminal-only folders
- * (`cancelled`, `prds-dropped`, `needs-attention`) are NOT here — once an
- * item has reached a terminal, the apply is OVER, and a re-resolve into a
- * terminal would mean the item has effectively vanished from the active
- * lifecycle (callers handle that as the clean-exit `vanished` outcome below).
- */
-const APPLY_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
-	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
-	observation: ['observations'],
-};
-
-/**
- * Resolve the item's CURRENT on-disk path by IDENTITY — the apply-side
- * folder-agnostic resolver, the symmetric twin of `sidecarPathFor`. Mirrors the
- * sidecar's identity-keyed resolution shape: the path is derived from the
- * `(type, slug)` identity at WRITE-TIME, never from a captured `ItemPath`.
+ * The engine-owned APPLY PERSIST (prd `advance-loop`, task `advance-rung-apply`;
+ * AGENTIC apply, task `agentic-apply-retire-disposition-vocabulary`) — the half of
+ * the APPLY rung the ENGINE owns. On `classify=apply` (ALL sidecar entries
+ * answered), it applies the HUMAN's answers to the item ATOMICALLY (item body +
+ * sidecar in ONE commit, via the sidecar contract's {@link applyAtomic}), then
+ * EITHER:
  *
- * Scans the lifecycle folders the type may rest in (`APPLY_LIFECYCLE_FOLDERS`),
- * including STAGING, and returns the FIRST match (one slug per type, so there
- * is at most one). Returns `undefined` when the item file is GONE between
- * capture and write (a concurrent `promote` to a terminal, a human delete, or a
- * sibling triage move) — the apply rung then exits CLEAN (no commit, no ghost
- * file), routed as the `vanished` outcome.
+ *   - **append / re-pause** — when the apply has NEW questions to ask: append
+ *     `qN+1…`, stay `needsAnswers:true`, re-pause (the "all answered?" flips back
+ *     to false); OR
+ *   - **discharge by deletion** — when the caller decided the SOURCE should leave
+ *     by deletion (`discharge` set): `git rm` the source + sidecar in a STANDALONE
+ *     revertible commit, the reason in the commit message (git history is the
+ *     archive); OR
+ *   - **resolve fully** (the default) — clear `needsAnswers` + DELETE the sidecar
+ *     in the SAME atomic commit (the invariant `needsAnswers:false ⟺ no active
+ *     sidecar`); the item advances toward build by its normal lifecycle.
  *
- * This is the F3a fix from prd `staging-surface-and-apply-promote-safety`:
- * the sidecar is already identity-keyed and folder-agnostic; the item path is
- * now the same. A concurrent `promote` that `git mv`'d the item out from under
- * a captured path can no longer cause a stale-path write.
- */
-export function resolveItemPathByIdentity(
-	cwd: string,
-	item: string,
-): string | undefined {
-	const {type, slug} = resolveSidecarIdentity(item);
-	for (const folder of APPLY_LIFECYCLE_FOLDERS[type]) {
-		const rel = workItemRel(folder, `${slug}.md`);
-		if (existsSync(join(cwd, rel))) {
-			return rel;
-		}
-	}
-	return undefined;
-}
-
-/**
- * The PER-REGIME won't-proceed terminal a `dropped` disposition routes an item to,
- * by its TYPE — the slug-collision correctness fix (prd
- * `folder-taxonomy-reorg-and-rename` US #10). A dropped task and a dropped prd
- * sharing a slug used to collide on one bare-slug `work/dropped/<slug>.md`; each
- * regime now has its own namespaced terminal. An OBSERVATION has NO terminal folder
- * (`undefined`) — a note leaves by DELETION, so a `dropped` disposition on an
- * observation is handled as a delete-recommendation, never a move to a terminal.
- */
-function dropTerminalFolder(type: SidecarType): WorkFolderKey | undefined {
-	switch (type) {
-		case 'task':
-			return 'cancelled';
-		case 'prd':
-			return 'prds-dropped';
-		case 'observation':
-			return undefined;
-	}
-}
-
-/**
- * The engine-owned APPLY PERSIST (prd `advance-loop`, task `advance-rung-apply`,
- * US #11/14/15/29/30) — the half of the APPLY rung the ENGINE owns. On
- * `classify=apply` (ALL sidecar entries answered), it applies the HUMAN's
- * answers to the item ATOMICALLY (item body + sidecar in ONE commit, via the
- * sidecar contract's {@link applyAtomic}), then EITHER:
+ * **The disposition vocabulary is GONE** (task
+ * `agentic-apply-retire-disposition-vocabulary`): the apply rung no longer reads a
+ * per-entry `disposition=` token, no longer runs a most-decisive picker, and has
+ * no `keep`/`triaged:keep` resting state. A sidecar entry is BINARY (no-answer |
+ * answered); what to DO with a fully-answered OBSERVATION is decided by the
+ * AGENTIC apply decision in the advance tick (`advance.ts` `applyRung` over the
+ * shared `decide` engine), which then routes here (re-pause / discharge / via
+ * `promoteObservation` for a mint). A signal is still-open, acted-on, or deleted
+ * — there is no \"retain as resolved\" state.
  *
- *   - **append / re-pause** — when the apply discovers/appends NEW questions:
- *     append `qN+1…`, stay `needsAnswers:true`, re-pause (the "all answered?"
- *     flips back to false); OR
- *   - **resolve fully** — clear `needsAnswers` + DELETE the sidecar in the SAME
- *     atomic commit (the invariant `needsAnswers:false ⟺ no active sidecar`); OR
- *   - **disposition to a terminal** — an answered entry's `disposition` routes the
- *     item to a terminal state (advance / dropped / needs-attention /
- *     observation keep / delete). The apply rung EXECUTES the recorded routing.
+ * The work-item (task/prd) terminal MOVES (`tasks/cancelled`, `prds/dropped`) and
+ * the `needs-attention/` LIFECYCLE state are a SEPARATE lifecycle concern (a
+ * task/prd is dropped by its own lifecycle, not by a question answer) — they are
+ * NOT routed from here any more (they were the removed disposition vocabulary).
  *
  * It is the SIBLING of {@link import('./surface-persist.js').persistSurfacedQuestions}:
  * that is the SURFACE rung's one-commit primitive (append-or-create + set
- * `needsAnswers`); this is the APPLY rung's (apply answers + resolve/re-pause/
- * disposition). Kept file-orthogonal so the rung bodies land in different tasks.
+ * `needsAnswers`); this is the APPLY rung's (apply answers + resolve / re-pause /
+ * discharge). Kept file-orthogonal so the rung bodies land in different tasks.
  *
  * **NEVER invents an answer (US #4).** The apply rung applies ONLY what the human
- * authored — the recorded `answer:` text and the `disposition:` field. It does
- * NOT fill, guess, or author an answer; a SUBSET-answered sidecar is not even
- * classified `apply` (the classifier NO-OPs), so this is only ever called with a
- * fully-answered sidecar. **ALWAYS allowed (no gate)** — applying a human's
- * answer is never gated, even with every autonomy flag off (the engine, not this
- * module, enforces the no-gate sequencing).
+ * authored — the recorded `answer:` text. It does NOT fill, guess, or author an
+ * answer; a SUBSET-answered sidecar is not even classified `apply` (the classifier
+ * NO-OPs), so this is only ever called with a fully-answered sidecar. **ALWAYS
+ * allowed (no gate)** — applying a human's answer is never gated, even with every
+ * autonomy flag off (the engine, not this module, enforces the no-gate
+ * sequencing).
  *
  * Like the surface persist, this is the LOCAL one-commit primitive over a working
  * tree (the throwaway-git-repo test pattern). The `advancing` CAS lock that makes
  * it WINNER-ONLY is held by `performAdvance` BEFORE this is called; this module
  * does NOT race the arbiter — that is the lock's job.
  */
+
+// Re-export the extracted neutral resolver so existing importers of
+// `apply-persist.ts` keep working (the resolver now LIVES in `item-path.ts`, a
+// non-hot module the sibling CLI / gc-sweep tasks import without touching this
+// rewritten file).
+export {APPLY_LIFECYCLE_FOLDERS, resolveItemPathByIdentity};
 
 /** Marker that opens the applied-answers record in an item body. */
 const APPLIED_HEADING = '## Applied answers';
@@ -149,9 +99,6 @@ const APPLIED_HEADING = '## Applied answers';
 export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';
 export const OPEN_QUESTIONS_MARKER_CLOSE = '<!-- /open-questions -->';
 
-/** The frontmatter marker a "keep" disposition stamps (US #30). */
-const TRIAGED_KEEP = 'keep';
-
 export interface ApplyAnsweredQuestionsOptions {
 	/** Working clone/worktree the apply commits in. */
 	cwd: string;
@@ -165,12 +112,23 @@ export interface ApplyAnsweredQuestionsOptions {
 	 */
 	itemPath: string;
 	/**
-	 * NEW follow-up questions the apply discovered (the human's answer raised more
-	 * judgement). When non-empty, the apply APPENDS them (`qN+1…`, never mutating an
-	 * answered entry) and RE-PAUSES (`needsAnswers:true` stays) — the "all answered?"
-	 * flips back to false. Empty/omitted ⇒ resolve (or disposition) the item.
+	 * NEW follow-up questions the apply has (the agentic `ask-follow-up` verdict, or
+	 * a caller-supplied batch). When non-empty, the apply APPENDS them (`qN+1…`,
+	 * never mutating an answered entry) and RE-PAUSES (`needsAnswers:true` stays) —
+	 * the "all answered?" flips back to false. Empty/omitted ⇒ resolve the item (or
+	 * discharge it, when `discharge` is set).
 	 */
 	appendQuestions?: NewQuestion[];
+	/**
+	 * DISCHARGE the SOURCE by DELETION (the agentic `delete-source` verdict, or a
+	 * direct discharge): instead of resolving in place, `git rm` the source + its
+	 * answered sidecar in a STANDALONE revertible commit, the `reason` recorded in
+	 * the commit message (git history is the archive). Fires DIRECT (no
+	 * preview/confirm — decision 12). Mutually exclusive with `appendQuestions`
+	 * (re-pause and discharge cannot both happen on one apply); when both are given
+	 * the re-pause wins (you cannot discharge a source you are still asking about).
+	 */
+	discharge?: {reason: string};
 	/** Advisory committer id for the commit subject. Defaults to git user.name. */
 	by?: string;
 	/** Environment for child git processes. */
@@ -179,45 +137,21 @@ export interface ApplyAnsweredQuestionsOptions {
 	note?: (message: string) => void;
 }
 
-/** The terminal an apply routed the item to (none ⇒ a plain resolve/re-pause). */
+/** The terminal an apply reached. */
 export type ApplyTerminal =
 	/** Resolved fully: needsAnswers cleared + sidecar deleted (the default). */
 	| 'resolved'
 	/** New questions appended; stayed needsAnswers:true and re-paused. */
 	| 'repaused'
-	/** A "keep" answer stamped `triaged:keep`; the item drops out of the pool. */
-	| 'kept'
 	/**
-	 * Moved to the regime's PER-REGIME "won't-proceed" terminal: a TASK to
-	 * `work/tasks/cancelled/`, a PRD to `work/prds/dropped/` (the slug-collision
-	 * fix, task `brief-regime-rename-and-dropped-migration`). An OBSERVATION has no
-	 * terminal folder, so a `dropped` disposition on one is discharged by DELETION
-	 * (the `deleted` outcome — notes leave by being `git rm`-ed). The specific REASON
-	 * (`out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned`) lives in the
-	 * item BODY, not in the folder name. The OUTCOME word stays `dropped` for a
-	 * task/prd (the disposition kept its meaning; only the resolved PATH is
-	 * regime-namespaced).
-	 */
-	| 'dropped'
-	/** Moved to `work/needs-attention/` (the existing bounce — a human must look). */
-	| 'needs-attention'
-	/**
-	 * A "delete"/"dropped" answer on an OBSERVATION DISCHARGED the note BY
-	 * DELETION: the note (and its answered sidecar, if any) were `git rm`-ed in a
-	 * STANDALONE commit, the reason recorded in the commit message (git history =
-	 * archive). A discharged note leaves the inbox by being GONE — there is no
-	 * resting `## Recommended: delete` marker and no `triaged:` stamp. This is the
-	 * apply rung applying the human's RATIFIED drop answer (human-authored, not a
-	 * unilateral agent destruction of a live signal).
+	 * The SOURCE was DISCHARGED BY DELETION (the agentic `delete-source` verdict, or
+	 * a direct discharge): the source (+ its answered sidecar) were `git rm`-ed in a
+	 * STANDALONE revertible commit, the reason recorded in the commit message (git
+	 * history = archive). A discharged item leaves by being GONE — there is no
+	 * resting marker. This is the apply rung applying the human's RATIFIED answer
+	 * (human-authored, not a unilateral agent destruction of a live signal).
 	 */
 	| 'deleted'
-	/**
-	 * A "delete" answer on a WORK ITEM (task/prd) RECOMMENDED deletion (the human
-	 * deletes — never auto-delete). Work items leave via a terminal FOLDER, not by
-	 * deletion, so a `delete` disposition on one keeps the recommend-and-retain
-	 * resting state; only observations discharge by deletion.
-	 */
-	| 'delete-recommended'
 	/**
 	 * The item file was GONE by the time apply tried to write (a concurrent
 	 * promote/terminal-move/delete between capture and write). Apply exited
@@ -234,7 +168,7 @@ export interface ApplyAnsweredQuestionsResult {
 	commit?: string;
 	/** The sidecar path (relative to `cwd`) the apply touched. */
 	sidecarPath: string;
-	/** The item path (relative to `cwd`) after the apply (a terminal move changes it). */
+	/** The item path (relative to `cwd`) after the apply. */
 	itemPath: string;
 	/** A human-readable summary. */
 	message: string;
@@ -315,42 +249,6 @@ function readSidecar(
 }
 
 /**
- * Order on the terminal dispositions, most-decisive first. When the human spread
- * dispositions across entries, the apply executes the SINGLE most-decisive
- * terminal (a needs-attention bounce wins over a dropped, which wins over a
- * keep / delete / plain resolve), so an item never lands in two terminals.
- */
-const TERMINAL_PRECEDENCE: SidecarDisposition[] = [
-	'needs-attention',
-	'dropped',
-	'delete',
-	'keep',
-];
-
-/**
- * Pick the SINGLE terminal disposition to execute from the answered entries (the
- * most-decisive present), or `undefined` for a plain resolve. `promote-task` /
- * `promote-adr` are NOT terminals HERE — they are the triage rung's new-item
- * creation (task `advance-rung-triage` consumes the CAS-create helper); the apply
- * rung treats a promote as a plain resolve of THIS item (the promotion is a
- * separate new-item creation, not a move of this one).
- */
-function pickTerminal(entries: SidecarEntry[]): SidecarDisposition | undefined {
-	const present = new Set<SidecarDisposition>();
-	for (const entry of entries) {
-		if (entry.disposition !== undefined && isEntryAnswered(entry)) {
-			present.add(entry.disposition);
-		}
-	}
-	for (const disposition of TERMINAL_PRECEDENCE) {
-		if (present.has(disposition)) {
-			return disposition;
-		}
-	}
-	return undefined;
-}
-
-/**
  * Render the applied-answers record appended to the item body. PURELY the human's
  * recorded answers (verbatim) under a dated heading — NEVER an invented or
  * paraphrased answer. Append-only (a prior record stays); the body is the durable
@@ -363,10 +261,6 @@ function appliedAnswersBlock(entries: SidecarEntry[]): string {
 		lines.push(`### ${entry.id}: ${entry.question.trim()}`);
 		lines.push('');
 		lines.push(entry.answer.trim());
-		if (entry.disposition !== undefined) {
-			lines.push('');
-			lines.push(`disposition: ${entry.disposition}`);
-		}
 		lines.push('');
 	}
 	return lines.join('\n');
@@ -421,24 +315,18 @@ function stripOpenQuestionsBlocks(body: string): string {
 }
 
 /**
- * Apply a FULLY-ANSWERED sidecar's answers to its item ATOMICALLY, then route to
- * the right terminal. The keystone APPLY rung the advance engine dispatches into
- * once the classifier said `apply` (all entries answered) AND the `advancing`
- * lock was won.
+ * Apply a FULLY-ANSWERED sidecar's answers to its item ATOMICALLY, then route it.
+ * The keystone APPLY rung the advance engine dispatches into once the classifier
+ * said `apply` (all entries answered) AND the `advancing` lock was won.
  *
- * The decision (derived from the answered entries + the optional follow-up
- * questions — the human's recorded intent is the SOLE source of truth, never an
+ * The decision (the human's recorded intent + the caller's routing — NEVER an
  * invention):
  *
  *   1. **append / re-pause** — `appendQuestions` is non-empty: append `qN+1…`,
  *      keep `needsAnswers:true`, re-pause (one commit, body + sidecar).
- *   2. **terminal disposition** — an answered entry carries a terminal
- *      `disposition` (`needs-attention` / `dropped` / `delete` / `keep`):
- *      execute the routing — a `git mv` to the terminal folder (task/prd
- *      `dropped`), a `triaged:keep` marker (`keep`), a work-item delete
- *      RECOMMENDATION (task/prd `delete`), or — for an OBSERVATION `delete`/
- *      `dropped` — DISCHARGE BY DELETION (`git rm` the note + sidecar in a
- *      standalone commit, reason in the commit message; no resting marker).
+ *   2. **discharge by deletion** — `discharge` is set (the `delete-source`
+ *      verdict): `git rm` the source + sidecar in a standalone revertible commit,
+ *      the reason in the commit message.
  *   3. **resolve fully** (the default) — clear `needsAnswers` + delete the sidecar
  *      in ONE commit; the item advances toward build by its normal lifecycle.
  */
@@ -493,8 +381,10 @@ export function applyAnsweredQuestions(
 	const baseBody = readItem(itemAbs, cwd, itemPath, env);
 	const by = options.by || resolveBy(cwd, env);
 
-	// (1) APPEND / RE-PAUSE: the apply discovered new questions. Append them
-	// (`qN+1…`, never mutating an answered entry), stay needsAnswers:true, re-pause.
+	// (1) APPEND / RE-PAUSE: the apply has new questions. Append them (`qN+1…`,
+	// never mutating an answered entry), stay needsAnswers:true, re-pause. Re-pause
+	// WINS over a discharge — you cannot discharge a source you are still asking
+	// about.
 	const followups = options.appendQuestions ?? [];
 	if (followups.length > 0) {
 		const repaused = appendQuestions(model, followups);
@@ -519,102 +409,45 @@ export function applyAnsweredQuestions(
 		};
 	}
 
-	// No follow-ups → the Q&A is RESOLVED (clear needsAnswers + delete the sidecar).
-	// A terminal disposition routes the (now-resolved) item further.
-	const picked = pickTerminal(model.entries);
-	const itemType = resolveSidecarIdentity(item).type;
-	// A `dropped` disposition on an OBSERVATION has no terminal folder (notes leave
-	// by deletion), so it routes to the `delete` discharge-by-deletion below — the
-	// note is `git rm`-ed, never moved to a terminal. For a task/prd, `dropped`
-	// keeps routing to the regime's namespaced won't-proceed terminal
-	// (`tasks/cancelled` / `prds/dropped`).
-	const terminal =
-		picked === 'dropped' && dropTerminalFolder(itemType) === undefined
-			? 'delete'
-			: picked;
-	// Full-resolution reconcile (D1): strip the now-stale marker-fenced
+	// (2) DISCHARGE BY DELETION: the caller decided the source should leave by
+	// deletion (the `delete-source` verdict). `git rm` the source + sidecar in a
+	// STANDALONE revertible commit, the reason in the commit message (git history =
+	// archive). DIRECT — no preview/confirm (decision 12); the human's answer is
+	// the source of truth.
+	if (options.discharge !== undefined) {
+		return dischargeByDeletion({
+			cwd,
+			item,
+			itemPath,
+			reason: options.discharge.reason,
+			sidecarPath,
+			by,
+			env,
+			note,
+		});
+	}
+
+	// (3) RESOLVE FULLY (the default): clear needsAnswers + delete the sidecar in
+	// ONE commit. Full-resolution reconcile (D1): strip the now-stale marker-fenced
 	// open-questions block(s) so the resolved body reads as resolved. Backward
 	// compatible — no marker ⇒ identical bytes. The re-pause path above is
 	// deliberately untouched (D3): its open-questions block is still open.
 	const reconciledBody = stripOpenQuestionsBlocks(baseBody);
 	const resolvedBody = withAppliedAnswers(reconciledBody, model.entries);
-
-	// DISCHARGE BY DELETION (observation only): a `delete`/`dropped` answer on a
-	// NOTE removes it from the inbox by `git rm`, the reason in the commit message
-	// (git history = archive) — NOT a `## Recommended: delete` resting marker. The
-	// apply rung is applying the human's RATIFIED drop answer, so the deletion is
-	// human-authored. A WORK ITEM (task/prd) `delete` keeps the recommend-and-
-	// retain route below (work items leave via a terminal FOLDER, not by deletion).
-	if (terminal === 'delete' && itemType === 'observation') {
-		return deleteDischargedObservation({
-			cwd,
-			item,
-			itemPath,
-			reason: deleteReason(model.entries),
-			sidecarPath,
-			by,
-			env,
-			note,
-		});
-	}
-
-	if (terminal === 'keep') {
-		return resolveWithKeepMarker({
-			cwd,
-			item,
-			itemPath,
-			body: resolvedBody,
-			sidecar: model,
-			sidecarPath,
-			by,
-			env,
-			note,
-		});
-	}
-
-	// The plain resolve (default, and the body half of every terminal route): clear
-	// needsAnswers + delete the sidecar in ONE commit. A WORK-ITEM (task/prd)
-	// `delete` disposition adds the recommendation to the body; the human deletes
-	// the file (never auto-delete). An OBSERVATION `delete` already returned above
-	// (discharged by deletion), so a `delete` reaching here is a work item.
-	const finalBody =
-		terminal === 'delete'
-			? appendDeleteRecommendation(resolvedBody)
-			: resolvedBody;
 	const result = applyAtomic({
 		cwd,
 		itemPath,
-		itemBody: finalBody,
+		itemBody: resolvedBody,
 		sidecar: model,
 		mode: 'resolve',
 		by,
 		env,
 		note,
 	});
-
-	if (terminal === 'dropped' || terminal === 'needs-attention') {
-		return moveResolvedItemToTerminal({
-			cwd,
-			item,
-			itemPath,
-			terminal,
-			itemType,
-			by,
-			env,
-			note,
-			sidecarPath,
-		});
-	}
-
-	const outcome: ApplyTerminal =
-		terminal === 'delete' ? 'delete-recommended' : 'resolved';
-	const message =
-		terminal === 'delete'
-			? `applied ${item} → resolved + RECOMMENDED deletion (a human deletes the file; the agent never auto-deletes a signal).`
-			: `applied ${item} → resolved (needsAnswers cleared, sidecar deleted).`;
+	const message = `applied ${item} → resolved (needsAnswers cleared, sidecar deleted).`;
 	note(message);
 	return {
-		outcome,
+		outcome: 'resolved',
 		commit: result.commit,
 		sidecarPath,
 		itemPath,
@@ -622,55 +455,11 @@ export function applyAnsweredQuestions(
 	};
 }
 
-interface KeepInput {
+interface DischargeInput {
 	cwd: string;
 	item: string;
 	itemPath: string;
-	body: string;
-	sidecar: SidecarModel;
-	sidecarPath: string;
-	by: string;
-	env: NodeJS.ProcessEnv | undefined;
-	note: (m: string) => void;
-}
-
-/**
- * A "keep" answer (US #30): stamp `triaged:keep` on the item body, then resolve
- * the Q&A (clear needsAnswers + delete the sidecar) — all in ONE commit. The
- * `triaged:keep` marker drops the item out of the candidate pool so it is never
- * re-asked (the apply executes the recorded disposition; the keep/delete ROUTING
- * is shared with the triage rung, finalised here).
- */
-function resolveWithKeepMarker(input: KeepInput): ApplyAnsweredQuestionsResult {
-	const {cwd, item, itemPath, body, sidecar, sidecarPath, by, env, note} =
-		input;
-	const marked = setFrontmatterMarker(body, 'triaged', TRIAGED_KEEP);
-	const result = applyAtomic({
-		cwd,
-		itemPath,
-		itemBody: marked,
-		sidecar,
-		mode: 'resolve',
-		by,
-		env,
-		note,
-	});
-	const message = `applied ${item} → "keep" (triaged:keep stamped; drops out of the pool, never re-asked).`;
-	note(message);
-	return {
-		outcome: 'kept',
-		commit: result.commit,
-		sidecarPath,
-		itemPath,
-		message,
-	};
-}
-
-interface DeleteObservationInput {
-	cwd: string;
-	item: string;
-	itemPath: string;
-	/** The human's drop reason (their answer text), recorded in the commit message. */
+	/** The human's discharge reason (their answer text), recorded in the commit message. */
 	reason: string;
 	sidecarPath: string;
 	by: string;
@@ -679,25 +468,26 @@ interface DeleteObservationInput {
 }
 
 /**
- * DISCHARGE an OBSERVATION by DELETION (the `delete`/`dropped` route, US #2/#7):
- * `git rm` the note AND its answered sidecar in ONE STANDALONE commit, the human's
- * drop reason recorded in the commit MESSAGE (git history is the archive). There
- * is no spawned artifact for a drop, so the deletion is a standalone commit (the
- * `promote` route, by contrast, rides the new artifact's create commit).
+ * DISCHARGE a source by DELETION (the `delete-source` verdict, US #5/#11): `git
+ * rm` the source AND its answered sidecar in ONE STANDALONE commit, the human's
+ * discharge reason recorded in the commit MESSAGE (git history is the archive).
+ * There is no spawned artifact for a discharge, so the deletion is a standalone
+ * commit (a `mint`, by contrast, rides the new artifact's create commit through
+ * `promoteObservation`).
  *
- * A discharged note leaves the inbox by being GONE — no `## Recommended: delete`
- * body marker and no `triaged:` stamp remain (the resting-state machinery is
- * retired for notes; a deleted note is out of the pool by being deleted). This is
- * the apply rung applying the human's RATIFIED drop answer (the deletion is
- * human-authored, satisfying the "never auto-delete a live signal" clause).
+ * A discharged item leaves by being GONE — no resting body marker, no `triaged:`
+ * stamp (the resting-state machinery is retired; an item is still-open, acted-on,
+ * or deleted). This is the apply rung applying the human's RATIFIED answer (the
+ * deletion is human-authored), and it is git-recoverable (a single revertible
+ * commit) — a wrong inference is never catastrophic.
  */
-function deleteDischargedObservation(
-	input: DeleteObservationInput,
+function dischargeByDeletion(
+	input: DischargeInput,
 ): ApplyAnsweredQuestionsResult {
 	const {cwd, item, itemPath, reason, sidecarPath, by, env, note} = input;
-	// `git rm` the note. The sidecar may not exist (a `dropped` answer can be
-	// authored without one); rm it too when present, so the discharge leaves no
-	// answered-sidecar residue. Both ride ONE commit.
+	// `git rm` the source. The sidecar may not exist in every path; rm it too when
+	// present, so the discharge leaves no answered-sidecar residue. Both ride ONE
+	// commit.
 	const rmPaths = [itemPath];
 	if (existsSync(join(cwd, sidecarPath))) {
 		rmPaths.push(sidecarPath);
@@ -706,13 +496,13 @@ function deleteDischargedObservation(
 	const reasonLine = reason.trim() === '' ? '(no reason given)' : reason.trim();
 	const subject = `advance: ${item} → deleted (by ${by})`;
 	const messageBody =
-		`Discharged by deletion (the human's ratified drop answer authors it; ` +
+		`Discharged by deletion (the human's ratified answer authors it; ` +
 		`git history is the archive).\n\nreason: ${reasonLine}`;
 	gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
 	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
 	const message =
-		`applied ${item} → deleted (note git rm-ed in a standalone commit; reason in ` +
-		'the commit message, git history is the archive).';
+		`applied ${item} → deleted (source git rm-ed in a standalone commit; reason ` +
+		'in the commit message, git history is the archive).';
 	note(message);
 	return {
 		outcome: 'deleted',
@@ -723,129 +513,6 @@ function deleteDischargedObservation(
 	};
 }
 
-/**
- * The human's drop REASON for an observation discharge — their answer text on the
- * entries that carry the terminal `delete`/`dropped` disposition (verbatim, never
- * invented). Joined when more than one such entry was answered.
- */
-function deleteReason(entries: SidecarEntry[]): string {
-	return entries
-		.filter(
-			(e) =>
-				(e.disposition === 'delete' || e.disposition === 'dropped') &&
-				isEntryAnswered(e),
-		)
-		.map((e) => e.answer.trim())
-		.filter((a) => a !== '')
-		.join('; ');
-}
-
-interface MoveTerminalInput {
-	cwd: string;
-	item: string;
-	itemPath: string;
-	/** The terminal OUTCOME name (kept as the disposition word). */
-	terminal: 'dropped' | 'needs-attention';
-	/** The item type, used to resolve the per-regime `dropped` terminal folder. */
-	itemType: SidecarType;
-	by: string;
-	env: NodeJS.ProcessEnv | undefined;
-	note: (m: string) => void;
-	sidecarPath: string;
-}
-
-/**
- * Route the (already Q&A-resolved) item to a terminal LIFECYCLE folder
- * (the per-regime won't-proceed terminal for `dropped`, or `needs-attention/`)
- * via a `git mv` + commit — the SECOND commit of the disposition (the first
- * cleared needsAnswers + deleted the sidecar). Status = the folder (WORK-CONTRACT
- * rule 3): the move IS the terminal state, no frontmatter status field. A
- * `dropped` disposition resolves the destination PER REGIME (`tasks/cancelled`
- * for a task, `prds/dropped` for a prd) so a task-drop and a prd-drop
- * sharing a slug never collide; `needs-attention` is type-agnostic. Returns the
- * NEW item path.
- */
-function moveResolvedItemToTerminal(
-	input: MoveTerminalInput,
-): ApplyAnsweredQuestionsResult {
-	const {cwd, item, itemPath, terminal, itemType, env, note, sidecarPath} =
-		input;
-	const destFolder: WorkFolderKey =
-		terminal === 'dropped'
-			? // observation is already downgraded to `delete` upstream, so the folder
-				// resolves to a defined regime terminal here.
-				(dropTerminalFolder(itemType) ?? 'cancelled')
-			: 'needs-attention';
-	const destDir = workFolderPath(cwd, destFolder);
-	mkdirSync(destDir, {recursive: true});
-	const slug = itemPath.replace(/^.*\//, '');
-	const destRel = workItemRel(destFolder, slug);
-	gitHard(['mv', itemPath, destRel], cwd, env);
-	gitHard(['add', '-A'], cwd, env);
-	const subject = `advance: ${item} → ${terminal} (by ${input.by})`;
-	gitHard(['commit', '--quiet', '-m', subject], cwd, env);
-	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
-	const message = `applied ${item} → ${terminal} (moved to ${workFolderPrefix(
-		destFolder,
-	)}).`;
-	note(message);
-	return {
-		outcome: terminal,
-		commit,
-		sidecarPath,
-		itemPath: destRel,
-		message,
-	};
-}
-
-/**
- * Marker heading for a delete recommendation appended to a WORK-ITEM body. Only
- * the task/prd `delete` route uses it now — an OBSERVATION `delete`/`dropped`
- * discharges by DELETION (no resting marker), so a note never carries this.
- */
-const DELETE_HEADING = '## Recommended: delete';
-
-/**
- * Append a delete RECOMMENDATION to a WORK-ITEM body (the human deletes the file
- * — the agent NEVER auto-deletes, per the capture-bucket contract). Prose only;
- * the recommendation is durable, the deletion is the human's. This is the
- * task/prd `delete` route ONLY — observations discharge by deletion and never
- * reach here.
- */
-function appendDeleteRecommendation(body: string): string {
-	const base = body.replace(/\s*$/, '');
-	return [
-		base,
-		'',
-		DELETE_HEADING,
-		'',
-		'A human answered "delete": this item can be removed (git history is the ' +
-			'archive). The agent leaves the deletion to the human per the ' +
-			'capture-bucket contract.',
-		'',
-	].join('\n');
-}
-
-// Re-export the heading constants the tests assert against, so the byte-level
-// markers stay in one place.
-export {APPLIED_HEADING, DELETE_HEADING};
-
-/** True when the item carries a `triaged: keep` frontmatter marker. */
-export function isTriagedKeep(itemBody: string): boolean {
-	const normalized = itemBody.replace(/\r\n/g, '\n');
-	if (!normalized.startsWith('---\n')) {
-		return false;
-	}
-	const lines = normalized.split('\n');
-	const closing = lines.indexOf('---', 1);
-	if (closing === -1) {
-		return false;
-	}
-	for (let i = 1; i < closing; i++) {
-		const m = /^triaged\s*:\s*(.*)$/.exec(lines[i]);
-		if (m) {
-			return m[1].trim() === TRIAGED_KEEP;
-		}
-	}
-	return false;
-}
+// Re-export the heading constant the tests assert against, so the byte-level
+// marker stays in one place.
+export {APPLIED_HEADING};
