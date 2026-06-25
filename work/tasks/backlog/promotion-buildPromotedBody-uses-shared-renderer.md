@@ -94,3 +94,7 @@ parallel; both depend only on the keystone.
 > Keep the edit confined to `triage-persist.ts` + its tests (file-orthogonal to the
 > intake rewire). Record any non-obvious decision in the done record. Finish green:
 > `pnpm -r build && pnpm -r test && pnpm format:check`.
+
+## Requeue 2026-06-25
+
+Gate-2 BLOCK (correct): the rewire dropped the blank line after the frontmatter fence — emits '---\n## What to build' but must emit '---\n\n## What to build' (the byte-for-byte requirement + the original output). Cause: frontmatter array ends with '' joined by \n (one trailing \n) and renderTaskBody/renderPrdBody start at the heading with no leading blank, so only ONE newline separates fence and heading. FIX: insert the separator between frontmatter and the rendered body (e.g. frontmatter.join('\n') + '\n' + render...() , or own a single consistent leading-blank convention) so promotion's output is byte-for-byte unchanged AND matches what intake will produce when it adopts the renderer. Add a test asserting the '---\n\n##' fence spacing (the existing test only checked extractPromptSection, so it missed this).
