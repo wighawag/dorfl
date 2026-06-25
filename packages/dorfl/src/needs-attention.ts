@@ -607,13 +607,23 @@ export async function returnToBacklog(
 		options.message && options.message.trim() !== ''
 			? options.message.trim()
 			: undefined;
-	const backlogRel = workItemRel('tasks-ready', `${slug}.md`);
+	// The body rests EITHER in the pool (`tasks-ready`) OR — for a staged item driven
+	// with `--allow-backlog` — in staging (`tasks-backlog`). Probe in the SAME
+	// precedence `resolveTask`/`--allow-backlog` uses (ready first, then backlog), so
+	// the handoff note finds a staged body too (obs
+	// `requeue-dash-m-fails-and-strands-lock-for-staged-backlog-item`).
+	const bodyResidenceCandidates: readonly WorkFolderKey[] = [
+		'tasks-ready',
+		'tasks-backlog',
+	];
 
 	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
-	// section to the item BODY in `work/backlog/` (where it already rests) before the
-	// lock release, via the SAME tree-less CAS move (backlog → backlog with the body
-	// transform) — it NEVER stages/commits in the cwd tree. The handoff is OPTIONAL;
-	// the lock release below is the core requeue.
+	// section to the item BODY where it already rests (pool or staging), via the SAME
+	// tree-less CAS move (same-folder rewrite with the body transform) — it NEVER
+	// stages/commits in the cwd tree. The handoff is OPTIONAL and NON-FATAL: a failed
+	// append degrades to a WARNING and the lock release below STILL runs, because the
+	// lock release is the load-bearing recovery and must never be stranded by an
+	// optional note (obs `requeue-dash-m-fails-and-strands-lock-for-staged-backlog-item`).
 	if (handoff !== undefined) {
 		const noted = await runTreelessLedgerMove({
 			cwd,
@@ -625,17 +635,20 @@ export async function returnToBacklog(
 			env,
 			note,
 			plan: (base) => {
-				if (!pathInCommit(base, backlogRel, cwd, env)) {
-					// The body is not in backlog/ on this base — nothing to annotate
-					// (the durable move that placed it there must land first).
+				const bodyRel = bodyResidenceCandidates
+					.map((folder) => workItemRel(folder, `${slug}.md`))
+					.find((rel) => pathInCommit(base, rel, cwd, env));
+				if (bodyRel === undefined) {
+					// The body is in neither tasks/ready/ nor tasks/backlog/ on this base —
+					// nothing to annotate (the durable move that placed it must land first).
 					return 'missing';
 				}
 				return prepareTreelessMoveCommit({
 					cwd,
 					slug,
 					base,
-					sourceRel: backlogRel,
-					destRel: backlogRel,
+					sourceRel: bodyRel,
+					destRel: bodyRel,
 					transformBody: (body) => appendRequeueNoteText(body, handoff),
 					commitMessage: `chore(${slug}): requeue handoff note`,
 					refNamespace: 'requeue',
@@ -644,12 +657,15 @@ export async function returnToBacklog(
 			},
 		});
 		if (!noted) {
-			const message =
-				`requeue for '${slug}': could not append the handoff note (the body is ` +
-				`not in work/backlog/ on ${arbiter}/main, or main kept moving). The lock ` +
-				'was NOT released. Try again shortly.';
-			note(message);
-			return {moved: false, reasonNotMoved: message};
+			// NON-FATAL: warn and fall through to the lock release. We do NOT strand the
+			// lock for a failed OPTIONAL note (the previous behaviour, which left a
+			// half-applied state: branch deleted on --reset, lock still held).
+			note(
+				`requeue for '${slug}': could not append the -m handoff note (the body ` +
+					`is in neither tasks/ready/ nor tasks/backlog/ on ${arbiter}/main, or ` +
+					'main kept moving). Releasing the lock anyway — the requeue still ' +
+					'recovers the item; only the note was skipped.',
+			);
 		}
 	}
 

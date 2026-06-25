@@ -356,6 +356,97 @@ describe('requeue -m — handoff note (append-only, both modes)', () => {
 	});
 });
 
+describe('requeue -m — STAGED (tasks/backlog/) item + non-fatal note (obs requeue-dash-m-strands-lock)', () => {
+	// A staged item driven with --allow-backlog rests in tasks/backlog/, NOT the pool
+	// tasks/ready/. The -m handoff note must find it there (mirroring --allow-backlog
+	// resolution), AND a note that cannot land must NEVER strand the lock.
+
+	it('appends the handoff note to a STAGED (tasks/backlog/) body and releases the lock', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, [], {
+			staged: ['staged-m'],
+		});
+		const repo = seeded.repo;
+		// Claim the STAGED body (--allow-backlog) and mark it stuck, so requeue has a
+		// held lock to recover, exactly like the real backlog-drive recovery.
+		const claim = await performClaim({
+			slug: 'staged-m',
+			cwd: repo,
+			arbiter: ARBITER,
+			allowBacklog: true,
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		await markStuckItemLock({
+			item: 'task:staged-m',
+			reason: 'gate crash',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		const result = await returnToBacklog({
+			cwd: repo,
+			slug: 'staged-m',
+			arbiter: ARBITER,
+			reset: true,
+			message: 'staged handoff: fix the prompt section',
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(true);
+		// The note landed on the STAGED body (tasks/backlog/), not tasks/ready/.
+		const body = arbiterStagedBody(seeded, 'staged-m');
+		expect(body).toMatch(/## Requeue \d{4}-\d{2}-\d{2}/);
+		expect(body).toMatch(/staged handoff: fix the prompt section/);
+		// The lock is RELEASED (the strand bug would leave it held).
+		expect(stuckLockOnArbiter(repo, 'staged-m', ARBITER)).toBe(false);
+	});
+
+	it('a note that cannot land (body in neither ready/ nor backlog/) STILL releases the lock (non-fatal)', async () => {
+		// Regression for the strand: the previous behaviour returned early on a failed
+		// note and left the lock held. Seed a stuck lock whose body is NOT in either
+		// claimable folder, so the note append finds nothing — the lock must still go.
+		const seeded = seedRepoWithArbiter(scratch.root, ['orphan-note']);
+		const repo = seeded.repo;
+		const claim = await performClaim({
+			slug: 'orphan-note',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(claim.exitCode).toBe(0);
+		await markStuckItemLock({
+			item: 'task:orphan-note',
+			reason: 'stuck',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		// Remove the body from the pool on the arbiter so the note has nowhere to land.
+		const mover = seeded.clone('drop-body-orphan-note');
+		gitIn(['rm', '-q', 'work/tasks/ready/orphan-note.md'], mover);
+		gitIn(['commit', '-q', '-m', 'drop body'], mover);
+		gitIn(['push', '-q', 'origin', 'HEAD:main'], mover);
+
+		const notes: string[] = [];
+		const result = await returnToBacklog({
+			cwd: repo,
+			slug: 'orphan-note',
+			arbiter: ARBITER,
+			reset: true,
+			message: 'this note cannot be placed',
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		// The requeue still recovered the item: lock RELEASED despite the failed note.
+		expect(result.moved).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'orphan-note', ARBITER)).toBe(false);
+		// And it warned (rather than silently swallowing) that the note was skipped.
+		expect(
+			notes.some((n) => /could not append the -m handoff note/.test(n)),
+		).toBe(true);
+	});
+});
+
 describe('requeue continue — JOB-WORKTREE path (createJob)', () => {
 	it('cuts the worktree from the kept arbiter branch and clearStale does not nuke it', async () => {
 		const {seeded} = await stuckThenRequeued('lambda');
@@ -538,6 +629,18 @@ function arbiterBacklogBody(seeded: SeededRepo, slug: string): string {
 	const reader = seeded.clone(`read-${slug}`);
 	return readFileSync(
 		join(reader, 'work', 'tasks', 'ready', `${slug}.md`),
+		'utf8',
+	);
+}
+
+/**
+ * Read a STAGED item's body from the ARBITER's `main` (`work/tasks/backlog/`, the
+ * staging folder a --allow-backlog-driven item rests in) via a fresh clone.
+ */
+function arbiterStagedBody(seeded: SeededRepo, slug: string): string {
+	const reader = seeded.clone(`read-staged-${slug}`);
+	return readFileSync(
+		join(reader, 'work', 'tasks', 'backlog', `${slug}.md`),
 		'utf8',
 	);
 }
