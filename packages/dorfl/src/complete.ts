@@ -40,18 +40,17 @@ export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
  * human-driven and so allows a `--skip-verify` escape hatch the autonomous
  * runner never uses (ADR §8).
  *
- * The item's SOURCE folder is normally `work/in-progress/` (a freshly-built
- * task). As a RUNNER-OWNED RECOVERY path it ALSO accepts an item in
- * `work/needs-attention/` (a SPURIOUSLY-failed task — an env-polluted gate, a
- * transient flake, or a since-fixed cause): when `in-progress/` is absent it
- * falls back to `needs-attention/`, RE-RUNS the gate (authoritative — only a
- * GREEN re-gate completes; a still-red item simply stays in needs-attention/),
- * and on green does the `needs-attention → done` move + commit + rebase +
- * integrate — the SAME machinery, just a different source folder, so a
- * good-but-stuck item is finishable with NO manual git. That recovery rebase
- * also RECONCILES the cherry-picked on-`main` needs-attention surfacing (the
- * done-move supersedes it) so the human never hits a rebase conflict against the
- * surfacing commit. `--skip-verify` stays the only, human-only, loud override.
+ * The item's SOURCE folder is normally `work/tasks/ready/` (the pool — claim
+ * leaves the body there, task
+ * `cutover-claim-body-stays-and-complete-sources-from-backlog`). A RUNNER-OWNED
+ * RECOVERY of a SPURIOUSLY-stuck item (env-polluted gate, transient flake,
+ * since-fixed cause) sources from the SAME pool location: the per-item-lock
+ * cutover (`cutover-needs-attention-becomes-lock-stuck-recovery-surface`)
+ * retired the `work/needs-attention/` folder — stuck is the lock `state: stuck`
+ * and the body stays in `tasks/ready/` while claimed, so a recovery `complete`
+ * is structurally a normal build. The gate is RE-RUN and authoritative (only a
+ * GREEN re-gate completes; a still-red item stays stuck on the lock).
+ * `--skip-verify` stays the only, human-only, loud override.
  *
  * The integration step is split by mode (config `integration`, ADR §6):
  *   merge   — push the rebased branch to `<arbiter>/main`, then sync the LOCAL
@@ -89,12 +88,13 @@ export {synthesiseProposeTitle, composeProposeBody, PR_TITLE_MAX};
  * On the two FAILURE paths the human can't paper over — a red gate (without
  * `--skip-verify`) and a rebase conflict (ADR §10) — `complete` no longer leaves
  * the item dangling. Instead it routes the item through the shared
- * `needs-attention` mechanism (ADR §12): record the reason and
- * `git mv work/in-progress|done/<slug>.md → work/needs-attention/<slug>.md`, so
- * the stuck item is surfaced by `status` and returnable to `backlog/`. The
- * success and `--skip-verify` paths are unchanged. The exit code stays 1 (the
- * work did NOT complete); the outcome still names WHY (gate-failed /
- * rebase-conflict) and `routedToNeedsAttention` records that the move happened.
+ * `needs-attention` mechanism (ADR §12): record the reason on the per-item lock
+ * entry (`state: stuck`, post-cutover task
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`) so the stuck
+ * item is surfaced by `status` and returnable to `backlog/`. The success and
+ * `--skip-verify` paths are unchanged. The exit code stays 1 (the work did NOT
+ * complete); the outcome still names WHY (gate-failed / rebase-conflict) and
+ * `routedToNeedsAttention` records that the lock amend happened.
  */
 
 export type CompleteOutcome =
@@ -640,34 +640,30 @@ async function runComplete(
 		);
 	}
 
-	// The task must be in-progress in the working tree (the normal path), OR —
-	// the runner-owned recovery path — in needs-attention/ (a SPURIOUSLY-failed
-	// item the human/runner is finishing: the gate failure was env-pollution / a
-	// transient flake / a since-fixed cause). We prefer in-progress/; we fall back
-	// to needs-attention/ ONLY when in-progress/ is absent. Refuse only when
-	// NEITHER folder holds it. From needs-attention/ the gate is RE-RUN and must be
-	// GREEN to complete (recovery never trusts the human blindly — the existing
-	// human-only --skip-verify stays the loud override); the surfaced on-`main`
-	// needs-attention state is reconciled by the done-move (it supersedes it).
+	// The task is normally in `tasks/ready/` (claim leaves the body there — task
+	// `cutover-claim-body-stays-and-complete-sources-from-backlog`). The legacy
+	// runner-owned recovery path used to also probe `work/needs-attention/<slug>.md`,
+	// but the per-item-lock cutover (task
+	// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`) retired that
+	// folder: a stuck item is now the lock `state: stuck`, the body stays in
+	// `tasks/ready/` while claimed, and a recovery `complete` sources from there
+	// like any other build. The `needs-attention/` folder probe + the `recovering`
+	// re-gate branch are GONE (this task,
+	// `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`):
+	// nothing writes that folder anymore so the arm could not fire.
 	//
 	// This LOCAL source resolution is now only a PRE-FLIGHT (which folder the
-	// checkout holds + the `recovering` re-gate decision) and the content FALLBACK:
-	// the integration core's done-move RESOLVES THE ACTUAL SOURCE FOLDER FROM THE
-	// ARBITER (arbiter-is-truth) and removes it from THERE, so the move can never
-	// disagree with what the arbiter holds even when the local tree diverges
-	// (ledger-integrity defect 1). The `source` we pass is the arbiter-content
-	// fallback for the degenerate "arbiter holds nothing" case, not the authority.
-	// THE NORMAL freshly-built path now rests in `work/backlog/` (task
-	// `cutover-claim-body-stays-and-complete-sources-from-backlog`): claim acquires
-	// the per-item lock and NO LONGER moves the body out of `backlog/`, so the task
-	// `.md` the build agent worked under is still at `work/backlog/<slug>.md`. We
-	// PREFER `backlog/` as the build source; `in-progress/` is RETAINED below for the
-	// legacy/bounce surfaces that may still source from it until its folder removal
-	// (9c), and `needs-attention/` for the runner-owned recovery finish.
+	// checkout holds) and the content FALLBACK: the integration core's done-move
+	// RESOLVES THE ACTUAL SOURCE FOLDER FROM THE ARBITER (arbiter-is-truth) and
+	// removes it from THERE, so the move can never disagree with what the arbiter
+	// holds even when the local tree diverges (ledger-integrity defect 1). The
+	// `source` we pass is the arbiter-content fallback for the degenerate "arbiter
+	// holds nothing" case, not the authority. `in-progress/` is RETAINED below for
+	// the legacy/bounce surfaces that may still source from it until its folder
+	// removal (9c, OUT of this task's scope).
 	const backlog = workItemPath(cwd, 'tasks-ready', slug);
 	const staged = workItemPath(cwd, 'tasks-backlog', slug);
 	const inProgress = workItemPath(cwd, 'in-progress', slug);
-	const needsAttention = workItemPath(cwd, 'needs-attention', slug);
 	const done = workItemPath(cwd, 'done', slug);
 	const onBacklog = existsSync(backlog);
 	// `--allow-backlog` drive (prd
@@ -681,7 +677,6 @@ async function runComplete(
 	// NOT silently integrate — only the deliberate drive promotes from staging.
 	const onPreBacklog = options.allowBacklog === true && existsSync(staged);
 	const onInProgress = existsSync(inProgress);
-	const onNeedsAttention = existsSync(needsAttention);
 	// SELF-RENAMING FOLDER task backstop: the binary-known `work/done/<slug>.md`,
 	// OR — when none of the binary-known ledger folders hold the record — the slug
 	// at a RENAMED done-position the migration agent placed it in (e.g.
@@ -693,7 +688,6 @@ async function runComplete(
 		(!onBacklog &&
 			!onPreBacklog &&
 			!onInProgress &&
-			!onNeedsAttention &&
 			recordAtRenamedDonePosition(cwd, slug));
 	// STRANDED-DONE AUTO-RECOVER (prd `ledger-integrity` story 6, the autonomous
 	// half of `finish-already-committed-branch`). When neither in-progress/ nor
@@ -710,7 +704,7 @@ async function runComplete(
 	// re-push/double-integrate). Mutually exclusive with the build-path source +
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
 	const folderShapeStranded =
-		!onBacklog && !onPreBacklog && !onInProgress && !onNeedsAttention && onDone;
+		!onBacklog && !onPreBacklog && !onInProgress && onDone;
 	// DIRTY-CONTINUE GATE (task `recover-autodetect-gated-on-nothing-to-commit`).
 	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
 	// a CONTINUE: a requeued task whose prior attempt already done-moved the slug
@@ -739,20 +733,22 @@ async function runComplete(
 	// -A` → commit → rebase → integrate on the NEW work. Replaces the blocker
 	// task's needs-attention BOUNCE (the dirty continue now AUTO-LANDS instead
 	// of surfacing). See `docs/adr/continue-build-already-done-moved.md`.
-	const source:
-		| 'tasks-ready'
-		| 'tasks-backlog'
-		| 'in-progress'
-		| 'needs-attention'
-		| 'done' = dirtyContinue
-		? 'done'
-		: onBacklog
-			? 'tasks-ready'
-			: onInProgress
-				? 'in-progress'
-				: onPreBacklog
-					? 'tasks-backlog'
-					: 'needs-attention';
+	// Default branch (post `needs-attention/`-folder cutover, this task): when
+	// NONE of the recognised source folders holds the slug, the build cannot
+	// proceed — refuse via the `existsSync(sourcePath)` check below (the explicit
+	// "nothing to complete" CompleteRefusal). We default `source` to `'tasks-ready'`
+	// so `sourcePath` resolves to the canonical pool path the refusal message
+	// names; the refusal fires because that file does not exist on disk.
+	const source: 'tasks-ready' | 'tasks-backlog' | 'in-progress' | 'done' =
+		dirtyContinue
+			? 'done'
+			: onBacklog
+				? 'tasks-ready'
+				: onInProgress
+					? 'in-progress'
+					: onPreBacklog
+						? 'tasks-backlog'
+						: 'tasks-ready';
 	const sourcePath =
 		source === 'tasks-ready'
 			? backlog
@@ -760,9 +756,7 @@ async function runComplete(
 				? staged
 				: source === 'in-progress'
 					? inProgress
-					: source === 'needs-attention'
-						? needsAttention
-						: done;
+					: done;
 	if (dirtyContinue) {
 		// Announce LOUDLY (parallel to the `committedRecovery` recovery note above):
 		// the autonomous integrate path took the CONTINUE-BUILD branch, not the
@@ -786,7 +780,7 @@ async function runComplete(
 	// anyway, so there is nothing this check needs to protect for that branch.
 	if (!committedRecovery && source !== 'done' && !existsSync(sourcePath)) {
 		throw new CompleteRefusal(
-			`work/tasks/ready/${slug}.md (nor work/needs-attention/${slug}.md) found — ` +
+			`work/tasks/ready/${slug}.md not found — ` +
 				'nothing to complete (already done, or wrong slug?).',
 			'source-strand',
 			slug,
@@ -797,7 +791,15 @@ async function runComplete(
 	// (`committedRecovery` is mutually exclusive with `dirtyContinue` by
 	// construction above). It falls through to `performIntegration` like a
 	// normal build, where the core skips the step-2 `git mv` for this source.
-	const recovering = !committedRecovery && source === 'needs-attention';
+	// Post `needs-attention/`-folder cutover (task
+	// `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`):
+	// `source === 'needs-attention'` is no longer reachable here (the folder is
+	// retired; a stuck item is the lock `state: stuck` and the body rests in
+	// `tasks/ready/`). A recovery `complete` of a stuck item now sources from
+	// `tasks/ready/` like a normal build, so `recovering` is always `false`. The
+	// integration core still accepts the flag (vestigial, ignored) — every caller
+	// passes `false` and the re-gate branches that read it are dead.
+	const recovering = false;
 	if (committedRecovery) {
 		// Announce LOUDLY: a stranded already-complete branch signals an EARLIER
 		// un-merged PR — the CI/job log must record that the autonomous path took
