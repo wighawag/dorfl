@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # in-progress/ folder also appears unwritten — follow-up candidate
 
 2026-06-25 — while finishing
