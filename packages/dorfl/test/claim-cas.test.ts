@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync} from 'node:fs';
+import {mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performClaim} from '../src/claim-cas.js';
 import {listItemLocks, readItemLock} from '../src/item-lock.js';
@@ -217,6 +217,122 @@ describe('performClaim — --allow-backlog widens the claimable predicate', () =
 		});
 		expect(result.exitCode).toBe(0);
 		expect(existsOnArbiterMain(repo, 'pre-backlog', 'staged')).toBe(true);
+	});
+});
+
+describe('performClaim — pre-claim well-formedness guard (the promptless-strand fix)', () => {
+	// A body missing `## Prompt` is not dispatchable: the dispatch validator
+	// (`resolveTask`/`extractPromptSection`) throws at the run step, AFTER the claim,
+	// leaving the lock `state: stuck`. The guard runs that SAME validation PRE-CLAIM
+	// so a malformed body from ANY source is refused with a clean usage error and NO
+	// lock is acquired.
+
+	/** Seed a `tasks/ready/<slug>.md` with NO `## Prompt` section, committed + pushed. */
+	function seedPromptlessReady(repo: string, slug: string): void {
+		const dir = join(repo, 'work', 'tasks', 'ready');
+		mkdirSync(dir, {recursive: true});
+		writeFileSync(
+			join(dir, `${slug}.md`),
+			[
+				'---',
+				`title: ${slug}`,
+				`slug: ${slug}`,
+				'blockedBy: []',
+				'---',
+				'',
+				'## What to build',
+				'',
+				'a body with no Prompt section',
+				'',
+			].join('\n'),
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', `seed promptless ${slug}`], repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], repo);
+	}
+
+	it('refuses a promptless body PRE-CLAIM (exit 1, usage-error) and acquires NO lock', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPromptlessReady(repo, 'promptless');
+		const result = await performClaim({
+			slug: 'promptless',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(result.message).toMatch(/no '## Prompt' section/);
+		// The defining guarantee: NO lock was acquired (so nothing is left `stuck`),
+		// and the body never moved.
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
+		expect(existsOnArbiterMain(repo, 'backlog', 'promptless')).toBe(true);
+	});
+
+	it('a well-formed body STILL claims cleanly (the guard does not regress the happy path)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['ok']);
+		const result = await performClaim({
+			slug: 'ok',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('claimed');
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual(['task-ok']);
+	});
+
+	it('a dry-run over a promptless body reports the usage error (not "would claim")', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPromptlessReady(repo, 'promptless');
+		const notes: string[] = [];
+		const result = await performClaim({
+			slug: 'promptless',
+			cwd: repo,
+			arbiter: 'arbiter',
+			dryRun: true,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(notes.some((n) => n.includes('DRY-RUN'))).toBe(false);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
+	});
+
+	it('a promptless STAGED body under --allow-backlog is also refused pre-claim (no lock)', async () => {
+		// The guard covers the staged residence too, so the --allow-backlog drive
+		// path cannot strand a stuck lock on a malformed staged body either.
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const dir = join(repo, 'work', 'tasks', 'backlog');
+		mkdirSync(dir, {recursive: true});
+		writeFileSync(
+			join(dir, 'staged-bad.md'),
+			[
+				'---',
+				'title: staged-bad',
+				'blockedBy: []',
+				'---',
+				'',
+				'no prompt.',
+				'',
+			].join('\n'),
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed promptless staged'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], repo);
+
+		const result = await performClaim({
+			slug: 'staged-bad',
+			cwd: repo,
+			arbiter: 'arbiter',
+			allowBacklog: true,
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(result.message).toMatch(/no '## Prompt' section/);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
 	});
 });
 
