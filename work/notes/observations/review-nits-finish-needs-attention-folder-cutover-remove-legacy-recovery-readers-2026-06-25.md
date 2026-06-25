@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'finish-needs-attention-folder-cutover-
 date: 2026-06-25
 status: open
 reviewOf: finish-needs-attention-folder-cutover-remove-legacy-recovery-readers
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
