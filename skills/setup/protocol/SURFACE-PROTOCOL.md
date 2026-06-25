@@ -25,7 +25,7 @@ It is **doc-shaped, exactly like `review`**: you produce an assessment (here, a 
 You are a GATHERER. You stand up the existing producers/reviewers and collect what they emit; you do not reimplement their judgement. `to-task` and `review` stay the single sources, **composed and UNCHANGED**.
 
 1. **`review` (`work/protocol/REVIEW-PROTOCOL.md`) — for a task / prd / code.** Run the `review` discipline; it EMITS a verdict `{verdict, findings:[{severity, question, context}]}` and writes nothing. ROUTE its **`block`** findings into your emitted questions (a blocking finding is an open question that must be answered before the item advances). A non-blocking finding is a nit — record it as an optional/low-priority question, never as a blocker. Do NOT re-derive review's lenses here; you call review and carry its findings over.
-2. **The native observation-triage question — for an observation.** An observation has no gate for `review` to assess; its question is **"what becomes of this signal?"** Emit a single triage question whose answer is a `disposition` (see [the emitted question shape](#the-emitted-question-shape-must-match-the-sidecar)). This judgement is NATIVE to this skill — investigate the observation's claim against current reality (code / tasks / prds / ADRs) so the inline context and the suggested default are honest, exactly as the triage discipline demands.
+2. **The native observation-triage question — for an observation.** An observation has no gate for `review` to assess; its question is **"what becomes of this signal?"** Emit a single plain question asking the human, in their own words, what should happen to it (see [the emitted question shape](#the-emitted-question-shape-must-match-the-sidecar)). This judgement is NATIVE to this skill — investigate the observation's claim against current reality (code / tasks / prds / ADRs) so the inline context and the suggested default are honest, exactly as the triage discipline demands.
 3. **The item's PRE-EXISTING open questions.** Collect what the item already carries: a `needsAnswers: true` item's `## Open questions` block, and any open question already written in the body. Carry each over verbatim as an emitted question (with its context). These are open judgement the author already named — they must surface, not be silently dropped.
 
 For each gathered question, attach **inline CONTEXT** (the relevant excerpt / `file:line` / the reasoning — so the human need not open the source item) and, where you can honestly suggest one, an **optional suggested DEFAULT** (the humility aid — never a decision).
@@ -43,8 +43,7 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
 		{
 			"question": "…",
 			"context": "…",
-			"default": "… (optional; omit if none)",
-			"disposition": "promote-task|promote-prd|promote-adr|keep|delete|dropped|needs-attention (ONLY on a triage question; omit otherwise)"
+			"default": "… (optional; omit if none)"
 		}
 	]
 }
@@ -55,13 +54,14 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
   - **`question`** — REQUIRED, the question verbatim. An all-whitespace question is dropped as a placeholder.
   - **`context`** — OPTIONAL, inline context so the human need not open the item (the relevant excerpt / `file:line` / reasoning).
   - **`default`** — OPTIONAL, the suggested default — the humility aid; omit when you cannot honestly suggest one (never fabricate a default just to fill the field).
-  - **`disposition`** — OPTIONAL, present ONLY on a triage / terminal-routing question (the observation case, or any question whose answer routes the item to a terminal state). Its allowed values are exactly the sidecar's (the live code constants the engine parses — carry them VERBATIM so the engine needs zero translation): **`promote-task` | `promote-prd` | `promote-adr` | `keep` | `delete` | `dropped` | `needs-attention`**. `promote-task` vs `promote-prd` is the HUMAN's task-vs-PRD sizing call (a PRD-sized signal mints `prds/proposed/<slug>.md`); it is offered at the surface but is NEVER an `observationTriage: auto` auto-pick (the auto gate only auto-disposes the no-question `duplicate`/`map` cases, never promotes). `dropped` is the GENERIC "won't-proceed" terminal (the runner routes a dropped item to its regime's terminal — `tasks/cancelled/` for a task, `prds/dropped/` for a prd; the specific REASON — `out-of-scope` / `superseded by <x>` / `duplicate` / `abandoned` — lives in the item body as `reason:`, NOT in the disposition). A plain task/prd answer-question carries NO `disposition`. An unrecognised disposition is dropped by the parser.
 
-You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`. Those are the SIDECAR's machine-owned fields — the engine assigns the stable monotonic id (`q1`, `q2`, …), the human fills `answer:`, and the serialiser derives `answered:`/`allAnswered`. You emit only the four authoring fields above; the engine owns the rest. (This is precisely why you must not write the sidecar: you do not own its machine fields.)
+There is NO `disposition` field, and no token vocabulary to learn or pick: a sidecar entry is BINARY (no-answer | answered), and the human answers in PLAIN LANGUAGE. What to DO with the answer — mint a task, a PRD, or an ADR; delete the source; or ask a follow-up — is the agentic apply decision (read off the human's answer + the source item), not a token the surface emits. An observation's triage question is therefore just an ordinary plain question ("what becomes of this signal?"); the human writes back in their own words, and if the answer is "throw it away", the discharge is the direct-delete path (the human, the `answer-questions` skill, or the `dorfl` delete verb removes the source + sidecar in one revertible commit), not a `delete` token.
+
+You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`. Those are the SIDECAR's machine-owned fields — the engine assigns the stable monotonic id (`q1`, `q2`, …), the human fills `answer:`, and the serialiser derives `answered:`/`allAnswered`. You emit only the three authoring fields above; the engine owns the rest. (This is precisely why you must not write the sidecar: you do not own its machine fields.)
 
 Because the shape is the sidecar's, the engine APPENDS your questions to any existing sidecar (never overwriting an already-answered entry) and writes the whole thing in one CAS-atomic commit. You need not know any of that — you just emit the four fields.
 
-If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative disposition the repo's auto-triage bar covers, nothing pre-existing) — emit an **empty `questions` array** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
+If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative outcome the repo's auto-triage bar covers, nothing pre-existing) — emit an **empty `questions` array** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
 
 ### How the caller persists your questions (NOT your job — for orientation only)
 
@@ -88,7 +88,7 @@ The hand-written sidecar shape (the SAME file is both human-readable on GitHub a
 
 _Suggested default: <optional default; omit the whole line if none>_
 
-<!-- q1 fields: id=q1 disposition=<optional — triage entries only> -->
+<!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
 
@@ -104,7 +104,7 @@ Notes for the hand-writer:
 - The **identity HTML comment** at the top carries `item`/`type`/`slug` and the derived `allAnswered` mirror. Set `allAnswered=false` on first write (no answers yet); the engine recomputes it on every subsequent serialise.
 - Each entry opens with a `## Qn` heading (`Q1`, `Q2`, …, monotonic — never reused). The heading is BOTH the entry separator and the answer-region boundary.
 - The **question is a bold line**, the **context is a Markdown blockquote** (each line prefixed `> `), the **default is one italic line** prefixed `_Suggested default: ` and closed with `_`. Omit context/default lines entirely when absent.
-- The **per-entry HTML comment** carries `id=qN` and, on a triage entry only, `disposition=<value>`. Do NOT add an `answered=` field — the engine derives answered-ness from the answer text and only emits the override when it disagrees with that derivation.
+- The **per-entry HTML comment** carries `id=qN`. There is no `disposition=` field (the token vocabulary is retired — an entry is binary). Do NOT add an `answered=` field either — the engine derives answered-ness from the answer text and only emits the override when it disagrees with that derivation.
 - The fixed marker `**Your answer** (write below this line):` is followed by an empty region; the answer is everything from the marker up to the next `## ` heading (heading-delimited so a `---` inside an answer cannot break parsing).
 - The human just types prose under the answer marker — no `key:`, no escaping, no fence.
 

@@ -25,12 +25,12 @@ It is a **user-invoked operator skill** (`disable-model-invocation: true`), huma
 
 For each open sidecar in `work/questions/` (each `<type>-<slug>.md` with an unanswered entry), per question:
 
-1. **Read the question + its context** from the sidecar (the bold question, the blockquote context, any suggested default, and the `disposition=` set on a triage entry). Open the item it asks about (`<type>:<slug>`) only if the inline context is not enough.
+1. **Read the question + its context** from the sidecar (the bold question, the blockquote context, any suggested default). A sidecar entry is BINARY (no-answer | answered) — there is no disposition token to read; the human answers in plain language. Open the item it asks about (`<type>:<slug>`) only if the inline context is not enough.
 2. **Classify factual vs judgement** — do the cheap legwork to decide:
    - **FACTUAL / resolvable** — the answer is settled somewhere checkable: a landed `tasks/done/` record, an ADR in `docs/adr/`, a `work/protocol/` rule, the current code, or external/world fact. Investigate it against current reality (the same honesty `surface-questions`/triage demand) so the draft is grounded, not guessed.
    - **JUDGEMENT** — the answer turns on preference, a design/product/security call, a `humanOnly` concern, or an open fork the evidence does not settle.
 3. **Act on the classification:**
-   - **FACTUAL → PROPOSE a draft answer.** State the answer, and cite the EVIDENCE (the `file:line` / ADR / done-record / contract clause that settles it) so the human can ratify in seconds rather than re-investigate. For a triage question, the draft answer is one of the entry's allowed `disposition` values, with the evidence for that routing. Mark it clearly as a DRAFT awaiting ratification.
+   - **FACTUAL → PROPOSE a draft answer.** State the answer in PLAIN LANGUAGE, and cite the EVIDENCE (the `file:line` / ADR / done-record / contract clause that settles it) so the human can ratify in seconds rather than re-investigate. For an observation's "what becomes of this signal?" question, the draft is a plain-language recommendation (e.g. "turn this into a task", "this is a duplicate of `<x>` — delete it") with the evidence for it; the apply rung's decision agent reads that answer and acts, and an outright throw-away can also go via the direct-delete path. Mark it clearly as a DRAFT awaiting ratification.
    - **JUDGEMENT → DEFER.** Surface the question with: inline context (so the human need not open the item), the consequence of each plausible answer, and an **optional suggested default** where you honestly have a view (the humility aid — never a decision). Do NOT draft a committed answer.
 4. **Batch the output** (below). In phase 1 you WRITE nothing to the sidecar. You write a `**Your answer**` slot ONLY in the optional phase 2, and ONLY for the handles the human explicitly ratified (see "Phase 2" below).
 
@@ -46,7 +46,6 @@ PROPOSE (factual — ratify or correct):
     question:   <verbatim>
     draft:      <the proposed answer>
     evidence:   <file:line / ADR / tasks/done record / contract clause that settles it>
-    disposition: <only on a triage entry — the proposed allowed value>
 
 DEFER (judgement — needs you):
   - D1  item: <type>:<slug>  (qN)
@@ -55,6 +54,8 @@ DEFER (judgement — needs you):
     consequence:<what each plausible answer implies>
     default:    <optional suggested default — humility aid, omit if none>
 ```
+
+(A sidecar entry is binary — no-answer | answered — so a PROPOSE or DEFER is just plain-language answer text; there is no disposition token to fill.)
 
 The verbatim `question:` (and, for DEFER, the `context:`) is MANDATORY on every entry — it is the whole point of the batch: the human must be able to DECIDE from the batch alone, without opening each file. A compact TABLE keyed on the same `P#`/`D#` handles is fine for a large batch ONLY IF every row still carries the verbatim question + (for DEFER) context + item id + draft/default + (for PROPOSE) evidence. If that does not fit a table row, use the block form — do NOT drop the question to make it fit. A batch that elides the question forces a manual file lookup to decide and has failed at its job. Where several entries collapse to ONE decision (e.g. a recurring pattern across many sidecars), give the cluster a single handle and list the items it covers, so the human spends one ratification, not N.
 
@@ -66,7 +67,7 @@ The batch above is phase 1 and writes NOTHING. If — and only if — the human 
 
 - **Write ONLY handles the human explicitly named.** Never write an un-named entry, never "helpfully" fill the rest, never write a DEFER's suggested `default:` unless the human named that handle. An entry the human left out stays blank.
 - **Amendments are the human's text, verbatim.** If the human says "accept D9 but change X", write their amended text, not your original draft.
-- **For a triage entry, write the answer the human ratified** (the disposition + any prose). Match the sidecar's documented `**Your answer**` format exactly.
+- **For an observation's triage entry, write the plain-language answer the human ratified** (e.g. "make this a task" / "delete it"). Match the sidecar's documented `**Your answer**` format exactly — there is no disposition token, the human's prose IS the answer.
 - **Still NEVER** set `answered:`/`allAnswered`, never `git mv`, never commit, never touch the per-entry/identity machine comments. You write ONLY the prose under the `**Your answer**` marker; the apply rung (or the human) owns everything else (see below).
 - **If the human's reply is ambiguous about a handle, do not write it — ask.** A wrong transcription into the trusted slot is the exact forgery the law forbids; when unsure, leave it blank and surface the ambiguity.
 
@@ -76,13 +77,13 @@ The batch above is phase 1 and writes NOTHING. If — and only if — the human 
 
 You draft; the HUMAN owns the write. Once the human ratifies a PROPOSE (or answers a DEFER), the answer is recorded by:
 
-- **The `advance` verb's apply rung** — it applies the HUMAN's answered sidecar atomically (item body + sidecar in one commit) and resolves / re-pauses / dispositions the item. It applies only human-authored answers; a ratified draft is human-authored the moment the human accepts it. (A human with no runner hand-writes the answer into the sidecar per the documented format.)
+- **The `advance` verb's apply rung** — it applies the HUMAN's answered sidecar atomically (item body + sidecar in one commit): a decision agent reads the answer + source and resolves / re-pauses / acts on the item (mint / delete-source / ask-follow-up). It applies only human-authored answers; a ratified draft is human-authored the moment the human accepts it. (A human with no runner hand-writes the answer into the sidecar per the documented format.)
 - **Hand-writing the answer** into `work/questions/<type>-<slug>.md` under the entry's `**Your answer** (write below this line):` marker (the documented human-readable sidecar format). The ratified draft text drops straight in — it is a transcription, because you already shaped it as the answer.
 
-Your ONLY write is the optional phase-2 transcription: dropping the HUMAN-RATIFIED answer text under the `**Your answer**` marker for the handles the human explicitly named. Beyond that you never set `answered:`/`allAnswered`, never touch machine comments, never `git mv`, never commit. You propose and defer; the human ratifies (and may name handles for you to transcribe); the apply rung (or the human's own edit) does the rest — reads the answered slot, sets `answered:`/`allAnswered`, dispositions, and commits.
+Your ONLY write is the optional phase-2 transcription: dropping the HUMAN-RATIFIED answer text under the `**Your answer**` marker for the handles the human explicitly named. Beyond that you never set `answered:`/`allAnswered`, never touch machine comments, never `git mv`, never commit. You propose and defer; the human ratifies (and may name handles for you to transcribe); the apply rung (or the human's own edit) does the rest — reads the answered slot, sets `answered:`/`allAnswered`, runs the decision agent over the answer + source to act on it (mint / delete-source / ask-follow-up), and commits.
 
 ## Boundaries (the scope fence)
 
-- **`surface-questions` and `answer-questions` are duals.** Surface FORMULATES open questions for one item and writes nothing; answer READS the formulated questions and drafts/defers (phase 1, write-nothing) and, ONLY on explicit human ratification, transcribes the named answers into their slots (phase 2). Neither FORMULATES nor APPLIES: do not let answer re-formulate (that is surface) or set `answered:`/disposition/commit (that is apply). Phase-2 transcription writes the answer PROSE only; it is not "persisting" in the apply sense.
+- **`surface-questions` and `answer-questions` are duals.** Surface FORMULATES open questions for one item and writes nothing; answer READS the formulated questions and drafts/defers (phase 1, write-nothing) and, ONLY on explicit human ratification, transcribes the named answers into their slots (phase 2). Neither FORMULATES nor APPLIES: do not let answer re-formulate (that is surface) or set `answered:` / act on the answer / commit (that is apply). Phase-2 transcription writes the answer PROSE only; it is not "persisting" in the apply sense.
 - **Propose, never finalise.** Restated because it is the whole point: you resolve only factual questions, and only into DRAFTS the human ratifies; genuine judgement is DEFERRED with context, never auto-answered. You write a slot ONLY for a handle the human explicitly named (that text is then human-authored); you NEVER write an un-named entry or your own suggested default into a slot. The human is the clock.
 - **Compose, don't reimplement.** Use `review` / the item bodies / the ADRs / the contract as the single sources of truth your draft cites; do not re-derive their judgement. You gather evidence and shape it into a ratifiable answer.

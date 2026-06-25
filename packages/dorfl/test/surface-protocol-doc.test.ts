@@ -66,14 +66,18 @@ describe('SURFACE-PROTOCOL.md \u2014 the new in-band surface-questions disciplin
 		expect(doc).toMatch(/\bquestion\b/);
 		expect(doc).toMatch(/\bcontext\b/);
 		expect(doc).toMatch(/\bdefault\b/);
-		expect(doc).toMatch(/\bdisposition\b/);
-		// The disposition vocabulary (the live sidecar values, verbatim).
-		expect(doc).toMatch(/promote-task/);
-		// `promote-prd` is the human-only observation→PRD sizing route (US #5).
-		expect(doc).toMatch(/promote-prd/);
-		expect(doc).toMatch(/promote-adr/);
-		expect(doc).toMatch(/needs-attention/);
-		expect(doc).toMatch(/dropped/);
+		// The disposition VOCABULARY is RETIRED (task
+		// `surface-skill-prose-drop-disposition-vocabulary`): the emitted-question
+		// shape no longer carries a `disposition` field, and the token value list
+		// (`promote-task | promote-prd | promote-adr | keep | delete | dropped |
+		// needs-attention`) is gone from the operator-facing prose. A sidecar entry
+		// is BINARY (no-answer | answered); the human answers in plain language.
+		expect(doc).not.toMatch(/promote-task/);
+		expect(doc).not.toMatch(/promote-prd/);
+		expect(doc).not.toMatch(/promote-adr/);
+		// The doc states the entry is binary (the replacement framing).
+		expect(doc).toMatch(/binary/i);
+		expect(doc).toMatch(/no-answer/);
 	});
 
 	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
@@ -147,11 +151,11 @@ describe('Per-discipline shape DRIFT GUARD \u2014 canonical fixture parses AND m
 
 	it('every field the fixture exercises is DESCRIBED in SURFACE-PROTOCOL.md (the doc mirrors the parser; D2)', () => {
 		const doc = readFileSync(resolve(SOURCE, 'SURFACE-PROTOCOL.md'), 'utf8');
-		// Each authoring field the parser reads must appear in the doc's prose.
+		// Each authoring field the parser reads must appear in the doc's prose. The
+		// retired `disposition` field is NOT among them (the entry is binary now).
 		expect(doc).toMatch(/\bquestion\b/);
 		expect(doc).toMatch(/\bcontext\b/);
 		expect(doc).toMatch(/\bdefault\b/);
-		expect(doc).toMatch(/\bdisposition\b/);
 		expect(doc).toMatch(/\bitem\b/);
 		// An EMPTY questions array is the honest "no open judgement" result \u2014 the
 		// doc must say so (the parser accepts it, the doc explains it).
