@@ -608,6 +608,13 @@ export {
 	gc,
 	discoverJobs,
 } from './gc.js';
+export type {
+	ReapedSidecar,
+	RetainedSidecar,
+	SweepOrphanSidecarsInput,
+	SweepOrphanSidecarsResult,
+} from './orphan-sidecar.js';
+export {sweepOrphanSidecars} from './orphan-sidecar.js';
 
 export type {JobStatus, StatusReport, StatusOptions} from './status.js';
 export {status, formatStatus} from './status.js';

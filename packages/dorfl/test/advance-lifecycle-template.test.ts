@@ -332,6 +332,24 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		);
 	});
 
+	it('the SCHEDULED `gc --remote-branches` invocation ALSO reaps orphan sidecars (US #10) — it fires in CI, not behind an un-passed flag', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		const result = validateAdvanceLifecycleWorkflow(text);
+		// The orphan-sidecar sweep rides the EXACT invocation the scheduled tick runs.
+		expect(/dorfl gc --remote-branches --arbiter origin/.test(text)).toBe(true);
+		// The reap job checks out a working tree (the orphan sweep is working-tree
+		// based) and the step names the orphan-sidecar duty so the linkage is visible.
+		expect(result.problems.map((p) => p.id)).not.toContain(
+			'reap-checks-out-working-tree',
+		);
+		expect(result.problems.map((p) => p.id)).not.toContain(
+			'reap-names-orphan-sidecars',
+		);
+		expect(/reap-merged-branches:[\s\S]*?orphan sidecar/i.test(text)).toBe(
+			true,
+		);
+	});
+
 	it('runs IN-PLACE (no --isolated/--remote on any invocation) and carries a concurrency group', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		const result = validateAdvanceLifecycleWorkflow(text);
@@ -537,6 +555,22 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 			base.replace(/dorfl gc --remote-branches --arbiter origin/, 'echo skip'),
 			'reap-uses-gc-remote-branches',
 		);
+	});
+
+	it('flags a reap job that drops the orphan-sidecar naming (US #10 linkage lost)', () => {
+		expectFlagged(
+			base.replace(/orphan sidecar/gi, 'merged branch'),
+			'reap-names-orphan-sidecars',
+		);
+	});
+
+	it('flags a reap job that drops its working-tree checkout (orphan sweep is working-tree based)', () => {
+		// Remove the `uses: actions/checkout` line within the reap job only.
+		const broken = base.replace(
+			/(reap-merged-branches:[\s\S]*?)- uses: actions\/checkout@v4\n\s*with:\n\s*fetch-depth: 0\n/,
+			'$1',
+		);
+		expectFlagged(broken, 'reap-checks-out-working-tree');
 	});
 
 	it('flags an --isolated flag (CI runs in-place)', () => {

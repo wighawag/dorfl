@@ -430,9 +430,14 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup
-      - name: reap merged remote work/* branches (gc --remote-branches)
+      - name: reap merged remote work/* branches + orphan sidecars (gc --remote-branches)
         # Deletes ONLY branches provably merged into origin/main; reports
         # deleted-vs-retained-with-reason. Safe to run every tick (idempotent).
+        # This invocation ALSO reaps ORPHAN question sidecars: a
+        # sidecar under the questions queue (<type>-<slug>.md) whose source item
+        # was deleted out-of-band (git rm; the sidecar's working-tree source no
+        # longer exists). The orphan sweep rides THIS scheduled invocation
+        # precisely so it is never "in the code but never invoked in CI".
         run: dorfl gc --remote-branches --arbiter origin
 `;
 }
@@ -643,6 +648,25 @@ export function validateAdvanceLifecycleWorkflow(
 		text,
 	), 'the `sweepMergedBranches` dispatch input (capability F, opt-out) must be ' +
 		'preserved.');
+	// The ORPHAN-SIDECAR reap (prd
+	// `agentic-question-resolution-retire-disposition-vocabulary`, US #10) rides
+	// the SAME scheduled `dorfl gc --remote-branches` invocation, so it provably
+	// FIRES on the cron tick (not behind an un-passed flag). The reap step that
+	// runs `gc --remote-branches` MUST be checked out WITH a working tree (the
+	// orphan sweep is working-tree based: it reads `work/questions/` + the
+	// lifecycle folders from the checkout). `actions/checkout` provides that, and
+	// the step's name/comment names the orphan-sidecar duty so the linkage is not
+	// silently lost on a future template edit.
+	require('reap-checks-out-working-tree', /reap-merged-branches:[\s\S]*?uses:\s*actions\/checkout/.test(
+		text,
+	), 'the reap job must `actions/checkout` a working tree before ' +
+		'`gc --remote-branches`: the orphan-sidecar sweep that rides that invocation ' +
+		'reads `work/questions/` + the lifecycle folders from the checkout.');
+	require('reap-names-orphan-sidecars', /reap-merged-branches:[\s\S]*?orphan sidecar/i.test(
+		text,
+	), 'the reap step (running `gc --remote-branches`) must name the ORPHAN ' +
+		'SIDECAR reap it ALSO performs (US #10), so the scheduled invocation that ' +
+		'fires it is visible and not silently dropped on a future edit.');
 
 	// --- CI runs IN-PLACE: no isolation machinery ------------------------------
 	require('no-isolated-flag', !/--isolated\b/.test(

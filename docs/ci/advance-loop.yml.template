@@ -306,7 +306,12 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup
-      - name: reap merged remote work/* branches (gc --remote-branches)
+      - name: reap merged remote work/* branches + orphan sidecars (gc --remote-branches)
         # Deletes ONLY branches provably merged into origin/main; reports
         # deleted-vs-retained-with-reason. Safe to run every tick (idempotent).
+        # This invocation ALSO reaps ORPHAN question sidecars: a
+        # sidecar under the questions queue (<type>-<slug>.md) whose source item
+        # was deleted out-of-band (git rm; the sidecar's working-tree source no
+        # longer exists). The orphan sweep rides THIS scheduled invocation
+        # precisely so it is never "in the code but never invoked in CI".
         run: dorfl gc --remote-branches --arbiter origin
