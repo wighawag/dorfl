@@ -1,8 +1,63 @@
 ---
 title: Land-time re-verify as one mode-agnostic primitive + parallel-merge CI shape + propose PR-merge-time safety (git-alone floor, host-accelerated ceiling)
 slug: land-time-reverify-and-parallel-merge-ceiling
-needsAnswers: false
+needsAnswers: true
 ---
+
+## Needs re-tasking 2026-06-25 (the merge-question slices are premised on the retired disposition vocabulary)
+
+Moved BACK from `prds/tasked/` to `prds/proposed/` with `needsAnswers: true`: the
+PRD GOAL is still valid, but the MECHANISM three of its slices assume was retired,
+so it must be re-decomposed before it is tasked again.
+
+What drifted (verified on `main` 2026-06-25): the merged PRD
+`agentic-question-resolution-retire-disposition-vocabulary` RETIRED the sidecar
+disposition vocabulary. There is no longer a `disposition=` field, no
+`promote-* | keep | delete | dropped | needs-attention` token set, and no
+most-decisive-disposition picker; a sidecar entry is now BINARY
+(`no-answer | answered`), and apply is the agentic
+`decide(input, allowedOutcomes) -> {mint-task | mint-prd | delete-source | ask-follow-up}`.
+Three slices of THIS prd were premised on the old `merge | hold | drop` merge-question
+disposition mechanism that no longer exists:
+
+- `merge-question-surfacer` (`tasks/backlog/`, covers 14): its What-to-build, a
+  scope bullet, and an acceptance criterion all require emitting merge-questions
+  with `merge | hold | drop` disposition vocabulary into the sidecar. There is no
+  longer a `disposition=` field to emit into. As written it cannot be built.
+- `apply-rung-merge-disposition` (`tasks/backlog/`, covers 15, 16): specifies
+  extending the apply rung's `promote-slice`/`dropped` disposition-dispatch in
+  `triage-persist.ts` to dispatch an answered `merge` disposition. That dispatch,
+  the picker, and `triage-persist.ts`'s disposition routing were removed by the
+  keystone; `merge` is not a `DecisionOutcome`. No token-dispatch remains to mirror.
+- `merge-questions-gate-axis` (`tasks/backlog/`, covers 17): least directly
+  drifted (it only GATES whether the surfacer runs), but its `auto` sub-state is
+  defined as "auto-land an answered/unblocked merge", which presupposes the
+  retired answered-merge disposition. Its FIXED parts (separate axis, default not
+  `off`, same precedence chain, the gate name/shape) do NOT depend on the retired
+  vocabulary and can survive a re-decompose.
+
+What is still valid: the GOAL (surface unmerged `work/*` branches -> human answers
+-> apply lands them via the land primitive: rebase -> re-verify -> advance). Only
+the disposition-token MECHANISM is gone. The non-merge-question parts of this PRD
+(the land-time re-verify primitive, the parallel-merge CI shape, propose
+merge-time safety) are unaffected by this drift.
+
+What re-tasking must decide (the open questions blocking re-task):
+1. Re-decompose the three merge-question slices against the BINARY-sidecar /
+   agentic-`decide` model: a merge-question is a binary `no-answer | answered`
+   entry; an answered merge-question feeds `decide(input, allowedOutcomes)` whose
+   outcome set is the question (is "land this merge" a new `DecisionOutcome`, or
+   expressed via the existing `mint-*`/`delete-source` set?). Restate
+   `merge-question-surfacer` and `apply-rung-merge-disposition` accordingly, and
+   restate `merge-questions-gate-axis`'s `auto` in binary-answered terms.
+2. Decide whether to DROP-and-rewrite the three slices or amend them in place
+   (they carry `prd:`/`covers: [14,15,16,17]` linkage to this PRD).
+3. Cross-reference: the standing observation
+   `work/notes/observations/merge-question-tasks-premised-on-retired-disposition-vocabulary-2026-06-25.md`
+   captures the same drift; resolve it in the same re-task pass. The sidecar
+   rebuild of `merge-questions-gate-axis` independently re-confirmed this drift.
+
+(Provenance: sidecar rebuild sweep finding A; human-authorised move-back.)
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/backlog/` slices. Originating design trail (the discussion that produced this brief): `work/notes/observations/ci-readme-claims-parallel-merge-thrashes-cas-but-integratelock-makes-it-safe-2026-06-21.md`, `work/notes/observations/integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21.md`, `work/notes/observations/propose-mode-pr-merge-time-drift-runner-gates-push-time-tip-not-merge-time-tip-2026-06-21.md`. Engine already built: `integration-core.ts` (`freshWorktreeGate` default-on, `integrateLock`, `mergeRetries`), `integrator.ts` (the rebase + CAS-push land primitive, `NoneProvider`), `run.ts` (`createKeyedLock()` wiring). Affected doc: `docs/ci/README.md` (the advance-loop CI template). Verified findings folded in: `work/notes/findings/install-ci-can-set-branch-protection-via-api-but-needs-admin-token-not-ambient-github-token-2026-06-21.md` (resolves OPEN QUESTION 4) and `work/notes/findings/advance-surface-apply-rungs-can-carry-merge-questions-for-unmerged-branches-2026-06-21.md` (resolves OPEN QUESTION 2 — the runner becomes the merger via advance's surface/apply rungs).
 
