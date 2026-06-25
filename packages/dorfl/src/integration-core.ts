@@ -23,6 +23,7 @@ import {
 	type ReviewGate,
 	type ReviewFinding,
 	type ReviewVerdict,
+	ReviewParseError,
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
 } from './review-gate.js';
@@ -89,6 +90,7 @@ export type IntegrationCoreOutcome =
 	| 'prepare-failed' // the env-prep step (prepare) was red — env not ready, verify untrusted
 	| 'gate-failed' // the acceptance gate (verify) was red (and not skipped)
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
+	| 'review-unparseable' // Gate 2 ran but its verdict JSON could not be parsed (malformed output) — work-preserving route, transient-infra cause (NOT a reviewer block)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
 	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
 	| 'already-integrated'; // committed-recovery: the kept tip is already on <arbiter>/main (clean no-op)
@@ -2672,22 +2674,79 @@ async function runGate2Review(params: {
 	let approved = false;
 	let lastVerdict: ReviewVerdict | undefined;
 	for (let round = 1; round <= maxRounds; round++) {
-		const verdict = await reviewGate({
-			slug,
-			cwd: reviewCwd,
-			reviewModel: input.reviewModel,
-			round,
-			// `--watch` threading (task `watch-review-session`): when on, the production
-			// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
-			watch: input.watch,
-			watchSink: input.watchSink,
-			color: input.color,
-			sessionsDir: input.sessionsDir,
-			// The review AGENT launches with the AMBIENT env, never the identity-scoped
-			// `env` (an agent must not act as the bot). Falls back to `env` when no
-			// identity is configured (unchanged for non-identity callers).
-			env: input.agentEnv ?? env,
-		});
+		let verdict: ReviewVerdict;
+		try {
+			verdict = await reviewGate({
+				slug,
+				cwd: reviewCwd,
+				reviewModel: input.reviewModel,
+				round,
+				// `--watch` threading (task `watch-review-session`): when on, the production
+				// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
+				watch: input.watch,
+				watchSink: input.watchSink,
+				color: input.color,
+				sessionsDir: input.sessionsDir,
+				// The review AGENT launches with the AMBIENT env, never the identity-scoped
+				// `env` (an agent must not act as the bot). Falls back to `env` when no
+				// identity is configured (unchanged for non-identity callers).
+				env: input.agentEnv ?? env,
+			});
+		} catch (err) {
+			if (!(err instanceof ReviewParseError)) {
+				// Anything else (a harness/connection throw, a programmer bug) is NOT this
+				// gate's concern — re-throw so the existing catch sites classify it.
+				throw err;
+			}
+			// THE GATE RAN BUT ITS VERDICT WAS UNREADABLE (direction 1, the safety net):
+			// the reviewer did NOT block — the gate's OUTPUT could not be parsed (a
+			// malformed JSON verdict, common on large diffs + weaker models, AFTER the
+			// direction-2 repair pass could not salvage it). WITHOUT this catch the throw
+			// escapes the core and `performComplete` maps it to the generic `usage-error`
+			// (verbatim, no push, no surface) AFTER the green build but BEFORE the
+			// done-move/push — STRANDING the lock + work branch with no PR.
+			//
+			// A parse failure in ANY round is TERMINAL: route IMMEDIATELY, never re-roll
+			// the remaining rounds (mirroring the block-is-terminal rule — re-reviewing
+			// the same tip would just be the dice re-roll the corroboration loop forbids).
+			// We route through the SAME work-preserving `applyNeedsAttentionTransition`
+			// seam the block path uses (it PUSHES the work branch + surfaces the item on
+			// `surfaceArbiter` for the autonomous path), targeting `cwd` (the work branch +
+			// ledger), NOT the throwaway `reviewCwd` — so BOTH the direct `!freshWorktreeGate`
+			// path AND the fresh-worktree `review:` callback are covered by this ONE catch.
+			// The recorded reason carries the parse-failure phrase the `failure-cause.ts`
+			// signature matches → the `do`/`run` tail classifies it `transient-infra`
+			// (retry the SAME work: the gate output is STOCHASTIC, so a re-run CAN differ,
+			// and the direction-2 repair makes a re-run far more likely to parse). NEVER a
+			// silent approve.
+			const reason =
+				`PR/code review (Gate 2) ran but its verdict could not be parsed: ` +
+				`${err.message}`;
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				arbiter: input.surfaceArbiter,
+				env,
+				note,
+			});
+			const message = routed.moved
+				? `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
+					'routed it to work/needs-attention/ (work branch pushed + surfaced; ' +
+					'transient-infra — re-run). NOT integrated.'
+				: `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
+					'NOT integrating.';
+			note(message);
+			return {
+				kind: 'blocked',
+				result: {
+					outcome: 'review-unparseable',
+					routedToNeedsAttention: routed.moved,
+					branch,
+					reason,
+				},
+			};
+		}
 		lastVerdict = verdict;
 		if (verdict.verdict !== 'approve') {
 			// A `block` is TERMINAL: stop now (never re-roll an unchanged tip) and route

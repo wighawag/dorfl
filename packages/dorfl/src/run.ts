@@ -1010,6 +1010,25 @@ async function runOneItem(
 			});
 			return {...base, status: 'tests-failed', detail: core.reason};
 		}
+		if (core.outcome === 'review-unparseable') {
+			// Gate 2 RAN but its verdict was UNPARSEABLE (malformed JSON). The core already
+			// routed it work-preservingly (branch pushed + surfaced). FAILURE-CAUSE axis,
+			// NOT a reviewer block: classify the parse-failure phrase the core recorded →
+			// `transient-infra` (re-run the SAME work — the stochastic gate + the parser's
+			// repair pass make a re-run far more likely to parse), the SAME
+			// `classifyFailureCause` `do` uses, so the cross-path label agrees. The job
+			// record carries the classified status; the worktree is retained by the §4 reap.
+			const cause = classifyFailureCause(core.reason);
+			updateJobRecord(tree.dir, {
+				state: 'needs-attention',
+				reason: core.reason,
+			});
+			return {
+				...base,
+				status: failureCauseToItemStatus(cause),
+				detail: core.reason,
+			};
+		}
 		if (
 			core.outcome === 'prepare-failed' ||
 			core.outcome === 'review-blocked' ||

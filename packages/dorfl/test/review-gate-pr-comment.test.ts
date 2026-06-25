@@ -201,8 +201,11 @@ describe('buildReviewPrompt — requires a `review` prose field in the JSON', ()
 		expect(p).toMatch(/Approved|Blocked/);
 		expect(p).toMatch(/lens|lenses/i);
 		expect(p).toMatch(/destination check/i);
-		// Guidance only: NO length limit, NO forced verbosity.
-		expect(p).toMatch(/no length limit|NO length/i);
+		// Guidance only: a LENGTH CAP now (the prior "no length limit" license was the
+		// hazard — a long field corrupts the JSON on large diffs), still NO forced
+		// verbosity (the cap is an upper bound, not a floor).
+		expect(p).toMatch(/1500|length|short|tight/i);
+		expect(p).not.toMatch(/no length limit|NO length/i);
 		expect(p).not.toMatch(/at least \d+ (words|sentences|paragraphs)/i);
 		// It tells the agent NOT to narrate its process.
 		expect(p).toMatch(/not.*narrate|do NOT narrate/i);

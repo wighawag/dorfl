@@ -48,6 +48,30 @@ describe('classifyFailureCause — the failure-CAUSE taxonomy', () => {
 		}
 	});
 
+	it('a MALFORMED/UNPARSEABLE Gate-2 verdict → transient-infra (not gate-failed/config-error/agent-failed)', () => {
+		// A malformed JSON verdict from the review agent is the stochastic gate output
+		// misbehaving — the WORK + wiring are fine, so RE-RUNNING the same work is the
+		// natural recovery. Matches both `parseReviewVerdict` throw phrasings + the
+		// core's wrapper phrase.
+		const parseFailures = [
+			"review verdict was not valid JSON: Expected ',' or '}' after property value",
+			'PR/code review (Gate 2) ran but its verdict could not be parsed: oops',
+			'review agent produced no parseable {verdict, findings} result',
+		];
+		for (const message of parseFailures) {
+			expect(classifyFailureCause(message)).toBe('transient-infra');
+		}
+	});
+
+	it('the EXISTING config-error wiring signature still wins (no regression from the new parse signature)', () => {
+		// The genuine wiring error (review on, no gate) must STILL classify config-error,
+		// not be captured by the new parse-failure transient-infra signature.
+		const message =
+			'review is on but no review gate is configured — cannot run Gate 2 for ' +
+			"'feat' (this is a wiring bug; the gate must not be skipped).";
+		expect(classifyFailureCause(message)).toBe('config-error');
+	});
+
 	it('a config-error signature WINS over a transient signature (most specific first)', () => {
 		// A message that mentions both a wiring bug AND a timeout is a config error —
 		// the wiring is the actionable cause, not the (incidental) network word.

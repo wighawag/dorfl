@@ -6,6 +6,7 @@ import {performClaim} from '../src/claim-cas.js';
 import {readItemLock} from '../src/item-lock.js';
 import {createKeyedLock} from '../src/concurrency.js';
 import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
+import {ReviewParseError} from '../src/review-gate.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -14,6 +15,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	type SeededRepo,
 } from './helpers/gitRepo.js';
 
 /**
@@ -436,6 +438,94 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 			env: gitEnv(),
 		});
 		expect(lock?.reason).toMatch(/does not reach the task goal/);
+	});
+});
+
+describe('integration-core — Gate-2 UNPARSEABLE verdict ⇒ review-unparseable + work-preserving route', () => {
+	// A stub gate that THROWS ReviewParseError (the malformed-verdict crash path) —
+	// the SAME error the real parser throws on un-repairable JSON. The catch inside
+	// `runGate2Review` must route it work-preservingly, NOT let it strand.
+	function throwingGate(): ReviewGate {
+		return async () => {
+			throw new ReviewParseError(
+				"review verdict was not valid JSON: Expected ',' or '}' after " +
+					'property value in JSON at position 8101',
+			);
+		};
+	}
+
+	/** Is the `work/task-<slug>` branch PUSHED to the arbiter (the strand-ender)? */
+	function workBranchPushedToArbiter(
+		seeded: SeededRepo,
+		slug: string,
+	): boolean {
+		const out = gitIn(
+			['ls-remote', seeded.arbiter, `refs/heads/work/task-${slug}`],
+			seeded.repo,
+		).trim();
+		return out.length > 0;
+	}
+
+	it('DIRECT path (!freshWorktreeGate): an unparseable verdict routes to needs-attention, branch PUSHED + item SURFACED, never integrates', async () => {
+		const {seeded, repo} = await claimAndBranch('upsilon');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'upsilon',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			review: true,
+			reviewGate: throwingGate(),
+			freshWorktreeGate: false,
+			mode: 'propose',
+			surfaceArbiter: ARBITER, // autonomous path: surface on main + push the branch
+			env: gitEnv(),
+		});
+
+		// NOT a throw, NOT an approve, NOT a review-block: the legible distinct signal.
+		expect(core.outcome).toBe('review-unparseable');
+		expect(core.routedToNeedsAttention).toBe(true);
+		expect(core.branch).toBe('work/task-upsilon');
+		expect(core.reason).toMatch(/could not be parsed/i);
+		expect(core.reason).toMatch(/not valid JSON/i);
+		expect(core.integration).toBeUndefined();
+		// The STRAND is provably GONE: the work branch is PUSHED + the item SURFACED.
+		expect(workBranchPushedToArbiter(seeded, 'upsilon')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'upsilon')).toBe(true);
+		// Never reached done/ (never integrated).
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'upsilon.md'))).toBe(
+			false,
+		);
+	});
+
+	it('FRESH-WORKTREE path (the default autonomous fleet path): the SAME throw is caught + routed (not only the direct path)', async () => {
+		const {seeded, repo} = await claimAndBranch('phi');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'phi',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			review: true,
+			reviewGate: throwingGate(),
+			freshWorktreeGate: true, // review runs as the `review:` callback inside the fresh gate
+			mode: 'propose',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('review-unparseable');
+		expect(core.routedToNeedsAttention).toBe(true);
+		expect(core.branch).toBe('work/task-phi');
+		expect(core.reason).toMatch(/could not be parsed/i);
+		// The fresh-worktree path strands the SAME way without the in-function catch —
+		// assert it is covered: branch pushed + item surfaced.
+		expect(workBranchPushedToArbiter(seeded, 'phi')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'phi')).toBe(true);
 	});
 });
 

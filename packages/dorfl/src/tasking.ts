@@ -725,6 +725,38 @@ export async function performTask(
 					`marked the per-item lock stuck (needs attention; no tasks landed).`,
 			};
 		}
+		if (core.outcome === 'review-unparseable') {
+			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
+			// JSON). Route the held prd to needs-attention through the SAME lock-release
+			// seam the block path uses (the tasking needs-attention surface is the stuck
+			// `prd:<slug>` lock; no folder write). It is NOT a block (the gate output was
+			// unreadable) — record it as the transient-infra-class re-run signal so the
+			// stuck reason reads correctly; nothing landed.
+			const reason =
+				`The task acceptance gate for '${slug}' produced an UNPARSEABLE verdict ` +
+				`(re-run — transient): ${core.reason ?? ''}`;
+			const routed = await lock.release({
+				slug,
+				cwd,
+				arbiter,
+				lockedBlob,
+				routeToNeedsAttention: {reason},
+				env,
+				note,
+			});
+			if (routed.outcome !== 'released') {
+				return releaseFailureToResult(routed, slug);
+			}
+			note(reason);
+			return {
+				exitCode: 1,
+				outcome: 'needs-attention',
+				slug,
+				message:
+					`The task acceptance gate produced an unparseable verdict for '${slug}'; ` +
+					`marked the per-item lock stuck (needs attention; no tasks landed; re-run).`,
+			};
+		}
 		if (core.outcome === 'completed') {
 			// The durable `prd → prd-tasked` `main` move landed through the shared integrate
 			// core (the body moved straight from `work/prds/ready/` — no transient `tasking/`
