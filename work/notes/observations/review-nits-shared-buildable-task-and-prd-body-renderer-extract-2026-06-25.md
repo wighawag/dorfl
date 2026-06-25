@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'shared-buildable-task-and-prd-body-ren
 date: 2026-06-25
 status: open
 reviewOf: shared-buildable-task-and-prd-body-renderer-extract
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
