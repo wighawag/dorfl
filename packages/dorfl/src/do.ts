@@ -1430,9 +1430,9 @@ async function saveAgentFailure(params: {
 	const reason = `${failureCauseLabel(cause)}: ${detail}`;
 
 	// Route through the SAME seam the gate-fail path uses: save the agent's work as
-	// a wip commit (skipped when the tree is clean — the empty-failure case),
-	// `git mv` the item to needs-attention/ with the reason in the body, surface the
-	// move-only commit on the arbiter's main (OBSERVABLE, mode-M, cross-machine
+	// a wip commit (skipped when the tree is clean — the empty-failure case), amend
+	// the item's per-item lock ref to `state: stuck` with the reason in the body,
+	// surface that lock amend on the arbiter (OBSERVABLE, mode-M, cross-machine
 	// visible) AND push the `work/<slug>` branch (RECOVERABLE — so a requeue-continue
 	// reading <arbiter>/work/<slug> lands on the saved wip). Both halves fire from
 	// the single `arbiter` here; no separate push to forget.
@@ -1448,9 +1448,9 @@ async function saveAgentFailure(params: {
 	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
-			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`
+			`partial work and marked '${slug}' stuck on its lock (${report!.fragment}).`
 		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
-			`route to work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+			`mark '${slug}' stuck (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
 	return {
 		exitCode: 1,
@@ -1563,10 +1563,10 @@ async function saveAgentStop(params: {
 	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `The agent STOPPED building '${slug}' (the task drifted / is ambiguous / ` +
-			`produced no change); routed it to work/needs-attention/ (${report!.fragment}) ` +
+			`produced no change); marked '${slug}' stuck on its lock (${report!.fragment}) ` +
 			`WITHOUT running the gate or Gate-2 review. Reason: ${reason}`
-		: `The agent STOPPED building '${slug}' but it could not be routed to ` +
-			`work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}). Reason: ${reason}`;
+		: `The agent STOPPED building '${slug}' but it could not be marked stuck ` +
+			`(${routed.reasonNotMoved ?? 'unknown'}). Reason: ${reason}`;
 	note(message);
 	return {
 		exitCode: 1,
@@ -2466,9 +2466,9 @@ async function saveRemoteAgentFailure(params: {
 	const report = routed.moved ? routeReport(routed, branch) : undefined;
 	const message = routed.moved
 		? `Agent run failed building '${slug}' [${cause}] (${detail}); SAVED the ` +
-			`partial work and routed it to work/needs-attention/ (${report!.fragment}).`
+			`partial work and marked '${slug}' stuck on its lock (${report!.fragment}).`
 		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
-			`route to work/needs-attention/ (${routed.reasonNotMoved ?? 'unknown'}).`;
+			`mark '${slug}' stuck (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
 	return {
 		exitCode: 1,
