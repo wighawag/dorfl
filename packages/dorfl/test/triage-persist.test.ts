@@ -218,6 +218,13 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		);
 		expect(taskBody).toContain(MECHANISM_SIGNAL);
 		expect(taskBody).not.toMatch(/Promoted from observation/i);
+		// FENCE SPACING (byte-for-byte): exactly ONE blank line separates the closing
+		// frontmatter fence from the first body heading (`---\n\n## What to build`).
+		// The renderer rewire once collapsed this to a single newline; assert it here
+		// (the shared renderer starts at its heading with no leading blank, so the
+		// separator is owned by the frontmatter writer).
+		expect(taskBody).toContain('---\n\n## What to build');
+		expect(taskBody).not.toMatch(/---\n## What to build/);
 		// The observation's open questions are transcribed + needsAnswers reflects them.
 		expect(taskBody).toContain('## Open questions');
 		expect(taskBody).toContain(OPEN_QUESTION_SIGNAL);
@@ -613,6 +620,10 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 		expect(prdBody).toContain(MECHANISM_SIGNAL);
 		expect(prdBody).toContain('## Problem Statement');
 		expect(prdBody).not.toMatch(/Promoted from observation/i);
+		// FENCE SPACING (byte-for-byte): one blank line between the frontmatter fence
+		// and the PRD lead heading (`---\n\n## Problem Statement`), same as the task path.
+		expect(prdBody).toContain('---\n\n## Problem Statement');
+		expect(prdBody).not.toMatch(/---\n## Problem Statement/);
 		// Open questions transcribed + needsAnswers reflects them.
 		expect(prdBody).toContain('## Open questions');
 		expect(prdBody).toContain(OPEN_QUESTION_SIGNAL);
