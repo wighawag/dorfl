@@ -60,3 +60,7 @@ git fetch <remote> && git switch -c work/install-ci-project-setup-hook <remote>/
 # on completion, in the work branch's PR/merge:
 git mv work/tasks/ready/install-ci-project-setup-hook.md work/tasks/done/install-ci-project-setup-hook.md
 ```
+
+## Requeue 2026-06-26
+
+active claim never surfaced (killed/interrupted run at 20:04Z); no work branch produced; reset+requeued by recovery
