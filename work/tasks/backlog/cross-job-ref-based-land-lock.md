@@ -2,9 +2,10 @@
 title: Cross-job ref-based land-lock accelerator (portable, with stale-lock reclaim)
 slug: cross-job-ref-based-land-lock
 prd: land-time-reverify-and-parallel-merge-ceiling
-needsAnswers: true
+needsAnswers: false
 blockedBy: [merge-retries-gate-precedence]
 covers: [5]
+reason: superseded-by-decision — no sound, model-consistent, cheap stale-lock reclaim exists for a land-lock; the PRD explicitly allows splitting it out. The mergeRetries floor (merge-retries-gate-precedence) is correctness-sufficient; this accelerator is deferred to a follow-on. See the ANSWERED block.
 ---
 
 ## What to build
@@ -20,7 +21,51 @@ This is the cross-job analogue of the in-process `integrateLock`. It SITS
 ON TOP of the scaled `mergeRetries` floor (`merge-retries-gate-precedence`)
 and must degrade to that floor if the lock is unavailable.
 
-## Open questions (needsAnswers)
+## ANSWERED 2026-06-26 — VERDICT: CANCEL (split to a follow-on), the floor suffices
+
+The three open questions are answered, and the answer to Q2 is the PRD's own
+exit clause: this accelerator should NOT ship in this PRD. The task is CANCELLED
+(moved to `tasks/cancelled/`); the `mergeRetries` floor
+(`merge-retries-gate-precedence`) is the shipped cross-job serialiser and is
+correctness-sufficient on its own.
+
+1. **Stale-lock reclaim mechanism → (c) human-only reclaim is the ONLY
+   model-consistent option, and it is a BAD FIT for a land-lock.** The repo's
+   per-item lock doctrine EXPLICITLY rejects TTL/heartbeat auto-reclaim:
+   WORK-CONTRACT states "there is no liveness heartbeat and no auto-sweep (a
+   human asserts a lock is dead)", with reclaim via `release-lock` +
+   `gc --ledger` (tasks/done: `release-lock-verb-and-gc-stuck-report`,
+   `gc-ledger-reap-stale-locks-opt-in-flag`). So (a) a wall-clock TTL is OUT
+   (clock skew across CI runners makes it unsound; a premature steal = a
+   both-land race, the exact thing the land step must never do), and (b) a
+   liveness check is OUT (there is no heartbeat signal to check). That leaves
+   (c). But a human-only reclaim on the LAND TAIL is the wrong shape: the
+   land-lock is meant to be an automatic accelerator held for SECONDS during a
+   serialised land, not a lock a human babysits. A crashed holder would STALL
+   ALL landings until a human runs `release-lock` — strictly WORSE than the
+   floor's spurious bounce, which self-heals (re-rebase + re-gate + retry).
+2. **In-scope-now vs follow-on → FOLLOW-ON (cancel this task).** Given (1),
+   there is no SOUND + CHEAP + model-consistent reclaim story, which is exactly
+   the PRD's stated condition for splitting it out (Applied Answer q1: "If a
+   robust stale-lock story is not cheap, ship (a) scaled NOW and split (b) into
+   a follow-on"). The accelerator is a pure THROUGHPUT optimisation over an
+   already-correct floor, so it is not worth a deadlock-prone or human-babysat
+   lock. Capture it as a follow-on PRD idea
+   (`work/notes/ideas/cross-job-ref-land-lock-accelerator.md`) to revisit only
+   if a real wide-matrix repo shows the floor's bounce rate is a problem AND a
+   sound reclaim emerges (e.g. a host-provided lease the bare floor degrades
+   away from).
+3. **Lock granularity → PER-TARGET-BRANCH** (recorded for the follow-on, moot
+   here). A land-lock must serialise only landings to the SAME branch; per-repo
+   would needlessly serialise independent branch landings. Key it
+   `refs/dorfl/land-lock/<branch>`, not one global `refs/dorfl/land-lock`.
+
+Consequence for siblings: `test-cross-job-concurrent-land` keeps its FLOOR-only
+assertions (its body already says "if `cross-job-ref-based-land-lock` ships, this
+test grows a variant ... if it does not, the test asserts the floor only") — no
+change needed there.
+
+## Open questions (RESOLVED — see the ANSWERED/VERDICT block above)
 
 The prd (Applied Answer q1) says: ship this task only if a SOUND
 stale-lock reclaim story is cheap; otherwise split it out. Concretely:
