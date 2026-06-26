@@ -1,5 +1,5 @@
 ---
-needsAnswers: false
+needsAnswers: true
 ---
 
 # A `needsAnswers` PRD in `prds/tasked/` strands its answered sidecar: no lifecycle pool enumerates it (neither surface nor apply)
