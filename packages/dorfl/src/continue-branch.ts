@@ -218,8 +218,182 @@ export const DEFAULT_STALE_LEASE_RETRIES = 3;
  * ledger-write CAS recognises (`ledger-write.ts`), narrowed here to the lease's
  * own `stale info`.
  */
-function isStaleLeaseRejection(stderr: string): boolean {
+export function isStaleLeaseRejection(stderr: string): boolean {
 	return /stale info/i.test(stderr);
+}
+
+/**
+ * Outcome of {@link pushProposeBranchWithStaleLeaseRetry} — the sibling of
+ * {@link ContinuedPushResult} on the PROPOSE-mode work-branch push.
+ */
+export type ProposePushResult =
+	/** The work branch landed on the arbiter (first try or after a stale-lease retry). */
+	| {kind: 'pushed'}
+	/**
+	 * BENIGN already-landed race tail: the remote `work/<slug>` ref is GONE on
+	 * the arbiter AND our HEAD is provably reachable from `<arbiter>/main` — i.e.
+	 * the work already landed via a sibling's merge and its head was reaped
+	 * (`integrator.ts` `deleteMergedHeadBranch`'s ancestor-guarded reap, or `gc`).
+	 * This is the propose-push analogue of the leased-delete `already-reaped`
+	 * outcome (`item-lock.ts`): a vanished ref whose work is provably landed is
+	 * the DESIRED end state, not a failure.
+	 */
+	| {kind: 'already-landed'};
+
+/**
+ * Push the propose-mode work branch with the SAME stale-lease retry semantics
+ * as {@link pushContinuedBranchWithStaleLeaseRetry} (explicit
+ * `--force-with-lease=<branch>:<expectedTip>`, `stale info` detection, bounded
+ * re-observation + retry, terminal throw on cap exhaustion / non-stale
+ * failure), plus the one race the continue path does not have: a `work/<slug>`
+ * ref that is GONE on the arbiter because the work already LANDED on `main` is
+ * a BENIGN already-landed success, not a failure. The predicate mirrors the
+ * leased-delete `already-reaped` + merged-head-reap ancestor guards: gone ref
+ * AND `HEAD` is an ancestor of `<arbiter>/main`.
+ *
+ * WHY a propose-specific helper instead of the continue helper verbatim: the
+ * continue helper's stale-lease retry RE-REBASES the kept branch onto the
+ * freshly-fetched main (a kept-branch onboard's job — main may have moved
+ * while the prior attempt sat in backlog). In the propose path the caller has
+ * ALREADY rebased the branch onto `<arbiter>/main` (`integrateWithRebase`, or
+ * `integration-core.ts` `recoverAlreadyCommitted`'s recovery rebase), so the
+ * only race the lease needs to survive here is the remote work ref MOVING /
+ * REAPING under us — re-leasing against the freshly-observed tip is enough,
+ * AND a re-rebase mid-integrate would smuggle a NEW rebase past
+ * `integrateWithRebase`'s explicit conflict-aborts-to-needs-attention contract.
+ * So this helper shares the stale-info detection + bounded retry shape (the
+ * `--force-with-lease`-only / never-bare-force / never-`:main` guardrails are
+ * identical) but does NOT layer the rebase step.
+ *
+ * Guardrails (ADR §11): `--force-with-lease` ONLY (re-computed each attempt),
+ * NEVER bare `--force`, NEVER `:main`, the WORK branch ONLY. The lease is
+ * threaded as `<branch>:<expectedTip>` — using EMPTY (`<branch>:`) when the
+ * arbiter has no ref yet (the first-time propose / post-reap shape — the same
+ * create-only lease form `item-lock.ts` uses for the lock CAS), so a bare-hub-
+ * mirror worktree (no `refs/remotes/<arbiter>/*` upstream) leases correctly.
+ *
+ * Bounded by `retries` (default {@link DEFAULT_STALE_LEASE_RETRIES}, mirroring
+ * the claim / continue retry cap). Must be called while HEAD is the propose
+ * `<branch>`.
+ */
+export function pushProposeBranchWithStaleLeaseRetry(options: {
+	cwd: string;
+	branch: string;
+	/** The arbiter remote name to push to / observe (e.g. `arbiter`, `origin`). */
+	arbiter: string;
+	retries?: number;
+	env: NodeJS.ProcessEnv | undefined;
+	/** Optional progress note sink (mirrors the continue helper's `note`). */
+	note?: (message: string) => void;
+}): ProposePushResult {
+	const {cwd, branch, arbiter, env} = options;
+	const note = options.note ?? (() => {});
+	const retries = options.retries ?? DEFAULT_STALE_LEASE_RETRIES;
+	const mainRef = `refs/remotes/${arbiter}/main`;
+
+	const refreshMain = (): void => {
+		gitSoft(
+			['fetch', '--quiet', arbiter, `+refs/heads/main:${mainRef}`],
+			cwd,
+			env,
+		);
+	};
+
+	/** The arbiter's CURRENT `<branch>` sha (via `ls-remote`), or `''` when absent / unreachable. */
+	const observeArbiterTip = (): string => {
+		const ls = gitSoft(['ls-remote', '--heads', arbiter, branch], cwd, env);
+		if (ls.status !== 0) return '';
+		const m = /^([0-9a-f]{40})/m.exec(ls.stdout.trim());
+		return m ? m[1] : '';
+	};
+
+	/** True iff HEAD is provably reachable from `<arbiter>/main` (the work landed). */
+	const headOnArbiterMain = (): boolean => {
+		const head = gitSoft(
+			['rev-parse', '--verify', '--quiet', 'HEAD'],
+			cwd,
+			env,
+		).stdout.trim();
+		if (head === '') return false;
+		return (
+			gitSoft(['merge-base', '--is-ancestor', head, mainRef], cwd, env)
+				.status === 0
+		);
+	};
+
+	/**
+	 * The BENIGN already-landed predicate: the remote work ref is GONE on the
+	 * arbiter AND our HEAD is provably reachable from `<arbiter>/main`. Mirrors
+	 * `integrator.ts` `deleteMergedHeadBranch`'s ancestor-guarded reap + the
+	 * `item-lock.ts` leased-delete `already-reaped` precedent: a vanished ref
+	 * whose work is provably landed is the desired end state. Re-fetches main
+	 * first so the answer reflects the current arbiter, not a stale local view.
+	 */
+	const benignAlreadyLanded = (): boolean => {
+		refreshMain();
+		return observeArbiterTip() === '' && headOnArbiterMain();
+	};
+
+	// Short-circuit BEFORE any push: the dominant recovery race shape (a sibling
+	// already merged this work and reaped the head before we even attempted our
+	// push). Avoids burning a stale-lease retry budget on a no-op.
+	if (benignAlreadyLanded()) {
+		note(
+			`${branch}: already landed on ${arbiter}/main + remote head reaped — ` +
+				'clean no-op (no push, no review request).',
+		);
+		return {kind: 'already-landed'};
+	}
+
+	let attempt = 0;
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		const observed = observeArbiterTip();
+		// Explicit `<branch>:<expected>` — EMPTY when the ref is absent (first-time
+		// propose, or a post-reap retry), MATCHING when present. The empty-expected
+		// shape is the same create-only `--force-with-lease=<ref>:` form
+		// `item-lock.ts` uses for the CAS create.
+		const lease = observed === '' ? `${branch}:` : `${branch}:${observed}`;
+		const push = gitSoft(
+			['push', arbiter, `${branch}:${branch}`, `--force-with-lease=${lease}`],
+			cwd,
+			env,
+		);
+		if (push.status === 0) {
+			return {kind: 'pushed'};
+		}
+		// Only `stale info` is re-leasable on this unshared work branch; every
+		// other failure (connectivity, protected ref, auth) SURFACES at once.
+		if (!isStaleLeaseRejection(push.stderr)) {
+			throw new Error(
+				`pushing ${branch} to ${arbiter} failed (not a stale lease): ` +
+					(push.stderr.trim() || `exit ${push.status}`),
+			);
+		}
+		// A stale lease: re-check the BENIGN already-landed predicate first (the
+		// race tail this task carries), else retry with a freshly-observed lease.
+		if (benignAlreadyLanded()) {
+			note(
+				`${branch}: stale lease + work already on ${arbiter}/main + remote ` +
+					'head reaped — clean no-op.',
+			);
+			return {kind: 'already-landed'};
+		}
+		attempt += 1;
+		if (attempt > retries) {
+			throw new Error(
+				`pushing ${branch} to ${arbiter} kept failing with a stale ` +
+					`--force-with-lease after ${retries} retr${retries === 1 ? 'y' : 'ies'} ` +
+					'(the arbiter work ref keeps moving under us, and the work is not ' +
+					`provably on main). The green work is still committed on ${branch} — ` +
+					'route to needs-attention and retry when the churn settles.',
+			);
+		}
+		note(
+			`${branch} propose push rejected (stale lease) — re-observe + retry ` +
+				`(${attempt}/${retries})...`,
+		);
+	}
 }
 
 /** The outcome of {@link pushContinuedBranchWithStaleLeaseRetry}. */

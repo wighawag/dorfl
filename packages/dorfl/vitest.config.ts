@@ -133,6 +133,14 @@ const RACE_SENSITIVE = [
 	// pressure for the same deterministic claim/main-CAS reasoning as
 	// do-remote.test.ts.
 	'test/stale-lease-all-push-sites.test.ts',
+	// The propose-mode stale-lease + benign already-landed tests
+	// (`propose-push-survives-stale-lease-on-reaped-work-ref`): drive real git
+	// against a --bare arbiter at the integrator seam (direct
+	// `Integrator.integrate({mode: 'propose'})` AND `performIntegration({
+	// committedRecovery: true})`), pushing the work branch and — in the recovery
+	// case — writing main. Keep them out of file-parallel pressure for the same
+	// deterministic claim/main-CAS reasoning as `stale-lease-all-push-sites.test.ts`.
+	'test/stale-lease-propose-push.test.ts',
 	// The REGISTRY-SET advance driver with per-mirror job-worktree isolation
 	// (`advance-loop-driver-registry-set-job-worktrees`): discovers the registry via
 	// `scan(config)`, materialises a hub mirror + job worktree per mirror, builds +

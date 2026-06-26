@@ -2,6 +2,7 @@ import type {IntegrationMode} from './config.js';
 import {git, run} from './git.js';
 import {isAncestor} from './gc.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
+import {pushProposeBranchWithStaleLeaseRetry} from './continue-branch.js';
 
 /**
  * The **integration seam** (ADR §6): integrating a completed work branch back to
@@ -285,6 +286,17 @@ export interface IntegrateResult {
 	provider: string;
 	/** True iff a review request was opened (propose + a real provider). */
 	requestOpened: boolean;
+	/**
+	 * **BENIGN already-landed race tail** (propose mode — task
+	 * `propose-push-survives-stale-lease-on-reaped-work-ref`): set `true` when
+	 * the propose push observed a GONE `work/<slug>` ref on the arbiter AND the
+	 * work was provably reachable from `<arbiter>/main` (an earlier merge had
+	 * already landed it + reaped the head). The result is a CLEAN no-op: no push
+	 * (or no completed push), no review request attempted against a vanished
+	 * ref, distinct from a real push failure. Absent on the normal pushed-and-
+	 * proposed path and in merge mode (merge has its own `mergedToMain`).
+	 */
+	alreadyLanded?: boolean;
 	/** Human-readable next step (propose mode). */
 	instruction?: string;
 	/**
@@ -383,14 +395,47 @@ export class Integrator {
 		// there is nothing to drop) and so REWRITES the tip vs an already-pushed
 		// `work/<slug>` (the bounce now pushes it via the seam) — lands cleanly
 		// instead of failing non-fast-forward. The lease guards the CAS; this
-		// is NEVER a plain `--force`, and NEVER touches main. For a first-time propose
-		// (no remote ref yet) the lease against the absent remote-tracking ref allows
-		// the new-branch push, so the normal path is unchanged.
-		pushBranch(
-			input,
-			`${input.branch}:${input.branch}`,
-			`--force-with-lease=${input.branch}`,
-		);
+		// is NEVER a plain `--force`, and NEVER touches main.
+		//
+		// STALE-LEASE SURVIVAL + BENIGN ALREADY-LANDED (task `propose-push-
+		// survives-stale-lease-on-reaped-work-ref`): route through the propose
+		// stale-lease retry helper (the sibling of
+		// `pushContinuedBranchWithStaleLeaseRetry`, sharing its `stale info`
+		// detection + bounded retry, with the propose-specific addition of the
+		// gone-ref + ancestor-of-`<arbiter>/main` = BENIGN already-landed predicate
+		// — mirroring `deleteMergedHeadBranch`'s ancestor guard + the leased-delete
+		// `already-reaped` precedent). Survives a `stale info` rejection when the
+		// arbiter's view of the unshared work ref moved under us (re-leases against
+		// the freshly-observed tip); reports `alreadyLanded` (no PR re-open against
+		// a vanished ref) when the work already landed via a sibling's merge +
+		// reap; SURFACES every non-stale failure (connectivity, protected ref,
+		// auth) and a non-provably-landed stale-info-after-cap as a terminal throw.
+		// For a first-time propose (no remote ref yet) the helper's create-only
+		// empty-expected lease shape (`<branch>:`) accepts the new ref unchanged.
+		const proposePush = pushProposeBranchWithStaleLeaseRetry({
+			cwd: input.cwd,
+			branch: input.branch,
+			arbiter: input.arbiter,
+			env: input.env,
+		});
+		if (proposePush.kind === 'already-landed') {
+			// BENIGN already-landed: the work is provably on `<arbiter>/main` and the
+			// head was reaped. Do NOT call the provider — there is no ref to open a
+			// review request against, and asking the provider to open a PR for
+			// landed work would be a confusing no-op. Distinct from a real failure:
+			// `alreadyLanded: true`, no throw, no PR.
+			return {
+				mode: 'propose',
+				mergedToMain: false,
+				pushedRef: input.branch,
+				provider: 'none',
+				requestOpened: false,
+				alreadyLanded: true,
+				instruction:
+					`${input.branch}: the work is already on ${input.arbiter}/main ` +
+					'and its remote head was reaped — nothing to propose (clean no-op).',
+			};
+		}
 		// PR-INTENT (`noPR: true`): the branch is now pushed (safe) — deliberately do
 		// NOT open a review request (the explicit suppress-PR intent). No warning: the
 		// no-PR outcome is intended, not a degrade. The provider is reported as `none`
