@@ -1,8 +1,66 @@
 ---
 title: Land-time re-verify as one mode-agnostic primitive + parallel-merge CI shape + propose PR-merge-time safety (git-alone floor, host-accelerated ceiling)
 slug: land-time-reverify-and-parallel-merge-ceiling
-needsAnswers: true
+needsAnswers: false
 ---
+
+## RESOLVED 2026-06-26 (drift reconciled in place; the merge-question mechanism re-decided)
+
+The drift below (the retired disposition vocabulary) has been RECONCILED IN PLACE
+(no reopen needed): the PRD goal is unchanged and the three merge-question tasks
+were amended in place against the new model. `needsAnswers` is now cleared. The
+open questions (original OQ1/3/5/6/7 + the post-retirement mechanism) were
+answered on the human path via the surfaced question sidecars; the answers (now
+self-contained here):
+
+- **Merge-acceptance is a DETERMINISTIC runner-ACTION, not an agent decision.**
+  An answered merge-question dispatches the land primitive
+  (`performIntegration`: rebase -> re-verify -> advance) via a SEPARATE
+  answer-driven runner-action dispatch layer, keyed off the question's KIND +
+  the human's plain `merge | hold | drop` choice. It is NOT a new
+  `DecisionOutcome` and is NOT routed through the agentic `decide()`. Rationale:
+  a merge-acceptance has no judgement content left (the human's choice IS the
+  decision; the apply-time re-verify on the rebased tip is the real correctness
+  gate), so an LLM there only adds cost + non-determinism. The apply rung gains a
+  kind-check BEFORE the agentic decider: runner-action kinds (`merge`,
+  `stuck-requeue`) dispatch deterministically; content kinds
+  (observation/triage/spec) keep today's agentic `decide()`. This restores the
+  pre-disposition determinism for the action class while keeping agentic
+  flexibility for the content class. **ADR-worthy** (working name
+  `answered-question-dispatch-splits-runner-action-vs-agentic-content`).
+- **Sidecar shape + keying.** The merge-question sidecar carries a DETERMINISTIC
+  CHOICE shape (`merge | hold | drop`) the human picks and the system parses
+  unambiguously, distinct from the free-text content-question shape. Sidecar
+  identity may key to a `branch:`/`ref:` (and `lock:`) identity in addition to
+  `item:` (an unmerged branch has no item body on `main`); a typed `kind` field
+  (merge | stuck | triage | spec) is added now and is what apply reads to pick
+  the dispatch. Kind-based SUBFOLDERS (`questions/merge/`, ...) are the intended
+  later direction (safe: kinds are temporally exclusive per item), tracked by
+  `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` —
+  NOT folded into this PRD. LOAD-BEARING: sidecar authorship stays on
+  `main`/runner under the `advancing` lock, never on a work branch.
+- **Gate (OQ7).** New gate `mergeQuestions`, 3-state `off | ask | auto` (mirrors
+  `observationTriage`), default `ask`, resolved via the gate-family precedence
+  chain. `auto` (restated, no retired token) = runner self-supplies the merge
+  answer without surfacing and lands via the same deterministic dispatch +
+  apply-time re-verify. Separate from `observationTriage`, never `off` by default.
+- **Stale-approval (OQ6).** Honour the prior answer + land when the rebased tip
+  re-verifies GREEN; opt-in `strictMergeApproval` (per-repo, default OFF)
+  re-surfaces the merge-question when the merge-base changed. Story #16's
+  red-re-verify refusal is unchanged.
+- **Decomposition.** The three merge-question tasks are AMENDED IN PLACE
+  (`covers: [14,15,16,17]` linkage preserved), not dropped. All three now have
+  `needsAnswers: false` (their sidecars applied + deleted by the advance apply
+  rung 2026-06-26). They stay in `tasks/backlog/` (not promoted) and are built
+  together against the reshaped model.
+
+> NOTE (process gap observed): this PRD's OWN answered sidecar could NOT be
+> applied by the engine — a `needsAnswers` PRD resting in `prds/tasked/` is
+> enumerated by neither the surface nor the apply lifecycle pool (the gather reads
+> `prds/ready` + staging `prds/proposed`, not `prds/tasked`), so its human answer
+> was stranded and a human applied it directly (cleared the flag + deleted the
+> sidecar here). Captured as
+> `work/notes/observations/tasked-prd-needsanswers-sidecar-stranded-no-apply-pool-2026-06-26.md`.
 
 ## DRIFTED-WHILE-TASKED 2026-06-26 (the merge-question tasks are premised on the retired disposition vocabulary)
 
