@@ -25,6 +25,14 @@ import {defineConfig} from 'vitest/config';
  */
 const RACE_SENSITIVE = [
 	'test/claim-cas.test.ts',
+	// The CROSS-PROCESS concurrent-land test (Story 13 cross-job half of
+	// `land-time-reverify-and-parallel-merge-ceiling`): two SPAWNED node
+	// processes race the same --bare `file://` arbiter ref so the in-process
+	// `integrateLock` cannot serialise them — only the CAS-loop can. Same
+	// git-`file://`-CAS race class as `merge-retries-external.test.ts` /
+	// `claim-cas.test.ts`; keep it out of file-parallel pressure for the
+	// same deterministic claim/main-CAS reasoning.
+	'test/cross-job-concurrent-land.test.ts',
 	// The `gc --ledger --reap-stale-locks` SWEEP (`gc-ledger-reap-stale-locks-opt-in-flag`):
 	// the opt-in reaper clears `cleared-stale` per-item locks via the shared leased
 	// delete against a --bare arbiter, and runs an in-process TWO-REAPER race (two

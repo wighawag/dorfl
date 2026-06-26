@@ -708,6 +708,8 @@ interface DoFlags {
 	observationTriage?: string;
 	/** `--surface-blockers` / `--no-surface-blockers`: the declared-blocked-work gate (`advance`). */
 	surfaceBlockers?: boolean;
+	/** `--merge-questions <off|ask|auto>`: the merge-question SURFACER gate (`advance`). SEPARATE from `--observation-triage` with a HIGHER default. */
+	mergeQuestions?: string;
 	merge?: boolean;
 	propose?: boolean;
 	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
@@ -2501,6 +2503,10 @@ export function buildProgram(): Command {
 		.option(
 			'--no-surface-blockers',
 			'leave a needsAnswers:true task/prd silently blocked (default; the blocked pool is dropped from auto-pick)',
+		)
+		.option(
+			'--merge-questions <mode>',
+			'the merge-question SURFACER gate (off|ask|auto): off drops the surfacer (only for a repo that lands by some other means); ask (default) enumerates unmerged `work/*` branches and surfaces a merge-question sidecar a human answers; auto self-supplies the `merge` answer and lands via the SAME deterministic apply-time re-verify (the merge-mode-like fast path). SEPARATE axis from --observation-triage with a HIGHER default (a dropped merge-question means pushed work never lands). Resolved flag > env > per-repo > global > default ask.',
 		)
 		.option(
 			'--merge',

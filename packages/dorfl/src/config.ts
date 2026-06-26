@@ -78,6 +78,33 @@ export type PrdsLandIn = 'pre-proposed' | 'ready';
 export type ObservationTriage = 'off' | 'ask' | 'auto';
 
 /**
+ * **The `mergeQuestions` gate axis** — the 3-state member of the question-
+ * surfacing gate family that governs the MERGE-QUESTION surfacer (prd
+ * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
+ * `merge-questions-gate-axis`). MIRRORS `observationTriage`'s shape
+ * (`off | ask | auto`) but is a SEPARATE axis — "should this built work merge?"
+ * is materially more consequential than "is this observation worth promoting?",
+ * so a merge-question must NEVER ride `observationTriage` and must NOT default
+ * `off` (a silently-dropped merge-question means finished, pushed work never
+ * lands). The states:
+ *   - `off` ⇒ the merge-question surfacer is not invoked (only correct for a
+ *     repo that lands by some other means);
+ *   - `ask` (DEFAULT) ⇒ the surfacer enumerates unmerged `work/*` branches +
+ *     emits a merge-question sidecar; a human's plain `merge | hold | drop`
+ *     answer is required before the land. The conservative default that honours
+ *     propose semantics and never silently drops pushed work;
+ *   - `auto` ⇒ the runner self-supplies the `merge` answer without surfacing
+ *     and lands through the SAME deterministic answer-driven runner-action
+ *     dispatch + apply-time re-verify (the merge-mode-like fast path). Does NOT
+ *     invoke the agentic decider — a merge-land is never an agent decision.
+ * Resolved through the SAME precedence chain as the other gates (flag > env >
+ * per-repo > global > default `ask`). The exact name + default + shape were
+ * answered in this task's Applied answers 2026-06-26 (q1/q2/q3) + PRD sidecar
+ * Q3.
+ */
+export type MergeQuestions = 'off' | 'ask' | 'auto';
+
+/**
  * Which harness adapter (ADR §5) launches a job's agent and reports its
  * liveness: `null` (shell out to `agentCmd`) or `pi` (the pi CLI). Selected via
  * the `harness` config field; defaults to `null`.
@@ -198,6 +225,28 @@ export interface Config {
 	 * a committed answer) stays ALWAYS allowed.
 	 */
 	observationTriage: ObservationTriage;
+	/**
+	 * Per-repo policy governing the MERGE-QUESTION SURFACER — the 3-state member
+	 * of the question-surfacing gate family (prd
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
+	 * `merge-questions-gate-axis`). MIRRORS `observationTriage`'s SHAPE
+	 * (`off | ask | auto`) but is a SEPARATE axis with a DIFFERENT default —
+	 * `observationTriage` defaults `off` (a dropped observation is safely
+	 * ignorable), `mergeQuestions` defaults `ask` (a dropped merge-question means
+	 * pushed work never lands). `off` ⇒ the surfacer is NOT invoked (only for a
+	 * repo that lands by some other means); `ask` (default) ⇒ the surfacer
+	 * enumerates unmerged `work/*` branches and emits a merge-question sidecar a
+	 * human answers; `auto` ⇒ the runner self-supplies the `merge` answer without
+	 * surfacing and lands via the SAME deterministic answer-driven runner-action
+	 * dispatch + apply-time re-verify (the merge-mode-like fast path; NOT the
+	 * agentic decider). Resolved like `observationTriage`/`integration`: flag
+	 * (`--merge-questions`) > `DORFL_MERGE_QUESTIONS` env > per-repo > global >
+	 * default `ask`. Gates the SURFACE phase of the merge-question loop only;
+	 * APPLY (consume a committed merge-answer) stays ALWAYS allowed (the
+	 * create-vs-consume invariant the gate family obeys, ADR
+	 * `ci-config-policy-and-gate-family` §4).
+	 */
+	mergeQuestions: MergeQuestions;
 	/**
 	 * Per-repo policy governing DECLARED blocked work — the BOOLEAN member of the
 	 * question-surfacing gate family (its orthogonal PEER is `observationTriage`,
@@ -635,6 +684,17 @@ export const DEFAULT_CONFIG: Config = {
 	// opts in via `observationTriage` (`ask` ⇒ surface a question for each; `auto` ⇒
 	// auto-dispose the no-question cases). ADR `ci-config-policy-and-gate-family` §3.
 	observationTriage: 'off',
+	// The merge-question SURFACER defaults to `ask` — the conservative default
+	// (prd `land-time-reverify-and-parallel-merge-ceiling` Applied answer q2 /
+	// task `merge-questions-gate-axis` Applied answer q2). NEVER `off` by default:
+	// a silently-dropped merge-question means finished, pushed work never lands —
+	// strictly more consequential than a dropped observation-promote prompt, so
+	// this gate axis is DELIBERATELY HIGHER than `observationTriage`'s `off`. A
+	// trusted-repo fast path opts into `auto` (runner self-supplies the `merge`
+	// answer + lands via the SAME deterministic apply-time re-verify); a repo that
+	// lands by some other means opts into `off`. Resolved per-repo through the
+	// SAME precedence chain (flag > env > per-repo > global > default).
+	mergeQuestions: 'ask',
 	// DECLARED blocked work is calm by default (`false`): the `needsAnswers`-blocked
 	// pool is dropped from the auto-pick selection, so `advance` does NOT proactively
 	// render a declared blocker into a question sidecar unless a repo opts in via

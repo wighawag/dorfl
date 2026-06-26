@@ -30,18 +30,43 @@
 #   * `integrationMode: propose` → a MATRIX of independent jobs (one per eligible
 #                       item), each leg running `advance <item> --propose` so it
 #                       opens its OWN PR. propose-mode items are independent PRs, so
-#                       a matrix is true parallelism and `-n` is not even needed.
-#                       The matrix items are ENUMERATED via the mirror-side pool
-#                       scan (`dorfl scan --json`, the registry/hub-mirror
+#                       a matrix is true parallelism. The matrix items are
+#                       ENUMERATED via the mirror-side pool scan
+#                       (`dorfl scan --json`, the registry/hub-mirror
 #                       enumeration), so CI fans out over exactly the eligible pool.
 #
-#   * `integrationMode: merge` → a SINGLE SEQUENTIAL job running
-#                       `advance -n <x> --merge`. merge-mode items chain via rebase
-#                       (rebase-before-integrate, ADR §10); parallel merge jobs would
-#                       THRASH the main-CAS, so merge mode runs ONE sequential driver
-#                       (`-n` is ALWAYS sequential). The `--merge` flag can ONLY ride
-#                       this sequential job — no matrix leg ever carries it — so a
-#                       parallel merge-to-main is structurally impossible.
+#   * `integrationMode: merge` → a MATRIX of independent jobs (one per eligible
+#                       item), each leg running `advance <item> --merge` so
+#                       build/gate/review run CONCURRENTLY across siblings; the
+#                       LAND TAIL (rebase-before-integrate + CAS push to `main`,
+#                       ADR §10) is what serialises, by the engine's safety story,
+#                       NOT by this workflow's job shape. The legs share the same
+#                       mirror-side pool scan as propose; only the per-leg flag
+#                       and (formerly) the shape differ.
+#
+#                       THE FLOOR (git-alone, host-agnostic): the cross-job
+#                       serialiser is the engine's `mergeRetries` CAS-retry loop
+#                       (`integration-core.ts` + `merge-retries-gate-precedence`).
+#                       A non-fast-forward push triggers re-rebase + re-gate +
+#                       retry up to the resolved cap — never a `--force`, never a
+#                       both-land-broken. Within a single runner the in-memory
+#                       `integrateLock` (in `integration-core.ts`/`run.ts`) is the
+#                       same-process accelerator that keeps build/gate/review
+#                       concurrent while serialising the land tail; it does NOT
+#                       span separate CI jobs. So the previous "parallel merge
+#                       jobs would thrash the main-CAS" framing is gone: parallel
+#                       merge legs are LAND-SAFE, capped on throughput by the
+#                       CAS-retry cap (raise `mergeRetries` for a wider matrix).
+#
+#                       NO `concurrency:` SERIALISER ON THE MERGE JOB BY DEFAULT.
+#                       A GitHub Actions `concurrency:` group on `advance-merge`
+#                       is host-specific sugar that this template deliberately
+#                       does NOT use: if added it would be load-bearing for
+#                       safety, and the floor is supposed to be safe on a bare
+#                       arbiter with no host. The portable accelerator (a
+#                       cross-job ref-lock) is the planned add — when it ships
+#                       it slots in as an OPTIONAL accelerator over the CAS-retry
+#                       floor, not as a host-specific gate at the workflow layer.
 #
 # Pick the mode with the `integrationMode` dispatch input (default below). It rides
 # `advance` as `--propose`/`--merge`, which sits at the TOP of the precedence chain
@@ -64,7 +89,7 @@ on:
   workflow_dispatch:
     inputs:
       integrationMode:
-        description: 'Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a single sequential `advance -n --merge` (rebase-chains to main).'
+        description: 'Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a matrix, each leg `advance --merge` (one item — build/gate/review fan out in parallel; the LAND tail is serialised by the engine''s `mergeRetries` CAS-retry loop, not by the workflow shape).'
         required: false
         default: 'propose'
         type: choice
@@ -145,17 +170,16 @@ env:
   SWEEP_MERGED_BRANCHES: ${{ github.event.inputs.sweepMergedBranches || 'true' }}
 
 jobs:
-  # ── ENUMERATE (propose only) ────────────────────────────────────────────────
+  # ── ENUMERATE (both modes) ──────────────────────────────────────────────────
   # Build the matrix from the eligible-pool scan. `scan --json` reads BOTH the
   # registry/hub-mirror pool (`repos[].items[]` + `repos[].prds[]`) AND the
   # in-place working checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`) and emits
   # eligible items + taskable PRDs; CI runs IN-PLACE so the eligible items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
   # both eligible-TASK pools AND both taskable-PRD pools into a GitHub Actions
-  # matrix list (one `task:<slug>` or `prd:<slug>` id per leg). Skipped entirely
-  # in merge mode.
+  # matrix list (one `task:<slug>` or `prd:<slug>` id per leg). Used by BOTH the
+  # propose and merge fan-out jobs — the same eligible pool drives either shape.
   enumerate:
-    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
     outputs:
       items: ${{ steps.scan.outputs.items }}
@@ -244,15 +268,31 @@ jobs:
         # `--watch` streams the build agent's high-signal turns into THIS job log
         # live (read-only observer; no outcome/gate/git effect), so the run shows
         # the agent working instead of freezing. Fits because each matrix leg names
-        # ONE item (one pi session to tail); the `-n` merge job cannot use it.
+        # ONE item (one pi session to tail) — the merge job is now a per-item matrix
+        # too (see below) and streams the same way.
         run: dorfl advance "${{ matrix.item }}" --propose --watch --arbiter origin
 
-  # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
-  # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.
-  # One sequential driver (`advance -n <x>`, ALWAYS sequential) drains the pool.
+  # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
+  # Each item gets its own leg running `dorfl advance <item> --merge`. Build,
+  # gate, and review run CONCURRENTLY across siblings; the LAND TAIL
+  # (rebase + CAS push to `main`, ADR §10) is serialised by the engine's
+  # `mergeRetries` CAS-retry loop — the git-alone, host-agnostic floor — NOT by
+  # this workflow's job shape. A non-fast-forward push triggers re-rebase +
+  # re-gate + retry up to the resolved `mergeRetries` cap; safe across runners,
+  # never a `--force`. Raise the cap (`merge-retries-gate-precedence`'s gate
+  # family: flag > env > per-repo > global > default) for a wider matrix.
+  # No `concurrency:` group on this job: a host-specific serialiser would make
+  # the floor depend on a GitHub Actions feature, which the design forbids.
   advance-merge:
-    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' }}
+    needs: enumerate
+    if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    strategy:
+      # Independent landings: one failing item must NOT cancel the others; a
+      # loser of the CAS race simply re-rebases + re-gates + retries.
+      fail-fast: false
+      matrix:
+        item: ${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -260,9 +300,8 @@ jobs:
       - uses: ./.github/actions/dorfl-setup
       - name: apply dispatch gate overrides (one-shot, this run only)
         # Mirror of the enumerate-job override (see there): export each gate's
-        # DORFL_* ONLY on a workflow_dispatch with a non-blank input. The
-        # merge job re-scans the pool inside `advance -n`, so it needs the override
-        # too for the lifecycle/task pools to reflect it.
+        # DORFL_* ONLY on a workflow_dispatch with a non-blank input, so the
+        # one-shot override also reaches the `advance` leg that lands the item.
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           [ -n "${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
@@ -270,15 +309,18 @@ jobs:
           [ -n "${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
-      - name: advance the eligible pool sequentially (merge ⇒ rebase-chains to main)
-        # `--merge` rides ONLY this single sequential job (never a matrix leg), so
-        # rebase-chained merges to main happen one at a time — no parallel main-CAS
-        # thrash. The flag ties the integration mode to this shape; it overrides the
-        # repo config default, so the workflow mode and the integration mode agree.
+      - name: advance one item (merge ⇒ rebase + CAS land on main)
+        # `--merge` ties the integration mode to THIS (matrix) shape: it sits at
+        # the top of the precedence chain, so the workflow mode always wins over
+        # the repo's `.dorfl.json` default. Cross-job land safety comes from the
+        # engine's CAS-retry loop, not from this workflow's job shape.
         # `gh` (merge / PR housekeeping) reads `GH_TOKEN` from the env.
         env:
           GH_TOKEN: ${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: dorfl advance -n 10 --merge --arbiter origin
+        # `--watch` streams the build agent's high-signal turns into this job
+        # log live (read-only observer); each leg names ONE item, so it fits the
+        # same way it does on the propose legs.
+        run: dorfl advance "${{ matrix.item }}" --merge --watch --arbiter origin
 
   # ── REAP merged remote work/* branches (the hygiene sweep) ───────────────────
   # The provider-agnostic counterpart of the worktree reaper: delete remote

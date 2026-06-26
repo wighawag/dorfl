@@ -15,7 +15,9 @@ import {
  * a documented template is VALIDATED here: it locates as a `.template` (so it
  * never self-triggers in THIS repo), parses into the required structural shape,
  * and references the right DRIVER invocations (propose ⇒ matrix enumerated via the
- * mirror-side `scan --json`; merge ⇒ a single sequential `advance -n`).
+ * mirror-side `scan --json`; merge ⇒ ALSO a matrix per item, the parallel-build /
+ * serialised-land shape that the engine's `integrateLock` + `mergeRetries`
+ * CAS-retry loop makes safe — see `land-time-reverify-and-parallel-merge-ceiling`).
  *
  * `validateAdvanceCiTemplate` is the dependency-free counterpart of a YAML parse
  * (the package has no YAML lib, mirroring `frontmatter.ts`): a set of presence/
@@ -64,23 +66,41 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				text,
 			),
 		).toBe(true);
-		// And `--merge` must NEVER ride a matrix leg (parallel merge-to-main thrash).
-		expect(/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(text)).toBe(
-			false,
-		);
+		// And `--merge` must NEVER ride a `propose` matrix leg (it would silently
+		// land a propose leg on main). The MERGE matrix leg DOES carry `--merge`
+		// (the new fan-out shape), so the guard is scoped to the propose section
+		// only — split off the merge section so the regex cannot reach it.
+		const proposeSection = text.split('advance-merge:')[0];
+		expect(
+			/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(proposeSection),
+		).toBe(false);
 	});
 
-	it('merge mode is a SINGLE SEQUENTIAL job invoking the -n driver with --merge (no matrix)', () => {
+	it("merge mode fans out as a MATRIX per item, with --merge per leg (parallel build/gate/review, serialised land via the engine's CAS-retry loop)", () => {
 		const text = loadAdvanceCiTemplate();
-		// The `-n` driver is always sequential; the merge job must not use a matrix
-		// (parallel merge jobs would thrash the main-CAS).
-		expect(/dorfl advance -n\b/.test(text)).toBe(true);
+		// The new shape (PRD `land-time-reverify-and-parallel-merge-ceiling`,
+		// stories 4 + 6): merge mode fans out one job per item. Build/gate/review
+		// run concurrently across siblings; the land tail is serialised by the
+		// engine's `mergeRetries` CAS-retry loop (the git-alone floor), NOT by the
+		// workflow's job shape.
 		expect(/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(
-			false,
+			true,
 		);
-		// The sequential job carries `--merge` so its integration mode is TIED to the
-		// single-sequential shape (cannot desync from the dispatch mode / config).
-		expect(/dorfl advance -n\b[^\n]*--merge\b/.test(text)).toBe(true);
+		expect(
+			/advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+				text,
+			),
+		).toBe(true);
+	});
+
+	it('the merge job carries NO host-specific `concurrency:` serialiser (the floor is git-alone; CAS-retry is the cross-job serialiser)', () => {
+		const text = loadAdvanceCiTemplate();
+		// Applied Answer q1: scaled `mergeRetries` is the floor; the portable
+		// cross-job ref-lock is the planned accelerator; a GitHub Actions
+		// `concurrency:` block on `advance-merge` is OPTIONAL host sugar only,
+		// deliberately NOT shipped — a host-specific serialiser would be
+		// load-bearing for safety, which the floor framing forbids.
+		expect(/advance-merge:[\s\S]*?\n {4}concurrency:/.test(text)).toBe(false);
 	});
 
 	it('uses ONE word (integrationMode) for the dispatch input that drives BOTH flag and shape', () => {
@@ -160,13 +180,16 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			);
 		});
 
-		it('flags a missing sequential -n merge driver', () => {
-			const broken = base.replace(/dorfl advance -n\b/g, 'dorfl advance');
+		it('flags a merge job that is NOT a matrix (the new fan-out shape requires it)', () => {
+			// Strip the matrix block from the merge job: a single-sequential merge
+			// (the OLD shape) must now FAIL validation.
+			const broken = base.replace(
+				/(advance-merge:[\s\S]*?)strategy:\s*\n(?:\s+[^\n]*\n)+?(\s+steps:)/,
+				'$1$2',
+			);
 			const result = withTmpTemplate(broken);
 			expect(result.ok).toBe(false);
-			expect(result.problems.map((p) => p.id)).toContain(
-				'merge-sequential-n-driver',
-			);
+			expect(result.problems.map((p) => p.id)).toContain('merge-matrix');
 		});
 
 		it('flags a propose matrix leg missing the --propose flag', () => {
@@ -183,12 +206,32 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			);
 		});
 
-		it('flags a merge -n job missing the --merge flag', () => {
-			const broken = base.replace(/(dorfl advance -n 10) --merge/, '$1');
+		it('flags a merge matrix leg missing the --merge flag', () => {
+			// Drop `--merge` from the merge matrix leg only: the integration mode
+			// would then fall back to config and could desync from the matrix shape.
+			const broken = base.replace(
+				/(advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --merge/,
+				'$1',
+			);
 			const result = withTmpTemplate(broken);
 			expect(result.ok).toBe(false);
 			expect(result.problems.map((p) => p.id)).toContain(
-				'merge-job-carries-merge-flag',
+				'merge-leg-carries-merge-flag',
+			);
+		});
+
+		it('flags a host-specific `concurrency:` group injected on the `advance-merge` job (would make safety host-dependent)', () => {
+			// Inject a forbidden `concurrency:` block under the `advance-merge:` job:
+			// a host-specific serialiser at the workflow layer would be load-bearing
+			// for cross-job land safety, breaking the git-alone floor framing.
+			const broken = base.replace(
+				/(advance-merge:\n)(\s{4}needs:)/,
+				'$1    concurrency:\n      group: dorfl-merge-${{ github.ref }}\n      cancel-in-progress: false\n$2',
+			);
+			const result = withTmpTemplate(broken);
+			expect(result.ok).toBe(false);
+			expect(result.problems.map((p) => p.id)).toContain(
+				'merge-no-host-concurrency-serialiser',
 			);
 		});
 
@@ -209,19 +252,5 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				);
 			},
 		);
-
-		it('flags --merge riding a matrix leg (parallel merge-to-main thrash)', () => {
-			// Inject a forbidden `--merge` onto the matrix leg: the validator must catch
-			// that a parallel matrix could merge to main concurrently.
-			const broken = base.replace(
-				/(dorfl advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --propose/,
-				'$1 --merge',
-			);
-			const result = withTmpTemplate(broken);
-			expect(result.ok).toBe(false);
-			expect(result.problems.map((p) => p.id)).toContain(
-				'merge-flag-not-on-matrix-leg',
-			);
-		});
 	});
 });

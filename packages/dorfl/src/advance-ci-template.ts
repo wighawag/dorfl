@@ -28,9 +28,12 @@ import {fileURLToPath} from 'node:url';
  *     mirror-side pool scan (`dorfl scan --json`), one `advance … --propose`
  *     per item (the `--propose` flag TIES the integration mode to the matrix shape,
  *     so a leg can never merge to main);
- *   - `merge` mode → a SINGLE SEQUENTIAL job invoking the `-n` driver with
- *     `--merge` (`dorfl advance -n … --merge`, always sequential — `--merge`
- *     rides ONLY this job, so parallel merge-to-main is structurally impossible);
+ *   - `merge` mode → a MATRIX of independent jobs (one per item), each leg
+ *     running `dorfl advance <item> --merge` so build/gate/review run
+ *     concurrently across siblings; the LAND TAIL is serialised by the engine's
+ *     `mergeRetries` CAS-retry loop (the git-alone floor), NOT by this
+ *     workflow's job shape — a host-specific `concurrency:` group would be
+ *     load-bearing for safety, which the floor framing forbids;
  *   - the dispatch input is `integrationMode` (ONE word, ONE meaning): it drives
  *     BOTH the integration flag the legs pass AND the job shape, so they cannot
  *     desync;
@@ -158,32 +161,38 @@ export function validateAdvanceCiTemplate(
 		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
 		'dispatch mode).');
 
-	// --- merge ⇒ a SINGLE SEQUENTIAL job invoking the `-n` driver ----------------
-	require('merge-sequential-n-driver', /dorfl advance -n\b/.test(
+	// --- merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land) -
+	// The engine's `integrateLock` + `mergeRetries` CAS-retry loop is what makes
+	// concurrent merge jobs LAND-SAFE (`land-time-reverify-and-parallel-merge-ceiling`):
+	// build/gate/review fan out across siblings, and a non-fast-forward push
+	// triggers re-rebase + re-gate + retry up to the resolved `mergeRetries` cap.
+	// The cross-job serialiser is the CAS-retry loop itself — the git-alone floor.
+	require('merge-matrix', /advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
 		text,
-	), '`merge` mode must run a SINGLE SEQUENTIAL job invoking the `-n` driver ' +
-		'(`dorfl advance -n <x>`).');
-	// The sequential merge job must carry `--merge` so the integration mode is TIED
-	// to the single-sequential shape (it cannot desync from the dispatch
-	// `integrationMode` input nor fall back to a repo config default of `propose`).
-	require('merge-job-carries-merge-flag', /dorfl advance -n\b[^\n]*--merge\b/.test(
+	), 'the `merge` job must use a MATRIX (parallel build/gate/review per item; ' +
+		"the land tail is serialised by the engine's `mergeRetries` CAS-retry " +
+		"loop, not by the workflow's job shape).");
+	// Each merge matrix leg must run one `dorfl advance <matrix.item> --merge`,
+	// scoped to the `advance-merge:` job so the `--merge` flag is TIED to its leg
+	// (cannot desync from the dispatch `integrationMode` input nor fall back to a
+	// repo config default of `propose`).
+	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
 		text,
-	), 'the `merge` job must pass `--merge` on its `advance -n` driver so the ' +
-		'integration mode is TIED to the single-sequential shape (it cannot desync ' +
-		'from the dispatch mode / a repo config default).');
-	// And `--merge` must NOT appear on any matrix leg — a parallel merge-to-main
-	// would thrash the main-CAS. Guard that the `--merge` flag rides ONLY the
-	// sequential job, never an `advance "${{ matrix.* }}"` leg.
-	require('merge-flag-not-on-matrix-leg', !/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(
+	), 'each `merge` matrix leg must pass `--merge` so the integration mode is ' +
+		'TIED to the matrix shape (a leg can never propose-only / desync from the ' +
+		'dispatch mode).');
+	// The merge fan-out is the SAFETY-FLOOR shape: no `concurrency:` group on the
+	// `advance-merge:` job, because a GitHub Actions `concurrency:` serialiser
+	// would be load-bearing for cross-job land safety, and the floor must work on
+	// a bare arbiter with no host (Applied Answer q1: scaled CAS-retry is the
+	// floor; the portable cross-job ref-lock is the planned accelerator; GitHub
+	// `concurrency:` is OPTIONAL host sugar only, deliberately not used here).
+	require('merge-no-host-concurrency-serialiser', !/advance-merge:[\s\S]*?\n\s{4}concurrency:/.test(
 		text,
-	), '`--merge` must NOT ride a matrix leg (parallel merge-to-main would thrash ' +
-		'the main-CAS); it belongs ONLY on the single sequential `advance -n` job.');
-	// A matrix must NOT appear in the merge job — guard against parallel merge
-	// (which would thrash the main-CAS). The merge job is identified by its name.
-	require('merge-no-matrix', !/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
-		text,
-	), 'the `merge` job must NOT use a matrix (parallel merge jobs would thrash ' +
-		'the main-CAS).');
+	), 'the `merge` job must NOT carry a `concurrency:` group: a host-specific ' +
+		'serialiser would make the cross-job land safety depend on a GitHub Actions ' +
+		"feature; the engine's `mergeRetries` CAS-retry loop is the git-alone " +
+		'floor.');
 
 	// --- It only INVOKES the existing `advance` driver (no new execution model) --
 	require('invokes-advance-driver', /dorfl advance\b/.test(
