@@ -3,6 +3,7 @@ title: recovery-complete propose push reds CI with 'stale info' on an already-la
 date: 2026-06-26
 status: open
 relatedTask: propose-push-survives-stale-lease-on-reaped-work-ref
+needsAnswers: true
 ---
 
 ## What was observed
