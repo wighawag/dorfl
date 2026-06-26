@@ -95,3 +95,7 @@ stranded-recovery caller that already gated keeps skipping the gate.
 > assert on external behaviour (what lands on main vs. routes to
 > needs-attention, that verify ran on the rebased tip). Run the
 > AGENTS.md acceptance gate.
+
+## Requeue 2026-06-26
+
+stuck: acceptance gate exit 1 on rebased tip (18:42Z); no work branch on origin; reset+requeued for fresh claim
