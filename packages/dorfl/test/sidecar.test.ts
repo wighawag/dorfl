@@ -11,6 +11,7 @@ import {
 	sidecarPathFor,
 	SidecarParseError,
 	type SidecarModel,
+	type SidecarKind,
 } from '../src/sidecar.js';
 
 /** A canonical two-entry sidecar text in the new human-readable format. */
@@ -509,5 +510,81 @@ describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver S
 	});
 	it('the `:`→`-` mapping is in the FILENAME only (item keeps the colon)', () => {
 		expect(resolveSidecarIdentity('prd:x').item).toBe('prd:x');
+	});
+});
+
+describe('entry `kind` axis — INTERIM dispatch primitive (apply-rung reads it)', () => {
+	const KINDS: SidecarKind[] = ['merge', 'stuck', 'triage', 'spec'];
+
+	it.each(KINDS)(
+		'round-trips `kind=%s` through serialise + parse, emitting it in the per-entry comment',
+		(kind) => {
+			const model: SidecarModel = {
+				item: 'task:foo',
+				type: 'task',
+				slug: 'foo',
+				entries: [{id: 'q1', question: 'q?', context: '', answer: '', kind}],
+			};
+			const out = serialiseSidecar(model);
+			expect(out).toContain(`<!-- q1 fields: id=q1 kind=${kind} -->`);
+			const reparsed = parseSidecar(out);
+			expect(reparsed.entries[0].kind).toBe(kind);
+			// Fixed point: re-serialising is byte-equal.
+			expect(serialiseSidecar(reparsed)).toBe(out);
+		},
+	);
+
+	it('an entry with NO `kind` parses + serialises byte-identically (back-compat — every existing sidecar is unchanged)', () => {
+		const text = [
+			'<!-- dorfl-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**A question?**',
+			'',
+			'<!-- q1 fields: id=q1 -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect('kind' in model.entries[0]).toBe(false);
+		expect(serialiseSidecar(model)).toBe(text);
+	});
+
+	it('an unknown `kind=` token parses to `undefined` (silent-on-malformed, retired-`disposition` precedent)', () => {
+		const text = [
+			'<!-- dorfl-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**A question?**',
+			'',
+			'<!-- q1 fields: id=q1 kind=bogus -->',
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+		const model = parseSidecar(text);
+		expect(model.entries[0].kind).toBeUndefined();
+		expect('kind' in model.entries[0]).toBe(false);
+		// And serialising drops the unknown token (no coerce, no echo).
+		expect(serialiseSidecar(model)).not.toContain('kind=');
+	});
+
+	it('`newSidecar` / `appendQuestions` stamp the `kind` the surfacer hands them', () => {
+		const model = newSidecar('task:foo', [
+			{question: 'merge x?', kind: 'merge'},
+		]);
+		expect(model.entries[0].kind).toBe('merge');
+		const next = appendQuestions(model, [
+			{question: 'spec y?', kind: 'spec'},
+			{question: 'plain content q?'},
+		]);
+		expect(next.entries.map((e) => e.kind)).toEqual([
+			'merge',
+			'spec',
+			undefined,
+		]);
 	});
 });
