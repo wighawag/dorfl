@@ -300,6 +300,15 @@ export interface DoOptions {
 	 */
 	freshWorktreeGate?: boolean;
 	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded VERBATIM into `performComplete` → `performIntegration` so a
+	 * wide-matrix CI's raised cap actually reaches the cross-job land queue (the
+	 * CAS loop IS the queue across separate jobs). Resolved per-repo through the
+	 * gate-family precedence chain (flag > env > per-repo > global > default).
+	 */
+	mergeRetries?: number;
+	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
 	 * the branch but deliberately skips the PR (the explicit suppress-PR intent).
 	 * NOT a provider choice — the provider is purely arbiter-derived. Threaded
@@ -516,6 +525,15 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * flag is passed UNCONDITIONALLY (no `run`-fleet downgrade).
 	 */
 	freshWorktreeGate?: boolean;
+	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded VERBATIM into `performComplete` → `performIntegration` so the
+	 * resolved cap reaches the cross-job land queue (the CAS loop IS the queue
+	 * across separate jobs). Mirrors {@link DoOptions.mergeRetries} so the in-place
+	 * and no-checkout `do` paths share ONE knob.
+	 */
+	mergeRetries?: number;
 	/**
 	 * **The PR-INTENT axis** (config `noPR`, ADR §6): when `true`, propose pushes
 	 * the branch but skips the PR (the explicit suppress-PR intent). NOT a provider
@@ -1154,6 +1172,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
+		// git-alone FLOOR of the cross-job land queue (prd `land-time-reverify-and-
+		// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). Threaded so a
+		// wide-matrix CI's raised cap actually reaches the merge loop.
+		mergeRetries: options.mergeRetries,
 		noPR: options.noPR,
 		// The resolved provider INSTANCE seam (tests/embeddings inject a stubbed
 		// GitHubProvider to drive the propose pipeline offline). Unset ⇒ the core
@@ -2314,6 +2337,10 @@ async function runRemotePipeline(
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — see
+		// the in-place site above for the rationale; mirrored here so the no-checkout
+		// `do --remote`/`--isolated` path threads the same resolved cap.
+		mergeRetries: options.mergeRetries,
 		noPR: options.noPR,
 		providerInstance: options.providerInstance,
 		body: agent.output,

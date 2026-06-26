@@ -953,6 +953,13 @@ async function runOneItem(
 				// on the `run` fleet at any same-repo parallelism. Single-job callers
 				// (`do`/`--isolated`/`--remote`/`complete`) already pass it unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
+				// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
+				// the git-alone FLOOR of the cross-job land queue (prd `land-time-reverify-
+				// and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). Threaded
+				// from the per-repo resolved config so a wide-matrix CI's raised cap actually
+				// reaches the merge loop — across separate `run` fleet jobs the CAS loop IS
+				// the queue (`integrateLock` only serialises sibling integrates in ONE process).
+				mergeRetries: config.mergeRetries,
 				// Gate 2 (PR/code review): the per-repo resolved flags ride from `config`;
 				// only the gate SEAM is threaded through `ctx` (the CLI wires the prod
 				// `harnessReviewGate()` only when `config.review` is on).
