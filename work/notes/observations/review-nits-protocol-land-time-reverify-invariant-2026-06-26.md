@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'protocol-land-time-reverify-invariant'
 date: 2026-06-26
 status: open
 reviewOf: protocol-land-time-reverify-invariant
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
