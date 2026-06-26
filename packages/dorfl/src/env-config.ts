@@ -131,6 +131,12 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `freshWorktreeGate` is a BOOLEAN coercion (like `taskerLoop`), so
 	// `DORFL_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
 	freshWorktreeGate: 'boolean',
+	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — prd
+	// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a))
+	// coerces as a NUMBER (like `reviewMaxRounds`), so `DORFL_MERGE_RETRIES=20`
+	// works and a typo FAILS LOUDLY. A wide-matrix CI raises it; the default
+	// (1000 — the C2 large liveness ceiling) stays in place when unset.
+	mergeRetries: 'number',
 	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env
 	// var of its own — each MEMBER carries its own env var (the nested-key form
 	// `DORFL_PROMPT_GUIDANCE_<MEMBER>`), handled out-of-band in

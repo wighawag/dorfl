@@ -159,6 +159,16 @@ export interface CompleteOptions {
 	 * {@link performIntegration}.
 	 */
 	freshWorktreeGate?: boolean;
+	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded verbatim into {@link performIntegration} as `mergeRetries` so
+	 * the resolved per-repo value controls how many re-rebase-and-retry attempts
+	 * the merge-mode `${branch}:main` push makes before a contender bounces to
+	 * needs-attention. Resolved ONCE per `performComplete` call — the same
+	 * per-item resolution as `freshWorktreeGate` / `reviewMaxRounds`.
+	 */
+	mergeRetries?: number;
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
@@ -880,6 +890,11 @@ async function runComplete(
 		prepare: options.prepare,
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
+		// git-alone FLOOR of the cross-job land-queue, resolved through the gate-family
+		// precedence chain (prd `land-time-reverify-and-parallel-merge-ceiling` Story
+		// 5). Threaded so a wide-matrix CI's raised cap actually reaches the merge loop.
+		mergeRetries: options.mergeRetries,
 		skipVerify: options.skipVerify,
 		// The untrusted-origin build-propose rule's override (task
 		// `untrusted-origin-forces-build-propose`): an explicit `--merge` lets the

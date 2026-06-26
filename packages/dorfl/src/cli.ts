@@ -97,6 +97,7 @@ import {
 	NO_AGENT_CMD_MESSAGE,
 	reviewFlagOverrides,
 	freshWorktreeGateFlagOverrides,
+	mergeRetriesFlagOverrides,
 	noPRFlagOverrides,
 } from './do-config.js';
 import {harnessReviewGate, harnessTaskAcceptanceGate} from './review-gate.js';
@@ -393,6 +394,10 @@ function buildRegistrySetAdvanceTick(options: {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
+				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — resolved per-repo
+				// and threaded so the registry-driven advance path's `do` inherits it.
+				mergeRetries: config.mergeRetries,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
@@ -515,6 +520,8 @@ interface RunFlags extends ScanFlags {
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	mergeRetries?: string;
 }
 
 function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
@@ -551,6 +558,12 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	// caller additionally downgrades it to today's gate at `perRepoMax > 1` (the
 	// fleet conditional lives in `runOnce`, not in this flag mapping).
 	Object.assign(overrides, freshWorktreeGateFlagOverrides(flags));
+	// `--merge-retries <n>` rides the SAME chain: the cross-job merge-serialiser
+	// CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 /
+	// Applied Answer q1 (a)). The `run` fleet inherits the resolved cap through
+	// the converged `performIntegration` core (config.mergeRetries threads into
+	// the merge loop, replacing the bare `DEFAULT_MERGE_RETRIES` fallback).
+	Object.assign(overrides, mergeRetriesFlagOverrides(flags));
 	return overrides;
 }
 
@@ -624,6 +637,8 @@ interface CompleteFlags {
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	mergeRetries?: string;
 	/** `--isolated`: finish the slug's retained job worktree (the stranded-branch recover). */
 	isolated?: boolean;
 	workspace?: string;
@@ -719,6 +734,8 @@ interface DoFlags {
 	taskerLoopModel?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	mergeRetries?: string;
 }
 
 interface IntakeFlags {
@@ -1170,6 +1187,10 @@ export function buildProgram(): Command {
 		.option(
 			'--no-fresh-worktree-gate',
 			'run the acceptance gate in the build worktree (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
+		)
+		.option(
+			'--merge-retries <n>',
+			'cross-job merge-serialiser CAS-retry cap: a non-fast-forward `${branch}:main` push re-rebases onto the moved <arbiter>/main and retries up to <n> times before a contender bounces to needs-attention. The CAS loop IS the cross-job queue (the in-process integrateLock only serialises sibling integrates in one process), so a wide-matrix CI raises this. Default 1000 (a large liveness ceiling, NOT a small contention budget). Resolved flag > env > per-repo > global > default.',
 		)
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: RunFlags, command: Commander) => {
@@ -1716,6 +1737,10 @@ export function buildProgram(): Command {
 			'--no-fresh-worktree-gate',
 			'run the acceptance gate in the current checkout (the pre-rebase tree) — the opt-out for when the per-gate install cost is too high',
 		)
+		.option(
+			'--merge-retries <n>',
+			'cross-job merge-serialiser CAS-retry cap (see `run --help`); resolved flag > env > per-repo > global > default 1000.',
+		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
 			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
 			const slug = resolveTaskOnlySlug(rawSlug);
@@ -1780,6 +1805,10 @@ export function buildProgram(): Command {
 					...reviewFlagOverrides(flags),
 					// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` rides the SAME chain.
 					...freshWorktreeGateFlagOverrides(flags),
+					// `--merge-retries <n>` rides the SAME chain: the cross-job merge-serialiser
+					// CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5
+					// / Applied Answer q1 (a)).
+					...mergeRetriesFlagOverrides(flags),
 					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
 					...noPRFlagOverrides(flags),
 				},
@@ -1817,6 +1846,11 @@ export function buildProgram(): Command {
 				// a single-job path, so the resolved flag is passed UNCONDITIONALLY (no
 				// fleet downgrade).
 				freshWorktreeGate: config.freshWorktreeGate,
+				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — the resolved
+				// per-repo value reaches the merge loop via `performComplete`→
+				// `performIntegration`.
+				mergeRetries: config.mergeRetries,
 				type: flags.type,
 				message: flags.message,
 				// Color the propose-mode next-step block only on an interactive
@@ -1961,6 +1995,10 @@ export function buildProgram(): Command {
 		.option(
 			'--no-fresh-worktree-gate',
 			"run the acceptance gate in the agent's build worktree (the pre-rebase tree) as before — the opt-out for when the per-gate install cost is too high",
+		)
+		.option(
+			'--merge-retries <n>',
+			'cross-job merge-serialiser CAS-retry cap (see `run --help`); resolved flag > env > per-repo > global > default 1000.',
 		)
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
@@ -2131,6 +2169,10 @@ export function buildProgram(): Command {
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
 					freshWorktreeGate: remoteConfig.freshWorktreeGate,
+					// Cross-job merge-serialiser CAS-retry cap (resolved through the per-repo
+					// chain on the arbiter-side `.dorfl.json` too) — prd
+					// `land-time-reverify-and-parallel-merge-ceiling` Story 5.
+					mergeRetries: remoteConfig.mergeRetries,
 					noPR: remoteConfig.noPR,
 					harness: remoteHarness,
 					agentCmd: remoteConfig.agentCmd,
@@ -2300,6 +2342,10 @@ export function buildProgram(): Command {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
+				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — resolved per-repo
+				// and threaded to `performComplete`→`performIntegration`.
+				mergeRetries: config.mergeRetries,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,
@@ -2612,6 +2658,9 @@ export function buildProgram(): Command {
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
 					freshWorktreeGate: remoteConfig.freshWorktreeGate,
+					// Cross-job merge-serialiser CAS-retry cap — prd
+					// `land-time-reverify-and-parallel-merge-ceiling` Story 5.
+					mergeRetries: remoteConfig.mergeRetries,
 					noPR: remoteConfig.noPR,
 					harness: isoHarness,
 					agentCmd: remoteConfig.agentCmd,
@@ -2752,6 +2801,9 @@ export function buildProgram(): Command {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
+				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)).
+				mergeRetries: config.mergeRetries,
 				noPR: config.noPR,
 				harness,
 				agentCmd: config.agentCmd,

@@ -72,7 +72,8 @@ export function doFlagOverrides(
 		SelectionOrderFlags &
 		ObservationTriageFlags &
 		SurfaceBlockersFlags &
-		NoPRFlags,
+		NoPRFlags &
+		MergeRetriesFlags,
 	integration?: IntegrationMode,
 ): PartialConfig {
 	const overrides = {
@@ -105,6 +106,10 @@ export function doFlagOverrides(
 		// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
 		// arbiter. Rides the SAME flag > env > per-repo > global > default chain.
 		...noPRFlagOverrides(flags),
+		// `--merge-retries <n>` (the cross-job merge serialiser's CAS-retry cap — prd
+		// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer
+		// q1 (a)) rides the SAME chain (flag > env > per-repo > global > default).
+		...mergeRetriesFlagOverrides(flags),
 	};
 	if (integration !== undefined) {
 		// An explicit `--merge`/`--propose` flag ALWAYS wins for the transition this
@@ -348,6 +353,45 @@ export function surfaceBlockersFlagOverrides(
 	const overrides: PartialConfig = {};
 	if (flags.surfaceBlockers !== undefined) {
 		overrides.surfaceBlockers = flags.surfaceBlockers;
+	}
+	return overrides;
+}
+
+/**
+ * **The cross-job merge-serialiser CAS-retry cap CLI flag** (`--merge-retries
+ * <n>`) — prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied
+ * Answer q1 (a). The git-alone FLOOR of the cross-job land-queue; a wide-matrix
+ * CI raises the cap so more contenders converge before any spurious bounce to
+ * needs-attention. Offered by `do`/`run`/`complete`. Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as `--review-max-rounds` /
+ * `--fresh-worktree-gate`.
+ */
+export interface MergeRetriesFlags {
+	/** `--merge-retries <n>` — the cross-job CAS-retry cap (parsed to a non-negative integer). */
+	mergeRetries?: string;
+}
+
+/**
+ * Map the `--merge-retries <n>` flag into a {@link PartialConfig} override. Only
+ * a present flag contributes (absent ⇒ absent key), so the override layer never
+ * clobbers a lower-precedence source with `undefined`. The value MUST be a
+ * NON-NEGATIVE integer (`0` is meaningful — it disables the retry, the
+ * un-retried path the engine's tests pin); a non-integer / negative value is
+ * dropped silently so the lower layer / default decides (mirrors
+ * {@link reviewFlagOverrides}'s parse-or-drop on `--review-max-rounds`).
+ */
+export function mergeRetriesFlagOverrides(
+	flags: MergeRetriesFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.mergeRetries !== undefined) {
+		const raw = flags.mergeRetries;
+		if (raw.trim() !== '') {
+			const n = Number(raw);
+			if (Number.isInteger(n) && n >= 0) {
+				overrides.mergeRetries = n;
+			}
+		}
 	}
 	return overrides;
 }

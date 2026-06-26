@@ -530,6 +530,28 @@ export interface Config {
 	 */
 	freshWorktreeGate: boolean;
 	/**
+	 * **The cross-job merge serialiser's CAS-retry cap** — the git-alone FLOOR of the
+	 * land-time cross-job queue (prd `land-time-reverify-and-parallel-merge-ceiling`,
+	 * Story 5 + Applied Answer q1 (a)). The merge-mode `${branch}:main` push retries
+	 * a non-fast-forward rejection by re-rebasing onto the moved `<arbiter>/main` and
+	 * pushing again, up to this cap; only after exhaustion does a loser bounce to
+	 * needs-attention. The in-process `integrateLock` only serialises sibling
+	 * INTEGRATES in ONE process; across separate CI jobs the CAS loop IS the queue,
+	 * and this cap is what determines how wide a matrix burst converges before any
+	 * spurious bounce. A wide-matrix CI raises it; the default stays modest. Race-1
+	 * safety is unchanged (a lost CAS costs only a re-rebase + re-gate retry, never a
+	 * `--force`, never a both-land-broken) — scaling the cap only changes WHEN a
+	 * genuinely-stuck loser gives up. Resolved per-repo like `freshWorktreeGate`:
+	 * flag (`--merge-retries`) > env (`DORFL_MERGE_RETRIES`) > per-repo > global >
+	 * default. The default matches `integration-core.ts`'s built-in fallback (1000 —
+	 * the C2 rebase-until-real-conflict liveness ceiling, not a small Race-1 budget),
+	 * so resolving it through this layer is byte-for-byte today's behaviour when no
+	 * source sets it. Forwarded into `performIntegration`'s `mergeRetries` (resolved
+	 * ONCE per `performIntegration` call, fixed across that call's CAS-retry loop —
+	 * the same per-item resolution `freshWorktreeGate` / `review` use).
+	 */
+	mergeRetries: number;
+	/**
 	 * The optional runner **identity** (a bot): run the runner's git + provider
 	 * operations as a configured entity via process-scoped env overrides, without
 	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
@@ -682,6 +704,14 @@ export const DEFAULT_CONFIG: Config = {
 	// before, for when the per-gate install cost is too high. Mirrors `taskerLoop`
 	// (positive name, default-on).
 	freshWorktreeGate: true,
+	// The cross-job merge serialiser's CAS-retry cap — the git-alone FLOOR of the
+	// land-time cross-job queue (prd `land-time-reverify-and-parallel-merge-ceiling`,
+	// Story 5 + Applied Answer q1 (a)). Matches `integration-core.ts`'s built-in
+	// `DEFAULT_MERGE_RETRIES` fallback (1000 — the C2 large liveness ceiling, NOT a
+	// small Race-1 budget) so resolving it through this layer is byte-for-byte
+	// today's behaviour when no source sets it. A wide-matrix CI raises it via
+	// `--merge-retries`/`DORFL_MERGE_RETRIES`/per-repo `mergeRetries`.
+	mergeRetries: 1000,
 };
 
 /** The conventional config location (`~/.config/dorfl/config.json`). */

@@ -172,6 +172,15 @@ export const REPO_ALLOWED_KEYS = [
 	// artifact (and pays the per-gate install cost) is agreed by all collaborators
 	// + travels with the repo. Resolved per-repo through the SAME chain.
 	'freshWorktreeGate',
+	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — prd
+	// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a))
+	// is a genuine repo property exactly like `freshWorktreeGate`: "how many
+	// re-rebase-and-retry attempts before a contender bounces to needs-attention"
+	// is agreed by all collaborators in a wide-matrix CI repo + travels with the
+	// repo. Resolved per-repo through the SAME chain as `freshWorktreeGate`
+	// (flag > env > per-repo > global > default). Safety is unchanged — a lost
+	// CAS still costs only a re-rebase + re-gate retry, never a `--force`.
+	'mergeRetries',
 	// `promptGuidance` (the NUDGE namespace — prompt-text knobs that strengthen
 	// the worker's in-band wrapper line, e.g. `testFirst`) is a genuine repo
 	// property: "is this repo nudged toward test-first?" travels with the repo
