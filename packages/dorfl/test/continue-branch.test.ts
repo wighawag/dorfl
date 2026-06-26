@@ -12,6 +12,7 @@ import {
 	rebaseContinuedBranchOntoMain,
 	pushContinuedBranchWithStaleLeaseRetry,
 } from '../src/continue-branch.js';
+import {run} from '../src/git.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -220,6 +221,144 @@ describe('rebaseContinuedBranchOntoMain', () => {
 		const subjects = gitIn(['log', '--format=%s', 'arbiter/main..HEAD'], repo);
 		expect(subjects).not.toMatch(/route to needs-attention/);
 		expect(subjects).toMatch(/wip\(alpha\): agent feature/);
+	});
+
+	// --- Directory-rename detection MUST stay off (task ----------------------
+	// `disable-rename-detection-on-continue-rebase`).
+	//
+	// Failure shape: a work branch carries one durable folder-transition `git mv`
+	// out of a SPARSE source folder (the only item), then main advances by ADDING
+	// new files into that SAME source folder. Git's directory-rename heuristic
+	// would infer a whole-DIRECTORY rename `<from>/ → <to>/` for our commit and
+	// flag each new file added on main as `CONFLICT (file location): … added in
+	// HEAD inside a directory that was renamed … suggesting it should perhaps be
+	// moved to <to>/<slug>.md`. The fix: `-c merge.directoryRenames=false` scoped
+	// to the rebase invocation. Verified empirically: `-Xno-renames` /
+	// `merge.renames` / `diff.renames` do NOT suppress this conflict; only
+	// `merge.directoryRenames=false` does.
+	it('replays CLEAN when a single done-move out of a SPARSE source folder meets a main that ADDED files into that same folder (no spurious directory-rename CONFLICT (file location))', () => {
+		// Sparse source folder: just one item in `work/tasks/ready/` (`alpha`).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// Work branch: durable done-move of the SOLE item out of the sparse folder.
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/ready/alpha.md', 'work/tasks/done/alpha.md'],
+			repo,
+		);
+		gitIn(['commit', '-q', '-m', 'feat(alpha): done'], repo);
+
+		// Main advances: ADD new sibling files into the SAME (now-empty-on-our-branch)
+		// `work/tasks/ready/` folder. Their content is unrelated to our work.
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'ready', 'beta.md'),
+			'---\nslug: beta\n---\nbeta\n',
+		);
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'ready', 'gamma.md'),
+			'---\nslug: gamma\n---\ngamma\n',
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed beta + gamma into ready/'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result.kind).toBe('clean');
+
+		// Our done-move applied: alpha is in done/ only.
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
+			false,
+		);
+		// Main's added sibling files landed in `ready/` (their INTENDED folder), NOT
+		// silently swept into `done/` by an inferred directory rename.
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'beta.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'gamma.md'))).toBe(
+			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'beta.md'))).toBe(
+			false,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'gamma.md'))).toBe(
+			false,
+		);
+		// And the worktree is clean (no `--abort`ed rebase left behind).
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+
+	// Rename-off must NOT mask a GENUINE same-path content conflict: the
+	// `{kind: 'conflict'}` / needs-attention route is preserved.
+	it('still conflicts on a GENUINE same-path content clash (rename-off does NOT mask real conflicts)', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		// Branch edits a shared file one way.
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		writeFileSync(join(repo, 'shared.txt'), 'branch version\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'branch edits shared'], repo);
+
+		// Main edits the SAME file at the SAME path differently.
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(join(repo, 'shared.txt'), 'main version\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'main edits shared'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result.kind).toBe('conflict');
+		// The rebase was aborted: clean worktree, still on the branch tip.
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
+			'work/task-alpha',
+		);
+	});
+
+	// Scope: rename-off is scoped to the rebase invocation; the repo's persistent
+	// git config is NOT touched. A user's interactive `git rebase` is unaffected.
+	it('does NOT write `merge.directoryRenames` into the repo or global git config', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		writeFileSync(join(repo, 'feature.txt'), 'feature\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'prior'], repo);
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(join(repo, 'unrelated.txt'), 'u\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'main moved'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		rebaseContinuedBranchOntoMain(repo, 'arbiter/main', gitEnv());
+		// `git config --local --get merge.directoryRenames` exits non-zero when the
+		// key is unset — the value is not persisted by the scoped `-c` flag.
+		const local = run(
+			'git',
+			['config', '--local', '--get', 'merge.directoryRenames'],
+			repo,
+			{env: gitEnv()},
+		);
+		expect(local.status).not.toBe(0);
 	});
 });
 

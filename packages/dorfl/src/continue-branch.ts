@@ -170,13 +170,29 @@ export interface ContinueRebaseResult {
  * conflict) is `--abort`ed (NEVER auto-resolved) and returns `{kind: 'conflict'}`
  * so the caller can route the item to needs-attention via the §10 path. Must be
  * called while HEAD is the continued branch.
+ *
+ * RENAME-DETECTION-OFF (task `disable-rename-detection-on-continue-rebase`): the
+ * rebase is invoked with `-c merge.directoryRenames=false` SCOPED to the
+ * invocation (never a persistent `git config` write), so a single durable
+ * folder-transition `git mv` out of a SPARSE source folder is NOT misread by
+ * git's directory-rename heuristic as a whole-DIRECTORY rename — which would
+ * spuriously flag every sibling file main added into that same folder as
+ * `CONFLICT (file location)` and force a FALSE needs-attention. Content-rename
+ * detection (`-Xno-renames` / `merge.renames` / `diff.renames`) is NOT what
+ * controls this conflict and was empirically verified ineffective; only
+ * `merge.directoryRenames=false` suppresses it. A GENUINE same-path content
+ * conflict still conflicts unchanged.
  */
 export function rebaseContinuedBranchOntoMain(
 	cwd: string,
 	mainRef: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): ContinueRebaseResult {
-	const rebase = gitSoft(['rebase', mainRef], cwd, env);
+	const rebase = gitSoft(
+		['-c', 'merge.directoryRenames=false', 'rebase', mainRef],
+		cwd,
+		env,
+	);
 	if (rebase.status === 0) {
 		return {kind: 'clean'};
 	}
