@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'sidecar-kind-field' (Gate 2 approve)
 date: 2026-06-26
 status: open
 reviewOf: sidecar-kind-field
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
