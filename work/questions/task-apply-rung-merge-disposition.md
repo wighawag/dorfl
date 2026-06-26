@@ -12,6 +12,8 @@ _Suggested default: (a) honour the prior approval and land when the rebased tip 
 
 **Your answer** (write below this line):
 
+(a) HONOUR the prior approval and land when the rebased tip re-verifies GREEN, with (b) re-surface-on-changed-merge-base as an OPT-IN strictness layered on top. The opt-in (b) is controlled by a per-repo `strictMergeApproval` setting (resolved via the gate-family precedence chain: flag > env > per-repo > global > default), defaulting OFF, so the cheap green-re-verify-is-enough path is the default. On the binary sidecar, (b) clears the answer back to no-answer and re-surfaces the merge-question (authored on `main`/runner under the `advancing` lock, so no branch-side mutation). This matches PRD sidecar Q4. Story #16's RED-re-verify refusal is unchanged.
+
 ## Q2
 
 **This task's premise appears STALE: it specifies mirroring the apply rung's `promote-slice`/`dropped` disposition-dispatch and dispatching an answered `merge` DISPOSITION, but that whole disposition vocabulary has since been RETIRED. Should this task be re-scoped (and re-reviewed) against the new AGENTIC apply model before it is built, or has its premise already been reconciled somewhere I have not seen?**
@@ -24,6 +26,8 @@ _Suggested default: Re-scope this task (and its blocker `merge-question-surfacer
 
 **Your answer** (write below this line):
 
+Yes — the premise was stale (the disposition vocabulary is retired), and it has now been RECONCILED in this pass (see PRD sidecar Q1/Q2). The task body has been amended in place to the new model: do NOT mirror a `promote-slice`/`dropped` disposition-dispatch (gone) and do NOT route through the agentic `decide()`. Build the answered-merge land as a DETERMINISTIC runner-ACTION dispatch (see Q3). The task stays `needsAnswers: true` only until Q1 (policy) + Q3 (mechanism) here are applied.
+
 ## Q3
 
 **Given the disposition vocabulary is retired and the agentic apply outcome set is `{task | prd | adr | delete | ask}` (a content-mint / delete / follow-up model), HOW should an answered merge-question dispatch the LAND primitive (rebase -> re-verify -> advance) within that model? It is a runner ACTION, not a content outcome, so it does not map onto any current `DecisionOutcome`. Does `merge` become a new agentic outcome wired only into the merge-question caller, a separate non-agentic state-action dispatch keyed off the merge-question's answer, or something else?**
@@ -35,3 +39,19 @@ _Suggested default: Treat answer-driven runner ACTIONS (merge/land, and the sibl
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+A SEPARATE, DETERMINISTIC answer-driven runner-ACTION dispatch layer — NOT a new `DecisionOutcome` and NOT a route through the agentic `decide()`. This is the keystone decision (PRD sidecar Q1): a merge-acceptance has no judgement content (the human's plain merge|hold|drop answer IS the decision; the correctness gate is the apply-time re-verify on the rebased tip, never an agent), so routing it through an LLM only adds cost and non-determinism.
+
+Concretely, the apply rung gains a kind-check BEFORE the agentic decider:
+```
+apply(answered sidecar):
+  if sidecar.kind is a runner-action kind (merge | stuck-requeue):
+      dispatch deterministically from (kind, plain answer):
+        answer=merge → performIntegration (rebase → re-verify → advance); refuse on red
+        answer=hold  → leave as-is (no land)
+        answer=drop  → route to the drop/cancel terminal
+      # NO agent run
+  else:                                   # observation / spec / triage
+      verdict = decide(input, allowedOutcomes); route verdict   # agent, as today
+```
+The `kind` is read from the sidecar's typed identity field (PRD sidecar Q5-ii). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).

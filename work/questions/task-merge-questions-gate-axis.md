@@ -12,6 +12,8 @@ _Suggested default: `mergeQuestions` — it names the surfaced thing (merge-ques
 
 **Your answer** (write below this line):
 
+`mergeQuestions` (matches PRD sidecar Q3). It names the policy domain the way `observationTriage` does, reads cleanly in the `flag > env > per-repo > global > default` chain, and avoids the verb-flavoured `surfaceMerge`.
+
 ## Q2
 
 **OQ7(b) — Default value: what is the built-in default for the merge-question gate? `ask` (surface + wait for a human answer), `auto` (auto-land an answered/unblocked merge — the merge-mode-like fast path), or `off` (only for a repo that lands by some other means)? The fixed constraint is: it must NOT default to `off`.**
@@ -23,6 +25,8 @@ _Suggested default: `ask` — the PRD names it as the likely default (surface + 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+`ask` (surface + wait for the human's plain merge|hold|drop answer). It is the conservative default that honours propose semantics and never silently drops pushed work, and it does NOT depend on the retired disposition mechanism. `auto` is restated for the deterministic-action model (Q3 below) and is available as a trusted-repo fast path; `off` only for a repo that lands by some other means. Matches PRD sidecar Q3.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Three-state `off | ask | auto`, mirroring `observationTriage
 
 **Your answer** (write below this line):
 
+Three-state `off | ask | auto`, mirroring `observationTriage`, with `auto` restated WITHOUT the retired token: `auto` = the runner self-supplies the `merge` answer without surfacing and lands through the SAME deterministic runner-action dispatch + apply-time re-verify (PRD sidecar Q1/Q3). It does NOT invoke the agentic decider — a merge-land is never an agent decision. The 3-state shape is preserved because the surface-vs-auto-land distinction is real and useful; the middle (`ask`) is the default.
+
 ## Q4
 
 **Should this task be HELD (kept out of the build pool) and/or re-scoped until the sibling `merge-question-surfacer` is re-decomposed against the retired-disposition model — and does answering OQ7 require restating `auto` without the `merge|hold|drop` token mechanism?**
@@ -47,3 +53,5 @@ _Suggested default: Hold this task out of the build pool and resolve it as part 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+This task is the LEAST drifted of the three (it only gates invocation), and its FIXED parts (separate axis, default not `off`, same precedence chain) plus its name/default/shape (Q1-Q3) do NOT depend on the retired vocabulary — so DECIDE them here (done above) rather than hold the whole task. The only entanglement was `auto`'s meaning, now restated against the deterministic-action model. KEEP this task in `tasks/backlog/` (not promoted to the pool) and build it together with / after `merge-question-surfacer` + `apply-rung-merge-disposition` so the `merge-question-surfacer is invoked iff this gate says so` wiring lands against the reshaped surfacer. The cross-cutting sidecar-keying + questions-folder questions are answered ONCE in PRD sidecar Q5 (branch/ref key allowed; typed `kind` field now, kind-subfolders later via `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21`); do not preempt the folder restructure here.
