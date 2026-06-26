@@ -71,6 +71,34 @@ import {workItemRel} from './work-layout.js';
 /** The three item-types a sidecar can key onto (the slug-namespace + obs). */
 export type SidecarType = 'prd' | 'task' | 'observation';
 
+/**
+ * The optional, machine-only `kind` AXIS on a question entry — the dispatch
+ * signal the answered-question apply rung reads to choose deterministic-action
+ * (`merge`, `stuck`) vs agentic-content (`triage`, `spec`) routing WITHOUT
+ * sniffing the shape of another field. Absent ⇒ the existing binary content
+ * entry (every pre-`kind` sidecar parses + renders byte-identically).
+ *
+ * INTERIM PRIMITIVE — REMOVE when question sidecars move to KIND-BASED
+ * SUBFOLDERS (`work/questions/merge/`, …), where the folder ENCODES the kind
+ * and this per-entry field is redundant. See the observation
+ * `questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` + idea
+ * `folder-taxonomy-and-prd-edit-handshake`. Built deliberately as a single
+ * typed field read in exactly ONE place (the apply dispatch, a later task) so
+ * the folder-cutover can DELETE it in one move.
+ *
+ * A mistyped/unknown `kind=` token parses to `undefined` (silent-on-malformed,
+ * mirroring the retired `disposition` precedent), never a throw, never a
+ * coerce.
+ */
+export type SidecarKind = 'merge' | 'stuck' | 'triage' | 'spec';
+
+const SIDECAR_KINDS: ReadonlySet<SidecarKind> = new Set<SidecarKind>([
+	'merge',
+	'stuck',
+	'triage',
+	'spec',
+]);
+
 /** One question entry in the sidecar (the per-entry source of truth). */
 export interface SidecarEntry {
 	/** Stable, monotonic id (`q1`, `q2`, …); never reused once minted. */
@@ -92,6 +120,12 @@ export interface SidecarEntry {
 	 * `undefined` ⇒ no override (the answered-ness derives from `answer`).
 	 */
 	answeredOverride?: boolean;
+	/**
+	 * Optional dispatch axis (see {@link SidecarKind}). Absent ⇒ the existing
+	 * binary content entry. INTERIM — removable once question sidecars move to
+	 * kind-based SUBFOLDERS.
+	 */
+	kind?: SidecarKind;
 }
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
@@ -283,6 +317,7 @@ function parseIdentityComment(line: string): IdentityFields | undefined {
 interface EntryFields {
 	id?: string;
 	answered?: boolean;
+	kind?: SidecarKind;
 }
 
 /** Parse a per-entry `<!-- qN fields: key=val … -->` HTML comment. */
@@ -310,6 +345,12 @@ function parseEntryComment(line: string): EntryFields | undefined {
 			} else if (value === 'false') {
 				out.answered = false;
 			}
+		} else if (key === 'kind') {
+			// Silent-on-malformed (retired `disposition` precedent): a mistyped or
+			// unknown kind reads as `undefined`, never a throw, never a coerce.
+			if (SIDECAR_KINDS.has(value as SidecarKind)) {
+				out.kind = value as SidecarKind;
+			}
 		}
 	}
 	return out;
@@ -323,6 +364,7 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	let inBlockquote = false;
 	let defaultVal: string | undefined;
 	let answeredOverride: boolean | undefined;
+	let kind: SidecarKind | undefined;
 	let answerStart = -1;
 
 	for (let i = 0; i < lines.length; i++) {
@@ -338,6 +380,9 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 			}
 			if (entryFields.answered !== undefined) {
 				answeredOverride = entryFields.answered;
+			}
+			if (entryFields.kind !== undefined) {
+				kind = entryFields.kind;
 			}
 			inBlockquote = false;
 			continue;
@@ -403,6 +448,9 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	}
 	if (finalOverride !== undefined) {
 		entry.answeredOverride = finalOverride;
+	}
+	if (kind !== undefined) {
+		entry.kind = kind;
 	}
 	return entry;
 }
@@ -533,6 +581,9 @@ export function serialiseSidecar(model: SidecarModel): string {
 		} else if (entry.answeredOverride === false && derivedAnswered) {
 			fields.push('answered=false');
 		}
+		if (entry.kind !== undefined) {
+			fields.push(`kind=${entry.kind}`);
+		}
 		out.push(`<!-- ${entry.id} fields: ${fields.join(' ')} -->`);
 		out.push('');
 		out.push(ANSWER_MARKER);
@@ -553,6 +604,13 @@ export interface NewQuestion {
 	question: string;
 	context?: string;
 	default?: string;
+	/**
+	 * Optional dispatch {@link SidecarKind} the surfacer stamps so the apply
+	 * rung can route a runner-ACTION question (`merge`, `stuck`) to the
+	 * deterministic dispatch vs a CONTENT question (`triage`, `spec`) to the
+	 * agentic `decide()` path. INTERIM — removable once kind-subfolders land.
+	 */
+	kind?: SidecarKind;
 }
 
 /**
@@ -576,6 +634,9 @@ export function appendQuestions(
 		};
 		if (q.default !== undefined) {
 			entry.default = q.default;
+		}
+		if (q.kind !== undefined) {
+			entry.kind = q.kind;
 		}
 		entries.push(entry);
 	}
