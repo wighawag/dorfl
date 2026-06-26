@@ -81,6 +81,21 @@ function blockedItemsInPlace(
 			out.push({namespace: 'prd', slug: prd.slug});
 		}
 	}
+	// TASKED resting prds (`prds/tasked/`) — enumerated UNCONDITIONALLY (NOT behind
+	// `surfaceStaging`), because a prd may legitimately carry `needsAnswers:true`
+	// while resting in `prds/tasked/` (WORK-CONTRACT "A PRD that has drifted AFTER
+	// it was TASKED"). This is NOT a staging widening: a tasked prd is a durable
+	// resting state, like the pool, so it is enumerated like the pool. Routing
+	// still respects the gates in `buildLifecyclePools` (an ANSWERED sidecar -> the
+	// always-on APPLY pool so the human's answer is never STRANDED; a NO-sidecar
+	// tasked prd -> SURFACE, still gated by `surfaceBlockers`). Without this, a
+	// tasked prd's answered sidecar is enumerated by no pool and apply never runs
+	// on it (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
+	for (const prd of read.resolveLocalPrdTasked({repoPath})) {
+		if (prd.needsAnswers === true) {
+			out.push({namespace: 'prd', slug: prd.slug});
+		}
+	}
 	// SURFACE-on-STAGING widening (prd
 	// `staging-surface-and-apply-promote-safety` F2): when `surfaceStaging` is
 	// ON, the candidate set ADDITIONALLY enumerates `needsAnswers` items resting
@@ -196,6 +211,16 @@ export async function gatherLifecycleMirror(input: {
 		}
 	}
 	for (const prd of prdPool.prds) {
+		if (prd.needsAnswers === true) {
+			blocked.push({namespace: 'prd', slug: prd.slug});
+		}
+	}
+	// TASKED resting prds (`<ref>:work/prds/tasked/`) — enumerated UNCONDITIONALLY,
+	// the mirror-side counterpart of the in-place tasked-prd enumeration above
+	// (so a `needsAnswers` tasked prd's answered sidecar is never stranded on the
+	// mirror/CI advance path either). Routing still respects the gates.
+	const prdTasked = await read.resolveMirrorPrdTasked({mirrorPath, ref, env});
+	for (const prd of prdTasked) {
 		if (prd.needsAnswers === true) {
 			blocked.push({namespace: 'prd', slug: prd.slug});
 		}

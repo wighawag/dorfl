@@ -54,13 +54,17 @@ self-contained here):
   rung 2026-06-26). They stay in `tasks/backlog/` (not promoted) and are built
   together against the reshaped model.
 
-> NOTE (process gap observed): this PRD's OWN answered sidecar could NOT be
-> applied by the engine — a `needsAnswers` PRD resting in `prds/tasked/` is
-> enumerated by neither the surface nor the apply lifecycle pool (the gather reads
-> `prds/ready` + staging `prds/proposed`, not `prds/tasked`), so its human answer
-> was stranded and a human applied it directly (cleared the flag + deleted the
-> sidecar here). Captured as
-> `work/notes/observations/tasked-prd-needsanswers-sidecar-stranded-no-apply-pool-2026-06-26.md`.
+> NOTE (process gap observed THEN FIXED): this PRD's OWN answered sidecar could
+> not be applied by the engine at the time — a `needsAnswers` PRD resting in
+> `prds/tasked/` was enumerated by neither the surface nor the apply lifecycle
+> pool (the gather read `prds/ready` + staging `prds/proposed`, not `prds/tasked`),
+> so its human answer was stranded and a human applied it directly (cleared the
+> flag + deleted the sidecar here). That gap is now FIXED: the lifecycle gather
+> enumerates `prds/tasked/` unconditionally (`resolveLocalPrdTasked` /
+> `resolveMirrorPrdTasked` in `ledger-read.ts`, consumed by `lifecycle-gather.ts`;
+> an answered tasked-prd sidecar now routes to the always-on apply pool), proven
+> by `test/tasked-prd-needsanswers-lifecycle.test.ts`. So a future tasked-prd
+> drift will close its answer loop in-band, no manual apply needed.
 
 ## DRIFTED-WHILE-TASKED 2026-06-26 (the merge-question tasks are premised on the retired disposition vocabulary)
 

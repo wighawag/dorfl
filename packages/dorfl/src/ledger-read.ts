@@ -340,6 +340,20 @@ export interface LedgerReadStrategy {
 	 */
 	resolveLocalPrdStaging(input: ResolvePrdPoolInput): LedgerPrdItem[];
 	/**
+	 * Enumerate `work/prds/tasked/*.md` (the TASKED resting folder) into the SAME
+	 * {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns. UNLIKE the pool
+	 * (`prds/ready/`) and staging (`prds/proposed/`) readers, this exists so the
+	 * lifecycle GATHER can surface/apply a `needsAnswers:true` prd that drifted
+	 * AFTER it was tasked and rests IN PLACE in `prds/tasked/` (WORK-CONTRACT
+	 * "A PRD that has drifted AFTER it was TASKED"). Without it, such a prd's
+	 * ANSWERED sidecar is enumerated by no pool and the human's answer is STRANDED
+	 * (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
+	 * `resolvePrdPool` deliberately returns tasked prds only as `taskedSlugs`
+	 * (residence, for `taskedAfter`), NOT as enumerable gate-bearing items, so this
+	 * is a SEPARATE read. Sync + OFFLINE.
+	 */
+	resolveLocalPrdTasked(input: ResolvePrdPoolInput): LedgerPrdItem[];
+	/**
 	 * Mirror-ref counterpart of {@link resolveLocalTaskStaging}: read
 	 * `<ref>:work/tasks/backlog/*.md` from a BARE hub mirror via `git ls-tree` +
 	 * `git show` (the SAME mechanism `resolveMirrorState` uses for the pool).
@@ -352,6 +366,15 @@ export interface LedgerReadStrategy {
 	 * `<ref>:work/prds/proposed/*.md` from a bare mirror.
 	 */
 	resolveMirrorPrdStaging(
+		input: ResolveMirrorPrdPoolInput,
+	): Promise<LedgerPrdItem[]>;
+	/**
+	 * Mirror-ref counterpart of {@link resolveLocalPrdTasked}: read
+	 * `<ref>:work/prds/tasked/*.md` from a bare mirror, so a `needsAnswers` tasked
+	 * prd's answered sidecar is never stranded on the mirror-side advance path
+	 * either.
+	 */
+	resolveMirrorPrdTasked(
 		input: ResolveMirrorPrdPoolInput,
 	): Promise<LedgerPrdItem[]>;
 }
@@ -422,7 +445,25 @@ function readLocalTaskStaging(repoPath: string): LedgerReadyItem[] {
  * the SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns.
  */
 function readLocalPrdStaging(repoPath: string): LedgerPrdItem[] {
-	const dir = workFolderPath(repoPath, 'prds-proposed');
+	return readLocalPrdFolder(repoPath, 'prds-proposed');
+}
+
+/**
+ * Read `work/prds/tasked/*.md` (the TASKED resting folder) into the SAME
+ * {@link LedgerPrdItem} shape. Used by the lifecycle gather to surface/apply a
+ * `needsAnswers` prd that drifted after tasking and rests in place in
+ * `prds/tasked/` — so its answered sidecar is never stranded.
+ */
+function readLocalPrdTasked(repoPath: string): LedgerPrdItem[] {
+	return readLocalPrdFolder(repoPath, 'prds-tasked');
+}
+
+/** Shared body for the local prd-FOLDER readers (proposed/tasked) — same item shape. */
+function readLocalPrdFolder(
+	repoPath: string,
+	folder: 'prds-proposed' | 'prds-tasked',
+): LedgerPrdItem[] {
+	const dir = workFolderPath(repoPath, folder);
 	const prds: LedgerPrdItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -696,7 +737,26 @@ async function readPrdStagingFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdItem[]> {
-	const base = `${ref}:${workFolderRel('prds-proposed')}`;
+	return readPrdFolderFromTree('prds-proposed', ref, cwd, env);
+}
+
+/** Parse `<ref>:work/prds/tasked/*.md` (TASKED resting) into prd items, sorted by slug. */
+async function readPrdTaskedFromTree(
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerPrdItem[]> {
+	return readPrdFolderFromTree('prds-tasked', ref, cwd, env);
+}
+
+/** Shared body for the mirror-ref prd-FOLDER readers (proposed/tasked) — same item shape. */
+async function readPrdFolderFromTree(
+	folder: 'prds-proposed' | 'prds-tasked',
+	ref: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<LedgerPrdItem[]> {
+	const base = `${ref}:${workFolderRel(folder)}`;
 	const prds: LedgerPrdItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
@@ -826,11 +886,17 @@ export const currentLedgerRead: LedgerReadStrategy = {
 	resolveLocalPrdStaging({repoPath}) {
 		return readLocalPrdStaging(repoPath);
 	},
+	resolveLocalPrdTasked({repoPath}) {
+		return readLocalPrdTasked(repoPath);
+	},
 	async resolveMirrorTaskStaging({mirrorPath, ref = 'main', env}) {
 		return readTaskStagingFromTree(ref, mirrorPath, env);
 	},
 	async resolveMirrorPrdStaging({mirrorPath, ref = 'main', env}) {
 		return readPrdStagingFromTree(ref, mirrorPath, env);
+	},
+	async resolveMirrorPrdTasked({mirrorPath, ref = 'main', env}) {
+		return readPrdTaskedFromTree(ref, mirrorPath, env);
 	},
 	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
