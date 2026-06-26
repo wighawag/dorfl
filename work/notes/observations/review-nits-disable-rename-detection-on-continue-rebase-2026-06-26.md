@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'disable-rename-detection-on-continue-r
 date: 2026-06-26
 status: addressed
 reviewOf: disable-rename-detection-on-continue-rebase
+needsAnswers: true
 ---
 
 ## 2026-06-26 follow-up (continuation pass)
