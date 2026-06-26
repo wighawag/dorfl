@@ -96,6 +96,23 @@ export interface CIConfigFile {
 	installSource?: InstallSource;
 	/** API key values keyed by env var name. Only present with `--include-secrets`. */
 	secrets?: Record<string, string>;
+	/**
+	 * The project-setup escape hatch (prd `install-ci-project-provisioning`,
+	 * task `install-ci-project-setup-hook`): a PROVIDER-NAMESPACED, OPAQUE,
+	 * NATIVE-SYNTAX pass-through map. The key is a provider id (today only
+	 * `github`); the value is the user's own project-toolchain snippet in that
+	 * provider's NATIVE syntax (for GitHub: a string of Actions step YAML —
+	 * `uses:` marketplace actions, `run:` steps). The CORE never parses or
+	 * normalizes the snippet (only validates the outer map shape); the active
+	 * provider's adapter splices it VERBATIM and FIRST into the generated
+	 * composite setup action, before dorfl-install + AI-auth (US #10 of
+	 * `install-ci-project-provisioning`). Absent/empty ⇒ the generated
+	 * composite action is BYTE-IDENTICAL to today. Round-trips through
+	 * `--config` / `--export-config` like every existing knob. Deliberately
+	 * NOT a portable cross-provider step-DSL — each adapter consumes its OWN
+	 * native shape (ADR `install-ci-project-provisioning-native-passthrough`).
+	 */
+	projectSetup?: Record<string, unknown>;
 }
 
 /**
@@ -111,6 +128,8 @@ export interface ResolvedCIConfig {
 	defaultModel: string;
 	harness: HarnessAdapter;
 	installSource: InstallSource;
+	/** See {@link CIConfigFile.projectSetup}. */
+	projectSetup?: Record<string, unknown>;
 }
 
 /** The default harness the composite setup action installs. */
@@ -135,6 +154,15 @@ export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
 export interface CIProviderContext {
 	/** The target repo's working directory (where `.github/` / `.fake/` is written). */
 	workDir: string;
+	/**
+	 * Stable id for THIS provider adapter (today only `github`). Used by the
+	 * orchestrator to pick the active provider's payload out of
+	 * {@link CIConfigFile.projectSetup} (the provider-namespaced opaque
+	 * pass-through). Optional so a provider that never participates in the
+	 * project-setup hook can omit it; the orchestrator then renders no
+	 * fragment and the composite action is unchanged.
+	 */
+	readonly providerId?: string;
 	/** The `owner/repo` slug, or `undefined` when not (yet) known. */
 	repo: string | undefined;
 	/** Whether the provider's CLI (`gh`) is available + authenticated. */
@@ -165,6 +193,20 @@ export interface CIProviderContext {
 	 * Throws on failure (caller catches + logs).
 	 */
 	setBranchProtection?(branch: string, spec: unknown): Promise<void>;
+	/**
+	 * OPTIONALLY render the user's project-setup payload (the value of
+	 * {@link CIConfigFile.projectSetup}[providerId]) to the NATIVE-SYNTAX
+	 * fragment the composite setup action splices in FIRST (before
+	 * setup-node, dorfl-install, and AI-auth). The adapter owns the LIGHT
+	 * structural sanity check (for GitHub: list-of-mapping-shaped steps) and
+	 * the indentation that makes the fragment splice cleanly into the
+	 * composite action's `steps:` body. The returned string is treated as
+	 * OPAQUE by the core — bytes-in == bytes-out, modulo the indentation the
+	 * adapter applies. Throws on a malformed payload (caller surfaces). An
+	 * adapter that never participates in this hook omits the method; an
+	 * `undefined`/missing payload short-circuits to no fragment.
+	 */
+	renderProjectSetup?(payload: unknown): string;
 }
 
 /** Whitesmith's name for {@link CIProviderContext} (the seam this task adopts). */
@@ -499,6 +541,19 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 			`config file "installSource" must be "registry" or "workspace"`,
 		);
 	}
+	if (data.projectSetup !== undefined) {
+		if (
+			data.projectSetup === null ||
+			typeof data.projectSetup !== 'object' ||
+			Array.isArray(data.projectSetup)
+		) {
+			throw new CIConfigError(
+				'config file "projectSetup" must be a provider-namespaced object ' +
+					'(e.g. {"github": "<native step YAML>"}); ' +
+					'the per-provider payload is OPAQUE to the core',
+			);
+		}
+	}
 	if (authMode === 'models-json') {
 		if (
 			!data.providers ||
@@ -518,6 +573,7 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 		harness: data.harness,
 		installSource: data.installSource,
 		secrets: data.secrets,
+		projectSetup: data.projectSetup,
 	};
 }
 
@@ -530,6 +586,7 @@ export function resolveCIConfig(file: CIConfigFile): ResolvedCIConfig {
 		defaultModel: file.defaultModel,
 		harness: file.harness ?? DEFAULT_HARNESS,
 		installSource: file.installSource ?? DEFAULT_INSTALL_SOURCE,
+		projectSetup: file.projectSetup,
 	};
 }
 
@@ -551,6 +608,9 @@ export function exportCIConfig(
 		harness: config.harness,
 		installSource: config.installSource,
 	};
+	if (config.projectSetup && Object.keys(config.projectSetup).length > 0) {
+		file.projectSetup = config.projectSetup;
+	}
 	if (secrets && Object.keys(secrets).length > 0) {
 		file.secrets = secrets;
 	}
@@ -608,7 +668,18 @@ function harnessInstallStep(
  * `~/.pi/agent/auth.json` from `$PI_AUTH_JSON` + runs the OAuth-refresh script
  * (the sharp edge). Deterministic: the same config produces byte-identical output.
  */
-export function generateSetupAction(config: ResolvedCIConfig): string {
+export function generateSetupAction(
+	config: ResolvedCIConfig,
+	/**
+	 * OPTIONAL provider-rendered project-setup steps fragment, already indented
+	 * to splice into the composite action's `steps:` body (4-space indent on
+	 * the `- ` list-item lines). The CORE treats this as OPAQUE: bytes-in ==
+	 * bytes-out (modulo the indentation the adapter already applied). When
+	 * absent/empty, the generated action is BYTE-IDENTICAL to the no-hook
+	 * baseline (the load-bearing absent-⇒-identical contract).
+	 */
+	projectSetupSteps?: string,
+): string {
 	let authStep: string;
 	// models-json mode declares one ACTION INPUT per distinct provider key (named
 	// identically to the secret / env var) and exports it to `$GITHUB_ENV`, so every
@@ -732,6 +803,14 @@ ${providerKeyNames
 `
 			: '';
 
+	// The project-setup fragment splices in FIRST, before setup-node, dorfl-install,
+	// and AI-auth (US #10 of `install-ci-project-provisioning`). Absent/empty ⇒ the
+	// emitted text below is byte-identical to the no-hook baseline.
+	const projectSetupBlock =
+		projectSetupSteps && projectSetupSteps.length > 0
+			? `${projectSetupSteps.replace(/\s+$/, '')}\n\n`
+			: '';
+
 	return `\
 name: Setup dorfl
 description: Install Node.js, dorfl, the agent harness, and configure AI provider auth
@@ -739,7 +818,7 @@ description: Install Node.js, dorfl, the agent harness, and configure AI provide
 ${inputsBlock}runs:
   using: composite
   steps:
-    - name: Setup Node.js
+${projectSetupBlock}    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '22'
@@ -867,11 +946,18 @@ if (repo && token) {
 export function buildSetupArtifacts(
 	config: ResolvedCIConfig,
 	capabilities: CapabilityEmitter[] = [],
+	/**
+	 * OPTIONAL bag of provider-rendered fragments to splice into the generated
+	 * artifacts. `projectSetupSteps`: see {@link generateSetupAction}. Threaded
+	 * here so the orchestrator (`installCI`) can pre-render via the active
+	 * provider seam and keep this core function provider-agnostic.
+	 */
+	options?: {projectSetupSteps?: string},
 ): EmittedFile[] {
 	const files: EmittedFile[] = [
 		{
 			path: join('actions', 'dorfl-setup', 'action.yml'),
-			content: generateSetupAction(config),
+			content: generateSetupAction(config, options?.projectSetupSteps),
 		},
 	];
 	if (config.authMode === 'auth-json') {

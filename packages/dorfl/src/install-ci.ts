@@ -239,8 +239,25 @@ export async function installCI(
 		}
 	}
 
-	// 5. Assemble + write the artifacts (composite setup action + auth).
-	const files = buildSetupArtifacts(config, options.capabilities ?? []);
+	// 5. Assemble + write the artifacts (composite setup action + auth). The
+	// project-setup escape hatch (prd `install-ci-project-provisioning`) lives
+	// on `config.projectSetup` as a PROVIDER-NAMESPACED, OPAQUE map; we look up
+	// THIS provider's payload via the seam (`ctx.providerId`) and ask the
+	// adapter to render it to the FIRST-steps fragment (`ctx.renderProjectSetup`).
+	// Absent payload / missing seam method ⇒ no fragment ⇒ byte-identical to the
+	// no-hook baseline (the load-bearing contract this hook preserves).
+	let projectSetupSteps: string | undefined;
+	const providerId = options.ctx.providerId;
+	const payload =
+		providerId && config.projectSetup
+			? config.projectSetup[providerId]
+			: undefined;
+	if (payload !== undefined && options.ctx.renderProjectSetup) {
+		projectSetupSteps = options.ctx.renderProjectSetup(payload);
+	}
+	const files = buildSetupArtifacts(config, options.capabilities ?? [], {
+		projectSetupSteps,
+	});
 	const written = writeArtifacts({workDir: options.ctx.workDir, fake, files});
 	for (const path of written) {
 		log(`  wrote ${path}`);
