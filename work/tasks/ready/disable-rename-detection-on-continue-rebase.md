@@ -42,7 +42,7 @@ main that ADDED files into that same folder flags each new file as a SPURIOUS
 (correctly, given no way to tell a spurious from a real conflict) aborts and
 stuck-locks the branch, producing a FALSE needs-attention.
 
-The slice: pass rename-detection-OFF to every rebase invocation on the runner's
+The task: pass rename-detection-OFF to every rebase invocation on the runner's
 continue/integration path via `-c merge.directoryRenames=false` SCOPED to that one
 rebase invocation (NOT `-Xno-renames` / `merge.renames` / `diff.renames` — those
 control file-CONTENT rename detection and do NOT suppress this directory-rename
@@ -78,8 +78,8 @@ current main, where the source folder is no longer sparse so the whole-dir-renam
 heuristic no longer fires).
 
 This bites ANY branch carrying a durable folder transition
-(`tasks/todo → tasks/done`, `prds/ready → prds/tasked`,
-`tasks/todo → tasks/cancelled`, `prds/ready → prds/dropped`) WHEN the SOURCE
+(`tasks/ready → tasks/done`, `prds/ready → prds/tasked`,
+`tasks/ready → tasks/cancelled`, `prds/ready → prds/dropped`) WHEN the SOURCE
 folder is sparse (0-1 items) at branch time AND `main` later adds files into that
 same folder. It is a latent FALSE needs-attention source. The taxonomy reorg makes
 it MORE likely, not less: more folders, several often holding 0-1 files
@@ -192,7 +192,7 @@ have to learn to exclude. Do NOT adopt the sentinel route in this task.
 >
 > FIRST, check this task against current reality (it is a launch snapshot and may have
 > DRIFTED): does the continue/integration rebase still live where described, and is
-> rename detection still ON (default) there? If a prior slice already disabled it, or
+> rename detection still ON (default) there? If a prior task already disabled it, or
 > the rebase machinery moved, do NOT build on the stale premise — route the task to
 > needs-attention with the discrepancy as the reason.
 >
@@ -214,5 +214,5 @@ dorfl claim disable-rename-detection-on-continue-rebase --arbiter <remote>
 # then start work on the updated main:
 git fetch <remote> && git switch -c work/disable-rename-detection-on-continue-rebase <remote>/main
 # on completion, in the work branch's PR/merge:
-git mv work/tasks/todo/disable-rename-detection-on-continue-rebase.md work/tasks/done/disable-rename-detection-on-continue-rebase.md
+git mv work/tasks/ready/disable-rename-detection-on-continue-rebase.md work/tasks/done/disable-rename-detection-on-continue-rebase.md
 ```

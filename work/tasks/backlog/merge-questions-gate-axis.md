@@ -31,7 +31,16 @@ not:
    means. Pick the default.
 3. **Shape.** Three-state `off | ask | auto` mirroring
    `observationTriage`, or boolean? The prd leans 3-state; confirm or
-   override.
+   override. NOTE the `auto` sub-state was originally defined as
+   "auto-land an answered/unblocked MERGE DISPOSITION" — the
+   disposition vocabulary was retired (keystone
+   `agentic-question-resolution-retire-disposition-vocabulary`), so
+   restate `auto` in BINARY-answered / runner-action terms: "a
+   surfaced merge-question that is answered (or needs no answer) is
+   auto-landed via the answer-driven land action" (see
+   `apply-rung-merge-disposition`). The gate's FIXED parts (separate
+   axis, default not `off`, same precedence chain) do NOT depend on the
+   retired vocabulary.
 
 Do NOT build until OQ7 is answered.
 
@@ -40,7 +49,7 @@ section lists two CROSS-CUTTING questions (sidecar-keying to a lock-
 ref/branch identity; questions-folder shape/name) that are SHARED with
 the stuck-lock surfacer sibling and must be resolved ONCE across both,
 not twice. That resolution is its own concern — it is NOT a blocker
-for THIS slice, but the implementation here should not preempt either
+for THIS task, but the implementation here should not preempt either
 sub-decision.
 
 ## Acceptance criteria
@@ -51,7 +60,7 @@ sub-decision.
 - [ ] Default value matches the resolved OQ7 answer; default is NOT
       `off`.
 - [ ] `merge-question-surfacer` is invoked iff this gate's resolved
-      value says so (the wiring is part of this slice).
+      value says so (the wiring is part of this task).
 - [ ] Does NOT alter `observationTriage`'s default or shape.
 - [ ] Tests cover every precedence rung and the default, in the style
       of the existing gate-precedence tests.
@@ -69,7 +78,7 @@ sub-decision.
 > answered: read Story 17 + the prd's "Implementation Decisions"
 > paragraph that fixes the SEPARATION + higher-default. Locate the gate
 > precedence helper extended by `merge-retries-gate-precedence` (or, if
-> that slice hasn't landed yet, the sibling gates' helper) and add the
+> that task hasn't landed yet, the sibling gates' helper) and add the
 > new axis in the same shape. Wire `merge-question-surfacer` to gate
 > its invocation on the new axis. Tests mirror sibling gate-precedence
 > tests in style. Run the AGENTS.md acceptance gate.

@@ -15,7 +15,7 @@ whichever mechanism the floor provides (the scaled CAS-retry loop, see
 ships). Correct the "parallel merge thrashes the CAS" claim in
 `docs/ci/README.md` to reflect `integrateLock` + `mergeRetries`.
 
-This is a doc + emitter + test change as one vertical slice:
+This is a doc + emitter + test change as one vertical task:
 
 - `docs/ci/README.md`: rewrite the single-sequential-merge mandate to the
   new shape. Explain that across runners the CAS loop IS the queue; within
@@ -31,7 +31,7 @@ This is a doc + emitter + test change as one vertical slice:
 
 Out of scope here: Tier-2 GitHub Merge Queue / `merge_group` trigger
 (deferred per Applied Answer q3); the cross-job ref-lock itself (separate
-slice).
+task).
 
 ## Acceptance criteria
 
@@ -58,7 +58,7 @@ slice).
 > the accelerator, GitHub `concurrency:` only as optional sugar). Read
 > `docs/ci/README.md`, `src/advance-ci-template.ts`, and
 > `test/advance-ci-template.test.ts` together — they are the single
-> validated unit. Update them as one slice. Keep the floor framing
+> validated unit. Update them as one task. Keep the floor framing
 > intact: no host-specific feature is load-bearing for safety. Verify
 > with the AGENTS.md acceptance gate. Record any in-scope decision you
 > make (e.g. an explicit "no `concurrency:` block by default" choice) per

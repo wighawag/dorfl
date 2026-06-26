@@ -22,7 +22,7 @@ and must degrade to that floor if the lock is unavailable.
 
 ## Open questions (needsAnswers)
 
-The prd (Applied Answer q1) says: ship this slice only if a SOUND
+The prd (Applied Answer q1) says: ship this task only if a SOUND
 stale-lock reclaim story is cheap; otherwise split it out. Concretely:
 
 1. **Stale-lock reclaim mechanism.** A ref-lock held by a crashed job
@@ -33,9 +33,9 @@ stale-lock reclaim story is cheap; otherwise split it out. Concretely:
    signal — there is explicitly no heartbeat in the per-item lock
    model); (c) a human-only reclaim verb (`release-lock`-style) that
    refuses to ship without admin opt-in. Pick one and justify.
-2. **In-scope-now vs follow-on.** Given (1)'s answer, is this slice
+2. **In-scope-now vs follow-on.** Given (1)'s answer, is this task
    cheap enough to ship in this prd, or should it be split into a
-   follow-on prd and this slice cancelled? The prd explicitly
+   follow-on prd and this task cancelled? The prd explicitly
    allows the latter.
 3. **Lock granularity.** One global land-lock per repo, or
    per-target-branch? (Per-repo is simpler; per-branch matches future

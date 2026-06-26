@@ -60,7 +60,7 @@ Required behaviour:
 
 ## Blocked by
 
-- None — orthogonal file surface from the engine slices.
+- None — orthogonal file surface from the engine tasks.
 
 ## Prompt
 
