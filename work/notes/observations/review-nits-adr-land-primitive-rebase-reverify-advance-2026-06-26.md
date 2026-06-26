@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'adr-land-primitive-rebase-reverify-adv
 date: 2026-06-26
 status: open
 reviewOf: adr-land-primitive-rebase-reverify-advance
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
