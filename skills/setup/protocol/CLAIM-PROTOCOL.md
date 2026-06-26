@@ -20,6 +20,8 @@ The atomicity comes from a **single repo that everyone treats as the integration
 The protocol is **identical** for both — it targets a remote _by name_ (`<arbiter>`), not a hardcoded URL. Switching offline↔online is `git remote set-url <arbiter> <url>` (or adding a second remote); the claim steps do not change.
 
 > **Consequence the human must accept:** you participate like an agent — you reach `main` via push (ff / `pull --rebase` then push), NOT via unsynchronized local commits onto a checked-out `main` that is also the arbiter. The arbiter ref and a working `main` you hand-commit to cannot be the same ref. This is mild, good hygiene, and is what keeps the claim guarantee intact for everyone.
+>
+> **WARNING — reconcile by REBASE, never a plain `git pull` merge.** A merge does NOT re-run `verify` on the reconciled tree, so a clean merge can hide a semantically-broken result. If your push is rejected non-fast-forward: `git pull --rebase`, then re-run `verify` on the rebased tree BEFORE pushing. (The runner path enforces this automatically as the land invariant below; on the human path it is on you — the human path is deliberately lighter, but the invariant is the same.)
 
 ### Offline setup (local bare arbiter), once
 
@@ -81,6 +83,10 @@ WORK (only after the lock is held):
 ```
 
 > The durable `tasks/ready → tasks/done` / `prds/ready → prds/tasked` / `tasks/ready → tasks/cancelled` moves are the ONLY writes to the shared `main` ref, so THEY keep a small retrying CAS; the per-item LOCK acquire/release never does (it is self-arbitrating). The two are independent substrates that may legitimately disagree (e.g. `tasks/done` on `main` + a `stuck` lock co-exist after a rebase-conflict bounce of a just-completed item).
+
+## The land invariant — rebase + re-verify + advance
+
+Step 7a's durable `main` move (the LAND) is the mode-agnostic primitive: **fetch current `main` → rebase the work branch onto it → re-run `verify` (and review) on the rebased tree → advance.** A lost CAS or a moved-`main` between gate and push INVALIDATES any prior green and re-arms the gate (re-rebase, re-`verify`, retry — never a `--force`, never an auto-resolved conflict). Merge mode runs it inline at the serialised land; propose mode runs it at the human checkpoint (the propose PR is merged only after the rebased tip re-verifies green). Human review is ADDITIVE (intent/design/security), NEVER a substitute for the re-verify on the rebased tree. The durable _why_ — and the floor/ceiling gradient from bare git to a capable host — lives in ADR `land-primitive-rebase-reverify-advance`.
 
 ## The prompt handed to the work agent (the `## Prompt` wrapper)
 
