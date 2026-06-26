@@ -51,7 +51,13 @@ never be retried into a clobber.
 This push fails from two distinct callers; both observed in CI, both BENIGN
 race tails (the work had ALREADY landed on `main` and the `work/<slug>` ref
 was already reaped). Sub-case 2 (gone-ref + provably-landed = benign) is the
-expected outcome for BOTH:
+expected outcome for BOTH. FIVE incidents observed (2026-06-26), recorded in
+`work/notes/observations/recovery-complete-propose-push-reds-ci-on-reaped-work-ref-2026-06-26.md`:
+one first-pass propose (`ci-template-parallel-merge-fanout`) and FOUR
+recovery-complete (`test-cross-job-concurrent-land`, `sidecar-kind-field`,
+`protocol-land-time-reverify-invariant`, `merge-questions-gate-axis`), all
+confirmed already-landed (done body on `origin/main`, ref reaped). The 4:1
+split is why recovery-complete is the dominant trigger:
 
 1. **First-pass propose under the parallel fan-out.** A `advance-propose`
    matrix leg's integrator push raced a sibling's land/done-move that reaped
