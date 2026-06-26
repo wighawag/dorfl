@@ -1,6 +1,7 @@
 import type {
 	Config,
 	IntegrationMode,
+	MergeQuestions,
 	ObservationTriage,
 	PartialConfig,
 } from './config.js';
@@ -72,6 +73,7 @@ export function doFlagOverrides(
 		SelectionOrderFlags &
 		ObservationTriageFlags &
 		SurfaceBlockersFlags &
+		MergeQuestionsFlags &
 		NoPRFlags &
 		MergeRetriesFlags,
 	integration?: IntegrationMode,
@@ -85,6 +87,13 @@ export function doFlagOverrides(
 		// boolean gate over DECLARED blocked work (the orthogonal peer of
 		// `--observation-triage`).
 		...surfaceBlockersFlagOverrides(flags),
+		// `--merge-questions <off|ask|auto>` rides the SAME flag-override chain
+		// (flag > env > per-repo > global > default `ask`): the 3-state gate over
+		// the merge-question SURFACER (prd `land-time-reverify-and-parallel-
+		// merge-ceiling` Story 17 / task `merge-questions-gate-axis`). SEPARATE
+		// axis from `--observation-triage` with a HIGHER default — NEVER rides
+		// `--observation-triage`.
+		...mergeQuestionsFlagOverrides(flags),
 		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
 		// per-repo > global > default): a comma-separated value becomes a list (an
 		// explicit pool order), otherwise the verbatim string (a preset keyword). The
@@ -392,6 +401,51 @@ export function mergeRetriesFlagOverrides(
 				overrides.mergeRetries = n;
 			}
 		}
+	}
+	return overrides;
+}
+
+/**
+ * The merge-questions CLI flag (`advance`): `--merge-questions <off|ask|auto>`,
+ * the 3-state gate over the MERGE-QUESTION SURFACER (prd
+ * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
+ * `merge-questions-gate-axis`). MIRRORS `--observation-triage`'s SHAPE but is a
+ * SEPARATE axis with a HIGHER default (`ask`, never `off` — a dropped merge-
+ * question means pushed work never lands). Resolved through the SAME
+ * `flag > env > per-repo > global > default` chain as the other gate flags.
+ */
+export interface MergeQuestionsFlags {
+	/** `--merge-questions <off|ask|auto>` — the merge-question surfacer gate. */
+	mergeQuestions?: string;
+}
+
+/** The valid `--merge-questions` values (mirrors the env enum coercion). */
+const MERGE_QUESTIONS_VALUES: readonly MergeQuestions[] = [
+	'off',
+	'ask',
+	'auto',
+];
+
+/**
+ * Map the `--merge-questions` flag into a {@link PartialConfig} override. Only a
+ * present flag contributes (absent ⇒ absent key). An INVALID value FAILS LOUDLY
+ * (the same loud-failure contract `--observation-triage` enforces) rather than
+ * silently falling through — a typo on a question-surfacing gate must never be
+ * quietly ignored.
+ */
+export function mergeQuestionsFlagOverrides(
+	flags: MergeQuestionsFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.mergeQuestions !== undefined) {
+		const raw = flags.mergeQuestions;
+		if (!MERGE_QUESTIONS_VALUES.includes(raw as MergeQuestions)) {
+			throw new Error(
+				`Invalid value for --merge-questions: '${raw}'. ` +
+					`Expected one of: ${MERGE_QUESTIONS_VALUES.join(', ')}.`,
+			);
+		}
+		overrides.mergeQuestions = raw as MergeQuestions;
 	}
 	return overrides;
 }
