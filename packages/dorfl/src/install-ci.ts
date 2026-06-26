@@ -37,6 +37,10 @@ import {
 	writeArtifacts,
 } from './install-ci-core.js';
 import type {HarnessAdapter} from './config.js';
+import {
+	installCIBranchProtectionStep,
+	type BranchProtectionStepResult,
+} from './install-ci-branch-protection.js';
 
 /**
  * The interactive prompt SEAM the wizard drives. Production wires readline; tests
@@ -93,6 +97,8 @@ export interface InstallCIResult {
 	written: string[];
 	/** The secret-orchestration outcomes (empty on `--fake` / `exported`). */
 	secrets: SecretSetResult[];
+	/** The Tier-1 branch-protection outcome (undefined on `exported`). */
+	branchProtection?: BranchProtectionStepResult;
 }
 
 /**
@@ -239,6 +245,18 @@ export async function installCI(
 	for (const path of written) {
 		log(`  wrote ${path}`);
 	}
+
+	// 5b. Tier-1 GitHub branch protection (prd land-time-reverify-and-parallel-
+	// merge-ceiling, Story 11). Auto-configures when the credential is admin-
+	// scoped (one `gh api` PUT on the protection endpoint, required check
+	// `verify` + strict: true); prints the exact ready-to-run `gh api` command
+	// + manual UI fallback when not. Skipped in --fake (no real API touched);
+	// skipped on a non-GitHub provider (the seam method is absent there).
+	const branchProtection = await installCIBranchProtectionStep({
+		ctx: options.ctx,
+		fake,
+		log,
+	});
 	// CI-autonomy posture (task `install-ci-emits-no-gate-env-let-config-decide`):
 	// the emitted advance workflow carries NO DORFL_AUTO_BUILD /
 	// DORFL_AUTO_TASK / DORFL_OBSERVATION_TRIAGE /
@@ -265,7 +283,7 @@ export async function installCI(
 			"      DORFL_AUTO_BUILD: 'true'\n" +
 			"      DORFL_AUTO_TASK: 'true'",
 	);
-	return {outcome: 'generated', config, written, secrets};
+	return {outcome: 'generated', config, written, secrets, branchProtection};
 }
 
 /**
