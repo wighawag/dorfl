@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'test-clean-rebase-semantic-break' (Gat
 date: 2026-06-26
 status: open
 reviewOf: test-clean-rebase-semantic-break
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
