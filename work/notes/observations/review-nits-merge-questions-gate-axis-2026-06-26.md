@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'merge-questions-gate-axis' (Gate 2 app
 date: 2026-06-26
 status: open
 reviewOf: merge-questions-gate-axis
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
