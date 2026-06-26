@@ -736,7 +736,17 @@ ${providerKeyNames
 name: Setup dorfl
 description: Install Node.js, dorfl, the agent harness, and configure AI provider auth
 
-${inputsBlock}runs:
+${inputsBlock}# Project-toolchain boundary (task install-ci-document-toolchain-boundary):
+# This composite action provisions ONLY what dorfl + the agent harness need.
+# dorfl declares engines.node '>=18' and only PINS Node 22 below for its own
+# runtime — it does NOT provision the project's own toolchain (a project-
+# pinned package manager, a project Node version, rust, system packages,
+# project-dep install steps, ...).
+# A custom or conflicting project toolchain is supported ONLY via the
+# project-setup hook (sibling task install-ci-project-setup-hook); without
+# that hook the conflicting case is unsupported. install-ci does NOT detect
+# a likely conflict — the boundary is documentation, not detection.
+runs:
   using: composite
   steps:
     - name: Setup Node.js

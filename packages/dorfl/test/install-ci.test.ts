@@ -493,6 +493,27 @@ describe('composite setup action generation (both auth modes)', () => {
 		}
 	});
 
+	it('documents the project-toolchain boundary as a YAML comment + still emits setup-node for dorfl (task install-ci-document-toolchain-boundary)', () => {
+		// PRD `install-ci-project-provisioning` axis (A): dorfl declares
+		// engines.node '>=18' so there is NO dorfl-Node-version knob to add and
+		// NO conflict-detection. The boundary is a HONEST documented line in the
+		// generated composite action: dorfl provisions only its own runtime; a
+		// custom/conflicting project toolchain is supported ONLY via the
+		// project-setup hook (sibling task `install-ci-project-setup-hook`).
+		const action = generateSetupAction(modelsConfig);
+		// dorfl's own Node step still emits (the criterion's "setup-node still emits").
+		expect(action).toContain('actions/setup-node@v4');
+		expect(action).toContain("node-version: '22'");
+		// Boundary is stated as a YAML comment (a deliberate, honest line) and
+		// names the project-setup hook by task slug so the supported escape hatch
+		// is discoverable from the generated artifact itself.
+		expect(action).toMatch(/#\s*Project-toolchain boundary/);
+		expect(action).toContain('install-ci-project-setup-hook');
+		expect(action).toMatch(/unsupported/i);
+		// And explicitly says it is documentation, not detection.
+		expect(action).toMatch(/not detection/i);
+	});
+
 	it('resolveCIConfig defaults a missing installSource to registry', () => {
 		const resolved = resolveCIConfig({
 			authMode: 'models-json',
@@ -608,6 +629,47 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		expect(/"autoTask":\s*true/.test(joined)).toBe(true);
 		expect(/DORFL_AUTO_BUILD:\s*'true'/.test(joined)).toBe(true);
 		expect(/DORFL_AUTO_TASK:\s*'true'/.test(joined)).toBe(true);
+	});
+
+	it('install-ci completion message states the project-toolchain boundary + names the project-setup hook (task install-ci-document-toolchain-boundary)', async () => {
+		// PRD `install-ci-project-provisioning` axis (A): dorfl provisions only
+		// its OWN runtime (Node for engines.node '>=18'); the project's toolchain
+		// is the project's concern. The completion log must say so out loud and
+		// name the SUPPORTED escape hatch (sibling task
+		// `install-ci-project-setup-hook`), so a maintainer whose project pins a
+		// different Node/pnpm/rust is never silently broken. NO knob, NO
+		// detection — just an honest documented line.
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			repo: 'owner/repo',
+			ghAvailable: false,
+		});
+		const file = join(work, 'ci.json');
+		writeFileSync(file, exportCIConfig(config));
+		const lines: string[] = [];
+		await installCI({
+			ctx,
+			fake: true,
+			configFile: file,
+			log: (line) => lines.push(line),
+		});
+		const joined = lines.join('\n');
+		// Boundary is stated explicitly.
+		expect(/Project toolchain/i.test(joined)).toBe(true);
+		expect(/does NOT provision your project toolchain/i.test(joined)).toBe(
+			true,
+		);
+		// Names the supported escape hatch by task slug.
+		expect(/install-ci-project-setup-hook/.test(joined)).toBe(true);
+		// Says the conflicting case without the hook is unsupported.
+		expect(/unsupported/i.test(joined)).toBe(true);
+		// Says install-ci does NOT detect conflicts.
+		expect(/does NOT detect/i.test(joined)).toBe(true);
+		// Shared-write isolation: artifacts under .fake/, NEVER .github/.
+		expect(
+			existsSync(join(work, '.fake', 'actions', 'dorfl-setup', 'action.yml')),
+		).toBe(true);
+		expect(existsSync(join(work, '.github'))).toBe(false);
 	});
 });
 
