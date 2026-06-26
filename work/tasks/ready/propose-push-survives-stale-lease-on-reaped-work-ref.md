@@ -46,6 +46,29 @@ Anything that is neither (connectivity, auth, a protected ref, a genuine
 non-fast-forward that is NOT explained by our stale view) must still SURFACE,
 never be retried into a clobber.
 
+## Observed incidents (two real triggers; the build must cover BOTH)
+
+This push fails from two distinct callers; both observed in CI, both BENIGN
+race tails (the work had ALREADY landed on `main` and the `work/<slug>` ref
+was already reaped). Sub-case 2 (gone-ref + provably-landed = benign) is the
+expected outcome for BOTH:
+
+1. **First-pass propose under the parallel fan-out.** A `advance-propose`
+   matrix leg's integrator push raced a sibling's land/done-move that reaped
+   the ref. (`! [rejected] work/task-<slug> (stale info)`.)
+2. **Recovery-complete (the DOMINANT trigger; test this one explicitly).**
+   A `dorfl advance ... --propose` run found a stranded already-complete
+   branch, REBASED the kept branch onto `<arbiter>/main` (which REWRITES the
+   tip, a rewrite the integrator propose comment already anticipates),
+   then the propose push reconciled the rewritten tip with the bare lease and
+   hit `stale info` because the ref had been reaped after the earlier land.
+   The recovery note itself says "this signals an earlier un-merged PR": that
+   means the work is very likely ALREADY on `main`, so the gone-ref-is-benign path
+   is the NORMAL recovery outcome, not an edge case. The push is reached via
+   the recovery rebase in the integration core → the propose branch of the
+   integrator; the test must drive THAT path (a kept-branch recovery whose
+   work already landed + whose ref is gone), not only the first-pass propose.
+
 ## Acceptance criteria
 
 - [ ] A `propose` integrator push that hits `stale info` because OUR view of
@@ -62,6 +85,10 @@ never be retried into a clobber.
       SURFACES as a terminal failure — never retried into a bare force, never
       swallowed. Assert no `--force` (bare) and no `:main` destination is ever
       emitted by this path (extend the existing all-push-sites safety sweep).
+- [ ] The RECOVERY-complete path (kept branch rebased onto `<arbiter>/main`,
+      tip rewritten, ref already reaped, work provably on `main`) reaches the
+      same BENIGN already-landed success, asserted with a recovery-flow test,
+      not only a first-pass propose test. This is the dominant real trigger.
 - [ ] The first-time propose (no remote `work/<slug>` yet) path is UNCHANGED.
 - [ ] Tests cover all four shapes above at the integrator seam, mirroring the
       existing stale-lease / continue-branch test style (temp bare arbiter +
@@ -115,8 +142,12 @@ never be retried into a clobber.
 > work-branch stale-lease retry helper (its `stale info` detection, bounded
 > re-fetch + re-lease + retry, and terminal-throw contract); the per-item
 > leased-delete + merged-head-reap ancestor guards for the "benign
-> already-gone, provably landed" precedent. Test at the integrator seam with
-> the existing temp-bare-arbiter + worktree harness and a deterministic
+> already-gone, provably landed" precedent; and the RECOVERY-complete flow
+> that reaches this push: the integration core's recovery rebase of a kept
+> already-complete branch onto `<arbiter>/main` (the dominant real trigger,
+> per the Observed incidents above), invoked from the complete path's
+> committed-recovery branch. Test BOTH callers at the integrator seam with the
+> existing temp-bare-arbiter + worktree harness and a deterministic
 > churn/delete git shim. Run the AGENTS.md acceptance gate.
 >
 > RECORD non-obvious in-scope decisions (a `## Decisions` block in the done
