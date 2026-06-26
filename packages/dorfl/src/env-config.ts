@@ -143,6 +143,13 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. A wide-matrix CI raises it; the default
 	// (1000 — the C2 large liveness ceiling) stays in place when unset.
 	mergeRetries: 'number',
+	// `strictMergeApproval` (the OPT-IN strictness layered on the OQ6
+	// stale-approval default — prd `land-time-reverify-and-parallel-merge-ceiling`
+	// sidecar OQ6 / task `strict-merge-approval-gate`) coerces as a BOOLEAN
+	// (like `freshWorktreeGate`), so `DORFL_STRICT_MERGE_APPROVAL=true|false`
+	// works and a typo FAILS LOUDLY. Default OFF; ON re-surfaces the
+	// merge-question on a merge-base change instead of auto-landing.
+	strictMergeApproval: 'boolean',
 	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env
 	// var of its own — each MEMBER carries its own env var (the nested-key form
 	// `DORFL_PROMPT_GUIDANCE_<MEMBER>`), handled out-of-band in

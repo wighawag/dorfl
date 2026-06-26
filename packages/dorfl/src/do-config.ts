@@ -74,6 +74,7 @@ export function doFlagOverrides(
 		ObservationTriageFlags &
 		SurfaceBlockersFlags &
 		MergeQuestionsFlags &
+		StrictMergeApprovalFlags &
 		NoPRFlags &
 		MergeRetriesFlags,
 	integration?: IntegrationMode,
@@ -94,6 +95,12 @@ export function doFlagOverrides(
 		// axis from `--observation-triage` with a HIGHER default — NEVER rides
 		// `--observation-triage`.
 		...mergeQuestionsFlagOverrides(flags),
+		// `--strict-merge-approval`/`--no-strict-merge-approval` rides the SAME
+		// flag-override chain (flag > env > per-repo > global > default `false`):
+		// the OPT-IN strictness layered on the OQ6 stale-approval default. SEPARATE
+		// axis from `--merge-questions` — the re-surface vs. land branch is
+		// `apply-rung-merge-disposition`'s consumer; this only resolves the boolean.
+		...strictMergeApprovalFlagOverrides(flags),
 		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
 		// per-repo > global > default): a comma-separated value becomes a list (an
 		// explicit pool order), otherwise the verbatim string (a preset keyword). The
@@ -446,6 +453,43 @@ export function mergeQuestionsFlagOverrides(
 			);
 		}
 		overrides.mergeQuestions = raw as MergeQuestions;
+	}
+	return overrides;
+}
+
+/**
+ * **The strict-merge-approval CLI flag** (`--strict-merge-approval` /
+ * `--no-strict-merge-approval`) — prd
+ * `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6 / task
+ * `strict-merge-approval-gate`. The OPT-IN strictness layered on the OQ6
+ * stale-approval default: ON re-surfaces the merge-question on a merge-base
+ * change instead of auto-landing on a green re-verify (the host-agnostic
+ * analogue of GitHub's "dismiss stale approvals when the base changes"); OFF
+ * (default) honours the prior answer + lands when the rebased tip re-verifies
+ * GREEN. Offered alongside `--merge-questions` on `advance` (the apply rung is
+ * the consumer). Resolved through the SAME `flag > env > per-repo > global >
+ * default` chain as the other gate-family members. A negatable boolean
+ * (mirrors `--fresh-worktree-gate`).
+ */
+export interface StrictMergeApprovalFlags {
+	/** `--strict-merge-approval` ⇒ true, `--no-strict-merge-approval` ⇒ false, absent ⇒ undefined. */
+	strictMergeApproval?: boolean;
+}
+
+/**
+ * Map the `--strict-merge-approval`/`--no-strict-merge-approval` flag into a
+ * {@link PartialConfig} override. Only a present flag contributes (absent ⇒
+ * absent key), so the override layer never clobbers a lower-precedence source
+ * with `undefined`. A negatable boolean (mirrors
+ * {@link freshWorktreeGateFlagOverrides}): the caller leaves
+ * `strictMergeApproval` UNDEFINED unless the user explicitly passed the flag.
+ */
+export function strictMergeApprovalFlagOverrides(
+	flags: StrictMergeApprovalFlags,
+): PartialConfig {
+	const overrides: PartialConfig = {};
+	if (flags.strictMergeApproval !== undefined) {
+		overrides.strictMergeApproval = flags.strictMergeApproval;
 	}
 	return overrides;
 }
