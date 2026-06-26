@@ -1,8 +1,50 @@
 ---
-title: held-lock subtraction fails OPEN on a lock-read fault, so a continuously-held in-flight task can be re-enumerated and re-claimed (empty diff then spurious 'stuck')
+title: propose-mode releases the per-item lock at PR-OPEN, not at PR-merge, so an in-flight task is re-claimable across the whole review window (empty diff then spurious 'stuck')
 date: 2026-06-26
 status: open
 ---
+
+## CORRECTION (2026-06-26, supersedes the fail-open theory below)
+
+The fail-open lock-read theory in the original body is NOT the root cause.
+Evidence that disproves it: the CI log shows the leg `CLAIMED` the task. The
+claim is a create-only push (`acquireItemLock`, `--force-with-lease=<ref>:`
+empty-expected) that succeeds ONLY if the lock ref is ABSENT. So at claim time
+the lock was GONE, not held. A held lock would have made the claim `lost`,
+regardless of the eligibility scan. So the question is not why the subtraction
+missed a held lock; it is why the lock was ABSENT for an in-flight task.
+
+ROOT CAUSE: in `propose` mode the per-item lock is released at PR-OPEN, not at
+the durable `main` move. `performComplete` (complete.ts ~L1029) calls
+`releaseClaimLockAfterDurableMove` UNCONDITIONALLY on the success path, before
+the mode-specific tail. Its name + comment assert 'the durable `main` move
+ALREADY landed FIRST', true in MERGE mode, FALSE in PROPOSE mode: there the
+done-move (`git mv tasks/ready -> done`, integration-core step 2) is committed
+on the WORK BRANCH and pushed as the PR; `<arbiter>/main` is NOT touched. So on
+a successful propose build the lock is released while the body is STILL in
+`tasks/ready/` on `main` (the move lands only when a human MERGES the PR).
+
+Result: across the entire PR-review window the task is BOTH unlocked AND in
+`tasks/ready/` on `main`, i.e. fully eligible. The hourly advance cron (or a
+sibling matrix leg in the same run) re-enumerates it, claims it cleanly (lock
+absent, the `CLAIMED` in the log), rebuilds, the PR meanwhile merges, the diff
+is empty, and the runner marks the lock `stuck`. Deterministic, not flaky; it
+fires for every propose-built task whose PR stays open across an advance tick,
+which is why it hit several tasks across one 70-leg run.
+
+The 14 'leaked' locks are then mostly this bug's `stuck` marks (the release at
+PR-open already cleared the cleanly-merged ones), NOT out-of-band-merge leaks.
+
+FIX DIRECTION: bind the lock release to the DURABLE move, which in propose mode
+is the PR MERGE, not PR-open. Keep the lock HELD (state `active`, or a new
+`in-review`/`proposed` state) for an open propose PR so the held-slug
+subtraction keeps the in-flight item out of the pool for the whole window; the
+lock is released when the work actually lands on `main` (merge), reconciled by
+`reconcileItemLockAgainstMain` if the merge happens out-of-band. The comments
+corrected in commit 43bbc47 still stand (the subtraction IS load-bearing); the
+fail-closed-on-read-fault idea below is defence-in-depth, not the root fix.
+
+--- ORIGINAL (fail-open theory, KEPT for the record, but SUPERSEDED above) ---
 
 ## What was observed
 
