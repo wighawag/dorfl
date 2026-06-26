@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'ci-template-parallel-merge-fanout' (Ga
 date: 2026-06-26
 status: open
 reviewOf: ci-template-parallel-merge-fanout
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
