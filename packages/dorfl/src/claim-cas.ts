@@ -19,7 +19,8 @@ import {workItemRel} from './work-layout.js';
  * ordering) picks the single winner.
  *
  * Exit codes:
- *   0  claim landed (the per-item lock is held; the body stays in work/backlog/)
+ *   0  claim landed (the per-item lock is held; the body stays where it rested:
+ *       `tasks/ready/` normally, or `tasks/backlog/` under --allow-backlog)
  *   1  usage / environment error, or a readiness REFUSAL (unmet blockedBy)
  *   2  item not claimable (not in backlog, or lost the lock race to someone else)
  *   3  (legacy) push contention — no longer reachable: the per-item lock never
@@ -112,7 +113,8 @@ export interface ClaimCasResult {
 	 * (RETAINED for the option shape; now ALWAYS absent.) Historically the sha of
 	 * the CLAIM COMMIT that landed on `main`, used by in-place onboarding to branch
 	 * the work branch off the exact claim commit. The lock-substrate claim writes
-	 * NOTHING to `main` (the body stays in `work/backlog/`), so there is no claim
+	 * NOTHING to `main` (the body stays where it rested — `tasks/ready/` normally,
+	 * or `tasks/backlog/` under --allow-backlog), so there is no claim
 	 * commit — onboarding cuts the work branch straight off `<arbiter>/main` (which
 	 * carries the backlog body). Kept on the result shape so existing readers
 	 * (`do.ts` threads `claim.claimCommit` into onboarding) keep type-checking; an
@@ -289,6 +291,16 @@ async function runClaim(
 	}
 
 	/**
+	 * The human-facing folder label for a resolved claimable body path (`work/<dir>`,
+	 * e.g. `work/tasks/ready` or `work/tasks/backlog`). Derived from the ACTUAL
+	 * resolved residence so the claim message never hard-codes the wrong folder.
+	 */
+	function residenceFolder(bodyRel: string): string {
+		const dir = bodyRel.slice(0, bodyRel.lastIndexOf('/'));
+		return dir === '' ? bodyRel : dir;
+	}
+
+	/**
 	 * PRE-CLAIM WELL-FORMEDNESS GUARD (this task's interim guard against the
 	 * promptless-promoted-task strand). The validator `resolveTask` /
 	 * `extractPromptSection` (`prompt.ts`) requires a task body to carry a
@@ -356,7 +368,7 @@ async function runClaim(
 		// A dry-run still runs the pre-claim well-formedness guard so it reports a
 		// promptless body as a usage error rather than "would claim" it.
 		await assertBodyWellFormed(bodyRel);
-		const message = `DRY-RUN: would acquire the per-item lock for '${slug}' (body stays in work/backlog/).`;
+		const message = `DRY-RUN: would acquire the per-item lock for '${slug}' (body stays in ${residenceFolder(bodyRel)}/).`;
 		note(message);
 		return {exitCode: 0, outcome: 'claimed', message};
 	}
@@ -412,6 +424,11 @@ async function runClaim(
 		await releaseItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	}
 
+	// The RESOLVED claimable residence (`tasks/ready/` or, under `--allow-backlog`,
+	// `tasks/backlog/`), captured by the post-lock claimability re-check below so the
+	// success message reports the real folder rather than a hard-coded guess.
+	let claimedBodyRel: string | undefined;
+
 	try {
 		// CLAIMABLE PREDICATE (US #15): "in `tasks/ready/` (the pool) on `main` AND no
 		// lock held" \u2014 widened under `--allow-backlog` to ALSO accept a
@@ -422,7 +439,8 @@ async function runClaim(
 		// not claimable: release the lock we just took (it never protected any in-flight
 		// work) and lose (exit 2).
 		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-		if (!(await bodyRestsClaimable())) {
+		claimedBodyRel = await claimableBodyRel();
+		if (claimedBodyRel === undefined) {
 			await releaseHeldLock();
 			const message = await lostMessage(
 				slug,
@@ -442,10 +460,18 @@ async function runClaim(
 		throw err;
 	}
 
-	// CLAIMED. The body rests in `backlog/` on `<arbiter>/main` and the lock is held.
-	// There is NO claim commit and nothing on `main` to branch from — onboarding cuts
-	// the work branch straight off `<arbiter>/main` (which carries the backlog body).
-	const message = `CLAIMED '${slug}' (lock held; body stays in work/backlog/ on ${arbiter}/main).`;
+	// CLAIMED. The body rests where it was claimed from (`tasks/ready/` normally, or
+	// `tasks/backlog/` under `--allow-backlog`) on `<arbiter>/main` and the lock is
+	// held. There is NO claim commit and nothing on `main` to branch from —
+	// onboarding cuts the work branch straight off `<arbiter>/main` (which carries the
+	// body). The folder is the RESOLVED residence, not a hard-coded guess: a `ready/`
+	// claim must not falsely report `backlog/` (it misled a whole CI-incident triage).
+	// `claimedBodyRel` is always set here (the claimability re-check above returns
+	// `lost` otherwise); fall back to the pool residence (`backlog` IS the
+	// `tasks-ready` path constant) for type-safety — derived via the layout helper,
+	// never a raw `work/<folder>` literal (the work-layout guard).
+	const residence = residenceFolder(claimedBodyRel ?? backlog);
+	const message = `CLAIMED '${slug}' (lock held; body stays in ${residence}/ on ${arbiter}/main).`;
 	note(message);
 	note(
 		`Start work:  git fetch ${arbiter} && git switch -C ${branch} ${arbiter}/main`,

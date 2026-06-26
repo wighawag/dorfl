@@ -73,6 +73,25 @@ describe('claim acquires the unified per-item lock and leaves the body in backlo
 		expect(entry?.state).toBe('active');
 	});
 
+	it('the success message names the REAL residence (tasks/ready/), not a hard-coded backlog/', async () => {
+		// Regression: the claim message used to hard-code `body stays in work/backlog/`
+		// even for a pool (`tasks/ready/`) claim. That false "backlog" wording misled a
+		// whole CI-incident triage (the item was actually a ready/ pool task). The
+		// message must reflect the ACTUAL resolved residence the body was claimed from.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = await performClaim({
+			slug: 'alpha',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('claimed');
+		// The seeded body rests in tasks/ready/ (the helper's 'backlog' alias maps to
+		// tasks-ready), so the message must say tasks/ready, NEVER work/backlog.
+		expect(result.message).toContain('work/tasks/ready/');
+		expect(result.message).not.toContain('work/backlog/');
+	});
+
 	it('a protected-main repo (claim writes nothing to main) still claims successfully', async () => {
 		// Model a protected `main`: claim must touch no `main` ref. We assert it by the
 		// arbiter main tip being unchanged across the claim (the only proof that needs
