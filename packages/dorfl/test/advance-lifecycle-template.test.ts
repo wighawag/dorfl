@@ -92,7 +92,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		const proposeUses =
 			/dorfl-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance one item/;
 		const mergeUses =
-			/dorfl-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance the eligible pool/;
+			/dorfl-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance one item in-place \(merge/;
 		expect(text).toMatch(proposeUses);
 		expect(text).toMatch(mergeUses);
 		// The enumerate + reap jobs use the bare setup action (no agent, no secret).
@@ -112,15 +112,20 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(text).not.toMatch(/secrets\.[A-Z_]*API_KEY/);
 	});
 
-	it('the propose leg streams the agent live (`--watch`); the `-n` merge job does NOT (it tails no single session)', () => {
+	it('both propose AND merge legs stream the agent live (`--watch`); both name ONE item per leg, so a single pi session can be tailed', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		// Propose: a single named item per matrix leg, so --watch fits.
 		expect(text).toMatch(
 			/advance "\$\{\{ matrix\.item \}\}" --propose --watch --arbiter origin/,
 		);
-		// Merge: the -n sequential form cannot tail ONE session, so NO --watch.
-		expect(text).toMatch(/advance -n 10 --merge --arbiter origin/);
-		expect(text).not.toMatch(/advance -n \d+ --merge --watch/);
+		// Merge: per the new fan-out shape (PRD
+		// `land-time-reverify-and-parallel-merge-ceiling`) each merge leg also
+		// names ONE item via the matrix, so --watch fits there too. The old
+		// sequential `-n` form is GONE.
+		expect(text).toMatch(
+			/advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
+		);
+		expect(/dorfl advance -n\b/.test(text)).toBe(false);
 	});
 
 	it('is the PARAMETERISED seed: it ALSO passes the seed validator (advance-ci-template)', () => {
@@ -160,16 +165,19 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(/strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(true);
 		expect(text).toContain('dorfl scan --json');
 		expect(/dorfl advance "?\$\{\{\s*matrix\./.test(text)).toBe(true);
-		// The leg carries `--propose` (tying integration mode to the matrix shape);
-		// `--merge` never rides a matrix leg (parallel merge-to-main thrash).
+		// The leg carries `--propose` (tying integration mode to the matrix shape).
 		expect(
 			/advance-propose:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
 				text,
 			),
 		).toBe(true);
-		expect(/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(text)).toBe(
-			false,
-		);
+		// `--merge` must NEVER ride a `propose` matrix leg (it would silently land
+		// a propose leg on main). The merge job's own matrix legs DO carry
+		// `--merge` (the new fan-out shape).
+		const proposeSection = text.split('advance-merge:')[0];
+		expect(
+			/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(proposeSection),
+		).toBe(false);
 	});
 
 	it(
@@ -189,13 +197,24 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		},
 	);
 
-	it('merge ⇒ a SINGLE SEQUENTIAL `advance -n <x> --merge` (no matrix)', () => {
+	it("merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land via the engine's CAS-retry loop)", () => {
+		// PRD `land-time-reverify-and-parallel-merge-ceiling` stories 4 + 6: the
+		// merge job fans out one leg per item; the land tail is serialised by the
+		// engine's `mergeRetries` CAS-retry loop (the git-alone floor), NOT by the
+		// workflow's job shape. The old single-sequential `-n` form is gone.
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/dorfl advance -n\b/.test(text)).toBe(true);
-		expect(/dorfl advance -n\b[^\n]*--merge\b/.test(text)).toBe(true);
 		expect(/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(
-			false,
+			true,
 		);
+		expect(
+			/advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+				text,
+			),
+		).toBe(true);
+		expect(/dorfl advance -n\b/.test(text)).toBe(false);
+		// And no host-specific `concurrency:` group on the merge job (the floor
+		// must not depend on a GitHub Actions feature for cross-job safety).
+		expect(/advance-merge:[\s\S]*?\n {4}concurrency:/.test(text)).toBe(false);
 	});
 
 	it('ONE word `integrationMode` drives BOTH the flag and the derived job shape (matches the build tick)', () => {
@@ -204,14 +223,16 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(/github\.event\.inputs\.integrationMode/.test(text)).toBe(true);
 		// The same value gates BOTH the propose and merge jobs' `if:` (the shape),
 		// and selects the `--propose`/`--merge` flag (no second knob to desync).
+		// Both `if:` clauses now also AND-guard on `needs.enumerate.outputs.any`
+		// because merge — like propose — fans out from the same eligible-pool scan.
 		expect(
 			text.includes(
-				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}",
+				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}",
 			),
 		).toBe(true);
 		expect(
 			text.includes(
-				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' }}",
+				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}",
 			),
 		).toBe(true);
 	});
@@ -403,8 +424,13 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	};
 
 	it('flags invoking `do` directly', () => {
+		// Inject a `dorfl do` invocation by replacing the merge leg's `advance`
+		// call (any `advance` invocation site would do; this one is unique).
 		expectFlagged(
-			base.replace(/dorfl advance -n 10 --merge/, 'dorfl do -n 10 --merge'),
+			base.replace(
+				/dorfl advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
+				'dorfl do "${{ matrix.item }}" --merge --watch --arbiter origin',
+			),
 			'never-invokes-do',
 		);
 	});
@@ -443,20 +469,29 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		);
 	});
 
-	it('flags a merge -n job missing the --merge flag', () => {
+	it('flags a merge matrix leg missing the --merge flag', () => {
+		// Drop `--merge` from the merge matrix leg only (scoped by the watch +
+		// arbiter suffix unique to that line). Without `--merge` the integration
+		// mode falls back to config and can desync from the matrix shape.
 		expectFlagged(
-			base.replace(/(dorfl advance -n 10) --merge/, '$1'),
-			'merge-job-carries-merge-flag',
+			base.replace(
+				/(dorfl advance "\$\{\{ matrix\.item \}\}") --merge --watch --arbiter origin/,
+				'$1 --watch --arbiter origin',
+			),
+			'merge-leg-carries-merge-flag',
 		);
 	});
 
-	it('flags --merge riding a matrix leg (parallel merge-to-main thrash)', () => {
+	it('flags a host-specific `concurrency:` group injected on `advance-merge` (would make safety host-dependent)', () => {
+		// Applied Answer q1: a GitHub Actions `concurrency:` group on the merge
+		// job would make cross-job land safety depend on a host feature, breaking
+		// the git-alone-floor framing.
 		expectFlagged(
 			base.replace(
-				/(dorfl advance "\$\{\{ matrix\.item \}\}") --propose/,
-				'$1 --merge',
+				/(advance-merge:\n)(\s{4}needs:)/,
+				'$1    concurrency:\n      group: dorfl-merge-${{ github.ref }}\n      cancel-in-progress: false\n$2',
 			),
-			'merge-flag-not-on-matrix-leg',
+			'merge-no-host-concurrency-serialiser',
 		);
 	});
 
@@ -576,8 +611,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags an --isolated flag (CI runs in-place)', () => {
 		expectFlagged(
 			base.replace(
-				/--merge --arbiter origin/,
-				'--merge --isolated --arbiter origin',
+				/--merge --watch --arbiter origin/,
+				'--merge --watch --isolated --arbiter origin',
 			),
 			'no-isolated-flag',
 		);
@@ -600,7 +635,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a step touching .github/workflows/** (US #9)', () => {
 		expectFlagged(
 			base.replace(
-				/run: dorfl advance -n 10 --merge --arbiter origin/,
+				/run: dorfl advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
 				'run: cp x .github/workflows/evil.yml',
 			),
 			'never-edits-dot-github-workflows',
