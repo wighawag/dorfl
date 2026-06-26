@@ -84,3 +84,7 @@ this task lands, `apply-rung-merge-disposition` hard-codes the default
 > boolean; do NOT put the re-surface-vs-land policy branch here (that is
 > `apply-rung-merge-disposition`'s consumer). Tests mirror the sibling
 > gate-precedence tests in style. Run the AGENTS.md acceptance gate.
+
+## Requeue 2026-06-26
+
+stuck: acceptance gate exit 1 on rebased tip (18:42Z); kept work branch; requeued to retry from tip
