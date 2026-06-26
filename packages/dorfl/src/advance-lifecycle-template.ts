@@ -40,10 +40,13 @@
  *   - ONE word `integrationMode` drives BOTH the job SHAPE AND the
  *     `--propose`/`--merge` flag (they can never desync): `propose` ⇒ a DYNAMIC
  *     matrix (`dorfl scan --json | jq` enumerates one leg per eligible id,
- *     each leg carries `--propose` so it can NEVER merge to `main`); `merge` ⇒ a
- *     SINGLE SEQUENTIAL `advance -n <x> --merge` (merge contends on `main`, so it
- *     MUST linearise). This is integration-mode behaviour, IDENTICAL to the build
- *     tick (integration mode is verb-independent).
+ *     each leg carries `--propose` so it can NEVER merge to `main`); `merge` ⇒ ALSO
+ *     a MATRIX (one leg per item; build/gate/review fan out, the LAND tail is
+ *     serialised by the engine's `mergeRetries` CAS-retry loop — the git-alone
+ *     floor — NOT by the workflow shape; PRD
+ *     `land-time-reverify-and-parallel-merge-ceiling`). This is integration-mode
+ *     behaviour, IDENTICAL to the build tick (integration mode is
+ *     verb-independent).
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
  *     `--isolated`/`--remote`/registry. A CI concurrency group (per-ref) prevents
  *     overlapping ticks; the claim CAS is the real cross-run serialiser.
@@ -121,9 +124,13 @@ export function generateAdvanceLifecycleWorkflow(
 #   * propose ⇒ a DYNAMIC matrix (one leg per eligible id, enumerated via
 #               \`dorfl scan --json | jq\`), each leg \`advance --propose\`
 #               opening its OWN PR — a leg can NEVER merge to main.
-#   * merge   ⇒ a SINGLE SEQUENTIAL \`advance -n <x> --merge\` — merge contends on
-#               \`main\`, so it MUST linearise (parallel legs would thrash the
-#               main-CAS). \`--merge\` rides ONLY this sequential job.
+#   * merge   ⇒ ALSO a MATRIX (one leg per item; build/gate/review fan out, the
+#               LAND tail — rebase + CAS push to \`main\` — is serialised by the
+#               engine's \`mergeRetries\` CAS-retry loop, NOT by the workflow shape.
+#               PRD \`land-time-reverify-and-parallel-merge-ceiling\`: a
+#               non-fast-forward push triggers re-rebase + re-gate + retry, never
+#               a \`--force\`. The cross-job serialiser is the CAS-retry FLOOR;
+#               there is NO host-specific \`concurrency:\` group on the merge job).
 # This is integration-mode behaviour, IDENTICAL to the build/task tick
 # (integration mode is verb-independent). The CLAIM CAS, not the matrix, is the
 # real cross-run serialiser: a leg that loses the claim race exits clean.
@@ -273,7 +280,6 @@ jobs:
   # becomes one matrix leg → one independent \`advance --propose\`. Skipped in merge
   # mode. Inert with calm-default gates (empty triage/surface pools).
   enumerate:
-    if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' }}
     runs-on: ubuntu-latest
     outputs:
       items: \${{ steps.scan.outputs.items }}
@@ -370,15 +376,27 @@ jobs:
         # (one pi session to tail); the \`-n\` merge job cannot use it.
         run: dorfl advance "\${{ matrix.item }}" --propose --watch --arbiter origin
 
-  # ── MERGE: a SINGLE SEQUENTIAL job ───────────────────────────────────────────
-  # merge-mode items chain via rebase; parallel jobs would thrash the main-CAS.
-  # One sequential driver (\`advance -n <x>\`, ALWAYS sequential) drains the pool.
-  # The fully-autonomous-to-main path (this job + all gates on) is a LOUD,
+  # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
+  # PRD \`land-time-reverify-and-parallel-merge-ceiling\` (stories 4 + 6): each item
+  # gets its own leg; build/gate/review run concurrently across siblings; the LAND
+  # TAIL is serialised by the engine's \`mergeRetries\` CAS-retry loop — the
+  # git-alone floor — NOT by the workflow shape. A non-fast-forward push triggers
+  # re-rebase + re-gate + retry up to the resolved \`mergeRetries\` cap; never a
+  # \`--force\`. NO host-specific \`concurrency:\` group on this job (it would be
+  # load-bearing for cross-job safety, breaking the floor framing).
+  # The fully-autonomous-to-main path (this job + all gates on) is still a LOUD,
   # NON-DEFAULT opt-in: the default integrationMode is \`propose\`, so reaching
   # merge-to-main requires deliberately dispatching/pinning \`merge\`.
   advance-merge:
-    if: \${{ (github.event.inputs.integrationMode || 'propose') == 'merge' }}
+    needs: enumerate
+    if: \${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    strategy:
+      # Independent landings: one failing item must NOT cancel the others; a
+      # loser of the CAS race re-rebases + re-gates + retries.
+      fail-fast: false
+      matrix:
+        item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -396,15 +414,19 @@ jobs:
           [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
           [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
           true
-      - name: advance the eligible pool sequentially in-place (merge ⇒ rebase-chains to main)
-        # In-place (no --isolated/--remote). \`--merge\` rides ONLY this single
-        # sequential job (never a matrix leg), so rebase-chained merges to main
-        # happen one at a time — no parallel main-CAS thrash. The flag ties the
-        # integration mode to this shape; it overrides the repo config default.
-        # \`gh\` (merge / PR housekeeping) reads \`GH_TOKEN\` from the env.
+      - name: advance one item in-place (merge ⇒ rebase + CAS land on main)
+        # In-place (no --isolated/--remote). \`--merge\` ties the integration mode
+        # to THIS (matrix) shape: it sits at the top of the precedence chain, so
+        # the workflow mode always wins over the repo's \`.dorfl.json\` default.
+        # Cross-job land safety comes from the engine's CAS-retry loop, not from
+        # this workflow's job shape. \`gh\` (merge / PR housekeeping) reads
+        # \`GH_TOKEN\` from the env.
         env:
           GH_TOKEN: \${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: dorfl advance -n 10 --merge --arbiter origin
+        # \`--watch\` streams the build agent's high-signal turns into THIS job
+        # log live; each leg names ONE item, so it fits the same way it does on
+        # the propose legs.
+        run: dorfl advance "\${{ matrix.item }}" --merge --watch --arbiter origin
 
   # ── REAP merged remote work/* branches (capability F, the hygiene sweep) ─────
   # PRESERVED from the seed (NOT a separate gc-sweep workflow): the provider-
@@ -535,23 +557,28 @@ export function validateAdvanceLifecycleWorkflow(
 		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
 		'dispatch mode).');
 
-	// --- merge ⇒ a SINGLE SEQUENTIAL `advance -n <x> --merge` -------------------
-	require('merge-sequential-n-driver', /dorfl advance -n\b/.test(
+	// --- merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land) -
+	// PRD `land-time-reverify-and-parallel-merge-ceiling` stories 4 + 6: build/
+	// gate/review fan out; the LAND tail is serialised by the engine's
+	// `mergeRetries` CAS-retry loop (the git-alone floor), NOT the workflow.
+	require('merge-matrix', /advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
 		text,
-	), '`merge` mode must run a SINGLE SEQUENTIAL job invoking the `-n` driver ' +
-		'(`dorfl advance -n <x>`).');
-	require('merge-job-carries-merge-flag', /dorfl advance -n\b[^\n]*--merge\b/.test(
+	), 'the `merge` job must use a MATRIX (parallel build/gate/review per item; ' +
+		"the land tail is serialised by the engine's `mergeRetries` CAS-retry " +
+		"loop, not by the workflow's job shape).");
+	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
 		text,
-	), 'the `merge` job must pass `--merge` on its `advance -n` driver so the ' +
-		'integration mode is TIED to the single-sequential shape.');
-	require('merge-flag-not-on-matrix-leg', !/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(
+	), 'each `merge` matrix leg must pass `--merge` so the integration mode is ' +
+		'TIED to the matrix shape (a leg can never propose-only / desync from the ' +
+		'dispatch mode).');
+	// No host-specific cross-job serialiser on the merge job: a GitHub Actions
+	// `concurrency:` block there would make cross-job land safety depend on a host
+	// feature, breaking the git-alone-floor framing (Applied Answer q1).
+	require('merge-no-host-concurrency-serialiser', !/advance-merge:[\s\S]*?\n\s{4}concurrency:/.test(
 		text,
-	), '`--merge` must NOT ride a matrix leg (parallel merge-to-main would thrash ' +
-		'the main-CAS); it belongs ONLY on the single sequential `advance -n` job.');
-	require('merge-no-matrix', !/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
-		text,
-	), 'the `merge` job must NOT use a matrix (parallel merge jobs would thrash ' +
-		'the main-CAS).');
+	), 'the `merge` job must NOT carry a `concurrency:` group: a host-specific ' +
+		'serialiser would make the cross-job land safety depend on a GitHub Actions ' +
+		"feature; the engine's `mergeRetries` CAS-retry loop is the git-alone floor.");
 
 	// --- The DORFL_* gate family must NOT be carried as workflow env -----
 	// The workflow emits NO active gate env line for any of AUTO_BUILD / AUTO_TASK

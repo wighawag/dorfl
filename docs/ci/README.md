@@ -48,10 +48,10 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 
 ## The two CI shapes (US #27)
 
-| `integrationMode` | shape                        | `advance` invocation              | why                                                                                       |
-| ----------------- | ---------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
-| `propose`         | a MATRIX of independent jobs | `advance <item> --propose`        | propose-mode items are independent PRs → true parallelism; `-n` not even needed.          |
-| `merge`           | a SINGLE SEQUENTIAL job      | `advance -n <x> --merge`          | merge-mode items land on `main` via rebase (ADR §10); this template keeps merge a single sequential job today (see the note below). |
+| `integrationMode` | shape                                                                  | `advance` invocation         | why                                                                                                                                                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `propose`         | a MATRIX of independent jobs                                           | `advance <item> --propose`   | propose-mode items are independent PRs → true parallelism, one PR per item.                                                                                                                                                                                                                          |
+| `merge`           | a MATRIX of independent jobs (parallel build/gate/review; LAND serialised by the engine) | `advance <item> --merge` | merge-mode items land on `main` via rebase (ADR §10). Build/gate/review fan out per item; the cross-job land tail is serialised by the engine's `mergeRetries` CAS-retry loop — the git-alone floor — NOT by this workflow's job shape (per PRD `land-time-reverify-and-parallel-merge-ceiling`). |
 
 **One word, one meaning.** The dispatch input is `integrationMode` — the SAME
 vocabulary as `.dorfl.json`'s `integration` and `advance --propose`/
@@ -61,29 +61,67 @@ shape the legs run in and the integration mode they actually use can never desyn
 (the dangerous case the prior attempt missed: `propose` shape, parallel matrix, but
 every leg silently merging to `main` because the repo config defaulted to `merge`).
 
-The propose matrix enumerates its items via the **mirror-side eligible-pool scan**
+Both modes enumerate their items via the **mirror-side eligible-pool scan**
 (`dorfl scan --json`, the hub-mirror enumeration the loop driver also
-consumes), so CI fans out over exactly the eligible pool. Each leg passes
-`--propose`, so a matrix leg can NEVER merge to `main`. The merge job runs the
-one-shot driver `dorfl advance -n <x> --merge` (`-n` is ALWAYS sequential —
-parallelism comes only from the propose matrix, never from `-n`); `--merge` rides
-ONLY this single sequential job, so a parallel merge-to-`main` is structurally
-impossible in the SHIPPED template.
+consumes), so CI fans out over exactly the eligible pool. Each propose leg passes
+`--propose`, so a propose leg can NEVER merge to `main`; each merge leg passes
+`--merge`, so its integration mode is tied to its job shape just as tightly. The
+legs run the existing `advance <item>` driver (no `-n` in either shape —
+parallelism comes from the matrix itself).
 
-> **Why a single sequential merge job (and why that is a TEMPLATE choice, not a
-> hard engine limit).** An earlier rationale here said parallel merge jobs "would
-> thrash the main-CAS." That is no longer accurate: the engine now serialises ONLY
-> the land-on-`main` TAIL via `integrateLock` (keyed per repo, in
-> `integration-core.ts`/`run.ts`) while build/gate/review run concurrently, and a
-> sibling that advanced `main` during the push window is handled by `mergeRetries`
-> (re-rebase + re-gate + retry, never a `--force`), not a thrash. So concurrent
-> merge is land-SAFE in-process. The CI template still ships merge as a single
-> sequential `advance -n` job because the in-memory `integrateLock` does not span
-> SEPARATE CI jobs (cross-job landing would fall back to the CAS-retry loop alone)
-> and the retry cap was sized for in-process siblings, not a wide matrix. Driving a
-> parallel merge matrix in CI is the open `land-time-reverify-and-parallel-merge-ceiling`
-> prd (`work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md`); do
-> NOT change the shipped shape here ahead of it.
+### Parallel-merge fan-out and the cross-job serialiser (the floor)
+
+An earlier version of this doc said parallel merge jobs "would thrash the
+main-CAS" and therefore shipped merge as a single sequential `advance -n` job.
+That claim is wrong and is now retracted: the engine has been land-safe under
+parallel landings for a while, and the template now matches.
+
+The engine's actual safety story:
+
+- **`integrateLock`** (in-process, in `integration-core.ts`/`run.ts`,
+  keyed per repo): serialises ONLY the land-on-`main` TAIL within a single
+  process, so build/gate/review run concurrently across siblings on the same
+  runner. It is the IN-PROCESS optimisation; it does NOT span separate CI jobs.
+- **`mergeRetries`** (cross-job, the CAS-retry loop): a non-fast-forward push
+  triggers re-rebase + re-gate + retry up to the resolved cap — never a
+  `--force`, never a both-land-broken merge. Across runners this CAS loop IS the
+  queue: losers re-rebase and re-gate, the winner lands; the LAST land's
+  fresh-worktree gate ran on the current `main` tip.
+- **`mergeRetries` is gate-family-resolved** (`merge-retries-gate-precedence`):
+  flag > env > per-repo > global > default. A wide CI matrix can raise the cap
+  without redeploying.
+
+So concurrent merge legs in CI are LAND-SAFE: there is no scenario in which two
+green, rebased trees both land semantically-broken, and no scenario in which the
+runner is driven to `--force`. The throughput cost of a wide burst is bounded by
+the cap — past the cap a loser bounces to needs-attention rather than land
+incorrectly.
+
+**Cross-job serialiser — floor, accelerator, optional host sugar (per the PRD's
+Applied Answer q1):**
+
+- **Floor (git-alone, host-agnostic):** the scaled `mergeRetries` CAS-retry
+  loop. Pure ref CAS against the arbiter; works on a bare `--bare` arbiter with
+  `NoneProvider`; this is what the shipped template depends on.
+- **Accelerator (portable):** an optional cross-job ref-lock (a CAS-claim on a
+  `refs/dorfl/land-lock` sentinel ref) so losers QUEUE rather than burn
+  retries then bounce. Tracked separately; degrades to every host. NOT shipped
+  yet; the floor is correct without it.
+- **Host sugar (optional):** a GitHub Actions `concurrency:` group on the
+  merge job is allowed only as host-specific convenience LAYERED ON TOP of the
+  floor. The shipped template deliberately does NOT include one (see the
+  decision note below): if it did, removing it on a host without
+  `concurrency:` would silently lose safety, which is exactly the dependency
+  the floor framing forbids.
+
+> **No `concurrency:` block on the merge job by default.** The workflow-level
+> `concurrency: advance-loop-${{ github.ref }}` group (which only deduplicates
+> overlapping ticks of the same shape) is unrelated to land serialisation and
+> stays. The merge JOB carries no `concurrency:` of its own — a host-specific
+> serialiser there would be load-bearing for cross-job land safety, breaking
+> the git-alone floor framing. A maintainer who wants the host accelerator on a
+> GitHub arbiter may add one locally; it is intentionally not part of the
+> shipped template.
 
 ### Matrix enumeration scope
 
