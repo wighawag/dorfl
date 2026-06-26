@@ -160,7 +160,7 @@ on:
   workflow_dispatch:
     inputs:
       integrationMode:
-        description: 'Integration mode (drives BOTH the integration flag passed to \`advance\` AND the job shape): propose ⇒ a matrix, each leg \`advance --propose\` (one PR per item); merge ⇒ a single sequential \`advance -n --merge\` (rebase-chains to main).'
+        description: 'Integration mode (drives BOTH the integration flag passed to \`advance\` AND the job shape): propose ⇒ a matrix, each leg \`advance --propose\` (one PR per item); merge ⇒ a matrix, each leg \`advance --merge\` (one item — build/gate/review fan out in parallel; the LAND tail is serialised by the engine\'s \`mergeRetries\` CAS-retry loop, not by the workflow shape).'
         required: false
         default: 'propose'
         type: choice
@@ -373,7 +373,8 @@ jobs:
         # tool calls, finish) into THIS job log live, so the run shows the agent
         # working instead of freezing after "Start work". A read-only observer (no
         # outcome/gate/git effect). It fits because each matrix leg names ONE item
-        # (one pi session to tail); the \`-n\` merge job cannot use it.
+        # (one pi session to tail) — the merge job is now a per-item matrix too
+        # (see below) and streams the same way.
         run: dorfl advance "\${{ matrix.item }}" --propose --watch --arbiter origin
 
   # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
