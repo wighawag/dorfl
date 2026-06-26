@@ -63,3 +63,7 @@ task).
 > with the AGENTS.md acceptance gate. Record any in-scope decision you
 > make (e.g. an explicit "no `concurrency:` block by default" choice) per
 > task-template convention.
+
+## Requeue 2026-06-26
+
+CONTINUE from the kept branch (do NOT restart — the 358-line implementation is correct and complete except for the block below). Gate-2 block (valid): the workflow_dispatch integrationMode `description:` string still advertises the OLD shape 'merge => a single sequential advance -n --merge (rebase-chains to main)', contradicting the fan-out this task ships. FIX: update that description in BOTH copies — packages/dorfl/src/advance-lifecycle-template.ts (~L163) AND docs/ci/advance-loop.yml.template (~L92) — to the new shape (matrix per item; land tail serialised by the engine's mergeRetries CAS-retry loop). ALSO (non-blocking but do it): rephrase the stale propose-leg inline comments that still say 'the -n merge job cannot use it' / reference the removed '-n' job (advance-lifecycle-template.ts ~L550 'single sequential advance -n job' and the seed template ~L274). AND add the '## Decisions' block the prompt asked for, ratifying: (a) merge legs now pass --watch, (b) enumerate shared by propose+merge, (c) both jobs AND-guard on enumerate.any, (d) the -n driver removed entirely, (e) fail-fast:false on the merge matrix, (f) no concurrency: block by default. Then re-run the acceptance gate + Gate 2.
