@@ -1,9 +1,28 @@
 ---
 title: review-gate non-blocking nits for 'disable-rename-detection-on-continue-rebase' (Gate 2 approve)
 date: 2026-06-26
-status: open
+status: addressed
 reviewOf: disable-rename-detection-on-continue-rebase
 ---
+
+## 2026-06-26 follow-up (continuation pass)
+
+The task was requeued for a continuation pass on these nits; all three are
+resolved in the same task branch:
+
+- Nit 1 (ADR for rename-off-over-sentinel): added
+  `docs/adr/runner-rebase-rename-detection-off.md` capturing the decision +
+  rejected alternatives (sentinel, persistent config, content-rename knobs).
+- Nit 2 (no regression at the integration-core seam): added a regression test in
+  `packages/dorfl/test/integration-core.test.ts` under
+  'integration-core — directory-rename detection MUST stay off on the
+  integrate-tail rebase'. Uses a NON-`.md` sibling file in `work/tasks/ready/`
+  so the existing `reconcileSiblingLedgerConflict` arm cannot mask the
+  directory-rename failure — the test FAILS when the flag is removed from the
+  integrate-tail rebase, PASSES with it.
+- Nit 3 (no Decisions block in the commit): recorded inline in the
+  continuation done record / report; the durable why now also lives in the new
+  ADR + the regression test's own comments.
 
 ## Non-blocking review findings
 
