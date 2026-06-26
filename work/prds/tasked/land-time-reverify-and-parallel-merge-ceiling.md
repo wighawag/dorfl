@@ -33,8 +33,13 @@ self-contained here):
   unambiguously, distinct from the free-text content-question shape. Sidecar
   identity may key to a `branch:`/`ref:` (and `lock:`) identity in addition to
   `item:` (an unmerged branch has no item body on `main`); a typed `kind` field
-  (merge | stuck | triage | spec) is added now and is what apply reads to pick
-  the dispatch. Kind-based SUBFOLDERS (`questions/merge/`, ...) are the intended
+  (merge | stuck | triage | spec) is what apply reads to pick the dispatch. That
+  `kind` field is a SHARED foundational primitive (surfacer + apply-rung both
+  need it), so it is its OWN task `sidecar-kind-field` (a `blockedBy` of the
+  surfacer + apply-rung), NOT improvised inside whichever task touches it first.
+  It is INTERIM — removable once kinds get their own subfolders. (A first build of
+  `merge-question-surfacer` was BLOCKED at review for working around the absent
+  field by overloading `default` + string-sniffing; this extraction is the fix.) Kind-based SUBFOLDERS (`questions/merge/`, ...) are the intended
   later direction (safe: kinds are temporally exclusive per item), tracked by
   `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` —
   NOT folded into this PRD. LOAD-BEARING: sidecar authorship stays on

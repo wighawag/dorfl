@@ -3,7 +3,7 @@ title: Apply-rung — answered merge-question invokes the land primitive (condit
 slug: apply-rung-merge-disposition
 prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
-blockedBy: [merge-question-surfacer]
+blockedBy: [merge-question-surfacer, sidecar-kind-field]
 covers: [15, 16]
 ---
 
@@ -139,4 +139,4 @@ apply(answered sidecar):
   else:                                   # observation / spec / triage
       verdict = decide(input, allowedOutcomes); route verdict   # agent, as today
 ```
-The `kind` is read from the sidecar's typed identity field (PRD sidecar Q5-ii). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).
+The `kind` is read from the sidecar's typed identity field (PRD sidecar Q5-ii), introduced by the foundational task `sidecar-kind-field` (a `blockedBy` of this task). Read the typed `kind` field directly — do NOT string-sniff the `default` menu (the workaround that got `merge-question-surfacer`'s first build blocked at review). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).

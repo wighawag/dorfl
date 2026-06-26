@@ -3,11 +3,40 @@ title: Advance surfacer — emit MERGE-QUESTIONS for unmerged `work/*` branches 
 slug: merge-question-surfacer
 prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
-blockedBy: []
+blockedBy: [sidecar-kind-field]
 covers: [14]
 ---
 
-## Open questions (needsAnswers — disposition vocabulary was retired)
+## REVIEW-BLOCK RESOLUTION 2026-06-26 (the `kind` field is now a prerequisite, not this task's job)
+
+A first build of this task was BLOCKED at the PR/code-review gate (Gate 2,
+terminal). The blocking finding (correct): applied-answer q3/q5 require an
+EXPLICIT typed `kind` field (`merge | stuck | triage | spec`) in the sidecar
+entry as the apply rung's dispatch signal, but the agent — not wanting to change
+the sidecar schema inside a surfacer task — WORKED AROUND it by overloading the
+free-text `default` humility-aid field to carry the `merge | hold | drop` menu
+and asking the apply layer to string-SNIFF it. That contradicts the answer the
+task was conditioned on AND abuses `default`'s meaning.
+
+Resolution (decomposition fix, not a spec change): the `kind` field is a SHARED
+foundational primitive (the surfacer, apply-rung, and gate-axis all need it), so
+it is EXTRACTED into its own task `sidecar-kind-field` (now a `blockedBy` of this
+one). This task no longer adds the field — it STAMPS it:
+
+- The surfacer emits a binary entry with `kind: merge` set (the field from
+  `sidecar-kind-field`). It does NOT overload `default`, and does NOT string-sniff.
+- `default` carries the human-readable choice menu `merge | hold | drop` as a
+  HINT only (its existing humility-aid meaning); the MACHINE dispatch signal is
+  `kind`, never the shape of `default`.
+
+NOTE the `kind` field is INTERIM (removable once kind-subfolders land — see
+`sidecar-kind-field`'s banner); this task depends on it while it exists.
+
+The stale "## Open questions" block below is RESIDUE (needsAnswers was already
+cleared by apply); read the "## Applied answers 2026-06-26" section + this
+resolution as the live spec.
+
+## Open questions (RESOLVED — see Applied answers + the REVIEW-BLOCK RESOLUTION above)
 
 This task was authored against the SIDECAR DISPOSITION VOCABULARY
 (`merge | hold | drop`), which the keystone PRD
@@ -62,11 +91,13 @@ Scope of this task:
   `main` (the floor), augmented with PR metadata via `gh pr list` where
   a GitHub remote is configured (the ceiling rendering).
 - The sidecar emit: same shape as existing surfacers; a BINARY entry
-  (no-answer | answered), NOT a disposition token (the disposition
-  vocabulary was retired — see Open questions). The merge/hold/drop
-  CHOICE is the human's answer text, interpreted later by the apply
-  action layer (`apply-rung-merge-disposition`). Sidecar identity-keyed
-  (per `work/questions/<type>-<slug>.md` convention).
+  (no-answer | answered) STAMPED `kind: merge` (the typed field from
+  `sidecar-kind-field`), NOT a disposition token (the disposition
+  vocabulary was retired). The `merge | hold | drop` choice menu rides
+  the entry's `default` as a human-readable HINT only; the MACHINE
+  dispatch signal the apply layer reads is `kind`, NEVER the shape of
+  `default` (the workaround that got the first build blocked). Sidecar
+  identity-keyed (per `work/questions/<type>-<slug>.md` convention).
 - PR-OPTIONAL by construction: works on a bare `--bare` arbiter with
   `NoneProvider`.
 
@@ -82,13 +113,13 @@ OUT OF SCOPE for THIS task (separate tasks):
 
 ## Acceptance criteria
 
-- [ ] needsAnswers is cleared (the disposition-vocabulary open questions
-      above are answered) before this is built.
 - [ ] New surfacer enumerates unmerged `work/*` branches by reachability
       against `main`; adds PR metadata when a GitHub host is configured.
-- [ ] Surfacer emits merge-questions as BINARY sidecar entries (no
-      disposition token); the merge/hold/drop choice rides the human's
-      answer text, not a `disposition=` field.
+- [ ] Surfacer emits merge-questions as BINARY sidecar entries STAMPED
+      `kind: merge` (the typed field from `sidecar-kind-field`); the
+      `merge | hold | drop` menu rides `default` as a HINT only. NO
+      `disposition=` field, and the apply layer's dispatch signal is
+      `kind`, NOT the shape of `default` (no string-sniffing).
 - [ ] Surfacer works on a bare arbiter (no host required).
 - [ ] Existing `surface-questions` judgement skill is untouched.
 - [ ] Tests cover: a no-host bare arbiter, a GitHub-configured
@@ -99,8 +130,11 @@ OUT OF SCOPE for THIS task (separate tasks):
 
 ## Blocked by
 
-- None — file-orthogonal from engine and CI-template tasks; rides on
-  the advance-loop surfacer machinery already in `tasks/done/`
+- `sidecar-kind-field` — the surfacer STAMPS the typed `kind: merge`
+  field on each entry; that field must exist first. (Otherwise the only
+  options are abusing `default` or string-sniffing — the workaround the
+  first build was blocked for.) Otherwise file-orthogonal; rides on the
+  advance-loop surfacer machinery already in `tasks/done/`
   (`advance-rung-surface.md`, `advance-sidecar-contract.md`).
 
 ## Prompt
@@ -117,7 +151,14 @@ OUT OF SCOPE for THIS task (separate tasks):
 > `apply-decide.ts`) to mirror their pattern exactly — this task is a
 > clean INSTANCE of the general surface->answer->apply shape over the
 > BINARY sidecar, not a bespoke verb and not a disposition emitter. Build the floor (reachability) first; layer the
-> `gh pr list` ceiling on top as enrichment only. Tests must not hit
+> `gh pr list` ceiling on top as enrichment only.
+>
+> STAMP `kind: merge` on each emitted entry (the field from the blocker
+> `sidecar-kind-field`). The `merge | hold | drop` menu goes in `default`
+> as a human HINT only — do NOT make the apply layer recognise a
+> merge-question by the shape of `default` (that string-sniff workaround
+> is exactly what got the first build BLOCKED at review; see the
+> REVIEW-BLOCK RESOLUTION at the top). Tests must not hit
 > real GitHub. Run the AGENTS.md acceptance gate.
 
 ## Applied answers 2026-06-26
