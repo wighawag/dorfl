@@ -1090,7 +1090,25 @@ export async function performIntegration(
 			// rebases are the same plain replay onto `<arbiter>/main`.
 			void recovering;
 			void lifecycle;
-			const rebase = await gitSoft(['rebase', `${arbiter}/main`], cwd, env);
+			// RENAME-DETECTION-OFF (task
+			// `disable-rename-detection-on-continue-rebase`): scope
+			// `-c merge.directoryRenames=false` to THIS rebase invocation, so a single
+			// durable folder-transition `git mv` out of a SPARSE work/<from>/ folder is
+			// NOT misread by git's directory-rename heuristic as a whole-DIRECTORY
+			// rename `work/<from>/ → work/<to>/` (which would spuriously flag every
+			// sibling file `<arbiter>/main` added into that folder as `CONFLICT (file
+			// location)` and force a FALSE needs-attention). Content-rename detection
+			// (`-Xno-renames`/`merge.renames`/`diff.renames`) is the wrong knob and
+			// does NOT suppress this directory-rename conflict; only
+			// `merge.directoryRenames=false` does. NEVER a persistent `git config`
+			// write — the repo's config stays clean so a user's interactive
+			// `git rebase` is unaffected. A GENUINE content conflict still surfaces
+			// and still routes via `rebaseConflictRoute()` below.
+			const rebase = await gitSoft(
+				['-c', 'merge.directoryRenames=false', 'rebase', `${arbiter}/main`],
+				cwd,
+				env,
+			);
 			if (rebase.status !== 0) {
 				// NEVER auto-resolve a genuine CODE conflict. But FIRST, a SIBLING-SLUG
 				// LEDGER conflict (the replay conflicts ONLY on OTHER slugs'
@@ -1665,14 +1683,28 @@ async function recoverAlreadyCommitted(params: {
 	// re-fetched main is the same shape it would have hit on the original run (the
 	// recovery is not the place to grow new reconcile semantics).
 	//
-	// RENAME-DETECTION composition: the rebase invocation is written as a small
-	// args array so the sibling `disable-rename-detection-on-continue-rebase` task
-	// can slot `-Xno-renames` / `-c merge.renames=false` in at ONE site without
-	// regressing the loop.
+	// RENAME-DETECTION composition (task
+	// `disable-rename-detection-on-continue-rebase`): the rebase carries
+	// `-c merge.directoryRenames=false` SCOPED to the invocation — written as a
+	// small args array so every retry of THIS loop carries it too — so a single
+	// durable folder-transition `git mv` out of a SPARSE source folder is NOT
+	// misread as a whole-DIRECTORY rename and the post-rename heuristic does NOT
+	// flag sibling files `<arbiter>/main` added into that folder as `CONFLICT
+	// (file location)`. Content-rename detection (`-Xno-renames`/`merge.renames`/
+	// `diff.renames`) is the WRONG knob and was verified ineffective for this
+	// directory-rename conflict; only `merge.directoryRenames=false` suppresses
+	// it. NEVER a persistent `git config` write — the repo's config stays clean.
+	// A GENUINE same-path content conflict still surfaces and still routes to
+	// `rebase-conflict` (the user's interactive `git rebase` is unaffected).
 	note(
 		`Recovering '${slug}': rebasing the kept ${branch} onto ${arbiter}/main…`,
 	);
-	const rebaseArgs = (): string[] => ['rebase', `${arbiter}/main`];
+	const rebaseArgs = (): string[] => [
+		'-c',
+		'merge.directoryRenames=false',
+		'rebase',
+		`${arbiter}/main`,
+	];
 	let attempt = 0;
 	for (;;) {
 		const rebase = await gitSoft(rebaseArgs(), cwd, env);

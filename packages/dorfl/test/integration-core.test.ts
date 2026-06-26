@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
 import {readItemLock} from '../src/item-lock.js';
+import {run as runGit} from '../src/git.js';
 import {createKeyedLock} from '../src/concurrency.js';
 import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
 import {ReviewParseError} from '../src/review-gate.js';
@@ -1094,5 +1095,89 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
 		expect(stuckLockOnArbiter(repo, 'sa')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(false);
+	});
+});
+
+describe('integration-core — directory-rename detection MUST stay off on the integrate-tail rebase', () => {
+	// Task `disable-rename-detection-on-continue-rebase`: the integrate-tail rebase
+	// (`performIntegration`'s rebase-onto-`<arbiter>/main`) also carries
+	// `-c merge.directoryRenames=false`, for the SAME reason as the continue-rebase
+	// in `rebaseContinuedBranchOntoMain` (see `continue-branch.test.ts`). The
+	// failure shape at this seam: the band's own step-2 done-move empties a SPARSE
+	// `work/tasks/ready/` folder, the integrate-tail rebase then replays that
+	// commit onto a `<arbiter>/main` that has ADDED a NON-LEDGER (non-`.md`)
+	// sibling file into the same folder — and git's directory-rename heuristic
+	// silently re-routes the added file into `work/tasks/done/` as `CONFLICT (file
+	// location)`.
+	//
+	// Why a NON-LEDGER added file: the band already has a
+	// `reconcileSiblingLedgerConflict` arm that swallows a rebase conflict scoped
+	// strictly to OTHER slugs' `work/<status>/<otherslug>.md` ledger files (a
+	// benign sibling-job race), so a directory-rename conflict on `*.md` siblings
+	// would be reconciled away even WITHOUT the rename-off flag — the regression
+	// would not bite. A non-`.md` added file is OUTSIDE the sibling-ledger
+	// reconcile's scope (by design: it returns `false` when any non-ledger file
+	// conflicts), so the rename-off flag is what keeps the rebase clean here.
+	it('a sparse-ready done-move meets a main that ADDED a NON-LEDGER sibling file into work/tasks/ready/ ⇒ integrates CLEAN (rename-off keeps the directory-rename heuristic from spuriously conflicting)', async () => {
+		// `claimAndBranch` seeds EXACTLY one task in `work/tasks/ready/` — so when the
+		// band runs step-2 `git mv work/tasks/ready/alpha.md → work/tasks/done/alpha.md`,
+		// `ready/` is left EMPTY on the work branch. That is the sparse-source shape
+		// the directory-rename heuristic latches onto.
+		const {seeded, repo} = await claimAndBranch('alpha');
+
+		// Advance arbiter/main on a sibling clone: ADD ONE non-`.md` sibling file
+		// into the SAME `work/tasks/ready/` folder (a hand-dropped note alongside
+		// tasks). Non-ledger ⇒ the sibling-ledger reconcile arm CANNOT swallow the
+		// resulting `CONFLICT (file location)`; only the scoped
+		// `-c merge.directoryRenames=false` on the integrate-tail rebase prevents it.
+		const other = seeded.clone('siblings');
+		mkdirSync(join(other, 'work', 'tasks', 'ready'), {recursive: true});
+		writeFileSync(
+			join(other, 'work', 'tasks', 'ready', 'NOTES.txt'),
+			'hand-dropped operator note alongside ready/ tasks\n',
+		);
+		gitIn(['add', '-A'], other);
+		gitIn(['commit', '-q', '-m', 'seed NOTES.txt into ready/'], other);
+		gitIn(['push', '-q', ARBITER, 'main:main'], other);
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'alpha',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			// `merge` lands on main when the rebase is clean. The integrate-tail rebase
+			// is the one rebase invocation under test here.
+			mode: 'merge',
+			env: gitEnv(),
+		});
+
+		// The integrate-tail rebase replayed CLEAN: no spurious `CONFLICT (file
+		// location)` from an inferred `work/tasks/ready/ → work/tasks/done/` rename.
+		expect(core.outcome).toBe('completed');
+		expect(core.routedToNeedsAttention).toBe(false);
+		expect(core.integration?.mergedToMain).toBe(true);
+
+		// alpha landed in done/ (the band's own move); main's added NOTES.txt stayed
+		// in ready/ (its INTENDED folder), NOT silently swept into done/ by an
+		// inferred directory rename.
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+		// NOTES.txt landed in ready/ (its intended folder) and NOT in done/.
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const notesInReady = runGit(
+			'git',
+			['cat-file', '-e', `${ARBITER}/main:work/tasks/ready/NOTES.txt`],
+			repo,
+			{env: gitEnv()},
+		);
+		expect(notesInReady.status).toBe(0);
+		const notesInDone = runGit(
+			'git',
+			['cat-file', '-e', `${ARBITER}/main:work/tasks/done/NOTES.txt`],
+			repo,
+			{env: gitEnv()},
+		);
+		expect(notesInDone.status).not.toBe(0);
 	});
 });
