@@ -985,10 +985,13 @@ async function runComplete(
 		//
 		// CROSS-SUBSTRATE RELEASE (prd `ledger-status-per-item-lock-refs` US #9/#10;
 		// task `complete-lock-then-durable-main-move-crash-safe`): the durable
-		// `main` record is already terminal, so the per-item lock claim took is now
-		// stale — release it SECOND (the move already landed FIRST). Best-effort +
-		// idempotent (`not-held` is fine when a prior reconcile/release cleared it).
-		await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env);
+		// `main` record is already terminal (the kept tip is provably on
+		// `<arbiter>/main`), so the per-item lock claim took is now stale: release it
+		// SECOND (the move already landed FIRST). `durablyOnMain: true` unconditionally
+		// here (unlike the propose build path, this branch is reached ONLY when the
+		// work is already integrated on `main`). Best-effort + idempotent (`not-held`
+		// is fine when a prior reconcile/release cleared it).
+		await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env, true, note);
 		return {
 			exitCode: 0,
 			outcome: 'already-integrated',
@@ -1010,24 +1013,6 @@ async function runComplete(
 		};
 	}
 
-	// CROSS-SUBSTRATE RELEASE — the HEART of this path's crash-safety (prd
-	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
-	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; task
-	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
-	// DURABLE `main` move (interim `in-progress → done`, atomic with the agent's
-	// code; or `→ dropped`) ALREADY landed FIRST inside `performIntegration`
-	// (the authoritative, referenceable record); the per-item lock that `claim`
-	// ALSO acquired (`action: implement`, keyed `task:<slug>`) is released SECOND,
-	// HERE. A crash BETWEEN them leaves a `done`-on-`main` item with a still-held
-	// lock; `reconcileItemLockAgainstMain` recovers it (the `main` record is
-	// authoritative over the stale lock). The release is best-effort + idempotent
-	// (`not-held` when the body predates the lock or a reconcile already cleared
-	// it), mirroring `tasking`'s symmetric "the integrate core owns the completing
-	// commit, so the unified lock is released here". The body-move retarget to
-	// `backlog/` is the capstone task #9; the ordering + recovery built here is
-	// substrate-agnostic and carries through unchanged.
-	await releaseClaimLockAfterDurableMove(slug, cwd, arbiter, env);
-
 	// SUCCESS: the core integrated. `result` is its integration result; `mode` is
 	// the mode the core resolved, read from the result (it always equals the
 	// requested mode now that there is no downgrade). The tail switches/ffs per the
@@ -1035,6 +1020,44 @@ async function runComplete(
 	const result = core.integration!;
 	const commitMessage = core.commitMessage;
 	const mode = result.mode;
+
+	// CROSS-SUBSTRATE RELEASE, gated on the work being DURABLY ON `main` (prd
+	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
+	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; task
+	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
+	// per-item lock that `claim` acquired (`action: implement`, keyed
+	// `task:<slug>`) is released SECOND, AFTER the durable `main` move landed FIRST
+	// inside `performIntegration`.
+	//
+	// CRITICAL (task `propose-keep-lock-until-pr-merge`): in PROPOSE mode the
+	// done-move did NOT land on `main` here. The `git mv tasks/ready -> done` is
+	// committed on the WORK BRANCH and pushed as the PR; `<arbiter>/main` still
+	// shows the body in `tasks/ready/` until a human MERGES the PR. So releasing
+	// the lock now would leave the task BOTH unlocked AND in `tasks/ready/` on
+	// `main`, i.e. fully eligible again, for the whole review window: the next
+	// advance tick re-claims it (lock absent), rebuilds, the PR meanwhile merges,
+	// the diff is empty, and the item is mis-marked `stuck`. So we release ONLY
+	// when the work is provably on `main`: merge mode (`mergedToMain`) or an
+	// already-landed propose (`alreadyLanded`, the benign already-on-main race
+	// tail). A plain open propose PR KEEPS the lock held (the open PR IS the
+	// in-flight state); it is released when the work lands on `main`, reconciled by
+	// `reconcileItemLockAgainstMain` when the PR merges out-of-band.
+	//
+	// A crash between the move and the release leaves a `done`-on-`main` item with
+	// a still-held lock; `reconcileItemLockAgainstMain` recovers it (the `main`
+	// record is authoritative over the stale lock). The release is best-effort +
+	// idempotent (`not-held` when the body predates the lock or a reconcile already
+	// cleared it).
+	const durablyOnMain =
+		result.mergedToMain === true || result.alreadyLanded === true;
+	await releaseClaimLockAfterDurableMove(
+		slug,
+		cwd,
+		arbiter,
+		env,
+		durablyOnMain,
+		note,
+	);
 
 	// Land back on `main` by default in BOTH modes (the move differs per mode),
 	// then delete the local work branch iff its work is provably on the arbiter.
@@ -1139,16 +1162,27 @@ async function runComplete(
  * `ledger-status-per-item-lock-refs` US #9/#10; task
  * `complete-lock-then-durable-main-move-crash-safe`).
  *
- * Called ONLY on the SUCCESS paths (`completed` / `already-integrated`), where
- * the durable `in-progress → done` (or `→ dropped`) move is already on
- * `<arbiter>/main` — so the lock is no longer holding anything in flight and is
- * cleanly released SECOND. The FAILURE paths (gate-failed / review-blocked /
- * rebase-conflict / prepare-failed) deliberately do NOT release here: those route
- * to needs-attention (the lock is marked `stuck`, not released, via the
- * needs-attention seam) and the item is still in flight, so the held lock is
- * correct.
+ * Called ONLY on the SUCCESS paths (`completed` / `already-integrated`). The lock
+ * is released ONLY when the work is DURABLY ON `<arbiter>/main` (`durablyOnMain`):
+ * merge mode (`mergedToMain`), an already-landed propose race tail
+ * (`alreadyLanded`), or the `already-integrated` recovery (provably on main). In
+ * those cases the lock is no longer holding anything in flight and is cleanly
+ * released SECOND.
  *
- * Best-effort + idempotent (a `not-held` is fine — the body may predate the lock,
+ * When `durablyOnMain` is FALSE (a plain open propose PR: the done-move is on the
+ * PR branch, NOT on `main`), the lock is KEPT HELD: the open PR IS the in-flight
+ * state, and the held lock is what keeps the still-`tasks/ready/`-on-`main` task
+ * out of the eligible pool until the PR merges (task
+ * `propose-keep-lock-until-pr-merge`). Releasing here would let the next advance
+ * tick re-claim the in-flight task and mis-mark it `stuck` on an empty diff. The
+ * lock is released when the work lands on `main`, reconciled by
+ * `reconcileItemLockAgainstMain` when the PR merges out-of-band.
+ *
+ * The FAILURE paths (gate-failed / review-blocked / rebase-conflict /
+ * prepare-failed) deliberately do NOT call this: those route to needs-attention
+ * (the lock is marked `stuck`, not released) and the item is still in flight.
+ *
+ * Best-effort + idempotent (a `not-held` is fine: the body may predate the lock,
  * or a crash-recovery `reconcileItemLockAgainstMain` may already have cleared it).
  * A release fault never fails an already-landed completion: the durable `main`
  * record is authoritative, and a stranded lock is exactly what recovery clears.
@@ -1158,12 +1192,24 @@ async function releaseClaimLockAfterDurableMove(
 	cwd: string,
 	arbiter: string,
 	env: NodeJS.ProcessEnv | undefined,
+	durablyOnMain: boolean,
+	note: (message: string) => void,
 ): Promise<void> {
+	if (!durablyOnMain) {
+		// PROPOSE, PR open: the done-move is on the PR branch, not on `main`. KEEP the
+		// lock held so the in-flight task is not re-claimed during the review window.
+		note(
+			`'${slug}': keeping the per-item lock HELD (propose PR open; the work is ` +
+				'not yet on main). It is released when the PR merges (reconciled against ' +
+				'main).',
+		);
+		return;
+	}
 	try {
 		await releaseItemLock({item: `task:${slug}`, cwd, arbiter, env});
 	} catch {
 		// Best-effort: a release fault leaves a stale lock that recovery
-		// (`reconcileItemLockAgainstMain`) clears — the durable move already defined
+		// (`reconcileItemLockAgainstMain`) clears: the durable move already defined
 		// success. Never fail an already-landed completion on the lock release.
 	}
 }

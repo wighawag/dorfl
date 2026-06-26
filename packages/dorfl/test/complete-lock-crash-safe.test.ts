@@ -118,7 +118,15 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 	});
 
-	it('still completes (and releases) on the propose path', async () => {
+	it('propose path KEEPS the lock HELD (work is on the PR branch, NOT on main) until the PR merges', async () => {
+		// REGRESSION for `propose-keep-lock-until-pr-merge`: a successful propose
+		// complete lands the done-move on the PUSHED work BRANCH (awaiting a PR merge),
+		// NOT on `main`. The body therefore still rests in `tasks/ready/` on
+		// `<arbiter>/main`. If the lock were RELEASED here the task would be both
+		// unlocked AND still in the pool, so the next advance tick would re-claim it
+		// (lock absent), rebuild, the PR would merge, the diff would be empty, and the
+		// item would be mis-marked `stuck`. So the lock MUST stay HELD: the open PR is
+		// the in-flight state; the lock is released only when the work lands on `main`.
 		const {repo, arbiter} = await claimAndBranch('beta');
 		agentEdits(repo);
 
@@ -135,9 +143,7 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('completed');
-		// Propose mode lands the durable done-move on the PUSHED work BRANCH (it
-		// awaits a PR merge, NOT on `main` yet) — the in-flight hold is done, so the
-		// per-item lock is RELEASED here exactly as on the merge path.
+		// The done-move is on the pushed work BRANCH, NOT on `main`.
 		const onBranch = run(
 			'git',
 			['cat-file', '-e', 'HEAD:work/tasks/done/beta.md'],
@@ -146,7 +152,14 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 		);
 		expect(onBranch.status).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'beta')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'task-beta')).toBe(false);
+		// The body still rests in the pool on `main` (claim no longer moves it; the
+		// propose done-move has not landed on main). The `backlog` fixture word maps
+		// to the `tasks/ready/` pool folder.
+		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
+		// THE FIX: the per-item lock is KEPT HELD (not released at PR-open), so the
+		// held-slug subtraction keeps the in-flight task out of the eligible pool for
+		// the whole review window.
+		expect(lockRefOnArbiter(arbiter, 'task-beta')).toBe(true);
 	});
 
 	it('a FAILED gate does NOT release the lock (the item is still in flight, routed stuck)', async () => {
