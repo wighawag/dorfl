@@ -3,7 +3,7 @@ title: Apply-rung — answered merge-question invokes the land primitive (condit
 slug: apply-rung-merge-disposition
 prd: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
-blockedBy: [merge-question-surfacer, sidecar-kind-field]
+blockedBy: [merge-question-surfacer, sidecar-kind-field, committed-recovery-honours-fresh-worktree-gate, strict-merge-approval-gate]
 covers: [15, 16]
 ---
 
@@ -29,6 +29,36 @@ land must be a DISTINCT answer-driven runner-ACTION dispatch layer
 SIBLING of the agentic content decision — not an entry in the
 `DecisionOutcome` union. Resolve the exact seam in the Open questions
 below before building.
+
+SCOPE (narrowed 2026-06-26 after the build agent stopped — see
+"Applied answers" q4): this task is the DISPATCH LAYER + the
+WORKTREE/CHECKOUT SEAM + the verify-on-rebased-tip REFUSAL. Two
+load-bearing pieces the original scope ASSUMED the engine already did
+are carved into their own preceding tasks (both are now `blockedBy`):
+
+- the committed-recovery tail re-verifying on the rebased tip is NOT
+  what `performIntegration` does today on the answered-merge state
+  (`committedRecovery` deliberately SKIPS the fresh gate) -> fixed by
+  `committed-recovery-honours-fresh-worktree-gate`;
+- the `strictMergeApproval` opt-in (OQ6's re-surface-on-changed-
+  merge-base) is a new user-visible config axis -> carved into
+  `strict-merge-approval-gate`. Until it lands, hard-code the default
+  (OFF = honour the prior answer + land on a green re-verify).
+
+WORKTREE/CHECKOUT SEAM (item the original scope left unnamed): the
+apply rung runs on `main`; the unmerged `work/<slug>` branch must be
+checked out before `performIntegration` can rebase/re-verify/integrate
+its tip. Use the EXISTING per-job worktree seam in `workspace.ts`
+(`createJob` -> `git worktree add` a worktree OFF the hub mirror at the
+work branch tip), the same seam the build/recovery callers use — do
+NOT improvise a one-off `git worktree add` or a fresh clone. The
+answered-merge branch shape this dispatcher handles is a branch whose
+tip ALREADY carries the prior build's done-move commit (NOT the
+arbitrary `work-<slug>.txt` content the surfacer's unit test seeds);
+drive `performIntegration` with `committedRecovery: true` +
+`freshWorktreeGate: true` so it takes the (now gate-honouring) recovery
+tail rather than the build path (which would raise
+`IntegrationNothingStaged` on the already-committed done-move).
 
 Two non-negotiable behaviours:
 
@@ -79,7 +109,16 @@ WHETHER the surfacer runs, not what the dispatch does.)
       runner-ACTION handler (keyed off the question identity + answer),
       NOT a disposition token and NOT the `decide()` content-outcome
       union.
-- [ ] Stale approval policy implemented per the resolved OQ6 answer.
+- [ ] The unmerged `work/<slug>` is checked out via the existing
+      `workspace.ts` per-job worktree seam (`createJob` off the hub
+      mirror), NOT a bespoke worktree/clone; `performIntegration` is
+      invoked with `committedRecovery: true` + `freshWorktreeGate: true`.
+- [ ] Stale approval policy: HONOUR + land on a green re-verify
+      (default); consult the resolved `strictMergeApproval` boolean from
+      `strict-merge-approval-gate` for the opt-in re-surface-on-changed-
+      merge-base. (The flag/resolver itself is that sibling task; this
+      task only CONSUMES the resolved value and, until it lands,
+      hard-codes the OFF default.)
 - [ ] A red re-verify on the rebased tip REFUSES the land and routes to
       needs-attention (or re-surfaces per policy); `main` never receives
       a tree that fails `verify`.
@@ -107,9 +146,16 @@ WHETHER the surfacer runs, not what the dispatch does.)
 > `decision-engine.ts`). Add the answered-merge LAND as a runner-ACTION
 > dispatch (sibling to the agentic content decision; keyed off the
 > merge-question identity + the human's answer), NOT a `DecisionOutcome`
-> and NOT a revived disposition field. Invoke the LAND primitive via the
-> existing `integration-core.ts` `performIntegration` — do NOT
-> re-implement rebase/verify/advance. Tests must hit external behaviour
+> and NOT a revived disposition field. Check out the unmerged work
+> branch via the existing `workspace.ts` per-job worktree seam
+> (`createJob`), then invoke the LAND primitive via the existing
+> `integration-core.ts` `performIntegration` with `committedRecovery:
+> true` + `freshWorktreeGate: true` — do NOT re-implement
+> rebase/verify/advance and do NOT improvise a worktree/clone. (The
+> committed-recovery tail's fresh-gate honouring is the preceding task
+> `committed-recovery-honours-fresh-worktree-gate`; the
+> `strictMergeApproval` flag is `strict-merge-approval-gate`. Both are
+> `blockedBy` — build after them.) Tests must hit external behaviour
 > (what lands on `main`, what routes to needs-attention) and prove
 > `verify` ran on the rebased tip. Run the AGENTS.md acceptance gate.
 
@@ -140,3 +186,41 @@ apply(answered sidecar):
       verdict = decide(input, allowedOutcomes); route verdict   # agent, as today
 ```
 The `kind` is read from the sidecar's typed identity field (PRD sidecar Q5-ii), introduced by the foundational task `sidecar-kind-field` (a `blockedBy` of this task). Read the typed `kind` field directly — do NOT string-sniff the `default` menu (the workaround that got `merge-question-surfacer`'s first build blocked at review). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).
+
+### q4: The build agent STOPPED here (2026-06-26): the applied answers pin the dispatch layer but not (1) the committed-recovery tail re-verifying on the rebased tip, (2) the worktree/checkout seam, (3) the strictMergeApproval config axis. Resolve the scope.
+
+CONFIRMED and RE-SCOPED (the stop was correct, not over-cautious). The
+three gaps are resolved without reopening any policy:
+
+1. COMPOSITION (carved out). `performIntegration` does NOT re-verify on
+   the rebased tip for the answered-merge state: the build path commits
+   the done-move BEFORE the rebase (so it raises `IntegrationNothingStaged`
+   on a branch that already carries that commit), and the
+   `committedRecovery` tail DELIBERATELY skips `runFreshWorktreeGate`.
+   Neither satisfies "prove verify ran on the rebased tip". Fixed by the
+   new PRECEDING task `committed-recovery-honours-fresh-worktree-gate`
+   (thread `freshWorktreeGate` into `recoverAlreadyCommitted`; gate the
+   rebased tip before integrate; RED refuses). This task then drives
+   `performIntegration` with `committedRecovery: true` +
+   `freshWorktreeGate: true`. Added to `blockedBy`.
+
+2. WORKTREE SEAM (named in-band). The apply rung runs on `main`; check
+   out the unmerged `work/<slug>` via the EXISTING `workspace.ts`
+   per-job worktree seam (`createJob` -> `git worktree add` off the hub
+   mirror), the same seam build/recovery use. No bespoke worktree/clone.
+   The dispatcher handles the done-move-committed branch shape (NOT the
+   surfacer unit test's arbitrary `work-<slug>.txt` seed). Folded into
+   "What to build" + the prompt above.
+
+3. CONFIG AXIS (carved out). `strictMergeApproval` (OQ6's opt-in) is a
+   new user-visible gate-family member; carved into the new sibling task
+   `strict-merge-approval-gate` (mirrors how `merge-questions-gate-axis`
+   carved out `mergeQuestions`). This task CONSUMES the resolved boolean
+   and, until that sibling lands, hard-codes the OFF default (honour +
+   land on a green re-verify; no re-surface on changed merge-base).
+   Added to `blockedBy`.
+
+Net: this task is now the DISPATCH LAYER + the WORKTREE SEAM + the
+verify-on-rebased-tip REFUSAL, all small and decidable. Build it AFTER
+`committed-recovery-honours-fresh-worktree-gate` and
+`strict-merge-approval-gate`.

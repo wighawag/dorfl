@@ -58,6 +58,30 @@ self-contained here):
   `needsAnswers: false` (their sidecars applied + deleted by the advance apply
   rung 2026-06-26). They stay in `tasks/backlog/` (not promoted) and are built
   together against the reshaped model.
+- **Apply-rung re-scope (2026-06-26, after the build agent STOPPED).** The
+  `apply-rung-merge-disposition` build stopped because two pieces it assumed the
+  engine already did are NOT built, and one is a new config axis. Resolved by
+  CARVING OUT two preceding sibling tasks (the apply-rung is now `blockedBy` both)
+  and naming the worktree seam in-band; no policy reopened:
+  - `committed-recovery-honours-fresh-worktree-gate` (covers 15,16) — the
+    `committedRecovery` tail of `performIntegration` (`recoverAlreadyCommitted`)
+    DELIBERATELY skips `runFreshWorktreeGate`, and the build path commits the
+    done-move BEFORE the rebase (so it raises `IntegrationNothingStaged` on a
+    branch that already carries that commit). Neither path re-verifies on the
+    rebased tip for the answered-merge state, so the load-bearing invariant
+    ("main never receives a tree that fails verify") cannot hold on the merge
+    path WITHOUT threading `freshWorktreeGate` into that recovery tail. This
+    corrects the over-broad "Do NOT re-architect the land primitive — it is
+    built" decision below: the BUILD-path land is built; the answered-merge
+    (committed-recovery) land needs this one composition extension.
+  - `strict-merge-approval-gate` (covers 16) — OQ6's opt-in
+    `strictMergeApproval` is a new user-visible gate-family member; carved out
+    the same way `merge-questions-gate-axis` carved out `mergeQuestions`
+    (flag/env/default/precedence), default OFF.
+  The apply-rung itself is now narrowed to the DISPATCH LAYER + the worktree
+  seam (the existing `workspace.ts` per-job `createJob` worktree off the hub
+  mirror, driving `performIntegration` with `committedRecovery: true` +
+  `freshWorktreeGate: true`) + the verify-on-rebased-tip refusal.
 
 > NOTE (process gap observed THEN FIXED): this PRD's OWN answered sidecar could
 > not be applied by the engine at the time — a `needsAnswers` PRD resting in
@@ -221,7 +245,7 @@ The merge-question mechanism (stories #14-17) is ONE INSTANCE of an emerging pat
 
 Decisions already fixed at launch (the engine exists; these constrain the tasks):
 
-- **Do NOT re-architect the land primitive — it is built.** `integration-core.ts`'s `performIntegration` already implements rebase → fresh-worktree gate (verify + relocated review) → integrate, with the `mergeRetries` re-rebase-and-retry loop. The work is NAMING it (docs/ADR), EXTENDING the CI shape to use it, CLOSING the propose merge-time tier, and TESTING the invariant — not rebuilding the engine.
+- **Do NOT re-architect the land primitive — the BUILD-path land is built.** `integration-core.ts`'s `performIntegration` already implements, on the BUILD path, rebase → fresh-worktree gate (verify + relocated review) → integrate, with the `mergeRetries` re-rebase-and-retry loop. The work is NAMING it (docs/ADR), EXTENDING the CI shape to use it, CLOSING the propose merge-time tier, and TESTING the invariant — not rebuilding the engine. ONE EXCEPTION surfaced 2026-06-26 (see the apply-rung re-scope above): the `committedRecovery` tail (`recoverAlreadyCommitted`), which the answered-merge land reuses, DELIBERATELY skips the fresh-worktree gate, so the answered-merge path needs `freshWorktreeGate` threaded INTO that tail (task `committed-recovery-honours-fresh-worktree-gate`). That is a composition extension of an existing seam (reusing `runFreshWorktreeGate`), NOT a re-architecture — the prohibition stands for everything else.
 - **Protocol-doc edits are dual-write.** Per this repo's rule, edit `skills/setup/protocol/*` (the SOURCE OF TRUTH) and mirror byte-identically into `work/protocol/*`; `diff -r` must be clean.
 - **The CI template is validated code.** `docs/ci/README.md`'s shape is enforced by `src/advance-ci-template.ts` + `test/advance-ci-template.test.ts`; the parallel-merge change touches BOTH the doc and that emitter/test, not the doc alone.
 - **Provider stays purely arbiter-derived.** The GitHub-ceiling work layers on top of the existing `selectProvider` (GitHub URL ⇒ `gh`, else `none`); it does NOT add a provider override axis. The merge-queue/branch-protection config is a SETUP concern (`runner-in-ci`), not a new integration provider.
