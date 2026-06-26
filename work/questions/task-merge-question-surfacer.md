@@ -12,6 +12,8 @@ _Suggested default: Yes — the surfacer emits a plain BINARY sidecar entry (no 
 
 **Your answer** (write below this line):
 
+Yes, with one refinement to the suggested default. The surfacer emits a BINARY sidecar entry with NO disposition token (none exists). BUT the merge/hold/drop choice is NOT free-text — it is a DETERMINISTIC CHOICE shape (a fixed menu the human picks and the system parses unambiguously), distinct from the free-text answer box a content question uses. This is what lets the separate apply-action layer dispatch the land DETERMINISTICALLY without an agent run (PRD sidecar Q1 / `apply-rung-merge-disposition` Q3): a merge-acceptance has no judgement content, so the answer must be machine-parseable, not interpreted by an LLM. The surfacer's job is enumerate + surface (binary, plain, kind-tagged `merge`); the apply-action layer reads the kind + the chosen option and acts. So: binary entry, no token, deterministic-choice answer shape, kind=merge.
+
 ## Q2
 
 **Can a sidecar key to a LOCK-REF / BRANCH identity, not only a `work/<type>-<slug>.md` path? An unmerged `work/*` branch may have no item body in the working tree (the branch tip carries the item, `main` does not), so the existing `work/questions/<type>-<slug>.md` convention may not be addressable from `main`.**
@@ -23,6 +25,8 @@ _Suggested default: Extend the sidecar identity to a tagged union (`{kind: 'item
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes — extend the sidecar identity to a tagged union that permits a `branch:` / `ref:` (and `lock:` for the stuck-lock sibling) key in addition to `item:`, reflected in both the `item=` HTML comment and the filename. An unmerged-branch merge-question has no item body on `main`, so the branch ref is its stable identity. Resolve ONCE jointly with the stuck-lock surfacer (this is PRD sidecar Q5-i). LOAD-BEARING CONSTRAINT (from `questions-folder-rename-and-kind-axis-prefix-vs-subfolder` round-2 Q3): even a branch/ref-keyed sidecar must still be AUTHORED on `main`/runner under the `advancing` lock, NEVER against the work branch, or the 3-way-merge guarantee (stale sidecar content cannot survive a rebase) breaks.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Keep `work/questions/<type>-<slug>.md` for item-keyed sideca
 
 **Your answer** (write below this line):
 
+For NOW: keep the flat `work/questions/` folder; item-keyed sidecars stay `work/questions/<type>-<slug>.md`, and add a sibling shape for branch/lock keys (e.g. `work/questions/branch-<sanitised-ref>.md`, `lock-<sanitised-ref>.md`) plus an explicit typed `kind` field (merge | stuck | triage | spec) in the identity comment — the kind is what the apply rung reads to choose deterministic-action vs agentic-content dispatch. LATER (intended direction, per `questions-folder-rename-and-kind-axis-prefix-vs-subfolder` + idea `folder-taxonomy-and-prd-edit-handshake`): group sidecars into kind-based SUBFOLDERS (`questions/merge/`, `questions/stuck/`, ...), safe because kinds are temporally mutually-exclusive per item and the subfolder is a pure function of (kind, identity). That restructure + any `questions/` rename is its OWN ADR-worthy decision tracked by `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21`; do NOT fold it into this PRD. (PRD sidecar Q5-ii.)
+
 ## Q4
 
 **Should this task be HELD out of the build pool until the parent PRD `land-time-reverify-and-parallel-merge-ceiling` is re-decomposed against the binary-sidecar / agentic-apply model, with this task's body language reconciled in the same pass?**
@@ -47,3 +53,5 @@ _Suggested default: Hold this task out of the build pool and resolve it as part 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+The premise has now been RECONCILED in place (it does not need a separate re-decompose pass): the parent PRD `land-time-reverify-and-parallel-merge-ceiling` and all three merge-question task bodies have been amended in this pass against the binary-sidecar / deterministic-runner-action model (PRD sidecar Q1/Q2). This task's `## What to build` + scope bullet + acceptance criterion were already updated to drop the `merge | hold | drop` disposition-token language (replaced by "binary entry + deterministic-choice answer shape, no token") and to point at the runner-action apply layer. So: do NOT keep it premised on the retired vocabulary, and KEEP it in `tasks/backlog/` (not promoted) so it is built together with / before its siblings against the reshaped model. The observation `merge-question-tasks-premised-on-retired-disposition-vocabulary-2026-06-25` is discharged by this reconciliation (its signal now lives self-contained in the PRD + task bodies + these answers). needsAnswers clears once these answers apply.
