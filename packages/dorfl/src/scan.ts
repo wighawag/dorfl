@@ -300,12 +300,22 @@ export function scoreItems(
 	// HELD-SLUG SUBTRACTION (prd `ledger-status-per-item-lock-refs` US #15; task
 	// `claim-acquires-unified-lock-no-body-move`): exclude any pool slug whose
 	// per-item lock is currently held — the eligible pool is "in `tasks/ready/` on
-	// `main` AND no lock held". While the body still moves to `in-progress/` on
-	// claim this is REDUNDANT-but-harmless (the moved body already left the pool);
-	// it is wired now so the capstone that stops the body move (task #9) needs no
-	// reader change. The held set is gathered by the CALLER (which holds the
-	// arbiter handle) and is EMPTY when unavailable/offline, so this degrades to
-	// "subtract nothing".
+	// `main` AND no lock held".
+	//
+	// LOAD-BEARING since the lock cut-over: the claim NO LONGER moves the body to
+	// `in-progress/` (it stays at `tasks/ready/` on `main`, the held lock IS the
+	// claim), so this subtraction is the ONLY thing keeping a claimed / in-flight
+	// item out of the eligible pool, NOT the redundant belt-and-suspenders it was
+	// while the body-move still removed claimed items. An ACTIVE (in-progress) lock
+	// is a legitimate, primary claim signal here.
+	//
+	// FAIL-OPEN CAVEAT (known defect; selection should fail CLOSED): the held set
+	// is gathered by the CALLER and is EMPTY when the lock read is
+	// unavailable/offline, so a READ FAULT currently degrades to "subtract nothing"
+	// and an in-flight item can leak back into the pool (re-claimed → empty diff →
+	// spurious `stuck`). Now that the subtraction is load-bearing this is wrong for
+	// SELECTION: a failed lock read must not re-make a held item eligible. See the
+	// observation/task on fail-closed lock-read for selection.
 	return state.ready
 		.filter((item) => !heldSlugs.has(item.slug))
 		.map((item) => {

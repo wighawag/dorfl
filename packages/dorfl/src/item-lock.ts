@@ -1661,13 +1661,21 @@ export async function listItemLockEntries(
  * `ready/` pool readers SUBTRACT (prd `ledger-status-per-item-lock-refs` US #15;
  * task `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
  * and keeps only the `task-<slug>` entries (a prd/observation lock does not gate
- * the TASK pool), mapping each to its bare `<slug>`. Best-effort: a fetch
- * fault yields an EMPTY set, so the offline pool read degrades to "subtract
- * nothing" rather than erroring — while the body still moves to `in-progress/` the
- * subtraction is redundant anyway (the moved body already leaves the pool); it is
- * wired now so the capstone that stops the body move (task #9) has the predicate
- * "in `backlog/` on `main` AND no lock held" already in force without re-touching
- * the readers.
+ * the TASK pool), mapping each to its bare `<slug>`.
+ *
+ * LOAD-BEARING since the lock cut-over: the claim NO LONGER moves the body to
+ * `in-progress/` (it stays in the pool on `main`; the held lock IS the claim), so
+ * this held-slug set is the ONLY signal that keeps a claimed / in-flight item out
+ * of the eligible pool, NOT the redundant subtraction it was while the body-move
+ * still removed claimed items.
+ *
+ * FAIL-OPEN CAVEAT (known defect): a fetch fault yields an EMPTY set, so the read
+ * degrades to "subtract nothing". That is correct for the READ-ONLY `status`/
+ * `scan` SURFACE (graceful "no in-flight locks" view), but WRONG for SELECTION:
+ * an empty set on a read FAULT lets a continuously-held in-flight item leak back
+ * into the eligible pool (re-claimed → empty diff → spurious `stuck`). The
+ * SELECTION path must distinguish "read OK, no locks" from "read FAILED" and fail
+ * CLOSED on the latter. See the fail-closed-lock-read observation/task.
  */
 export async function heldTaskSlugs(
 	cwd: string,
