@@ -147,6 +147,24 @@ export interface CIProviderContext {
 	 * Stubbed in tests; never silently toggled (the wizard prompts).
 	 */
 	setRepoSetting?(name: string, value: boolean): Promise<void>;
+	/**
+	 * OPTIONALLY report whether the configured credential has REPO-ADMIN scope
+	 * on the provider (→ can set branch protection / rulesets). Used by the
+	 * Tier-1 branch-protection step (prd `land-time-reverify-and-parallel-
+	 * merge-ceiling`, Story 11) to pick `auto-configure` vs `print fallback`.
+	 * `true` ⇒ admin, `false` ⇒ explicitly NOT admin, `undefined` ⇒ unknown
+	 * (treated as non-admin: never silently attempt a call that would 403).
+	 * Absent on a provider that has no concept of admin scope.
+	 */
+	getRepoAdminScope?(): Promise<boolean | undefined>;
+	/**
+	 * OPTIONALLY configure Tier-1 branch protection on `branch` per `spec`. The
+	 * spec body (`BranchProtectionSpec` in `install-ci-branch-protection.ts`) is
+	 * a structural type — typed as `unknown` here to keep this core seam free of
+	 * the branch-protection module's import. Absent on a non-GitHub provider.
+	 * Throws on failure (caller catches + logs).
+	 */
+	setBranchProtection?(branch: string, spec: unknown): Promise<void>;
 }
 
 /** Whitesmith's name for {@link CIProviderContext} (the seam this task adopts). */
