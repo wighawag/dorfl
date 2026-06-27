@@ -1,4 +1,4 @@
-import {runAsync, localMainDivergence} from './git.js';
+import {run, runAsync, localMainDivergence} from './git.js';
 import {isParticipatingRepo} from './detect.js';
 import {scanRepoPaths, type RepoReport} from './scan.js';
 import {arbiterStatus} from './arbiter.js';
@@ -102,6 +102,18 @@ export interface CwdSection {
 	arbiter?: CwdArbiter;
 }
 
+/** True iff the working repo has a git remote with name `remote`. The held-lock
+ * read targets the COORDINATION arbiter (default `origin`); we only attempt it
+ * when that remote actually exists, so a repo with no coordination remote keeps
+ * the empty held set rather than failing on a `git remote get-url` miss. */
+function remoteExists(
+	cwd: string,
+	remote: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	return run('git', ['remote', 'get-url', remote], cwd, {env}).status === 0;
+}
+
 /** Inputs to {@link resolveCwdSection}. */
 export interface ResolveCwdSectionOptions {
 	/** The current working directory to inspect (the candidate cwd repo). */
@@ -115,10 +127,21 @@ export interface ResolveCwdSectionOptions {
 	 */
 	override?: ConfigOverrideMap;
 	/**
-	 * The arbiter remote name to fetch + diff against. Defaults to the same remote
-	 * `status`'s arbiter section resolves; the CLI passes the configured value.
+	 * The arbiter remote name to fetch + diff against (the SURFACE/divergence
+	 * remote). Defaults to the same remote `status`'s arbiter section resolves
+	 * (`arbiter`); the CLI passes the configured value.
 	 */
 	arbiterRemote?: string;
+	/**
+	 * The COORDINATION arbiter remote where the per-item lock refs
+	 * (`refs/dorfl/lock/*`) live — the remote the held-lock SUBTRACTION reads. This
+	 * is the SAME remote `claim`/`do`/`complete` push locks to, which defaults to
+	 * `origin` (NOT the `arbiter`-named DIVERGENCE remote above — a repo can use
+	 * `origin` as its arbiter and have no `arbiter` remote at all, exactly this
+	 * repo's shape). Decoupled so the held-lock read targets the real coordination
+	 * arbiter even when the divergence remote is absent. Default `origin`.
+	 */
+	lockArbiterRemote?: string;
 	/** Sink for the fetch-first fall-back warning (warn + last-known, never error). */
 	warn?: (message: string) => void;
 	env?: NodeJS.ProcessEnv;
@@ -131,8 +154,9 @@ export interface ResolveCwdSectionOptions {
  *
  *   1. FETCHES the cwd repo's arbiter first (warn + fall back to last-known on
  *      failure — never errors), then computes the divergence vs `<arbiter>/main`;
- *   2. reads the arbiter's HELD-LOCK set (fail-closed: throws when a configured
- *      arbiter is unreachable) to SUBTRACT in-flight items from the pool;
+ *   2. reads the COORDINATION arbiter's HELD-LOCK set (the remote where
+ *      `refs/dorfl/lock/*` live, default `origin`; fail-closed: throws when that
+ *      remote exists but is unreachable) to SUBTRACT in-flight items from the pool;
  *   3. reads the cwd's `work/` lifecycle from the LOCAL WORKING TREE
  *      (`scanRepoPaths([cwd])`) with that held set subtracted;
  *   4. de-dups against the registry (is the cwd's arbiter URL a registered
@@ -164,16 +188,20 @@ export async function resolveCwdSection(
 	});
 
 	// 2. The held-lock set to SUBTRACT from the cwd pool (the SELECTION fix). The
-	//    held set lives ONLY on the arbiter, so when one is configured we read it
-	//    from there and FAIL CLOSED on a read fault (`heldTaskSlugsStrict` throws):
-	//    an offline / unreachable arbiter makes the eligible pool UNKNOWN, and we
-	//    must NOT emit a wrong pool (which CI would enumerate into doomed claim legs).
-	//    A repo with NO configured arbiter has no remote coordination surface —
-	//    nothing to subtract, nothing to fail against — so it keeps the empty set.
-	const heldSlugs =
-		arbiter?.configured && arbiter.remote
-			? await heldTaskSlugsStrict(cwd, arbiter.remote, env)
-			: new Set<string>();
+	//    lock refs live on the COORDINATION arbiter (`refs/dorfl/lock/*`) — the SAME
+	//    remote `claim`/`do` use, default `origin` — NOT the `arbiter`-named
+	//    DIVERGENCE remote resolved above (this repo has no `arbiter` remote; its
+	//    arbiter IS `origin`). So we read the held set from the coordination remote
+	//    and FAIL CLOSED on a read fault (`heldTaskSlugsStrict` throws): an offline /
+	//    unreachable arbiter makes the eligible pool UNKNOWN, and we must NOT emit a
+	//    confident-but-wrong pool (which CI would enumerate into doomed claim legs).
+	//    A repo with NO coordination remote configured has nothing to subtract and
+	//    nothing to fail against — it keeps the empty set.
+	const lockRemote = options.lockArbiterRemote ?? 'origin';
+	const hasLockRemote = remoteExists(cwd, lockRemote, env);
+	const heldSlugs = hasLockRemote
+		? await heldTaskSlugsStrict(cwd, lockRemote, env)
+		: new Set<string>();
 
 	// 3. The cwd's `work/` lifecycle from the LOCAL WORKING TREE (not a mirror ref),
 	//    with the arbiter-read held set SUBTRACTED so in-flight (lock-held) items are

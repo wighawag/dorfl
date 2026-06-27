@@ -71,14 +71,42 @@ concurrency. Decisions:
    The split is: SELECTION (held-lock subtraction, eligibility) = remote +
    fail-closed; SURFACE (divergence) = best-effort.
 
+## SECOND ROOT CAUSE (found after the first fix shipped inert)
+
+The first fix read the held set from the cwd section's DIVERGENCE arbiter
+(`arbiterStatus`, which defaults to a remote NAMED `arbiter`, `DEFAULT_ARBITER_REMOTE`).
+But this repo — and the CI checkout — has NO `arbiter` remote: its arbiter IS
+`origin` (the coordination verbs `claim`/`do`/`complete`/`gc` all default
+`--arbiter` to `origin`). So `arbiterStatus` returned `configured: false`, the
+section's `arbiter` was `undefined`, and the held-lock guard fell straight through
+to the empty set — NO subtraction — leaving the first fix completely inert
+(`scan --json` still reported the 4 in-flight items as `eligible:true`, CI matrix
+still enumerated them, legs still exit 2). `advance` worked only because CI passes
+it `--arbiter origin` explicitly; the `enumerate` step's `dorfl scan --json` had no
+such flag and resolved the WRONG (absent) remote.
+
+The lock refs (`refs/dorfl/lock/*`) live on the COORDINATION arbiter (`origin` by
+default), which is a DIFFERENT axis from the `arbiter`-named DIVERGENCE remote the
+cwd section reports the ahead/behind line against. The held-lock read must target
+the coordination arbiter, NOT the divergence remote.
+
 ## The fix
 
-In `resolveCwdSection`: resolve the arbiter FIRST, read `heldTaskSlugs(cwd,
-arbiter.remote, env)` from it, and pass that set into `scanRepoPaths`. When the
-cwd repo has a configured arbiter but the lock read fails, THROW (fail closed) so
-`scan --json` errors rather than enumerating an untrusted pool. A repo with NO
-configured arbiter has no remote coordination surface and keeps the local read
-(nothing to subtract, nothing to fail against).
+Decouple the two arbiter axes in `resolveCwdSection`:
 
-Mark RESOLVED when the cwd selection pool subtracts the arbiter-read held set and
-offline selection fails closed.
+- SURFACE/divergence keeps `arbiterRemote` (default `arbiter`/`DEFAULT_ARBITER_REMOTE`).
+- SELECTION/held-lock reads a NEW `lockArbiterRemote` (default `origin`, the SAME
+  remote `claim`/`do` use), gated by a `remoteExists` check so a repo with no
+  coordination remote keeps the empty set rather than failing on a missing
+  remote. When that remote EXISTS but is unreachable, `heldTaskSlugsStrict` THROWS
+  (fail closed) so `scan --json` errors rather than enumerate an untrusted pool.
+
+The CLI `scan`/`status` gain an `--arbiter <remote>` flag (default `origin`)
+threaded as `lockArbiterRemote`, mirroring the coordination verbs.
+
+VERIFIED: with the fix, `node dist/cli.js scan --json` reports the 4 in-flight
+items' cwd eligibility as gone (`cwd eligible count: 0`) and the CI matrix `jq`
+yields `[]` for the task/prd legs.
+
+Mark RESOLVED when the cwd selection pool subtracts the COORDINATION-arbiter-read
+held set and offline selection fails closed. (Both halves now done.)

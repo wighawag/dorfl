@@ -122,20 +122,24 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 
 	it('the DIVERGENCE line warns + falls back offline, but SELECTION fails closed (the held-lock read throws)', async () => {
 		const {repo} = seedCwdRepo({'a.md': task('a')});
-		// Point the arbiter remote at a path that does not exist ⇒ every fetch fails.
+		// Point the coordination (lock) arbiter at a path that does not exist ⇒ the
+		// held-lock fetch fails.
 		gitIn(
 			['remote', 'set-url', 'arbiter', 'file:///nonexistent/gone.git'],
 			repo,
 		);
 		const warnings: string[] = [];
-		// The SELECTION pool needs the arbiter's held-lock set; an unreachable
-		// configured arbiter makes eligibility UNKNOWN, so the section THROWS rather
-		// than emit a confident-but-wrong eligible pool (offline selection fails;
-		// there is NO --local fallback). The divergence fetch still warned first.
+		// The SELECTION pool needs the coordination arbiter's held-lock set; an
+		// unreachable (but configured) lock remote makes eligibility UNKNOWN, so the
+		// section THROWS rather than emit a confident-but-wrong eligible pool (offline
+		// selection fails; there is NO --local fallback). The divergence fetch still
+		// warned first.
 		await expect(
 			resolveCwdSection({
 				cwd: repo,
 				config: config(),
+				arbiterRemote: 'arbiter',
+				lockArbiterRemote: 'arbiter',
 				warn: (m) => warnings.push(m),
 			}),
 		).rejects.toThrow();
@@ -148,8 +152,8 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 describe('resolveCwdSection — held-lock subtraction (SELECTION is remote-authoritative)', () => {
 	it('SUBTRACTS an in-flight (lock-held) task from the cwd eligible pool', async () => {
 		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
-		// Hold the per-item lock for `a` on the arbiter (the SAME `arbiter` remote the
-		// cwd section reads). `a` is now in-flight and must NOT be reported eligible.
+		// Hold the per-item lock for `a` on the coordination arbiter (the `arbiter`
+		// remote this fixture wires). `a` is in-flight and must NOT be eligible.
 		const held = await acquireItemLock({
 			item: 'task:a',
 			action: 'implement',
@@ -161,11 +165,36 @@ describe('resolveCwdSection — held-lock subtraction (SELECTION is remote-autho
 		const section = await resolveCwdSection({
 			cwd: repo,
 			config: config(),
-			arbiterRemote: 'arbiter',
+			lockArbiterRemote: 'arbiter',
 		});
 		// `a`'s lock is held → subtracted from the pool entirely; only `b` remains.
 		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['b']);
 		expect(section.totalItems).toBe(1);
+		expect(section.totalEligible).toBe(1);
+	});
+
+	it('reads locks from the COORDINATION remote, not the DIVERGENCE remote (the origin-is-arbiter shape)', async () => {
+		// The exact production shape that broke CI: the repo's arbiter IS its only
+		// remote, and there is NO separate `arbiter`-named divergence remote. The
+		// held-lock read must still find the lock via the coordination remote, NOT
+		// silently subtract nothing because the divergence remote is absent.
+		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
+		// Rename the wired remote `arbiter` -> `origin` so there is no `arbiter` remote
+		// at all (divergence resolution returns undefined), exactly like this repo.
+		gitIn(['remote', 'rename', 'arbiter', 'origin'], repo);
+		const held = await acquireItemLock({
+			item: 'task:a',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'origin',
+		});
+		expect(held.outcome).toBe('acquired');
+
+		// No lockArbiterRemote override → defaults to `origin` (the coordination
+		// arbiter), even though the `arbiter`-named divergence remote does not exist.
+		const section = await resolveCwdSection({cwd: repo, config: config()});
+		expect(section.arbiter).toBeUndefined(); // no `arbiter` divergence remote
+		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['b']);
 		expect(section.totalEligible).toBe(1);
 	});
 
@@ -174,7 +203,7 @@ describe('resolveCwdSection — held-lock subtraction (SELECTION is remote-autho
 		const section = await resolveCwdSection({
 			cwd: repo,
 			config: config(),
-			arbiterRemote: 'arbiter',
+			lockArbiterRemote: 'arbiter',
 		});
 		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['a', 'b']);
 		expect(section.totalEligible).toBe(2);

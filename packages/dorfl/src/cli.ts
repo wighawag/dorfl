@@ -148,6 +148,7 @@ interface ScanFlags {
 	json?: boolean;
 	cwd?: boolean;
 	arbiterRemote?: string;
+	arbiter?: string;
 }
 
 /**
@@ -786,6 +787,7 @@ interface StatusFlags {
 	config?: string;
 	workspace?: string;
 	arbiterRemote?: string;
+	arbiter?: string;
 	noArbiter?: boolean;
 	cwd?: boolean;
 	json?: boolean;
@@ -1061,6 +1063,10 @@ export function buildProgram(): Command {
 			`the current repo's arbiter remote to fetch + diff its local section against (default: ${DEFAULT_ARBITER_REMOTE})`,
 		)
 		.option(
+			'--arbiter <remote>',
+			'the COORDINATION arbiter remote whose per-item lock refs (refs/dorfl/lock/*) gate the cwd selection pool (held in-flight items are subtracted); default: origin (the same remote claim/do use, NOT the --arbiter-remote divergence name)',
+		)
+		.option(
 			'--no-cwd',
 			'skip the cwd-local section (report only the cross-repo registry view)',
 		)
@@ -1087,6 +1093,7 @@ export function buildProgram(): Command {
 							config,
 							override,
 							arbiterRemote: flags.arbiterRemote,
+							lockArbiterRemote: flags.arbiter ?? 'origin',
 							warn,
 						});
 			if (flags.json) {
@@ -3205,6 +3212,10 @@ export function buildProgram(): Command {
 			'--arbiter-remote <name>',
 			`the current repo's arbiter remote to report on (folds in the old \`arbiter status\`; default: ${DEFAULT_ARBITER_REMOTE})`,
 		)
+		.option(
+			'--arbiter <remote>',
+			'the COORDINATION arbiter remote whose per-item lock refs gate the cwd selection pool (held in-flight items are subtracted); default: origin',
+		)
 		.option('--no-arbiter', "skip the current repo's arbiter section")
 		.option(
 			'--no-cwd',
@@ -3242,6 +3253,7 @@ export function buildProgram(): Command {
 							config,
 							override,
 							arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+							lockArbiterRemote: flags.arbiter ?? 'origin',
 							warn,
 						});
 			const report = await status({
