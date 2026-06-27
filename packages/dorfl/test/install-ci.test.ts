@@ -32,7 +32,13 @@ import {
 	registeredCapabilities,
 	loadCapabilityRegistry,
 } from '../src/install-ci-core.js';
-import {MemoryCIProviderContext} from '../src/install-ci-github.js';
+import {
+	GITHUB_PROVIDER_ID,
+	GithubProjectSetupError,
+	MemoryCIProviderContext,
+	renderGithubProjectSetupSteps,
+	validateGithubProjectSetupPayload,
+} from '../src/install-ci-github.js';
 import {installCI, runWizard, type WizardPrompts} from '../src/install-ci.js';
 
 /**
@@ -1086,6 +1092,291 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		for (const f of closeJob.emit(config)) {
 			expect(/\bdorfl advance\b/.test(f.content)).toBe(false);
 		}
+	});
+});
+
+// ─── project-setup hook (provider-namespaced opaque pass-through, US #1–12) ────
+
+describe('install-ci project-setup hook (provider-namespaced opaque pass-through)', () => {
+	/** A minimal models-json baseline config (no project-setup hook). */
+	const baseConfig: ResolvedCIConfig = {
+		authMode: 'models-json',
+		providers: [
+			{
+				name: 'anthropic',
+				apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+				models: [{id: 'm'}],
+				builtin: true,
+			},
+		],
+		defaultProvider: 'anthropic',
+		defaultModel: 'm',
+		harness: 'pi',
+		installSource: 'registry',
+	};
+
+	/** A realistic native-syntax GitHub Actions snippet the user would supply. */
+	const snippet =
+		'- name: Setup pnpm\n' +
+		'  uses: pnpm/action-setup@v4\n' +
+		'  with:\n' +
+		'    version: 10\n' +
+		'- name: Install project dependencies\n' +
+		'  shell: bash\n' +
+		'  run: pnpm install --frozen-lockfile\n';
+
+	it('GITHUB_PROVIDER_ID is the stable key the orchestrator looks up in projectSetup', () => {
+		expect(GITHUB_PROVIDER_ID).toBe('github');
+	});
+
+	it('absent / empty projectSetup ⇒ the generated composite action is byte-identical to the no-hook baseline', () => {
+		const baseline = generateSetupAction(baseConfig);
+		expect(generateSetupAction(baseConfig, undefined)).toBe(baseline);
+		expect(generateSetupAction(baseConfig, '')).toBe(baseline);
+		expect(generateSetupAction({...baseConfig, projectSetup: {}})).toBe(
+			baseline,
+		);
+		// Same goes for installCI's pipeline: no projectSetup key at all.
+		const fragmented = generateSetupAction(
+			baseConfig,
+			renderGithubProjectSetupSteps(snippet),
+		);
+		expect(fragmented).not.toBe(baseline);
+	});
+
+	it('GitHub snippet appears VERBATIM and FIRST (before setup-node, dorfl-install, AI-auth)', () => {
+		const action = generateSetupAction(
+			baseConfig,
+			renderGithubProjectSetupSteps(snippet),
+		);
+		// Each verbatim line of the snippet appears, in order, in the output.
+		for (const line of [
+			'- name: Setup pnpm',
+			'uses: pnpm/action-setup@v4',
+			'version: 10',
+			'- name: Install project dependencies',
+			'run: pnpm install --frozen-lockfile',
+		]) {
+			expect(action).toContain(line);
+		}
+		// Ordering: the project-setup steps land BEFORE setup-node + dorfl-install
+		// + the agent-auth (models.json) step.
+		const posPnpm = action.indexOf('Setup pnpm');
+		const posNode = action.indexOf('actions/setup-node@v4');
+		const posDorfl = action.indexOf('npm install -g dorfl');
+		const posAuth = action.indexOf('Configure agent models (models.json)');
+		expect(posPnpm).toBeGreaterThan(0);
+		expect(posPnpm).toBeLessThan(posNode);
+		expect(posPnpm).toBeLessThan(posDorfl);
+		expect(posPnpm).toBeLessThan(posAuth);
+	});
+
+	it('OPACITY: bytes-in == bytes-out modulo the 4-space indent the adapter applies (no transform, no normalize)', () => {
+		// A snippet packed with characters a mini-format might mangle (escape
+		// sequences, `${{ ... }}`, multi-line `run: |` scripts, comments) survives
+		// byte-for-byte after the adapter indents the splice point.
+		const payload =
+			'# pinned by CI\n' +
+			'- name: Restore cache\n' +
+			'  uses: actions/cache@v4\n' +
+			'  with:\n' +
+			'    key: ${{ runner.os }}-${{ hashFiles("**/pnpm-lock.yaml") }}\n' +
+			'    path: |\n' +
+			'      ~/.pnpm-store\n' +
+			'      node_modules\n' +
+			'- run: |\n' +
+			'    echo "hello $WORLD"\n' +
+			'    pnpm install\n';
+		const rendered = renderGithubProjectSetupSteps(payload);
+		// Strip the 4-space indent the adapter applies and the trailing newline
+		// it normalises to. The result equals the trimmed input verbatim — i.e.
+		// no field was rewritten and no whitespace was normalised inside lines.
+		const stripped = rendered
+			.replace(/\n$/, '')
+			.split('\n')
+			.map((line) => (line.length === 0 ? '' : line.replace(/^ {4}/, '')))
+			.join('\n');
+		expect(stripped).toBe(payload.replace(/\s+$/, ''));
+	});
+
+	it('LIGHT structural check: accepts a YAML list of step mappings; rejects non-list / non-string shapes', () => {
+		// Accept: classic step list.
+		expect(() => validateGithubProjectSetupPayload(snippet)).not.toThrow();
+		// Accept: single bare item (no continuation).
+		expect(() =>
+			validateGithubProjectSetupPayload('- run: echo hi\n'),
+		).not.toThrow();
+		// Reject: not a string.
+		expect(() => validateGithubProjectSetupPayload(42)).toThrow(
+			GithubProjectSetupError,
+		);
+		expect(() => validateGithubProjectSetupPayload([{run: 'echo'}])).toThrow(
+			GithubProjectSetupError,
+		);
+		expect(() => validateGithubProjectSetupPayload({run: 'echo'})).toThrow(
+			GithubProjectSetupError,
+		);
+		// Reject: empty string.
+		expect(() => validateGithubProjectSetupPayload('')).toThrow(
+			GithubProjectSetupError,
+		);
+		expect(() => validateGithubProjectSetupPayload('   \n\n')).toThrow(
+			GithubProjectSetupError,
+		);
+		// Reject: top-level non-list (a bare mapping) — missing the `- ` marker.
+		expect(() =>
+			validateGithubProjectSetupPayload('name: foo\nrun: echo hi\n'),
+		).toThrow(GithubProjectSetupError);
+		// Reject: first non-blank line is an indented continuation (no item yet).
+		expect(() =>
+			validateGithubProjectSetupPayload('  uses: foo/bar@v1\n'),
+		).toThrow(GithubProjectSetupError);
+	});
+
+	it('the check is STRUCTURAL ONLY — no semantic parse of step fields (the escape hatch stays an escape hatch)', () => {
+		// Garbage step fields, marketplace actions we have never heard of, and
+		// unknown `uses:` versions all pass: we do NOT semantically validate.
+		const weird =
+			'- name: Mystery step\n' +
+			'  uses: some-org/no-such-action@v99\n' +
+			'  with:\n' +
+			'    nonsense-key: 42\n' +
+			'- random_field: this is not a real step field\n' +
+			'  another: 1\n';
+		expect(() => validateGithubProjectSetupPayload(weird)).not.toThrow();
+	});
+
+	it('round-trips byte-for-byte through --export-config → --config (load → export → load)', () => {
+		const file = join(work, 'in.json');
+		writeFileSync(
+			file,
+			exportCIConfig({
+				...baseConfig,
+				projectSetup: {github: snippet},
+			}),
+		);
+		const loaded = loadCIConfigFile(file);
+		expect(loaded.projectSetup).toEqual({github: snippet});
+		const reExported = exportCIConfig(resolveCIConfig(loaded));
+		expect(reExported).toBe(
+			exportCIConfig({...baseConfig, projectSetup: {github: snippet}}),
+		);
+		// And re-loading the re-exported file yields the same resolved config.
+		const out = join(work, 'out.json');
+		writeFileSync(out, reExported);
+		expect(resolveCIConfig(loadCIConfigFile(out)).projectSetup).toEqual({
+			github: snippet,
+		});
+	});
+
+	it('--export-config OMITS projectSetup entirely when absent / empty (no hidden empty object)', () => {
+		expect(exportCIConfig(baseConfig)).not.toContain('projectSetup');
+		expect(exportCIConfig({...baseConfig, projectSetup: {}})).not.toContain(
+			'projectSetup',
+		);
+	});
+
+	it('loadCIConfigFile loudly rejects a non-object projectSetup (light structural check, lives in the core)', () => {
+		const file = join(work, 'bad.json');
+		writeFileSync(
+			file,
+			JSON.stringify({
+				authMode: 'models-json',
+				providers: [
+					{
+						name: 'anthropic',
+						apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+						models: [{id: 'm'}],
+						builtin: true,
+					},
+				],
+				defaultProvider: 'anthropic',
+				defaultModel: 'm',
+				projectSetup: ['not', 'a', 'map'],
+			}),
+		);
+		expect(() => loadCIConfigFile(file)).toThrow(CIConfigError);
+	});
+
+	it('installCI --fake splices the snippet into .fake/ and leaves real ~ / .github / system git config untouched', async () => {
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			repo: 'owner/repo',
+			ghAvailable: false,
+		});
+		const file = join(work, 'ci.json');
+		writeFileSync(
+			file,
+			exportCIConfig({...baseConfig, projectSetup: {github: snippet}}),
+		);
+
+		const home = homedir();
+		const homeBefore = safeList(home);
+
+		const result = await installCI({
+			ctx,
+			fake: true,
+			configFile: file,
+			log: () => {},
+		});
+		expect(result.outcome).toBe('generated');
+		const written = readFileSync(
+			join(work, '.fake', 'actions', 'dorfl-setup', 'action.yml'),
+			'utf8',
+		);
+		// Snippet appears verbatim and BEFORE setup-node / dorfl install.
+		expect(written).toContain('- name: Setup pnpm');
+		expect(written).toContain('uses: pnpm/action-setup@v4');
+		expect(written).toContain('pnpm install --frozen-lockfile');
+		expect(written.indexOf('Setup pnpm')).toBeLessThan(
+			written.indexOf('actions/setup-node@v4'),
+		);
+		expect(written.indexOf('Setup pnpm')).toBeLessThan(
+			written.indexOf('npm install -g dorfl'),
+		);
+		// Shared-write isolation: real .github absent, real ~ unchanged, no real
+		// secret recorded on the stub seam.
+		expect(existsSync(join(work, '.github'))).toBe(false);
+		expect(existsSync(join(process.cwd(), '.fake'))).toBe(false);
+		expect(ctx.secrets.size).toBe(0);
+		expect(ctx.repoSettings.size).toBe(0);
+		expect(safeList(home)).toEqual(homeBefore);
+	});
+
+	it('installCI with a provider whose providerId does not match any projectSetup key ⇒ no splice (byte-identical baseline)', async () => {
+		// A future non-GitHub adapter (provider id `gitlab`) would carry its own
+		// payload; when the user only supplied `github`, that provider sees no
+		// fragment to render and the composite action stays baseline. Models the
+		// non-GitHub-by-construction safety the ADR records.
+		const ctx = new MemoryCIProviderContext({
+			workDir: work,
+			ghAvailable: false,
+			providerId: 'gitlab',
+		});
+		const file = join(work, 'ci.json');
+		writeFileSync(
+			file,
+			exportCIConfig({...baseConfig, projectSetup: {github: snippet}}),
+		);
+		await installCI({ctx, fake: true, configFile: file, log: () => {}});
+		const written = readFileSync(
+			join(work, '.fake', 'actions', 'dorfl-setup', 'action.yml'),
+			'utf8',
+		);
+		expect(written).not.toContain('Setup pnpm');
+		// And it equals the no-hook baseline byte-for-byte.
+		expect(written).toBe(
+			generateSetupAction(
+				resolveCIConfig({
+					authMode: baseConfig.authMode,
+					providers: baseConfig.providers,
+					defaultProvider: baseConfig.defaultProvider,
+					defaultModel: baseConfig.defaultModel,
+					harness: baseConfig.harness,
+					installSource: baseConfig.installSource,
+				}),
+			),
+		);
 	});
 });
 

@@ -18,6 +18,94 @@ import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
 import type {CIProviderContext} from './install-ci-core.js';
 
+/**
+ * The provider id this adapter exposes through {@link CIProviderContext.providerId}.
+ * Matches the key the orchestrator looks up in
+ * `CIConfigFile.projectSetup` (the provider-namespaced opaque pass-through).
+ */
+export const GITHUB_PROVIDER_ID = 'github';
+
+/**
+ * Raised when the GitHub project-setup payload fails its LIGHT structural sanity
+ * check (the only check we do — see {@link renderGithubProjectSetupSteps}).
+ * Distinct error class so callers can branch on it; message names the field.
+ */
+export class GithubProjectSetupError extends Error {}
+
+/**
+ * Validate the user's GitHub project-setup payload with a DELIBERATELY LIGHT
+ * structural check — enough to catch obvious typos (string vs. nothing; not a
+ * YAML list) without re-introducing the mini-format this escape hatch exists to
+ * avoid (ADR `install-ci-project-provisioning-native-passthrough`).
+ *
+ * Rules: the payload must be a non-empty STRING whose trimmed body parses as a
+ * top-level YAML list-of-mappings — at indent level 0, every non-blank line
+ * either (a) starts a step item with `- ` / `-` (a YAML sequence entry) or (b)
+ * is an indented continuation of the previous step. We do NOT inspect step
+ * fields (`uses`, `run`, `name`, …) and we do NOT semantically parse YAML.
+ *
+ * Returns the canonicalised (trimmed) snippet. Throws {@link GithubProjectSetupError}
+ * with a message that NAMES the field (`projectSetup.github`).
+ */
+export function validateGithubProjectSetupPayload(payload: unknown): string {
+	if (typeof payload !== 'string') {
+		throw new GithubProjectSetupError(
+			'projectSetup.github must be a STRING of native GitHub Actions step ' +
+				'YAML (a YAML list of step mappings, e.g. `- name: ...\\n  uses: ...`)',
+		);
+	}
+	const trimmed = payload.replace(/^[\r\n\s]+/, '').replace(/\s+$/, '');
+	if (trimmed.length === 0) {
+		throw new GithubProjectSetupError(
+			'projectSetup.github is empty; either supply a YAML list of step ' +
+				'mappings or omit the field entirely',
+		);
+	}
+	let sawItem = false;
+	for (const line of trimmed.split('\n')) {
+		if (line.trim() === '') continue;
+		// Top-level YAML comments are valid and pass through verbatim.
+		if (/^#/.test(line)) continue;
+		if (/^[ \t]/.test(line)) {
+			if (!sawItem) {
+				throw new GithubProjectSetupError(
+					'projectSetup.github must be a YAML list of step mappings ' +
+						'(top-level first non-blank line must start with `- `; got an ' +
+						`indented continuation: ${JSON.stringify(line)})`,
+				);
+			}
+			continue;
+		}
+		if (!/^-(\s|$)/.test(line)) {
+			throw new GithubProjectSetupError(
+				'projectSetup.github must be a YAML list of step mappings ' +
+					`(unexpected top-level line: ${JSON.stringify(line)})`,
+			);
+		}
+		sawItem = true;
+	}
+	return trimmed;
+}
+
+/**
+ * Render the user's GitHub project-setup payload to the YAML fragment the
+ * composite setup action splices in FIRST (before setup-node, dorfl-install,
+ * and AI-auth). The check is delegated to
+ * {@link validateGithubProjectSetupPayload}; this function only INDENTS the
+ * verbatim payload so it sits at the 4-space level the composite action's
+ * `steps:` body uses. The opacity contract: bytes-in == bytes-out, modulo the
+ * 4-space indent applied here — we do NOT transform, normalize, or reflow the
+ * snippet (that would re-introduce the mini-format this hook exists to avoid).
+ */
+export function renderGithubProjectSetupSteps(payload: unknown): string {
+	const snippet = validateGithubProjectSetupPayload(payload);
+	const indented = snippet
+		.split('\n')
+		.map((line) => (line.length === 0 ? '' : `    ${line}`))
+		.join('\n');
+	return indented.endsWith('\n') ? indented : indented + '\n';
+}
+
 /** Options for the live GitHub provider context. */
 export interface GitHubCIContextOptions {
 	/** The target repo's working directory. */
@@ -37,6 +125,7 @@ export interface GitHubCIContextOptions {
  * NEVER `--force`s and treats a missing `gh` as `ghAvailable: false`.
  */
 export class GitHubCIContext implements CIProviderContext {
+	readonly providerId = GITHUB_PROVIDER_ID;
 	readonly workDir: string;
 	repo: string | undefined;
 	readonly ghAvailable: boolean;
@@ -187,6 +276,15 @@ export class GitHubCIContext implements CIProviderContext {
 		}
 	}
 
+	/**
+	 * Render the GitHub project-setup payload to the steps fragment the
+	 * composite setup action splices in FIRST. Free-function delegate so the
+	 * memory stub gets identical behaviour with no I/O.
+	 */
+	renderProjectSetup(payload: unknown): string {
+		return renderGithubProjectSetupSteps(payload);
+	}
+
 	/** Run `gh <args>` in workDir, or `undefined` when `gh` cannot be spawned. */
 	private runGh(args: string[]): RunResult | undefined {
 		try {
@@ -214,6 +312,7 @@ export class GitHubCIContext implements CIProviderContext {
  * real `~`, no system git config written.
  */
 export class MemoryCIProviderContext implements CIProviderContext {
+	readonly providerId: string;
 	readonly workDir: string;
 	repo: string | undefined;
 	readonly ghAvailable: boolean;
@@ -236,12 +335,24 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		adminScope?: boolean;
 		/** When set, `setBranchProtection` throws with this message (failure path). */
 		branchProtectionError?: string;
+		/**
+		 * The provider id this stub claims (default `github`). Tests of the
+		 * project-setup seam may override to assert the orchestrator's
+		 * payload-lookup path; the default models GitHub the way the live
+		 * adapter does.
+		 */
+		providerId?: string;
 	}) {
 		this.workDir = options.workDir;
 		this.repo = options.repo;
 		this.ghAvailable = options.ghAvailable ?? false;
 		this.adminScope = options.adminScope;
 		this.branchProtectionError = options.branchProtectionError;
+		this.providerId = options.providerId ?? GITHUB_PROVIDER_ID;
+	}
+
+	renderProjectSetup(payload: unknown): string {
+		return renderGithubProjectSetupSteps(payload);
 	}
 
 	async setSecret(name: string, value: string): Promise<void> {
