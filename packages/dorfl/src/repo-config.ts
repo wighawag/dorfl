@@ -192,6 +192,19 @@ export const REPO_ALLOWED_KEYS = [
 	// (flag > env > per-repo > global > default). Safety is unchanged — a lost
 	// CAS still costs only a re-rebase + re-gate retry, never a `--force`.
 	'mergeRetries',
+	// `strictMergeApproval` (the OPT-IN strictness layered on the OQ6
+	// stale-approval default — prd `land-time-reverify-and-parallel-merge-ceiling`
+	// sidecar OQ6 / task `strict-merge-approval-gate`) is a genuine repo property
+	// exactly like `mergeQuestions`/`mergeRetries`: whether THIS repo re-surfaces
+	// the merge-question on a merge-base change (the host-agnostic analogue of
+	// GitHub's "dismiss stale approvals when the base changes") instead of
+	// auto-landing on a green re-verify is agreed by all collaborators + travels
+	// with the repo. Resolved per-repo through the SAME gate-family precedence
+	// chain (flag > env > per-repo > global > default `false`). SEPARATE,
+	// independent axis — does NOT alter `mergeQuestions`/`observationTriage`
+	// default or shape. The re-surface vs. land branch is
+	// `apply-rung-merge-disposition`'s consumer, never here.
+	'strictMergeApproval',
 	// `promptGuidance` (the NUDGE namespace — prompt-text knobs that strengthen
 	// the worker's in-band wrapper line, e.g. `testFirst`) is a genuine repo
 	// property: "is this repo nudged toward test-first?" travels with the repo

@@ -601,6 +601,29 @@ export interface Config {
 	 */
 	mergeRetries: number;
 	/**
+	 * **Per-repo OPT-IN strictness layered on the OQ6 stale-approval default**
+	 * (prd `land-time-reverify-and-parallel-merge-ceiling`, sidecar OQ6 / task
+	 * `strict-merge-approval-gate`). Controls how the apply rung treats a prior
+	 * merge-answer when the merge-base CHANGED between the human's answer and
+	 * the apply step. The default (`false`) honours the prior answer and lands
+	 * when the rebased tip re-verifies GREEN — a green re-verify is trusted as
+	 * sufficient (the cheap fast-path). `true` re-surfaces the merge-question
+	 * (clears the answer back to no-answer and re-authors the question on
+	 * `main`/runner under the `advancing` lock — no branch-side mutation)
+	 * instead of auto-landing on a merge-base change, even on a green re-verify
+	 * — the host-agnostic analogue of GitHub's "dismiss stale approvals when
+	 * the base changes". Story #16's RED-re-verify refusal is UNCHANGED and
+	 * independent of this flag.
+	 *
+	 * This module ONLY resolves the boolean; the re-surface vs. land branch
+	 * lives in `apply-rung-merge-disposition`'s consumer. Resolved per-repo
+	 * through the SAME gate-family precedence chain as the sibling gates
+	 * (flag `--strict-merge-approval` > env `DORFL_STRICT_MERGE_APPROVAL` >
+	 * per-repo > global > default `false`). DOES NOT alter `mergeQuestions` /
+	 * `observationTriage` default or shape — a SEPARATE, independent axis.
+	 */
+	strictMergeApproval: boolean;
+	/**
 	 * The optional runner **identity** (a bot): run the runner's git + provider
 	 * operations as a configured entity via process-scoped env overrides, without
 	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
@@ -772,6 +795,14 @@ export const DEFAULT_CONFIG: Config = {
 	// today's behaviour when no source sets it. A wide-matrix CI raises it via
 	// `--merge-retries`/`DORFL_MERGE_RETRIES`/per-repo `mergeRetries`.
 	mergeRetries: 1000,
+	// The strict-merge-approval gate defaults OFF (sidecar OQ6 / task
+	// `strict-merge-approval-gate`): the cheap "green re-verify is enough" path
+	// is the default; the OQ6 PRD answer pins this. A repo opts in to the
+	// host-agnostic "dismiss stale approvals on base change" discipline with
+	// `strictMergeApproval: true` (or `--strict-merge-approval` /
+	// `DORFL_STRICT_MERGE_APPROVAL=true`). The re-surface vs. land branch is
+	// `apply-rung-merge-disposition`'s consumer, NOT here.
+	strictMergeApproval: false,
 };
 
 /** The conventional config location (`~/.config/dorfl/config.json`). */

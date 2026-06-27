@@ -711,6 +711,8 @@ interface DoFlags {
 	surfaceBlockers?: boolean;
 	/** `--merge-questions <off|ask|auto>`: the merge-question SURFACER gate (`advance`). SEPARATE from `--observation-triage` with a HIGHER default. */
 	mergeQuestions?: string;
+	/** `--strict-merge-approval` / `--no-strict-merge-approval`: the OPT-IN strictness layered on the OQ6 stale-approval default (`advance`). Default OFF — ON re-surfaces the merge-question on a merge-base change instead of auto-landing on a green re-verify. */
+	strictMergeApproval?: boolean;
 	merge?: boolean;
 	propose?: boolean;
 	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
@@ -2510,6 +2512,14 @@ export function buildProgram(): Command {
 		.option(
 			'--no-surface-blockers',
 			'leave a needsAnswers:true task/prd silently blocked (default; the blocked pool is dropped from auto-pick)',
+		)
+		.option(
+			'--strict-merge-approval',
+			'opt in to the host-agnostic "dismiss stale approvals on base change" discipline (prd `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6): when the merge-base CHANGED between the human’s merge-answer and the apply step, RE-SURFACE the merge-question (clear the answer back to no-answer; re-author the question on main/runner under the advancing lock) instead of auto-landing on a green re-verify. Default OFF (a green re-verify is trusted as sufficient; honour the prior answer). Story #16’s RED-re-verify refusal is UNCHANGED and independent of this flag. Resolved flag > env > per-repo > global > default off.',
+		)
+		.option(
+			'--no-strict-merge-approval',
+			'honour the prior merge-answer and land when the rebased tip re-verifies GREEN even if the merge-base changed (default; the cheap green-re-verify-is-enough path)',
 		)
 		.option(
 			'--merge-questions <mode>',
