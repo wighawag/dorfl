@@ -7,7 +7,9 @@ import {
 	writeFileSync,
 	readdirSync,
 	mkdirSync,
+	chmodSync,
 } from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import {tmpdir, homedir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -1613,5 +1615,254 @@ describe('installCI auto-detects the workspace install source in the monorepo', 
 		expect(resolveCIConfig(loadCIConfigFile(outFile)).installSource).toBe(
 			'workspace',
 		);
+	});
+});
+
+// ─── PREFER-LOCAL DORFL resolver (task install-ci-prefer-project-local-dorfl) ─
+
+describe('the generated CI prefers a project-pinned dorfl over the global bootstrap', () => {
+	// PRD `install-ci-project-provisioning` axis (C): the composite setup
+	// action emits a SHARED shim that resolves a project-local
+	// `node_modules/.bin/dorfl` FIRST (C3 — the repo's devDep pin, populated by
+	// the project-setup hook's `pnpm install`) and falls back to the global
+	// bootstrap (C1 — always-installed so a config-less repo still works
+	// zero-config). The shim is prepended to `$GITHUB_PATH` so EVERY downstream
+	// `dorfl <verb>` step in EVERY capability workflow resolves through it
+	// uniformly — no per-template literal editing, no per-capability drift.
+
+	const modelsConfig: ResolvedCIConfig = {
+		authMode: 'models-json',
+		providers: [
+			{
+				name: 'anthropic',
+				apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+				models: [{id: 'm'}],
+				builtin: true,
+			},
+		],
+		defaultProvider: 'anthropic',
+		defaultModel: 'm',
+		harness: 'pi',
+		installSource: 'registry',
+	};
+
+	it('emits a resolver step that runs AFTER global dorfl install and BEFORE agent-auth (registry mode)', () => {
+		const action = generateSetupAction(modelsConfig);
+		const posInstall = action.indexOf('npm install -g dorfl');
+		const posResolver = action.indexOf(
+			'Install dorfl resolver (prefer project-local over global)',
+		);
+		const posAuth = action.indexOf('Configure agent models (models.json)');
+		expect(posInstall).toBeGreaterThan(0);
+		expect(posResolver).toBeGreaterThan(posInstall);
+		expect(posAuth).toBeGreaterThan(posResolver);
+		// The mechanism: a shim dir prepended to $GITHUB_PATH, so every later
+		// `dorfl <verb>` step resolves through it.
+		expect(action).toContain('$GITHUB_PATH');
+		expect(action).toContain('dorfl-resolver');
+		// And it explicitly references the local-vs-global resolution surface.
+		expect(action).toContain('node_modules/.bin/dorfl');
+	});
+
+	it('emits the resolver step in workspace mode too (after the pnpm-link install, before auth)', () => {
+		const action = generateSetupAction({
+			...modelsConfig,
+			installSource: 'workspace',
+		});
+		const posLink = action.indexOf('pnpm link --global');
+		const posResolver = action.indexOf(
+			'Install dorfl resolver (prefer project-local over global)',
+		);
+		const posAuth = action.indexOf('Configure agent models (models.json)');
+		expect(posLink).toBeGreaterThan(0);
+		expect(posResolver).toBeGreaterThan(posLink);
+		expect(posAuth).toBeGreaterThan(posResolver);
+		// The workspace install path itself is unchanged (the resolver is
+		// additive, AFTER the install).
+		expect(action).toContain('cd packages/dorfl && pnpm link --global');
+	});
+
+	/**
+	 * Extract the bash body of the resolver step from the generated YAML — i.e.
+	 * the `run: |` block under the resolver step name. We strip the common
+	 * 8-space YAML indent so the result is the literal script the runner would
+	 * execute. This is the same shape `actions/checkout`-driven composite
+	 * steps run under bash on the GitHub runner.
+	 */
+	function extractResolverScript(action: string): string {
+		const marker =
+			'- name: Install dorfl resolver (prefer project-local over global)';
+		const start = action.indexOf(marker);
+		expect(start).toBeGreaterThan(0);
+		const runIdx = action.indexOf('run: |\n', start);
+		expect(runIdx).toBeGreaterThan(0);
+		const tail = action.slice(runIdx + 'run: |\n'.length);
+		// The run block ends at the first line that is NOT blank and NOT
+		// indented by at least 8 spaces.
+		const lines = tail.split('\n');
+		const body: string[] = [];
+		for (const line of lines) {
+			if (line === '' || line.startsWith('        ')) {
+				body.push(line.replace(/^ {8}/, ''));
+				continue;
+			}
+			break;
+		}
+		return body.join('\n');
+	}
+
+	/**
+	 * Behavioural test (shared-write isolation): execute the resolver step in a
+	 * SCRATCH temp dir with a FAKE "global" dorfl on a SCOPED PATH, then invoke
+	 * the shim it produces. Local-absent ⇒ shim execs the fake global;
+	 * local-present ⇒ shim execs the local. Real `~`, real secrets, the real
+	 * system git config are NEVER touched: $HOME is redirected to a scratch
+	 * dir, PATH is rebuilt from scratch, and no `gh` / network call is made.
+	 */
+	it('LOCAL-ABSENT: the shim execs the captured GLOBAL bootstrap (and LOCAL-PRESENT: execs node_modules/.bin/dorfl) — behavioural, no network', () => {
+		const action = generateSetupAction(modelsConfig);
+		const resolverScript = extractResolverScript(action);
+
+		const sandbox = mkdtempSync(join(tmpdir(), 'dorfl-resolver-'));
+		try {
+			const runnerTemp = join(sandbox, 'runner-temp');
+			const fakeBin = join(sandbox, 'fake-bin');
+			const githubPath = join(sandbox, 'github-path');
+			const githubWorkspace = join(sandbox, 'workspace');
+			mkdirSync(runnerTemp, {recursive: true});
+			mkdirSync(fakeBin, {recursive: true});
+			mkdirSync(githubWorkspace, {recursive: true});
+			writeFileSync(githubPath, '');
+
+			// A FAKE global dorfl that just echoes a stable marker so we can
+			// observe which binary the shim resolved.
+			const fakeGlobal = join(fakeBin, 'dorfl');
+			writeFileSync(fakeGlobal, '#!/usr/bin/env bash\necho "GLOBAL:$*"\n');
+			chmodSync(fakeGlobal, 0o755);
+
+			// Run the resolver step under a SCOPED PATH (only the fake-bin dir +
+			// the system bins we need), $HOME redirected to a scratch dir so we
+			// would notice any leak to real ~. The step creates the shim.
+			const homeScratch = join(sandbox, 'home');
+			mkdirSync(homeScratch, {recursive: true});
+			execFileSync('bash', ['-eu', '-c', resolverScript], {
+				env: {
+					...process.env,
+					PATH: `${fakeBin}:/usr/bin:/bin`,
+					RUNNER_TEMP: runnerTemp,
+					GITHUB_PATH: githubPath,
+					HOME: homeScratch,
+				},
+				stdio: 'pipe',
+			});
+
+			const shimDir = join(runnerTemp, 'dorfl-resolver');
+			const shim = join(shimDir, 'dorfl');
+			expect(existsSync(shim)).toBe(true);
+			// The shebang lands at COLUMN 0 — if the YAML `run: |` indent leaked
+			// in, the shim would not be a valid executable.
+			expect(readFileSync(shim, 'utf8').startsWith('#!/usr/bin/env bash')).toBe(
+				true,
+			);
+			// The shim dir was prepended to $GITHUB_PATH so every later `dorfl`
+			// invocation in the same job picks it up.
+			expect(readFileSync(githubPath, 'utf8').trim()).toBe(shimDir);
+			// The captured global path matches the only `dorfl` on PATH.
+			expect(readFileSync(join(shimDir, 'global-path'), 'utf8').trim()).toBe(
+				fakeGlobal,
+			);
+
+			// LOCAL-ABSENT: the shim execs the captured GLOBAL.
+			const absentOut = execFileSync(shim, ['advance', '--watch'], {
+				env: {
+					...process.env,
+					PATH: '/usr/bin:/bin', // fake-bin REMOVED — the shim has the path baked in
+					GITHUB_WORKSPACE: githubWorkspace,
+					HOME: homeScratch,
+				},
+				encoding: 'utf8',
+			});
+			expect(absentOut.trim()).toBe('GLOBAL:advance --watch');
+
+			// LOCAL-PRESENT: drop a project-local `node_modules/.bin/dorfl` in
+			// $GITHUB_WORKSPACE and the shim execs IT instead.
+			const localBin = join(githubWorkspace, 'node_modules', '.bin');
+			mkdirSync(localBin, {recursive: true});
+			const fakeLocal = join(localBin, 'dorfl');
+			writeFileSync(fakeLocal, '#!/usr/bin/env bash\necho "LOCAL:$*"\n');
+			chmodSync(fakeLocal, 0o755);
+			const presentOut = execFileSync(shim, ['advance', '--watch'], {
+				env: {
+					...process.env,
+					PATH: '/usr/bin:/bin',
+					GITHUB_WORKSPACE: githubWorkspace,
+					HOME: homeScratch,
+				},
+				encoding: 'utf8',
+			});
+			expect(presentOut.trim()).toBe('LOCAL:advance --watch');
+
+			// Shared-write isolation: $HOME scratch dir is the only place we
+			// could possibly have touched, and we never wrote anything to it.
+			expect(readdirSync(homeScratch)).toEqual([]);
+		} finally {
+			rmSync(sandbox, {recursive: true, force: true});
+		}
+	});
+
+	it('every shipped capability workflow invokes `dorfl <verb>` UNQUALIFIED — so the PATH-prepended shim catches them all uniformly', async () => {
+		// The single-shared-resolver decision: capability templates emit literal
+		// `dorfl <verb>` (not an absolute path, not a `node_modules/.bin/`-
+		// prefixed string), so the shim on `$GITHUB_PATH` is what every
+		// invocation resolves to. This test pins that contract — if a capability
+		// ever starts emitting an absolute or local-only path, the resolver
+		// would be bypassed and the C-axis guarantee would silently break.
+		const adv = await import('../src/advance-lifecycle-template.js');
+		const intake = await import('../src/intake-trigger-template.js');
+		const closeJob = await import('../src/close-job-template.js');
+		const capabilities = [
+			{
+				id: adv.ADVANCE_LIFECYCLE_CAPABILITY_ID,
+				label: 'advance',
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: join('workflows', 'advance-lifecycle.yml'),
+						content: adv.generateAdvanceLifecycleWorkflow(c),
+					},
+				],
+			},
+			{
+				id: intake.INTAKE_TRIGGER_CAPABILITY_ID,
+				label: 'intake',
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: join('workflows', 'intake-trigger.yml'),
+						content: intake.generateIntakeWorkflow(c),
+					},
+				],
+			},
+			{
+				id: closeJob.CLOSE_JOB_CAPABILITY_ID,
+				label: 'close-job',
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: join('workflows', 'close-job.yml'),
+						content: closeJob.generateCloseJobWorkflow(c),
+					},
+				],
+			},
+		];
+		for (const cap of capabilities) {
+			for (const file of cap.emit(modelsConfig)) {
+				// `dorfl` is referenced (otherwise the workflow does not
+				// participate at all and the test is meaningless).
+				expect(file.content).toMatch(/\bdorfl\b/);
+				// No capability hard-codes an absolute path to dorfl or a
+				// node_modules/.bin/-prefixed invocation — they MUST stay
+				// unqualified so the PATH-prepended shim wins.
+				expect(file.content).not.toMatch(/\/node_modules\/\.bin\/dorfl\b/);
+				expect(file.content).not.toMatch(/\/usr\/(?:local\/)?bin\/dorfl\b/);
+			}
+		}
 	});
 });
