@@ -283,6 +283,30 @@ export async function installCI(
 			"      DORFL_AUTO_BUILD: 'true'\n" +
 			"      DORFL_AUTO_TASK: 'true'",
 	);
+	// Project-toolchain boundary (task install-ci-document-toolchain-boundary,
+	// PRD install-ci-project-provisioning axis (A)). dorfl declares
+	// engines.node '>=18' and the generated composite action pins Node 22 only
+	// for dorfl's own runtime — it does NOT provision the project's toolchain.
+	// State that boundary explicitly so a maintainer whose project pins a
+	// different Node/pnpm version (or uses rust / system packages) is never
+	// silently broken: the project-setup hook (sibling task
+	// install-ci-project-setup-hook) is the SUPPORTED escape hatch; without
+	// it the conflicting case is unsupported. install-ci does NOT sniff
+	// .nvmrc / packageManager / rust-toolchain.toml — the boundary is
+	// documentation, not detection.
+	log('');
+	log(
+		"Project toolchain: the generated composite action provisions ONLY dorfl's own runtime (Node 22 for engines.node '>=18').",
+	);
+	log(
+		'It does NOT provision your project toolchain (a project-pinned pnpm/Node, rust, system packages, `pnpm install` of your deps).',
+	);
+	log(
+		'A custom or conflicting project toolchain is supported ONLY via the project-setup hook (task install-ci-project-setup-hook);',
+	);
+	log(
+		'without that hook the conflicting case is unsupported. install-ci does NOT detect likely conflicts — this is a documented boundary.',
+	);
 	return {outcome: 'generated', config, written, secrets, branchProtection};
 }
 
