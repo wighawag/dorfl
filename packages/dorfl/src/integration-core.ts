@@ -687,6 +687,26 @@ export async function performIntegration(
 			recoveryRebaseJitterMs: input.recoveryRebaseJitterMs,
 			recoveryRebaseSleep: input.recoveryRebaseSleep,
 			recoveryRebaseRandom: input.recoveryRebaseRandom,
+			// Answered-merge land (task `committed-recovery-honours-fresh-worktree-gate`,
+			// prd `land-time-reverify-and-parallel-merge-ceiling`): the apply-rung
+			// dispatches an answered `merge` through this committed-recovery tail (the
+			// branch already carries its done-move commit, so the build path's
+			// `git mv`+`add -A`+commit would raise `IntegrationNothingStaged`). UNLIKE
+			// the original stranded-recovery caller (whose pre-strand build already
+			// gated), `<arbiter>/main` may have MOVED since this branch's last build,
+			// so the rebased tip MUST be re-verified before it lands or the load-bearing
+			// invariant ("main never receives a tree that fails verify") cannot hold on
+			// the merge path. Thread the gate inputs through; recovery runs the EXISTING
+			// `runFreshWorktreeGate` on the rebased tip when `freshWorktreeGate` is set
+			// (and not `--skip-verify`), routing a RED gate to needs-attention via the
+			// SAME seam the build path uses. With `freshWorktreeGate` unset (the
+			// stranded-recovery caller), recovery is byte-identical to before — no
+			// extra gate, no extra fetch.
+			freshWorktreeGate,
+			skipVerify: input.skipVerify,
+			prepare: input.prepare,
+			verify: input.verify,
+			surfaceArbiter: input.surfaceArbiter,
 			env,
 			note,
 		});
@@ -1565,9 +1585,25 @@ export async function performIntegration(
  * green work AND the `git mv → work/done/` are ALREADY committed on the work
  * branch (a terminal push failed AFTER `performIntegration`'s steps 2–3), and the
  * tip is NOT on the arbiter. This runs ONLY the rebase→integrate TAIL (steps 4–5)
- * from the kept commit — NO re-gate, NO re-done-move, NO re-commit, NO rebuild,
- * NO orphan branch — reusing the SAME `ledgerWrite.applyCompleteTransition`
- * integrate primitive the build path uses.
+ * from the kept commit — NO re-done-move, NO re-commit, NO rebuild, NO orphan
+ * branch — reusing the SAME `ledgerWrite.applyCompleteTransition` integrate
+ * primitive the build path uses.
+ *
+ * RE-GATE on the REBASED TIP (task `committed-recovery-honours-fresh-worktree-
+ * gate`, prd `land-time-reverify-and-parallel-merge-ceiling`): when the caller
+ * sets `freshWorktreeGate` (and not `skipVerify`), the EXISTING
+ * `runFreshWorktreeGate` runs on the rebased tip AFTER the rebase loop and
+ * BEFORE `applyCompleteTransition`, mirroring the build path's
+ * `freshWorktreeGate && !skipVerify && !lifecycle` branch — a red gate routes
+ * to needs-attention through the SAME shared seam, never integrates a clean-
+ * rebase-but-broken merge. This is OPT-IN per caller: the original stranded-
+ * recovery caller (`complete --integration`'s already-built strand, whose pre-
+ * strand build already gated) leaves it UNSET and is byte-identical to before —
+ * no extra gate, no extra fetch. The answered-merge apply-rung SETS it because
+ * `<arbiter>/main` may have moved since the branch's last build, so the rebased
+ * tip MUST be re-verified before it lands or the load-bearing invariant
+ * ("main never receives a tree that fails verify") cannot hold on the merge
+ * path.
  *
  * SAFETY — UNSPOOFABLE detection: BEFORE acting it fetches `<arbiter>/main` and
  * checks whether the kept tip is ALREADY reachable there (`isAncestor`, the SAME
@@ -1596,6 +1632,33 @@ async function recoverAlreadyCommitted(params: {
 	recoveryRebaseJitterMs?: number;
 	recoveryRebaseSleep?: Sleep;
 	recoveryRebaseRandom?: () => number;
+	/**
+	 * Run the EXISTING `runFreshWorktreeGate` (`prepare` then `verify`) on the
+	 * rebased tip AFTER the rebase loop and BEFORE `applyCompleteTransition`
+	 * (task `committed-recovery-honours-fresh-worktree-gate`, prd
+	 * `land-time-reverify-and-parallel-merge-ceiling`). The original stranded-
+	 * recovery caller (`complete --integration`'s already-built strand) leaves
+	 * this UNSET ⇒ no gate, no extra fetch — byte-identical to before. The
+	 * answered-merge apply-rung sets it ⇒ the rebased tip is re-verified before
+	 * it lands, so the load-bearing invariant ("main never receives a tree that
+	 * fails verify") holds on the merge path: a clean rebase that fails verify
+	 * routes to needs-attention via the SAME `applyNeedsAttentionTransition`
+	 * seam the build path's `freshWorktreeGate && !skipVerify && !lifecycle`
+	 * branch uses — no fork of a second gate or a second integrate primitive.
+	 */
+	freshWorktreeGate?: boolean;
+	/** `--skip-verify` honoured exactly as the build path: skips the gate entirely. */
+	skipVerify?: boolean;
+	/** Env-prep config for the fresh gate (mirrors the build path). */
+	prepare?: VerifyConfig;
+	/** Acceptance gate config for the fresh gate (mirrors the build path). */
+	verify?: VerifyConfig;
+	/**
+	 * Autonomous needs-attention surface (mirrors the build path): when set, a
+	 * red rebased-tip gate cherry-picks the bounce onto `main` + pushes the
+	 * work branch (observable + cross-machine). Unset ⇒ local-only routing.
+	 */
+	surfaceArbiter?: string;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<IntegrationCoreResult> {
@@ -1735,6 +1798,65 @@ async function recoverAlreadyCommitted(params: {
 		await sleep(delay);
 		await refetchMain();
 		attempt++;
+	}
+
+	// FRESH-WORKTREE GATE on the REBASED TIP (task `committed-recovery-honours-
+	// fresh-worktree-gate`, prd `land-time-reverify-and-parallel-merge-ceiling`):
+	// when `freshWorktreeGate` is set (the answered-merge land caller) and not
+	// `--skip-verify`, re-run the acceptance gate on the rebased tip BEFORE we
+	// integrate, mirroring the build path's `freshWorktreeGate && !skipVerify &&
+	// !lifecycle` branch (recovery never carries a lifecycle, so no lifecycle
+	// guard is needed). A green gate ⇒ fall through to integrate exactly as today;
+	// a red gate routes to needs-attention through the SAME shared seam
+	// (`applyNeedsAttentionTransition`) the build path uses — NEVER integrates a
+	// clean-rebase-but-broken merge. With `freshWorktreeGate` UNSET (the original
+	// stranded-recovery caller, whose pre-strand build already gated) this whole
+	// block is skipped and behaviour is byte-identical to before.
+	if (params.freshWorktreeGate && !params.skipVerify) {
+		const tip = (
+			await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
+		).stdout.trim();
+		const gated = await runFreshWorktreeGate({
+			cwd,
+			commit: tip,
+			prepare: params.prepare,
+			verify: params.verify,
+			env,
+			note,
+		});
+		if (!gated.passed) {
+			const outcome: IntegrationCoreOutcome =
+				gated.kind === 'prepare' ? 'prepare-failed' : 'gate-failed';
+			const what =
+				gated.kind === 'prepare'
+					? `Env-prep (prepare) failed (exit ${gated.exitCode})`
+					: `Acceptance gate failed (exit ${gated.exitCode})`;
+			const reason =
+				gated.kind === 'prepare'
+					? `prepare (env-prep) failed (exit ${gated.exitCode}) on the rebased tip`
+					: `acceptance gate failed (exit ${gated.exitCode}) on the rebased tip`;
+			const routed = await ledgerWrite.applyNeedsAttentionTransition({
+				cwd,
+				slug,
+				reason,
+				arbiter: params.surfaceArbiter,
+				env,
+				note,
+			});
+			return {
+				outcome,
+				routedToNeedsAttention: routed.moved,
+				branch,
+				reason: routed.moved
+					? `${what} on the rebased tip during committed-recovery; routed ` +
+						`'${slug}' to work/needs-attention/ (surfaced by status; return ` +
+						'to backlog/ once resolved). Fix the work, or use --skip-verify ' +
+						'to override.'
+					: `${what} on the rebased tip during committed-recovery; not ` +
+						`integrating '${slug}'. Fix the work, or use --skip-verify to ` +
+						'override.',
+			};
+		}
 	}
 
 	// Integrate the rebased kept commit through the SAME complete-transition
