@@ -4,6 +4,7 @@ import {scanRepoPaths, type RepoReport} from './scan.js';
 import {arbiterStatus} from './arbiter.js';
 import {listMirrors} from './registry.js';
 import {encodeRepoKey, mirrorPath} from './repo-mirror.js';
+import {heldTaskSlugsStrict} from './item-lock.js';
 import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
@@ -20,6 +21,19 @@ import type {ConfigOverrideMap} from './config-override.js';
  *     mirror-ref the registry reads. The two reads have DIFFERENT freshness +
  *     storage models, so they are kept VISUALLY + SEMANTICALLY distinct, each
  *     with its OWN count. A merged grand total would be true in NEITHER model.
+ *   - **The SELECTION pool is REMOTE-AUTHORITATIVE + FAILS CLOSED offline.** The
+ *     held-lock set (`refs/dorfl/lock/*`) lives ONLY on the arbiter, and it is the
+ *     LOAD-BEARING signal that keeps a claimed / in-flight item out of the
+ *     eligible pool (the body no longer moves on claim). So the cwd pool reads the
+ *     held set from the arbiter (`heldTaskSlugsStrict`) and SUBTRACTS it before
+ *     reporting eligibility — exactly as the registry `scan()` does. When the cwd
+ *     repo has a configured arbiter but that read cannot reach it, eligibility is
+ *     UNKNOWN and the section THROWS rather than emit a confident-but-wrong pool
+ *     (the
+ *     `scan-cwd-selection-pool-read-local-skips-held-lock-subtraction-offline-must-fail`
+ *     decision: offline selection fails; there is NO `--local` fallback). This is
+ *     the SELECTION concern; the divergence line is the SURFACE concern and keeps
+ *     its graceful warn+last-known behaviour.
  *   - **Fetch-first ALSO for the cwd** (the maintainer's explicit ask): the cwd
  *     repo's arbiter is fetched BEFORE the divergence is computed (the local
  *     working tree is the LEAST authoritative view), reusing the
@@ -115,11 +129,13 @@ export interface ResolveCwdSectionOptions {
  * `{participating: false}` when the cwd is NOT a participating repo (the callers
  * then render only the registry view, unchanged). When participating it:
  *
- *   1. reads the cwd's `work/` lifecycle from the LOCAL WORKING TREE
- *      (`scanRepoPaths([cwd])`);
- *   2. FETCHES the cwd repo's arbiter first (warn + fall back to last-known on
+ *   1. FETCHES the cwd repo's arbiter first (warn + fall back to last-known on
  *      failure — never errors), then computes the divergence vs `<arbiter>/main`;
- *   3. de-dups against the registry (is the cwd's arbiter URL a registered
+ *   2. reads the arbiter's HELD-LOCK set (fail-closed: throws when a configured
+ *      arbiter is unreachable) to SUBTRACT in-flight items from the pool;
+ *   3. reads the cwd's `work/` lifecycle from the LOCAL WORKING TREE
+ *      (`scanRepoPaths([cwd])`) with that held set subtracted;
+ *   4. de-dups against the registry (is the cwd's arbiter URL a registered
  *      mirror?).
  *
  * It MUTATES nothing but the arbiter fetch (a read refresh, same as the registry
@@ -134,16 +150,12 @@ export async function resolveCwdSection(
 		return {path: cwd, participating: false};
 	}
 
-	// 1. The cwd's `work/` lifecycle from the LOCAL WORKING TREE (not a mirror ref).
-	//    Thread the per-machine override so the cwd section's eligibility matches
-	//    what `do`/`advance` autopick will actually select.
-	const localReport = scanRepoPaths([cwd], config, new Set(), options.override);
-	const repo = localReport.repos[0];
-
-	// 2. The cwd repo's arbiter + fetch-first divergence. We resolve the arbiter
+	// 1. The cwd repo's arbiter + fetch-first divergence. We resolve the arbiter
 	//    via the SAME `arbiterStatus` the dashboard's arbiter section uses; if it
 	//    is configured we fetch it BEFORE diffing (the local tree is the least
-	//    authoritative view) — warn + fall back to last-known on failure.
+	//    authoritative view) — warn + fall back to last-known on failure. Resolved
+	//    FIRST (before the pool read) so the held-lock subtraction below reads that
+	//    same arbiter's lock refs.
 	const arbiter = await resolveCwdArbiter({
 		cwd,
 		remote: options.arbiterRemote,
@@ -151,7 +163,26 @@ export async function resolveCwdSection(
 		env,
 	});
 
-	// 3. De-dup: is the cwd's arbiter URL a registered hub mirror? Compare the
+	// 2. The held-lock set to SUBTRACT from the cwd pool (the SELECTION fix). The
+	//    held set lives ONLY on the arbiter, so when one is configured we read it
+	//    from there and FAIL CLOSED on a read fault (`heldTaskSlugsStrict` throws):
+	//    an offline / unreachable arbiter makes the eligible pool UNKNOWN, and we
+	//    must NOT emit a wrong pool (which CI would enumerate into doomed claim legs).
+	//    A repo with NO configured arbiter has no remote coordination surface —
+	//    nothing to subtract, nothing to fail against — so it keeps the empty set.
+	const heldSlugs =
+		arbiter?.configured && arbiter.remote
+			? await heldTaskSlugsStrict(cwd, arbiter.remote, env)
+			: new Set<string>();
+
+	// 3. The cwd's `work/` lifecycle from the LOCAL WORKING TREE (not a mirror ref),
+	//    with the arbiter-read held set SUBTRACTED so in-flight (lock-held) items are
+	//    not reported eligible. Thread the per-machine override so the cwd section's
+	//    eligibility matches what `do`/`advance` autopick will actually select.
+	const localReport = scanRepoPaths([cwd], config, heldSlugs, options.override);
+	const repo = localReport.repos[0];
+
+	// 4. De-dup: is the cwd's arbiter URL a registered hub mirror? Compare the
 	//    cwd's mirror KEY (from its arbiter URL) against the registry's keys.
 	const {alsoRegistered, registeredMirrorPath} = resolveRegistration({
 		arbiterUrl: arbiter?.url,

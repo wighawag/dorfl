@@ -1669,13 +1669,15 @@ export async function listItemLockEntries(
  * of the eligible pool, NOT the redundant subtraction it was while the body-move
  * still removed claimed items.
  *
- * FAIL-OPEN CAVEAT (known defect): a fetch fault yields an EMPTY set, so the read
- * degrades to "subtract nothing". That is correct for the READ-ONLY `status`/
- * `scan` SURFACE (graceful "no in-flight locks" view), but WRONG for SELECTION:
- * an empty set on a read FAULT lets a continuously-held in-flight item leak back
- * into the eligible pool (re-claimed → empty diff → spurious `stuck`). The
- * SELECTION path must distinguish "read OK, no locks" from "read FAILED" and fail
- * CLOSED on the latter. See the fail-closed-lock-read observation/task.
+ * GRACEFUL (fail-OPEN) by design — this is the SURFACE reader: a fetch fault
+ * yields an EMPTY set so the read-only `status`/`scan` views degrade to "no
+ * in-flight locks" rather than erroring. That is WRONG for SELECTION (an empty set
+ * on a read FAULT lets a continuously-held in-flight item leak back into the
+ * eligible pool → re-claimed → empty diff → spurious `stuck`). The SELECTION path
+ * must instead use {@link heldTaskSlugsStrict}, which THROWS on a read fault so
+ * the caller can fail CLOSED (refuse to enumerate an untrusted pool) rather than
+ * subtract nothing. This graceful variant delegates to the strict one and only
+ * swallows the fault.
  */
 export async function heldTaskSlugs(
 	cwd: string,
@@ -1683,16 +1685,38 @@ export async function heldTaskSlugs(
 	env?: NodeJS.ProcessEnv,
 ): Promise<Set<string>> {
 	try {
-		const entries = await listItemLocks(cwd, arbiter, env);
-		const prefix = 'task-';
-		return new Set(
-			entries
-				.filter((e) => e.startsWith(prefix))
-				.map((e) => e.slice(prefix.length)),
-		);
+		return await heldTaskSlugsStrict(cwd, arbiter, env);
 	} catch {
 		return new Set();
 	}
+}
+
+/**
+ * STRICT (fail-CLOSED) twin of {@link heldTaskSlugs} for the SELECTION path: read
+ * the held TASK slugs from the arbiter and THROW on any read fault (offline / dead
+ * arbiter / unreadable lock refs) instead of degrading to an empty set. The
+ * held-lock set lives ONLY on the arbiter and is the LOAD-BEARING signal that
+ * keeps a claimed / in-flight item out of the eligible pool, so a SELECTION read
+ * that cannot reach the arbiter must NOT pretend "no locks held" — it must fail so
+ * the caller refuses to enumerate a pool it cannot trust (the
+ * `scan-cwd-selection-pool-read-local-skips-held-lock-subtraction-offline-must-fail`
+ * decision: offline selection FAILS, there is no `--local` fallback). The
+ * read-only surface keeps the graceful {@link heldTaskSlugs}.
+ */
+export async function heldTaskSlugsStrict(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<Set<string>> {
+	// `listItemLocks` fetches the lock refs with `gitHard` (throws on a failed
+	// fetch) and returns the held entries; we do NOT swallow that throw here.
+	const entries = await listItemLocks(cwd, arbiter, env);
+	const prefix = 'task-';
+	return new Set(
+		entries
+			.filter((e) => e.startsWith(prefix))
+			.map((e) => e.slice(prefix.length)),
+	);
 }
 
 /**

@@ -7,6 +7,7 @@ import {status, formatStatus} from '../src/status.js';
 import {scan} from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
 import {mirrorPath} from '../src/repo-mirror.js';
+import {acquireItemLock} from '../src/item-lock.js';
 import {makeScratch, gitIn, type Scratch} from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -119,24 +120,64 @@ describe('resolveCwdSection — fetch-first + divergence (main-divergence-guard 
 		expect(out).toMatch(/arbiter\/main/);
 	});
 
-	it('WARNS and falls back when the cwd arbiter fetch FAILS (never errors)', async () => {
+	it('the DIVERGENCE line warns + falls back offline, but SELECTION fails closed (the held-lock read throws)', async () => {
 		const {repo} = seedCwdRepo({'a.md': task('a')});
-		// Point the arbiter remote at a path that does not exist ⇒ fetch fails.
+		// Point the arbiter remote at a path that does not exist ⇒ every fetch fails.
 		gitIn(
 			['remote', 'set-url', 'arbiter', 'file:///nonexistent/gone.git'],
 			repo,
 		);
 		const warnings: string[] = [];
+		// The SELECTION pool needs the arbiter's held-lock set; an unreachable
+		// configured arbiter makes eligibility UNKNOWN, so the section THROWS rather
+		// than emit a confident-but-wrong eligible pool (offline selection fails;
+		// there is NO --local fallback). The divergence fetch still warned first.
+		await expect(
+			resolveCwdSection({
+				cwd: repo,
+				config: config(),
+				warn: (m) => warnings.push(m),
+			}),
+		).rejects.toThrow();
+		expect(warnings.some((w) => /fetch|offline|last-known/i.test(w))).toBe(
+			true,
+		);
+	});
+});
+
+describe('resolveCwdSection — held-lock subtraction (SELECTION is remote-authoritative)', () => {
+	it('SUBTRACTS an in-flight (lock-held) task from the cwd eligible pool', async () => {
+		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
+		// Hold the per-item lock for `a` on the arbiter (the SAME `arbiter` remote the
+		// cwd section reads). `a` is now in-flight and must NOT be reported eligible.
+		const held = await acquireItemLock({
+			item: 'task:a',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'arbiter',
+		});
+		expect(held.outcome).toBe('acquired');
+
 		const section = await resolveCwdSection({
 			cwd: repo,
 			config: config(),
-			warn: (m) => warnings.push(m),
+			arbiterRemote: 'arbiter',
 		});
-		// Did NOT throw; still produced the local section (offline fall-back).
-		expect(section.participating).toBe(true);
-		expect(section.arbiter?.fetched).toBe(false);
-		expect(warnings).toHaveLength(1);
-		expect(warnings[0].toLowerCase()).toMatch(/fetch|offline|last-known/);
+		// `a`'s lock is held → subtracted from the pool entirely; only `b` remains.
+		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['b']);
+		expect(section.totalItems).toBe(1);
+		expect(section.totalEligible).toBe(1);
+	});
+
+	it('subtracts NOTHING when no locks are held (every ready task stays eligible)', async () => {
+		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
+		const section = await resolveCwdSection({
+			cwd: repo,
+			config: config(),
+			arbiterRemote: 'arbiter',
+		});
+		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['a', 'b']);
+		expect(section.totalEligible).toBe(2);
 	});
 });
 
