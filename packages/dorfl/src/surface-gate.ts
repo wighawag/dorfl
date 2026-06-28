@@ -110,6 +110,15 @@ export class SurfaceParseError extends Error {}
  * `questions` list is VALID (the honest "no open judgement" result). Throws
  * {@link SurfaceParseError} when no valid emit is present (the caller treats an
  * unparseable emit as an error — never a silent "surfaced nothing").
+ *
+ * The emit MAY also carry a free-prose `note` field (the surface counterpart of
+ * the verdict's `review`): a HOME inside the object for the agent's reasoning /
+ * findings so it never needs to write prose AROUND the JSON (the cause of the
+ * "no parseable {questions}" trailing-chatter failure — observation
+ * `surface-rung-agent-emits-no-parseable-questions`). The engine does not
+ * persist `note`, so it is simply IGNORED here (like every unrecognised field);
+ * the prompt's job is to give the prose a place to go, not the parser's to keep
+ * it.
  */
 export function parseSurfaceEmit(output: string): SurfaceEmit {
 	const span = extractJsonObjectSpan(output, 'questions');
@@ -213,6 +222,20 @@ export function buildSurfacePrompt(item: string): string {
 		``,
 		`Do NOT edit any files, run no git — you EMIT questions only.`,
 		``,
+		`Your investigation may be substantial (you compose review's verdict, you`,
+		`probe an observation against current reality). Put ANY explanation,`,
+		`reasoning, or "here is what I found" prose IN the \`note\` field of the JSON`,
+		`below — that is its home. This MIRRORS Gate-2's verdict, which carries its`,
+		`human-readable prose in a \`review\` field for exactly this reason: with a`,
+		`channel for prose INSIDE the object, you never need to write anything`,
+		`around it.`,
+		``,
+		`The single JSON object below MUST be your FINAL and ONLY output. Do NOT`,
+		`narrate your process ("Let me check…"), do NOT add any remark, summary, or`,
+		`sign-off BEFORE or AFTER it, and do NOT take any further turn once you have`,
+		`emitted it — emitting the object is how you finish. A trailing chatty turn`,
+		`after the object strands the run (the reader sees only your last turn).`,
+		``,
 		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it;`,
 		`see \`SURFACE-PROTOCOL.md\` → "The emitted question shape" for the`,
 		`prose-described contract this mirrors). The example below is EXPANDED over`,
@@ -225,17 +248,20 @@ export function buildSurfacePrompt(item: string): string {
 		`   {"question": "…",`,
 		`    "context": "…",`,
 		`    "default": "… (optional; omit if none)"}`,
-		` ]}`,
+		` ],`,
+		` "note": "… (optional; your reasoning / findings prose lives HERE, not outside the object)"}`,
 		'```',
 		``,
-		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement);`,
-		`absence of the field is NOT.`,
+		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement) —`,
+		`emit the object with \`"questions": []\` (put WHY in \`note\`); do NOT replace`,
+		`it with a prose explanation. Absence of the field is NOT valid.`,
 		``,
 		// The SHARED defensive-JSON contract (the same hardening Gate-2's verdict
 		// prompt carries) — the surface rung hit the IDENTICAL unparseable-emit
 		// failure the verdict gate did, so it reuses the one contract rather than
-		// staying the lone un-hardened seam. The longest field is `context`.
-		parseableJsonContractPrompt('result', 'context'),
+		// staying the lone un-hardened seam. The longest field is `note` (the free
+		// prose channel, the surface counterpart of the verdict's `review`).
+		parseableJsonContractPrompt('result', 'note'),
 	].join('\n');
 }
 

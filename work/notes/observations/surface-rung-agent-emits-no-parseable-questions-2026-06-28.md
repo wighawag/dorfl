@@ -60,12 +60,53 @@ needs-attention. The expectation is that this should rarely fail; a genuine miss
 should just red that one CI leg (already harmless under `fail-fast:false`, the
 next cron tick retries), NOT generate human-facing needs-attention noise.
 
+## Recurrence + the REAL root-cause fix (2026-06-28, second pass)
+
+The prompt-hardening above did NOT stop it: the SAME item
+(`review-nits-install-ci-document-toolchain-boundary`) red the surface leg again.
+Re-investigation (maintainer's prompt: "why does the agent have no clean end
+message, like Gate 2 does?") found the ACTUAL asymmetry with the reliable verdict
+gate. It is NOT the JSON contract (both seams now share
+`parseableJsonContractPrompt`). It is that **the verdict emit has a dedicated
+prose channel INSIDE the JSON — the `review` field — and the verdict prompt tells
+the agent to put its human-facing explanation there and to NOT narrate its
+process.** So the verdict agent's prose has a home inside the object and its last
+turn is a clean single JSON object.
+
+The surface seam had NO such channel. After heavy investigation (it composes the
+whole `review` sub-discipline + probes an observation against reality) the agent
+has reasoning it wants to express, and `SURFACE-PROTOCOL.md` even said to emit an
+empty array "and say so" — inviting prose. With nowhere INSIDE the object to put
+it, the agent narrated around the JSON or added a trailing chatty turn; the reader
+(`lastAssistantText`) sees only the LAST turn, so the good emit is discarded.
+
+Fix (this pass), mirroring Gate-2's discipline — ONE lever, the prompt, not the
+parser:
+
+1. `buildSurfacePrompt` now offers an optional free-prose `note` field (the
+   surface counterpart of the verdict's `review`) as the HOME for the agent's
+   reasoning/findings, and adds the verdict gate's terminal-emit discipline: the
+   JSON object is the FINAL and ONLY output, do NOT narrate, add no remark before
+   or after, take no further turn. `note` is now the length-capped longest field.
+2. `SURFACE-PROTOCOL.md` (source + propagated copy) documents the `note` channel
+   and replaces the "and say so" prose-invitation with "emit the empty-array
+   OBJECT (put WHY in `note`)" + the same terminal-emit rule.
+3. The parser is UNCHANGED: it already ignores unrecognised fields, so `note` is
+   simply parsed past (the engine does not persist it).
+
+Reverted the first-pass exploration that the maintainer rejected (cross-turn /
+all-messages scanning): not every harness can surface all turns, and the right
+fix is to make the agent produce a clean terminal emit, not to scrape around a
+messy one. So `extractLastParseableObjectSpan` / `allAssistantTexts` were NOT
+kept.
+
 ## Residual / open
 
 - The parser still reads only the LAST assistant turn + the FIRST `"questions"`
-  occurrence; a trailing chatty turn could still shadow a good emit. Hardening
-  `parseSurfaceEmit` to scan ALL turns for the LAST parseable `{questions}`
-  object was held back as secondary insurance — revisit ONLY if misses persist
-  after the prompt fix.
+  occurrence. The second-pass fix attacks the CAUSE (give prose a home + demand a
+  clean terminal emit) rather than scraping a messy transcript; the maintainer
+  explicitly rejected cross-turn / all-messages scanning (not every harness can
+  do it). Revisit parser-side insurance ONLY if misses persist after this prompt
+  fix too — and even then prefer the prose-channel lever.
 - The `pi-yields-turn-early` cause is unfixable by prompt wording (no JSON is
   emitted at all); it belongs to pi, not dorfl.

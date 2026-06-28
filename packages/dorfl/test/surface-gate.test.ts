@@ -55,6 +55,22 @@ describe('parseSurfaceEmit — reads the surface-questions SKILL emit shape', ()
 		expect(emit.questions).toEqual([]);
 	});
 
+	it('TOLERATES the free-prose `note` channel (it is parsed past, not persisted)', () => {
+		// `note` is the surface counterpart of the verdict's `review` field: a HOME
+		// for the agent's prose INSIDE the object so it never writes prose around the
+		// JSON (the trailing-chatter failure). The engine does not persist it, so the
+		// parser simply ignores it — the questions still parse cleanly.
+		const emit = parseSurfaceEmit(
+			JSON.stringify({
+				item: 'observation:foo',
+				questions: [{question: 'what becomes of this signal?'}],
+				note: 'I composed review and probed the observation against the code.',
+			}),
+		);
+		expect(emit.questions).toHaveLength(1);
+		expect('note' in emit).toBe(false);
+	});
+
 	it('IGNORES any disposition token on a surfaced question (the vocabulary is retired — a question is plain)', () => {
 		// The disposition vocabulary is gone (task
 		// `agentic-apply-retire-disposition-vocabulary`): a surfaced question carries
@@ -159,11 +175,31 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 		expect(p).toMatch(/MINIFIED/);
 		expect(p).toMatch(/literal double-quote/);
 		expect(p).toMatch(/raw newline/);
-		// The surface emit's longest field is `context`.
-		expect(p).toMatch(/LONGEST field \(`context`\)/);
+		// The free-prose channel is `note` (the surface counterpart of the verdict's
+		// `review`), so it is the LENGTH-CAPPED longest field.
+		expect(p).toMatch(/LONGEST field \(`note`\)/);
 		// And the example is presented as something to MINIFY, not a multi-line
 		// template that invites pretty-printing.
 		expect(p).toMatch(/you MUST emit it MINIFIED/);
+	});
+
+	it('gives prose a HOME (the `note` channel) and demands a clean TERMINAL emit (the real root-cause fix)', () => {
+		// Root cause of `surface-rung-agent-emits-no-parseable-questions`: unlike the
+		// verdict gate (which channels its prose into a `review` field), the surface
+		// agent had nowhere to put its investigation prose, so it narrated around the
+		// JSON / added a trailing turn — and the reader sees only the LAST turn. The
+		// fix mirrors Gate-2: a `note` prose channel + an explicit terminal-emit rule.
+		const p = buildSurfacePrompt('observation:foo');
+		// A prose channel exists INSIDE the object…
+		expect(p).toMatch(/`note`/);
+		expect(p).toMatch(/"note":/);
+		// …explicitly framed as the home for reasoning/findings, mirroring `review`.
+		expect(p).toMatch(/review/);
+		// The object must be the FINAL and ONLY output; no trailing turn.
+		expect(p).toMatch(/FINAL and ONLY output/);
+		expect(p).toMatch(/trailing chatty turn/);
+		// And the don't-narrate discipline the verdict prompt carries.
+		expect(p).toMatch(/narrate your process/);
 	});
 });
 

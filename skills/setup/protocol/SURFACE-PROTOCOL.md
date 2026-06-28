@@ -45,7 +45,8 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
 			"context": "…",
 			"default": "… (optional; omit if none)"
 		}
-	]
+	],
+	"note": "… (optional free prose; your reasoning / findings live HERE)"
 }
 ```
 
@@ -54,6 +55,7 @@ Emit a single JSON object of this exact shape (no prose OUTSIDE it):
   - **`question`** — REQUIRED, the question verbatim. An all-whitespace question is dropped as a placeholder.
   - **`context`** — OPTIONAL, inline context so the human need not open the item (the relevant excerpt / `file:line` / reasoning).
   - **`default`** — OPTIONAL, the suggested default — the humility aid; omit when you cannot honestly suggest one (never fabricate a default just to fill the field).
+- **`note`** — OPTIONAL free-prose channel for your reasoning / findings (the surface counterpart of the verdict's `review` field). It is the HOME for any explanation you want to give: put it HERE, INSIDE the object, never as prose around the JSON. The engine does not persist `note` (the parser ignores it); its only purpose is to give your prose somewhere to go so the emitted object can be your final, clean, single-object output. Like `review`, keep it short and single-line (write `\n` literally, never a raw newline).
 
 There is NO `disposition` field, and no token vocabulary to learn or pick: a sidecar entry is BINARY (no-answer | answered), and the human answers in PLAIN LANGUAGE. What to DO with the answer — mint a task, a PRD, or an ADR; delete the source; or ask a follow-up — is the agentic apply decision (read off the human's answer + the source item), not a token the surface emits. An observation's triage question is therefore just an ordinary plain question ("what becomes of this signal?"); the human writes back in their own words, and if the answer is "throw it away", the discharge is the direct-delete path (the human, the `answer-questions` skill, or the `dorfl` delete verb removes the source + sidecar in one revertible commit), not a `delete` token.
 
@@ -61,7 +63,9 @@ You do NOT assign ids, `answered:`, `answer:`, or `allAnswered`. Those are the S
 
 Because the shape is the sidecar's, the engine APPENDS your questions to any existing sidecar (never overwriting an already-answered entry) and writes the whole thing in one CAS-atomic commit. You need not know any of that — you just emit the four fields.
 
-If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative outcome the repo's auto-triage bar covers, nothing pre-existing) — emit an **empty `questions` array** and say so. Surfacing nothing is a valid, honest result; do not manufacture a question to look busy.
+If the item carries **no open judgement** (review approves with no blocking findings, the observation has an obvious conservative outcome the repo's auto-triage bar covers, nothing pre-existing) — emit the object with an **empty `questions` array** (put WHY in `note`). Surfacing nothing is a valid, honest result; do not manufacture a question to look busy. Do NOT replace the empty-array object with a prose explanation: the JSON object is always your output, even when it carries no questions.
+
+**The emitted object is your FINAL and ONLY output.** Do not narrate your process, and add no remark, summary, or sign-off before or after it — and take no further turn once you have emitted it (emitting it is how you finish). The caller reads only your LAST turn, so a trailing chatty turn AFTER the object discards the emit and strands the run. This is the same discipline Gate-2's verdict carries; the `note` field exists precisely so all your prose has a home inside the object.
 
 ### How the caller persists your questions (NOT your job — for orientation only)
 
