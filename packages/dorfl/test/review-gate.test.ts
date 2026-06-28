@@ -22,6 +22,30 @@ import {
 	type ReviewVerdict,
 } from '../src/review-gate.js';
 import {NullHarness, MODEL_PLACEHOLDER, type Harness} from '../src/harness.js';
+import {parseableJsonContractPrompt} from '../src/review-verdict.js';
+
+describe('parseableJsonContractPrompt — the SHARED defensive-JSON contract', () => {
+	it('carries the load-bearing parseability rules (minify, no inner double-quote, no raw newline)', () => {
+		const c = parseableJsonContractPrompt();
+		expect(c).toMatch(/MINIFIED/);
+		expect(c).toMatch(/PARSEABLE/);
+		// The #1 failure cause is named: a literal inner double-quote.
+		expect(c).toMatch(/literal double-quote/);
+		expect(c).toMatch(/raw newline/);
+	});
+
+	it('defaults the emit noun to `verdict` and omits the length cap when no field is named', () => {
+		const c = parseableJsonContractPrompt();
+		expect(c).toMatch(/A malformed verdict strands the work/);
+		expect(c).not.toMatch(/LONGEST field/);
+	});
+
+	it('takes a custom emit noun + length-caps the named longest field', () => {
+		const c = parseableJsonContractPrompt('result', 'context');
+		expect(c).toMatch(/A malformed result strands the work/);
+		expect(c).toMatch(/LONGEST field \(`context`\)/);
+	});
+});
 
 /**
  * Gate 2 (PR/code review) — the SEAM + config-resolution unit tests (pure logic,
@@ -432,6 +456,17 @@ describe('buildReviewPrompt — frames code-vs-its-task + the required output', 
 		expect(p).toMatch(/duplicate|overlap|fork/i);
 		// It leans on the glossary as the source of truth for term meaning.
 		expect(p).toMatch(/CONTEXT\.md|glossary/i);
+	});
+
+	it('still carries the shared defensive-JSON parseability contract', () => {
+		// `verdictContractPrompt` now COMPOSES `parseableJsonContractPrompt`; the
+		// hard-won "keep the JSON parseable" discipline must survive the extraction.
+		const p = buildReviewPrompt('my-task');
+		expect(p).toMatch(/Keep the JSON PARSEABLE/);
+		expect(p).toMatch(/MINIFIED/);
+		expect(p).toMatch(/literal double-quote/);
+		// The verdict gate length-caps its longest field (`review`).
+		expect(p).toMatch(/LONGEST field \(`review`\)/);
 	});
 });
 

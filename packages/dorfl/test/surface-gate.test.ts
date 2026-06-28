@@ -147,6 +147,24 @@ describe('buildSurfacePrompt — frames the fresh-context surface + the required
 		// the protocol DOC the skill points at, not the host-installed skill.
 		expect(p).not.toMatch(/Run the `surface-questions` skill/);
 	});
+
+	it('carries the SHARED defensive-JSON parseability contract (the Gate-2 hardening)', () => {
+		// The surface rung hit the IDENTICAL unparseable-emit failure the verdict
+		// gate did (observation
+		// `surface-rung-agent-emits-no-parseable-questions`); the prompt now reuses
+		// the SAME `parseableJsonContractPrompt` the verdict gate carries instead of
+		// being the lone un-hardened agent→JSON seam.
+		const p = buildSurfacePrompt('task:foo');
+		expect(p).toMatch(/Keep the JSON PARSEABLE/);
+		expect(p).toMatch(/MINIFIED/);
+		expect(p).toMatch(/literal double-quote/);
+		expect(p).toMatch(/raw newline/);
+		// The surface emit's longest field is `context`.
+		expect(p).toMatch(/LONGEST field \(`context`\)/);
+		// And the example is presented as something to MINIFY, not a multi-line
+		// template that invites pretty-printing.
+		expect(p).toMatch(/you MUST emit it MINIFIED/);
+	});
 });
 
 describe('harnessSurfaceGate — surfaceModel reaches the launch via the existing seam', () => {

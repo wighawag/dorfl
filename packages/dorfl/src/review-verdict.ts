@@ -333,18 +333,52 @@ export function verdictContractPrompt(): string {
 		'  `uncertainTasks`, `decompositionUnclear`) are OPT-IN: only fill the ones',
 		"  the caller's framing names. Unused channels are ignored.",
 		'',
+		parseableJsonContractPrompt('verdict', 'review'),
+	].join('\n');
+}
+
+/**
+ * The shared "emit DEFENSIVE, parseable, minified JSON" contract block — the
+ * hard-won discipline that stops a weak model from stranding the run with an
+ * unparseable emit (a dropped escape on an inner `"`, a raw newline in a string,
+ * an over-long field). It was learned on the Gate-2 verdict seam
+ * (observation `gate2-review-verdict-json-parse-crash-on-large-diffs`) and is
+ * now SHARED so EVERY agent→JSON→dispatch seam carries it, not just the verdict
+ * gate: {@link verdictContractPrompt} appends it, and so does the SURFACE gate's
+ * `buildSurfacePrompt` (observation
+ * `surface-rung-agent-emits-no-parseable-questions` — the same class of failure
+ * on the surface rung, where the prompt previously lacked this hardening AND
+ * showed a multi-line example that invited pretty-printing).
+ *
+ * @param emitNoun what the emitted object is called in prose (`verdict` /
+ *   `result`) — only the wording differs; the discipline is identical.
+ * @param longestField the name of the field most likely to be long (the one to
+ *   length-cap), or undefined to omit the length-cap bullet.
+ */
+export function parseableJsonContractPrompt(
+	emitNoun = 'verdict',
+	longestField?: string,
+): string {
+	const lengthCap =
+		longestField === undefined
+			? []
+			: [
+					`- Keep the LONGEST field (\`${longestField}\`) under ~1500 characters; say`,
+					'  less, not more. A long, multi-paragraph field is exactly what corrupts',
+					'  the JSON.',
+				];
+	return [
 		'### Keep the JSON PARSEABLE (this is where weak models fail)',
 		'',
-		'A malformed verdict strands the work, so emit DEFENSIVELY:',
+		`A malformed ${emitNoun} strands the work, so emit DEFENSIVELY:`,
 		'- Emit it MINIFIED: ONE single line, no pretty-printing, no blank lines.',
 		'- INSIDE every string value, do NOT use a literal double-quote `"`. If you',
 		'  must quote something in prose, PARAPHRASE it or use SINGLE quotes \u2014 a',
-		'  dropped escape on an inner `"` is the #1 cause of an unparseable verdict.',
+		`  dropped escape on an inner \`"\` is the #1 cause of an unparseable ${emitNoun}.`,
 		'- Keep every string field SHORT and SINGLE-LINE. Do NOT embed a raw newline,',
 		'  tab, or other control char in a string; if you genuinely need a break, write',
 		'  the two characters `\\n` (a backslash then n), never a real newline.',
-		'- Keep the LONGEST field (`review`) under ~1500 characters; say less, not',
-		'  more. A long, multi-paragraph field is exactly what corrupts the JSON.',
+		...lengthCap,
 	].join('\n');
 }
 

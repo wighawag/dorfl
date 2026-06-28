@@ -2,6 +2,7 @@ import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {boundaryLine} from './watch-session.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
+import {parseableJsonContractPrompt} from './review-verdict.js';
 import type {NewQuestion} from './sidecar.js';
 
 /**
@@ -214,16 +215,27 @@ export function buildSurfacePrompt(item: string): string {
 		``,
 		`Output ONLY a single JSON object of this exact shape (no prose OUTSIDE it;`,
 		`see \`SURFACE-PROTOCOL.md\` → "The emitted question shape" for the`,
-		`prose-described contract this mirrors):`,
+		`prose-described contract this mirrors). The example below is EXPANDED over`,
+		`several lines for READABILITY, but you MUST emit it MINIFIED — ONE single`,
+		`line, no newlines between the keys:`,
+		``,
+		'```json',
 		`{"item": "${item}",`,
 		` "questions": [`,
 		`   {"question": "…",`,
 		`    "context": "…",`,
 		`    "default": "… (optional; omit if none)"}`,
 		` ]}`,
+		'```',
+		``,
 		`An EMPTY \`questions\` array is a VALID, honest result (no open judgement);`,
-		`absence of the field is NOT. It is plain text inside the JSON string`,
-		`(escape newlines as \\n).`,
+		`absence of the field is NOT.`,
+		``,
+		// The SHARED defensive-JSON contract (the same hardening Gate-2's verdict
+		// prompt carries) — the surface rung hit the IDENTICAL unparseable-emit
+		// failure the verdict gate did, so it reuses the one contract rather than
+		// staying the lone un-hardened seam. The longest field is `context`.
+		parseableJsonContractPrompt('result', 'context'),
 	].join('\n');
 }
 
