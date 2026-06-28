@@ -213,8 +213,9 @@ export type {
 	CwdSection,
 	CwdArbiter,
 	ResolveCwdSectionOptions,
+	CwdDisposition,
 } from './cwd-section.js';
-export {resolveCwdSection} from './cwd-section.js';
+export {resolveCwdSection, cwdSectionDisposition} from './cwd-section.js';
 
 export type {
 	TaskFolder,

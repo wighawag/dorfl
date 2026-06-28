@@ -23,7 +23,7 @@ import {scan} from './scan.js';
 import {remoteAdd, remoteRm, listMirrors, RegistryError} from './registry.js';
 import {findParticipatingRepos} from './detect.js';
 import {formatReport} from './format.js';
-import {resolveCwdSection} from './cwd-section.js';
+import {resolveCwdSection, cwdSectionDisposition} from './cwd-section.js';
 import {
 	runOnce,
 	runLoop,
@@ -146,7 +146,7 @@ interface ScanFlags {
 	config?: string;
 	autoBuild?: boolean;
 	json?: boolean;
-	cwd?: boolean;
+	here?: boolean;
 	arbiterRemote?: string;
 	arbiter?: string;
 }
@@ -791,7 +791,7 @@ interface StatusFlags {
 	arbiterRemote?: string;
 	arbiter?: string;
 	noArbiter?: boolean;
-	cwd?: boolean;
+	here?: boolean;
 	json?: boolean;
 }
 
@@ -1069,8 +1069,8 @@ export function buildProgram(): Command {
 			'the COORDINATION arbiter remote whose per-item lock refs (refs/dorfl/lock/*) gate the cwd selection pool (held in-flight items are subtracted); default: origin (the same remote claim/do use, NOT the --arbiter-remote divergence name)',
 		)
 		.option(
-			'--no-cwd',
-			'skip the cwd-local section (report only the cross-repo registry view)',
+			'--here',
+			'report ONLY the current repo (the cwd working tree, fetch-first): skip the cross-repo registry loop entirely. The fast, focused path — no N-mirror fetches.',
 		)
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: ScanFlags, command: Commander) => {
@@ -1083,21 +1083,52 @@ export function buildProgram(): Command {
 				flagOverrides(flags, command),
 			);
 			const warn = (message: string) => console.error(`>> ${message}`);
+			const resolveCwd = () =>
+				resolveCwdSection({
+					cwd: process.cwd(),
+					config,
+					override,
+					arbiterRemote: flags.arbiterRemote,
+					lockArbiterRemote: flags.arbiter ?? 'origin',
+					warn,
+				});
+			// `--here`: report ONLY the cwd — skip the registry loop ENTIRELY (the fast,
+			// focused path, and the CI shape). The report carries an empty `repos[]` so
+			// the `--json` consumers (the CI matrix `jq`) read `.cwd.repo.*` exactly as
+			// before, with `.repos[]` simply yielding nothing.
+			if (flags.here === true) {
+				const cwdSection = await resolveCwd();
+				const emptyReport = {repos: [], totalItems: 0, totalEligible: 0};
+				if (flags.json) {
+					console.log(
+						JSON.stringify(
+							{...emptyReport, cwd: cwdSection},
+							(_key, value) => (value instanceof Set ? [...value] : value),
+							2,
+						),
+					);
+				} else {
+					console.log(formatReport(emptyReport, cwdSection));
+				}
+				return;
+			}
 			const report = await scan(config, {warn, override});
-			// The cwd-local section (the `scan-status-read-cwd-repo` task): when run
-			// INSIDE a participating repo, ALSO report it as a separately-counted local
-			// block (fetch-its-arbiter-first), distinct from the registry view.
+			// The cwd-local section: resolve it ONLY when a participating cwd is NOT
+			// already covered by a registered mirror. A FETCH-FREE pre-check
+			// (`cwdSectionDisposition`) decides this with zero network I/O; an
+			// already-registered cwd is skipped so we never re-fetch the SAME arbiter the
+			// registry loop just fetched (the `scan-here-and-skip-redundant-cwd`
+			// decision), and an UNregistered cwd is still shown standalone so a
+			// mirror-less repo you are standing in is never invisible.
+			const disposition = cwdSectionDisposition({
+				cwd: process.cwd(),
+				config,
+				arbiterRemote: flags.arbiterRemote,
+			});
 			const cwdSection =
-				flags.cwd === false
-					? undefined
-					: await resolveCwdSection({
-							cwd: process.cwd(),
-							config,
-							override,
-							arbiterRemote: flags.arbiterRemote,
-							lockArbiterRemote: flags.arbiter ?? 'origin',
-							warn,
-						});
+				disposition.participating && !disposition.alsoRegistered
+					? await resolveCwd()
+					: undefined;
 			if (flags.json) {
 				console.log(
 					JSON.stringify(
@@ -3228,8 +3259,8 @@ export function buildProgram(): Command {
 		)
 		.option('--no-arbiter', "skip the current repo's arbiter section")
 		.option(
-			'--no-cwd',
-			'skip the cwd-local section (report only the jobs + registry view)',
+			'--here',
+			'report ONLY the current repo (the cwd working tree, fetch-first): skip the jobs, registry-mirror, and arbiter sections entirely. "This repo, nothing else" — the fast, focused path.',
 		)
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: StatusFlags) => {
@@ -3239,6 +3270,34 @@ export function buildProgram(): Command {
 			);
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 			const warn = (message: string) => console.error(`>> ${message}`);
+			const resolveCwd = () =>
+				resolveCwdSection({
+					cwd: process.cwd(),
+					config,
+					override,
+					arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+					lockArbiterRemote: flags.arbiter ?? 'origin',
+					warn,
+				});
+			// `--here`: report ONLY the cwd — skip the jobs, registry-mirror, and arbiter
+			// sections entirely ("this repo, nothing else"). `status` is built with NO
+			// jobs (empty workspace view), NO mirrors, and NO arbiter, so only the cwd
+			// block renders.
+			if (flags.here === true) {
+				const cwdSection = await resolveCwd();
+				const report = await status({
+					workspacesDir,
+					mirrorPaths: [],
+					cwd: cwdSection,
+					warn,
+				});
+				if (flags.json) {
+					console.log(JSON.stringify(report, null, 2));
+				} else {
+					console.log(formatStatus(report));
+				}
+				return;
+			}
 			// Surface the folder-native needs-attention set (ADR §12) from each
 			// REGISTERED HUB MIRROR (the registry), read from its bare `main` ref
 			// through the read seam (mirrors have no working tree).
@@ -3252,20 +3311,20 @@ export function buildProgram(): Command {
 							cwd: process.cwd(),
 							remote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
 						});
-			// The cwd-local section (the `scan-status-read-cwd-repo` task): when run
-			// INSIDE a participating repo, ALSO report it as a separately-counted local
-			// block (fetch-its-arbiter-first), distinct from the registry/job view.
+			// The cwd-local section: resolve it ONLY when a participating cwd is NOT
+			// already covered by a registered mirror, via the SAME fetch-free pre-check
+			// `scan` uses (`cwdSectionDisposition`) — so an already-registered cwd is not
+			// re-fetched (the registry/jobs view already covers it) while a mirror-less
+			// cwd is still shown standalone.
+			const disposition = cwdSectionDisposition({
+				cwd: process.cwd(),
+				config,
+				arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+			});
 			const cwdSection =
-				flags.cwd === false
-					? undefined
-					: await resolveCwdSection({
-							cwd: process.cwd(),
-							config,
-							override,
-							arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
-							lockArbiterRemote: flags.arbiter ?? 'origin',
-							warn,
-						});
+				disposition.participating && !disposition.alsoRegistered
+					? await resolveCwd()
+					: undefined;
 			const report = await status({
 				workspacesDir,
 				mirrorPaths,

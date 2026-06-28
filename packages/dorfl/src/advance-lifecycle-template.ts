@@ -313,10 +313,15 @@ jobs:
         # observations have no task/prd namespace), \`lifecycle.surface[]\` +
         # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`task:\`/\`prd:\` legs
         # for \`needsAnswers\` items — surface mints the blocker question, apply
-        # consumes the committed answer). All pools surface on \`repos[]\` AND
-        # \`cwd.repo\`; we union + dedup so the matrix has one leg per item.
+        # consumes the committed answer). CI runs IN-PLACE, so we use
+        # \`scan --here\`: it reports ONLY the cwd checkout (\`cwd.repo.*\`) and SKIPS
+        # the cross-repo registry loop (no N-mirror fetches; a fresh runner has no
+        # registered mirror anyway). The \`cwd\` arbiter is the checkout's own clone,
+        # so the fetch-first is a near-noop. \`jq\` still reads the (now-empty)
+        # \`repos[]\` branches harmlessly; we union + dedup so the matrix has one
+        # leg per item.
         run: |
-          items="$(dorfl scan --json \\
+          items="$(dorfl scan --json --here \\
             | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then

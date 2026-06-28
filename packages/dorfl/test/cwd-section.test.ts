@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
-import {resolveCwdSection} from '../src/cwd-section.js';
+import {resolveCwdSection, cwdSectionDisposition} from '../src/cwd-section.js';
 import {formatReport, formatCwdSection} from '../src/format.js';
 import {status, formatStatus} from '../src/status.js';
 import {scan} from '../src/scan.js';
@@ -271,6 +271,39 @@ describe('formatReport — cwd-local section is distinct + de-duped (scan)', () 
 		const registry = await scan(config()); // empty registry
 		const out = formatReport(registry, section);
 		expect(out).toContain('No participating repos found.');
+	});
+});
+
+describe('cwdSectionDisposition — FETCH-FREE pre-check (skip-redundant-cwd)', () => {
+	it('a participating cwd with NO registered mirror: resolve it (participating, not registered)', () => {
+		const {repo} = seedCwdRepo({'a.md': task('a')});
+		const d = cwdSectionDisposition({cwd: repo, config: config()});
+		expect(d.participating).toBe(true);
+		expect(d.alsoRegistered).toBe(false);
+	});
+
+	it('a participating cwd that IS a registered mirror: skip it (alsoRegistered=true)', () => {
+		const {repo, arbiter} = seedCwdRepo({'a.md': task('a')});
+		registerArbiterAsMirror(arbiter);
+		const d = cwdSectionDisposition({cwd: repo, config: config()});
+		expect(d.participating).toBe(true);
+		expect(d.alsoRegistered).toBe(true);
+	});
+
+	it('a non-participating cwd: not participating (nothing to resolve)', () => {
+		const notRepo = join(scratch.root, 'empty');
+		mkdirSync(notRepo, {recursive: true});
+		const d = cwdSectionDisposition({cwd: notRepo, config: config()});
+		expect(d.participating).toBe(false);
+		expect(d.alsoRegistered).toBe(false);
+	});
+
+	it('agrees with resolveCwdSection.alsoRegistered (NOT a forked predicate)', async () => {
+		const {repo, arbiter} = seedCwdRepo({'a.md': task('a')});
+		registerArbiterAsMirror(arbiter);
+		const d = cwdSectionDisposition({cwd: repo, config: config()});
+		const section = await resolveCwdSection({cwd: repo, config: config()});
+		expect(d.alsoRegistered).toBe(section.alsoRegistered);
 	});
 });
 

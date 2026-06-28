@@ -114,6 +114,61 @@ function remoteExists(
 	return run('git', ['remote', 'get-url', remote], cwd, {env}).status === 0;
 }
 
+/** The verdict of the FETCH-FREE cwd pre-check {@link cwdSectionDisposition}. */
+export interface CwdDisposition {
+	/** True iff the cwd is a participating repo (a `work/tasks/ready/` with >= 1 `.md`). */
+	participating: boolean;
+	/**
+	 * True iff the cwd's arbiter URL keys to a registered hub mirror. When true the
+	 * registry view ALREADY covers this repo, so a default `scan`/`status` should
+	 * SKIP resolving the (expensive, fetch-first) cwd section entirely — the registry
+	 * row represents it, and re-reading the cwd would just re-fetch the SAME arbiter
+	 * `main` + lock refs the registry loop already fetched (the redundant-fetch the
+	 * `scan-here-and-skip-redundant-cwd` decision eliminates). Meaningful only when
+	 * {@link participating}.
+	 */
+	alsoRegistered: boolean;
+}
+
+/**
+ * The FETCH-FREE pre-check that decides whether a DEFAULT `scan`/`status` should
+ * pay for the cwd section at all. It does NO network I/O: it reads whether the cwd
+ * participates (local `readdirSync`) and resolves the cwd's arbiter URL via the
+ * fetch-free {@link arbiterStatus} (a local `git remote get-url`), then asks the
+ * fetch-free {@link resolveRegistration} (local {@link listMirrors} key match)
+ * whether that URL is already a registered mirror.
+ *
+ * The CLI gates on this BEFORE calling {@link resolveCwdSection}: a participating
+ * cwd that is ALSO registered is skipped (the registry already covers it, and the
+ * cwd read would only re-fetch the same arbiter), while a participating cwd with
+ * NO mirror is resolved + shown standalone so a mirror-less repo you are standing
+ * in is never invisible. `--here` bypasses this gate (it ALWAYS resolves the cwd,
+ * and only the cwd).
+ */
+export function cwdSectionDisposition(input: {
+	cwd: string;
+	config: Config;
+	/** The DIVERGENCE/arbiter remote whose URL keys the registration check. */
+	arbiterRemote?: string;
+	env?: NodeJS.ProcessEnv;
+}): CwdDisposition {
+	if (!isParticipatingRepo(input.cwd)) {
+		return {participating: false, alsoRegistered: false};
+	}
+	// Fetch-free: arbiterStatus reads the local remote config only (no fetch).
+	const status = arbiterStatus({
+		cwd: input.cwd,
+		remote: input.arbiterRemote,
+		env: input.env,
+	});
+	const {alsoRegistered} = resolveRegistration({
+		arbiterUrl: status.url,
+		config: input.config,
+		env: input.env,
+	});
+	return {participating: true, alsoRegistered};
+}
+
 /** Inputs to {@link resolveCwdSection}. */
 export interface ResolveCwdSectionOptions {
 	/** The current working directory to inspect (the candidate cwd repo). */
