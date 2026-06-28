@@ -59,6 +59,13 @@ import {
 	type ApplyAnsweredQuestionsOptions,
 	type ApplyAnsweredQuestionsResult,
 } from './apply-persist.js';
+import {
+	detectAnsweredMergeAction,
+	performMergeAction,
+	type MergeActionHandler,
+	type MergeActionResult,
+} from './apply-merge-action.js';
+import type {VerifyConfig} from './verify.js';
 import type {NewQuestion} from './sidecar.js';
 
 /**
@@ -310,6 +317,58 @@ export interface AdvanceContext {
 	 * the promoted item's identity WITHOUT inventing the answer.
 	 */
 	promoteSlug?: string;
+	/**
+	 * The execution working area (`workspacesDir`, default `~/.dorfl`) the
+	 * answered-merge LAND uses to cut a per-job worktree from the hub mirror
+	 * (via `workspace.ts` `createJob`). Unset ⇒ no `workspacesDir` is available
+	 * to the dispatcher, so an answered `kind: merge` entry is REFUSED (clean
+	 * surfacing); the answer stays for a follow-up. The registry-set advance
+	 * driver threads the resolved `workspacesDir` here.
+	 * (prd `land-time-reverify-and-parallel-merge-ceiling`, task
+	 * `apply-rung-merge-disposition`)
+	 */
+	workspacesDir?: string;
+	/**
+	 * The arbiter URL the answered-merge LAND mirrors from. Optional: when
+	 * unset the dispatcher resolves it via `git remote get-url <arbiter>` in the
+	 * apply rung's `cwd` (the in-place / one-shot caller). The registry-set
+	 * advance driver threads the per-mirror origin URL here directly so the
+	 * per-mirror tree-less clone (whose `origin` points at the LOCAL mirror
+	 * path, not the real arbiter URL) is bypassed.
+	 */
+	arbiterUrl?: string;
+	/**
+	 * Per-repo env-prep config (`prepare`) the answered-merge LAND threads into
+	 * `performIntegration` so the fresh-worktree gate runs `prepare` then
+	 * `verify` on the rebased tip — the SAME config the build path uses.
+	 */
+	prepare?: VerifyConfig;
+	/**
+	 * Per-repo acceptance gate (`verify`) the answered-merge LAND threads into
+	 * `performIntegration` so the fresh-worktree gate re-verifies the rebased
+	 * tip before integrating.
+	 */
+	verify?: VerifyConfig;
+	/**
+	 * Resolved `strictMergeApproval` boolean (sibling task
+	 * `strict-merge-approval-gate`). Default OFF ⇒ honour the prior approval +
+	 * land on a green re-verify (cheap, the PRD-applied OQ6 default). ON ⇒
+	 * re-surface the merge-question when the merge-base moved between the
+	 * surfacer's question and this apply (the host-agnostic analogue of
+	 * GitHub's "dismiss stale approvals when the base changes").
+	 */
+	strictMergeApproval?: boolean;
+	/**
+	 * The merge-action dispatch SEAM (task `apply-rung-merge-disposition`):
+	 * the deterministic answer-driven runner-action handler the apply rung
+	 * invokes BEFORE the agentic decider when an answered `kind: merge` entry
+	 * is detected. Production wires {@link performMergeAction} (checks out via
+	 * `createJob` + lands via `performIntegration` with `committedRecovery:
+	 * true` + `freshWorktreeGate: true`); tests inject a stub so they assert on
+	 * the apply-rung's `landed | refused | restale | hold | drop` routing
+	 * WITHOUT spinning up a hub mirror or running real verify.
+	 */
+	mergeAction?: MergeActionHandler;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -727,6 +786,21 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 		return vanishedSkip({rung: 'apply', item});
 	}
 
+	// RUNNER-ACTION KIND-CHECK (task `apply-rung-merge-disposition`, prd
+	// `land-time-reverify-and-parallel-merge-ceiling`): an answered `kind: merge`
+	// sidecar entry is a DETERMINISTIC land action, NOT a content decision. It
+	// dispatches HERE (a sibling of the agentic `decide()`), keyed off the
+	// question kind + the human's plain `merge | hold | drop` answer, BEFORE the
+	// agentic decider runs. The dispatcher invokes the EXISTING land primitive
+	// (`performIntegration` with `committedRecovery: true` + `freshWorktreeGate:
+	// true`) through the EXISTING per-job worktree seam (`workspace.ts`
+	// `createJob` off the hub mirror) — it does NOT re-implement rebase / verify
+	// / advance and does NOT improvise a worktree or clone.
+	const mergeRoute = await maybeRunMergeAction(input, itemPath);
+	if (mergeRoute !== undefined) {
+		return mergeRoute;
+	}
+
 	// AGENTIC APPLY for an answered OBSERVATION (the subsumed triage rung): run the
 	// shared decision engine over the answer(s) + source, route the verdict. A
 	// caller-supplied follow-up batch (`applyFollowups`) bypasses the decision and
@@ -762,6 +836,165 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 			exitCode: 0,
 			outcome: mapped,
 			message: result.message,
+		};
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: `apply ${item}: ${detail}`,
+		};
+	}
+}
+
+/**
+ * Dispatch an answered MERGE-QUESTION (a sidecar entry stamped `kind: merge` by
+ * the merge-question surfacer) through the EXISTING land primitive
+ * (`performIntegration` with `committedRecovery: true` + `freshWorktreeGate:
+ * true`) via the EXISTING per-job worktree seam (`workspace.ts` `createJob`).
+ * The deterministic SIBLING of the agentic `decide()` content-decision (PRD
+ * `land-time-reverify-and-parallel-merge-ceiling`, task
+ * `apply-rung-merge-disposition`; Stories #15, #16): a merge-acceptance has no
+ * judgement content (the human's plain `merge | hold | drop` answer IS the
+ * decision; the apply-time re-verify on the rebased tip is the real correctness
+ * gate), so the apply rung KIND-CHECKS the sidecar BEFORE the agentic decider.
+ *
+ * Returns `undefined` when there is no answered `kind: merge` entry to dispatch
+ * (the apply rung then proceeds to the existing path — agentic for
+ * observations, normal `applyAnsweredQuestions` for task/prd content questions).
+ * Returns a {@link RungExecResult} when the dispatcher handled the rung:
+ *
+ *   - `landed` / `already-integrated` ⇒ the kept commit landed on `main` (or
+ *     was already there); the dispatcher FALLS THROUGH to the normal apply path
+ *     so the answer is recorded in the item body + the sidecar is resolved.
+ *   - `refused` ⇒ the LAND was refused (RED re-verify on the rebased tip,
+ *     rebase conflict, or pre-checkout failure); `performIntegration` routed
+ *     the item to needs-attention through its own shared seam, so `main` never
+ *     received a failing tree. The apply rung SHORT-CIRCUITS — the sidecar is
+ *     LEFT IN PLACE so the open answer stays surfaced for a human follow-up.
+ *   - `restale` ⇒ `strictMergeApproval` was ON and the merge-base moved
+ *     between the surfacer's question and this apply; the apply rung appends
+ *     a follow-up question + re-pauses (the human re-confirms against the new
+ *     base).
+ *   - `hold` / `drop` ⇒ no land; fall through to the normal apply path so the
+ *     answer is recorded in body. The branch stays unmerged; a future
+ *     surfacer pass may re-emit a merge-question.
+ */
+async function maybeRunMergeAction(
+	input: RungExecInput,
+	itemPath: string,
+): Promise<RungExecResult | undefined> {
+	const {item, context} = input;
+	const cwd = context.cwd;
+	const note = context.note ?? (() => {});
+
+	const detected = detectAnsweredMergeAction(cwd, item);
+	if (detected === undefined) return undefined;
+
+	const handler = context.mergeAction ?? performMergeAction;
+
+	// The dispatcher needs a `workspacesDir` to cut a per-job worktree (the
+	// `createJob` seam). When unset (a caller that has not threaded it) we
+	// REFUSE cleanly rather than guess: a land without isolation is not the
+	// shape this dispatcher promises.
+	const workspacesDir = context.workspacesDir;
+	if (workspacesDir === undefined && context.mergeAction === undefined) {
+		const message =
+			`apply ${item}: answered merge-question detected (kind=merge, answer=` +
+			`${detected.verb}) but no \`workspacesDir\` is threaded into the apply ` +
+			`rung — the dispatcher needs one to cut the per-job worktree via ` +
+			`\`workspace.ts\` \`createJob\`. NOT landing; the answer stays surfaced.`;
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', message};
+	}
+
+	let result: MergeActionResult;
+	try {
+		result = await handler({
+			action: detected,
+			item,
+			slug: input.slug,
+			cwd,
+			arbiter: context.arbiter ?? DEFAULT_ARBITER,
+			arbiterUrl: context.arbiterUrl,
+			workspacesDir: workspacesDir ?? '',
+			prepare: context.prepare,
+			verify: context.verify,
+			strictMergeApproval: context.strictMergeApproval,
+			note,
+		});
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		const message =
+			`apply ${item}: answered merge-question dispatch raised (${detail}); NOT ` +
+			`landing; the answer stays surfaced.`;
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', message};
+	}
+
+	if (result.outcome === 'refused') {
+		// `main` never received a failing tree (performIntegration routed the
+		// bounce to needs-attention through its own shared seam). SHORT-CIRCUIT:
+		// leave the sidecar so the open answer stays surfaced — the apply rung
+		// MUST NOT also resolve it (the next surfacer / human will follow up).
+		note(result.message);
+		return {exitCode: 1, outcome: 'usage-error', message: result.message};
+	}
+
+	if (result.outcome === 'restale') {
+		// `strictMergeApproval` re-surface: append a follow-up question and
+		// re-pause. The previous answer stays recorded in the entry; the human
+		// re-confirms against the new merge-base in the appended question.
+		const apply = context.applyPersist ?? applyAnsweredQuestions;
+		try {
+			const applied = apply({
+				cwd,
+				item,
+				itemPath,
+				appendQuestions: [
+					{
+						question:
+							`Merge-base for \`work/${input.slug}\` moved since your last ` +
+							`answer (strictMergeApproval is ON). Re-confirm: still land?`,
+						context: result.message,
+						default: 'merge | hold | drop',
+						kind: 'merge',
+					},
+				],
+				note,
+			});
+			return {
+				exitCode: 0,
+				outcome: 'no-op',
+				message: applied.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: re-surfacing the merge-question failed (${detail}).`,
+			};
+		}
+	}
+
+	// landed | already-integrated | hold | drop: the dispatcher's action is
+	// done; FALL THROUGH to the normal apply path so the answer is recorded in
+	// the item body + the sidecar is resolved.
+	note(result.message);
+	const apply = context.applyPersist ?? applyAnsweredQuestions;
+	try {
+		const applied = apply({cwd, item, itemPath, note});
+		const mapped: AdvanceOutcome =
+			applied.outcome === 'repaused'
+				? 'no-op'
+				: applied.outcome === 'vanished'
+					? 'vanished'
+					: 'advanced';
+		return {
+			exitCode: 0,
+			outcome: mapped,
+			message: `${result.message} ${applied.message}`,
 		};
 	} catch (err) {
 		const detail = err instanceof Error ? err.message : String(err);
@@ -1198,6 +1431,15 @@ export async function performAdvance(
 				promote: options.promote,
 				mintAdr: options.mintAdr,
 				promoteSlug: options.promoteSlug,
+				// The answered-merge LAND dispatch context (task
+				// `apply-rung-merge-disposition`): threaded into the apply rung's
+				// kind-check for a `kind: merge` runner-action.
+				workspacesDir: options.workspacesDir,
+				arbiterUrl: options.arbiterUrl,
+				prepare: options.prepare,
+				verify: options.verify,
+				strictMergeApproval: options.strictMergeApproval,
+				mergeAction: options.mergeAction,
 				note,
 			},
 		});

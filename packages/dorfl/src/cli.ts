@@ -433,6 +433,24 @@ function buildRegistrySetAdvanceTick(options: {
 				observationTriage: config.observationTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
+				// The ANSWERED-MERGE LAND DISPATCH context (task
+				// `apply-rung-merge-disposition`, prd `land-time-reverify-and-parallel-
+				// merge-ceiling`): the dispatcher cuts a per-job worktree via
+				// `workspace.ts` `createJob` off the hub mirror (so we thread the resolved
+				// `workspacesDir` + the real arbiter URL — the per-mirror tree-less
+				// `treelessCwd` has `origin` pointing at the LOCAL mirror path, NOT the
+				// arbiter URL, so we MUST pass `originUrl` directly here), then drives
+				// `performIntegration` with `committedRecovery: true` +
+				// `freshWorktreeGate: true` (the rebased tip is re-verified, the RED
+				// route refuses, the GREEN route lands). `prepare`/`verify` are the SAME
+				// per-repo gate the build path uses; `strictMergeApproval` is the OQ6
+				// opt-in resolved by the sibling task `strict-merge-approval-gate`
+				// (default OFF ⇒ honour + land on a green re-verify).
+				workspacesDir: workspace,
+				arbiterUrl: originUrl,
+				prepare: config.prepare,
+				verify: config.verify,
+				strictMergeApproval: config.strictMergeApproval,
 				note: (message) => console.error(`>> ${message}`),
 			};
 			return context;
