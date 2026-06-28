@@ -1,5 +1,6 @@
 import type {ScanReport, ScannedItem} from './scan.js';
 import type {CwdSection} from './cwd-section.js';
+import type {LockEntry} from './item-lock.js';
 import {formatDuplicateWarnings} from './ledger-lint.js';
 import {
 	categoriseItems,
@@ -115,6 +116,43 @@ function cwdDivergenceLine(
  * The counts here are the cwd's OWN (never merged into the registry total — the
  * consistency rule): the two reads have different freshness + storage models.
  */
+/**
+ * Render ONE held per-item lock entry (action × state + reason/questions) as
+ * indented lines, the SHARED renderer for the in-flight lock surface on BOTH the
+ * registry view (`formatStatus`) and the cwd section (`formatCwdSection`), so the
+ * two substrates present a held/stuck item identically (NOT a forked renderer). An
+ * `active` hold reads as `in-progress`; a `stuck` hold as `needs-attention` and
+ * carries its (possibly multi-line) reason + any surfaced questions.
+ */
+export function formatLockEntryLines(
+	entry: LockEntry,
+	indent: string,
+): string[] {
+	const lines: string[] = [];
+	const view = entry.state === 'stuck' ? 'needs-attention' : 'in-progress';
+	lines.push(
+		`${indent}${entry.entry}   (${entry.action}/${entry.state} = ${view})`,
+	);
+	if (entry.state === 'stuck') {
+		const reason =
+			entry.reason && entry.reason !== ''
+				? entry.reason
+				: '(no reason recorded)';
+		const reasonLines = reason.split('\n');
+		lines.push(`${indent}  reason: ${reasonLines[0]}`);
+		for (const extra of reasonLines.slice(1)) {
+			lines.push(`${indent}    ${extra}`);
+		}
+		if (entry.questions && entry.questions.length > 0) {
+			lines.push(`${indent}  questions:`);
+			for (const q of entry.questions) {
+				lines.push(`${indent}    - ${q}`);
+			}
+		}
+	}
+	return lines;
+}
+
 export function formatCwdSection(section: CwdSection): string[] {
 	if (!section.participating || section.repo === undefined) {
 		return [];
@@ -161,6 +199,24 @@ export function formatCwdSection(section: CwdSection): string[] {
 			for (const entry of entries) {
 				lines.push(formatItem(entry));
 			}
+		}
+	}
+
+	// The PER-ITEM LOCK in-flight SURFACE for the cwd (prd
+	// `ledger-status-per-item-lock-refs` US #8): held (`active` = in-progress) and
+	// `stuck` (= needs-attention) lock entries + their reasons. This is what keeps a
+	// held/stuck cwd item from vanishing: the held-slug subtraction removes it from
+	// the buckets above, so without THIS block it would be invisible (the regression
+	// this fixes). Symmetric with the registry view's `In-flight locks` block (same
+	// `refs/dorfl/lock/*` source, same primitive); rendered HERE inside the cwd
+	// section so it stays the cwd's OWN, separately-counted surface. Empty ⇒ no
+	// block (a calm repo adds no lines).
+	const lockHeld = section.repo.lockHeld ?? [];
+	if (lockHeld.length > 0) {
+		lines.push('');
+		lines.push('    In progress / stuck (lock held — refs/dorfl/lock/*):');
+		for (const entry of lockHeld) {
+			lines.push(...formatLockEntryLines(entry, '      '));
 		}
 	}
 	lines.push('');

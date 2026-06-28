@@ -7,7 +7,7 @@ import {type JobState} from './workspace.js';
 import {fetchMirrorMainOrWarn} from './repo-mirror.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {listItemLockEntries, type LockEntry} from './item-lock.js';
-import {formatCwdSection} from './format.js';
+import {formatCwdSection, formatLockEntryLines} from './format.js';
 import type {CwdSection} from './cwd-section.js';
 import {
 	lintRefLedger,
@@ -370,29 +370,9 @@ export function formatStatus(report: StatusReport): string {
 		for (const repo of lockHeld) {
 			lines.push(`  ${repo.repoPath}`);
 			for (const entry of repo.entries) {
-				const view =
-					entry.state === 'stuck' ? 'needs-attention' : 'in-progress';
-				lines.push(
-					`    ${entry.entry}   (${entry.action}/${entry.state} = ${view})`,
-				);
-				if (entry.state === 'stuck') {
-					const reason =
-						entry.reason && entry.reason !== ''
-							? entry.reason
-							: '(no reason recorded)';
-					// A multi-line reason renders on its own indented lines.
-					const reasonLines = reason.split('\n');
-					lines.push(`      reason: ${reasonLines[0]}`);
-					for (const extra of reasonLines.slice(1)) {
-						lines.push(`        ${extra}`);
-					}
-					if (entry.questions && entry.questions.length > 0) {
-						lines.push('      questions:');
-						for (const q of entry.questions) {
-							lines.push(`        - ${q}`);
-						}
-					}
-				}
+				// SHARED renderer (NOT a forked one) so the cwd section
+				// (`formatCwdSection`) presents a held/stuck item identically.
+				lines.push(...formatLockEntryLines(entry, '    '));
 			}
 		}
 	}

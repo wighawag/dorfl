@@ -4,7 +4,7 @@ import {scanRepoPaths, type RepoReport} from './scan.js';
 import {arbiterStatus} from './arbiter.js';
 import {listMirrors} from './registry.js';
 import {encodeRepoKey, mirrorPath} from './repo-mirror.js';
-import {heldTaskSlugsStrict} from './item-lock.js';
+import {heldTaskSlugsStrict, listItemLockEntries} from './item-lock.js';
 import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
@@ -264,6 +264,33 @@ export async function resolveCwdSection(
 	//    eligibility matches what `do`/`advance` autopick will actually select.
 	const localReport = scanRepoPaths([cwd], config, heldSlugs, options.override);
 	const repo = localReport.repos[0];
+
+	// 3b. The PER-ITEM LOCK in-flight SURFACE for the cwd (prd
+	//     `ledger-status-per-item-lock-refs` US #8). The subtraction above removes a
+	//     held slug from the eligible `items[]` pool; on its OWN that leaves a
+	//     held/stuck cwd item in a BLIND SPOT — gone from every bucket with nothing
+	//     explaining why (the regression this fixes). The registry/mirror `scan`
+	//     attaches `lockHeld` to each `RepoReport` so a held item still shows up
+	//     in-progress/stuck; the cwd `RepoReport` from `scanRepoPaths` did not. So we
+	//     read the SAME held lock entries (action × state + reason/questions) via the
+	//     SAME `listItemLockEntries` primitive the mirror path uses (NOT a second
+	//     reader) and attach them, making `.cwd.repo.lockHeld` symmetric with
+	//     `.repos[].lockHeld`.
+	//
+	//     This is a SURFACE only, and it is INTENTIONALLY graceful (best-effort,
+	//     empty on any fault — exactly as `listItemLockEntries` is on the mirror
+	//     side): a read fault degrades to "no in-flight locks shown", it must NOT
+	//     fail the section. The SELECTION subtraction above stays STRICT
+	//     (`heldTaskSlugsStrict`, fail-closed) — the two reads have deliberately
+	//     different fault models (selection fails closed; the surface degrades).
+	//     Read from the SAME coordination remote the subtraction used. A repo with no
+	//     coordination remote has no lock refs to read — empty surface.
+	if (repo !== undefined && hasLockRemote) {
+		const lockHeld = await listItemLockEntries(cwd, lockRemote, env);
+		if (lockHeld.length > 0) {
+			repo.lockHeld = lockHeld;
+		}
+	}
 
 	// 4. De-dup: is the cwd's arbiter URL a registered hub mirror? Compare the
 	//    cwd's mirror KEY (from its arbiter URL) against the registry's keys.

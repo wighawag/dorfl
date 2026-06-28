@@ -7,7 +7,8 @@ import {status, formatStatus} from '../src/status.js';
 import {scan} from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
 import {mirrorPath} from '../src/repo-mirror.js';
-import {acquireItemLock} from '../src/item-lock.js';
+import {acquireItemLock, markStuckItemLock} from '../src/item-lock.js';
+import {formatCwdSection as formatCwd} from '../src/format.js';
 import {makeScratch, gitIn, type Scratch} from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -207,6 +208,85 @@ describe('resolveCwdSection — held-lock subtraction (SELECTION is remote-autho
 		});
 		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['a', 'b']);
 		expect(section.totalEligible).toBe(2);
+	});
+});
+
+describe('resolveCwdSection — in-flight/stuck SURFACE (held item is not invisible)', () => {
+	// The regression this guards: the cwd path gained the held-slug SUBTRACTION
+	// (selection fix) WITHOUT the matching in-flight/stuck SURFACE the mirror path
+	// already has, so a held/stuck `tasks/ready/` slug vanished from every bucket
+	// with nothing explaining why. The fix attaches `lockHeld` to the cwd
+	// `RepoReport` (via the SAME `listItemLockEntries` primitive) and renders it.
+	it('surfaces a held (active) cwd item on .cwd.repo.lockHeld AND excludes it from items[]', async () => {
+		const {repo} = seedCwdRepo({'a.md': task('a'), 'b.md': task('b')});
+		const held = await acquireItemLock({
+			item: 'task:a',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'arbiter',
+		});
+		expect(held.outcome).toBe('acquired');
+
+		const section = await resolveCwdSection({
+			cwd: repo,
+			config: config(),
+			lockArbiterRemote: 'arbiter',
+		});
+		// SELECTION unchanged: `a` is still subtracted from the eligible pool.
+		expect(section.repo?.items.map((i) => i.slug).sort()).toEqual(['b']);
+		// SURFACE added: `a` is now visible as an in-flight lock entry.
+		expect(section.repo?.lockHeld?.map((e) => e.entry)).toEqual(['task-a']);
+		expect(section.repo?.lockHeld?.[0].state).toBe('active');
+	});
+
+	it('surfaces a STUCK cwd item with its reason (the apply-rung-merge-disposition shape)', async () => {
+		const {repo} = seedCwdRepo({
+			'apply-rung-merge-disposition.md': task('apply-rung-merge-disposition'),
+		});
+		await acquireItemLock({
+			item: 'task:apply-rung-merge-disposition',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'arbiter',
+		});
+		const stuck = await markStuckItemLock({
+			item: 'task:apply-rung-merge-disposition',
+			reason: 'gate red\nverify failed',
+			cwd: repo,
+			arbiter: 'arbiter',
+		});
+		expect(stuck.outcome).toBe('transitioned');
+
+		const section = await resolveCwdSection({
+			cwd: repo,
+			config: config(),
+			lockArbiterRemote: 'arbiter',
+		});
+		// The slug is NOT in the eligible pool (subtracted) — but it is no longer
+		// invisible: it is on the in-flight surface as stuck + reason.
+		expect(section.repo?.items).toEqual([]);
+		const entry = section.repo?.lockHeld?.[0];
+		expect(entry?.entry).toBe('task-apply-rung-merge-disposition');
+		expect(entry?.state).toBe('stuck');
+		expect(entry?.reason).toContain('gate red');
+
+		// The human cwd formatter renders the in-flight block (no longer a blind spot).
+		const out = formatCwd(section).join('\n');
+		expect(out).toContain('In progress / stuck (lock held');
+		expect(out).toContain('task-apply-rung-merge-disposition');
+		expect(out).toContain('needs-attention');
+		expect(out).toContain('gate red');
+	});
+
+	it('omits lockHeld when no lock is held (no empty block on a calm repo)', async () => {
+		const {repo} = seedCwdRepo({'a.md': task('a')});
+		const section = await resolveCwdSection({
+			cwd: repo,
+			config: config(),
+			lockArbiterRemote: 'arbiter',
+		});
+		expect(section.repo?.lockHeld).toBeUndefined();
+		expect(formatCwd(section).join('\n')).not.toContain('In progress / stuck');
 	});
 });
 
