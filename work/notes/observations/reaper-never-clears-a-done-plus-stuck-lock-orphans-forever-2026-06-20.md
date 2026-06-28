@@ -77,3 +77,32 @@ still kept.
 ### q1: How should this observation be dispositioned: promote to a slice that extends the reaper to treat stuck+terminal-on-main locks as reapable (split kept-stuck into stuck+terminal => reapable vs stuck+in-flight => keep, with a pinning test), keep as an open observation, or another route?
 
 promote-slice, but treat it as a CONTRACT change, not a pure bugfix. Verified: the reaper reaps ONLY the `cleared-stale` class (terminal-on-main + active) and never `kept-stuck` (terminal + stuck), so a `done` + stuck lock orphans forever. The fix — split `kept-stuck` into stuck+terminal (reapable) vs stuck+in-flight (keep), with a pinning test that the non-terminal stuck case still NEVER reaps — loosens the load-bearing "stuck is never auto-cleared, it means human attention" invariant. So ship it WITH the carve-out + pin test AND an ADR note ratifying that terminal-on-main + stuck is now reapable (the cited ADR authorises "main is authoritative" but does not by itself say a stuck lock should be auto-cleared, so record the extension explicitly). Cross-ref the release-lock escape-hatch sidecar (same orphan, complementary recovery path). Disposition: promote-slice (as a contract change).
+
+## Update 2026-06-28 — re-confirmed still NOT auto-reaped; manual release-lock path DOES work now
+
+Hit the SAME class again while clearing a stale-lock backlog by hand: a
+`task-apply-rung-merge-disposition` lock sat at `implement/stuck` while the item
+rested in `work/tasks/ready/` (non-terminal at that moment), and `gc --ledger
+--reap-stale-locks` correctly KEPT it (`[kept] … [implement/stuck]`). That part
+is the non-terminal stuck case, which must stay kept — fine.
+
+The ORIGINAL defect (terminal-on-main + stuck = orphan the auto-reaper refuses)
+is STILL present in code: `reconcileItemLockAgainstMain` in
+`packages/dorfl/src/item-lock.ts` (~L1004-1014) still returns `outcome:
+'kept-stuck'` for `terminalOnMain && state==='stuck'`, and `reapStaleItemLocks`
+(L1392+) still reaps ONLY `cleared-stale`. So the promote-slice above is NOT yet
+built — the carve-out (stuck+terminal => reapable) does not exist.
+
+What HAS changed (the "might be fixed already" nuance): the MANUAL escape hatch
+works now. `dorfl release-lock task:apply-rung-merge-disposition` cleared the
+stuck lock cleanly (`refs/dorfl/lock/… deleted on origin`), so the sibling
+`release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries` bug that once
+blocked even the hand-clear is no longer in the way for current-vocabulary lock
+entries. So: human-recovery = fixed; AUTO-reaper carve-out = still open. The
+promote-slice for the auto-reaper extension remains valid.
+
+See also the branch-side twin spotted the same day:
+`gc-remote-branches-cannot-reap-squash-merged-work-branch-2026-06-28` (the
+remote `work/<slug>` branch orphan from a squash merge — same root shape: the
+durable `main` record says terminal, but the ancestry-only predicate can't see
+it).
