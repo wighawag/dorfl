@@ -69,18 +69,26 @@ export function lifecycleGatesFrom(config: {
 
 /**
  * A lifecycle item as it appears on a {@link RepoReport.lifecycle} sub-pool: the
- * bare `slug` plus, for surface/apply, the `namespace` discriminator (`'task'` /
- * `'prd'`) the matrix `jq` projects into a `task:`/`prd:` prefix. Triage items
- * carry only `{slug}` — the `obs:` prefix is fixed in the matrix `jq` (an
- * observation has no task/prd namespace), so a consumer never needs a
- * `namespace: 'observation'` here.
+ * bare `slug` plus, for surface/apply, the `namespace` discriminator the matrix
+ * `jq` projects into a `task:`/`prd:`/`observation:` prefix. Triage items carry
+ * only `{slug}` — the `obs:` prefix is fixed in the matrix `jq`.
  */
 export interface ScannedTriageItem {
 	slug: string;
 }
-/** A surface/apply lifecycle item: a `needsAnswers` task/prd, with its namespace. */
+/**
+ * A surface/apply lifecycle item, with its namespace. SURFACE only ever carries
+ * `needsAnswers` task/prd items (an observation with no sidecar goes to `triage`,
+ * not `surface`). APPLY, however, ALSO carries an ANSWERED OBSERVATION: since the
+ * classifier (`buildLifecyclePools`) routes an observation whose sidecar is
+ * all-answered to `apply` (CONSUME, always-on), the projection MUST keep it here
+ * so the CI enumerate `jq` (`.namespace + ":" + .slug`) emits an `observation:<slug>`
+ * apply leg. Dropping it (the pre-`route-answered-observation-sidecar-to-apply-pool`
+ * assumption that apply is task/prd-only) STRANDS every answered observation:
+ * gone from `triage` AND absent from `apply`, so CI never schedules it.
+ */
 export interface ScannedBlockedItem {
-	namespace: 'task' | 'prd';
+	namespace: 'task' | 'prd' | 'observation';
 	slug: string;
 }
 
@@ -100,9 +108,13 @@ export interface ScannedBlockedItem {
 export interface ScannedLifecycle {
 	/** Untriaged observations → `obs:<slug>` legs (gated by `observationTriage`). */
 	triage: ScannedTriageItem[];
-	/** `needsAnswers` items with no answered sidecar → surface legs (gated by `surfaceBlockers`). */
+	/** `needsAnswers` task/prd items with no answered sidecar → surface legs (gated by `surfaceBlockers`). */
 	surface: ScannedBlockedItem[];
-	/** `needsAnswers` items WITH an answered sidecar → apply legs (CONSUME, always-on). */
+	/**
+	 * Items WITH an all-answered sidecar → apply legs (CONSUME, always-on). Carries
+	 * `needsAnswers` tasks/prds AND answered OBSERVATIONS (namespace `'observation'`),
+	 * so the matrix `jq` emits `task:`/`prd:`/`observation:` apply legs alike.
+	 */
 	apply: ScannedBlockedItem[];
 }
 
@@ -267,27 +279,42 @@ export function scorePrds(
  * `{namespace, slug}` so the `jq` projects the right `task:`/`prd:` prefix. NOT a
  * re-enumeration — a pure shape map over the already-gated pools.
  *
- * The pool items' `namespace` is the wider {@link SelectedNamespace} (which also
- * admits `'observation'`), but by CONSTRUCTION the surface/apply sub-pools only
- * ever carry `'task'`/`'prd'` items (observations flow ONLY through `triage`,
- * which has no namespace field here), so we narrow + drop any non-task/prd
- * defensively rather than widening {@link ScannedBlockedItem}.
+ * The pool items' `namespace` is the wider {@link SelectedNamespace}. SURFACE by
+ * construction only carries `'task'`/`'prd'` (an observation with no sidecar is a
+ * `triage` candidate, never `surface`), so it narrows + drops any non-task/prd
+ * defensively. APPLY additionally admits `'observation'` (an answered observation
+ * sidecar → apply), and it MUST be kept so the matrix `jq` emits its
+ * `observation:<slug>` apply leg — narrowing it away here is exactly what stranded
+ * answered observations (present in neither `triage` nor `apply`). Any OTHER
+ * namespace is still dropped defensively.
  */
 export function toScannedLifecycle(pools: {
 	triage: {slug: string}[];
 	surface: {namespace: string; slug: string}[];
 	apply: {namespace: string; slug: string}[];
 }): ScannedLifecycle {
+	const BLOCKED_NAMESPACES = new Set(['task', 'prd', 'observation']);
+	// SURFACE stays task/prd-only; APPLY additionally keeps an answered observation.
 	const asBlocked = (
 		items: {namespace: string; slug: string}[],
+		allowObservation: boolean,
 	): ScannedBlockedItem[] =>
 		items
-			.filter((i) => i.namespace === 'task' || i.namespace === 'prd')
-			.map((i) => ({namespace: i.namespace as 'task' | 'prd', slug: i.slug}));
+			.filter(
+				(i) =>
+					i.namespace === 'task' ||
+					i.namespace === 'prd' ||
+					(allowObservation && i.namespace === 'observation'),
+			)
+			.filter((i) => BLOCKED_NAMESPACES.has(i.namespace))
+			.map((i) => ({
+				namespace: i.namespace as 'task' | 'prd' | 'observation',
+				slug: i.slug,
+			}));
 	return {
 		triage: pools.triage.map((t) => ({slug: t.slug})),
-		surface: asBlocked(pools.surface),
-		apply: asBlocked(pools.apply),
+		surface: asBlocked(pools.surface, false),
+		apply: asBlocked(pools.apply, true),
 	};
 }
 

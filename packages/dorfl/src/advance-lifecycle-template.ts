@@ -309,11 +309,11 @@ jobs:
         # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
         # builds them); TASKABLE PRDS ⇒ \`prd:<slug>\` legs (\`advance\` auto-tasks
         # them, capability B — \`DORFL_AUTO_TASK\` above). LIFECYCLE pools:
-        # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here;
-        # observations have no task/prd namespace), \`lifecycle.surface[]\` +
-        # \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\` (\`task:\`/\`prd:\` legs
-        # for \`needsAnswers\` items — surface mints the blocker question, apply
-        # consumes the committed answer). CI runs IN-PLACE, so we use
+        # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here),
+        # \`lifecycle.surface[]\` + \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\`
+        # (surface: \`task:\`/\`prd:\` blocker-question legs; apply: \`task:\`/\`prd:\`
+        # AND \`observation:\` legs — an answered observation sidecar is consumed by
+        # the apply rung too, so it MUST carry through here). CI runs IN-PLACE, so we use
         # \`scan --here\`: it reports ONLY the cwd checkout (\`cwd.repo.*\`) and SKIPS
         # the cross-repo registry loop (no N-mirror fetches; a fresh runner has no
         # registered mirror anyway). The \`cwd\` arbiter is the checkout's own clone,
@@ -766,7 +766,8 @@ export function validateAdvanceLifecycleWorkflow(
 		), 'the propose-mode `enumerate` `jq` must union the LIFECYCLE pools into the ' +
 		"matrix (read from `scan --json`'s `repos[].lifecycle.*` + " +
 		'`cwd.repo.lifecycle.*`): `triage[]` as `obs:<slug>` legs, and ' +
-		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`prd:`) legs, ' +
+		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`prd:`, plus ' +
+		'`observation:` for an answered-observation apply leg) legs, ' +
 		'so the WHOLE answer-loop (triage + surface + apply) runs in propose mode, ' +
 		'not only in merge mode ' +
 		'(`ci-propose-matrix-enumerates-lifecycle-items`).');

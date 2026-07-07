@@ -7,6 +7,7 @@ import {
 	scanRepoPaths,
 	readDoneSlugs,
 	readReadyItems,
+	toScannedLifecycle,
 } from '../src/scan.js';
 import {formatReport} from '../src/format.js';
 import {mergeConfig} from '../src/config.js';
@@ -85,6 +86,54 @@ beforeEach(() => {
 
 afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
+});
+
+describe('toScannedLifecycle (pool → scan-shape projection)', () => {
+	// Regression: `route-answered-observation-sidecar-to-apply-pool` made
+	// `buildLifecyclePools` route an ANSWERED observation to `apply` (namespace
+	// 'observation'). The scan projection MUST keep it, or every answered
+	// observation is stranded — gone from `triage` AND dropped from `apply` — so
+	// the CI enumerate schedules none of them. This asserts the projection keeps
+	// an answered observation in apply while surface stays task/prd-only.
+	it('keeps an answered observation in apply (namespace observation)', () => {
+		const out = toScannedLifecycle({
+			triage: [{slug: 'untriaged-obs'}],
+			surface: [{namespace: 'task', slug: 'blocked-task'}],
+			apply: [
+				{namespace: 'task', slug: 'answered-task'},
+				{namespace: 'prd', slug: 'answered-prd'},
+				{namespace: 'observation', slug: 'answered-obs'},
+			],
+		});
+		expect(out.triage).toEqual([{slug: 'untriaged-obs'}]);
+		expect(out.surface).toEqual([{namespace: 'task', slug: 'blocked-task'}]);
+		expect(out.apply).toEqual([
+			{namespace: 'task', slug: 'answered-task'},
+			{namespace: 'prd', slug: 'answered-prd'},
+			{namespace: 'observation', slug: 'answered-obs'},
+		]);
+	});
+
+	it('does NOT admit an observation into surface (an unsidecarred obs is triage, not surface)', () => {
+		const out = toScannedLifecycle({
+			triage: [],
+			surface: [{namespace: 'observation', slug: 'should-not-appear'}],
+			apply: [],
+		});
+		expect(out.surface).toEqual([]);
+	});
+
+	it('drops any other/unknown namespace defensively from apply', () => {
+		const out = toScannedLifecycle({
+			triage: [],
+			surface: [],
+			apply: [
+				{namespace: 'observation', slug: 'keep'},
+				{namespace: 'mystery', slug: 'drop'},
+			],
+		});
+		expect(out.apply).toEqual([{namespace: 'observation', slug: 'keep'}]);
+	});
 });
 
 describe('readDoneSlugs', () => {
