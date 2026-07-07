@@ -13,6 +13,16 @@ import {open, type FileHandle} from 'node:fs/promises';
  * `--mode json` STREAM `ar-run.sh` piped. The tailer is pointed at that EXACT
  * path (no newest-by-mtime dir guessing), so the stale-sibling race is gone.
  *
+ * Studied (task `pi-harness-polish`, finding
+ * `work/notes/findings/pi-harness-channels.md`, pinned against pi 0.73.1 +
+ * session format v3): tailing the session file is deliberately the CHOSEN
+ * channel for `--watch`, not just what was easiest to reuse. `--mode json`'s
+ * STDOUT event vocabulary would be lower-latency but it is unversioned, would
+ * fork a second parser away from pi-remote's `session-pool.ts` reference walk
+ * this classifier mirrors, and the vocabulary-drift risk that already bit
+ * `do --watch` once applies MORE to it than to the versioned+migrated session
+ * file. Revisit only if pi's session format changes.
+ *
  * A session-log record is `{"type":"message", "message":{role, content[]}}` (or a
  * `session`/`model_change`/`thinking_level_change` preamble record). The earlier
  * classifier matched the STREAM vocabulary (`tool_start`/`message_end`/`agent_end`),
@@ -202,6 +212,13 @@ function assistantContentText(content: unknown): string {
  * shape walk (one parser, not two): it scans the `{type:"message",
  * message:{role:"assistant", content[]}}` records, takes the LAST one carrying
  * non-empty `text`, and returns its concatenated text.
+ *
+ * Kept as a PURE `string → string | undefined` function on purpose: the pi
+ * adapter reads the session file and passes the JSONL text in, but a future
+ * stream/HTTP-shaped harness (opencode-style) can accumulate its own event
+ * stream into the same JSONL-shaped text and reuse this reader unchanged — the
+ * file shape does NOT leak through the `LaunchResult.output` seam (Option C).
+ * See `work/notes/findings/pi-harness-channels.md` (task `pi-harness-polish`).
  *
  * Returns `undefined` when the log has no assistant text at all — an absent log,
  * a malformed/short log, or a run whose only assistant turn was tool-calls (no

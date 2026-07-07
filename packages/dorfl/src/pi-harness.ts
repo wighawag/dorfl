@@ -354,6 +354,14 @@ export class PiHarness implements Harness {
  * pointer with an `existsSync` check. This is the pi-native "is there an audit
  * trail to look at?" signal — distinct from PID liveness, and STILL not mtime
  * (we check existence, never modification time).
+ *
+ * Studied (task `pi-harness-polish`, finding
+ * `work/notes/findings/pi-harness-channels.md`): the recorded `--session <path>`
+ * file remains the right audit pointer even against pi's other output surfaces
+ * (`--mode json` stdout stream, `--mode rpc`, in-process SDK) — those are
+ * transient stdio channels that do not survive the process, whereas the session
+ * file is the versioned, dashboard-visible activity trail pi itself treats as
+ * the audit artefact. PID stays the liveness anchor alongside it.
  */
 export function piSessionExists(record: HarnessRecord): boolean {
 	return record.session !== undefined && existsSync(record.session);
@@ -368,6 +376,17 @@ export function piSessionExists(record: HarnessRecord): boolean {
  * It REUSES `watch-session.ts`'s {@link lastAssistantText} (one `.jsonl` parser,
  * not two). An absent file (pi never wrote it) yields `undefined`, as does a log
  * with no assistant text — a read error is never thrown back into the launch.
+ *
+ * Studied (task `pi-harness-polish`, finding
+ * `work/notes/findings/pi-harness-channels.md`, pinned against pi 0.73.1 +
+ * session format v3): the session `.jsonl` is the right channel for output
+ * because it is the only one that is BOTH post-mortem readable AND explicitly
+ * versioned + migrated (`docs/session-format.md`). The `--mode json` STDOUT
+ * event stream is not versioned and is transient; `--mode rpc` and the
+ * in-process SDK cost more without solving anything the file does not. The
+ * cross-harness `LaunchResult.output` seam (Option C) is a bare `string | undefined`,
+ * so a future stream/HTTP-shaped harness (opencode-style) still fits: the file
+ * shape lives BEHIND this reader and is not observable through the seam.
  */
 function readLastAssistantText(sessionFile: string): string | undefined {
 	let jsonl: string;
