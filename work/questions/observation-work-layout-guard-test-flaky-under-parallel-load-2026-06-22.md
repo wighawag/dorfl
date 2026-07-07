@@ -19,3 +19,11 @@ _Suggested default: KEEP as a watch-item, matching the repo's settled recurrence
 **Your answer** (write below this line):
 
 Keep as a watch-item. This matches the repo's settled recurrence-based bar (KEEP on first sighting; promote a serialise/isolate slice only on recurrence) and this single first sighting has no identified race mechanism (the test reads a fixed SRC_DIR with no shared mutable state), so it is below the promotion threshold and weaker even than its cited sibling. Do not promote a slice now. If it flakes again under parallel load, promote a test-hardening slice then, and capture whether a clean `pnpm -r build` preceded the failing run (a mid-edit stale-build cause is at least as plausible as a true race).
+
+## Q2
+
+**The answer says 'Keep as a watch-item' — but this observation currently has `needsAnswers: true` in its frontmatter and no explicit 'watch-item' status marker. Concretely, how should the engine record 'keep as watch-item'? Options: (a) Just flip `needsAnswers: true` → `false` (or remove it) and leave the body + answer in place, so the file stays in place as an answered observation that lives on until recurrence promotes it. (b) Same as (a) but also append a short trailing note to the body (e.g. a `## Resolution` / `## Disposition` block) recording the watch-item decision + the recurrence-trigger criteria (flake again under parallel load → promote hardening slice; capture whether a clean `pnpm -r build` preceded the failing run) so a future reader doesn't have to reconstruct the bar from the Q&A. (c) Something else (e.g. move it to a different folder, add a specific status field you use elsewhere). I'd default to (b) since the answer contains real forward-looking guidance (promotion trigger + stale-build hypothesis to capture) that would be lost if we only cleared the flag — but I don't want to invent a convention. Which of (a)/(b)/(c) do you want, and if (b) or (c), what exact heading/field should I use?**
+
+<!-- q2 fields: id=q2 -->
+
+**Your answer** (write below this line):
