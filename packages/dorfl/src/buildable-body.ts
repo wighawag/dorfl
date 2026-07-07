@@ -91,6 +91,12 @@ export interface RenderTaskBodyInput {
  * The output passes `extractPromptSection`/`resolveTask` without the
  * "has no '## Prompt' section" throw, because `## Prompt` is unconditional and
  * never empty. The caller wraps this body with its own frontmatter.
+ *
+ * FENCE↔HEADING BOUNDARY: this renderer starts at its first heading with NO
+ * leading blank line — the caller's frontmatter serializer owns the single blank
+ * line between the closing `---` fence and this first heading (ratified in
+ * `docs/adr/frontmatter-owns-fence-to-heading-blank-line.md`). Do NOT add a
+ * leading blank here; that would reintroduce the fence-spacing drift class.
  */
 export function renderTaskBody(input: RenderTaskBodyInput): string {
 	const lines: string[] = [
@@ -156,6 +162,10 @@ export interface RenderPrdBodyInput {
  * (intake's default scaffold supplies Problem Statement + Solution + User Stories;
  * promotion's structured body supplies Problem Statement + optional Open
  * questions) so the two artifact shapes cannot drift apart.
+ *
+ * FENCE↔HEADING BOUNDARY: same convention as {@link renderTaskBody} — no leading
+ * blank; the frontmatter serializer owns the `\n\n` after the closing `---` fence
+ * (see `docs/adr/frontmatter-owns-fence-to-heading-blank-line.md`).
  */
 export function renderPrdBody(input: RenderPrdBodyInput): string {
 	const lines: string[] = [

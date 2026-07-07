@@ -467,7 +467,10 @@ function buildPromotedBody(
 	// leading blank, so the separator is owned here. This keeps promotion's output
 	// byte-for-byte identical to the pre-rewire hand-rolled body (which placed an
 	// empty array element between the `---` fence and the lead heading) and matches
-	// what intake will emit once it adopts the same renderer.
+	// what intake will emit once it adopts the same renderer. RATIFIED as a
+	// cross-module convention in `docs/adr/frontmatter-owns-fence-to-heading-blank-line.md`
+	// — frontmatter owns the `\n\n`, the renderer starts at the first heading with
+	// no leading blank. Do NOT move the separator into the renderer.
 	const fenceToBody = frontmatter.join('\n') + '\n\n';
 	// The body BELOW the frontmatter is rendered by the SHARED schema owner so the
 	// section skeleton has one home, not two (prd
