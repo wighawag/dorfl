@@ -15,3 +15,5 @@ _Suggested default: Promote nit #1 (record the disjoint-green tightening as a De
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote nit #1 (record the disjoint-green tightening: loser must also land claimed-done, result.claimedAndDone === 2) and nit #2 (replace the trivial `sh -c 'exit 0'` re-verify with a content/marker assertion, or drop it) into one small follow-up task; carry nit #3 (assert the lock `reason` string, not just `state !== 'stuck'`) as an optional hardening line in that task. Then delete this observation.

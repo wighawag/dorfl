@@ -22,3 +22,5 @@ _Suggested default: Delete. Both findings are ratifications of choices the lande
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. Both findings are ratifications of choices the landed task already made, not change requests, and the task is in tasks/done/. Nothing live to act on. The retrospective "record reassessments in Decisions blocks" habit belongs in the standing decisions-block meta-observation, not as residue here.

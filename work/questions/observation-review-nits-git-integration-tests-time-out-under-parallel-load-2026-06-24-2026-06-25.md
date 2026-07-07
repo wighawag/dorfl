@@ -16,3 +16,5 @@ _Suggested default: Delete — the nit is self-resolving (the decision matches t
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The nit is self-resolving: the chosen option (add to RACE_SENSITIVE) matches the applied-answer verbatim, so no un-recorded judgement was lost. The generic process angle (build agents honouring the "record decisions" prompt) does not justify a task on one isolated instance; it is already tracked by the standing decisions-block meta-observation. Promote only if a pattern recurs beyond that.

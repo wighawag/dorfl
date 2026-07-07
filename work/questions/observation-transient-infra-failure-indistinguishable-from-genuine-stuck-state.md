@@ -11,3 +11,5 @@ _Suggested default: Discharge: mint the small classification slice (new `needs-r
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Discharge by minting, then delete. The judgement is already settled in-body (q1/q2/q3); the residue is execution, not open design. Mint (a) a small classification task adding a dedicated `needs-reauth` / `credential-expired` FailureCause variant plus a 401 `authentication_required` / 'OAuth refresh token expired or revoked' signature in `src/failure-cause.ts`, and (b) a routing ADR capturing the Q2 sub-cause split (model-outage/5xx/429/overloaded -> bounded auto-retry with backoff then a distinct infra-blocked surface; credential-expiry -> a separate needs-reauth surface, kept distinct from work-stuck `needs-attention`). Then delete this observation.

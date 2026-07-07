@@ -12,6 +12,8 @@ _Suggested default: Ratify and delete: all three are non-blocking design choices
 
 **Your answer** (write below this line):
 
+Ratify and delete. All three nits (Q2-Q4) are non-blocking design choices that trace cleanly to the slice spec + the REVIEW-PROTOCOL keystone precedent, with no behavioural defect. Direct-delete the source + sidecar in one revertible commit.
+
 ## Q2
 
 **Ratify (nit 1): the doc preamble/title (`# SURFACE-PROTOCOL`, the protocol-native intro, the WORK-CONTRACT/REVIEW-PROTOCOL framing blockquote) was REWRITTEN to fit the protocol-doc shape rather than lifted verbatim from skills/surface-questions/SKILL.md, even though the slice prompt said the body moves VERBATIM. The discipline body (two laws, humility rule, what-you-compose, the shape, no-runner path, boundaries) IS byte-for-byte; only the framing intro was re-authored, matching the call the keystone made for REVIEW-PROTOCOL.md. Is this re-authoring of the framing intro authorised?**
@@ -23,6 +25,8 @@ _Suggested default: Authorised: same intentional pattern applied to the keystone
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Authorised. The verbatim requirement covers the discipline BODY (which is byte-for-byte), and re-authoring the framing intro to fit the protocol-doc shape is the same intentional pattern applied to the keystone REVIEW-PROTOCOL.md.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Accept as-is for this merged item (choices are reconstructib
 
 **Your answer** (write below this line):
 
+Accept as-is for this merged item: the choices are reconstructible from the slice + keystone, so nothing was lost in substance. The general commit-Decisions-block discipline is covered by the standing decisions-block meta-observation (answered RELAX); don't reopen this one.
+
 ## Q4
 
 **Ratify (nit 3): `buildSurfacePrompt` still restates two pieces of doc content — the discipline's table-of-contents line ("Its two laws, its humility aid, the composed sources... ALL live in that doc — read them there") and the empty-array-valid / absence-invalid output-shape rule. The slice's no-re-inlining test only forbids the LAW STRINGS (which pass), so this is a tiny, deliberate duplication of an output-shape contract the parser enforces. Keep it, or trim the prompt to defer entirely to the doc?**
@@ -47,3 +53,5 @@ _Suggested default: Keep: it is a practical output-shape contract the parser enf
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Keep. The prompt's restatement of the output-shape contract (TOC line + empty-array-valid/absence-invalid rule) is a practical parser-enforced contract, mirrors the review prompt's style, and re-inlines no law string (the no-re-inlining test passes).

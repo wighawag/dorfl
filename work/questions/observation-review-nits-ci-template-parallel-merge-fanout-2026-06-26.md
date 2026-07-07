@@ -14,3 +14,5 @@ _Suggested default: Split: (1) DELETE — the missing '## Decisions' block is on
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete the observation. (1) The missing `## Decisions` block is on a done task whose decisions are now embedded in shipped code and the requeue history; retro-editing a done-task file for archaeology has low ROI and the engine does not require it. (2) Fold the L409 `-n` comment rephrase into the next task that touches advance-lifecycle-template.ts as a drive-by fix, rather than minting a standalone task for one comment. Net: delete the observation, leaving the L409 nit as latent drive-by debt.

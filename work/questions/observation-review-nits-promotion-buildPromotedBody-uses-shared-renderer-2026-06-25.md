@@ -17,3 +17,5 @@ _Suggested default: Fold nit (1) into the existing keystone-review sidecar (obse
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Fold nit (1) (empty-mechanism placeholder wording drift) into the keystone-review sidecar `observation-review-nits-shared-buildable-task-and-prd-body-renderer-extract-2026-06-25` where the placeholder wording is already queued for ratification. Promote nit (2)(a) to a task: pin the fence-separator ownership convention (frontmatter writer owns the blank line between the `---` fence and the first heading) as a real `## Decisions` record or ADR-lite, since it is a cross-task load-bearing convention the sibling intake-adopts-renderer task will rely on. Nit (2)(b) is subsumed by nit (1). Do NOT spawn a per-occurrence task for the missing-Decisions-block miss itself (tracked by the standing decisions-block meta-observation). Then delete this observation.

@@ -12,6 +12,8 @@ _Suggested default: Close as ratified — both findings are documented, accurate
 
 **Your answer** (write below this line):
 
+Close as ratified. Both findings (Q2, Q3) are documented, accurate, and low/no risk; no further work needed. Delete the observation once Q2/Q3 are ratified below.
+
 ## Q2
 
 **Ratify the non-obvious decisions the slice asked to be recorded but which never landed in a `## Decisions` block (the commit body is empty)? Specifically: (a) the canonical question wording landed verbatim from the slice's suggested phrasing; (b) on a pre-existing `promptGuidance` with sibling members, only `testFirst` is set and siblings are preserved; (c) on a negative answer the WHOLE `promptGuidance` object is omitted (no `testFirst: false`, no empty object); (d) the CONTEXT.md template glossary unconditionally seeds a `promptGuidance` entry for new repos; (e) non-interactive / CI invocations are treated as the 'absent user' branch (write nothing) by inheritance from existing setup doctrine.**
@@ -24,6 +26,8 @@ _Suggested default: Ratify all five (a-e) as-is; they are consistent with setup 
 
 **Your answer** (write below this line):
 
+Ratify all five (a-e) as-is. They are consistent with setup doctrine and the merge-don't-clobber rule and are covered by tests. No durable ADR needed (the choices are visible in SKILL.md + tests); this is the RELAX disposition applied.
+
 ## Q3
 
 **Accept that the slice's acceptance criterion 'assert no write to the real ~/.dorfl.json outside the fixture' is met only by a POSITIVE proof (tmpdir() !== HOME and all writes go through mkdtempSync), not a true negative-assertion (snapshotting HOME pre/post), or require strengthening the isolation test to a real before/after HOME snapshot?**
@@ -35,3 +39,5 @@ _Suggested default: Accept the positive proof as sufficient given the nil practi
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Accept the positive proof (tmpdir() != HOME + all writes through mkdtemp roots) as sufficient given the nil practical leak risk. Do not require a before/after HOME snapshot here. If a stronger repo-wide guard is later wanted, raise it as a separate test-hygiene task rather than reopening this slice.

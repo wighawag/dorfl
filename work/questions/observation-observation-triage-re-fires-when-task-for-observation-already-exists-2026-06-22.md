@@ -12,6 +12,8 @@ _Suggested default: promote-task — the defect is real, narrow, mechanical (dis
 
 **Your answer** (write below this line):
 
+Promote-task. The defect is real, narrow, and mechanical (distinguish "lost a genuine concurrent create race" from "a task for this observation already exists" at the create-CAS step, and stop re-firing exit 2 every tick), and it sits in the same CI-noise family whose siblings are already being promoted. Well-scoped and provenance-rich enough to draft a buildable task. The design sub-questions Q2-Q4 shape that task.
+
 ## Q2
 
 **How should 'already triaged' be detected and recorded so the observation leaves the triage pool — by writing a `triaged:` marker into the observation frontmatter (the existing `triaged: keep`/`triaged: promoted` convention), or by deriving already-triaged-ness from the minted task's existence (slug derivation / a back-reference) at gather time?**
@@ -23,6 +25,8 @@ _Suggested default: Prefer deriving 'already triaged' from the minted task's exi
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Derive "already triaged" from the minted task's existence (a provable observation->task link), rather than adding more `triaged:` frontmatter. The in-flight task `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` is actively RETIRING the `triaged:` resting-state convention in favour of discharge-by-deletion, so a new marker mechanism would fight that direction. IMPORTANT: this task is dependent on / must be sequenced with that discharge-by-deletion work; the buildable task must state that dependency and reconcile against the final shape (once an observation is discharged-by-deletion after tasking, the source is simply gone and cannot re-fire, which may make the derivation trivial).
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Auto-treat as already-triaged (benign skip, no human prompt)
 
 **Your answer** (write below this line):
 
+Auto-treat as already-triaged (benign skip, no human prompt) ONLY when the minting task is provably the one minted from this observation. That is an idempotency fact (the human already decided when they minted the task), not a judgement call, so it fits the conservative no-question auto-disposition bar. Anything short of a provable link stays loud.
+
 ## Q4
 
 **What exit-code / skip semantics should the leg use when it detects 'already triaged', and should they be made consistent with the sibling already-done / held-lock observations that also want a benign skip rather than exit 2?**
@@ -47,3 +53,5 @@ _Suggested default: Reuse the existing benign-skip outcome shape from the observ
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Reuse the existing benign-skip outcome shape from the observation-identity slice (exit 0 / a tolerated non-error outcome the matrix accepts) for the already-triaged case, and keep the loud exit-2 only for a genuine concurrent-create race (two ticks racing to mint the same NEW task, where a retry actually helps). This keeps the CI-noise family consistent. src/advancing-lock.ts:544 currently has only the one 'lost'/back-off branch and must be taught to distinguish the two cases.

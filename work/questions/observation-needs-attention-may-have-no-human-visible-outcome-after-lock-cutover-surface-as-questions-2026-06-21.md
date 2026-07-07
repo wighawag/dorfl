@@ -12,6 +12,8 @@ _Suggested default: Spin a dedicated idea/brief for surface-state-as-questions (
 
 **Your answer** (write below this line):
 
+Spin a dedicated idea/brief for surface-state-as-questions (the needs-attention requeue case): a deterministic STATE surfacer, NOT the judgement surface-questions skill, enumerates stuck lock-refs + their recorded reason into a question whose answer is the human's requeue decision and whose apply dispatches the EXISTING requeue verb (optional --reset). Keep this observation as its de-facto capture until that brief exists. Do NOT fold into the land-time-reverify brief (it is its own signal).
+
 ## Q2
 
 **Can the advance sidecar mechanism key to a LOCK REF / branch identity (a stuck item with no work/<slug>.md body in a status folder), not only an item file PATH? Resolve before either the needs-attention or merge-questions surface-state direction is sliced, since it is the shared architectural question for the whole generalization.**
@@ -23,6 +25,8 @@ _Suggested default: For needs-attention specifically the sidecar can likely key 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Resolve as: for needs-attention the sidecar CAN key to the still-present backlog/ body via the identity resolver (sidecar.ts already keys on `<type>-<slug>`, not folder path), so that case is sliceable now. The no-body branch-identity case (merge-questions, an unmerged branch with possibly NO work/<slug>.md) needs the apply primitive extended first: sidecar-apply.ts applyAtomic currently REQUIRES options.itemPath and reads/writes the body there. So this shared architectural question is: needs-attention = keyed to backlog body (fine); merge-questions = requires extending apply to key to a lock-ref/branch identity with no body-file. Sequence the merge-questions surface AFTER that apply extension. Fold this into the same surface-state brief.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Yes, task it as a standalone doc-sync fix independent of the
 
 **Your answer** (write below this line):
 
+Yes, task it as a standalone doc-sync fix independent of the architectural surface question: update CONTEXT.md (the ~line 19/26 folder-model prose) and the needs-attention.ts header ("a folder you can ls") to the lock-`state: stuck` model. Low-risk text-only. Can bundle with the other stale needs-attention prose cleanup task.
+
 ## Q4
 
 **Adjacent cleanup #2 (do independently): item-lock.ts CITES work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md as where the surface-via-questions direction lives, but that file DOES NOT EXIST. Should the missing idea file be created, or the dangling code reference fixed/removed?**
@@ -47,3 +53,5 @@ _Suggested default: Create the missing idea file as the captured artifact for th
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Create the missing idea file (work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md) as the captured artifact for the surface-state-as-questions direction, ideally the SAME brief from Q1, so item-lock.ts's dangling reference (and the done-task references at lines 45/126) resolve. Resolve Q1 and Q4 together to avoid creating a second dangling pointer.

@@ -12,6 +12,8 @@ _Suggested default: Promote to a small cleanup task: pick option (a) — delete 
 
 **Your answer** (write below this line):
 
+Promote a small cleanup task, option (a): delete the unused `serialiseAfter` branch from the worker (helpers/cross-job-land-worker.ts `pollUntil(serialiseAfter)`) and rewrite the past-cap docblock to match the actual race-based reality. Option (b) (wire past-cap through serialiseAfter for determinism) only if we actually want past-cap deterministic, which the review did not flag as required. The dead code + lying comment is a real (if small) maintenance trap.
+
 ## Q2
 
 **What becomes of the in-scope-choices nit — promote to a Decisions-block backfill task (record (a)–(e) on the original task), keep as durable note, or delete?**
@@ -23,3 +25,5 @@ _Suggested default: Keep as durable note (this observation IS the record). Each 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Keep as a durable note (this observation IS the record). Each of (a)-(e) is a defensible local test-scaffolding choice, not an architectural commitment. Escalate to a task only if one later bites, e.g. if the tsx coupling (`node_modules/.bin/tsx`) breaks CI on a different layout.

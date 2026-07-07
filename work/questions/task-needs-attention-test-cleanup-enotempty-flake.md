@@ -12,6 +12,8 @@ _Suggested default: Retry rmSync on ENOTEMPTY with a short bounded backoff (simp
 
 **Your answer** (write below this line):
 
+Approach (b): retry rmSync on ENOTEMPTY with a short bounded backoff. It is the simplest, most localised fix and directly targets the observed failure. Only add awaiting of in-flight ops (approach a) if the retry proves insufficient in practice.
+
 ## Q2
 
 **The file/line references inherited from the observation are stale — should the task fix them to the real site(s)? The cited path 'test/needs-attention.test.ts'/'test/helpers/gitRepo.ts:102' is wrong: the files live under packages/dorfl/, and the cleanup() rmSync is at packages/dorfl/test/helpers/gitRepo.ts:152 (the applied answer said :150, also off by two).**
@@ -23,6 +25,8 @@ _Suggested default: Yes — rewrite the task to reference packages/dorfl/test/he
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, fix the stale refs: rewrite the task to reference packages/dorfl/test/helpers/gitRepo.ts cleanup() (currently line 152) and packages/dorfl/test/needs-attention.test.ts afterEach, and instruct the builder to re-confirm line numbers at build time rather than trusting the cited number (the observation's :102 and the applied-answer's :150 are both stale).
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Fix the shared rmSync path once (e.g. a single safeRemoveDir
 
 **Your answer** (write below this line):
 
+Generalise. Fix the shared rmSync path once via a single safeRemoveDir helper used by both the cleanup() site (:152) and the seed/done helper (:352), rather than patching cleanup() in isolation. The race is structural (git/fs ops still touching the tree), so a localised patch would leave a latent flake at the other site. (REVIEW-PROTOCOL discipline 4: a second instance means generalise.)
+
 ## Q4
 
 **How will the slice DEMONSTRATE the fix, given the failure is an intermittent race that passes on isolated re-run and only showed under full 'pnpm -r test'? What is the acceptance evidence — a deterministic regression test, repeated-run stress, or just 'verify stays green'?**
@@ -47,3 +53,5 @@ _Suggested default: Accept on: a hardened cleanup (retry-on-ENOTEMPTY or settle)
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Accept on: the hardened shared removal helper (retry-on-ENOTEMPTY) PLUS a targeted unit test that exercises it against a deliberately-busy directory to assert it no longer throws ENOTEMPTY, with the normal verify floor (pnpm -r build && pnpm -r test && pnpm format:check) staying green. A deterministic unit test on the helper is the honest proof; do not rely on "verify stays green" alone for an intermittent race.

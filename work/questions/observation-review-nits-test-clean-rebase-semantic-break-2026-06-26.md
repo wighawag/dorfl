@@ -11,3 +11,5 @@ _Suggested default: Delete the observation: the nit is test-only, has no cross-t
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The nit is test-only, has no cross-task surface, Gate 2 approved, and the three fixture choices (DORFL_TEST_MARKER outside any worktree, the JSON-line verify output, the two independent clones) are self-evident in the test source. Re-documenting them durably is low value. No task.

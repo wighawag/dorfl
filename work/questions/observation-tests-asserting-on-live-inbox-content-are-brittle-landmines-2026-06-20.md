@@ -18,3 +18,5 @@ _Suggested default: Delete the file (`git rm work/notes/observations/tests-asser
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete the file. This honours the 2026-06-24 in-body applied answer (`delete`): the single offending test was fixed on main and a fresh grep finds no remaining offenders, so the audit is discharged by that one fix, and the capture-bucket contract says a note leaves by deletion once it stops being a live signal (git history preserves the record). Remove the source note and any sidecar in one revertible commit. Only re-promote a real audit task if a later scan surfaces a pattern the current grep missed.

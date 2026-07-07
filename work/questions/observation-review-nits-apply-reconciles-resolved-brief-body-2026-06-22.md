@@ -12,6 +12,8 @@ _Suggested default: keep — retain as the durable triage record; nits 1-2 are v
 
 **Your answer** (write below this line):
 
+Keep as the durable triage record. Nits 1-2 are visibility/ratification-only and nit 2 is already covered by the sibling sidecar, so no new task for them. Nits 3 and 4 are handled in Q2/Q3 below.
+
 ## Q2
 
 **Should the open-questions fence markers stay un-prefixed ('<!-- open-questions -->' / '<!-- /open-questions -->'), or be renamed to carry the 'dorfl-' namespace (e.g. '<!-- dorfl-open-questions -->') to match the existing '<!-- dorfl-sidecar: … -->' style and avoid colliding with author-written HTML comments?**
@@ -24,6 +26,8 @@ _Suggested default: keep un-prefixed — the brief used the un-prefixed example,
 
 **Your answer** (write below this line):
 
+Keep un-prefixed. The brief used the un-prefixed example, both siblings already landed consistent on it, and the author-collision risk is low. Only revisit (rename to `dorfl-open-questions`) if an actual author-collision is observed; the markers are centralised so a later rename is cheap.
+
 ## Q3
 
 **Is a belt-and-braces test wanted that exercises the body-reconcile (strip of the marker-fenced block) on a terminal-disposition route (e.g. 'keep' or 'delete'), or is coverage of the default full-resolution route sufficient given the code structurally feeds all terminal routes through the same strip?**
@@ -35,3 +39,5 @@ _Suggested default: add a single terminal-route reconcile test (e.g. on the 'kee
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Add a single terminal-route reconcile test (e.g. on the `keep` route) as a small low-priority follow-up. Not a blocker since the strip is structurally shared across all terminal routes, but the test locks that invariant against a future refactor moving the strip inside the default branch.

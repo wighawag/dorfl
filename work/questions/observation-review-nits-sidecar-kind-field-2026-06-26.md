@@ -17,3 +17,5 @@ _Suggested default: Promote to a small follow-up task that records the three dec
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote a small follow-up task to record the three decisions in the sidecar shape spec (amend SURFACE-PROTOCOL.md's "emitted question shape" section, mirrored byte-identically source<->work per AGENTS.md; add a short ADR if the "why" needs a durable home): ratify the `kind=<value>` token spelling, order `kind=` after `answered=` in the per-entry HTML comment, and document that unknown `kind=` values are silently dropped on re-serialise (round-trip is not byte-preserving for unknown tokens, by design, matching the silent-on-malformed convention). The doc edit must be self-contained (carry the mechanism). Delete this observation in the same commit as the doc edit lands.

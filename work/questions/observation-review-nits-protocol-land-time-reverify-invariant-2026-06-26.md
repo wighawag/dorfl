@@ -15,3 +15,5 @@ _Suggested default: Ratify both nits and DELETE the observation: (a) the mirror-
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Ratify both nits and delete the observation. (1) The mirror-only VERSION bump matches the actual setup-mirror convention (VERSION is a sync-stamp setup writes into the mirror; only work/protocol/VERSION is a real source file), so the past task WORDING was the off thing, not the implementation. No follow-up unless the misleading "Bump skills/setup/protocol/VERSION" phrasing recurs in future task templates. (2) The nested-blockquote WARNING placement reads cleanly and groups with the related pull --rebase consequence; leave as-is.

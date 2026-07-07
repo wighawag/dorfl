@@ -19,3 +19,5 @@ _Suggested default: promote-task — a tiny self-contained follow-up that finish
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote a tiny self-contained follow-up task to finish the close-job.test.ts describe sweep (describe '... the prd case' -> '... the brief case'; 'prd's issue'/'the prd' prose -> brief/task wording; my-prd -> my-brief with matching brief:/toContain refs), keeping the existing fixture-FOLDER-word scope fence ('prd'/'prd-sliced' first args owned by clean-break-fixture-folder-vocab-compat-seam). This closes a stated-but-unmet acceptance criterion of the original task, so it is not just a coherence wart. Nit #2 is separately surfaced and nit #3 is closed. Then delete this observation.

@@ -12,6 +12,8 @@ _Suggested default: Close/drop this task as overtaken-by-events: all three captu
 
 **Your answer** (write below this line):
 
+Close/drop as overtaken-by-events. All three captured nits were resolved when the sibling slices landed in tasks/done/ (config-and-prompt-seam, item-override, setup-adoption-question), leaving nothing for this stub to build. Discharge via the cancelled/drop path (nothing to build).
+
 ## Q2
 
 **Nit 1 (seam + replace/append): the keystone slice deferred BOTH the seam mechanism (A conditional fragment / B variant wrapper / C append line) and the replace-vs-append phrasing. These were answered as Option A and REPLACE in the done config-seam slice. Is anything about that resolution still open, or is this nit fully discharged?**
@@ -23,6 +25,8 @@ _Suggested default: Discharged: q1/q2 are answered, recorded, ADR'd, and impleme
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Discharged. q1 (Option A conditional fragment with HTML-comment markers + ADR) and q2 (REPLACE) are answered, recorded, ADR'd, and implemented in the done config-seam slice. Nothing remains.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Confirmed/no follow-up: the concrete name DORFL_PROMPT_GUIDA
 
 **Your answer** (write below this line):
 
+Confirmed, no follow-up. The concrete env var DORFL_PROMPT_GUIDANCE_TEST_FIRST is pinned in the shipped resolver (config.ts).
+
 ## Q4
 
 **Nit 3 (precedence ADR): the item-override slice introduced a per-task > per-brief > repo precedence the brief did not explicitly rank. Did this fresh design call warrant an ADR, and if so was one recorded, or is documenting it in WORK-CONTRACT.md sufficient?**
@@ -47,3 +53,5 @@ _Suggested default: Sufficient as documented: the three-tier precedence mirrors 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Sufficient as documented. The per-task > per-prd > repo precedence mirrors the existing humanOnly/autoBuild item-override shape, so the WORK-CONTRACT.md documentation is enough; no separate precedence ADR is owed.

@@ -12,6 +12,8 @@ _Suggested default: Discharge/delete as largely overtaken by the slicing->taskin
 
 **Your answer** (write below this line):
 
+Discharge/delete as largely overtaken by the slicing->tasking clean-break rename, carrying forward only finding 2 (Q3) which is still genuinely open. Findings 1 and 3 are closed (Q2, Q4). Route the finding-2 fix per Q3, then delete this observation.
+
 ## Q2
 
 **Finding 1 (stale JSDoc/comments sweep): is this now closed by the slicing -> tasking rename, or is there residual stale comment vocabulary in `tasking.ts` still worth a sweep?**
@@ -23,6 +25,8 @@ _Suggested default: Closed — the clean-break rename overtook this nit; no sepa
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Closed. The clean-break rename overtook this nit: the specifically-named pre-rename tokens are gone from tasking.ts and the surviving `work/prds/...` mentions are the current correct vocabulary. No separate sweep task.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Ratify as descriptive prose, OR fold a one-line enumeration 
 
 **Your answer** (write below this line):
 
+Fix it: add `SURFACE-PROTOCOL.md` and `TASKING-PROTOCOL.md` to the propagated-docs enumeration in skills/setup/SKILL.md (lines 13/110/225 still list the old six and never name the two new docs). Fold this one-line-per-site enumeration fix into the next setup-skill doc-touchpoint task rather than minting a standalone; it is human-readable prose drift (propagation itself is data-driven and correct), but it actively misinforms a reader. Note the finding's own "SLICING-PROTOCOL" name is itself stale -> TASKING-PROTOCOL.
+
 ## Q4
 
 **Finding 3 (prompt 'no git' vs doc's `git mv` surface conflict): is the intent settled that the tasker prompt's blanket 'Do NOT perform any git operations' wins and the runner (not the spawned agent) owns the prd `git mv` + the one-time trim, per TASKING-PROTOCOL §6's runner-path carve-out? If yes, ratify the prompt staying silent on trim+move; if no, does the prompt need to mention them?**
@@ -47,3 +53,5 @@ _Suggested default: Ratify as already-resolved: the prompt's 'no git' wins for t
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Ratify as already-resolved. The tasker prompt's blanket "Do NOT perform any git operations" wins for the spawned agent; the RUNNER owns the prd trim + `git mv`, exactly as TASKING-PROTOCOL §6 line 76 states. The doc already resolves the apparent conflict; no code/doc change needed.

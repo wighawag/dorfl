@@ -11,3 +11,5 @@ _Suggested default: Spec a small task to add a serialise-time-regenerated, human
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Spec a small task to add a serialise-time-regenerated, human-visible Markdown link line OUTSIDE the per-entry parse regions (alongside the identity comment), rendered to the item's current folder. Hard constraints: it must degrade to harmless text, never break the parser or the model-equal round-trip, and it is accepted that the link can go stale until the next re-serialise (the item moves between lifecycle folders while the sidecar stays identity-keyed). The premise now holds since the human-readable-format task landed (the sidecar is real Markdown). If the folder-staleness upkeep is judged not worth it, the fallback is to drop this as an accepted limitation, but I lean toward the small task since a clickable jump materially helps a human triaging.

@@ -16,3 +16,5 @@ _Suggested default: Delete the observation as discharged: both nits are resolved
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as discharged. Both nits are resolved against current reality: the source/mirror WORK-CONTRACT.md drift is byte-clean, and the design choices are documented in WORK-CONTRACT.md's `promptGuidance.*` per-item override section. The task is done and the nit text is partly stale (brief->prd rename). No new task warranted.

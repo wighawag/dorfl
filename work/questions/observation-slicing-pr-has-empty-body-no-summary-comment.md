@@ -11,3 +11,5 @@ _Suggested default: Mint the task (scope: thread a composed slice-set summary as
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint the task, then delete this observation. Scope: thread a composed summary as the `body` on the slicing path's `performIntegration` call in `slicing.ts`, mirroring the build path (do.ts:1095, :2205); the review-prose comment path is out of scope (it already rides the shared poster, per q2). Produce a `task:` (not a `slice:`): the repo hard-cut slice->task. Once the task is minted, delete this observation and its sidecar in one revertible commit so the stale `needsAnswers: true` cannot re-fire.

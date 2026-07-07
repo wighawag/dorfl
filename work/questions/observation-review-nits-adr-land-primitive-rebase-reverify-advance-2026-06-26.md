@@ -15,3 +15,5 @@ _Suggested default: Delete the observation as fully discharged: (1) and (2) are 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as fully discharged. (1) and (2) are already ratified in the ADR's in-scope decisions block: accepted-as-recorded. If ADR-FORMAT.md should adopt the slug-only house style, that is a separate observation to file against ADR-FORMAT.md, not against this ADR. (3) is covered by the sibling ready task `protocol-land-time-reverify-invariant`, which lands the invariant line in the protocol docs; optionally add a one-line forward-reference note in that task's body so the integrator knows it discharges this nit. No new task needed.

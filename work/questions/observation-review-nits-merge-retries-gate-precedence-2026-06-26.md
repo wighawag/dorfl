@@ -15,3 +15,5 @@ _Suggested default: Promote nit-1 (ratify 1000 + update PRD line 158) and nit-2 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote nit-1 (ratify 1000 as the default AND update the stale PRD line 158 that still says 5) and nit-2 (thread mergeRetries through the tasking.ts, intake.ts, and recover-isolated.ts performIntegration calls so per-repo/env/flag caps are not silently lost on those paths) to follow-up tasks, these can be one small task. Nit-2 is a real correctness gap. Treat nit-3 (missing Decisions block) as a process note: ratify the four decisions inline here and do not rewrite the landed commit body. Then delete this observation.

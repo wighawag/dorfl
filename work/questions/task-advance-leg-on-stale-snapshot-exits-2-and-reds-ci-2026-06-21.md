@@ -12,6 +12,8 @@ _Suggested default: Draft the slice from the source observation's verified resid
 
 **Your answer** (write below this line):
 
+Draft the slice from the source observation's verified residue, split into two acceptance-able parts: (a) the uncontested message-conflation fix, claim-CAS distinguishes terminal / staged-but-not-pool / nowhere in BOTH message and (where applicable) exit, at src/claim-cas.ts:270 and :332; (b) the benign-skip exit behaviour per Q2/Q3 below. Pull the mechanism + fix shape from the observation into a self-contained `## What to build`, `## Prompt`, and acceptance criteria, then clear needsAnswers. Part (a) is independently acceptance-able (Q4).
+
 ## Q2
 
 **For a stale-snapshot leg whose item is already in a TERMINAL folder (tasks/done, tasks/cancelled), should the leg exit 0 (silent benign skip, leg green) or a NEW distinct non-zero code that the matrix workflow specifically tolerates (skip recorded but still observable)?**
@@ -23,6 +25,8 @@ _Suggested default: A NEW distinct tolerated non-zero exit code for "item alread
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Use a NEW distinct tolerated non-zero exit code for "item already terminal," mirroring the existing `contended`/exit-3 tolerated outcome the matrix already accepts. This keeps the skipped-leg signal observable while the run stays green, and is consistent with how the codebase already distinguishes tolerated outcomes. (Exit 0 + a clear SKIP message is an acceptable fallback if you prefer simplicity, but I lean to the distinct code so the skip stays visible.) The chosen code dictates the advance-lifecycle.yml edit that keeps the workflow green.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Flag-gated via `--quiet-if-gone` (or similar), set by the ad
 
 **Your answer** (write below this line):
 
+Flag-gated. The CI matrix leg sets `--quiet-if-gone` (or similar) in advance-lifecycle.yml; the interactive default stays LOUD (exit 2 on a gone slug) so a human who typos an already-done slug still gets a hard error. Mapping site: src/do.ts ~L553 (outcome:'lost' -> exit 2).
+
 ## Q4
 
 **Is the message-conflation fix in scope for THIS task regardless of how the exit-code questions resolve, and is it acceptance-able on its own?**
@@ -47,3 +53,5 @@ _Suggested default: Yes — the message-conflation fix (distinct messages for te
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Yes. The message-conflation fix (distinct messages for terminal / staged-but-not-pool / nowhere at src/claim-cas.ts:270 and :332) is in scope regardless of the exit-code decision and is independently acceptance-able. Make it the first acceptance criterion; gate the exit-code change (Q2/Q3) as a second criterion, so the slice can ship the conflation fix even if the exit-semantics residue stalls.

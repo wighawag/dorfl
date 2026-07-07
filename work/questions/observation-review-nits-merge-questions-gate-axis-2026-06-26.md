@@ -17,3 +17,5 @@ _Suggested default: Fold nit #1 into the existing 'merge-question-surfacer' task
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Fold nit #1 into the merge-question-surfacer task as a tracking note (its reviewer must verify cfg.mergeQuestions is actually read at the invocation site, else the axis is dead config), and ratify nit #2 in-place (the env var/flag names follow the observationTriage family convention and are correct). Then delete this observation. NOTE: this whole trio is being re-decomposed under the land-time-reverify PRD re-open (Tier B), so route these tracking notes into that re-decompose.

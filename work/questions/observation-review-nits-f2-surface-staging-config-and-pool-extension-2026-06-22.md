@@ -12,6 +12,8 @@ _Suggested default: Keep the observation open as a triage record and address the
 
 **Your answer** (write below this line):
 
+Keep the observation open as the triage record and address the highest-value nit (the missing mirror-path test, Q3) as a small follow-up. The rest (Q2, Q4) are decisions to ratify/acknowledge, not defects.
+
 ## Q2
 
 **Ratify or reverse the four decisions the slice made silently (no `## Decisions` block in the commit/PR body): (1) `LifecyclePoolGates.surfaceStaging` defaults `false` at the library boundary while `Config.surfaceStaging` defaults `true` (the calm-default is load-bearing for any direct caller of `gatherLifecycle*` that doesn't thread CLI gates); (2) four NEW public methods (`resolveLocalTaskStaging`/`resolveLocalBriefStaging`/`resolveMirrorTaskStaging`/`resolveMirrorBriefStaging`) added to `LedgerReadStrategy` and exported, rather than extending `resolveLocalState`/`resolveMirrorState` to enumerate staging behind a flag; (3) the gate is consumed by the GATHER, not by pure `buildLifecyclePools`, though the field lives on `LifecyclePoolGates`; (4) `surfaceStaging` added to `REPO_ALLOWED_KEYS` so a repo's `.dorfl.json` can flip it. Are all four the intended design?**
@@ -23,6 +25,8 @@ _Suggested default: Ratify all four as-is (they are coherent and doc-commented);
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Ratify all four as-is (the split default, the four new staging methods, gate-consumed-by-gather, and the REPO_ALLOWED_KEYS addition). They are coherent and doc-commented. The real action is the recurring decisions-block-skip pattern, which is tracked separately (and I've answered RELAX on that meta-observation).
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Yes — add the single mirror-path test; it covers the real 
 
 **Your answer** (write below this line):
 
+Yes, add the single mirror-path test for `gatherLifecycleMirror`'s staging widening (seed a staged needsAnswers item, push to a bare mirror, assert it enumerates under `surfaceStaging:true` and is empty under `false`). This is the actual path CI's propose-matrix runs against the bare hub mirror and is currently unverified, so it is the highest-value nit here. Mint it as a small follow-up (can bundle with Q1).
+
 ## Q4
 
 **Is the intended invariant that `apply` CONSUMES an answered staged sidecar regardless of `surfaceStaging` gate state? An answered sidecar can become STRANDED if `surfaceStaging` is flipped true→false after the surface tick minted+answered it: under `surfaceStaging:false` the gather no longer enumerates the staged item into `needsAnswers[]`, so `buildLifecyclePools` cannot route it to `apply` either — yet apply is documented as 'CONSUME, always-on'.**
@@ -47,3 +53,5 @@ _Suggested default: Acknowledge as a known low-impact edge; document the create-
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Acknowledge as a known low-impact edge; document the create-vs-consume expectation rather than re-route apply. The realistic flip direction is off->on, and an answered staged sidecar only exists if surfacing (opt-in) minted it, so the strand window is narrow. Only re-route apply if the create-vs-consume invariant must hold strictly.

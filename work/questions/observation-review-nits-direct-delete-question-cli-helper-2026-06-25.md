@@ -12,6 +12,8 @@ _Suggested default: Keep as a durable note unless you want nit 1 (dead --config 
 
 **Your answer** (write below this line):
 
+Address nit 1 (dead code) and ratify the rest, then delete the note. Nit 1 (Q2) touches shipped code, so fix it as a small cleanup. Nits 2-3 (Q3/Q4) are ratifications plus a cheap glossary line. Once nit 1 is minted, this note can be deleted.
+
 ## Q2
 
 **Nit 1 (cosmetic, code): should the unused `-c, --config <path>` option and the `config?` field on DropFlags be removed from the `drop` verb (or wired up if a config-dependent behaviour was actually intended)?**
@@ -23,6 +25,8 @@ _Suggested default: Remove the unused `--config` option and the `config?` field 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Remove the unused `-c, --config <path>` option and the `config?` field on DropFlags. The `drop` verb is a pure working-tree primitive that never loads config, so the flag is dead surface that misleads users. Mint a tiny cleanup task or fold it into the next touch of cli.ts.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Ratify all four as-is (they match the task intent and the co
 
 **Your answer** (write below this line):
 
+Ratify all four in-scope decisions as-is (verb name `drop`; `--reason` optional with `(no reason given)` fallback; unresolved source is a clean exit-0 no-op leaving orphans to gc; local working-tree commit only, human integrates). They match the task intent and are documented in the code comments.
+
 ## Q4
 
 **Nit 3 (coherence): the new verb is named `drop`, but `dropped` already has a load-bearing, DIFFERENT meaning in the system (prds/dropped/ is the won't-proceed TERMINAL that RETAINS the file with the reason in the body; `dropped` is also a triage disposition word in SURFACE-PROTOCOL.md). The new `drop` verb instead DELETES outright (git rm, reason in the commit message). Do you want a CONTEXT.md glossary line pinning `drop` (the direct-delete verb) vs `dropped` (the prd terminal) so a future author cannot conflate them?**
@@ -47,3 +53,5 @@ _Suggested default: Add a one-line CONTEXT.md glossary entry distinguishing the 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Yes, add a one-line CONTEXT.md glossary entry pinning `drop` (the direct-delete verb: git rm, reason in commit message) vs `dropped` (the prd terminal in prds/dropped/ that RETAINS the file). There is no live collision today, but the shared English word now carries two meanings across the surface and the glossary line is cheap insurance against a future author conflating them. Fold it into the nit-1 cleanup task.

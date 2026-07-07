@@ -14,3 +14,5 @@ _Suggested default: delete — ratify the already-applied human answer and remov
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. This ratifies the already-applied in-body answer: the `slicing`->`tasking` rename is verified cosmetic-only (absence assertions that pass regardless of the literal), and the missing `## Decisions` block is on an already-merged commit that cannot be retro-edited. No task, no ADR, no follow-up. Remove the observation and its sidecar in one revertible commit.

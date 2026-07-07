@@ -12,6 +12,8 @@ _Suggested default: Keep FLAT, identity-keyed; express kind as a TYPED FIELD in 
 
 **Your answer** (write below this line):
 
+Decision B: keep FLAT and identity-keyed; express kind as a TYPED FIELD in the identity HTML comment (matching how `type` is already carried), and render per-kind queues via `status`/`scan`. This is the round-2 ergonomics-only safe default and preserves the load-bearing invariant that `sidecarPathFor(identity)` is a pure function of item identity, no mutable axis in the path. Do NOT promote kind to a subfolder (that would encode a mutable axis in the path).
+
 ## Q2
 
 **Decision A (the rename), a SEPARATE question from B: should `work/questions/` be renamed (candidates: `inbox/`, `attention/`, `decisions/`, `pending/`), given that `work-layout.ts` already calls it 'the what needs me? queue' and most entries are decisions / a human-action inbox rather than literal questions? Is the rename in scope for THIS task, a separate follow-up, or declined?**
@@ -23,6 +25,8 @@ _Suggested default: Treat A as a separate decision from B; keep the name `questi
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Decision A is separate from B (do not conflate). Decline/defer the folder rename for now: keep the name `questions/`. B is the load-bearing structural call; A is a naming preference (inbox/attention/pending) that can be a cheap follow-up ADR + git mv later if wanted, with precedent in rename-task-pool-folder-todo-to-ready. Not worth the churn as part of this task.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Record the chosen B (and A, if accepted) as an ADR in `docs/
 
 **Your answer** (write below this line):
 
+Yes, record the chosen B (the kind typed-field decision) as an ADR in docs/adr/, then scope the code change (add the `kind` field + per-kind rendering) as the slice's acceptance. Folder structure/status is load-bearing, so the structural decision must be captured before code lands. Deliverable = both (ADR doc + code change with tests). The keying question (Q6) must be resolved in the SAME ADR.
+
 ## Q4
 
 **Open follow-up 1 (carried from the observation): should land/integrate (or a `gc` verb) ACTIVELY reconcile/clean stale+orphan sidecars, instead of relying on the downstream `needsAnswers <=> sidecar` invariant-violation HALT that catches but does not self-heal? Is this in scope for this task or a separate item?**
@@ -47,6 +53,8 @@ _Suggested default: Out of scope for this task (this task is about folder/kind l
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Out of scope for this task (which is about folder/kind layout). Split the self-heal-vs-halt question (should land/gc actively reconcile stale+orphan sidecars vs relying on the downstream invariant-violation HALT) into its own separate item.
 
 ## Q5
 
@@ -60,6 +68,8 @@ _Suggested default: Out of scope for this layout task; track as a separate orpha
 
 **Your answer** (write below this line):
 
+Out of scope for this layout task. Track the force-resolve-should-delete-sidecar orphan-prevention question as a separate item (it pairs naturally with Q4's self-heal item).
+
 ## Q6
 
 **Open follow-up 4 (carried, cross-cutting): the SIDECAR-KEYING question, can a sidecar key to a lock-ref/branch identity rather than only a file-path identity, shared with the merge-question and needs-attention notes? Must the keying decision be made TOGETHER with the folder/kind shape (B), or can B land independently?**
@@ -72,6 +82,8 @@ _Suggested default: Decide keying together with B at the ADR level (per the obse
 
 **Your answer** (write below this line):
 
+Decide keying TOGETHER with B at the ADR level, per the observation's own instruction. Preserve the invariant that sidecar authorship stays on `main`/runner under the `advancing` lock (never on a work branch). The round-2 constraint stands: if merge-questions are ever authored against a branch/lock-ref instead of main, it re-opens the both-sides-changed rebase conflict, so the ADR must hold the line that authorship stays on main even when the sidecar KEYS to a branch/lock-ref identity. This is the shared decision with the needs-attention surface-state brief (I routed that one to fold its keying question here too).
+
 ## Q7
 
 **The task body is a one-line stub ('draft this into a buildable slice') with empty `blockedBy` and no `## Prompt`, no acceptance criteria, and no recorded decision, yet it sits in `tasks/ready/`. What is the concrete definition of done / acceptance for this slice once A and B are answered, so a build agent could start from the file alone?**
@@ -83,3 +95,5 @@ _Suggested default: Do not build yet; once A/B are answered, rewrite the task wi
 <!-- q7 fields: id=q7 -->
 
 **Your answer** (write below this line):
+
+Do not build yet. Once A/B/keying are answered (all folded into one ADR), rewrite the task with a self-contained `## Prompt`, explicit acceptance (the ADR written + the `kind` field + per-kind rendering code with tests + `questions/` kept as-is), and any relevant blockedBy/cross-link references. The needsAnswers flag stays until that rewrite.

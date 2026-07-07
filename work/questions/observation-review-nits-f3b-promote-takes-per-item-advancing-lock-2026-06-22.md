@@ -12,6 +12,8 @@ _Suggested default: Ratify-as-is and defer the location convention to the standi
 
 **Your answer** (write below this line):
 
+Ratify-as-is and defer the recording-location convention to the standing decisions-block enforce-vs-relax decision (which I've answered RELAX: a durable record anywhere checkable, incl. code comments, counts). The design choice (reuse the `advance` action value so all three transitions serialise on one per-item ref) is sound and durably recorded in the needs-attention.ts block comments. Do not reopen f3b for a `## Decisions` entry.
+
 ## Q2
 
 **What becomes of the user-visible prose-drift finding: the promote path still emits `pre-backlog`/`work/backlog/`/`pre-prd`/`work/prd/` nouns in `note()` messages, the `reasonNotMoved` text, and the commit subject, even though the pool vocabulary has been moving toward the new `todo` noun? Mint a small follow-up slice to align the user-facing language, keep it as a tracked nit, or drop it?**
@@ -23,3 +25,5 @@ _Suggested default: Mint a small follow-up slice to align the promote-path user-
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Mint a small follow-up task to align the promote-path user-facing strings (note()/reasonNotMoved/commit subject), confirming the canonical target noun against the live `work/tasks/` layout FIRST (which currently has backlog/ready, no todo). This drift is pre-existing (f3b only wrapped it in try/finally), so fixing it inside f3b's scope would be wrong; a small dedicated task is right. Coordinate with the sibling f1 reader-side noun-alignment nit.

@@ -18,3 +18,5 @@ _Suggested default: Mint B as a small fix-and-flip task immediately (verify the 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep this note as a standing capture (do NOT delete): it is the audit record of the 64/64 sidecar rebuild and the only place the sweep counts and self-healing behaviour are written down. Act on the grouped findings separately: (B) mint a small fix-and-flip task immediately, verifying the close-job `prd`->`brief` rename gap first since it is the only finding called highest-value non-cosmetic; (A) fold into the existing `land-time-reverify-and-parallel-merge-ceiling` re-decompose (already decided in Tier B); (C) mint one small text-only task after confirming the `todo` vs `backlog`/`ready` target noun against the live tree; (D) do the 9-item discharge sweep by hand after re-confirming on current main; (E) mint a tiny skill-amendment task; (F) leave as-is (already surfaced as sidecars).

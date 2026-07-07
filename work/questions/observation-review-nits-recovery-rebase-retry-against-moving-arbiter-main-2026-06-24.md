@@ -12,6 +12,8 @@ _Suggested default: Keep the observation open as the triage record; disposition 
 
 **Your answer** (write below this line):
 
+Keep the observation open as the triage record; disposition the three remaining nits (Q2-Q5) below, then close it. A single small task captures the actionable ones (Q2's Decisions transcription; Q5's cleanup can ride along or be deferred).
+
 ## Q2
 
 **The acceptance criterion required a `## Decisions` block on the done record / PR / ADR (cap + why; contention-vs-outage; jitter; reconcile-arms; rename-detection orthogonality), but the done task file has no such block and the decisions live only in code comments in integration-core.ts. Should the `## Decisions` block be transcribed into the protocol-native location, and if so where (done task file vs PR description vs an ADR)?**
@@ -23,6 +25,8 @@ _Suggested default: Transcribe the decisions into a `## Decisions` block on the 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Transcribe the decisions into a `## Decisions` block on the done task file, sourced verbatim from the existing code comments (the task is already merged, so the in-repo done-record edit is the protocol-native home). This is one of the rare cases where the record genuinely wasn't made anywhere durable-and-linked, so it is worth transcribing rather than waving through under RELAX. Small follow-up task.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Ratify 4 as-is; it is a conservative contention cap and is o
 
 **Your answer** (write below this line):
 
+Ratify `DEFAULT_RECOVERY_REBASE_RETRIES = 4` (5 total attempts) as-is. It is a conservative contention cap, overridable via params.recoveryRebaseRetries. Revisit only if a real incident shows bursts outlasting 5 attempts.
+
 ## Q4
 
 **Ratify the in-scope reconcile-arms decision: the recovery re-rebase is left deliberately BARE (no `rebaseOntoMainWithReconcile()` arms). Do you confirm this load-bearing decision?**
@@ -48,6 +54,8 @@ _Suggested default: Confirm the bare recovery rebase; the recorded rationale hol
 
 **Your answer** (write below this line):
 
+Confirm the bare recovery rebase (no reconcile arms). The recorded rationale holds: the done-move was already committed upstream so divergent-done-move has nothing to act on, and a sibling-ledger conflict on a re-fetched main is the same shape the original run would hit. If a divergent-done-move case is later observed in the recovery path, reuse the SAME reconcile path (no second copy).
+
 ## Q5
 
 **Should the module-local two-sleep-primitive split be unified as a follow-up? Race-1 jitter still uses the local non-injectable `sleepMs` while the new recovery loop uses the injectable `Sleep` seam from retry-backoff.ts.**
@@ -59,3 +67,5 @@ _Suggested default: Defer as a low-priority cleanup follow-up: unify Race-1 jitt
 <!-- q5 fields: id=q5 -->
 
 **Your answer** (write below this line):
+
+Defer as a low-priority cleanup: unify the Race-1 jitter onto the same injectable `Sleep` seam when next touching that code. Do not mint dedicated work just for this; note it in the same follow-up task's body as an opportunistic tidy-up.

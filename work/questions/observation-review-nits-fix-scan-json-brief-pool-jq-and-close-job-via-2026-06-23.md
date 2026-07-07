@@ -11,3 +11,5 @@ _Suggested default: Delete the note (direct-delete path). All four findings are 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete the note (direct-delete path). All four findings are stale or discharged: the headline .briefs[]/.prds[] concern is moot after the brief->prd rename (the live workflow correctly reads .prds[]), the two RATIFY items were by-design and merged, the flagged stale-prose strings no longer exist in any .ts file, and the recursive-test-flake is its own separately-triaged observation. The only forward-looking residue (workflow regen) is covered by the done install-ci-advance-lifecycle-workflow task. No follow-up needed; remove the note and its sidecar in one revertible commit.

@@ -11,3 +11,5 @@ _Suggested default: Create the q2 follow-up slice (document reconcileItemLockAga
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Create the q2 follow-up task FIRST, then delete this observation. Do not waive the contingency: q4's delete was explicitly conditioned on q2's slice existing, and the q2 concern is undischarged, not stale, the broadened `reconcileItemLockAgainstMain` contract (the remoteEmpty branch returning 'no-lock', item-lock.ts:1038-1046) is still live and non-reaper callers (e.g. recovery) have not been audited for the error->no-lock shape change. Mint a small task to document the broadened shared contract and audit non-reaper callers, then delete this observation.

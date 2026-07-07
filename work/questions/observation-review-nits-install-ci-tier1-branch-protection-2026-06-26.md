@@ -15,3 +15,5 @@ _Suggested default: Split the answer per nit: (a) ratify in your reply (the choi
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Split per nit. (a) Ratify the six in-scope choices as-is: they are reasonable and now durably named in source comments; no code change. (b) Promote a small task: auto-detect the default branch via `gh repo view --json defaultBranchRef`, thread it through to the branch-protection PUT and the printed gh-api fallback, falling back to `main` only if the lookup fails. This is real breakage today: any non-`main` (e.g. `master`) repo gets protection PUT on the wrong/non-existent branch. (c) Promote a follow-up task: make the deadlock guard mechanism-shaped (ruleset `do_not_enforce_on_create`, or pre-run verify once) rather than a NOTE log line, since the brief explicitly asked for a runtime mechanism and the doc-shaped choice leaves a real 'protect then forget to push verify.yml' window for in-flight PRs. Delete the observation once (b) and (c) are minted.

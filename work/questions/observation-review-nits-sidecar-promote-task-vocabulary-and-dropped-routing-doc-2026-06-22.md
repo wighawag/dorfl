@@ -17,3 +17,5 @@ _Suggested default: delete (close as overtaken-by-events) — the disposition vo
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete (close as overtaken-by-events). The disposition vocabulary the nit concerns was fully retired by `agentic-apply-retire-disposition-vocabulary` (entries are now binary), so the parse-policy ratification (a) is moot. The missing `## Decisions` block (b) is a closed historical artifact on an already-merged task about a now-deleted concept, not worth re-opening. No task.

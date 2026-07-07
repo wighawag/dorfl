@@ -12,6 +12,8 @@ _Suggested default: Ratify the landed choices and delete the note (option a): th
 
 **Your answer** (write below this line):
 
+Ratify the landed choices and delete the note (option a). The choices are sound and now consumer-canonical; a retro `## Decisions` record adds little once consumers have hardened around them. Q2-Q4 below ratify the specifics.
+
 ## Q2
 
 **Is the SHORT outcome token set `{task | prd | adr | delete | ask}` the canonical wire vocabulary (vs. the PRD's longer `{mint-task | mint-prd | mint-adr | delete-source | ask-follow-up}`), so future ADRs/consumers must use the short names? Confirm and (if so) close this nit, since downstream code has already hardened on it.**
@@ -23,6 +25,8 @@ _Suggested default: Yes — ratify the short token set as canonical and close th
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, ratify the short token set `{task|prd|adr|delete|ask}` as canonical. The divergence from the PRD's longer names is already reconciled in the JSDoc of apply-decide.ts and advance.ts (documented as equivalent), it matches intake's prior art, and the adr route was wired on the short set. No rename.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Ratify the 3-param positional shape: it is idiomatic for a p
 
 **Your answer** (write below this line):
 
+Ratify the 3-param positional shape `decide(input, decider, allowedOutcomes)`. Threading the injected seam positionally is idiomatic for a pure injected-seam function (the whole point of the task) and the test suite already exercises it. No change.
+
 ## Q4
 
 **Ratify (or revise) the four unrecorded in-scope decisions the agent made in 'decision-engine-shared-decide-seam' but did not surface in a `## Decisions` block: (a) `parseDecisionVerdict` + `DisallowedOutcomeError` + `EmptyAllowedOutcomesError` exported as public production-wire surface beyond the bare `decide` core; (b) `EmptyAllowedOutcomesError` as a new fail-fast on an empty allowed set; (c) the guard inspects ONLY the `outcome` discriminator and never validates per-outcome content (pushed to the dispatching caller); (d) `allowedOutcomes` accepts any `Iterable` (Set or array), not just an array?**
@@ -47,3 +53,5 @@ _Suggested default: Ratify all four as-is: each is sound, JSDoc-documented, and 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Ratify all four as-is. Each (the exported parse/error surface, the empty-allowed-set fail-fast, the discriminator-only guard delegating content validation to the caller, and the `Iterable` acceptance) is sound, JSDoc-documented, and test-covered. Capturing them in this note's context is sufficient record without reopening the done task.

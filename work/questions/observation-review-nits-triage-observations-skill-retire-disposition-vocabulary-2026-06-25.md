@@ -12,6 +12,8 @@ _Suggested default: Delete this observation as discharged: the one nit is satisf
 
 **Your answer** (write below this line):
 
+Delete as discharged. The one nit is satisfied-in-spirit: the kept-vs-reframed taxonomy decision + rationale live durably in skills/triage-observations/SKILL.md:26, which serves the audit trail better than a transient PR body. No buildable residue; the task landed approved.
+
 ## Q2
 
 **Is recording the kept-vs-reframed taxonomy decision IN-BAND in the skill artifact (skills/triage-observations/SKILL.md:26, the 'recommendation set ... NOT the engine's old `disposition=` token vocabulary' paragraph) sufficient for acceptance criterion #2, or do you want it ALSO captured in a done note / PR description for the audit trail before this nit is closed?**
@@ -23,3 +25,5 @@ _Suggested default: Accept the in-band recording in skills/triage-observations/S
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+The in-band recording in skills/triage-observations/SKILL.md:26 is sufficient for criterion #2. Durable in the artifact where the next reader needs it beats a transient PR body; no backfilled done note required. (Consistent with my RELAX answer on the decisions-block convention.)

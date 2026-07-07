@@ -12,6 +12,8 @@ _Suggested default: Scope to (a)+(b): record the two genuine design rules (answe
 
 **Your answer** (write below this line):
 
+Scope to (a)+(b): record the two genuine design rules (answered= emitted only on disagreement; type=/slug= ignored and re-derived from item=) as decisions, and add the one-line hand-writer notes the nits request to SKILL.md. Treat the two edge-case nits (nested bold, split blockquote) as documented latent corners only, NOT code changes, since both are self-described as acceptable trade-offs. This is a small doc-only task.
+
 ## Q2
 
 **Nit 1 (the main one a reviewer would want logged): the parser emits the `answered=` override ONLY when it DISAGREES with the answer-derived predicate, and DROPS a redundant override on parse. The slice/ADR specified the answered predicate but not WHEN to emit the field. Should this rule be ratified as-is and recorded (decision/ADR), or is a different emit policy wanted?**
@@ -23,6 +25,8 @@ _Suggested default: Ratify as-is and record it: omitting the field on agreement 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Ratify as-is and record it. Emitting `answered=` only on disagreement (and dropping a redundant override on parse) is the right robustness choice, a stale override must not become sticky and freeze a future tolerant edit. Capture as a decision, no behaviour change.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Ratify silent re-derivation, but if a small change is in sco
 
 **Your answer** (write below this line):
 
+Ratify silent re-derivation from item= (the single source of truth). If a small change is in scope, prefer OMITTING the redundant type=/slug= on serialise over adding a validation refusal, fewer fields cannot disagree. But omission is optional polish, not required.
+
 ## Q4
 
 **Nit 3 (coherence): the sidecar heading is uppercase `## Q1` while the machine id and per-entry comment label are lowercase `q1` (parser only matches `^<!--\s*q\d+\s+fields:`). The heading is purely a separator; a human editing it to `## q1` is not detected. Is a one-line SKILL.md note ('heading case is cosmetic; the per-entry comment id is what counts') the desired fix, or should the parser/heading be made case-consistent?**
@@ -47,6 +53,8 @@ _Suggested default: Add the one-line SKILL.md note; do not change the parser or 
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Add the one-line SKILL.md note ("heading case is cosmetic; the per-entry comment id is what counts"). Do not change the parser or heading case, the `## Q1` / `q1` mix is sanctioned by the slice prompt itself.
 
 ## Q5
 
@@ -60,6 +68,8 @@ _Suggested default: Leave as a documented latent corner — no code change; surf
 
 **Your answer** (write below this line):
 
+Leave as a documented latent corner, no code change. Surfacers do not nest bold in a question, and the cost of hardening the regex exceeds the risk. A one-line SKILL.md note is enough.
+
 ## Q6
 
 **Nit 5 (edge case): multi-paragraph context keeps only the FIRST contiguous blockquote run; a hand-author who separates two `>` paragraphs with a non-quoted blank-content line silently loses the second run (the serialiser itself emits `>` on blank lines so its own output round-trips). Leave as a documented trade-off with a sentence in SKILL.md, or change the parser to re-absorb later `>` runs?**
@@ -71,3 +81,5 @@ _Suggested default: Add the SKILL.md sentence (blank-separated context paragraph
 <!-- q6 fields: id=q6 -->
 
 **Your answer** (write below this line):
+
+Add the SKILL.md sentence (blank-separated context paragraphs must keep the `>` prefix on the blank line). Do not change the parser, the current behaviour deliberately avoids re-absorbing an incidental `>` in a human preamble, which is the safer default.

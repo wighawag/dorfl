@@ -11,3 +11,5 @@ _Suggested default: Delete as spent: nit (1) is resolved by completed follow-up 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as spent. Nit (1) is fully discharged by two completed follow-up tasks in tasks/done/ (rename-lock-action-token-slice-to-task, rename-advance-rung-and-sliced-outcome-tokens): the wire-level literals now read tasking vocabulary and a grep for the old slicing literals returns zero hits. Nit (2)'s decisions are actioned and visibly consistent (the only residual `slic` strings are foreign-slug doc references, exactly the "keep verbatim" Decision 5 the observation endorsed). No remaining open judgement.

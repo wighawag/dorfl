@@ -12,6 +12,8 @@ _Suggested default: promote-task (tiny coverage-map patch on that slice)_
 
 **Your answer** (write below this line):
 
+Yes, add story 7 to install-ci-tier1-branch-protection's `covers:`. It is a one-line frontmatter coverage-map fix for a story that slice already delivers. Fold this into the `land-time-reverify-and-parallel-merge-ceiling` PRD re-decompose (which I've decided to re-open in Tier B) rather than a standalone task, since that pass is touching this PRD's coverage map anyway.
+
 ## Q2
 
 **Add story 9 to at least one of the propose-floor-closure slices (merge-question-surfacer / apply-rung-merge-disposition / merge-questions-gate-axis) so the headline 'runner-as-merger via advance surface/apply/answer' story is provably mapped?**
@@ -23,6 +25,8 @@ _Suggested default: promote-task — add 9 to merge-question-surfacer (the surfa
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, assign story 9 to merge-question-surfacer (the surface entry point of the trio). Fold this into the PRD re-decompose pass, not a standalone task, since those three merge-question tasks are being re-scoped against the binary-sidecar model anyway.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: promote-task (small acceptance-criteria tightening on the AD
 
 **Your answer** (write below this line):
 
+Yes, harden the story-8 (`merge_group`/Tier-2) deferral into a dedicated acceptance bullet on the ADR slice so deliberate non-delivery is enforced by acceptance, not author intent. Fold into the PRD re-decompose pass.
+
 ## Q4
 
 **Re-encode soft 'touches same file' blockers in the slice graph as a softer note rather than `blockedBy:`, so the dep graph reflects logical premise vs file-serialisation?**
@@ -48,6 +54,8 @@ _Suggested default: keep — file-serialisation via hard blocker is fine pragmat
 
 **Your answer** (write below this line):
 
+Keep. File-serialisation via a hard `blockedBy:` is fine pragmatically; do not introduce a new soft-blocked axis (that is a protocol/schema change) for this. The hard blocker is harmless as long as reviewers know it is edit-serialisation, not a logical premise. A one-line note on the blocker explaining it is file-serialisation is enough if wanted.
+
 ## Q5
 
 **Surface cross-job-ref-based-land-lock's three needsAnswers sub-decisions (stale-lock reclaim, scope-now-vs-follow-on, granularity) to the human in the SAME prompt batch as OQ6/OQ7, so all slice-level open questions for this brief land together?**
@@ -59,3 +67,5 @@ _Suggested default: keep — already captured in that slice's needsAnswers; adva
 <!-- q5 fields: id=q5 -->
 
 **Your answer** (write below this line):
+
+Keep. cross-job-ref-based-land-lock's three sub-decisions are already captured in that slice's needsAnswers; advance will surface them when the slice is picked up. No separate batching action needed. (Note: cross-job-ref-based-land-lock is currently in tasks/cancelled/, so confirm its status during the re-decompose.)

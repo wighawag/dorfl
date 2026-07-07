@@ -12,6 +12,8 @@ _Suggested default: Promote nits 2 and 3 into a single small follow-up task (the
 
 **Your answer** (write below this line):
 
+Promote nits 2 and 3 into a single small follow-up task (mechanical code/doc cleanups, Q3/Q4), and handle nit 1 (Q2) as an ADR. Then delete this observation.
+
 ## Q2
 
 **Nit 1 — ratification of unrecorded decisions: should we retroactively record the three non-obvious decisions (complete.ts default branch falling through to 'tasks-ready'; vestigial `recovering: boolean` on IntegrationCoreInput; the changed CompleteRefusal message) by amending the done-record's `## Decisions` block and/or opening an ADR, or accept that the rationale lives only in inline code comments and move on?**
@@ -23,6 +25,8 @@ _Suggested default: Open one ADR covering all three (default-branch refusal cont
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Open one ADR covering all three unrecorded decisions (default-branch refusal contract, vestigial `recovering` field rationale, refusal-message wording change) and link it from the done record. Cheaper than amending a landed record and gives future readers a single anchor. (This is the ADR route, distinct from the RELAX-on-Decisions-block answer: these are non-obvious enough to warrant a real ADR, not just an inline note.)
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Drop `'needs-attention'` from TASK_LIFECYCLE_FOLDERS and inl
 
 **Your answer** (write below this line):
 
+Drop `'needs-attention'` from TASK_LIFECYCLE_FOLDERS and inline an explicit small array at the two call-sites (close-job.ts, prd-complete.ts) if their residence-set diverges. This is exactly the "no executable folder probe remains" shape the cutover AC demanded, and the closure scan missed it. Bundle into the nit-2/3 follow-up task.
+
 ## Q4
 
 **Nit 3 — stale JSDoc in prd-complete.ts L29–33 (still describes `work/needs-attention/` as a legitimate pre-done resting state): fix the prose, or leave it?**
@@ -47,3 +53,5 @@ _Suggested default: Fix it — drop the `needs-attention` mention from the JSDoc
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Fix it: drop the `needs-attention` mention from prd-complete.ts L29-33 JSDoc (post-cutover that residence is impossible, so the description contradicts behaviour). Bundle with nit 2's code change in the same small follow-up task.

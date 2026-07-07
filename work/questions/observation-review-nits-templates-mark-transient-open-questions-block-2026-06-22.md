@@ -12,6 +12,8 @@ _Suggested default: Acknowledge both ratifications inline (neither rises to the 
 
 **Your answer** (write below this line):
 
+Acknowledge both ratifications inline (Q2, Q3) and delete the observation + sidecar via the direct-delete path. Neither nit rises to the ADR gate (low reversal cost, no surprising trade-off) and neither warrants a new slice.
+
 ## Q2
 
 **Ratify the autonomy-note PLACEMENT: do you accept that the 'Set needsAnswers: true … clear once answered' authoring instruction lives INSIDE the marker fence AND inside an HTML comment (doubly-non-rendered, stripped by apply on full resolution), rather than as a template-only comment outside the fence?**
@@ -24,6 +26,8 @@ _Suggested default: Accept the in-fence placement as-is; it is sanctioned by D2 
 
 **Your answer** (write below this line):
 
+Accept the in-fence placement. It is sanctioned by D2, keeps the authoring instruction co-located with the block it governs, and is auto-stripped on full resolution. The missing Decisions line is closed by the triage answer above (RELAX).
+
 ## Q3
 
 **Ratify the CROSS-SLICE CONTRACT this template pins: that the literal marker pair `<!-- open-questions -->` / `<!-- /open-questions -->` is now the load-bearing tag the sibling apply-reconciliation slice must match exactly (the brief had listed it only as an 'e.g.' example)?**
@@ -35,3 +39,5 @@ _Suggested default: Accept this exact marker pair as the pinned, load-bearing co
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Accept the exact marker pair `<!-- open-questions -->` / `<!-- /open-questions -->` as the pinned, load-bearing cross-slice contract. It matches the brief's example and sidecar house style and is already consistent across the templates and apply-persist.ts. Treat any future change to the tag as a coordinated cross-slice edit (templates + apply code + already-authored briefs). (Un-prefixed is fine, consistent with my answer on the apply-reconciles sidecar.)

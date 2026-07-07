@@ -16,3 +16,5 @@ _Suggested default: Delete the observation as discharged: the rename it proposed
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as discharged. The rename it proposed already shipped (ADR `rename-task-pool-folder-todo-to-ready`; the pool folder is `tasks/ready/`; `todo` is a retired legacy spelling not accepted by the clean-break parser). The observation's premise no longer matches the repo and there is no residual decision. Remove the source note and its sidecar in one revertible commit.

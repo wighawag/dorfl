@@ -12,6 +12,8 @@ _Suggested default: Yes — unify both bare-mirror scan() gates onto resolveRepo
 
 **Your answer** (write below this line):
 
+Yes, unify both bare-mirror scan() gates onto resolveRepoConfigFromMirror (the mirror-ref reader), per the applied triage answer. The mirror-ref reader is correct for a bare mirror (which has no checked-out .dorfl.json), so the autoBuild gate currently silently falls back to global, that is the bug. Leave the working-tree scanRepoPaths() sibling unchanged: it operates on real checkouts where resolveRepoConfig is correct.
+
 ## Q2
 
 **Is the scope strictly the registry scan() bare-mirror path, leaving scanRepoPaths() (the working-tree, in-place run sibling) untouched? And does the fix touch ONLY the reader selection at the autoBuild gate, or is any related call site (e.g. the autoBuild re-read at scan.ts ~L530, or the scoreItems(state, autoBuild,...) consumer at ~L480) also in scope?**
@@ -23,6 +25,8 @@ _Suggested default: Scope = the registry scan() bare-mirror autoBuild gate only 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Scope = the registry scan() bare-mirror path only; explicitly leave scanRepoPaths() on resolveRepoConfig. But AUDIT the other autoBuild reads inside scan() (the re-read near ~L530 and the scoreItems consumer) and move any that also read the bare mirror, so no divergent reader is left behind. The task's acceptance must state "no bare-mirror gate still reads via resolveRepoConfig."
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Fixture: a bare hub mirror whose committed main:.dorfl.json 
 
 **Your answer** (write below this line):
 
+Fixture: a bare hub mirror whose committed main:.dorfl.json sets autoBuild to a value differing from the global default; assert the scan() report's eligibility reflects the COMMITTED autoBuild value (proving the mirror-ref reader is now used), mirroring how autoTask is already read. Overriding autoBuild ALONE is the sharpest regression test for this specific bug; no need to also override autoTask/autoSlice.
+
 ## Q4
 
 **This task is a promotion stub and is not yet buildable: it carries needsAnswers:true but has NO '## Open questions' block listing them, and no '## Acceptance criteria' or self-contained '## Prompt' (template violation). It only back-points to the observation. Before it can advance, should the task body be filled out to carry the mechanism + fix shape + acceptance criteria + a self-contained prompt (so an agent could build from the file alone), or is the back-pointer to the observation acceptable?**
@@ -48,6 +54,8 @@ _Suggested default: Yes — flesh the task body out from the observation: inline
 
 **Your answer** (write below this line):
 
+Yes, flesh the task body out from the observation before it can advance: inline the mechanism (the two readers + the bare-mirror divergence), the fix shape (unify on resolveRepoConfigFromMirror), acceptance criteria (the Q3 regression test + verify-green), and a self-contained `## Prompt` with the drift-check. List the scoping questions under `## Open questions`. The observation is a deletable capture bucket, so the task must carry the signal itself (self-contained, not a back-pointer) before the observation can be discharged.
+
 ## Q5
 
 **The observation's code references have DRIFTED from the live source — it cites scan.ts ~L368 (autoBuild) and ~L397 (autoSlice), but the gates are now at ~L392 (autoBuild, resolveRepoConfig) and ~L422 (autoTask, resolveRepoConfigFromMirror) with the lifecycle gate at ~L451. Should the task reference modules/concepts (the autoBuild gate read in scan(), the resolveRepoConfig vs resolveRepoConfigFromMirror readers) rather than brittle line numbers?**
@@ -59,3 +67,5 @@ _Suggested default: Reference by symbol/concept: 'the autoBuild pool gate inside
 <!-- q5 fields: id=q5 -->
 
 **Your answer** (write below this line):
+
+Reference by symbol/concept, not brittle line numbers: "the autoBuild pool gate inside the registry scan() (packages/dorfl/src/scan.ts), currently resolved via resolveRepoConfig, vs the autoTask/lifecycle gates resolved via resolveRepoConfigFromMirror." Instruct the builder to re-confirm the exact sites at build time. The divergence is verified still real; this is a stale-reference correction, not a premise invalidation.

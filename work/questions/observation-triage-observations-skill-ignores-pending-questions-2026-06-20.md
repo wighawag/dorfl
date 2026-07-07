@@ -11,3 +11,5 @@ _Suggested default: Amend the skill (option a): add the pending-questions surfac
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Amend the skill (option a). Add the pending-questions surface (work/questions/ sidecars plus an item's needsAnswers / ## Open questions state) to step 2's investigate-sources list, with an exact-item match treated as cheap and required, and topical overlap surfaced to the human rather than auto-decided (consistent with the skill's never-auto-decide rule). Add a "leave, blocked on <question>" reasoning note to the recommendation guidance. Low-risk doc change against a verified live blind spot. Mint it as a small skill-amendment task (this can be the same E task from the sidecar-rebuild-sweep note). Note the stale disposition-token framing in the observation body is superseded by the retired-vocabulary cutover; the investigate blind spot is independent and still real.

@@ -15,3 +15,5 @@ _Suggested default: Delete — the signal has done its job. The durable why live
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. All three nits are addressed (status: addressed): the durable why lives in docs/adr/runner-rebase-rename-detection-off.md and the integration-core regression test, and the decisions are recorded. No open residue. Remove the observation so an addressed note stops adding noise to triage.

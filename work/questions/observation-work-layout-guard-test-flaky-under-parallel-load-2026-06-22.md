@@ -17,3 +17,5 @@ _Suggested default: KEEP as a watch-item, matching the repo's settled recurrence
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep as a watch-item. This matches the repo's settled recurrence-based bar (KEEP on first sighting; promote a serialise/isolate slice only on recurrence) and this single first sighting has no identified race mechanism (the test reads a fixed SRC_DIR with no shared mutable state), so it is below the promotion threshold and weaker even than its cited sibling. Do not promote a slice now. If it flakes again under parallel load, promote a test-hardening slice then, and capture whether a clean `pnpm -r build` preceded the failing run (a mid-edit stale-build cause is at least as plausible as a true race).

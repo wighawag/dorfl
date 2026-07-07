@@ -11,3 +11,5 @@ _Suggested default: Keep on record as-is (status documented, no code change). Th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep on record as-is (status documented, no code change). The remedy is operator-side (restart the VSCode TS server / select the Workspace TypeScript version); the build does not need a fix, and adding "types": ["node"] reflexively is discouraged. This note earns its keep by short-circuiting future "the types are broken!" panic with "tsc is clean, restart the TS server." If ever acted on, prefer a low-priority chore task (so the "doesn't change tsc behaviour" verification is gated) over an inline tsconfig edit.

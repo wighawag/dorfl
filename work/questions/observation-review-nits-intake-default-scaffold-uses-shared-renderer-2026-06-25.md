@@ -12,6 +12,8 @@ _Suggested default: Keep as-is (ratify) and delete this observation — standard
 
 **Your answer** (write below this line):
 
+Ratify as-is. Widening `renderBacklogTask`/`renderPrd` to exported solely for a characterisation test is the standard pin-behaviour pattern with zero production-side footprint (only the test imports them) and is fully reversible. Revisit only if a future refactor wants to re-narrow. Delete this observation once Q2 is answered too.
+
 ## Q2
 
 **Nit 2 — benign edge difference between the shared renderer and the pre-rewire literal when `title` / `problemStatement` is empty (placeholder `'(no ## What to build prose was supplied.)'` vs. empty line): accept the new behaviour, or promote to a task to re-align?**
@@ -23,3 +25,5 @@ _Suggested default: Accept the new placeholder behaviour and delete this observa
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Accept the new placeholder behaviour. The divergence (placeholder vs empty line on empty title/problemStatement) is strictly safer and is unreachable from any current intake path (call sites always pass a non-empty title, and an empty title would corrupt frontmatter upstream). Delete this observation.

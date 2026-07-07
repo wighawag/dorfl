@@ -14,3 +14,5 @@ _Suggested default: Mint a small follow-up cleanup task scoped to reconcile the 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a small text-only cleanup task to reconcile the stale `work/needs-attention/` prose, prioritising the human-facing RUNTIME strings that actively mislead users (do.ts:1432/1434/1547/1550/2432/2434 and the cli.ts:3207 requeue help) over the pure docstring/comment drift. The deferral to a follow-up was already ratified by the sibling nit and no task exists yet; the change is low-risk. Then delete this observation.

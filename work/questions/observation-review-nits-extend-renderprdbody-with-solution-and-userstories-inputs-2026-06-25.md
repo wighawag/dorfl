@@ -11,3 +11,5 @@ _Suggested default: Fold into the follow-on rewire task as an explicit acceptanc
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Fold into the follow-on rewire task as an explicit acceptance criterion: "add a `.toBe` golden asserting renderer output equals current `intakes.renderPrd` output byte-for-byte for the PS+Solution+UserStories case, including the trailing-newline detail." Then delete this observation. It is a one-line constraint on a task that already has to exist; a standalone task would fragment the work and an open observation risks being silently dropped when the rewire lands.
