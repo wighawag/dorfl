@@ -2,6 +2,7 @@
 title: propose-mode releases the per-item lock at PR-OPEN, not at PR-merge, so an in-flight task is re-claimable across the whole review window (empty diff then spurious 'stuck')
 date: 2026-06-26
 status: open
+needsAnswers: true
 ---
 
 ## CORRECTION (2026-06-26, supersedes the fail-open theory below)
