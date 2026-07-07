@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-06-26: `pnpm format:check` fails on main (pre-existing) due to `.github/workflows/advance-lifecycle.yml`
 
 `pnpm format:check` fails at HEAD of `main` (independent of any task work):
