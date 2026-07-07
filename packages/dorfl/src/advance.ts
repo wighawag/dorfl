@@ -638,6 +638,20 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 		note,
 	});
 	if (result.outcome === 'nothing') {
+		// LIMBO DETECTION (task `advance-surface-limbo-observation-loudly-instead-of-
+		// silent-no-op`): an untriaged observation with NO sidecar whose surfacer had
+		// nothing to ask is a TRAP — the human's triage answer may have been recorded
+		// in an in-BODY "Applied answers" block, but the engine reads triage-vs-
+		// settled only from the `triaged:` frontmatter marker (`ledger-read.ts`) and
+		// the promote path only from an answered `disposition: promote` SIDECAR
+		// (`triage-persist.ts`). Without either, the item is untriaged (re-enumerated
+		// every tick), un-surfaceable (nothing to ask), un-promotable (no sidecar) —
+		// a silent exit-0 no-op forever. Surface it LOUDLY instead.
+		const limbo = detectObservationLimbo(input);
+		if (limbo !== undefined) {
+			note(limbo);
+			return {exitCode: 1, outcome: 'usage-error', message: limbo};
+		}
 		return {
 			exitCode: 0,
 			outcome: 'no-op',
@@ -651,6 +665,43 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 			`surfaced ${result.entryCount} question(s) for ${item} → ${result.sidecarPath} ` +
 			`(needsAnswers:true, CAS-atomic).`,
 	};
+}
+
+/**
+ * Detect the OBSERVATION LIMBO shape (task `advance-surface-limbo-observation-
+ * loudly-instead-of-silent-no-op`): an observation whose triage answer was
+ * (mis-)authored in an in-body "Applied answers" block instead of the sidecar/
+ * frontmatter channels the engine reads. All four conditions must hold:
+ *
+ *   1. the item is an OBSERVATION;
+ *   2. its frontmatter has NO `triaged:` marker (untriaged per `ledger-read.ts`);
+ *   3. there is NO active question sidecar at `work/questions/observation-<slug>.md`;
+ *   4. the surfacer just returned empty (the caller — {@link surfaceRung} — only
+ *      calls this on the persist's `nothing` branch).
+ *
+ * Returns the loud diagnostic to emit (naming BOTH valid channels), or `undefined`
+ * when the shape does not match (the surfacer's empty is then the normal calm no-op).
+ * The engine does NOT (and will not) honour in-body disposition prose — one channel
+ * (the sidecar + `triaged:` frontmatter) keeps the loop honest.
+ */
+function detectObservationLimbo(input: RungExecInput): string | undefined {
+	if (input.namespace !== 'observation') return undefined;
+	const {item, slug, context} = input;
+	const cwd = context.cwd;
+	const itemRel = findItemPath(cwd, input.namespace, slug);
+	if (itemRel === undefined) return undefined;
+	const fm = parseFrontmatter(readFileSync(join(cwd, itemRel), 'utf8'));
+	if (fm.triaged !== undefined && fm.triaged !== '') return undefined;
+	const sidecarRel = sidecarPathFor(item);
+	if (existsSync(join(cwd, sidecarRel))) return undefined;
+	return (
+		`observation \`${slug}\` is in a limbo: no \`triaged:\` frontmatter marker ` +
+		`AND no answered question sidecar at \`${sidecarRel}\`, but the surfacer has ` +
+		`nothing to ask. If a human triage decision (promote-slice / keep / duplicate) ` +
+		`has been recorded in the observation BODY, that channel is INVISIBLE to the ` +
+		`runner — author the sidecar, or set \`triaged:\` in frontmatter. The engine ` +
+		`does not (and will not) honour in-body disposition prose.`
+	);
 }
 
 /**
