@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'route-answered-observation-sidecar-to-
 date: 2026-07-07
 status: open
 reviewOf: route-answered-observation-sidecar-to-apply-pool
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
