@@ -4,6 +4,7 @@ import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
 import {acquireItemLock, releaseItemLock} from './item-lock.js';
+import {realSleep, type Sleep} from './retry-backoff.js';
 
 /**
  * The **advancing-lock BORROW** (prd `advance-loop`, task
@@ -354,6 +355,196 @@ async function runRelease(
 
 // --- New-item creation through the CAS ------------------------------------
 
+// --- Contention retry: jittered delay + widened budget (lifecycle fan-out) ---
+
+/**
+ * The CONTENTION-RETRY BUDGET for the create/publish CAS in
+ * {@link createItemThroughCas} — the tuple of bounds that turns the loop from
+ * "instantly retry, tiny fixed cap" into a bounded DECORRELATED-JITTER retry with
+ * a wider attempt / wall-clock envelope. Deliberately DISTINCT from the OUTAGE
+ * regime in `retry-backoff.ts` (exponential backoff, modelling an unreachable
+ * remote): a rejected push against a MOVED ref just wants a small RANDOM delay to
+ * BREAK LOCKSTEP among parallel legs, not an exponential outage ramp. See the
+ * decision block at the bottom of this file for the rationale.
+ *
+ * All fields optional; the effective values fall back to the interactive default
+ * ({@link INTERACTIVE_CAS_CONTENTION}) — a small fixed cap with NO delay, so a
+ * lone caller stays prompt. The lifecycle driver passes
+ * {@link LIFECYCLE_CAS_CONTENTION} to widen a fan-out.
+ */
+export interface CasContentionBudget {
+	/** Cap on push retries when main merely advanced. */
+	retries?: number;
+	/** Base delay (ms) for the decorrelated-jitter schedule. `0` disables the delay. */
+	initialDelayMs?: number;
+	/** Cap (ms) the growing jittered delay never exceeds. */
+	maxDelayMs?: number;
+	/** Wall-clock budget (ms) for cumulative retry delays. `0` disables the wall-clock cap. */
+	maxTotalMs?: number;
+	/** Injected sleep seam (tests). Defaults to {@link realSleep}. */
+	sleep?: Sleep;
+	/** Injected `[0,1)` RNG (tests). Defaults to `Math.random`. */
+	rng?: () => number;
+}
+
+/**
+ * The INTERACTIVE default: today's shape (3 retries, NO delay). A human-typed
+ * single-item caller keeps the prompt bounded give-up it always had. Preserved
+ * so the API change is backwards-compatible for direct callers of
+ * {@link createItemThroughCas} that pass nothing.
+ */
+export const INTERACTIVE_CAS_CONTENTION: Required<
+	Omit<CasContentionBudget, 'sleep' | 'rng'>
+> = {
+	retries: 3,
+	initialDelayMs: 0,
+	maxDelayMs: 0,
+	maxTotalMs: 0,
+};
+
+/**
+ * The LIFECYCLE default: the wider envelope for the parallel-legs fan-out (the
+ * lifecycle propose/triage tick's promote-CAS + `mint-adr` legs). A modest base
+ * delay grows under an AWS-style DECORRELATED-JITTER schedule up to a cap, with a
+ * generous wall-clock envelope so a herd of valid appends DRAINS instead of
+ * thrashing to exhaustion. Sized so a lone leg is barely slower than today
+ * (jitter is small on the first retry) while a fan-out of N legs desynchronises
+ * within a few retries. See the decision block at the bottom of this file.
+ */
+export const LIFECYCLE_CAS_CONTENTION: Required<
+	Omit<CasContentionBudget, 'sleep' | 'rng'>
+> = {
+	retries: 32,
+	initialDelayMs: 25,
+	maxDelayMs: 2_000,
+	maxTotalMs: 30_000,
+};
+
+/**
+ * The outcome of a single CAS attempt inside {@link runCasContentionLoop}
+ * (mirrors {@link CreateAttemptResult}, exported for the retry-loop seam).
+ */
+export type CasAttemptResult =
+	| {kind: 'created'; message: string}
+	| {kind: 'lost'; message: string}
+	| {kind: 'rejected'; message: string};
+
+/**
+ * The retry-loop terminal outcome ({@link runCasContentionLoop}). Adds
+ * observation counters (`attempts`, the sequence of injected `sleep(ms)` calls)
+ * so tests can assert the RETRY TIMELINE + the JITTER SHAPE deterministically.
+ */
+export interface CasContentionLoopResult {
+	/** Terminal kind: `created` / `lost` / `contended` (bounded give-up). */
+	kind: 'created' | 'lost' | 'contended';
+	/** Human-readable summary. */
+	message: string;
+	/** Total attempts made (1 + retries taken). */
+	attempts: number;
+	/** The sequence of sleep durations (ms) between retries — the jitter timeline. */
+	sleeps: number[];
+}
+
+/**
+ * Run a CAS create/publish attempt inside the CONTENTION-RETRY loop. Reusable
+ * primitive shared between {@link createItemThroughCas} (the production path) and
+ * the unit tests that drive the loop with an injected fake attempt + injected
+ * `Sleep` + injected RNG so the retry timeline + jitter are fully deterministic
+ * with no real wall-clock waits.
+ *
+ * The `attempt` callback runs ONE CAS attempt and reports `created` / `lost` /
+ * `rejected`. On `rejected` the loop consults the {@link CasContentionBudget}:
+ *   1. if the attempts cap is reached → clean bounded give-up (`contended`);
+ *   2. else compute a DECORRELATED-JITTER delay ({@link nextCasContentionDelayMs});
+ *   3. if the delay would push cumulative sleep past `maxTotalMs` → clean bounded
+ *      give-up (`contended` — the wall-clock terminator);
+ *   4. else emit the retry note, sleep, and loop.
+ */
+export async function runCasContentionLoop(input: {
+	attempt: () => Promise<CasAttemptResult>;
+	budget: CasContentionBudget;
+	note?: (m: string) => void;
+}): Promise<CasContentionLoopResult> {
+	const note = input.note ?? (() => {});
+	const budget = input.budget;
+	const retries = budget.retries ?? INTERACTIVE_CAS_CONTENTION.retries;
+	const initialDelayMs =
+		budget.initialDelayMs ?? INTERACTIVE_CAS_CONTENTION.initialDelayMs;
+	const maxDelayMs = budget.maxDelayMs ?? INTERACTIVE_CAS_CONTENTION.maxDelayMs;
+	const maxTotalMs = budget.maxTotalMs ?? INTERACTIVE_CAS_CONTENTION.maxTotalMs;
+	const sleep = budget.sleep ?? realSleep;
+	const rng = budget.rng ?? Math.random;
+
+	let attempts = 0;
+	let elapsed = 0;
+	let previousDelayMs = 0;
+	const sleeps: number[] = [];
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		attempts += 1;
+		const result = await input.attempt();
+		if (result.kind === 'created') {
+			return {kind: 'created', message: result.message, attempts, sleeps};
+		}
+		if (result.kind === 'lost') {
+			return {kind: 'lost', message: result.message, attempts, sleeps};
+		}
+		const rejectedCount = attempts; // attempts so far == rejections so far
+		if (rejectedCount > retries) {
+			const message = `push rejected ${rejectedCount} times (main is contended). Try again shortly.`;
+			note(message);
+			return {kind: 'contended', message, attempts, sleeps};
+		}
+		const delay = nextCasContentionDelayMs({
+			previousDelayMs,
+			initialDelayMs,
+			maxDelayMs,
+			rng,
+		});
+		if (maxTotalMs > 0 && elapsed + delay > maxTotalMs) {
+			const message = `push rejected ${rejectedCount} times (main is contended; wall-clock budget ${maxTotalMs}ms exhausted). Try again shortly.`;
+			note(message);
+			return {kind: 'contended', message, attempts, sleeps};
+		}
+		note(
+			`main advanced under us — refetch and retry (${rejectedCount}/${retries})...`,
+		);
+		if (delay > 0) {
+			await sleep(delay);
+			elapsed += delay;
+			previousDelayMs = delay;
+			sleeps.push(delay);
+		}
+	}
+}
+
+/**
+ * Compute the NEXT contention-retry delay under AWS-style DECORRELATED JITTER:
+ * `delay = min(cap, floor(base + rng() * (min(cap, prev*3) - base)))`, clamped to
+ * `[base, cap]`. `previousDelayMs = 0` (the first retry) uses `base` as the
+ * seed. Returns `0` iff the delay is disabled (either bound is `0` or `NaN`),
+ * which preserves the interactive "instant retry" shape.
+ *
+ * Exported for the pure-unit shape test — the property is BOUNDED randomness
+ * that grows toward the cap.
+ */
+export function nextCasContentionDelayMs(input: {
+	previousDelayMs: number;
+	initialDelayMs: number;
+	maxDelayMs: number;
+	rng: () => number;
+}): number {
+	const base = input.initialDelayMs;
+	const cap = input.maxDelayMs;
+	if (!(base > 0) || !(cap > 0)) {
+		return 0;
+	}
+	const prev = input.previousDelayMs > 0 ? input.previousDelayMs : base;
+	const upper = Math.min(cap, prev * 3);
+	const r = Math.max(0, Math.min(1, input.rng()));
+	return Math.max(base, Math.min(cap, Math.floor(base + r * (upper - base))));
+}
+
 /** A semantic label for the new-item creation outcome. */
 export type CreateItemOutcome =
 	| 'created'
@@ -389,8 +580,20 @@ export interface CreateItemThroughCasOptions {
 	arbiter?: string;
 	/** Advisory creator id. Defaults to git user.name, then $USER. */
 	by?: string;
-	/** Cap on push retries when main merely advanced. Default 3. */
+	/**
+	 * Cap on push retries when main merely advanced. Default 3 (interactive shape).
+	 * The lifecycle driver widens this via {@link contention} /
+	 * {@link LIFECYCLE_CAS_CONTENTION} so a parallel fan-out DRAINS.
+	 */
 	retries?: number;
+	/**
+	 * The CONTENTION-RETRY BUDGET (jittered delay + wider attempt / wall-clock
+	 * envelope). Optional: absent ⇒ {@link INTERACTIVE_CAS_CONTENTION}
+	 * (today's instant-retry shape, so direct callers are unchanged); the
+	 * lifecycle driver in `advance.ts` passes {@link LIFECYCLE_CAS_CONTENTION} to
+	 * WIDEN a fan-out. Individual `contention` fields override {@link retries}.
+	 */
+	contention?: CasContentionBudget;
 	/** Show the intended push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
 	/** Environment for child git processes. */
@@ -446,7 +649,15 @@ async function runCreate(
 	note: (m: string) => void,
 ): Promise<CreateItemThroughCasResult> {
 	const arbiter = options.arbiter ?? DEFAULT_ARBITER;
-	const retries = options.retries ?? 3;
+	const budget = options.contention ?? {};
+	const retries =
+		budget.retries ?? options.retries ?? INTERACTIVE_CAS_CONTENTION.retries;
+	const initialDelayMs =
+		budget.initialDelayMs ?? INTERACTIVE_CAS_CONTENTION.initialDelayMs;
+	const maxDelayMs = budget.maxDelayMs ?? INTERACTIVE_CAS_CONTENTION.maxDelayMs;
+	const maxTotalMs = budget.maxTotalMs ?? INTERACTIVE_CAS_CONTENTION.maxTotalMs;
+	const sleep = budget.sleep ?? realSleep;
+	const rng = budget.rng ?? Math.random;
 	const dryRun = options.dryRun ?? false;
 	const cwd = options.cwd;
 	const env = options.env;
@@ -483,35 +694,40 @@ async function runCreate(
 
 	const origRef = await originalRef(cwd, env);
 	try {
-		let i = 0;
-		// eslint-disable-next-line no-constant-condition
-		while (true) {
-			const result = await createAttempt({
-				path,
-				content: options.content,
-				deletePaths: options.deletePaths ?? [],
-				by,
-				arbiter,
-				dryRun,
-				cwd,
-				env,
-				createBranch,
-				note,
-			});
-			if (result.kind === 'created') {
-				return {exitCode: 0, outcome: 'created', message: result.message};
-			}
-			if (result.kind === 'lost') {
-				return {exitCode: 2, outcome: 'lost', message: result.message};
-			}
-			i += 1;
-			if (i > retries) {
-				const message = `push rejected ${i} times (main is contended). Try again shortly.`;
-				note(message);
-				return {exitCode: 3, outcome: 'contended', message};
-			}
-			note(`main advanced under us — refetch and retry (${i}/${retries})...`);
+		// The bounded DECORRELATED-JITTER contention-retry lives in
+		// {@link runCasContentionLoop} — the shared primitive tests drive directly
+		// with an injected fake attempt + `Sleep` + RNG (no real waits, no flakes).
+		const loop = await runCasContentionLoop({
+			attempt: () =>
+				createAttempt({
+					path,
+					content: options.content,
+					deletePaths: options.deletePaths ?? [],
+					by,
+					arbiter,
+					dryRun,
+					cwd,
+					env,
+					createBranch,
+					note,
+				}),
+			budget: {
+				retries,
+				initialDelayMs,
+				maxDelayMs,
+				maxTotalMs,
+				sleep,
+				rng,
+			},
+			note,
+		});
+		if (loop.kind === 'created') {
+			return {exitCode: 0, outcome: 'created', message: loop.message};
 		}
+		if (loop.kind === 'lost') {
+			return {exitCode: 2, outcome: 'lost', message: loop.message};
+		}
+		return {exitCode: 3, outcome: 'contended', message: loop.message};
 	} finally {
 		await cleanup(cwd, origRef, createBranch, env);
 	}
@@ -718,3 +934,55 @@ async function gitHard(
 	}
 	return result;
 }
+
+// --- Decisions ------------------------------------------------------------
+//
+// **CAS contention retry: from instant-fixed-cap to bounded-JITTER + widened
+// budget (fan-out drain).** The earlier recorded model for `createItemThroughCas`
+// was "contention retries INSTANTLY, no delay, tiny fixed cap (3)". That is
+// correct for a SINGLE contender (grab the new base and go) but PATHOLOGICAL for
+// a lifecycle propose fan-out: N parallel legs (one per answered/triaged item)
+// all CAS-append against the SAME `main` ref, refetch and re-push in lockstep,
+// exhaust the tiny cap, and a large fraction exit `contended` (exit 3) EVEN
+// THOUGH every leg's write is valid and would land if they took turns. A real
+// 66-leg propose tick left ~33 legs at exit 3 \u2014 a thundering herd on one ref.
+//
+// The revised model, encoded here:
+//   1. Add a bounded DECORRELATED-JITTER inter-retry delay
+//      ({@link nextCasContentionDelayMs}). Parallel legs desynchronise; the herd
+//      breaks; the fan-out DRAINS. Small enough that a lone leg is barely
+//      slower than today (first-retry delay is O(base)).
+//   2. WIDEN the budget on the lifecycle path ({@link LIFECYCLE_CAS_CONTENTION}):
+//      more retries + a wall-clock envelope, since a lifecycle leg has no human
+//      waiting. The regime stays BOUNDED (attempts cap AND wall-clock cap) so
+//      genuine exhaustion still yields a clean `contended`, never a hang.
+//   3. Scope the widened budget to the LIFECYCLE path via an explicit
+//      `contention` option threaded from the driver (`advance.ts` \u2192
+//      `promoteObservation` / `mintAdr` \u2192 `createItemThroughCas`). Direct
+//      callers that pass nothing keep the INTERACTIVE shape
+//      ({@link INTERACTIVE_CAS_CONTENTION}): 3 retries, NO delay \u2014 backwards
+//      compatible, so a human-typed single-item caller stays prompt.
+//
+// **Deliberately DISTINCT from the OUTAGE regime in `retry-backoff.ts`.** That
+// helper models an unreachable remote with EXPONENTIAL backoff (the remote may
+// come back). Contention is a REJECTED push against a MOVED ref \u2014 the remote is
+// fine, the base just advanced. It wants a small RANDOM delay to BREAK LOCKSTEP,
+// not an exponential outage ramp. Do NOT reuse `retryWithBackoff` here.
+//
+// **Jitter shape: AWS-style DECORRELATED JITTER**
+// (`delay = uniform(base, min(cap, prev*3))`). Grows toward the cap when the
+// contention persists (more spread across the herd as the tail hangs on), but
+// bounded above by `cap`. The alternative \u2014 flat `uniform(0, base)` \u2014 was
+// considered and rejected: it does not adapt to a long tail, so the last N legs
+// still collide at similar rates once the herd shrinks; the decorrelated growth
+// is what makes the tail DRAIN under sustained parallel load. Same shape as the
+// recovery-rebase jitter loop in `integration-core.ts` uses (`Math.floor(random
+// * (jitterMs + 1))` on a fixed cap) but with the AWS growth term so a lifecycle
+// tail is not stuck on a tiny fixed window.
+//
+// **Composes with, does NOT duplicate, the held-lock-subtraction sibling**
+// (`advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick`): that
+// task reduces the NUMBER of legs entering the matrix (never enumerate a held
+// item); this task handles the RESIDUAL legitimate contention among the valid
+// legs that DO get scheduled. The two layers together should quiet the propose-
+// matrix CI noise.

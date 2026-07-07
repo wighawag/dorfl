@@ -38,6 +38,7 @@ import {
 	type PromoteObservationResult,
 } from './triage-persist.js';
 import {mintAdr, type MintAdrOptions, type MintAdrResult} from './mint-adr.js';
+import {LIFECYCLE_CAS_CONTENTION} from './advancing-lock.js';
 import {
 	decide,
 	DisallowedOutcomeError,
@@ -1165,6 +1166,10 @@ async function applyAgenticDecision(
 					? {stubContent: draftedBody}
 					: {}),
 				arbiter: context.arbiter,
+				// Lifecycle FAN-OUT: widen the CAS contention budget + jitter the retries
+				// so N parallel promote legs desync (task
+				// `jitter-and-widen-cas-contention-retry-for-lifecycle-fanout`).
+				contention: LIFECYCLE_CAS_CONTENTION,
 				note,
 			});
 			return {
@@ -1213,6 +1218,10 @@ async function applyAgenticDecision(
 					: {}),
 				answers,
 				arbiter: context.arbiter,
+				// Lifecycle FAN-OUT: widen the CAS contention budget + jitter the retries
+				// so N parallel mint-adr legs desync (task
+				// `jitter-and-widen-cas-contention-retry-for-lifecycle-fanout`).
+				contention: LIFECYCLE_CAS_CONTENTION,
 				note,
 			});
 			return {
