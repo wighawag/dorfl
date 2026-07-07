@@ -2,6 +2,7 @@
 title: scan's cwd selection pool reads the LOCAL working tree and skips the held-lock subtraction (empty held set), so CI re-enumerates in-flight items; offline selection must FAIL closed, not degrade to a wrong eligible pool
 date: 2026-06-27
 status: open
+needsAnswers: true
 ---
 
 ## What was observed
