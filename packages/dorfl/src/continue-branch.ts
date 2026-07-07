@@ -1,6 +1,28 @@
 import {run, type RunResult} from './git.js';
 
 /**
+ * BROADENED SCOPE NOTE (follow-up task
+ * `complete-propose-honour-already-landed-and-rename-continue-branch-module`):
+ * this module's name still reads as "continue-branch" (its ORIGINAL role: the
+ * continue-detection + rebase-onto-fresh-main helpers used by the onboarding
+ * paths, documented below), BUT it now ALSO hosts the shared
+ * **stale-lease work-branch push** helpers used by MULTIPLE callers:
+ *
+ *   - {@link pushContinuedBranchWithStaleLeaseRetry} — the original
+ *     continue/onboard caller (the mirror hub → arbiter reconcile push).
+ *   - {@link pushProposeBranchWithStaleLeaseRetry} — the propose-mode
+ *     integrator's push (task `propose-push-survives-stale-lease-on-reaped-work-
+ *     ref`), which adds the BENIGN already-landed predicate (gone remote ref +
+ *     work reachable from `<arbiter>/main`) on top of the shared `stale info`
+ *     retry.
+ *
+ * A rename to something like `stale-lease-work-push.ts` was considered; the
+ * scope-note is preferred here because a rename would churn many imports
+ * across `src/` + `test/` for no behavioural gain, and the module already reads
+ * as a single conceptual bucket ("the work-branch push + continue-detection
+ * helpers"). Add new stale-lease work-ref push helpers here rather than
+ * spawning a sibling module.
+ *
  * The **continue-detection** shared by BOTH onboarding paths (the keystone of
  * the `requeue-continue-and-reset` task). `requeue` keeps the `work/<slug>`
  * branch so the NEXT claim CONTINUES from its tip instead of force-cutting a
