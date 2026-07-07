@@ -328,9 +328,12 @@ export async function promoteObservation(
 		`${newSlug}.md`,
 	);
 	const by = options.by || resolveBy(cwd, env);
-	const content =
+	const content = ensureTaskDispatchable(
+		artifact,
+		newSlug,
 		options.stubContent ??
-		buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env));
+			buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env)),
+	);
 
 	// The note + its answered sidecar `git rm` IN THE SAME create commit (promote =
 	// ONE atomic commit). A CAS LOSER never reaches the commit, so it leaves both
@@ -406,6 +409,42 @@ export async function promoteObservation(
  * is the mechanism/fix prose. We copy PROSE (not a back-pointer) so the artifact is
  * buildable on its own.
  */
+/**
+ * Guarantee a minted TASK body is DISPATCHABLE (carries a `## Prompt`). The
+ * agentic apply path (`apply-decide` → `promoteObservation` with `stubContent`)
+ * lets a fresh-context agent AUTHOR the task body, and that agent frequently omits
+ * the `## Prompt` section (drafting its own `## Context`/`## Definition of done`
+ * skeleton instead) — so the raw drafted body bypasses {@link buildPromotedBody}'s
+ * renderer and lands NON-dispatchable: the `advance --propose` build leg then
+ * fails with `has no '## Prompt' section` (the `extractPromptSection`/`resolveTask`
+ * guard in `prompt.ts`). This is the robust backstop that closes that hole
+ * regardless of agent compliance: for a TASK, if the body has no `## Prompt`
+ * heading, append a seeded one (blockquoted, matching the renderer's shape). A PRD
+ * is left UNTOUCHED — a PRD is a spec, not dispatched by `do`/`run`, and carries no
+ * `## Prompt` by design.
+ */
+function ensureTaskDispatchable(
+	artifact: 'task' | 'prd',
+	slug: string,
+	body: string,
+): string {
+	if (artifact === 'prd') {
+		return body;
+	}
+	// A task WITH a `## Prompt` heading (any level-2 spelling the validator matches)
+	// is already dispatchable — leave it byte-for-byte.
+	if (/^##\s+Prompt\b/im.test(body)) {
+		return body;
+	}
+	// No `## Prompt`: append a seeded, blockquoted one so the minted task never
+	// lands non-dispatchable. The seed points the builder at the body above (the
+	// same shape `renderTaskBody`'s empty-mechanism default uses).
+	const trimmed = body.replace(/\s+$/, '');
+	const seed = `Build the task '${slug}', described above.`;
+	const promptBlock = `## Prompt\n\n> ${seed}\n`;
+	return `${trimmed}\n\n${promptBlock}`;
+}
+
 function buildPromotedBody(
 	artifact: 'task' | 'prd',
 	slug: string,

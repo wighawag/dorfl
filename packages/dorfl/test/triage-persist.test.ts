@@ -290,6 +290,95 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(resolved.taskPrompt).toContain(MECHANISM_SIGNAL);
 	});
 
+	it('an AGENT-DRAFTED body (stubContent) with NO `## Prompt` is made dispatchable (a `## Prompt` is appended)', async () => {
+		// Regression: the agentic apply path passes the agent's drafted `taskBody` as
+		// `stubContent`, which is written AS-IS (bypassing `buildPromotedBody`'s
+		// renderer). Agents routinely omit `## Prompt` (drafting `## Context` /
+		// `## Definition of done` instead), so the minted task landed non-dispatchable
+		// and its `advance --propose` build leg failed with `has no '## Prompt'
+		// section`. The promote writer must backstop this: append a seeded `## Prompt`.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'agent-drafted');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const promptlessBody = [
+			'## Context',
+			'',
+			MECHANISM_SIGNAL,
+			'',
+			'## Definition of done',
+			'',
+			'- [ ] it works',
+			'',
+		].join('\n');
+		expect(promptlessBody).not.toContain('## Prompt');
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:agent-drafted',
+			itemPath,
+			artifact: 'task',
+			stubContent: promptlessBody,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+
+		gitIn(['fetch', '-q', 'arbiter'], seeded.repo);
+		gitIn(['checkout', '-q', '-B', 'main', 'arbiter/main'], seeded.repo);
+		// The backstop appended a `## Prompt`, so the build validator accepts it, and
+		// the agent's own drafted content (Context/DoD) is preserved.
+		expect(() => resolveTask(seeded.repo, 'agent-drafted')).not.toThrow();
+		const body = readFileSync(
+			join(seeded.repo, 'work', 'tasks', 'ready', 'agent-drafted.md'),
+			'utf8',
+		);
+		expect(body).toContain('## Prompt');
+		expect(body).toContain('## Context');
+		expect(body).toContain('## Definition of done');
+	});
+
+	it('an agent-drafted body that ALREADY has a `## Prompt` is left byte-for-byte (no double prompt)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'already-prompt');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const withPrompt = [
+			'## What to build',
+			'',
+			MECHANISM_SIGNAL,
+			'',
+			'## Prompt',
+			'',
+			'> Do the thing described above.',
+			'',
+		].join('\n');
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:already-prompt',
+			itemPath,
+			artifact: 'task',
+			stubContent: withPrompt,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+
+		gitIn(['fetch', '-q', 'arbiter'], seeded.repo);
+		gitIn(['checkout', '-q', '-B', 'main', 'arbiter/main'], seeded.repo);
+		const body = readFileSync(
+			join(seeded.repo, 'work', 'tasks', 'ready', 'already-prompt.md'),
+			'utf8',
+		);
+		// Exactly one `## Prompt` (the backstop did not add a second).
+		expect(body.match(/^##\s+Prompt\b/gim)?.length).toBe(1);
+	});
+
 	it('a promoted observation with NO open questions clears needsAnswers on the task', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const itemPath = `work/notes/observations/noq.md`;
