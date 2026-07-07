@@ -11,3 +11,5 @@ _Suggested default: Discharge it: the flagged drift is resolved by the done task
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Discharge it. The flagged drift is resolved by the done task `rename-selection-pool-slice-keyword-to-task` (which cites this observation by name), and the only remaining `slice` strings in cli.ts are immutable historical slugs, concept comments, and a JS `.slice(...)` call. Delete the observation and its sidecar in one revertible commit. No follow-up task.

@@ -11,3 +11,5 @@ _Suggested default: Keep it as a deferred, recorded observation (do not mint a d
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Triage decision: KEEP on record as a standing observation (clear needsAnswers, retain the note in place, do NOT delete it and do NOT mint a task or PRD). This is a settled disposition, not an unresolved defer. Rationale: the root cause and any fix live in pi (it owns the conversation turn), not in the dorfl protocol, and the behaviour is rare, intermittent, and not reproducible on demand, so there is nothing for this repo to build. The only follow-up, and it needs no task, is: next time it recurs, capture the session id/.jsonl and pi version and route that upstream to the pi maintainers as a repro lead.

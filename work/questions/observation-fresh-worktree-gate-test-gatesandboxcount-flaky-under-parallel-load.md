@@ -11,3 +11,5 @@ _Suggested default: Mint a small test-hardening task to scope the assertion to t
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a small test-hardening task. Scope the assertion to this test's own sandbox root: use a unique per-test prefix/tag and assert a delta keyed to this test's own gate invocation, instead of the process-wide `dorfl-fresh-gate-*` tmpdir scan. Do NOT serialise the whole file. Then delete this observation. It is a real, reproducible test-isolation bug that will keep reddening CI under parallel load.

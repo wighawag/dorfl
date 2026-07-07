@@ -15,3 +15,5 @@ _Suggested default: Mint a task for the root-cause enumerate-side fix (thread he
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a task for the root-cause enumerate-side fix: thread held-lock subtraction onto the in-place scan path (scanRepoPaths -> scoreItems AND gatherLifecycleInPlace, async as needed for the lock-ref reads) so the propose matrix never enumerates a held/stuck item. In the same task, coordinate with the sibling observation's benign-skip-at-leg behaviour as a belt-and-suspenders second layer covering the enumerate->fan-out race window, rather than duplicating it. Scope the task to the enumerate-side fix as primary; reference the sibling for the leg-side skip.

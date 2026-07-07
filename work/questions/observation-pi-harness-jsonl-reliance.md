@@ -11,3 +11,5 @@ _Suggested default: Mint a deferred backlog task `pi-harness-polish` carrying th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a deferred backlog task `pi-harness-polish` carrying the note's three-point disposition verbatim: study the best channel per need (output/liveness/watch) rather than assuming .jsonl; revisit the existing call sites in watch-session.ts and pi-harness.ts, not just the new merged reader; and preserve the cross-harness LaunchResult.output (Option C) seam so a stdout-stream/HTTP harness like opencode still fits. Then close this observation. It is a coherent maintainer-flagged future polish, not a fix-now defect, so it belongs queued.

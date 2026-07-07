@@ -15,3 +15,5 @@ _Suggested default: Mint a small task to (a) confirm via deeper diagnosis that n
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a small task mirroring the `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers` precedent: (a) confirm via deeper diagnosis that nothing writes `work/in-progress/` after the per-item-lock cutover, and (b) if confirmed, retire `complete.ts`'s `onInProgress` arm and `start.ts`'s `--resume` folder-based decision. Then delete this observation.

@@ -15,3 +15,5 @@ _Suggested default: KEEP as a watch-item (matches the repo's recurrence-based au
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep as a watch-item. This matches the repo's settled recurrence-based bar (KEEP on first sighting; promote a serialise/isolate slice only on recurrence), and the evidence here is thinner than its siblings (deterministic in-memory template tests, a plausible mid-edit stale-build cause). Do not promote a slice on this single sighting. On next recurrence, append the 3 failing assertion names and whether a clean `pnpm -r build` preceded the failing run so the eventual slice has a precise repro.

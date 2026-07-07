@@ -11,3 +11,5 @@ _Suggested default: Keep the observation open as the recurrence-evidence record 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep the observation open as the recurrence-evidence record, exactly as the note prescribes. Resolve it (delete) the moment `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main. No new task/PRD/ADR needed: the fix is already tasked and owns it.

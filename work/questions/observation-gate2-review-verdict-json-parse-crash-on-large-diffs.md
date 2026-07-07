@@ -11,3 +11,5 @@ _Suggested default: Promote to a task scoped to fix directions (1) + (2): make `
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote to a task scoped to fix directions (1) + (2). Make `parseReviewVerdict` fault-tolerant and catch the parse failure at the `runGate2Review` call site, routing it to needs-attention with a transient-infra/config-error cause: never an unhandled throw, and never a silent approve. Harden the review prompt's output contract (strict minified JSON, escaped control chars, capped per-finding length, fenced-block extraction plus a lenient repair pass before the strict parse). Include fix direction (3) as a follow-on within the same task: once the throw is caught, the needs-attention routing should push the kept work branch and mark the lock stuck so recovery does not need a manual mirror->origin push. This has recurred 8+ times after green Gate-1 builds, so it is worth fixing now.
