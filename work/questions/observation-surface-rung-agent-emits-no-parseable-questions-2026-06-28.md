@@ -11,3 +11,5 @@ _Suggested default: Delete the observation as discharged (fixes landed, residual
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as discharged. Both fix passes landed and are verified (shared parseableJsonContractPrompt between the verdict and surface seams; the free-prose `note` channel + terminal-emit discipline in SURFACE-PROTOCOL.md and surface-gate.ts). The residual items are explicitly conditional (parser-side insurance only if misses persist) or out of dorfl's scope (the pi-yields-turn-early cause). No watch task needed; if surface-emit parse misses recur, that's a fresh signal.

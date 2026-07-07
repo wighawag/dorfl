@@ -12,6 +12,8 @@ _Suggested default: Promote to task: change detectAnsweredMergeAction to return 
 
 **Your answer** (write below this line):
 
+Promote to a task (bundle nits 1, 2, 4 below): change detectAnsweredMergeAction to return the LATEST answered merge entry (or prefer an unanswered follow-up first), so a re-surfaced merge question, not the stale prior answer, drives the next apply run. The append-and-history shape is otherwise fine; the bug is only that the FIRST-match lookup re-fires the stale answer.
+
 ## Q2
 
 **Nit 2 — a refused merge-action is mapped to rung outcome 'usage-error'. performIntegration already routes the bounce to needs-attention, so this is purely the rung-level signal, but 'usage-error' is an odd label for 'red re-verify on the rebased tip refused the land'. Confirm this matches how other performIntegration-routed refusals are labelled at the rung layer, or rename to a more accurate outcome?**
@@ -23,6 +25,8 @@ _Suggested default: Promote to a small task: audit the outcome vocabulary across
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Fold into the same task: audit the outcome vocabulary across advance rungs and give a refused merge-action an accurate outcome tag (reuse the existing needs-attention/refused tag, or add a dedicated `merge-refused`), not `usage-error` (which collides with genuine caller-usage errors). Keep exitCode:1.
 
 ## Q3
 
@@ -36,6 +40,8 @@ _Suggested default: Keep as observation and fold a one-line note into the advanc
 
 **Your answer** (write below this line):
 
+Keep the guard (it is correct and defensive) and fold a one-line note into the advance rung's contract doc describing the workspacesDir-unset refusal. No separate task; include the doc line in the bundled task above.
+
 ## Q4
 
 **Nit 4 — createJob is called with hard-coded type:'task'. Today the surfacer only emits merge-questions for tasks, but if a kind:merge sidecar is ever stamped on a non-task item (e.g. a prd-level unmerged branch) the branch name work/task-<slug> will silently mis-target. Add an assertion / thread the source item's type through, or leave a comment and defer?**
@@ -47,3 +53,5 @@ _Suggested default: Promote a tiny task: assert at performMergeAction entry that
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Fold into the same task: assert at performMergeAction entry that the sidecar's source item is a task (throw a clear error otherwise), so a future surfacer that stamps a kind:merge sidecar on a non-task item fails loudly instead of silently building a wrong `work/task-<slug>` branch name. Then delete this observation once the bundled task is minted.

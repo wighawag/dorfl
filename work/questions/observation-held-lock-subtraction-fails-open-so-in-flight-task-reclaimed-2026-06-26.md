@@ -11,3 +11,5 @@ _Suggested default: Mark RESOLVED and delete the observation — the root fix ha
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mark RESOLVED and delete. The root fix landed (complete.ts gates releaseClaimLockAfterDurableMove on `durablyOnMain = mergedToMain || alreadyLanded`, per task propose-keep-lock-until-pr-merge; reconcileItemLockAgainstMain handles out-of-band merges). For the two residual follow-ups: the leaked-lock auto-sweep is already covered by the sibling `reaper-never-clears-a-done-plus-stuck-lock-orphans` observation (which I'm minting a task for), so don't duplicate; the runner benign-empty-diff treatment is covered by the `propose-push-survives-stale-lease-on-reaped-work-ref` task. No new artifact needed here.

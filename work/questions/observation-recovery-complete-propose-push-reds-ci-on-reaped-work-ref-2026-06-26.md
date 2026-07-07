@@ -12,6 +12,8 @@ _Suggested default: Keep the observation open as the recurrence-evidence record 
 
 **Your answer** (write below this line):
 
+Keep open as the recurrence-evidence record until `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main, then delete. The fix is already tasked and owns it; this note is just the durable evidence archive. No new task/prd/adr.
+
 Keep the observation open as the recurrence-evidence record, exactly as the note prescribes. Resolve it (delete) the moment `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main. No new task/PRD/ADR needed: the fix is already tasked and owns it.
 
 ## Q2
@@ -21,3 +23,5 @@ Keep the observation open as the recurrence-evidence record, exactly as the note
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Option (a): leave the frontmatter/body as-is but flip `needsAnswers: true` -> `false`. The answer is recorded and no further human input is needed; the observation stays on record as passive evidence and stops pinging the questions gate. Do NOT delete now (the evidence value is the whole point) and do NOT mint a cleanup task (over-engineering, the eventual delete is a trivial manual/next-triage step when the fix lands). Meta-note for the engine: this exposes a real gap, there is no first-class KEEP outcome in {task,prd,adr,delete,ask} for "answered, no action, retain the note." For now, KEEP = clear needsAnswers + retain the file. That gap is itself worth an observation/task if it recurs (it will).

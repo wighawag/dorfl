@@ -12,6 +12,8 @@ _Suggested default: Keep the folder set as-is (both behaviours are the intended 
 
 **Your answer** (write below this line):
 
+Keep the folder set as-is (skip active in-progress builds; question lingering branches on cancelled tasks, both intended) and fix the misleading doc-comment to describe the ACTUAL set + rationale. Small code-comment task (bundle Q1-Q3 into one tidy-up).
+
 ## Q2
 
 **What becomes of nit 2 — the ceiling defaults baked into listOpenPullRequestsViaGh (--state open, --base <base>, --limit 200) that make PRs targeting a non-main base invisible and silently truncate at >200 open PRs?**
@@ -24,6 +26,8 @@ _Suggested default: Ratify the defaults (floor is authoritative; ceiling is best
 
 **Your answer** (write below this line):
 
+Ratify the ceiling defaults (git-reachability floor is authoritative; the gh-PR enrichment is best-effort, so a non-main-base or >200-PR blindspot degrades to floor-only, never corrupts output). Record the rationale as a one-line doc-comment note on the function. Fold into the Q1 tidy-up task.
+
 ## Q3
 
 **What becomes of nit 3 — pinning (or marking provisional) the MergeQuestionSkipped.reason enum ('no-item-body' | 'already-pending-merge-question' | 'persist-nothing') as the surfacer's stable vocabulary before a sibling stuck-lock surfacer forks it?**
@@ -35,3 +39,5 @@ _Suggested default: Mark the enum PROVISIONAL in its doc-comment (do not lift to
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Mark the MergeQuestionSkipped.reason enum PROVISIONAL in its doc-comment (do not lift to a shared type yet, no sibling surfacer exists). Promote to a real shared-vocabulary decision when the second (stuck-lock) surfacer lands. Fold into the Q1 tidy-up task, then delete this observation.

@@ -11,3 +11,5 @@ _Suggested default: Mint the promote-slice task per the 2026-06-22 disposition (
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint the task per the 2026-06-22 disposition: change reconcileItemLockAgainstMain's kept-stuck contract to split stuck+terminal-on-main (=> reapable) from stuck+in-flight (=> keep), extend reapStaleItemLocks to reap the terminal-orphan case, with a pin test (terminal-orphan reaped; in-flight retained) and an ADR note recording the contract change. Cross-link the squash-merge sibling `gc-remote-branches-cannot-reap-squash-merged-work-branch` (same orphan problem, lock-side vs branch-side). Then delete this observation.

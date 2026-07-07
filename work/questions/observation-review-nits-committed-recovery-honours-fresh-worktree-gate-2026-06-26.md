@@ -12,6 +12,8 @@ _Suggested default: Keep as durable note (no task); both are intentional diverge
 
 **Your answer** (write below this line):
 
+Small cleanup task for the cosmetic string alignment (Q3), and ratify the design divergence (Q2) in-place. Both nits are non-blocking; only the reason-string verb-swap (Q3) is worth a code touch. Then delete this observation.
+
 ## Q2
 
 **Should the recovery-tail invocation of runFreshWorktreeGate thread the build path's review callback, or is the current omission (no Gate-2 review semantics on answered-merge land) the right permanent design?**
@@ -24,6 +26,8 @@ _Suggested default: Keep as-is: answered-merge / committed-recovery land intenti
 
 **Your answer** (write below this line):
 
+Keep as-is: answered-merge / committed-recovery land intentionally has no Gate-2 review semantics (the recovery tail is re-verifying an already-reviewed, already-committed result). Document the divergence in a one-line code comment at the recovery-tail runFreshWorktreeGate call site rather than threading the review callback.
+
 ## Q3
 
 **Should the recovery-path user-visible reason strings be aligned with the build-path strings, or is the '... during committed-recovery; ... not integrating ...' phrasing kept deliberately distinct so needs-attention messages tell the operator which path failed?**
@@ -35,3 +39,5 @@ _Suggested default: Keep the 'during committed-recovery' distinguisher (useful s
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Keep the `during committed-recovery` distinguisher (useful operator signal for which path failed) but change `not integrating` -> `not completing` to match the build-path verb (the verb swap was unmotivated drift). Small string fix, bundle with Q1's cleanup task.

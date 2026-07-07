@@ -12,6 +12,8 @@ _Suggested default: Yes — mark the observation resolved (fixed by 9d5f9efc); n
 
 **Your answer** (write below this line):
 
+Yes, resolved. Both symptoms no longer reproduce on current main (format:check clean, tests leave the tree clean, template output = committed file = prettier all agree, fixed by 9d5f9efc). Delete the observation; no template-emitter change needed.
+
 ## Q2
 
 **Is a defensive follow-up still wanted to prevent future recurrence when the template YAML strings change again?**
@@ -23,3 +25,5 @@ _Suggested default: No — accept the recurrence risk; treat it as a one-shot dr
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+No defensive follow-up. Accept the low recurrence risk (only a future edit to a quoted YAML string could re-introduce it, and the acceptance gate's format:check would catch a committed-file drift anyway). Treat as a one-shot already fixed. If it recurs, then add the emit-and-prettier-diff invariant.

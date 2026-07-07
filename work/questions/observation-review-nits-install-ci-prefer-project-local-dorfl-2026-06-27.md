@@ -12,6 +12,8 @@ _Suggested default: Delete this bullet as a duplicate signal; let the existing 2
 
 **Your answer** (write below this line):
 
+Drop this nit as a duplicate: the missing `## Decisions` block is a fresh instance of the standing `decisions-block-convention-repeatedly-skipped` observation (answered RELAX). Let that one own the systemic question.
+
 ## Q2
 
 **What should become of nit 2 — extending the install-ci uniformity test to also pin verify-workflow-template and advance-ci-template against absolute/local-only dorfl paths?**
@@ -24,6 +26,8 @@ _Suggested default: Promote to a small task: widen the uniformity test to cover 
 
 **Your answer** (write below this line):
 
+Promote a small task: widen the install-ci uniformity test to also pin verify-workflow-template and advance-ci-template against absolute/local-only dorfl paths (they emit dorfl invocations through the shared setup action and are currently unguarded). Real coverage gap. Then delete this observation.
+
 ## Q3
 
 **What should become of nit 3 — ratifying that the resolver shim step is appended unconditionally in BOTH registry and workspace install modes?**
@@ -35,3 +39,5 @@ _Suggested default: Keep-as-is and close: record a one-line note in the task/PR 
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Ratify and close: the unconditional resolver-shim step in both registry and workspace install modes is intended and behaviour-preserving (workspace ordering test covers it running after `pnpm link --global`). No code change; the ratification is recorded here. Fold into the Q2 task's delete.

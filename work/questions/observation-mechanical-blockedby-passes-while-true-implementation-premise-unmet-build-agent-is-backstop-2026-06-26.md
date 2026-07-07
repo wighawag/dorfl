@@ -11,3 +11,5 @@ _Suggested default: Close as accepted-and-filed: the backstop worked, the concre
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep as record and clear needsAnswers (no task). The dependency-graph backstop worked as designed, and the concrete bug it spawned (misleading claim-success wording) is already fixed with a test. The two forward-looking directions (surface premise-deps at promote/review time; a cheaper re-scope queue for premise-unmet TASK-STOPs) are speculative, wait for a second recurrence before spending task budget. This is a KEEP disposition: retain the note as a standing record, do not delete (it documents the intended-backstop design).

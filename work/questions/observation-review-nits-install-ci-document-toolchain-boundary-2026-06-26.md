@@ -12,6 +12,8 @@ _Suggested default: Keep both surfaces (the YAML comment travels with the artifa
 
 **Your answer** (write below this line):
 
+Ratify: keep both surfaces (the YAML comment travels with the action.yml a maintainer opens; the completion log surfaces at install time). Close without a task.
+
 ## Q2
 
 **Ratify: is it acceptable that the boundary prose hard-codes the Node pin ('Node 22 for engines.node >=18') in two free-text strings that must be kept in lockstep with the setup-node step if the pin is ever bumped, with no single-source guard?**
@@ -24,6 +26,8 @@ _Suggested default: Accept as-is for now (pin bumps are rare and touched-togethe
 
 **Your answer** (write below this line):
 
+Accept as-is (Node-pin duplicated in a couple of free-text strings). Pin bumps are rare and touched together. If it drifts even once, promote a small task to derive the pin string from a single constant. No task now.
+
 ## Q3
 
 **Optional: should the repo adopt a lightweight convention of adding a '## Decisions' block to commit bodies for non-obvious in-scope choices (like the two ratifications above), so future reviewers do not have to reconstruct?**
@@ -35,3 +39,5 @@ _Suggested default: Note it as guidance for future build agents (prompt-side rem
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Guidance, not a task. This is the same recurring decisions-block habit tracked by the standing `decisions-block-convention-repeatedly-skipped` observation (which I answered RELAX: record durably anywhere checkable). Don't duplicate it here. Delete this observation after ratifying Q1/Q2.

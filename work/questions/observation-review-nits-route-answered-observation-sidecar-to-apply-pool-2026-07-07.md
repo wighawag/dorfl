@@ -11,3 +11,5 @@ _Suggested default: Promote to one small follow-up task bundling all three (reco
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote one small follow-up task bundling all three nits: (a) record the "answered sidecar wins over triaged: marker" decision (already encoded by a test), (b) add the missing end-to-end test, apply a fully-answered observation and assert the decided artifact is produced AND the source+sidecar removed (acceptance criterion (c) had no new test), and (c) convert the trailing "settled + pending sidecar falls through to neither pool" comment into a real one-line dropped-item assertion. The task is done so don't re-edit its file; the three nits are cohesive. NOTE: this is a real follow-up to MY fix, worth doing since (b) closes a genuine acceptance-criterion gap and (c) guards the silent-fall-through. Then delete this observation.

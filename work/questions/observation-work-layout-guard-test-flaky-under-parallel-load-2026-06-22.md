@@ -18,6 +18,8 @@ _Suggested default: KEEP as a watch-item, matching the repo's settled recurrence
 
 **Your answer** (write below this line):
 
+Keep as a watch-item. Matches the repo's settled recurrence-based bar (KEEP on first sighting; promote a serialise/isolate slice only on recurrence), and this single sighting has no identified race mechanism (the test reads a fixed SRC_DIR, no shared mutable state), so it is below the promotion threshold. Do not promote now. If it flakes again under parallel load, promote a test-hardening slice then, capturing whether a clean `pnpm -r build` preceded the failing run.
+
 Keep as a watch-item. This matches the repo's settled recurrence-based bar (KEEP on first sighting; promote a serialise/isolate slice only on recurrence) and this single first sighting has no identified race mechanism (the test reads a fixed SRC_DIR with no shared mutable state), so it is below the promotion threshold and weaker even than its cited sibling. Do not promote a slice now. If it flakes again under parallel load, promote a test-hardening slice then, and capture whether a clean `pnpm -r build` preceded the failing run (a mid-edit stale-build cause is at least as plausible as a true race).
 
 ## Q2
@@ -27,3 +29,5 @@ Keep as a watch-item. This matches the repo's settled recurrence-based bar (KEEP
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Option (b): flip `needsAnswers: true` -> `false` AND append a short `## Disposition` block to the body recording the watch-item decision + the recurrence trigger (flake again under parallel load => promote a hardening slice; on recurrence capture whether a clean `pnpm -r build` preceded the failing run). Use the heading `## Disposition`. The forward-looking guidance (promotion trigger + stale-build hypothesis) is real and would be lost if we only cleared the flag. This is the KEEP disposition: retain the file, record the decision, don't delete. (Same underlying gap as the recovery-complete Q2: {task,prd,adr,delete,ask} has no first-class KEEP outcome; encode it as clear-needsAnswers + a `## Disposition` note.)

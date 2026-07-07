@@ -11,3 +11,5 @@ _Suggested default: Promote nit #2 (complete.ts should honour alreadyLanded and 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote a small task for nit #2 (complete.ts should honour integrator.ts's `alreadyLanded` flag and emit the custom instruction instead of the push+PR next-step, so `dorfl complete --propose` hitting the benign already-landed race tail stops misreporting a step that didn't happen). Fold nit #3 (rename/split or add a scope note to continue-branch.ts, which now also holds the propose-branch stale-lease helper) into that same task as a coherence touch-up. Nit #1 (missing Decisions block) is the standing systemic pattern, don't duplicate. Then delete this observation.

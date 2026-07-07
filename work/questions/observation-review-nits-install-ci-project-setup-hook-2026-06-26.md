@@ -11,3 +11,5 @@ _Suggested default: Ratify all seven and discharge; if the missing Decisions blo
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Ratify all seven decisions (a-g) and discharge (delete). Each is sound and documented in this observation. The missing `## Decisions` block is the recurring systemic pattern owned by the standing `decisions-block-convention-repeatedly-skipped` observation (answered RELAX), don't duplicate it here.

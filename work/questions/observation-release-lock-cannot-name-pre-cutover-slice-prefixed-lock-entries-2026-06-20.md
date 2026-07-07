@@ -12,6 +12,8 @@ _Suggested default: Re-open (set needsAnswers: true) and promote a single slice 
 
 **Your answer** (write below this line):
 
+Mint the slice (the 2026-06-22 disposition was never shipped, confirmed no `--entry` option exists). One task bundling escape-hatch (b) `release-lock --entry <literal>` + reporting (c) `gc --ledger` showing literal entry names + a workaround-docs note. Leave migration (a) as a follow-up. Cross-reference the reaper-orphan sibling. Then delete this observation.
+
 ## Q2
 
 **Should the sibling observation reaper-never-clears-a-done-plus-stuck-lock-orphans-forever-2026-06-20 be folded into the SAME promoted slice (one orphan, two angles per the note), or promoted independently?**
@@ -23,3 +25,5 @@ _Suggested default: Bundle: one slice covering release-lock --entry, gc --ledger
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Bundle into the SAME slice: one escape-hatch (`release-lock --entry` + literal-entry reporting) addresses both the pre-cutover-prefixed-entry naming problem and the reaper terminal-orphan surface. Cross-reference the reaper observation from the task. (Note: the reaper CONTRACT change I'm minting separately from the reaper observation is the auto-reap behaviour; this slice is the human escape-hatch to name/release such an entry by hand. They compose.)

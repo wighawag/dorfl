@@ -11,3 +11,5 @@ _Suggested default: Delete — the defect is fixed, verified, and the design dec
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete, the defect is fixed and verified (cwd-section.ts defaults lockArbiterRemote to origin, calls heldTaskSlugsStrict and subtracts, empty-Set hardcoding gone). The design decisions (two arbiter axes: coordination vs divergence; selection fails closed, surface degrades gracefully) are already articulated in-line. I'd skip minting the ADR unless you want the durable design-guidance capture, the in-line comments plus this note are sufficient. So: delete as discharged.

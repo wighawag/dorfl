@@ -11,3 +11,5 @@ _Suggested default: Mint a task 'reap-squash-merged-remote-work-branches' implem
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a task `reap-squash-merged-remote-work-branches`: keep the fast-path `--is-ancestor` check, add a squash-aware fallback (terminal-on-main record + empty `git diff <main> <tip>`, or `git cherry` equivalence) so a provider-agnostic sweep reaps squash-landed branches. Include the two pin tests (squash-landed => reaped; genuinely unmerged => retained). Cross-link the lock-side twin observation `reaper-never-clears-a-done-plus-stuck-lock-orphans-forever`. Real recurring cost (one orphan branch per landed item on any squash-merge repo). Then delete this observation.
