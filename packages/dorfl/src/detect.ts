@@ -9,18 +9,54 @@ import {workFolderPath, isWorkItemFile} from './work-layout.js';
  * longer implicit discovery; its sole remaining job is to serve
  * **`remote find <folder>`** (ADR §1): walk ONE folder, find the participating
  * repos, and let the user toggle-add them. `isParticipatingRepo` is the same
- * predicate `remote find` filters on.
+ * predicate `remote find` filters on. A repo participates when it holds dorfl
+ * WORK content in any lifecycle pool (see {@link isParticipatingRepo}), not only
+ * a non-empty `tasks/ready/`.
  */
 
 /**
- * A repo participates iff it has a `work/backlog/` directory containing at least
- * one `.md` file. This is the predicate `remote find` (ADR §1) filters on.
+ * The `work/` pools whose presence makes a repo a dorfl WORK repo. Participation
+ * is NOT "has a claimable task": a repo whose `tasks/ready/` build pool is drained
+ * but whose LIFECYCLE queues are full (answered `questions/` sidecars awaiting
+ * apply, `needsAnswers` observations awaiting surface, staged prds/tasks awaiting
+ * promotion) is still very much participating — the lifecycle rungs
+ * (triage / surface / apply / promote) act on exactly those pools. Gating
+ * participation on `tasks/ready/` ALONE made such a repo read as non-participating,
+ * so `scan --here` returned empty lifecycle buckets and the CI enumerate step found
+ * nothing to do (a silent green no-op while real work sat in `questions/`).
+ *
+ * The predicate therefore mirrors what `enumerate`/`scan` can actually produce
+ * items from: it stays a CHEAP, fetch-free local `readdirSync` (no network — it is
+ * the pre-gate `remote find` and the cwd-section resolver call before paying for a
+ * fetch), just no longer NARROWER than the lifecycle it guards.
+ */
+const PARTICIPATING_POOLS = [
+	'tasks-ready',
+	'tasks-backlog',
+	'prds-proposed',
+	'prds-ready',
+	'observations',
+	'questions',
+] as const;
+
+/**
+ * A repo participates iff any of its lifecycle-bearing `work/` pools
+ * ({@link PARTICIPATING_POOLS}) contains at least one `.md` file. This is the
+ * predicate `remote find` (ADR §1) filters on AND the fetch-free gate
+ * `scan`/`status` use before resolving the (expensive) cwd section.
  */
 export function isParticipatingRepo(repoPath: string): boolean {
-	const backlog = workFolderPath(repoPath, 'tasks-ready');
+	return PARTICIPATING_POOLS.some((key) => folderHasWorkItem(repoPath, key));
+}
+
+/** True iff the named work folder exists and holds at least one work-item `.md`. */
+function folderHasWorkItem(
+	repoPath: string,
+	key: (typeof PARTICIPATING_POOLS)[number],
+): boolean {
 	let entries: string[];
 	try {
-		entries = readdirSync(backlog);
+		entries = readdirSync(workFolderPath(repoPath, key));
 	} catch {
 		return false;
 	}

@@ -18,6 +18,16 @@ function makeRepo(rel: string, backlogFiles: string[]): string {
 	return repo;
 }
 
+/** Seed a single work-item `.md` into an arbitrary pool subpath (relative to
+ * `work/`), so tests can assert participation off a non-`tasks/ready/` pool. */
+function seedPool(rel: string, poolSubpath: string, file: string): string {
+	const repo = join(root, rel);
+	const dir = join(repo, 'work', ...poolSubpath.split('/'));
+	mkdirSync(dir, {recursive: true});
+	writeFileSync(join(dir, file), '---\nslug: x\n---\n');
+	return repo;
+}
+
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), 'dorfl-detect-'));
 });
@@ -32,17 +42,53 @@ describe('isParticipatingRepo', () => {
 		expect(isParticipatingRepo(repo)).toBe(true);
 	});
 
-	it('is false for a repo whose work/tasks/ready/ has no .md files', () => {
+	it('is false for a repo whose work/tasks/ready/ has no .md files and no other pool content', () => {
 		const repo = join(root, 'beta');
 		mkdirSync(join(repo, 'work', 'tasks', 'ready'), {recursive: true});
 		writeFileSync(join(repo, 'work', 'tasks', 'ready', 'notes.txt'), 'hi');
 		expect(isParticipatingRepo(repo)).toBe(false);
 	});
 
-	it('is false for a repo with no work/tasks/ready/ at all', () => {
+	it('is false for a repo with no work/ pools at all', () => {
 		const repo = join(root, 'gamma');
 		mkdirSync(repo, {recursive: true});
 		expect(isParticipatingRepo(repo)).toBe(false);
+	});
+
+	// Regression: a drained build pool must NOT hide a repo whose LIFECYCLE queues
+	// are full. Before this, `tasks/ready/`-only gating made such a repo read as
+	// non-participating, so `scan --here` emitted empty lifecycle buckets and CI
+	// enumerate silently no-op'd while answered questions sat awaiting apply.
+	it('is true when tasks/ready/ is empty but questions/ has an answered sidecar', () => {
+		const repo = seedPool('delta', 'questions', 'observation-x.md');
+		expect(isParticipatingRepo(repo)).toBe(true);
+	});
+
+	it('is true off a staged tasks/backlog/ item alone', () => {
+		expect(isParticipatingRepo(seedPool('e1', 'tasks/backlog', 'a.md'))).toBe(
+			true,
+		);
+	});
+
+	it('is true off a proposed prd alone', () => {
+		expect(isParticipatingRepo(seedPool('e2', 'prds/proposed', 'p.md'))).toBe(
+			true,
+		);
+	});
+
+	it('is true off a notes/observations item alone', () => {
+		expect(
+			isParticipatingRepo(seedPool('e3', 'notes/observations', 'o.md')),
+		).toBe(true);
+	});
+
+	it('is NOT triggered by notes/ideas or notes/findings alone (non-lifecycle capture)', () => {
+		expect(isParticipatingRepo(seedPool('i1', 'notes/ideas', 'idea.md'))).toBe(
+			false,
+		);
+		expect(isParticipatingRepo(seedPool('i2', 'notes/findings', 'f.md'))).toBe(
+			false,
+		);
 	});
 });
 

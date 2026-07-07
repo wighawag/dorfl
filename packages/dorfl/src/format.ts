@@ -262,7 +262,9 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 		if (cwdLines.length === 0) {
 			lines.push('No participating repos found.');
 			lines.push(
-				'(A repo participates iff it has a work/backlog/ with >= 1 .md file.)',
+				'(A repo participates iff its work/ tree has lifecycle content in any ' +
+					'pool: tasks/ready, tasks/backlog, prds/proposed, prds/ready, ' +
+					'notes/observations, or questions.)',
 			);
 		} else {
 			lines.push(

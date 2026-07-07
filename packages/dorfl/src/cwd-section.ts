@@ -77,8 +77,9 @@ export interface CwdSection {
 	/** Absolute path to the cwd repo. */
 	path: string;
 	/**
-	 * True iff the cwd is a participating repo (a `work/backlog/` with ≥1 `.md`).
-	 * When false, every other field is absent — there is NO local section.
+	 * True iff the cwd is a participating repo (a `work/` tree with lifecycle
+	 * content in any pool — see {@link isParticipatingRepo}, NOT `tasks/ready/`
+	 * alone). When false, every other field is absent — there is NO local section.
 	 */
 	participating: boolean;
 	/** The cwd repo's `work/` lifecycle, read from the LOCAL WORKING TREE. */
@@ -116,7 +117,9 @@ function remoteExists(
 
 /** The verdict of the FETCH-FREE cwd pre-check {@link cwdSectionDisposition}. */
 export interface CwdDisposition {
-	/** True iff the cwd is a participating repo (a `work/tasks/ready/` with >= 1 `.md`). */
+	/** True iff the cwd is a participating repo (a `work/` tree with lifecycle
+	 * content in any pool — see {@link isParticipatingRepo}, NOT `tasks/ready/`
+	 * alone). */
 	participating: boolean;
 	/**
 	 * True iff the cwd's arbiter URL keys to a registered hub mirror. When true the
