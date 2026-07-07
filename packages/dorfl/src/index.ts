@@ -274,11 +274,18 @@ export type {
 	CreateItemExitCode,
 	CreateItemThroughCasOptions,
 	CreateItemThroughCasResult,
+	CasContentionBudget,
+	CasAttemptResult,
+	CasContentionLoopResult,
 } from './advancing-lock.js';
 export {
 	acquireAdvancingLock,
 	releaseAdvancingLock,
 	createItemThroughCas,
+	nextCasContentionDelayMs,
+	runCasContentionLoop,
+	INTERACTIVE_CAS_CONTENTION,
+	LIFECYCLE_CAS_CONTENTION,
 } from './advancing-lock.js';
 
 export type {

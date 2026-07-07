@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
 import {
 	createItemThroughCas,
+	type CasContentionBudget,
 	type CreateItemThroughCasResult,
 } from './advancing-lock.js';
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
@@ -134,6 +135,15 @@ export interface MintAdrOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Show the intended CAS push without mutating the arbiter (`--dry-run`). */
 	dryRun?: boolean;
+	/**
+	 * The CAS CONTENTION-RETRY BUDGET (jittered inter-retry delay + widened
+	 * attempt / wall-clock envelope). Threaded through to
+	 * {@link createItemThroughCas}. The lifecycle driver passes
+	 * `LIFECYCLE_CAS_CONTENTION` here so a propose-tick FAN-OUT of parallel
+	 * `mint-adr` legs desynchronises and DRAINS instead of thrashing to `contended`.
+	 * Absent ⇒ the interactive default (3 retries, no delay).
+	 */
+	contention?: CasContentionBudget;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -212,6 +222,9 @@ export async function mintAdr(options: MintAdrOptions): Promise<MintAdrResult> {
 		dryRun: options.dryRun,
 		env,
 		note,
+		...(options.contention !== undefined
+			? {contention: options.contention}
+			: {}),
 	});
 	if (created.exitCode !== 0) {
 		const message =
