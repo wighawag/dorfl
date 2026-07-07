@@ -1,5 +1,7 @@
+import {existsSync} from 'node:fs';
+import {join} from 'node:path';
 import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
-import {workItemRel} from './work-layout.js';
+import {workItemRel, type WorkFolderKey} from './work-layout.js';
 
 /**
  * The **question/answer SIDECAR contract** (spec `advance-loop`, task
@@ -290,6 +292,70 @@ export function sidecarPathCandidates(identity: string): string[] {
 
 /** The fixed answer marker the human types prose under. */
 const ANSWER_MARKER = '**Your answer** (write below this line):';
+
+/**
+ * The lifecycle folders a given item type may currently reside in — the
+ * search set the {@link serialiseSidecar} human-visible link line scans to
+ * locate the item at write-time. Deliberately INCLUSIVE of the terminal
+ * folders (`done`, `cancelled`, `prds-dropped`) so a sidecar still-being-
+ * serialised for a finished item still emits a clickable link. Kept LOCAL to
+ * this module (rather than reused from `advance.ts`) because this set is the
+ * "where might the item CURRENTLY be on disk?" question, which is broader
+ * than advance's rung-classifier reach.
+ */
+const LINK_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
+	task: [
+		'tasks-ready',
+		'in-progress',
+		'needs-attention',
+		'done',
+		'cancelled',
+		'tasks-backlog',
+	],
+	prd: ['prds-ready', 'prds-tasked', 'prds-proposed', 'prds-dropped'],
+	observation: ['observations'],
+};
+
+/**
+ * Look up the item's CURRENT on-disk repo-relative path by scanning the
+ * lifecycle folders its type may reside in, in a documented precedence order.
+ * Returns `undefined` when the item is not found in ANY folder — the
+ * serialiser's "harmless fallback" (omit the link) branch.
+ *
+ * PURE lookup: no throws, no side effects. Every call is a fresh scan — the
+ * link SELF-HEALS on the next `serialise` after a `git mv` between folders
+ * (identity-keyed sidecar; NO lock-step move).
+ */
+function findItemRelPath(
+	repoRoot: string,
+	type: SidecarType,
+	slug: string,
+): string | undefined {
+	for (const folder of LINK_LIFECYCLE_FOLDERS[type]) {
+		const rel = workItemRel(folder, `${slug}.md`);
+		if (existsSync(join(repoRoot, rel))) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Render the human-visible Markdown link line, from the sidecar's fixed path
+ * (`work/questions/<type>-<slug>.md`) to the item's current `work/<folder>/
+ * <slug>.md`. Since both live under `work/`, the sidecar-relative link is
+ * `../<folder-name>/<slug>.md` — the `..` climbs out of `questions/` and the
+ * `<folder-name>` (which may contain a `/`, e.g. `tasks/ready`) drops back in.
+ */
+function renderItemLinkLine(item: string, itemRel: string): string {
+	// itemRel is `work/<folder-name>/<slug>.md`; strip the leading `work/` and
+	// prefix with `../` so the link is relative to `work/questions/<file>.md`.
+	const prefix = 'work/';
+	const target = itemRel.startsWith(prefix)
+		? `../${itemRel.slice(prefix.length)}`
+		: itemRel;
+	return `Item: [\`${item}\`](${target})`;
+}
 
 // --- Parse ----------------------------------------------------------------
 
@@ -582,7 +648,10 @@ function blockquote(value: string): string[] {
  * `parseSidecar(serialiseSidecar(m))` recovers an equal MODEL; re-serialising
  * canonicalises the text.
  */
-export function serialiseSidecar(model: SidecarModel): string {
+export function serialiseSidecar(
+	model: SidecarModel,
+	options: SerialiseSidecarOptions = {},
+): string {
 	const out: string[] = [];
 	const identityParts = [
 		`item=${model.item}`,
@@ -591,6 +660,21 @@ export function serialiseSidecar(model: SidecarModel): string {
 		`allAnswered=${allAnswered(model)}`,
 	];
 	out.push(`<!-- dorfl-sidecar: ${identityParts.join(' ')} -->`);
+
+	// Human-visible Markdown link line — placed AFTER the identity comment and
+	// BEFORE the first `## ` heading, i.e. in the parser's ignored preamble
+	// region. Regenerated on every serialise from the item's CURRENT on-disk
+	// location; NEVER round-tripped through the parsed model (the link line is
+	// write-only cosmetic output, per the source observation). If the item is
+	// not resolvable on disk, we simply OMIT the line (harmless fallback) — a
+	// broken link would be more confusing than no link.
+	if (options.repoRoot !== undefined) {
+		const itemRel = findItemRelPath(options.repoRoot, model.type, model.slug);
+		if (itemRel !== undefined) {
+			out.push('');
+			out.push(renderItemLinkLine(model.item, itemRel));
+		}
+	}
 
 	model.entries.forEach((entry) => {
 		out.push('');
@@ -632,6 +716,24 @@ export function serialiseSidecar(model: SidecarModel): string {
 	});
 	out.push('');
 	return out.join('\n');
+}
+
+/**
+ * Options for {@link serialiseSidecar}. The optional `repoRoot` opts the
+ * caller into emitting the human-visible Markdown link line at the top of
+ * the sidecar (pointing at the item's current `work/<folder>/<slug>.md`).
+ * Callers that don't have a repo root (e.g. pure format tests) simply omit
+ * it and the serialiser emits no link — the parse is unaffected either way.
+ */
+export interface SerialiseSidecarOptions {
+	/**
+	 * Absolute or relative path to the repository root, so the serialiser can
+	 * scan `work/<lifecycle-folder>/<slug>.md` for the item and render a
+	 * clickable relative link line. When omitted (or when the item cannot be
+	 * located), the link line is omitted — a harmless fallback, never a
+	 * broken link.
+	 */
+	repoRoot?: string;
 }
 
 // --- Append ---------------------------------------------------------------
