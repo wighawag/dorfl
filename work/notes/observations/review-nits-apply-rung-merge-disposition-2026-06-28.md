@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'apply-rung-merge-disposition' (Gate 2 
 date: 2026-06-28
 status: open
 reviewOf: apply-rung-merge-disposition
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
