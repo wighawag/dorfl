@@ -71,7 +71,7 @@ export interface CloseCandidate {
 	/** The resolved issue number. */
 	issueNumber: number;
 	/** Whether the closing link was a lone task's `issue:` or a prd's `issue:`. */
-	via: 'issue' | 'prd';
+	via: 'issue' | 'brief';
 	/** The slug of the artifact carrying the closing link (prd slug / task slug). */
 	slug: string;
 	/** What the close-job decided for this candidate. */
@@ -146,11 +146,11 @@ function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
  */
 function resolveCandidates(repoPath: string): {
 	issueNumber: number;
-	via: 'issue' | 'prd';
+	via: 'issue' | 'brief';
 	slug: string;
 }[] {
 	const seen = new Set<number>();
-	const prdCandidates: {issueNumber: number; via: 'prd'; slug: string}[] = [];
+	const prdCandidates: {issueNumber: number; via: 'brief'; slug: string}[] = [];
 	const taskCandidates: {issueNumber: number; via: 'issue'; slug: string}[] =
 		[];
 
@@ -167,7 +167,7 @@ function resolveCandidates(repoPath: string): {
 			// `issue:`-bearing prd becomes a candidate here.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
-				prdCandidates.push({issueNumber: closing.issue, via: 'prd', slug});
+				prdCandidates.push({issueNumber: closing.issue, via: 'brief', slug});
 			}
 		}
 	}
@@ -211,9 +211,9 @@ function loneTaskLanded(repoPath: string, taskSlug: string): boolean {
 }
 
 /** The closing comment posted (atomically, on the close call) for each kind. */
-function closeComment(via: 'issue' | 'prd', slug: string): string {
-	return via === 'prd'
-		? `Closed by dorfl: every task of prd \`${slug}\` has landed in \`work/done/\`.`
+function closeComment(via: 'issue' | 'brief', slug: string): string {
+	return via === 'brief'
+		? `Closed by dorfl: every task of brief \`${slug}\` has landed in \`work/done/\`.`
 		: `Closed by dorfl: the task \`${slug}\` has landed in \`work/done/\`.`;
 }
 
@@ -239,7 +239,7 @@ export async function runCloseJob(
 		// computation of "complete" / "landed" is the UNCHANGED engine query.
 		let shouldClose: boolean;
 		let notReady: CloseDecision;
-		if (cand.via === 'prd') {
+		if (cand.via === 'brief') {
 			shouldClose = isPrdComplete({repoPath, slug: cand.slug}).complete;
 			notReady = 'not-complete';
 		} else {

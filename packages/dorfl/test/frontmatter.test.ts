@@ -402,7 +402,7 @@ describe('parseFrontmatter', () => {
 describe('resolveClosingIssue', () => {
 	it('a fanned task (prd: only) closes via the `prd:` hop', () => {
 		expect(resolveClosingIssue({prd: 'my-prd', issue: undefined})).toEqual({
-			via: 'prd',
+			via: 'brief',
 			prd: 'my-prd',
 		});
 	});
@@ -418,7 +418,7 @@ describe('resolveClosingIssue', () => {
 		// The one-closure-path invariant: intake never emits both; a human typo degrades
 		// to "use the prd's number" rather than crashing (no throwing validator).
 		expect(resolveClosingIssue({prd: 'my-prd', issue: 9})).toEqual({
-			via: 'prd',
+			via: 'brief',
 			prd: 'my-prd',
 		});
 	});

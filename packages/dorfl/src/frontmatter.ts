@@ -433,16 +433,16 @@ export function parseFrontmatter(content: string): Frontmatter {
  * that degrades to "use the prd" rather than crashing).
  *
  * Returns:
- * - `{via: 'prd', prd}` when a `prd:` is present (hop to the prd's `issue:`; the
+ * - `{via: 'brief', prd}` when a `prd:` is present (hop to the prd's `issue:`; the
  *   caller resolves the prd file to read its number);
  * - `{via: 'issue', issue}` when only a lone-task `issue:` is present;
  * - `undefined` when neither is present (no closure path).
  */
 export function resolveClosingIssue(
 	frontmatter: Pick<Frontmatter, 'prd' | 'issue'>,
-): {via: 'prd'; prd: string} | {via: 'issue'; issue: number} | undefined {
+): {via: 'brief'; prd: string} | {via: 'issue'; issue: number} | undefined {
 	if (frontmatter.prd !== undefined) {
-		return {via: 'prd', prd: frontmatter.prd};
+		return {via: 'brief', prd: frontmatter.prd};
 	}
 	if (frontmatter.issue !== undefined) {
 		return {via: 'issue', issue: frontmatter.issue};

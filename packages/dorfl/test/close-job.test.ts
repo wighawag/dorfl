@@ -223,7 +223,7 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 			1,
 		);
 		expect(result.candidates.find((c) => c.issueNumber === 42)?.via).toBe(
-			'prd',
+			'brief',
 		);
 	});
 
