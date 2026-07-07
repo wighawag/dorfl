@@ -2,6 +2,7 @@
 title: A task's mechanical `blockedBy` can be satisfied while its TRUE implementation premise is unmet; the build agent's code-read is the backstop that catches it (apply-rung-merge-disposition CI stop)
 date: 2026-06-26
 status: open
+needsAnswers: true
 ---
 
 ## What was seen
