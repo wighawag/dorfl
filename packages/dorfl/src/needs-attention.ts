@@ -543,20 +543,45 @@ export async function returnToBacklog(
 	// discards the branch by design).
 	if (!options.reset) {
 		const branch = workBranchRef('task', slug);
-		const onArbiter = branchAheadOf(
+		// Split the guard into TWO cases (task
+		// `default-requeue-succeeds-when-no-work-branch-exists`):
+		//   (a) the arbiter branch does NOT EXIST at all (never pushed, or a prior
+		//       `--reset` already deleted it) — there is NO continue-branch a future
+		//       worker would resume from, so the guard's precondition is vacuously
+		//       satisfied. Degrade gracefully to the same effective outcome as
+		//       `--reset` (nothing to discard) and proceed with the keep+continue
+		//       backlog move: no arbiter delete (there is nothing to delete), no
+		//       forcing the caller into the destructive `--reset` verb.
+		//   (b) the arbiter branch EXISTS but is NOT ahead of `<arbiter>/main` — a
+		//       real anomaly (the continue-branch would resume from a state already
+		//       reachable from main). Preserve today's refusal so the case surfaces.
+		const tip = gitSoftRun(
+			['rev-parse', '--verify', '--quiet', `${arbiter}/${branch}^{commit}`],
 			cwd,
-			`${arbiter}/${branch}`,
-			`${arbiter}/main`,
 			env,
 		);
-		if (!onArbiter) {
-			const message =
-				`the work branch ${branch} isn't on ${arbiter} (the continue ` +
-				`branch a cross-machine worker would resume from) — push it first, or ` +
-				'`requeue --reset` to discard and start fresh. Item left stuck (lock not ' +
-				'released).';
-			note(message);
-			return {moved: false, reasonNotMoved: message};
+		const arbiterBranchExists = tip.status === 0 && tip.stdout.trim() !== '';
+		if (!arbiterBranchExists) {
+			note(
+				`'${slug}' has no work branch on ${arbiter} — requeueing to backlog ` +
+					'for a FRESH claim (nothing to continue from; no --reset needed).',
+			);
+		} else {
+			const onArbiter = branchAheadOf(
+				cwd,
+				`${arbiter}/${branch}`,
+				`${arbiter}/main`,
+				env,
+			);
+			if (!onArbiter) {
+				const message =
+					`the work branch ${branch} isn't on ${arbiter} (the continue ` +
+					`branch a cross-machine worker would resume from) — push it first, or ` +
+					'`requeue --reset` to discard and start fresh. Item left stuck (lock not ' +
+					'released).';
+				note(message);
+				return {moved: false, reasonNotMoved: message};
+			}
 		}
 	}
 

@@ -210,11 +210,15 @@ describe('needs-attention route — honest per-op reporting', () => {
 	});
 });
 
-describe('requeue-safe — default keep+continue refuses a missing arbiter branch', () => {
-	it('REFUSES when the work branch is NOT on the arbiter (push first / --reset)', async () => {
+describe('requeue-safe — default keep+continue degrades to fresh when the arbiter branch is absent', () => {
+	it('SUCCEEDS when the work branch is NOT on the arbiter (nothing to continue from; no --reset needed)', async () => {
 		// Surface to needs-attention on the arbiter NORMALLY (so the item IS on
 		// <arbiter>/main and the tree-less requeue reaches the continue-branch guard),
 		// then DELETE the work branch from the arbiter so the guard sees it absent.
+		// Per task `default-requeue-succeeds-when-no-work-branch-exists`: the guard's
+		// precondition is vacuously satisfied when there is no continue-branch to
+		// protect, so DEFAULT requeue degrades gracefully to a fresh-claim move
+		// (equivalent effective outcome to `--reset` when there is nothing to lose).
 		const {repo, seeded} = await claimAndBranch('eta', {commitWork: true});
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
@@ -228,19 +232,27 @@ describe('requeue-safe — default keep+continue refuses a missing arbiter branc
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
 		gitIn(['push', '-q', ARBITER, '--delete', 'work/task-eta'], repo);
+		gitIn(['fetch', '-q', ARBITER], repo);
 		void seeded;
 
+		const notes: string[] = [];
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'eta',
 			arbiter: ARBITER,
 			env: gitEnv(),
+			note: (m) => notes.push(m),
 		});
-		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/isn't on/);
-		expect(result.reasonNotMoved).toMatch(/push it first|--reset/);
-		// The lock stayed stuck (not released); the body rests in backlog/.
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		expect(result.moved).toBe(true);
+		expect(result.reasonNotMoved).toBeUndefined();
+		// A legible note explains the degraded-to-fresh transition (no "push it
+		// first, or `requeue --reset`" refusal).
+		expect(notes.some((m) => /has no work branch on/i.test(m))).toBe(true);
+		expect(
+			notes.some((m) => /push it first, or `requeue --reset`/.test(m)),
+		).toBe(false);
+		// The lock was RELEASED (item claimable again); the body rests in backlog/.
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
 	});
 
