@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'committed-recovery-honours-fresh-workt
 date: 2026-06-26
 status: open
 reviewOf: committed-recovery-honours-fresh-worktree-gate
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
