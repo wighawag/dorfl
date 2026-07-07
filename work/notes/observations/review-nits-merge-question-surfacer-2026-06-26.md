@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'merge-question-surfacer' (Gate 2 appro
 date: 2026-06-26
 status: open
 reviewOf: merge-question-surfacer
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
