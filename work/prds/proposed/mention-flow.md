@@ -2,30 +2,11 @@
 title: mention-flow - an @dorfl conversational front-door (advise first, dispatch verbs later)
 slug: mention-flow
 humanOnly: true
-needsAnswers: true
+needsAnswers: false
 taskedAfter: [runner-in-ci, issue-intake]
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is tasked — they move into tasks/ADRs and this prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
-
-<!-- open-questions -->
-<!--
-  TRANSIENT BLOCK — stripped by the apply rung on full resolution.
-  While the spec has unresolved questions blocking autonomous tasking:
-    1. Set `needsAnswers: true` in the frontmatter above.
-    2. List the questions under the `## Open questions` heading below.
-    3. Clear the flag (and let apply strip this block) once they are answered.
-  Delete the whole fenced block — markers and all — if the prd launches fully resolved.
--->
-
-## Open questions
-
-1. **Bare-mention default intent.** When the body is just `@dorfl` with no instruction, what is the default? Proposed: advise/summarise the issue or thread (matching the interactive default of comparable tools), NOT "ask the user what they want". Confirm or override.
-2. **Flow B confirmation model.** When a TRUSTED mentioner says `@dorfl file a task` / `@dorfl fix this`, does the dispatch fire IMMEDIATELY, or does `@dorfl` always PROPOSE-and-wait-for-a-thumbs-up first? Proposed: dispatch may fire immediately for a trusted mentioner when the resolved integration mode is itself non-merging (i.e. it would open a PR / write to a staging pool anyway, so the human checkpoint is still ahead); anything that would land on `main` always asks first. Confirm the exact line.
-3. **Mention authorisation floor.** Who may summon `@dorfl` AT ALL (as distinct from who may make it MUTATE)? Proposed: the advisory flow (Flow A) is open to anyone who can comment (it only posts a comment); a configurable allow-list governs whether bot accounts may summon it. Mirrors the `allowed_bots` / `allowed_non_write_users` posture of comparable actions. Confirm whether advisory should also be gateable to write-collaborators-only for a private/locked-down repo.
-4. **Trigger phrase configurability + collision.** The phrase defaults to the brand base (`@dorfl`) and is configurable. Confirm the config key name and that a repo may set a different phrase (e.g. to avoid colliding with an unrelated `@dorfl` GitHub account that the maintainer does not own — the account-ownership constraint recorded in Further Notes).
-
-<!-- /open-questions -->
 
 ## Problem Statement
 
@@ -106,3 +87,29 @@ The keystone deliverable is **Flow A (advisory, write-nothing)**, because it reu
 - **Prior art to read at slicing time:** `src/intake.ts` (decision→dispatch shape, the agent-drafts/runner-acts boundary), `src/intake-marker.ts` + `src/intake-triage.ts` + `src/intake-event.ts` (the resumption machinery to reuse, the vocabulary NOT to reuse), `src/issue-provider.ts` (the seam), `src/identity.ts` (the bot identity, default name `dorfl`), `src/intake-trigger-template.ts` + `install-ci-github.ts` (the trigger-workflow generator + validator to mirror), and `runner-in-ci`'s merge-vs-propose + author-trust policy (the trust resolver to consume).
 - **Comparable reference:** the `anthropics/claude-code-action` shape — configurable `trigger_phrase` (default `@claude`) decoupled from `bot_name` (`claude[bot]`), `allowed_bots` / `allowed_non_write_users` summon gates, and an auto-detected interactive (mention) vs automation (prompt) mode — is the closest external prior art for the front-door UX and the summon-trust posture.
 - Slice this PRD with `to-slices`. Natural first slice: **Flow A advisory** (read seam + a non-terminal `advised` marker + the intent router's `advise` default + a `--fake`-tested mention workflow), then **Flow B dispatch** (`taskedAfter` the `runner-in-ci` author-trust slice), then **PR-surface** support (the url-keyed comment seam, inheriting the resumption caveat).
+
+## Applied answers 2026-07-07
+
+### q1: Bare-mention default intent. When the body is just `@dorfl` with no instruction, what is the default? Proposed: advise/summarise the issue or thread (matching the interactive default of comparable tools), NOT "ask the user what they want". Confirm or override.
+
+Advise/summarise the current issue or PR (the lightest-weight, read-only interaction), NOT "ask the user what they want." Writes nothing. This is Flow A, the keystone.
+
+### q2: Flow B confirmation model. When a TRUSTED mentioner says `@dorfl file a task` / `@dorfl fix this`, does the dispatch fire IMMEDIATELY, or does `@dorfl` always PROPOSE-and-wait-for-a-thumbs-up first? Confirm the exact line.
+
+CONSTRAIN Flow B to the work protocol: `@dorfl` must NOT do things outside the work protocol, and in particular "@dorfl fix this" does NOT mean the agent edits code directly. "fix this" / "file a task" means: CREATE a work artifact (a task, or a prd if larger), routed through the normal intake-shaped path. Placement: a task created from a TRUSTED mention goes straight into `tasks/ready/` so the loop picks it up (no separate promote step needed for a trusted origin); an untrusted mention can at most create a STAGED/proposed artifact (staging pool / proposed-prd), never a ready task and never anything that auto-lands on main (see Q3). If the request is unclear, the mention flow ASKS a clarifying question in the thread, exactly like intake's `ask` outcome, rather than guessing. So the confirmation model is: the mutation is always "create a work-protocol artifact" (never a direct code edit); trusted => the artifact may be created immediately in ready; untrusted => staged only; ambiguous => ask. Nothing dispatched via `@dorfl` may bypass the merge-vs-propose + author-trust policy or land on main automatically.
+
+### q3: Mention authorisation floor. Who may summon `@dorfl` AT ALL (distinct from who may make it MUTATE)? In particular, confirm whether the advisory flow (Flow A) should also be gateable to write-collaborators-only for a private/locked-down repo.
+
+Configurable authorisation floor. Flow A (advisory, comment-only) open to any commenter by DEFAULT, with a configurable allow-list for bot accounts and an opt-in write-collaborators-only gate for private/locked-down repos. CRITICAL trust requirement for any created artifact (Flow B): the created task/prd MUST RECORD ITS ORIGIN (the mentioner's handle + trust level + source thread) in its frontmatter/body, so trust is carried forward and an UNTRUSTED origin can never result in code landing on main automatically. Concretely: an untrusted-origin artifact is staged/proposed only and is fenced from the autonomous build->merge path (it requires an explicit human promotion before it can be claimed/built/merged); a trusted origin may go to ready. The origin record is the load-bearing mechanism, do not create an untrusted task without stamping its provenance.
+
+### q4: Trigger phrase configurability + collision. Confirm the config KEY NAME for the trigger phrase, and that a repo may set a phrase different from the `@dorfl` brand base (e.g. to avoid colliding with the unrelated, maintainer-not-owned `@dorfl` GitHub account).
+
+Confirmed. The trigger phrase defaults to the brand base (`@dorfl`) and is per-repo configurable, decoupled from the posting account. Config key name: `trigger_phrase` (mirroring the claude-code-action prior art).
+
+### q5: Flow B's dependency on the still-OPEN runner-in-ci author-trust resolver: how should the build order be pinned so a Flow B slice cannot be claimed before the resolver it consumes exists? The PRD names the dependency in prose ("must `taskedAfter`/`blockedBy` the slice that lands it") but encodes only a PRD-level `taskedAfter: [runner-in-ci, ...]`, which does not serialise per-slice build order. Confirm the intended `blockedBy` wiring at slicing time.
+
+At `to-task` time, give every Flow B (dispatch/create-artifact) task a concrete `blockedBy` referencing the runner-in-ci author-trust resolver task; keep Flow A (advisory) free of that dependency so the keystone slice stays buildable now. The origin-recording + untrusted-fencing requirement from Q3 also depends on that resolver, so it belongs in the Flow B slice(s), not Flow A.
+
+### q6: Non-blocking: the prior-art file paths in Further Notes are written as bare `src/...` (e.g. `src/intake.ts`, `src/issue-provider.ts`) but the code actually lives under `packages/dorfl/src/...`. Should the slicing/prompt references be normalised to the real package-relative paths so a fresh build agent does not chase ghost paths?
+
+Normalise the prior-art references to the real `packages/dorfl/src/...` paths when `to-task` lifts them into task prompts, so a fresh-context build agent does not chase ghost `src/...` paths.
