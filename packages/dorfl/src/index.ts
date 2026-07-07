@@ -450,6 +450,7 @@ export type {
 	LifecyclePools,
 	LifecyclePoolsInput,
 	NeedsAnswersCandidate,
+	ObservationCandidate,
 } from './lifecycle-pools.js';
 export {buildLifecyclePools} from './lifecycle-pools.js';
 export {

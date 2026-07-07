@@ -1,4 +1,3 @@
-import type {LedgerObservationItem} from './ledger-read.js';
 import type {SidecarModel} from './sidecar.js';
 import {allAnswered} from './sidecar.js';
 import type {LifecycleSelectedItem} from './select-priority.js';
@@ -105,16 +104,43 @@ export interface NeedsAnswersCandidate {
 	sidecar: SidecarModel | undefined;
 }
 
+/**
+ * One OBSERVATION candidate for the TRIAGE/APPLY sub-pools, resolved through
+ * the same read seam as its `needsAnswers` task/prd siblings (task
+ * `route-answered-observation-sidecar-to-apply-pool`). The classifier receives
+ * a sidecar-aware observation shape so an ANSWERED observation sidecar routes
+ * to the always-on APPLY pool (a CONSUME act — the human's answer is never
+ * stranded), while a NO/PENDING sidecar UNTRIAGED observation stays a TRIAGE
+ * candidate (gated) as today. PURE: the caller resolves the active sidecar (via
+ * {@link sidecarPathFor} — the SAME resolver the task/prd `needsAnswers`
+ * candidates use); this unit only routes.
+ */
+export interface ObservationCandidate {
+	/** The observation's identity — its FILENAME slug (never a foreign frontmatter `slug:`). */
+	slug: string;
+	/**
+	 * The SETTLED marker (`triaged:` frontmatter): a non-empty value drops the
+	 * observation out of the TRIAGE pool; `undefined` ⇒ UNTRIAGED. IGNORED for
+	 * the APPLY routing (an ANSWERED sidecar wins regardless of the marker: a
+	 * human's answer must never be stranded — task `## Decisions`).
+	 */
+	triaged: string | undefined;
+	/** The parsed ACTIVE sidecar (`work/questions/observation-<slug>.md`), or `undefined`. */
+	sidecar: SidecarModel | undefined;
+}
+
 /** Inputs to {@link buildLifecyclePools}: the raw lifecycle candidates + the gates. */
 export interface LifecyclePoolsInput {
 	/** The repo whose lifecycle items these are (carried onto each selected item). */
 	repoPath: string;
 	/**
-	 * Every observation in `work/notes/observations/` (the read seam's new observation
-	 * read). SETTLED ones (`triaged:` non-empty) are excluded here; only UNTRIAGED
-	 * observations feed the triage sub-pool.
+	 * Every observation in `work/notes/observations/` (the read seam's observation
+	 * read), each with its resolved active sidecar (task
+	 * `route-answered-observation-sidecar-to-apply-pool`). This unit routes each
+	 * to APPLY (sidecar all-answered, consume, always-on) or TRIAGE (untriaged, no
+	 * all-answered sidecar; create, gated).
 	 */
-	observations: LedgerObservationItem[];
+	observations: ObservationCandidate[];
 	/**
 	 * Every `needsAnswers:true` task/prd (the create-side blocked items), each
 	 * with its resolved active sidecar. This unit routes each to SURFACE or APPLY.
@@ -165,20 +191,37 @@ export function buildLifecyclePools(
 	const triageOn = gates.triage === true;
 	const surfaceOn = gates.surface === true;
 
-	// --- triage: UNTRIAGED observations (no `triaged:` settled marker) ---
-	const triage: LifecycleSelectedItem[] = triageOn
-		? input.observations
-				.filter((obs) => obs.triaged === undefined)
-				.map((obs) => ({
-					repoPath: input.repoPath,
-					slug: obs.slug,
-					namespace: 'observation' as const,
-				}))
-		: [];
+	// --- observation routing: apply (all-answered sidecar) vs triage (untriaged) ---
+	const triage: LifecycleSelectedItem[] = [];
+	const apply: LifecycleSelectedItem[] = [];
+	for (const obs of input.observations) {
+		const answered = obs.sidecar !== undefined && allAnswered(obs.sidecar);
+		if (answered) {
+			// CONSUME (apply the human's committed answer) — ALWAYS allowed, even
+			// with the triage create-gate off (the create-vs-consume invariant, ADR
+			// `ci-config-policy-and-gate-family` §4). An answered sidecar wins even
+			// when the observation body also carries a `triaged:` marker: a human's
+			// answer must never be stranded (task `## Decisions`).
+			apply.push({
+				repoPath: input.repoPath,
+				slug: obs.slug,
+				namespace: 'observation',
+			});
+		} else if (obs.triaged === undefined && triageOn) {
+			// CREATE (mint the promote/keep/delete question) — gated by
+			// `observationTriage`. An untriaged observation with NO sidecar or a
+			// PENDING sidecar is a triage candidate as today.
+			triage.push({
+				repoPath: input.repoPath,
+				slug: obs.slug,
+				namespace: 'observation',
+			});
+		}
+		// else: SETTLED (triaged:) with no answered sidecar — NOT enumerated.
+	}
 
 	// --- surface / apply: split `needsAnswers` items by sidecar answered-state ---
 	const surface: LifecycleSelectedItem[] = [];
-	const apply: LifecycleSelectedItem[] = [];
 	for (const candidate of input.needsAnswers) {
 		const answered =
 			candidate.sidecar !== undefined && allAnswered(candidate.sidecar);
