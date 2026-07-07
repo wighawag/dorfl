@@ -9,7 +9,10 @@ import {
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {gatherLifecycleInPlace} from '../src/lifecycle-gather.js';
+import {
+	gatherLifecycleInPlace,
+	gatherLifecycleMirror,
+} from '../src/lifecycle-gather.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {
 	performAdvanceAuto,
@@ -26,6 +29,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	gitEnv,
+	gitIn,
 	raceClone,
 	racerEnv,
 	type Scratch,
@@ -432,6 +436,71 @@ describe('(f) F3 precondition: a concurrent promote during apply does NOT split-
 			arbiter: 'arbiter',
 			env: racerEnv('apply'),
 		});
+	});
+});
+
+/**
+ * (g) MIRROR path — the CI propose-matrix path (`scanMirrorPool` →
+ * `gatherLifecycleMirror`) reads the SAME logical `work/` state from a BARE hub
+ * mirror's committed `<ref>` tree via `resolveMirrorTaskStaging` /
+ * `resolveMirrorPrdStaging` (each a `git ls-tree` + `git show` pair against
+ * `<ref>:work/tasks/backlog/` + `<ref>:work/prds/proposed/`). This block
+ * exercises that path end-to-end so the in-place widening (a)/(b) and the
+ * mirror-side widening AGREE.
+ */
+describe('(g) MIRROR path: gatherLifecycleMirror honours surfaceStaging against a bare hub mirror', () => {
+	function commitAndMirror(): {mirror: string} {
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'seed'], repo);
+		const mirror = join(root, 'mirror.git');
+		gitIn(['clone', '-q', '--bare', repo, mirror], root);
+		return {mirror};
+	}
+
+	it('surfaceStaging:true — a needsAnswers task in tasks/backlog/ IS enumerated into the mirror-side surface pool', async () => {
+		seedStagedTask('mirror-staged-task', {needsAnswers: true});
+		const {mirror} = commitAndMirror();
+		const pools = await gatherLifecycleMirror({
+			mirrorPath: mirror,
+			ref: 'main',
+			gates: {surface: true, surfaceStaging: true},
+			env: gitEnv(),
+		});
+		expect(pools.surface.map((i) => `${i.namespace}:${i.slug}`)).toContain(
+			'task:mirror-staged-task',
+		);
+		expect(pools.apply).toEqual([]);
+	});
+
+	it('surfaceStaging:true — a needsAnswers prd in prds/proposed/ IS enumerated (mirror-side prd-staging reader)', async () => {
+		seedStagedPrd('mirror-staged-prd', {needsAnswers: true});
+		const {mirror} = commitAndMirror();
+		const pools = await gatherLifecycleMirror({
+			mirrorPath: mirror,
+			ref: 'main',
+			gates: {surface: true, surfaceStaging: true},
+			env: gitEnv(),
+		});
+		expect(pools.surface.map((i) => `${i.namespace}:${i.slug}`)).toContain(
+			'prd:mirror-staged-prd',
+		);
+	});
+
+	it('surfaceStaging:false — the same staged task + prd are NOT enumerated (mirror-side staging readers are skipped)', async () => {
+		seedStagedTask('mirror-staged-task', {needsAnswers: true});
+		seedStagedPrd('mirror-staged-prd', {needsAnswers: true});
+		const {mirror} = commitAndMirror();
+		const pools = await gatherLifecycleMirror({
+			mirrorPath: mirror,
+			ref: 'main',
+			gates: {surface: true, surfaceStaging: false},
+			env: gitEnv(),
+		});
+		const surface = pools.surface.map((i) => `${i.namespace}:${i.slug}`);
+		expect(surface).not.toContain('task:mirror-staged-task');
+		expect(surface).not.toContain('prd:mirror-staged-prd');
+		expect(pools.surface).toEqual([]);
 	});
 });
 

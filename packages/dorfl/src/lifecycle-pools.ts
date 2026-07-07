@@ -80,6 +80,18 @@ export interface LifecyclePoolGates {
 	 * default is `true`). Spec `staging-surface-and-apply-promote-safety` F2.
 	 * BUILD/claim eligibility is UNCHANGED in either mode — staging items stay
 	 * non-claimable, the trust model is untouched.
+	 *
+	 * CREATE-vs-CONSUME EDGE (accepted, prd
+	 * `staging-surface-and-apply-promote-safety` F2 follow-up): `surfaceStaging`
+	 * gates the CREATE half (surface-side ENUMERATION of staged candidates).
+	 * APPLY (the consume half) reads through the SAME enumeration, so flipping
+	 * `surfaceStaging` true→false AFTER a surface tick has minted+answered a
+	 * staged sidecar can STRAND that sidecar in staging until the flag is flipped
+	 * back on. The realistic flip direction is off→on (opt-in widening), and an
+	 * answered staged sidecar only exists if surfacing (opt-in) minted it, so the
+	 * strand window is narrow and accepted. Revisit only if the create-vs-consume
+	 * invariant must hold strictly (e.g. re-route `apply` to consume regardless of
+	 * the surface gate).
 	 */
 	surfaceStaging?: boolean;
 }
