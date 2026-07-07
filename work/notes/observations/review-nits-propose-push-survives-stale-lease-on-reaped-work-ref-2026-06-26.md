@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'propose-push-survives-stale-lease-on-r
 date: 2026-06-26
 status: open
 reviewOf: propose-push-survives-stale-lease-on-reaped-work-ref
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
