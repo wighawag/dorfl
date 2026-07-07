@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'install-ci-project-setup-hook' (Gate 2
 date: 2026-06-26
 status: open
 reviewOf: install-ci-project-setup-hook
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
