@@ -30,3 +30,7 @@ Implementation reference: `packages/dorfl/src/sidecar.ts` (parse + serialise) an
 
 - Do NOT change `sidecar.ts` behaviour. This task ratifies what shipped; it does not renegotiate it.
 - Do NOT add echo-through for unknown `kind=` values; that would reverse decision (c).
+
+## Prompt
+
+> Build the task 'ratify-sidecar-kind-field-decisions-in-surface-protocol', described above.

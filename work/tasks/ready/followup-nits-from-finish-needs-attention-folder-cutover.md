@@ -50,3 +50,7 @@ File: `packages/dorfl/src/prd-complete.ts` L29–33. The module JSDoc still desc
 ## Provenance
 
 Derived from observation `review-nits-finish-needs-attention-folder-cutover-remove-legacy-recovery-readers-2026-06-25`, which the human triaged as: promote nits 2+3 into one small follow-up task, handle nit 1 as an ADR, then delete the observation. The ADR write-up is folded into this task as deliverable #1 so the follow-up lands atomically.
+
+## Prompt
+
+> Build the task 'followup-nits-from-finish-needs-attention-folder-cutover', described above.

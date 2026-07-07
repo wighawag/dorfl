@@ -47,3 +47,7 @@ The PRD's GOAL is still valid: surface unmerged `work/*` branches → human answ
 
 - Actually BUILDING the surfacer / gate / runner-action dispatch layer. This task only re-opens the PRD and re-decomposes; the freshly-minted replacement tasks are what get built afterward.
 - Revisiting the keystone decision to retire the disposition vocabulary — that is settled and is the PREMISE of this work.
+
+## Prompt
+
+> Build the task 'reopen-and-redecompose-land-time-reverify-prd-against-agentic-binary-sidecar', described above.

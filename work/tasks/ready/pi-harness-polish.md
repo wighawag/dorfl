@@ -29,3 +29,7 @@ A dedicated pass should:
 - Updates to `src/watch-session.ts` and `src/pi-harness.ts` (`piSessionExists`, `sessionPointer`) and the `harness-agent-output` reader consistent with those recommendations.
 - `LaunchResult.output` (Option C) still fits both pi and a stream/HTTP-shaped harness (opencode-style) without assuming a persisted file.
 - Acceptance gate green: `pnpm -r build && pnpm -r test && pnpm format:check`.
+
+## Prompt
+
+> Build the task 'pi-harness-polish', described above.

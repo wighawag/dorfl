@@ -51,3 +51,7 @@ Do NOT re-route `apply` to bypass the gate. Instead, add a short note (in the do
 - The four ratified decisions are recorded (at minimum in this task's commit/PR body under `## Decisions`).
 - The create-vs-consume strand edge is documented near the gate.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
+
+## Prompt
+
+> Build the task 'f2-mirror-path-staging-test-and-ratify-decisions', described above.

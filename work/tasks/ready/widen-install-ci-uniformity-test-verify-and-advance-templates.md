@@ -22,3 +22,7 @@ Extend the existing uniformity assertion in `test/install-ci.test.ts` so the `ca
 - Keep the change minimal: reuse the existing parametrised assertion; do not restructure the test file.
 - No `## Decisions` block required — mechanism is settled; this is straightforward coverage widening.
 - On completion, the parent observation `observation:review-nits-install-ci-prefer-project-local-dorfl-2026-06-27` is deleted (nit 3's ratification is recorded in that observation's answer history and rides along with the deletion).
+
+## Prompt
+
+> Build the task 'widen-install-ci-uniformity-test-verify-and-advance-templates', described above.

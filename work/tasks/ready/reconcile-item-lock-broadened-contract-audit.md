@@ -84,3 +84,7 @@ Once this task lands (moved to `work/tasks/done/`), the originating
 observation `review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20`
 can be deleted per its q4 disposition — the q2 contingency will then be
 satisfied by this task's done record.
+
+## Prompt
+
+> Build the task 'reconcile-item-lock-broadened-contract-audit', described above.

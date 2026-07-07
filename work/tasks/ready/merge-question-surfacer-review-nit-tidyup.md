@@ -44,3 +44,7 @@ Do not extract or rename anything now.
 ## Follow-up
 
 Once this task is done, the source observation `observation:review-nits-merge-question-surfacer-2026-06-26` should be deleted — it exists only to carry these three nits, and they are now captured here.
+
+## Prompt
+
+> Build the task 'merge-question-surfacer-review-nit-tidyup', described above.

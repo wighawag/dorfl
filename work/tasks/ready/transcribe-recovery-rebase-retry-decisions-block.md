@@ -39,3 +39,7 @@ Human disposition of the parent observation (`observation:review-nits-recovery-r
 ## Parent observation
 
 Close `work/observations/review-nits-recovery-rebase-retry-against-moving-arbiter-main-2026-06-24.md` once this task lands (it was kept open as the triage record for the Gate-2 nits and its remaining actionables all fold into this task).
+
+## Prompt
+
+> Build the task 'transcribe-recovery-rebase-retry-decisions-block', described above.

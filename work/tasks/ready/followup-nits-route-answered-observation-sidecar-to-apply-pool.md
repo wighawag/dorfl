@@ -39,3 +39,7 @@ Replace the bare comment with a real one-line dropped-item assertion / explicit 
 - `lifecycle-pools.ts` SETTLED+pending-sidecar branch is an explicit assertion/statement, not a trailing comment.
 - Source task file `work/tasks/done/route-answered-observation-sidecar-to-apply-pool.md` is NOT modified.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
+
+## Prompt
+
+> Build the task 'followup-nits-route-answered-observation-sidecar-to-apply-pool', described above.

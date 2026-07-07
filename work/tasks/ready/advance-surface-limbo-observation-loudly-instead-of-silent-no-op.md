@@ -51,3 +51,7 @@ EXPLICITLY OUT OF SCOPE: teaching the engine to read an in-body `promote-slice` 
   - `packages/dorfl/src/triage-persist.ts` around L294 `promoteObservation` and around L370 — promote REQUIRES an answered sidecar.
   - `packages/dorfl/src/ledger-read.ts` around L473 — triage-vs-settled is the `triaged:` frontmatter marker only.
   - `packages/dorfl/src/lifecycle-pools.ts` `buildLifecyclePools` — untriaged ⇒ triage pool, re-enumerated every tick.
+
+## Prompt
+
+> Build the task 'advance-surface-limbo-observation-loudly-instead-of-silent-no-op', described above.

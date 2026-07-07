@@ -44,3 +44,7 @@ Update each to the actual path `work/notes/ideas/advance-surfaces-and-self-clear
 - `work/notes/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md` carries the four additions above (state-vs-judgement sharpening, `requeue [--reset]` apply spelling, the four-case generalization, the Q2 sidecar-keying resolution + merge-questions sequencing gate).
 - No path-drift `work/ideas/advance-surfaces-and-self-clears-…` references remain in live code or live docs (the `done/` task, `item-lock.ts` — anywhere `grep` still turns them up outside the frozen observation + its question sidecar).
 - Acceptance gate green: `pnpm -r build && pnpm -r test && pnpm format:check`.
+
+## Prompt
+
+> Build the task 'extend-surface-state-as-questions-brief-and-fix-dangling-idea-path', described above.

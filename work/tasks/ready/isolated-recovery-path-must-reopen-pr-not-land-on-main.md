@@ -40,3 +40,7 @@ Content trust was restored by the runbook's compensating rule (recovery skips ga
 ## Root-cause hypothesis to validate while implementing
 
 The `--isolated` recovery path, when the integrate push loses a `--force-with-lease` race AND/OR the Gate-2 verdict parser crashes, can leave the green work reachable such that a subsequent sync replays it onto `main` directly rather than re-opening the PR. Verify this is indeed the mechanism (vs. some other bypass), and fix at whichever layer makes the "never land on main outside a PR" invariant structural rather than conditional.
+
+## Prompt
+
+> Build the task 'isolated-recovery-path-must-reopen-pr-not-land-on-main', described above.

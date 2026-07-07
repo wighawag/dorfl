@@ -36,3 +36,7 @@ This drift is **pre-existing**: f3b only wrapped these functions in `try/finally
 - Tests exercise those strings and pass.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - No change to promote-path lock semantics.
+
+## Prompt
+
+> Build the task 'align-promote-path-user-facing-nouns-to-tasks-layout', described above.

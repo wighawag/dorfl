@@ -38,3 +38,7 @@ Link target rendering:
 ## Out of scope / fallback
 
 - Not solving folder-move staleness beyond "self-heals on next serialise". If, during implementation, the folder-lookup logic turns out disproportionately expensive or fragile relative to the readability win, the accepted fallback is to close this task without shipping the link and record it as a known-and-accepted limitation on the source observation — but the default is to ship the small feature.
+
+## Prompt
+
+> Build the task 'sidecar-visible-item-link', described above.

@@ -46,3 +46,7 @@ Write a self-contained ADR capturing the Q2 decision so future work on `run.ts` 
 ## Provenance
 
 Discharges `work/notes/observations/transient-infra-failure-indistinguishable-from-genuine-stuck-state.md` (applied answers q1/q2/q3 dated 2026-06-22). That observation should be DELETED once this task is minted — its judgement is fully carried here, and git history is the archive.
+
+## Prompt
+
+> Build the task 'failure-cause-needs-reauth-and-transient-infra-routing', described above.

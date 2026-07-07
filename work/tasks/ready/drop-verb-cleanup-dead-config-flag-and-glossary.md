@@ -32,3 +32,7 @@ Gate-2 review of `direct-delete-question-cli-helper` (approved, ac36f4b) surface
 ## Provenance
 
 Minted from observation `observation:review-nits-direct-delete-question-cli-helper-2026-06-25` (Gate-2 non-blocking nits on approved parent task `direct-delete-question-cli-helper`, commit ac36f4b). Human answers on that observation: address nit 1 + nit 3 here (fold together), ratify nit 2, then the source observation can be deleted.
+
+## Prompt
+
+> Build the task 'drop-verb-cleanup-dead-config-flag-and-glossary', described above.

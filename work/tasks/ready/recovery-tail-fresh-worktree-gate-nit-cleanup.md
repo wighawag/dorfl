@@ -49,3 +49,7 @@ Exact wording is at author discretion; the requirement is that a future reader d
 ## Provenance
 
 Derived from observation `review-nits-committed-recovery-honours-fresh-worktree-gate-2026-06-26` (Gate-2 non-blocking nits, both ratified by the human on 2026-07-07). That observation can be deleted once this task is minted — its content is fully carried here.
+
+## Prompt
+
+> Build the task 'recovery-tail-fresh-worktree-gate-nit-cleanup', described above.

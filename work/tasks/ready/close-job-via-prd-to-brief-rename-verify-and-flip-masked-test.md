@@ -61,3 +61,7 @@ tracked separately by the human.
   as already-delivered and record that on the source observation.
 - Keep the code rename and the test flip in ONE commit so no intermediate
   state has a green-but-wrong assertion.
+
+## Prompt
+
+> Build the task 'close-job-via-prd-to-brief-rename-verify-and-flip-masked-test', described above.

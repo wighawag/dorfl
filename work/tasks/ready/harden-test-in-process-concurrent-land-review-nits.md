@@ -43,3 +43,7 @@ Currently: `if (lock !== undefined) expect(lock.state).not.toBe('stuck');` after
 
 - Do NOT re-open the concurrent-land engine semantics; this task only tightens the test and records the existing intent.
 - Do NOT introduce cross-file refactors of the concurrency harness.
+
+## Prompt
+
+> Build the task 'harden-test-in-process-concurrent-land-review-nits', described above.

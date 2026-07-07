@@ -46,3 +46,7 @@ This is a follow-on inside the same task, not a separate task: the whole point o
 
 - Redesigning Gate-2 itself or the review agent's verdict schema beyond the output-contract hardening above.
 - Broader gate-robustness sweep across Gate-1/Gate-3 (file a separate signal if similar unhandled throws exist there).
+
+## Prompt
+
+> Build the task 'harden-gate2-review-verdict-json-parse', described above.

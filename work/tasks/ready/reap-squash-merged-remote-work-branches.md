@@ -113,3 +113,7 @@ At minimum, add tests that pin both directions of the new predicate:
   `delete_branch_on_merge` (`install-ci.ts` L216-234,
   `install-ci-github.ts`) — orthogonal; the provider-agnostic sweep must
   still handle squash itself.
+
+## Prompt
+
+> Build the task 'reap-squash-merged-remote-work-branches', described above.

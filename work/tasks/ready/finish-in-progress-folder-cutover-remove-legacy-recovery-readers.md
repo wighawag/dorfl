@@ -35,3 +35,7 @@ The parent task deliberately fenced this out of scope, so it lives here as its o
 - Assuming confirmation: `complete.ts`'s `onInProgress` arm and `start.ts`'s `--resume` folder-based decision are gone, along with any code that existed solely to serve them.
 - Tests updated; `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - The originating observation (`observation:in-progress-folder-also-appears-unwritten`) is deleted as part of the follow-up chain (this task supersedes it).
+
+## Prompt
+
+> Build the task 'finish-in-progress-folder-cutover-remove-legacy-recovery-readers', described above.

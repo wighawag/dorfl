@@ -31,3 +31,7 @@ Make the sandbox-count assertion robust to concurrency by SCOPING it to this tes
 - File: `test/fresh-worktree-gate.test.ts` (see around line 511 for the OFF-path assertion that flaked).
 - Helper: `gateSandboxCount()` in that file (or wherever it is defined) — this is the function whose counting strategy needs to become per-test-scoped.
 - Origin: observation `fresh-worktree-gate-test-gatesandboxcount-flaky-under-parallel-load` (2026-06-22), spotted during Gate-3 re-verify of PR #208. Delete that observation as part of finishing this task.
+
+## Prompt
+
+> Build the task 'harden-fresh-worktree-gate-sandbox-count-against-parallel-flake', described above.

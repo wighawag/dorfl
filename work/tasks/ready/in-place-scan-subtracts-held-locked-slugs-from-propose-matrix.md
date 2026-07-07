@@ -52,3 +52,7 @@ Out of scope:
 - ADR `docs/adr/ci-config-policy-and-gate-family.md` §7 (claim CAS is the safety mechanism, but assumes the matrix does not repeatedly enumerate a permanently-held item).
 - Sibling observation (leg-side benign-skip, coordinate): `work/notes/observations/advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21.md`.
 - Originating observation: `work/notes/observations/advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22.md`.
+
+## Prompt
+
+> Build the task 'in-place-scan-subtracts-held-locked-slugs-from-propose-matrix', described above.

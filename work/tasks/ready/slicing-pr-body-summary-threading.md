@@ -44,3 +44,7 @@ Mirror the build path's shape: a single composed string threaded as `body` into 
 ## Provenance
 
 Promoted from observation `slicing-pr-has-empty-body-no-summary-comment` (spotted 2026-06-21 on PR #188 during the v1.0.0-skills-alignment session; triage resolved 2026-06-22 to promote-slice, then hard-cut to a task per the repo's slice->task convention). The observation and its sidecar are being deleted in the same revertible commit that mints this task, so the resolved signal cannot re-fire.
+
+## Prompt
+
+> Build the task 'slicing-pr-body-summary-threading', described above.

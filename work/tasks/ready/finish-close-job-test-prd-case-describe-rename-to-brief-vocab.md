@@ -32,3 +32,7 @@ The original task's Gate-3 follow-up explicitly stated finishing the describe sw
 - Fixture-FOLDER first-arg strings (`'prd'`, `'prd-sliced'`, etc.) are unchanged (fence with `clean-break-fixture-folder-vocab-compat-seam` held).
 - `pnpm -r build && pnpm -r test && pnpm format:check` green.
 - No src/ changes, no other test files changed.
+
+## Prompt
+
+> Build the task 'finish-close-job-test-prd-case-describe-rename-to-brief-vocab', described above.

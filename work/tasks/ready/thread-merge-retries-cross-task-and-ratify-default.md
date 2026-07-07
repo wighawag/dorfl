@@ -50,3 +50,7 @@ For each site:
 - PRD line ~158 no longer says `5`; it says `1000` (or references `DEFAULT_MERGE_RETRIES` without contradicting it).
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - The PR/commit body for THIS task includes a Decisions block listing: (a) 1000 ratified as modest default, (b) parse-or-drop mirrors `--review-max-rounds`, (c) resolved once per entry point, (d) which call sites were threaded and how each layer (flag/env/config) applied per site.
+
+## Prompt
+
+> Build the task 'thread-merge-retries-cross-task-and-ratify-default', described above.

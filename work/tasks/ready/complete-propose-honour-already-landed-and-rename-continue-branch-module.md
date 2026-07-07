@@ -46,3 +46,7 @@ Preference: whichever is the smaller, less churny change that still leaves the f
 ## Decisions to record
 
 Record a `## Decisions` block in the done body for any non-obvious in-scope choice, e.g. rename-vs-scope-note for `continue-branch.ts`, and the exact shape of the `complete.ts` branch (does it call the integrator's `instruction` verbatim, or wrap it?).
+
+## Prompt
+
+> Build the task 'complete-propose-honour-already-landed-and-rename-continue-branch-module', described above.

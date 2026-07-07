@@ -66,3 +66,7 @@ in-scope-choice list) is intentionally NOT part of this task — the human
 kept it as a durable note in the observation itself, to be escalated only
 if one of those choices later bites (e.g. the `node_modules/.bin/tsx`
 coupling breaking CI on a different layout).
+
+## Prompt
+
+> Build the task 'cleanup-cross-job-worker-serialiseafter-dead-branch', described above.

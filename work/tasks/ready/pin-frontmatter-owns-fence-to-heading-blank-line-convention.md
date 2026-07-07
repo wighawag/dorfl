@@ -34,3 +34,7 @@ If you choose ADR-lite, follow `work/protocol/ADR-FORMAT.md`. If you choose a `#
 - Any inline code comment in `src/buildable-body.ts` that currently carries this convention as a floating remark is updated to cross-reference the new record.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - The done record for THIS task notes explicitly which of the two forms (ADR-lite vs `## Decisions` on the sibling done record) was chosen and why, so the sibling intake-adopts-renderer task can find it.
+
+## Prompt
+
+> Build the task 'pin-frontmatter-owns-fence-to-heading-blank-line-convention', described above.

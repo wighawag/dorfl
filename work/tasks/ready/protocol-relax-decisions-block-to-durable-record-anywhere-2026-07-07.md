@@ -40,3 +40,7 @@ Per `AGENTS.md`, `skills/setup/protocol/*` is the SOURCE OF TRUTH and `work/prot
 - `diff` between the two protocol trees shows no drift on the edited files.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green (this is a docs edit so build/test should be untouched, but the gate still runs).
 - Done record links to this task and to the source observation `observation-decisions-block-convention-repeatedly-skipped-enforce-or-relax-2026-06-22`, and durably records any non-obvious wording choices per the NEW rule (i.e., anywhere durable + linked — dogfood the relaxed convention).
+
+## Prompt
+
+> Build the task 'protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07', described above.

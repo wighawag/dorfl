@@ -32,3 +32,7 @@ One test is enough; the point is to pin the structural invariant that the strip 
 - New test present and passing in `packages/dorfl/test/apply-persist.test.ts`.
 - `pnpm -r build && pnpm -r test && pnpm format:check` green.
 - Existing tests untouched (or only trivially refactored to share a fixture).
+
+## Prompt
+
+> Build the task 'apply-reconcile-terminal-route-test', described above.

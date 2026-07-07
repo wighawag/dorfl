@@ -46,3 +46,7 @@ In the disposition guidance, add a "**leave — blocked on `<question>`**" reaso
 - Skill: `~/.agents/skills/triage-observations/SKILL.md` (step 2 investigate-sources; disposition table). Sibling: `surface-questions`.
 - Sidecar surface: `src/sidecar.ts` (`work/questions/<type>-<slug>.md`, `SidecarType` includes `observation`); gate family `observationTriage`/`surfaceBlockers` (ADR `ci-config-policy-and-gate-family`) governs CREATING these questions.
 - Related sibling observation: `work/notes/observations/question-sidecar-has-no-visible-link-to-the-item-it-asks-about-2026-06-20.md` (same answer-loop surface, different gap — MAY be folded into the same E-task).
+
+## Prompt
+
+> Build the task 'amend-triage-observations-skill-to-include-pending-questions-surface', described above.

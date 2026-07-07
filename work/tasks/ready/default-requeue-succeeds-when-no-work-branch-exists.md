@@ -46,3 +46,7 @@ Do NOT weaken the guard when the branch DOES exist but is not ahead of main (tha
 - `packages/dorfl/src/needs-attention.ts` — the guard to soften (the `if (!options.reset)` / `branchAheadOf` block).
 - `packages/dorfl/src/cli.ts` — `requeue` help text.
 - `work/notes/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md` — related, but a distinct concern; do NOT try to fix here.
+
+## Prompt
+
+> Build the task 'default-requeue-succeeds-when-no-work-branch-exists', described above.

@@ -49,3 +49,7 @@ The 2026-06-22 disposition on the source observation was promote-slice shipping 
 - `gc --ledger`'s report lists literal entry names; entries with no current item-form print a one-line hint suggesting the `release-lock --entry <literal>` invocation.
 - Unit + integration tests cover: (i) `--entry` happy path deletes the literal ref; (ii) `--entry` absent-on-origin is a no-op success; (iii) invalid `--entry` value is rejected; (iv) mutual-exclusion with the item positional; (v) `gc --ledger` report surfaces literal names and the hint line for a `slice-`-prefixed fixture entry.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
+
+## Prompt
+
+> Build the task 'release-lock-entry-escape-hatch-and-literal-entry-reporting', described above.

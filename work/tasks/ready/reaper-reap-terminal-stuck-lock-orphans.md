@@ -41,3 +41,7 @@ Split the `kept-stuck` outcome in `reconcileItemLockAgainstMain` into two distin
 - New tests pin BOTH directions of the contract change (terminal-stuck reaped; in-flight-stuck kept).
 - ADR (or addendum) landed recording the contract loosening + the carve-out.
 - Code comments at the classification site and reap fence point at the ADR so the next reader sees why `stuck` is now conditionally reapable.
+
+## Prompt
+
+> Build the task 'reaper-reap-terminal-stuck-lock-orphans', described above.

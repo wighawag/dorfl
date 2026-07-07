@@ -42,3 +42,7 @@ Assert at `performMergeAction` entry that the sidecar's source item is a task, a
 - `performMergeAction` asserts source item is a task and fails loudly on non-task input; test covers it.
 - `pnpm -r build && pnpm -r test && pnpm format:check` green.
 - Delete the source observation `review-nits-apply-rung-merge-disposition-2026-06-28` once this task is minted (per the human's answer on nit 4).
+
+## Prompt
+
+> Build the task 'merge-action-nits-followup', described above.

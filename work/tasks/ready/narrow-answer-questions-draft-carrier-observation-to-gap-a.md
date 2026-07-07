@@ -36,3 +36,7 @@ Edit `work/observations/observation:answer-questions-has-no-in-file-draft-carrie
 - The recorded leaning toward shape (a) is present and explicitly labelled as a leaning, not a build order.
 - No new files, no ADR, no skill edits, no git operations.
 - `pnpm -r build && pnpm -r test && pnpm format:check` remains green (this is a docs-only edit; run `pnpm format` if needed before the check).
+
+## Prompt
+
+> Build the task 'narrow-answer-questions-draft-carrier-observation-to-gap-a', described above.

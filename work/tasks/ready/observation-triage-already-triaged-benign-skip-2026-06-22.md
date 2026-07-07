@@ -48,3 +48,7 @@ Answered up-front by the human on the source observation — carry these as deci
 - The reproducer (an observation with an existing minted task on `<arbiter>/main`) no longer reds CI on `advance-lifecycle` ticks; its triage leg exits benignly with an honest message.
 - A genuine concurrent-create race still fails loudly with exit 2 on the losing tick.
 - Sequencing with `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` is stated in the task's own notes and honoured in the implementation order.
+
+## Prompt
+
+> Build the task 'observation-triage-already-triaged-benign-skip-2026-06-22', described above.

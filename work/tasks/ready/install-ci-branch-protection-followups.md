@@ -49,3 +49,7 @@ Whichever is picked, record the choice + rationale in a proper `Decisions:` bloc
 - The deadlock guard is a real runtime mechanism (ruleset toggle OR pre-run), not just a log line; the module-header comment is updated to describe the mechanism, and the commit message carries a `Decisions:` block naming the chosen mechanism and why.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - The source observation `review-nits-install-ci-tier1-branch-protection-2026-06-26` is deleted as part of finishing this task (nit (a) is ratified in the task context above; nits (b) and (c) are addressed by the task itself).
+
+## Prompt
+
+> Build the task 'install-ci-branch-protection-followups', described above.

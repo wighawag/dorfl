@@ -43,3 +43,7 @@ Line numbers are drift-prone; treat them as hints and grep for `needs-attention/
 ## Notes
 
 Purely a text pass; risk is low. If while doing this you discover a runtime path that DOES still try to move files into `work/needs-attention/`, stop and surface it — that would mean the lock cutover left a live remnant and is out of scope for a prose-only slice.
+
+## Prompt
+
+> Build the task 'reconcile-stale-needs-attention-folder-prose-after-lock-cutover', described above.
