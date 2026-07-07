@@ -140,12 +140,17 @@ code itself (it affects nothing outside this task), resolve and proceed silently
 But a choice that touches ANOTHER command/flag/task, introduces a new
 ERROR/REFUSAL, or sets a USER-VISIBLE DEFAULT is a DESIGN decision, NOT a small
 factual gap — do NOT bury it in code. If it is load-bearing AND hard to reverse,
-STOP (above). Otherwise PROCEED but RECORD it: end your report with a "## Decisions"
-block, one entry per decision — what you chose + why + the alternative(s) you
-considered + what it touches (which other flag/command/task). This does NOT stop
-the build; it makes the choice visible so the reviewer + the human can ratify or
-reverse it. The bar is "would another task / a user / a reviewer be surprised this
-was decided here?" — if yes, record it. A real ambiguity or stale premise, STOP.
+STOP (above). Otherwise PROCEED but RECORD it DURABLY and LINK it from the done
+record, one entry per decision — what you chose + why + the alternative(s) you
+considered + what it touches (which other flag/command/task). Any durable home
+is acceptable: a module JSDoc at the choice site (best when there is an obvious
+code site the decision governs), a "## Decisions" block in the done record / PR
+body (the recommended fallback when there is no natural code site), or a dated
+observation note under work/notes/observations/. Whichever home you pick, LINK
+it from the done record so it is discoverable. This does NOT stop the build; it
+makes the choice visible so the reviewer + the human can ratify or reverse it.
+The bar is "would another task / a user / a reviewer be surprised this was
+decided here?" — if yes, record it. A real ambiguity or stale premise, STOP.
 
 COHERENCE CHECK (before you introduce a new concept). Consistency and coherence
 with the system's existing LANGUAGE is a first-class quality. Before you add a new
@@ -157,7 +162,9 @@ step vs the explicit verb a human typed)? (3) does it DUPLICATE/overlap an exist
 concept you should reuse or rename instead of forking? If a new concept conflicts
 with, re-means, or duplicates an existing one — or sits at the wrong layer — that is
 NOT a "small factual gap": STOP if it is load-bearing/hard-to-reverse, else RECORD
-it in `## Decisions` (what concept, what it overlaps, why your placement). This is
+it durably per the rule above (JSDoc at the choice site, a `## Decisions` entry
+in the done record, or an observation note — linked from the done record), noting
+what concept, what it overlaps, why your placement. This is
 the prevention half of the review's conceptual-coherence lens — a muddled concept
 that compiles is far more expensive than the question, because every later artifact
 that reuses the muddled term inherits the debt.
