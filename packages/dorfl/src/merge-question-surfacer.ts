@@ -139,10 +139,19 @@ export interface MergeQuestionSurfaced {
 	prUrl?: string;
 }
 
-/** One branch the surfacer considered but did not surface (with the reason). */
+/**
+ * One branch the surfacer considered but did not surface (with the reason).
+ *
+ * PROVISIONAL vocabulary. The `reason` union is scoped to this surfacer — no
+ * sibling surfacer exists yet, so it is deliberately NOT lifted to a shared
+ * skip-reason type. When a second STATE-sourced surfacer lands (e.g. a
+ * stuck-lock surfacer), promote this to a shared skip-reason vocabulary via a
+ * dedicated decision; until then it may change without notice.
+ */
 export interface MergeQuestionSkipped {
 	ref: string;
 	slug: string;
+	/** PROVISIONAL vocabulary — see {@link MergeQuestionSkipped}. */
 	reason: 'no-item-body' | 'already-pending-merge-question' | 'persist-nothing';
 }
 
@@ -164,9 +173,19 @@ export class MergeQuestionSurfacerError extends Error {
 	}
 }
 
-/** The lifecycle folders a task body may rest in (the FOLDERS the persist
- * needs to find the item file to set `needsAnswers:true` on). Matches
- * `advance.ts`'s `findItemPath` task-folder set. */
+/**
+ * The lifecycle folders {@link findTaskItemPath} scans for a task body to flip
+ * `needsAnswers:true` on. This set DELIBERATELY DIVERGES from `advance.ts`'s
+ * `FOLDERS_FOR_TYPE.task` (`['tasks-backlog','tasks-ready','in-progress','done']`):
+ *
+ *   - OMITS `in-progress` (and `needs-attention`): an unmerged `work/<slug>`
+ *     branch whose body is mid-build should NOT trigger a merge-question — the
+ *     build is still active, and surfacing a land-decision now would race the
+ *     builder. Such tasks fall through to the `no-item-body` skip.
+ *   - ADDS `cancelled`: a cancelled task with a lingering unmerged `work/*`
+ *     branch SHOULD surface a merge-question so the operator explicitly decides
+ *     whether to merge the branch or drop it.
+ */
 const TASK_FOLDERS: readonly WorkFolderKey[] = [
 	'tasks-ready',
 	'tasks-backlog',
@@ -440,6 +459,11 @@ export function listUnmergedWorkBranchesViaGit(
  * results by their `headRefName` so the surfacer can enrich the matching
  * branch's question. A non-zero / missing `gh` is treated as "no host
  * metadata available" — the floor still surfaces every unmerged branch.
+ *
+ * Best-effort enrichment. The git-reachability FLOOR is authoritative; the
+ * `--state open`, `--base <base>`, and `--limit 200` arguments are DELIBERATE
+ * ceilings — a PR targeting a non-`main` base (e.g. a stacked PR) or the case
+ * of >200 open PRs degrades to floor-only output, never corrupts it.
  */
 export function listOpenPullRequestsViaGh(
 	input: ListPullRequestsInput,
