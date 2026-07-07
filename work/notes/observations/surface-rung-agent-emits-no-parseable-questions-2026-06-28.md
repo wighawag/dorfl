@@ -2,6 +2,7 @@
 title: surface rung fails with "no parseable {questions} result" when the agent emits non-JSON; the surface prompt lacked Gate-2's defensive-JSON hardening
 date: 2026-06-28
 status: open
+needsAnswers: true
 ---
 
 ## Signal (recurring failure, observed on two different observations)
