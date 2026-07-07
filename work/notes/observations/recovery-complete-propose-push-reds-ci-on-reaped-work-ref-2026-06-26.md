@@ -53,3 +53,9 @@ gone ref + work provably ancestor-of-`<arbiter>/main` = benign already-landed
 success; recovery-complete pinned there as the dominant trigger). This note is
 the durable home for the recurrence evidence so the pattern is on the record
 for triage; mark RESOLVED when that task lands.
+
+## Applied answers 2026-07-07
+
+### q1: What becomes of this observation — keep it open as the durable evidence home until task `propose-push-survives-stale-lease-on-reaped-work-ref` lands and then mark it RESOLVED, or discharge it now (delete / fold into the task) because the task already exists in `work/tasks/ready/` and fully owns the fix?
+
+Keep the observation open as the recurrence-evidence record, exactly as the note prescribes. Resolve it (delete) the moment `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main. No new task/PRD/ADR needed: the fix is already tasked and owns it.

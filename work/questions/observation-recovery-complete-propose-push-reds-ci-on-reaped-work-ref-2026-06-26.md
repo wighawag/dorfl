@@ -13,3 +13,11 @@ _Suggested default: Keep the observation open as the recurrence-evidence record 
 **Your answer** (write below this line):
 
 Keep the observation open as the recurrence-evidence record, exactly as the note prescribes. Resolve it (delete) the moment `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main. No new task/PRD/ADR needed: the fix is already tasked and owns it.
+
+## Q2
+
+**The human's answer says to keep this observation open as the durable recurrence-evidence record until `propose-push-survives-stale-lease-on-reaped-work-ref` lands on main, then delete it — none of the available outcomes (task/prd/adr/delete/ask) express "keep open, unchanged, pending an external trigger." How should I encode that? Options: (a) leave the frontmatter as-is but flip `needsAnswers: true` → `needsAnswers: false` (answers are recorded, no further human input needed, item stays open as evidence) — pick this if you want the observation to simply stop pinging the questions gate; (b) treat the answer as a directive to `delete` NOW because the task already owns the fix and git history preserves the evidence; (c) mint a tiny follow-up `task` whose sole job is "delete this observation once `propose-push-survives-stale-lease-on-reaped-work-ref` is on main" so the cleanup is tracked. My read of the answer is (a) — keep it open, just clear the needs-answers flag — but I want to confirm before emitting, because the engine's discharge outcomes don't natively cover "answered but intentionally left open."**
+
+<!-- q2 fields: id=q2 -->
+
+**Your answer** (write below this line):
