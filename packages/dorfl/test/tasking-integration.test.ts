@@ -304,6 +304,148 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 	}
 });
 
+describe('do prd: threads a slice-set SUMMARY as the propose-mode PR body (task `slicing-pr-body-summary-threading`)', () => {
+	// The BUILD path threads `body: agent.output` into `performIntegration`'s
+	// propose-mode PR body (`do.ts:1190`). Before this task, the tasking path
+	// passed NO body — so slice PRs landed with an empty body / `gh pr create
+	// --fill` (observed on PR #188). This test asserts the slicing path now
+	// composes a summary of what it produced (task slugs+titles, coverage map,
+	// dependency graph, any carried `needsAnswers`) and threads it as `body` so
+	// the PR carries it instead of degrading to `--fill`.
+	it('composes a body carrying slugs+titles, covers, dep graph, and needsAnswers', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+
+		// A recording `gh` stub — the propose pipeline calls `gh pr create --title
+		// ... --body ...`; the stub writes every arg on its own line to argsFile so
+		// the test can inspect what got threaded through.
+		const binDir = join(scratch.root, 'gh-stub');
+		mkdirSync(binDir, {recursive: true});
+		const argsFile = join(binDir, 'gh-args.txt');
+		const gh = join(binDir, 'gh');
+		writeFileSync(
+			gh,
+			[
+				'#!/usr/bin/env bash',
+				`printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}`,
+				"printf '%s\\n' 'https://github.com/o/r/pull/7'",
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(gh, 0o755);
+
+		// A tasker that emits THREE tasks: a keystone (`alpha`), a dependent
+		// (`beta` blockedBy alpha, covers US #1 + #2), and an uncertain task
+		// (`gamma`, needsAnswers: true with an `## Open questions` block). Enough
+		// shape to exercise every section of the composed body.
+		const multiTaskAgent: TaskDorfl = ({cwd}) => {
+			const dir = join(cwd, 'work', 'tasks', 'backlog');
+			mkdirSync(dir, {recursive: true});
+			writeFileSync(
+				join(dir, 'alpha.md'),
+				[
+					'---',
+					'title: alpha — land the seam',
+					'slug: alpha',
+					'prd: it',
+					'covers: [1]',
+					'blockedBy: []',
+					'---',
+					'',
+					'## Prompt',
+					'',
+					'> build alpha',
+					'',
+				].join('\n'),
+			);
+			writeFileSync(
+				join(dir, 'beta.md'),
+				[
+					'---',
+					'title: beta — build on alpha',
+					'slug: beta',
+					'prd: it',
+					'covers: [1, 2]',
+					'blockedBy: [alpha]',
+					'---',
+					'',
+					'## Prompt',
+					'',
+					'> build beta',
+					'',
+				].join('\n'),
+			);
+			writeFileSync(
+				join(dir, 'gamma.md'),
+				[
+					'---',
+					'title: gamma — deferred seam',
+					'slug: gamma',
+					'prd: it',
+					'covers: [3]',
+					'blockedBy: []',
+					'needsAnswers: true',
+					'---',
+					'',
+					'## Prompt',
+					'',
+					'> build gamma',
+					'',
+					'## Open questions',
+					'',
+					'- what should the retry policy be?',
+					'',
+				].join('\n'),
+			);
+			return {ok: true};
+		};
+
+		const result = await performTask({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoTask: true,
+			integration: 'propose',
+			providerInstance: new GitHubProvider({ghBin: gh}),
+			dorfl: multiTaskAgent,
+			env: {...gitEnv(), PATH: `${binDir}:${process.env.PATH ?? ''}`},
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('tasked');
+
+		const args = readFileSync(argsFile, 'utf8');
+		// The propose pipeline invoked `gh pr create` with an explicit `--body`
+		// (not `--fill`); the body is one gh argument (printed on its own line by
+		// the stub's `printf '%s\n' "$@"`).
+		expect(args).toMatch(/^create$/m);
+		expect(args).toMatch(/^--body$/m);
+		expect(args).not.toMatch(/^--fill$/m);
+
+		// Slugs + titles.
+		expect(args).toContain('**alpha**');
+		expect(args).toContain('alpha — land the seam');
+		expect(args).toContain('**beta**');
+		expect(args).toContain('beta — build on alpha');
+		expect(args).toContain('**gamma**');
+		expect(args).toContain('gamma — deferred seam');
+
+		// Coverage map (which prd user stories each task covers).
+		expect(args).toContain('covers: US #1');
+		expect(args).toContain('covers: US #1, US #2');
+		expect(args).toContain('covers: US #3');
+
+		// Dependency graph (keystone + `blockedBy` edges within the set).
+		expect(args).toMatch(/Keystones?: .*alpha/);
+		expect(args).toContain('blockedBy: alpha');
+		expect(args).toContain('beta ← alpha');
+
+		// Carried `needsAnswers` (and the open questions surface on the PR, not
+		// buried in a task body).
+		expect(args).toContain('needsAnswers: true');
+		expect(args).toMatch(/## Needs answers[\s\S]*gamma[\s\S]*retry policy/);
+	});
+});
+
 describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-forces-build-propose)', () => {
 	it('tasking an UNTRUSTED-origin PRD stamps every emitted task originTrust: untrusted', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);

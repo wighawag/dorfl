@@ -688,6 +688,17 @@ export async function performTask(
 			mode: options.integration ?? 'propose',
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
+			// PROPOSE-MODE PR BODY (task `slicing-pr-body-summary-threading`): mirror the
+			// BUILD path's body threading (`do.ts` — `body: agent.output`). The tasker
+			// agent produces no `LaunchResult.output` we can carry, but the slice-SET
+			// itself is a summary-worthy artifact: the emitted task slugs+titles, their
+			// coverage of the prd's user stories, the dependency graph (keystone +
+			// blockedBy edges), and any `needsAnswers` open questions the tasker review
+			// loop flagged. Compose it here and thread it into the shared core as `body`
+			// so the propose-mode PR carries the summary instead of degrading to
+			// `gh pr create --fill`. Empty-set (no emitted tasks) ⇒ undefined ⇒ the
+			// provider's `--fill` fallback (no regression on that edge).
+			body: composeTaskingProposeBody(slug, emitTasks),
 			type: 'tasking',
 			lifecycle: {
 				// Read the PR title / commit summary from the held spec (before it moves).
@@ -1444,6 +1455,218 @@ function collectEmittedTasks(
 		out[rel] = readFileSync(join(cwd, rel), 'utf8');
 	}
 	return out;
+}
+
+/**
+ * Compose the propose-mode PR BODY for a slice-set (task
+ * `slicing-pr-body-summary-threading`): mirror the BUILD path's body threading
+ * (`do.ts` — `body: agent.output`) with a summary drawn from what the tasker
+ * ALREADY has in hand — the emitted task files. The shared
+ * {@link composeProposeBody} then wraps this prose with its runner-owned header.
+ *
+ * Sections (all suppressed when empty, so the body stays honest):
+ *   1. A lead line naming the source prd + emitted task count.
+ *   2. **Tasks** — one bullet per task: `slug — title`, plus `covers:` (which
+ *      prd user stories it maps to), `blockedBy:`, and `needsAnswers` if set.
+ *   3. **Dependency graph** — the KEYSTONE(S) (tasks whose `blockedBy` names no
+ *      other task in this set, so they land first) and the `blockedBy` edges.
+ *   4. **Needs answers** — any open questions the tasker review→edit loop
+ *      appended under `## Open questions` on `needsAnswers: true` tasks, so the
+ *      deferred seams are visible on the PR (not buried in task bodies).
+ *
+ * Returns `undefined` for the empty set (no emitted tasks) so the provider's
+ * `gh pr create --fill` fallback still applies on that edge (matches the build
+ * path's absent-body behaviour).
+ */
+export function composeTaskingProposeBody(
+	prdSlug: string,
+	emitTasks: Record<string, string>,
+): string | undefined {
+	const entries = Object.entries(emitTasks);
+	if (entries.length === 0) {
+		return undefined;
+	}
+	const tasks = entries
+		.map(([rel, content]) => parseTaskSummary(rel, content))
+		.sort((a, b) => a.slug.localeCompare(b.slug));
+	const setSlugs = new Set(tasks.map((t) => t.slug));
+	const lines: string[] = [];
+	const n = tasks.length;
+	lines.push(
+		`Auto-tasked \`${prdSlug}\` into ${n} backlog task${n === 1 ? '' : 's'}.`,
+	);
+	lines.push('');
+	lines.push('## Tasks');
+	lines.push('');
+	for (const t of tasks) {
+		lines.push(`- **${t.slug}** — ${t.title}`);
+		if (t.covers.length > 0) {
+			lines.push(`  - covers: ${t.covers.map((c) => `US #${c}`).join(', ')}`);
+		}
+		if (t.blockedBy.length > 0) {
+			lines.push(`  - blockedBy: ${t.blockedBy.join(', ')}`);
+		}
+		if (t.needsAnswers) {
+			lines.push('  - needsAnswers: true');
+		}
+	}
+	// Dependency graph: keystone(s) are tasks whose blockedBy names no OTHER
+	// member of this set (an external blocker — e.g. a task already in `done/` —
+	// does not prevent this set-relative starting point); the edges list every
+	// set-internal `blockedBy` link so a reviewer can trace the ordering.
+	const keystones = tasks.filter((t) =>
+		t.blockedBy.every((b) => !setSlugs.has(b)),
+	);
+	const edges = tasks.flatMap((t) =>
+		t.blockedBy.filter((b) => setSlugs.has(b)).map((b) => `${t.slug} ← ${b}`),
+	);
+	if (keystones.length > 0 || edges.length > 0) {
+		lines.push('');
+		lines.push('## Dependency graph');
+		lines.push('');
+		if (keystones.length > 0) {
+			const word = keystones.length === 1 ? 'Keystone' : 'Keystones';
+			lines.push(`- ${word}: ${keystones.map((k) => k.slug).join(', ')}`);
+		}
+		for (const edge of edges) {
+			lines.push(`- ${edge}`);
+		}
+	}
+	const uncertain = tasks.filter((t) => t.needsAnswers);
+	if (uncertain.length > 0) {
+		lines.push('');
+		lines.push('## Needs answers');
+		lines.push('');
+		for (const t of uncertain) {
+			lines.push(`- **${t.slug}**:`);
+			if (t.openQuestions.length === 0) {
+				lines.push('  - (no specific questions surfaced)');
+				continue;
+			}
+			for (const q of t.openQuestions) {
+				lines.push(`  - ${q}`);
+			}
+		}
+	}
+	return lines.join('\n');
+}
+
+/** Summary of one emitted task, for {@link composeTaskingProposeBody}. */
+interface TaskSummary {
+	slug: string;
+	title: string;
+	covers: string[];
+	blockedBy: string[];
+	needsAnswers: boolean;
+	openQuestions: string[];
+}
+
+/**
+ * Parse one emitted task file into a {@link TaskSummary}. Uses
+ * {@link parseFrontmatter} for the shared fields; scans the raw frontmatter
+ * block for `covers:` (not currently modelled on the parser's typed shape) and
+ * the body for a trailing `## Open questions` bullet list (the loop's
+ * uncertain-task disposition sink, see {@link appendQuestionsBlock}).
+ */
+function parseTaskSummary(rel: string, content: string): TaskSummary {
+	const fm = parseFrontmatter(content);
+	const slug = fm.slug ?? basename(rel).replace(/\.md$/i, '');
+	const title = readTitleField(content) ?? slug;
+	return {
+		slug,
+		title,
+		covers: readCoversField(content),
+		blockedBy: fm.blockedBy,
+		needsAnswers: fm.needsAnswers === true,
+		openQuestions: readOpenQuestions(content),
+	};
+}
+
+/**
+ * Extract the `title:` scalar from the raw frontmatter block (not on
+ * {@link parseFrontmatter}'s typed shape). Missing / malformed ⇒ `undefined`.
+ * Comment-tolerant: a trailing `# ...` after an UNQUOTED value is stripped.
+ */
+function readTitleField(content: string): string | undefined {
+	const normalized = content.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
+	if (!normalized.startsWith('---\n')) {
+		return undefined;
+	}
+	const lines = normalized.split('\n');
+	const closing = lines.indexOf('---', 1);
+	if (closing === -1) {
+		return undefined;
+	}
+	for (let i = 1; i < closing; i++) {
+		const m = lines[i].match(/^title:\s*(.*)$/);
+		if (!m) continue;
+		let value = m[1].trim();
+		if (value === '') return undefined;
+		// Quoted ⇒ return inner text verbatim; unquoted ⇒ strip trailing `# ...`.
+		if (
+			(value.startsWith('"') && value.endsWith('"')) ||
+			(value.startsWith("'") && value.endsWith("'"))
+		) {
+			return value.slice(1, -1);
+		}
+		const hash = value.indexOf('#');
+		if (hash !== -1) value = value.slice(0, hash).trimEnd();
+		return value === '' ? undefined : value;
+	}
+	return undefined;
+}
+
+/**
+ * Extract the `covers: [...]` inline-list values from the raw frontmatter block
+ * of a task (not on {@link parseFrontmatter}'s typed shape, so we scan the raw
+ * fence here). Missing / malformed / empty ⇒ `[]`. Comment-tolerant (a trailing
+ * `# ...` after the `]` is ignored, matching the house style on `blockedBy: []
+ * # startable now`).
+ */
+function readCoversField(content: string): string[] {
+	const normalized = content.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
+	if (!normalized.startsWith('---\n')) {
+		return [];
+	}
+	const lines = normalized.split('\n');
+	const closing = lines.indexOf('---', 1);
+	if (closing === -1) {
+		return [];
+	}
+	for (let i = 1; i < closing; i++) {
+		const line = lines[i];
+		const m = line.match(/^covers:\s*\[([^\]]*)\]/);
+		if (!m) continue;
+		return m[1]
+			.split(',')
+			.map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+			.filter((s) => s !== '');
+	}
+	return [];
+}
+
+/**
+ * Extract the bullets under a trailing `## Open questions` heading in a task
+ * body — the tasker review loop's uncertain-task sink (see
+ * {@link appendQuestionsBlock}). Returns `[]` when no such block exists.
+ */
+function readOpenQuestions(content: string): string[] {
+	const normalized = content.replace(/\r\n/g, '\n');
+	const idx = normalized.lastIndexOf(`\n${OPEN_QUESTIONS_HEADING}`);
+	if (idx === -1) {
+		return [];
+	}
+	const tail = normalized.slice(idx + 1);
+	const lines = tail.split('\n').slice(1);
+	const questions: string[] = [];
+	for (const raw of lines) {
+		const line = raw.trimEnd();
+		if (line === '') continue;
+		const m = line.match(/^- (.*)$/);
+		if (!m) break;
+		questions.push(m[1]);
+	}
+	return questions;
 }
 
 /** List `*.md` files in `dir`, sorted; an absent dir reads as empty. */
