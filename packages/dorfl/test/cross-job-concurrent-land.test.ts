@@ -46,14 +46,16 @@ import {
  * regression that drops that wiring fails THIS test loudly.
  *
  * Determinism without wall-clock dependency: a filesystem rendezvous
- * (`<rendezvousDir>/ready-<slug>` files) gates the workers — the within-cap
- * scenario waits for BOTH ready files before either proceeds (so both arrive
- * at the push concurrently and the CAS loop arbitrates), the past-cap
- * scenario serialises one worker behind a `done-<other>` marker so the
- * cap=0 loser deterministically hits an advanced `main` on its first push
- * attempt and exhausts immediately (the cap-0 + advanced-main pair IS the
- * "past the cap" branch, exercised here CROSS-PROCESS to prove it works
- * without the in-process lock).
+ * (`<rendezvousDir>/ready-<slug>` files) gates the workers — BOTH the
+ * within-cap and past-cap scenarios wait for BOTH ready files before either
+ * proceeds, so both arrive at the push concurrently and the CAS loop
+ * arbitrates. In the past-cap case both racers carry `mergeRetries: 0`, so
+ * whichever process loses the CAS race exhausts on attempt zero and routes
+ * to needs-attention; the assertion is on the SHAPE of the loss (CAS-
+ * exhaustion reason, stuck lock, winner's tree at tip), not on which slug
+ * happened to lose. Past-cap determinism-by-slug is intentionally not a
+ * requirement here — the deterministic broken-merge coverage lives in
+ * `clean-rebase-semantic-break.test.ts`.
  *
  * Per the AGENTS.md / setup.ts isolation rule the worker process inherits the
  * test setup's pinned `GIT_*` identity + `/dev/null` global/system config, so
@@ -99,7 +101,6 @@ function spawnWorker(args: {
 	cwd: string;
 	slug: string;
 	mergeRetries: number;
-	serialiseAfter?: string;
 	expectedReadyCount?: number;
 }): Promise<WorkerResult> {
 	return new Promise((resolve, reject) => {
@@ -109,7 +110,6 @@ function spawnWorker(args: {
 			arbiter: ARBITER,
 			mergeRetries: args.mergeRetries,
 			rendezvousDir,
-			serialiseAfter: args.serialiseAfter,
 			expectedReadyCount: args.expectedReadyCount ?? 2,
 		});
 		const child = spawn(TSX_BIN, [WORKER, payload], {
