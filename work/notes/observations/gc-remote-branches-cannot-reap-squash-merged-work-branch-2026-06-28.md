@@ -4,7 +4,7 @@ type: observation
 status: spotted
 spotted: 2026-06-28
 slug: gc-remote-branches-cannot-reap-squash-merged-work-branch
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
