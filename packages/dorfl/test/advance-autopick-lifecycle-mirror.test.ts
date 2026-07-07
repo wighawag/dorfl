@@ -78,11 +78,16 @@ const WORK = {
 	observations: {
 		'open.md': obs({slug: 'open'}),
 		'settled.md': obs({slug: 'settled', triaged: 'keep'}),
+		// A fully-answered OBSERVATION sidecar — routes to APPLY (task
+		// `route-answered-observation-sidecar-to-apply-pool`), even without a
+		// `triaged:` marker; the answered sidecar IS the signal.
+		'answered-obs.md': obs({slug: 'answered-obs', needsAnswers: 'true'}),
 	},
 	questions: {
 		'task-answered-task.md': sidecar('task:answered-task', true),
 		'task-half-task.md': sidecar('task:half-task', false), // pending
 		'prd-answered-prd.md': sidecar('prd:answered-prd', true),
+		'observation-answered-obs.md': sidecar('observation:answered-obs', true),
 	},
 };
 
@@ -101,7 +106,11 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		]);
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['prd:answered-prd', 'task:answered-task']);
+		).toEqual([
+			'observation:answered-obs',
+			'prd:answered-prd',
+			'task:answered-task',
+		]);
 	});
 
 	it('INTERIM born-OFF default: triage + surface EMPTY, apply still present (consume always-on)', async () => {
@@ -114,9 +123,16 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		});
 		expect(result.lifecycle.triage).toEqual([]);
 		expect(result.lifecycle.surface).toEqual([]);
+		// APPLY is always-on — an answered OBSERVATION sidecar reaches it too,
+		// not just task/prd (task
+		// `route-answered-observation-sidecar-to-apply-pool`).
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
-		).toEqual(['prd:answered-prd', 'task:answered-task']);
+		).toEqual([
+			'observation:answered-obs',
+			'prd:answered-prd',
+			'task:answered-task',
+		]);
 	});
 });
 

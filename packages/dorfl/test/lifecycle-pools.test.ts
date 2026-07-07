@@ -2,8 +2,8 @@ import {describe, it, expect} from 'vitest';
 import {
 	buildLifecyclePools,
 	type NeedsAnswersCandidate,
+	type ObservationCandidate,
 } from '../src/lifecycle-pools.js';
-import type {LedgerObservationItem} from '../src/ledger-read.js';
 import {newSidecar, type SidecarModel} from '../src/sidecar.js';
 
 /**
@@ -19,8 +19,12 @@ import {newSidecar, type SidecarModel} from '../src/sidecar.js';
  * INTERIM born-OFF default contributes only apply.
  */
 
-function obs(slug: string, triaged?: string): LedgerObservationItem {
-	return {file: `${slug}.md`, slug, triaged};
+function obs(
+	slug: string,
+	triaged?: string,
+	sidecar?: SidecarModel,
+): ObservationCandidate {
+	return {slug, triaged, sidecar};
 }
 
 /** A sidecar with one PENDING (unanswered) question. */
@@ -66,6 +70,51 @@ describe('buildLifecyclePools — triage sub-pool (untriaged observations)', () 
 		});
 		// Only the untriaged one survives; settled ones never re-enumerated.
 		expect(pools.triage.map((s) => s.slug)).toEqual(['open']);
+	});
+
+	it('routes an ANSWERED-sidecar observation to APPLY (consume, always-on)', () => {
+		const pools = buildLifecyclePools({
+			repoPath: '/repo',
+			observations: [
+				obs('answered', undefined, answeredSidecar('observation:answered')),
+				obs('pending', undefined, pendingSidecar('observation:pending')),
+				obs('open'),
+			],
+			needsAnswers: [],
+			// BOTH create-gates OFF — apply is NOT gated (§4 create-vs-consume).
+			gates: {},
+		});
+		expect(pools.apply).toEqual([
+			{repoPath: '/repo', slug: 'answered', namespace: 'observation'},
+		]);
+		// untriaged/pending stays in triage (gated), settled/pending w/o gate = nothing.
+		expect(pools.triage).toEqual([]);
+	});
+
+	it('an ANSWERED sidecar wins even when the observation is ALSO `triaged:` (answer never stranded)', () => {
+		const pools = buildLifecyclePools({
+			repoPath: '/repo',
+			observations: [
+				obs('marked', 'keep', answeredSidecar('observation:marked')),
+			],
+			needsAnswers: [],
+			gates: {triage: true},
+		});
+		expect(pools.apply.map((s) => s.slug)).toEqual(['marked']);
+		expect(pools.triage).toEqual([]);
+	});
+
+	it('a PENDING-sidecar UNTRIAGED observation stays in TRIAGE (as today) — not apply', () => {
+		const pools = buildLifecyclePools({
+			repoPath: '/repo',
+			observations: [
+				obs('half', undefined, pendingSidecar('observation:half')),
+			],
+			needsAnswers: [],
+			gates: {triage: true},
+		});
+		expect(pools.apply).toEqual([]);
+		expect(pools.triage.map((s) => s.slug)).toEqual(['half']);
 	});
 
 	it('with the triage gate OFF (default), enumerates NO observation', () => {

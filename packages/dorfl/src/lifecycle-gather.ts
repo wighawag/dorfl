@@ -7,6 +7,7 @@ import {
 	buildLifecyclePools,
 	type LifecyclePoolGates,
 	type NeedsAnswersCandidate,
+	type ObservationCandidate,
 } from './lifecycle-pools.js';
 import type {SelectedLifecyclePools} from './select-priority.js';
 
@@ -45,7 +46,7 @@ interface BlockedItem {
  */
 function readSidecarInPlace(
 	repoPath: string,
-	namespace: 'task' | 'prd',
+	namespace: 'task' | 'prd' | 'observation',
 	slug: string,
 ): SidecarModel | undefined {
 	const rel = sidecarPathFor(`${namespace}:${slug}`);
@@ -132,7 +133,12 @@ export function gatherLifecycleInPlace(input: {
 	const read = input.read ?? ledgerRead;
 	const repoPath = input.repoPath;
 
-	const observations = read.resolveLocalState({repoPath}).observations;
+	const rawObservations = read.resolveLocalState({repoPath}).observations;
+	const observations: ObservationCandidate[] = rawObservations.map((obs) => ({
+		slug: obs.slug,
+		triaged: obs.triaged,
+		sidecar: readSidecarInPlace(repoPath, 'observation', obs.slug),
+	}));
 	const surfaceStaging = input.gates?.surfaceStaging === true;
 	const needsAnswers: NeedsAnswersCandidate[] = blockedItemsInPlace(
 		read,
@@ -161,7 +167,7 @@ export function gatherLifecycleInPlace(input: {
 async function readSidecarMirror(
 	mirrorPath: string,
 	ref: string,
-	namespace: 'task' | 'prd',
+	namespace: 'task' | 'prd' | 'observation',
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<SidecarModel | undefined> {
@@ -258,9 +264,23 @@ export async function gatherLifecycleMirror(input: {
 		})),
 	);
 
+	const observations: ObservationCandidate[] = await Promise.all(
+		state.observations.map(async (obs) => ({
+			slug: obs.slug,
+			triaged: obs.triaged,
+			sidecar: await readSidecarMirror(
+				mirrorPath,
+				ref,
+				'observation',
+				obs.slug,
+				env,
+			),
+		})),
+	);
+
 	return buildLifecyclePools({
 		repoPath: mirrorPath,
-		observations: state.observations,
+		observations,
 		needsAnswers,
 		gates: input.gates,
 	});
