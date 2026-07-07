@@ -11,3 +11,5 @@ _Suggested default: Keep the clauses and close the observation: each surviving p
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep the clauses and close the observation. Each of the five surviving phrases truthfully narrates a real, distinct rename (pr->propose, return->requeue, untrusted-origin prior-state, allowAgents->removed) and reads as legitimate prose, not slice->task transition scaffolding. The verbatim rule scoped the clean break to slice/prd/slicing only, so these are out of mandate. Stripping accurate rename-narration about OTHER renames is a separate editorial preference that must be its own explicitly-authored task if wanted, not inferred from this sweep's generic AC wording.

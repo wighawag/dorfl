@@ -13,3 +13,5 @@ _Suggested default: Lean (a)/(c): the observation itself notes 'one channel, the
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+(a)/(c), leaning (a). Do NOT honour in-body disposition prose: one channel, the sidecar, keeps the loop honest. Fix the convention for the one stuck observation now (author its sidecar / triage it properly). The engine-robustness part (c) is worth doing but optional: make the engine surface the limbo LOUDLY (detect an observation with no sidecar and no `triaged:` marker and report it, instead of a silent exit-0 no-op on every propose tick). I lean toward eventually building that too, since a silent-forever no-op is exactly the trust-eroding trap the observation names, but it is not required to close this. If any task is minted, re-point the code refs from bare `src/` to `packages/dorfl/src/`.

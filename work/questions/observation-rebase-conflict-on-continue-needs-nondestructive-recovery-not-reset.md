@@ -15,3 +15,5 @@ _Suggested default: to-task — mint at least the point-3 fix (default requeue s
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint the point-3 fix now as a small, well-scoped task: default `requeue` should move a branch-less needs-attention item back to backlog WITHOUT `--reset`, since keep+continue and start-fresh are identical when there is no work branch to lose (packages/dorfl/src/needs-attention.ts:597). Treat the non-destructive recovery verb (points 1-2: a `--reconcile`/`--rebase` affordance that fetches the kept branch into a scratch worktree, rebases against latest main/arbiter, and re-pushes) as a SEPARATE design item, a task or short PRD, to be picked up if the broader affordance is wanted. Do not drop: all three points are verified live on current main.

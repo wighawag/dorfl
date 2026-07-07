@@ -15,3 +15,5 @@ _Suggested default: Re-open `prds/tasked/land-time-reverify-and-parallel-merge-c
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Re-open `prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md` and re-decompose its merge-question tasks against the new agentic / binary-sidecar model. The PRD's GOAL stays valid; only the disposition-token MECHANISM is gone. Use the sketched re-scope: treat answer-driven runner ACTIONS (merge/land, sibling stuck-lock requeue) as a DISTINCT dispatch layer keyed off the surfaced question's identity plus the human's plain answer, NOT forced into `decide()`'s content-outcome union. Resolve the PRD's two existing open cross-cutting questions (sidecar->branch/lock-ref keying; questions-folder shape) in the same pass. Until the re-decompose lands, HOLD `merge-question-surfacer`, `apply-rung-merge-disposition`, and `merge-questions-gate-axis` out of the build pool. Then delete this observation as discharged.

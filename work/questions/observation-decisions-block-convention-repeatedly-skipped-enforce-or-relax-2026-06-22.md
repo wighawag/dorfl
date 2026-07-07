@@ -11,3 +11,5 @@ _Suggested default: Lean RELAX (or HYBRID): rewrite CLAIM-PROTOCOL.md / task-tem
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+RELAX. Rewrite `CLAIM-PROTOCOL.md` and `task-template.md` from "add a `## Decisions` block" to "record the decision durably and link it (JSDoc at the choice site, a Decisions block, or an observation)." This matches what builders actually do and what triage keeps ratifying, and it costs zero new gate machinery. Not ENFORCE (a CI gate would punish a convention we've been waiving) and not HYBRID (drawing a crisp "slice-level decision vs local code invariant" line is extra spec surface for little gain). Mint a small protocol-doc task for the rewrite. IMPORTANT: this is a protocol-doc edit, so the task MUST mirror the change byte-identically between `skills/setup/protocol/` and `work/protocol/` per AGENTS.md.

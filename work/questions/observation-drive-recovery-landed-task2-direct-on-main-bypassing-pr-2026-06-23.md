@@ -12,6 +12,8 @@ _Suggested default: promote-task — a follow-up task to harden the --isolated r
 
 **Your answer** (write below this line):
 
+Mint the recovery-path-hardening task. Scope it to the recovery/replay path only: when the `--isolated` recovery path hits the combined failure (integrate push loses the --force-with-lease race AND/OR the Gate-2 verdict parser crashes), it must ALWAYS re-open the PR rather than replay green work directly onto main, and it must squash the requeue/wip `chore:` commits out of the integrated result. The two component faults stay tracked by their existing homes (the gate2-review-verdict-json-parse observation, and the done stale-lease tasks); the unique gap this task owns is the COMBINED-failure outcome that defeats the `propose` guarantee. The do.ts `sliced`->`tasked` doc-comment nit is out of scope here (separately surfaced).
+
 ## Q2
 
 **Is it acceptable that task #2's WIP/handoff `chore:` commits (`e30a622` requeue handoff, `9edf582` `chore: save aborted work (wip)`, `90a25bd` `feat ...; done`) leaked into origin/main's permanent first-parent linear history with NO `(#NNN)` PR reference, or should main's history be tidied (e.g. squashed/rewritten) for this landed range?**
@@ -23,3 +25,5 @@ _Suggested default: Accept the leaked commits in main history (do NOT rewrite al
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Accept the leaked commits; do NOT rewrite already-pushed main. The landed content is verified-green, and a force-rewrite of public main history is destructive and coordination-sensitive, more risk than the cosmetic cost of three un-squashed commits. The forward-looking fix (recovery path should squash requeue/wip chores out of the FUTURE integrated result) belongs in the recovery-path-hardening task from Q1, not a retroactive history rewrite of this range.

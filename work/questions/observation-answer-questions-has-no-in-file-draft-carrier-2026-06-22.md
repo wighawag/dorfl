@@ -12,6 +12,8 @@ _Suggested default: Keep open but narrow to gap A only (note in the body that ga
 
 **Your answer** (write below this line):
 
+Keep the observation open but NARROW it to gap A only. Gap B (ratify-by-handle) shipped in `skills/answer-questions/SKILL.md` Phase 2, so note that in the body and let this observation remain the single tracker for the unresolved draft-carrier decision (gap A / Q2). Do not delete it wholesale and do not re-surface the resolved half.
+
 ## Q2
 
 **Gap A (OQ #2): should the sidecar FORMAT + advance apply rung gain a "draft, ignored-until-ratified" carrier so an unratified draft can rest in the file near its question across sessions without the autonomous engine ever mistaking it for a human answer — and if so, which shape: (a) inert HTML-comment draft region above the answer line, (b) a typed draft=/proposed= identity-comment field promoted by a human-only --accept-drafts pass, or (c) leave it chat-only (status quo)?**
@@ -23,3 +25,5 @@ _Suggested default: Defer the build decision but record a leaning toward shape (
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Defer the build decision, but record a leaning toward shape (a): an inert HTML-comment draft region above the answer line (zero new schema, invisible on GitHub render, the parser treats it as inert). Do NOT commit to (b)'s new human-only --accept-drafts verb surface without a concrete need, and don't settle for chat-only (c) if we're going to carry drafts at all. This touches the humility-law enforcement surface, so it must not be guessed at build time: fold the format decision into the shared sidecar-structure ADR (same family as sidecar-keying and the questions-folder-rename design questions) rather than a standalone one. This is a recorded leaning, not a build order.
