@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'install-ci-prefer-project-local-dorfl'
 date: 2026-06-27
 status: open
 reviewOf: install-ci-prefer-project-local-dorfl
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
