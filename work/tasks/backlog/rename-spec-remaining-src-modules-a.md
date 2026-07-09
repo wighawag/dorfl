@@ -1,5 +1,5 @@
 ---
-title: prd→spec batch 4a — ledger/tasking/scan/select-priority Prd* symbols + pool identifiers
+title: prd→spec batch 4a — ATOMIC rename of every exported Prd* symbol + all its importers (one green shot, no alias)
 slug: rename-spec-remaining-src-modules-a
 prd: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-config-and-intake]
@@ -8,31 +8,32 @@ covers: [1]
 
 ## What to build
 
-Sub-batch (a) of the split bulk migrate (§3a): migrate the `Prd*` symbols + `prd` identifiers in the LEDGER/TASKING/SELECTION modules onto `spec`. Additive-migrate — the `prd` alias (from the expand tasks) still resolves for anything not touched here, so this stays green in isolation.
+Rename every EXPORTED `Prd*` TypeScript symbol to `Spec*`, together with EVERY importer, in ONE atomic change. Unlike the value tokens (frontmatter field, namespace, config key, artifact type — which the expand tasks dual-aliased so `prd:`/`spec:` both work during migration), these are INTERNAL TS exports with NO external contract and NO alias: an exported symbol must be renamed at its definition AND every import site in the same commit or the build breaks. There is nothing to alias and no reason to — just flip them all at once.
 
-Scope (this batch's files ONLY): `ledger-read.ts`, `tasking.ts` (the residual `Prd*` symbols NOT already migrated by batch 2's fm-read/branch/lock work), `scan.ts`, `select-priority.ts`, and their coupled tests. Rename the `Prd*` symbols: `LedgerPrdItem → LedgerSpecItem`, `LedgerPrdPool → LedgerSpecPool`, `resolvePrdPool → resolveSpecPool`, `resolveMirrorPrdPool → resolveMirrorSpecPool`, `PrdExistence`/`resolvePrdExistence → Spec…`, `taskablePrds → taskableSpecs`, `scorePrds → scoreSpecs`, `prdCandidate(s) → specCandidate(s)` where they live in these files, the `.prds` pool field, `prdsFirst`, `prdPool`, etc. Migrate `namespace === 'prd'` CONSUMER switches in `scan.ts`/`select-priority.ts` to also match `'spec'` (add `|| === 'spec'` beside `'prd'`, keeping `'prd'` working).
+Rename these exported symbols (definition + all importers): `LedgerPrdItem → LedgerSpecItem`, `LedgerPrdPool → LedgerSpecPool`, `resolvePrdPool → resolveSpecPool`, `resolveMirrorPrdPool → resolveMirrorSpecPool`, `PrdExistence → SpecExistence`, `resolvePrdExistence → resolveSpecExistence`, `taskablePrds → taskableSpecs`, `TaskablePrdsInput → TaskableSpecsInput`, `scorePrds → scoreSpecs`, `PrdCandidate → SpecCandidate`, `ScannedPrd → ScannedSpec`. `renderPrdBody`/`PrdTask` are OWNED BY 4c (they ride the `prd-complete.ts → spec-complete.ts` file rename) — do NOT touch them here. Grep `packages/dorfl/src` for each symbol and rename every occurrence, including re-exports in `index.ts` and the importers `ledger-read.ts`, `scan.ts`, `select-priority.ts`, `mirror-pool-scan.ts`, `slug-namespace.ts` (`resolvePrdExistence`), `tasking.ts`, `lifecycle-gather.ts`, `do-autopick.ts`, `advance-drivers.ts`, and any others grep finds. Update every coupled test that references a renamed symbol.
 
-Do NOT touch the deliberate alias surface (`PrdsLandIn`/`prdsLandIn`/`--prds-land-in` config, the `'prd'` namespace/artifact-type acceptance, `PRD_PREFIX`) — the contract task removes those. Do NOT touch files owned by sub-batches (b)/(c) (close-job, do*, advance*, prompt, prd-complete). Where a file is shared, touch only this batch's symbols.
+This is ONE atomic task (not file-orthogonal) BECAUSE the exported symbols' blast radius crosses ~14 files with no per-file alias — the only way it lands green is to fix every site together. Do NOT introduce a symbol-level alias (`export type LedgerPrdPool = LedgerSpecPool`) — that would leak past the contract task's `prd` leak scan and is unnecessary; just rename atomically.
+
+Do NOT touch: the deliberate VALUE alias surface (`prdsLandIn`/`--prds-land-in`, the `'prd'` namespace/artifact-type acceptance, `PRD_PREFIX` — contract task removes those); the `namespace === 'prd'` value-consumer switches owned by 4b/4c; the `brief` remnants (4b); the `prd-complete.ts` file + `renderPrdBody`/`PrdTask` (4c).
 
 ## Acceptance criteria
 
-- [ ] `Prd*` symbols in `ledger-read.ts`/`tasking.ts`/`scan.ts`/`select-priority.ts` renamed to `Spec*`; `namespace === 'prd'` consumer switches in these files also match `'spec'`.
-- [ ] Coupled tests for these modules updated in this batch.
-- [ ] The deliberate `prd` alias surface is UNTOUCHED (contract task owns removal); files owned by sub-batches (b)/(c) untouched.
-- [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green (the `prd` alias covers un-migrated occurrences elsewhere).
+- [ ] Every exported `Prd*` symbol listed above renamed to `Spec*` at its definition AND every importer (incl. `index.ts` re-exports, `mirror-pool-scan.ts`, `slug-namespace.ts`); grep confirms no importer still references the old name.
+- [ ] `renderPrdBody`/`PrdTask`/`prd-complete.ts` NOT touched (4c owns them); the value alias surface NOT touched (contract task); `brief` remnants NOT touched (4b).
+- [ ] NO symbol-level alias introduced (atomic rename, not expand-beside).
+- [ ] Coupled tests referencing renamed symbols updated.
+- [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
 ## Blocked by
 
-- rename-spec-config-and-intake (the shared identity — layout/frontmatter/namespace/config — is renamed; the `prd` alias is present so this stays green).
+- rename-spec-config-and-intake (shared value identity renamed; this is the exported-SYMBOL rename layer, atomic). NOTE: file-overlaps 4b/4c on `tasking.ts`/`lifecycle-gather.ts`/`do-autopick.ts`/`advance-drivers.ts` (this touches the SYMBOL import there; 4b/4c touch the value-consumer switch), so 4b and 4c are `blockedBy` THIS task to serialize the shared-file edits. (Sequence: 4a → 4b → 4c.)
 
 ## Prompt
 
-> Goal: sub-batch (a) of the split bulk migrate (read `work/protocol/TASKING-PROTOCOL.md` §3a + the parent spec `work/specs/tasked/prd-to-spec-vocabulary-cutover-and-migration-command.md`). Rename the `Prd*` symbols + `prd` identifiers in the LEDGER/TASKING/SELECTION modules (`ledger-read.ts`, `tasking.ts` residuals, `scan.ts`, `select-priority.ts`) onto `spec`, plus their coupled tests. Additive-migrate: the `prd` alias from the expand tasks still resolves elsewhere, so this stays green in isolation.
+> Goal: rename EVERY exported `Prd*` TypeScript symbol to `Spec*` — definition AND all importers — in ONE atomic change (read `work/protocol/TASKING-PROTOCOL.md` §3a + the parent spec `work/specs/tasked/prd-to-spec-vocabulary-cutover-and-migration-command.md`). These are internal exports with NO alias (unlike the value tokens the expand tasks dual-aliased), so they must flip at the definition and every import site together or the build breaks. Do NOT introduce a symbol alias; just rename atomically.
 >
-> Scope: rename `LedgerPrdItem`/`LedgerPrdPool`/`resolvePrdPool`/`resolveMirrorPrdPool`/`PrdExistence`/`resolvePrdExistence`/`taskablePrds`/`scorePrds`/`.prds`/`prdsFirst`/`prdPool` and peers in THESE files; add `|| === 'spec'` beside `namespace === 'prd'` switches in scan/select-priority. Do NOT touch the alias surface (`prdsLandIn`, `'prd'` namespace/artifact-type acceptance, `PRD_PREFIX` — contract task removes them) or sub-batch (b)/(c) files (close-job, do*, advance*, prompt, prd-complete).
+> Symbols: `LedgerPrdItem`, `LedgerPrdPool`, `resolvePrdPool`, `resolveMirrorPrdPool`, `PrdExistence`, `resolvePrdExistence`, `taskablePrds`, `TaskablePrdsInput`, `scorePrds`, `PrdCandidate`, `ScannedPrd` (→ `Spec*`). NOT `renderPrdBody`/`PrdTask` (4c owns them via the `prd-complete.ts → spec-complete.ts` file rename). Grep `packages/dorfl/src` for each; fix `index.ts` re-exports + importers (`ledger-read`, `scan`, `select-priority`, `mirror-pool-scan`, `slug-namespace`, `tasking`, `lifecycle-gather`, `do-autopick`, `advance-drivers`, …). Update coupled tests.
 >
-> Done means: these four modules' `Prd*` symbols are `Spec*`, consumers match `spec`, coupled tests green, full gate green. FIRST check drift: confirm `rename-spec-config-and-intake` landed and the expand aliases are present (a `prd` symbol you rename must still resolve elsewhere via the alias).
-
-## Requeue 2026-07-09
-
-Re-scoped: exported Prd* symbols have NO alias and span 14 importer files (index, mirror-pool-scan, slug-namespace, etc.) — not file-orthogonal. Making 4a the ATOMIC exported-symbol rename (def + all importers in one green shot), no alias. 4b (file-local + comments) and 4c (verb + whole-file prd-complete rename) stay as-is.
+> Do NOT touch: the value alias surface (`prdsLandIn`, `'prd'` namespace/artifact-type, `PRD_PREFIX` — contract task); the `namespace === 'prd'` value-consumer switches (4b/4c); the `brief` remnants (4b); `prd-complete.ts` (4c).
+>
+> Done means: every `Prd*` export is `Spec*` with no dangling importer, coupled tests green, full gate green. This is driven BEFORE 4b/4c. FIRST check drift: confirm `rename-spec-config-and-intake` landed.
