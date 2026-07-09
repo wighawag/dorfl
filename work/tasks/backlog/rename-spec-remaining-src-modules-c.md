@@ -37,3 +37,7 @@ Do NOT touch the deliberate `prd` alias surface (contract task) or sub-batch (a)
 > Scope boundary: touch only the do/advance/prompt/integration/triage/needs-attention/cli files + prd-complete. Do NOT touch the `prd` alias surface (contract task) or sub-batch (a)/(b) symbols (ledger/scan/select-priority/close-job/the brief remnants).
 >
 > Done means: `do spec:`/`advance spec:` route correctly, the consumers match `spec`, `spec-complete.ts` is renamed with importers updated, coupled tests green, full gate green. FIRST check drift: confirm `rename-spec-config-and-intake` landed and the expand aliases (esp. `SlugNamespace 'spec'`) are present — the verb dispatch depends on `resolveSlug('spec:x')` returning `{namespace:'spec'}`.
+
+## Requeue 2026-07-09
+
+Lock released: the previous do run was killed by a wrapper 25-min timeout during isolated build (before any work-branch push); no progress lost. Re-driving with a longer window.
