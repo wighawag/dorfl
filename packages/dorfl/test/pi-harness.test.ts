@@ -325,6 +325,65 @@ describe('PiHarness — output (last assistant text from the session .jsonl)', (
 		expect(result.output).toBe('async answer');
 	});
 
+	it('launchAsync resolves on pi EXIT even when a grandchild inherits the pipes and outlives it (runner-hang regression)', async () => {
+		// Regression for the `advance --watch` surface/triage/apply runner-hang: pi
+		// may spawn a grandchild (MCP server, model proxy, subshell) that INHERITS
+		// stdout/stderr and outlives pi. `close` only fires once EVERY inherited pipe
+		// closes, so keying completion off `close` hangs the promise (and the CI leg)
+		// forever. This stub exits 0 immediately but leaves a `sleep` grandchild
+		// holding the inherited pipes; `launchAsync` must STILL resolve (on `exit`)
+		// well within the timeout, never wait for the grandchild.
+		const bin = join(scratch.root, 'pi-leaky.sh');
+		const sessionBody = join(scratch.root, 'leaky-session.jsonl');
+		writeFileSync(sessionBody, assistantSessionLog('leaky answer'));
+		writeFileSync(
+			bin,
+			[
+				'#!/usr/bin/env bash',
+				'cat > /dev/null', // consume stdin (the prompt)
+				// Honour --session <file> like the real pi (create+write it).
+				'session_file=""; prev=""',
+				'for a in "$@"; do if [ "$prev" = "--session" ]; then session_file="$a"; fi; prev="$a"; done',
+				`if [ -n "$session_file" ]; then mkdir -p "$(dirname "$session_file")"; cp ${JSON.stringify(
+					sessionBody,
+				)} "$session_file"; fi`,
+				// A grandchild that INHERITS stdout/stderr and outlives us, holding the
+				// inherited pipe write ends open (simulates a leaked pi sub-process).
+				'sleep 30 &',
+				'exit 0',
+			].join('\n') + '\n',
+		);
+		chmodSync(bin, 0o755);
+
+		const harness = new PiHarness({piBin: bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+		const session = generateSessionPath({cwd: dir, id: 'leaky'});
+
+		const launch = harness.launchAsync({
+			dir,
+			slug: 'leaky',
+			command: '',
+			prompt: 'p',
+			session,
+		});
+		// Race the launch against a timeout: pre-fix this promise NEVER resolves (it
+		// waited for `close`, blocked by the grandchild's inherited pipes).
+		const outcome = await Promise.race([
+			launch.then((r) => ({resolved: true as const, r})),
+			new Promise<{resolved: false}>((res) =>
+				setTimeout(() => res({resolved: false}), 2000),
+			),
+		]);
+		expect(outcome.resolved).toBe(true);
+		if (outcome.resolved) {
+			expect(outcome.r.ok).toBe(true);
+			// The answer is read from the `.jsonl`, final once pi exited — the
+			// grandchild's open stdout pipe does not affect it.
+			expect(outcome.r.output).toBe('leaky answer');
+		}
+	});
+
 	it('writes the .jsonl under the isolated scratch dir — the real ~/.pi/agent/sessions is UNTOUCHED', () => {
 		// isolatePiAgentDir points PI_CODING_AGENT_DIR at the scratch dir (set in
 		// beforeEach), so a DEFAULT-path launch lands under scratch, never the real

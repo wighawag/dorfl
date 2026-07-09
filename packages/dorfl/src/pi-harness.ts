@@ -194,6 +194,24 @@ export class PiHarness implements Harness {
 	 * alongside the tailer; the WHOLE launch delta is `spawnSync` → `spawn`. The
 	 * prompt is still fed on stdin and stdout/stderr are still captured; we read
 	 * the `.jsonl` LOG, never piped stdout.
+	 *
+	 * ## Resolve on `exit`, NOT `close` (runner-hang fix)
+	 *
+	 * The promise resolves on the child's **`exit`** event (pi itself terminated),
+	 * NOT `close`. `close` fires only once EVERY stdio pipe of the child is closed
+	 * — which includes pipes INHERITED by any grandchild pi spawned (an MCP server,
+	 * a model proxy, a subshell). If such a grandchild OUTLIVES pi holding the
+	 * inherited stdout/stderr write end, `close` never fires and this promise never
+	 * resolves — the `advance --watch` surface/triage/apply leg then finishes its
+	 * work but its awaited launch hangs forever, burning a CI runner (and one of the
+	 * `max-parallel` slots) until cancelled. `exit` fires the instant pi exits, so
+	 * we key completion off pi's OWN death, not its descendants'. We still read the
+	 * agent's answer from the `.jsonl` (final once pi exited, independent of
+	 * stdout), then DESTROY our end of the stdio pipes so a leaked grandchild's
+	 * inherited FDs release what they can. A lingering grandchild may still hold an
+	 * OS pipe end open (keeping the event loop non-empty); the CLI verbs that call
+	 * this path `process.exit(code)` after the awaited result, which is the
+	 * belt-and-suspenders backstop bounding any such residual leak.
 	 */
 	launchAsync(input: LaunchInput): Promise<LaunchResult> {
 		const sessionFile = this.resolveSessionFile(input);
@@ -219,16 +237,36 @@ export class PiHarness implements Harness {
 			// Output is CAPTURED (not piped through) — `--watch` reads the .jsonl log,
 			// not stdout. We drain stdout so the pipe never fills and stalls pi.
 			child.stdout?.on('data', () => {});
+			// Guard so `exit` and a late `error` never double-settle the promise.
+			let settled = false;
 			child.on('error', (err) => {
+				if (settled) {
+					return;
+				}
+				settled = true;
 				reject(new Error(`failed to spawn pi (${this.piBin}): ${err.message}`));
 			});
-			child.on('close', (code) => {
+			// Resolve on `exit` (pi itself terminated), NOT `close`: `close` waits for
+			// EVERY child stdio pipe to close, including any INHERITED by a grandchild
+			// pi spawned that outlives it — which would hang this promise forever (see
+			// the doc-comment above). Then destroy our stdio ends to release the pipes.
+			child.on('exit', (code) => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				// Release our end of the stdio pipes so a leaked grandchild's inherited
+				// FDs stop keeping our streams referenced; `unref` the child handle too.
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+				child.stdin?.destroy();
+				child.unref?.();
 				const status = code ?? -1;
 				resolve({
 					ok: status === 0,
 					record,
 					detail: status === 0 ? undefined : stderr.trim(),
-					// Read the agent's ANSWER from the `.jsonl` at `close` — the same
+					// Read the agent's ANSWER from the `.jsonl` at `exit` — the same
 					// last-assistant-text read `launch` does at return (task
 					// `harness-agent-output`); the process has exited so the log is final.
 					output: readLastAssistantText(sessionFile),
