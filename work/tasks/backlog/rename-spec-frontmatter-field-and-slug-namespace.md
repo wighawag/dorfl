@@ -38,3 +38,7 @@ This repo's live `work/tasks/*` `prd:` frontmatter is NOT hand-converted (the mi
 > Done means: `spec` is the primary emitted form, the `prd` alias still works, coupled tests assert both, the full gate is green.
 >
 > FIRST check drift: confirm `expand-spec-frontmatter-and-namespace-aliases` landed (both `fm.spec` and `fm.prd` populate; `spec:`/`prd:` both resolve). If the alias is not there yet, this task cannot stay green — route to needs-attention rather than hard-swapping.
+
+## Requeue 2026-07-09
+
+Blocked on missing spec lock/sidecar namespace. Adding a follow-up expand task (expand-spec-lock-and-sidecar-namespace) before this batch; this batch's 'lock spec-<slug>' clause becomes satisfiable once that lands.
