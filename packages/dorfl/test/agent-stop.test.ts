@@ -142,9 +142,10 @@ describe('isWorkBranchDiffEmpty — the branch-commit-aware empty-diff predicate
 	});
 
 	/**
-	 * Build a throwaway repo on a `work/<slug>` branch cut from a `--bare` arbiter
-	 * main, with only the CLAIM commit (which touches `work/` only) ahead of main.
-	 * Returns the checkout dir; the caller layers on source commits / tree edits.
+	 * Build a throwaway repo on a `work/<slug>` branch cut CLEAN from a `--bare`
+	 * arbiter main. Under the per-item-lock model the claim writes NOTHING (there
+	 * is NO claim commit), so a fresh branch is IDENTICAL to arbiter/main. The
+	 * caller layers on the agent's edits / commits. Returns the checkout dir.
 	 */
 	function seedClaimedBranch(slug: string): string {
 		const repo = join(scratch.root, 'project');
@@ -157,17 +158,12 @@ describe('isWorkBranchDiffEmpty — the branch-commit-aware empty-diff predicate
 		gitIn(['clone', '-q', '--bare', repo, arbiter], scratch.root);
 		gitIn(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
-		// Cut the work branch off the arbiter main + add the claim commit (work/ only).
+		// Cut the work branch off arbiter main. No claim commit (per-item-lock model).
 		gitIn(['switch', '-q', '-c', `work/task-${slug}`, 'arbiter/main'], repo);
-		const ip = join(repo, 'work', 'in-progress');
-		mkdirSync(ip, {recursive: true});
-		writeFileSync(join(ip, `${slug}.md`), `claim: ${slug}\n`);
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', `claim ${slug}`], repo);
 		return repo;
 	}
 
-	it('TRUE (no-op) for a claim-commit-only branch with a clean working tree', async () => {
+	it('TRUE (no-op) for a fresh branch with a clean working tree (no claim commit under per-item-lock)', async () => {
 		const repo = seedClaimedBranch('alpha');
 		expect(
 			await isWorkBranchDiffEmpty({cwd: repo, arbiter: 'arbiter', env: ENV}),
@@ -194,12 +190,42 @@ describe('isWorkBranchDiffEmpty — the branch-commit-aware empty-diff predicate
 		).toBe(false);
 	});
 
-	it('TRUE when the only commits ahead touch the `work/` ledger only', async () => {
+	it('FALSE when a committed `work/` change is the DELIVERABLE (docs-only task, e.g. transcribe a Decisions block)', async () => {
 		const repo = seedClaimedBranch('alpha');
-		// A SECOND work/-only commit (still no source) must not read as a build.
-		writeFileSync(join(repo, 'work', 'in-progress', 'alpha.md'), 'claim v2\n');
+		// Regression (observation runner-empty-diff-false-positive-bounces-completed-
+		// work-2026-07-09): a `work/` change is frequently the real deliverable of a
+		// docs/protocol/observation task. It must NOT read as an empty-diff no-op.
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		writeFileSync(
+			join(repo, 'work', 'tasks', 'done', 'alpha.md'),
+			'---\nslug: alpha\n---\n\n## Decisions\n\n- transcribed\n',
+		);
 		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'work/ ledger touch'], repo);
+		gitIn(
+			['commit', '-q', '-m', 'feat(alpha): transcribe decisions; done'],
+			repo,
+		);
+		expect(
+			await isWorkBranchDiffEmpty({cwd: repo, arbiter: 'arbiter', env: ENV}),
+		).toBe(false);
+	});
+
+	it('TRUE (no-op) when the only commit ahead is BOOKKEEPING (Dorfl-Bookkeeping trailer)', async () => {
+		const repo = seedClaimedBranch('alpha');
+		// A runner move-only bookkeeping commit is identified by its trailer, not by
+		// its `work/` path, so it does NOT count as genuine agent work.
+		mkdirSync(join(repo, 'work', 'needs-attention'), {recursive: true});
+		writeFileSync(join(repo, 'work', 'needs-attention', 'alpha.md'), 'stuck\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(
+			[
+				'commit',
+				'-q',
+				'-m',
+				'chore(alpha): route to needs-attention\n\nDorfl-Bookkeeping: route-to-needs-attention',
+			],
+			repo,
+		);
 		expect(
 			await isWorkBranchDiffEmpty({cwd: repo, arbiter: 'arbiter', env: ENV}),
 		).toBe(true);
@@ -207,8 +233,8 @@ describe('isWorkBranchDiffEmpty — the branch-commit-aware empty-diff predicate
 
 	it('TRUE when the only commit ahead touches the job-record only (excluded)', async () => {
 		const repo = seedClaimedBranch('alpha');
-		// The runner's own `.dorfl-job.json` record is filtered out of the
-		// commit-range check, exactly as the working-tree check filters it.
+		// The runner's own `.dorfl-job.json` record is a bookkeeping-only commit and
+		// does NOT count as genuine work (no trailer, but its sole path is excluded).
 		writeFileSync(join(repo, '.dorfl-job.json'), '{}\n');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'job record'], repo);

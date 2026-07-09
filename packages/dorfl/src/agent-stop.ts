@@ -230,18 +230,26 @@ export async function hasUncommittedSourceChanges(params: {
 	env?: NodeJS.ProcessEnv;
 }): Promise<boolean> {
 	const {cwd, env} = params;
-	const status = await runAsync(
-		'git',
-		['status', '--porcelain', '--', '.', ':(exclude)work'],
-		cwd,
-		{env},
-	);
+	// Count ANY uncommitted tracked change (mods, deletions, untracked), dropping
+	// ONLY the runner's own `.dorfl-job.json` record (a job worktree leaves it).
+	//
+	// It does NOT exclude `work/`: a `work/` change is frequently the GENUINE
+	// DELIVERABLE of a task (extend an idea, transcribe a `## Decisions` block into a
+	// done-record, ratify in a protocol doc, author an ADR-note). Excluding `work/`
+	// wholesale mis-classified every DOCS-ONLY task as an empty-diff no-op and
+	// FALSE-bounced completed, correct work (observation
+	// `runner-empty-diff-false-positive-bounces-completed-work-2026-07-09`). The
+	// old exclusion existed for a claim BOOKKEEPING commit that touched `work/`
+	// only — but the per-item-lock claim writes NOTHING (`claim-cas.ts`: "there is
+	// NO claim commit"), so the exclusion now only over-drops real deliverables.
+	// Genuine bookkeeping is excluded by TRAILER at the commits-ahead check, not by
+	// path here (the working tree carries no bookkeeping — the agent's edits are
+	// its deliverable).
+	const status = await runAsync('git', ['status', '--porcelain'], cwd, {env});
 	if (status.status !== 0) {
 		return true; // plumbing error ⇒ treat as DIRTY (the safe direction).
 	}
-	// Each porcelain line is `XY <path>` (path from column 3). Drop the runner's
-	// own job-record line (a job worktree leaves it) — the SAME exclusion `gc`'s
-	// `isWorktreeClean` applies — so only genuine source changes remain.
+	// Each porcelain line is `XY <path>` (path from column 3).
 	const remaining = status.stdout
 		.split('\n')
 		.map((line) => line.trimEnd())
@@ -251,8 +259,9 @@ export async function hasUncommittedSourceChanges(params: {
 }
 
 /**
- * Does the work branch have at least one commit in `<arbiter>/main..HEAD` that
- * touches a NON-`work/`, non-job-record path? Fetches `<arbiter>/main` first
+ * Does the work branch have at least one GENUINE-WORK commit in
+ * `<arbiter>/main..HEAD` (a commit that is NOT a runner bookkeeping commit,
+ * identified by its `Dorfl-Bookkeeping` trailer)? Fetches `<arbiter>/main` first
  * (mirroring the integration band) so the ref resolves even in a bare-mirror job
  * worktree. Best-effort / SAFE direction: any plumbing failure (the fetch, the
  * rev-list, an unresolvable ref) reads as TRUE ("has source") — the same
@@ -281,33 +290,66 @@ async function hasSourceCommitsAhead(params: {
 	if (fetched.status !== 0) {
 		return true; // could not refresh the ref ⇒ NON-empty (safe direction).
 	}
-	// Count the commits in `<arbiter>/main..HEAD` that touch a path OTHER than the
-	// `work/` ledger and the runner's own job record — the SAME two exclusions the
-	// working-tree check applies, expressed as pathspecs so `--count` only counts
-	// commits with genuine source change. A claim-commit-only branch (claim touches
-	// `work/` only) counts 0; a continue-from-tip with prior source commits counts >0.
-	const revList = await runAsync(
+	// Enumerate the commits in `<arbiter>/main..HEAD` and count those that carry
+	// GENUINE work — i.e. NOT a runner BOOKKEEPING commit. A bookkeeping commit is
+	// identified by its recorded `Dorfl-Bookkeeping` trailer (task
+	// `identify-bookkeeping-commits-by-trailer-not-rendered-todo-text`), NOT by a
+	// `work/` path: a `work/` change is frequently the real deliverable of a
+	// docs/protocol/observation task, so a path-based `:(exclude)work` here
+	// FALSE-bounced completed docs-only work (observation
+	// `runner-empty-diff-false-positive-bounces-completed-work-2026-07-09`). Read
+	// each commit's sha + bookkeeping trailer via plumbing (NUL-delimited, one
+	// record per commit); a commit with a non-empty `Dorfl-Bookkeeping` trailer is
+	// bookkeeping and does not count; any other commit is genuine work.
+	// Per commit: its sha + its `Dorfl-Bookkeeping` trailer value, NUL-delimited
+	// then a record separator, so we can inspect each commit's files too.
+	const log = await runAsync(
 		'git',
 		[
-			'rev-list',
-			'--count',
+			'log',
+			'--format=%H%x00%(trailers:key=Dorfl-Bookkeeping,valueonly)%x1e',
 			`${arbiter}/main..HEAD`,
-			'--',
-			'.',
-			':(exclude)work',
-			`:(exclude)${JOB_RECORD_FILENAME}`,
 		],
 		cwd,
 		{env},
 	);
-	if (revList.status !== 0) {
+	if (log.status !== 0) {
 		return true; // could not compute the range ⇒ NON-empty (safe direction).
 	}
-	const count = Number.parseInt(revList.stdout.trim(), 10);
-	if (!Number.isFinite(count)) {
-		return true; // unparseable ⇒ NON-empty (safe direction).
+	const records = log.stdout
+		.split('\x1e')
+		.map((r) => r.trim())
+		.filter((r) => r !== '');
+	for (const record of records) {
+		const [sha, bookkeepingTrailer = ''] = record.split('\0');
+		// A bookkeeping-trailered commit is not genuine work.
+		if (bookkeepingTrailer.trim() !== '') {
+			continue;
+		}
+		// A commit whose ONLY touched path is the runner's own job-record is
+		// bookkeeping too (no trailer, but not the agent's deliverable).
+		const files = await runAsync(
+			'git',
+			['show', '--name-only', '--format=', sha],
+			cwd,
+			{env},
+		);
+		const touched =
+			files.status === 0
+				? files.stdout
+						.split('\n')
+						.map((p) => p.trim())
+						.filter((p) => p !== '')
+				: [];
+		const jobRecordOnly =
+			touched.length > 0 && touched.every((p) => p === JOB_RECORD_FILENAME);
+		if (jobRecordOnly) {
+			continue;
+		}
+		// A non-bookkeeping commit that touches real files ⇒ genuine work.
+		return true;
 	}
-	return count > 0;
+	return false;
 }
 
 /** The needs-attention reason for the deterministic empty-diff backstop. */
