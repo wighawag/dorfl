@@ -38,7 +38,7 @@ import type {
  *       `originTrust: untrusted` (the untrusted-origin force) even when the
  *       repo configures `prdsLandIn: 'ready'`;
  *   (b) `work/specs/ready/` STILL means the auto-slice POOL: the pool reader
- *       (`createLocalLedgerReadStrategy().resolvePrdPool`) reads `work/specs/ready/`
+ *       (`createLocalLedgerReadStrategy().resolveSpecPool`) reads `work/specs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
  *       tasking-eligibility gate refuses a staged slug;
  *   (c) the runner-owned promotion (`promoteFromPrePrd`) moves the staged
@@ -252,9 +252,9 @@ describe('STEP A (PRD) \u2014 work/specs/ready/ STILL means the auto-slice POOL 
 		expect(result.outcome).toBe('spec-written');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 
-		// THE POOL READER (`createLocalLedgerReadStrategy().resolvePrdPool`) reads
+		// THE POOL READER (`createLocalLedgerReadStrategy().resolveSpecPool`) reads
 		// `work/specs/ready/` BYTE-FOR-BYTE UNCHANGED: a staged PRD is NOT in the pool.
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
+		const pool = ledgerRead.resolveSpecPool({repoPath: repo});
 		expect(pool.prds.map((p) => p.slug)).not.toContain('shiny-new-vision');
 
 		// AND the tasking-eligibility gate refuses an autonomous task of a staged
@@ -321,7 +321,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 
 		// AND the pool reader now sees it (the auto-slice candidate pool).
 		gitIn(['pull', '--ff-only', '-q', ARBITER, 'main'], repo);
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
+		const pool = ledgerRead.resolveSpecPool({repoPath: repo});
 		expect(pool.prds.map((p) => p.slug)).toContain('shiny-new-vision');
 	});
 
@@ -402,7 +402,7 @@ describe('STEP A (PRD) \u2014 taskedAfter (prd-tasked/) and blockedBy (done/) re
 		gitIn(['push', '-q', ARBITER, 'main'], repo);
 
 		// The pool reader reads `work/specs/ready/` (the auto-slice pool, unchanged).
-		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
+		const pool = ledgerRead.resolveSpecPool({repoPath: repo});
 		// `taskedSlugs` is RESIDENCE in `work/specs/tasked/` (mirror of `done/` for
 		// blockedBy). The staged PRD in `work/specs/proposed/` must NOT appear here.
 		expect(pool.taskedSlugs.has('already-tasked')).toBe(true);

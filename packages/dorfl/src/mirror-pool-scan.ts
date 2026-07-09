@@ -3,15 +3,15 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {resolveRepoConfigFromMirror} from './repo-mirror.js';
 import {
 	scoreItems,
-	scorePrds,
+	scoreSpecs,
 	toScannedLifecycle,
 	type ScannedItem,
 	type ScanReport,
 	type RepoReport,
 } from './scan.js';
 import {
-	taskablePrds,
-	type PrdCandidate,
+	taskableSpecs,
+	type SpecCandidate,
 	type SelectedLifecyclePools,
 } from './select-priority.js';
 import {gatherLifecycleMirror} from './lifecycle-gather.js';
@@ -43,9 +43,9 @@ import {heldTaskSlugs} from './item-lock.js';
  *   - **tasks** — {@link scoreItems} (the SAME eligibility scoring the in-place
  *     `scanRepoPaths`/registry `scan` use) over the mirror's `work/backlog` +
  *     `work/done` read via {@link LedgerReadStrategy.resolveMirrorState}.
- *   - **taskable prds** — {@link taskablePrds} (`autoslice-gate`'s predicate)
+ *   - **taskable prds** — {@link taskableSpecs} (`autoslice-gate`'s predicate)
  *     over the mirror's `work/prds/ready` + `work/prds/tasked` read via the mirror-ref
- *     {@link LedgerReadStrategy.resolveMirrorPrdPool}.
+ *     {@link LedgerReadStrategy.resolveMirrorSpecPool}.
  *
  * Per-repo policy parity: a bare mirror has no checked-out `.dorfl.json`,
  * but the COMMITTED one is reachable on `main` (the `do --remote` per-repo seam).
@@ -117,11 +117,11 @@ export interface MirrorPoolScanResult {
 	/** Just the eligible subset of {@link tasks} (convenience for assertions/callers). */
 	eligibleTasks: ScannedItem[];
 	/**
-	 * The TASKABLE PRD pool — already filtered through `taskablePrds`
+	 * The TASKABLE PRD pool — already filtered through `taskableSpecs`
 	 * (`autoslice-gate`'s predicate). In declaration order; the selection layer
 	 * does not re-gate it.
 	 */
-	prds: PrdCandidate[];
+	prds: SpecCandidate[];
 	/**
 	 * The LIFECYCLE pools (task `advance-autopick-lifecycle-pools`): untriaged
 	 * observations (triage), `needsAnswers`-blocked items with no all-answered
@@ -182,8 +182,8 @@ export async function scanMirrorPool(
 	// Pool 2 — TASKABLE PRDS from the bare mirror's `work/prds/ready`+`work/prds/tasked`,
 	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
 	// we can populate the `prds[]` companion of `items[]` on the RepoReport below.
-	const pool = await read.resolveMirrorPrdPool({mirrorPath, ref, env});
-	const prds = taskablePrds({
+	const pool = await read.resolveMirrorSpecPool({mirrorPath, ref, env});
+	const prds = taskableSpecs({
 		candidates: pool.prds.map((p) => ({
 			repoPath: mirrorPath,
 			slug: p.slug,
@@ -198,7 +198,7 @@ export async function scanMirrorPool(
 	// mirror-side pool scan exists only to SCORE the task/prd candidate pools for
 	// autonomous selection, never to render a dashboard, so it carries an empty lint
 	// (the duplicate surface is the user-facing `scan`/`status`, per the task). The
-	// `prds[]` companion of `items[]` is filled via the SAME `scorePrds` helper
+	// `prds[]` companion of `items[]` is filled via the SAME `scoreSpecs` helper
 	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
@@ -217,7 +217,7 @@ export async function scanMirrorPool(
 	const repo: RepoReport = {
 		path: mirrorPath,
 		items,
-		prds: scorePrds(mirrorPath, pool, repoConfig.autoTask),
+		prds: scoreSpecs(mirrorPath, pool, repoConfig.autoTask),
 		// The propose-matrix lifecycle pool on this mirror's `RepoReport` — the SAME
 		// `gatherLifecycleMirror` result projected onto the `scan --json` shape, so
 		// the dashboard/matrix surface agrees with the selection scoring below.

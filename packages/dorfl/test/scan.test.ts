@@ -442,7 +442,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
  * propose-matrix `jq` reads `repos[].prds[]` + `cwd.repo.prds[]` and unions them
  * with the task legs; before this task landed, the pool was invisible there
  * and `DORFL_AUTO_TASK` was dead on the hourly cron. The eligibility
- * predicate REUSES `taskablePrds` (the SAME `autoslice-gate` predicate the
+ * predicate REUSES `taskableSpecs` (the SAME `autoslice-gate` predicate the
  * autopick paths run) — a config-less repo with `autoTask` off yields an
  * all-`eligible:false` pool (no `prd:` legs).
  */

@@ -139,14 +139,14 @@ export {
 export type {
 	LedgerReadyItem,
 	LedgerObservationItem,
-	LedgerPrdItem,
-	LedgerPrdPool,
-	PrdExistence,
+	LedgerSpecItem,
+	LedgerSpecPool,
+	SpecExistence,
 	LocalLedgerState,
 	ArbiterLedgerState,
 	ResolveLocalStateInput,
-	ResolvePrdExistenceInput,
-	ResolvePrdPoolInput,
+	ResolveSpecExistenceInput,
+	ResolveSpecPoolInput,
 	ResolveArbiterStateInput,
 	ResolveMirrorStateInput,
 	LedgerReadStrategy,
@@ -247,11 +247,11 @@ export type {
 	SelectedItem,
 	LifecycleSelectedItem,
 	SelectedLifecyclePools,
-	PrdCandidate,
-	TaskablePrdsInput,
+	SpecCandidate,
+	TaskableSpecsInput,
 	SelectPrioritisedInput,
 } from './select-priority.js';
-export {taskablePrds, selectPrioritised} from './select-priority.js';
+export {taskableSpecs, selectPrioritised} from './select-priority.js';
 
 export type {
 	ClaimExitCode,

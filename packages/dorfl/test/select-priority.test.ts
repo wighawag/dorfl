@@ -1,8 +1,8 @@
 import {describe, it, expect} from 'vitest';
 import {
 	selectPrioritised,
-	taskablePrds,
-	type PrdCandidate,
+	taskableSpecs,
+	type SpecCandidate,
 	type SelectedLifecyclePools,
 } from '../src/select-priority.js';
 import {selectCandidates} from '../src/select.js';
@@ -37,7 +37,7 @@ function report(path: string, items: ScannedItem[]): ScanReport {
 
 const CAPS = {maxParallel: 100, perRepoMax: 100};
 
-function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
+function prd(slug: string, extra: Partial<SpecCandidate> = {}): SpecCandidate {
 	return {
 		repoPath: '/repo',
 		slug,
@@ -48,14 +48,14 @@ function prd(slug: string, extra: Partial<PrdCandidate> = {}): PrdCandidate {
 	};
 }
 
-describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', () => {
+describe('taskableSpecs — consumes autoslice-gate predicate (not reinvented)', () => {
 	it('keeps only PRDs the gate passes (autoTask on, not humanOnly/needsAnswers)', () => {
 		const candidates = [
 			prd('ok'),
 			prd('human', {humanOnly: true}),
 			prd('asks', {needsAnswers: true}),
 		];
-		const out = taskablePrds({
+		const out = taskableSpecs({
 			candidates,
 			taskedSlugs: new Set(),
 			autoTask: true,
@@ -64,7 +64,7 @@ describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', 
 	});
 
 	it('autoTask off ⇒ nothing is taskable (mirrors autoBuild off)', () => {
-		const out = taskablePrds({
+		const out = taskableSpecs({
 			candidates: [prd('ok')],
 			taskedSlugs: new Set(),
 			autoTask: false,
@@ -76,11 +76,11 @@ describe('taskablePrds — consumes autoslice-gate predicate (not reinvented)', 
 		const candidates = [prd('beta', {taskedAfter: ['alpha']})];
 		// alpha not yet tasked ⇒ beta not taskable.
 		expect(
-			taskablePrds({candidates, taskedSlugs: new Set(), autoTask: true}),
+			taskableSpecs({candidates, taskedSlugs: new Set(), autoTask: true}),
 		).toEqual([]);
 		// alpha tasked ⇒ beta becomes taskable.
 		expect(
-			taskablePrds({
+			taskableSpecs({
 				candidates,
 				taskedSlugs: new Set(['alpha']),
 				autoTask: true,

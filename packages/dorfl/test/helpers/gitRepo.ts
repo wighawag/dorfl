@@ -211,7 +211,7 @@ export function seedRepoWithArbiter(
 		 * staging that the operator drives in place without promoting it.
 		 */
 		staged?: string[];
-		/** Prd slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
+		/** Spec slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
 		prds?: string[];
 		/**
 		 * Commit a `.dorfl.json` at the repo root (so it travels onto
@@ -327,7 +327,7 @@ export function prdFile(slug: string, marker = 'ORIGINAL'): string {
 		'',
 		'## Problem Statement',
 		'',
-		`Prd body for ${slug} (${marker}).`,
+		`Spec body for ${slug} (${marker}).`,
 		'',
 	].join('\n');
 }

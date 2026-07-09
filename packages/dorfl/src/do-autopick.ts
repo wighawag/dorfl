@@ -3,8 +3,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	taskablePrds,
-	type PrdCandidate,
+	taskableSpecs,
+	type SpecCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import type {Config} from './config.js';
@@ -117,16 +117,16 @@ export async function performDoAuto(
 	);
 
 	// Pool 2 — TASKABLE prds: the NEW pool from the shared prd read path
-	// (`resolvePrdPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
-	const pool = read.resolvePrdPool({repoPath: cwd});
-	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
+	// (`resolveSpecPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
+	const pool = read.resolveSpecPool({repoPath: cwd});
+	const prdCandidates: SpecCandidate[] = pool.prds.map((prd) => ({
 		repoPath: cwd,
 		slug: prd.slug,
 		humanOnly: prd.humanOnly,
 		needsAnswers: prd.needsAnswers,
 		taskedAfter: prd.taskedAfter,
 	}));
-	const eligiblePrds = taskablePrds({
+	const eligiblePrds = taskableSpecs({
 		candidates: prdCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
