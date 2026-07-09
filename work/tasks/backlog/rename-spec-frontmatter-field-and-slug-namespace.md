@@ -39,3 +39,7 @@ The `prd:` frontmatter field on this repo's own LIVE tasks is NOT flipped here (
 > Done means: code reads/writes `spec`, old `prd:` token rejected, full gate green, live ledger untouched.
 >
 > FIRST check drift: confirm `rename-spec-work-layout-and-folders` landed and the namespace/frontmatter still use the `prd` spelling this task renames.
+
+## Requeue 2026-07-09
+
+Re-scoped per review: batch 2 hard-swap could not land green in isolation. Adopting expand-first (§3a): a new expand task adds spec beside prd; this task becomes additive-migrate; hard-cutover rejection moves to the contract task.
