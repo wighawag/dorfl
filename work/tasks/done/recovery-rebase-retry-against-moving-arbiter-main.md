@@ -365,3 +365,153 @@ git fetch <remote> && git switch -c work/recovery-rebase-retry-against-moving-ar
 # on completion, in the work branch's PR/merge:
 git mv work/tasks/todo/recovery-rebase-retry-against-moving-arbiter-main.md work/tasks/done/recovery-rebase-retry-against-moving-arbiter-main.md
 ```
+
+---
+
+## Decisions
+
+> **Note.** This block is a POST-HOC transcription added by the follow-up task
+> `transcribe-recovery-rebase-retry-decisions-block` (Gate-2 review of PR #225
+> flagged that the acceptance criterion's `## Decisions` block was recorded ONLY
+> in code comments inside `packages/dorfl/src/integration-core.ts`, not on this
+> done-record). The task was already merged as PR #225 (commit `d1ab93c`, body
+> empty); this record is the protocol-native home for the decisions. Wording is
+> sourced verbatim from the code comments where practical.
+
+### Cap chosen and why
+
+`DEFAULT_RECOVERY_REBASE_RETRIES = 4` (5 total attempts). Ratified as a
+conservative CONTENTION cap; overridable via `params.recoveryRebaseRetries`.
+From the doc-comment on the constant:
+
+> Small on purpose — a few attempts ride out an `advance` burst (each burst is
+> tens of commits over a few seconds); a real conflict surfaces fast. […] Tests
+> inject `recoveryRebaseRetries: 0` (no retry — the legacy one-shot shape) or a
+> small explicit cap (assert the cap exhausts deterministically).
+
+Deliberately a DIFFERENT shape from the Race-1 merge-push cap
+(`DEFAULT_MERGE_RETRIES = 1000`, a liveness ceiling on a `non-fast-forward`
+contention loop). Revisit only if a real incident shows bursts outlasting 5
+fresh-fetched attempts.
+
+### Contention vs. outage
+
+Verbatim from the doc-comment on `DEFAULT_RECOVERY_REBASE_RETRIES` and the
+block-comment above the recovery retry loop:
+
+> This is the CONTENTION model (instant re-fetch+rebuild, like `claim-cas.ts`
+> and the Race-1 merge loop above), NOT the OUTAGE model in `retry-backoff.ts`
+> (exponential temporal backoff, the remote may come back). The two failure
+> classes are deliberately kept SEPARATE; do not substitute `retryWithBackoff`
+> here.
+
+And, on WHY re-fetch happens on EACH attempt:
+
+> On each conflict `--abort`, sleep a small jitter, RE-FETCH `<arbiter>/main`
+> (it may have advanced — `advance` runs land bursts of `advance: surface
+> observation:…` commits on main, so a one-shot rebase against a stale fetched
+> base can conflict against a main that already moved AGAIN), then re-rebase.
+> Only after the cap exhausts (a freshly-fetched main STILL conflicts on every
+> attempt) do we surface `rebase-conflict` (never auto-resolved, NEVER `--force`
+> to main — the kept commit stays on the branch, recoverable; the human
+> resolves and re-runs).
+
+Transient (moving base) is absorbed by a later attempt; genuine (persistent
+conflict against fresh main) exhausts the cap → needs-attention. The bounded
+retry against a freshly-fetched base IS the discriminator; there is no
+up-front classification signal (a rebase CONFLICT carries no `non-fast-forward`
+analogue).
+
+### Jitter
+
+`DEFAULT_RECOVERY_REBASE_JITTER_MS = 100`. Verbatim from its doc-comment:
+
+> **Default max jitter (ms)** between recovery-rebase attempts — a SMALL
+> livelock-breaking SPREAD between concurrent runners (NOT exponential outage
+> backoff). Pure instant retry has a real hazard: two runners that begin
+> retrying at the same instant re-fetch and re-rebase in LOCKSTEP, each moving
+> the base the other just rebased onto, and can livelock. A uniformly-random
+> `[0, mergeJitterMs]` ms sleep before each re-attempt de-correlates the two
+> racers. Bounded and tiny — a contention nudge, not an outage wait. Tests pass
+> `recoveryRebaseJitterMs: 0` for a deterministic latency-free loop, OR inject
+> the `sleep`/`random` seams to drive the timeline reproducibly with a seeded
+> RNG.
+
+Sleep is behind the INJECTABLE `Sleep`/`realSleep` seam from `retry-backoff.ts`
+(`params.recoveryRebaseSleep`); the RNG is behind `params.recoveryRebaseRandom`.
+
+### Reconcile-arms decision (recovery re-rebase is deliberately BARE)
+
+Verbatim from the block-comment above the retry loop:
+
+> RECONCILE ARMS DECISION (this task): the recovery rebase is deliberately
+> BARE — it does NOT layer the sibling-ledger / divergent-done-move arms the
+> build path's `rebaseOntoMainWithReconcile()` carries. Reasoning: this tail
+> integrates a branch whose done-move was ALREADY committed in a prior run, so
+> there is no first-time slug relocation on THIS commit for the divergent-
+> done-move reconcile to act on, and a sibling-slug ledger conflict on the
+> re-fetched main is the same shape it would have hit on the original run (the
+> recovery is not the place to grow new reconcile semantics).
+
+Ratified as load-bearing. If a divergent-done-move case is later observed IN
+the recovery path, reuse the SAME `rebaseOntoMainWithReconcile()` path — do NOT
+fork a second copy.
+
+### Rename-detection orthogonality
+
+Status at the time of this transcription (2026-07-07) — the world moved between
+PR #225 landing and this transcription; the current reality is recorded here
+rather than the launch-time snapshot:
+
+- The initial sibling attempt, PR #224
+  (`disable-rename-detection-on-continue-rebase`), was CLOSED UNMERGED because
+  it used the WRONG git knob (`-Xno-renames` / `merge.renames=false` /
+  `diff.renames=false` do NOT suppress the observed DIRECTORY-rename conflict
+  `CONFLICT (file location)`; only `-c merge.directoryRenames=false` does,
+  verified on git 2.47.3). The task was parked in
+  `work/tasks/backlog/disable-rename-detection-on-continue-rebase.md` with a
+  CORRECTION banner.
+- The CORRECTED sibling has since landed as PR #256
+  (`feat(disable-rename-detection-on-continue-rebase)`, commit `808e77c7`),
+  slotting `-c merge.directoryRenames=false` into the `rebaseArgs()` thunk this
+  task left in `recoverAlreadyCommitted`. At the moment of this transcription
+  the thunk therefore reads:
+
+  ```ts
+  const rebaseArgs = (): string[] => [
+      '-c', 'merge.directoryRenames=false',
+      'rebase', `${arbiter}/main`,
+  ];
+  ```
+
+  Verbatim from the current in-code block-comment (post PR #256):
+
+  > Content-rename detection (`-Xno-renames`/`merge.renames`/`diff.renames`) is
+  > the WRONG knob and was verified ineffective for this directory-rename
+  > conflict; only `merge.directoryRenames=false` suppresses it. NEVER a
+  > persistent `git config` write — the repo's config stays clean. A GENUINE
+  > same-path content conflict still surfaces and still routes to
+  > `rebase-conflict` (the user's interactive `git rebase` is unaffected).
+
+Orthogonality of the two failure modes is preserved: rename-off kills spurious
+directory-rename conflicts; the bounded re-fetch+retry absorbs moving-base
+races. Neither masks the other.
+
+> Deviation note for the reviewer: the parent task's Context section (written
+> before PR #256 landed) said "the `rebaseArgs()` thunk this task left in
+> `integration-core.ts` on `main` therefore does NOT yet carry any rename-off
+> option". That premise is now stale — the corrected sibling has since landed
+> and the thunk carries `-c merge.directoryRenames=false` today. This block
+> records CURRENT reality (which the code comments now describe) rather than
+> the launch-time snapshot.
+
+## Follow-ups (opportunistic, low priority — no dedicated task)
+
+- **Unify the Race-1 merge-push jitter onto the injectable `Sleep` seam.** The
+  Race-1 loop currently uses the local non-injectable `sleepMs` helper in
+  `integration-core.ts` (kept for byte-for-byte compatibility with existing
+  tests, per its doc-comment: *"The recovery-rebase loop uses the INJECTABLE
+  `Sleep` seam from `retry-backoff.ts` instead, so its timeline is
+  test-driveable."*). The new recovery seam is strictly better (RNG also
+  injected/seedable). Fold Race-1 onto the same `Sleep`/`random` seams NEXT
+  TIME that code is touched. Not worth minting dedicated work for.
