@@ -25,6 +25,7 @@ import {
 	loadCIConfigFile,
 	resolveCIConfig,
 	exportCIConfig,
+	DEFAULT_MAX_PARALLEL,
 	CIConfigError,
 	generateSetupAction,
 	buildSetupArtifacts,
@@ -331,8 +332,12 @@ describe('config load + --export-config round-trip', () => {
 			defaultModel: 'm',
 			harness: 'pi',
 			installSource: 'registry',
+			// The default maxParallel: omitted from the exported JSON (it equals the
+			// default) but re-applied by resolveCIConfig on load, so it round-trips.
+			maxParallel: 4,
 		};
 		const noSecrets = exportCIConfig(config);
+		expect(noSecrets).not.toContain('maxParallel');
 		expect(noSecrets).not.toContain('secrets');
 		expect(noSecrets.endsWith('\n')).toBe(true);
 

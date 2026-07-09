@@ -866,6 +866,7 @@ interface InstallCiFlags {
 	exportConfig?: string;
 	includeSecrets?: boolean;
 	installSource?: string;
+	maxParallel?: string;
 	cwd?: string;
 	repo?: string;
 	ghBin?: string;
@@ -4042,6 +4043,10 @@ export function buildProgram(): Command {
 			'--install-source <registry|workspace>',
 			'where the CI installs the CLI from: `registry` (npm install -g, the default) or `workspace` (build from the checked-out source + link onto PATH, for the self-hosting monorepo). Overrides auto-detection in both directions.',
 		)
+		.option(
+			'--max-parallel <n>',
+			'cap on CONCURRENT advance-lifecycle matrix legs (the propose/merge `max-parallel`). Each leg is a full agent session, so a large fan-out can exhaust the model provider rate limit + thrash the CAS. Default 4.',
+		)
 		.action(async (flags: InstallCiFlags) => {
 			const workDir = flags.cwd ?? process.cwd();
 			if (
@@ -4054,6 +4059,18 @@ export function buildProgram(): Command {
 				);
 				process.exitCode = 1;
 				return;
+			}
+			let maxParallel: number | undefined;
+			if (flags.maxParallel !== undefined) {
+				const n = Number(flags.maxParallel);
+				if (!Number.isInteger(n) || n < 1) {
+					console.error(
+						`install-ci: --max-parallel must be a positive integer (got "${flags.maxParallel}")`,
+					);
+					process.exitCode = 1;
+					return;
+				}
+				maxParallel = n;
 			}
 			const ctx = new GitHubCIContext({
 				workDir,
@@ -4078,6 +4095,7 @@ export function buildProgram(): Command {
 					| 'registry'
 					| 'workspace'
 					| undefined,
+				maxParallel,
 				prompts,
 				capabilities,
 				log: (line) => console.error(line),

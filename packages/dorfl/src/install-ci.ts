@@ -79,6 +79,12 @@ export interface InstallCIOptions {
 	 * comes from the config file (if it set it) else the auto-detection below.
 	 */
 	installSource?: InstallSource;
+	/**
+	 * Force the advance-lifecycle matrix concurrency cap (`--max-parallel`),
+	 * overriding the config file's value. When omitted, it comes from the config
+	 * file (if set) else {@link DEFAULT_MAX_PARALLEL}. Must be a positive integer.
+	 */
+	maxParallel?: number;
 	/** The interactive prompt seam (required unless `configFile` is given). */
 	prompts?: WizardPrompts;
 	/** The capability emitters to emit workflows for (none in this core task). */
@@ -138,6 +144,12 @@ export async function installCI(
 		options.installSource ?? file.installSource ?? undefined;
 	if (options.installSource) {
 		config.installSource = options.installSource;
+	}
+
+	// An EXPLICIT --max-parallel flag wins over the config file's value and is
+	// folded in BEFORE the export so it round-trips through --export-config.
+	if (options.maxParallel !== undefined) {
+		config.maxParallel = options.maxParallel;
 	}
 
 	// 2. --export-config: round-trip the gathered config back to JSON and exit.

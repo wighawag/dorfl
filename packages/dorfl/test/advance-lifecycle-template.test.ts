@@ -12,6 +12,7 @@ import {join} from 'node:path';
 import {
 	type ResolvedCIConfig,
 	loadCapabilityRegistry,
+	DEFAULT_MAX_PARALLEL,
 } from '../src/install-ci-core.js';
 import {MemoryCIProviderContext} from '../src/install-ci-github.js';
 import {installCI} from '../src/install-ci.js';
@@ -59,6 +60,8 @@ const config: ResolvedCIConfig = {
 	defaultProvider: 'anthropic',
 	defaultModel: 'claude-sonnet-4-20250514',
 	harness: 'pi',
+	installSource: 'registry',
+	maxParallel: 4,
 };
 
 let work: string;
@@ -178,6 +181,24 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(
 			/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(proposeSection),
 		).toBe(false);
+	});
+
+	it('caps the matrix fan-out with `max-parallel` from config (default 4, both propose + merge)', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		// Both matrices carry the cap (config.maxParallel = 4 here).
+		const caps = text.match(/max-parallel: \d+/g) ?? [];
+		expect(caps).toEqual(['max-parallel: 4', 'max-parallel: 4']);
+		// It is threaded from config, not hard-coded: an override flows through.
+		const overridden = generateAdvanceLifecycleWorkflow({
+			...config,
+			maxParallel: 8,
+		});
+		expect(overridden.match(/max-parallel: \d+/g)).toEqual([
+			'max-parallel: 8',
+			'max-parallel: 8',
+		]);
+		// Sanity: the default matches DEFAULT_MAX_PARALLEL.
+		expect(DEFAULT_MAX_PARALLEL).toBe(4);
 	});
 
 	it(

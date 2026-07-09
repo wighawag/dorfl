@@ -94,6 +94,15 @@ export interface CIConfigFile {
 	harness?: HarnessAdapter;
 	/** Where to get the CLI from (`registry` default; `workspace` builds from source). */
 	installSource?: InstallSource;
+	/**
+	 * Cap on CONCURRENT advance-lifecycle matrix legs (the `max-parallel` of the
+	 * propose/merge matrices). Each leg spawns a FULL agent session (build + Gate-2
+	 * review), so an unbounded fan-out over a large item set exhausts the model
+	 * provider's API rate limit (429s that strand legs as transient-infra stuck) and
+	 * thrashes the arbiter-main CAS. Default {@link DEFAULT_MAX_PARALLEL}. Must be a
+	 * positive integer.
+	 */
+	maxParallel?: number;
 	/** API key values keyed by env var name. Only present with `--include-secrets`. */
 	secrets?: Record<string, string>;
 	/**
@@ -130,10 +139,20 @@ export interface ResolvedCIConfig {
 	installSource: InstallSource;
 	/** See {@link CIConfigFile.projectSetup}. */
 	projectSetup?: Record<string, unknown>;
+	/** See {@link CIConfigFile.maxParallel}. Always resolved (default applied). */
+	maxParallel: number;
 }
 
 /** The default harness the composite setup action installs. */
 export const DEFAULT_HARNESS: HarnessAdapter = 'pi';
+
+/**
+ * The default {@link CIConfigFile.maxParallel}: cap the advance-lifecycle fan-out
+ * at 4 concurrent legs. A full agent session per leg, so this keeps the loop
+ * draining steadily rather than stampeding the model-provider rate limit + the
+ * arbiter CAS. Tunable via `install-ci --max-parallel <n>` / the config file.
+ */
+export const DEFAULT_MAX_PARALLEL = 4;
 
 /** The default install source: the published CLI via `npm install -g`. */
 export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
@@ -587,6 +606,7 @@ export function resolveCIConfig(file: CIConfigFile): ResolvedCIConfig {
 		harness: file.harness ?? DEFAULT_HARNESS,
 		installSource: file.installSource ?? DEFAULT_INSTALL_SOURCE,
 		projectSetup: file.projectSetup,
+		maxParallel: file.maxParallel ?? DEFAULT_MAX_PARALLEL,
 	};
 }
 
@@ -608,6 +628,11 @@ export function exportCIConfig(
 		harness: config.harness,
 		installSource: config.installSource,
 	};
+	// Emit `maxParallel` only when it deviates from the default, so an unchanged
+	// config stays minimal (mirrors how projectSetup is omitted when empty).
+	if (config.maxParallel !== DEFAULT_MAX_PARALLEL) {
+		file.maxParallel = config.maxParallel;
+	}
 	if (config.projectSetup && Object.keys(config.projectSetup).length > 0) {
 		file.projectSetup = config.projectSetup;
 	}

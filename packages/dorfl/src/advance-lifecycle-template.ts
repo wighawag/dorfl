@@ -343,6 +343,12 @@ jobs:
     strategy:
       # Independent PRs: one failing item must NOT cancel the others.
       fail-fast: false
+      # Cap concurrent legs (config \`maxParallel\`, install-ci --max-parallel):
+      # each leg spawns a FULL agent session (build + Gate-2 review), so an
+      # unbounded fan-out over a large item set exhausts the model-provider API
+      # rate limit (429s that strand legs as transient-infra stuck) AND thrashes
+      # the arbiter-main CAS. A bounded fan-out drains steadily instead.
+      max-parallel: ${config.maxParallel}
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
@@ -401,6 +407,9 @@ jobs:
       # Independent landings: one failing item must NOT cancel the others; a
       # loser of the CAS race re-rebases + re-gates + retries.
       fail-fast: false
+      # Cap concurrent legs (config \`maxParallel\`, see advance-propose): a FULL
+      # agent session per leg, so bound the fan-out to avoid API-429s + CAS thrash.
+      max-parallel: ${config.maxParallel}
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
