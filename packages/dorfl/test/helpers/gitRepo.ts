@@ -22,13 +22,13 @@ import {
 const FIXTURE_WORD_TO_KEY: Readonly<Record<string, WorkFolderKey>> = {
 	'pre-backlog': 'tasks-backlog',
 	backlog: 'tasks-ready',
-	// The PRD staging area (`work/prds/proposed/`).
-	'pre-prd': 'prds-proposed',
-	// The PRD pool (`work/prds/ready/`).
-	prd: 'prds-ready',
-	// The TASKED-prd residence (`work/prds/tasked/`).
-	'prd-tasked': 'prds-tasked',
-	prdTasked: 'prds-tasked',
+	// The PRD staging area (`work/specs/proposed/`).
+	'pre-prd': 'specs-proposed',
+	// The PRD pool (`work/specs/ready/`).
+	prd: 'specs-ready',
+	// The TASKED-prd residence (`work/specs/tasked/`).
+	'prd-tasked': 'specs-tasked',
+	prdTasked: 'specs-tasked',
 };
 
 /**
@@ -240,7 +240,7 @@ export function seedRepoWithArbiter(
 		}
 	}
 	if (opts.prds && opts.prds.length > 0) {
-		const prdDir = join(repo, 'work', 'prds', 'ready');
+		const prdDir = join(repo, 'work', 'specs', 'ready');
 		mkdirSync(prdDir, {recursive: true});
 		for (const slug of opts.prds) {
 			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
@@ -495,7 +495,7 @@ export function registerMirrorWithWork(
 	writeAll('done', work.done);
 	writeAll('needs-attention', work.needsAttention);
 	writeAll('cancelled', work.cancelled);
-	writeAll('prds-dropped', work.prdsDropped);
+	writeAll('specs-dropped', work.prdsDropped);
 	writeAll('prd', work.prd);
 	writeAll('prd-tasked', work.prdTasked);
 	writeAll('observations', work.observations);

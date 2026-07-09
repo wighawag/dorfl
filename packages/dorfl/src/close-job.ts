@@ -39,7 +39,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {
 	TASK_LIFECYCLE_FOLDERS,
-	PRD_FOLDERS as WORK_LAYOUT_PRD_FOLDERS,
+	SPEC_FOLDERS as WORK_LAYOUT_PRD_FOLDERS,
 	type WorkFolderKey,
 	workFolderPath,
 	workItemRel,

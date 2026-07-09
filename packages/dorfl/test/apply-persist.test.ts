@@ -556,10 +556,13 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 			questions: ['scope?'],
 			answers: ['narrow'],
 		});
-		expect(itemPath).toBe('work/prds/proposed/bar.md');
+		expect(itemPath).toBe('work/specs/proposed/bar.md');
 
-		mkdirSync(join(repo, 'work', 'prds', 'ready'), {recursive: true});
-		gitIn(['mv', 'work/prds/proposed/bar.md', 'work/prds/ready/bar.md'], repo);
+		mkdirSync(join(repo, 'work', 'specs', 'ready'), {recursive: true});
+		gitIn(
+			['mv', 'work/specs/proposed/bar.md', 'work/specs/ready/bar.md'],
+			repo,
+		);
 		gitIn(['commit', '-q', '-m', 'promote: bar proposed → ready'], repo);
 
 		const result = applyAnsweredQuestions({
@@ -570,12 +573,12 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		});
 
 		expect(result.outcome).toBe('resolved');
-		expect(result.itemPath).toBe('work/prds/ready/bar.md');
+		expect(result.itemPath).toBe('work/specs/ready/bar.md');
 		const touched = filesInHeadCommit(repo);
-		expect(touched).toContain('work/prds/ready/bar.md');
+		expect(touched).toContain('work/specs/ready/bar.md');
 		expect(touched).toContain(sidecarPath);
-		expect(existsSync(join(repo, 'work/prds/proposed/bar.md'))).toBe(false);
-		expect(trackedInHead(repo, 'work/prds/proposed/bar.md')).toBe(false);
+		expect(existsSync(join(repo, 'work/specs/proposed/bar.md'))).toBe(false);
+		expect(trackedInHead(repo, 'work/specs/proposed/bar.md')).toBe(false);
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 	});
 

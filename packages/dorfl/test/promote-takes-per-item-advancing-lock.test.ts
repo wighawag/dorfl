@@ -75,9 +75,9 @@ function seedStagedTask(repo: string, slug: string): void {
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});
 }
 
-/** Seed a staged prd file at `work/prds/proposed/<slug>.md` on the arbiter. */
+/** Seed a staged prd file at `work/specs/proposed/<slug>.md` on the arbiter. */
 function seedStagedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prds', 'proposed');
+	const dir = join(repo, 'work', 'specs', 'proposed');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -177,10 +177,10 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 			/per-item lock|already locked|implement\/task\/advance/i,
 		);
 		// The staged prd is unmoved on the arbiter.
-		expect(onArbiterMain(seeded.repo, 'work/prds/proposed/prd-race.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/specs/proposed/prd-race.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(seeded.repo, 'work/prds/ready/prd-race.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/specs/ready/prd-race.md')).toBe(
 			false,
 		);
 
@@ -230,10 +230,10 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		expect(onArbiterMain(seeded.repo, 'work/prds/ready/happy-prd.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/specs/ready/happy-prd.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(seeded.repo, 'work/prds/proposed/happy-prd.md')).toBe(
+		expect(onArbiterMain(seeded.repo, 'work/specs/proposed/happy-prd.md')).toBe(
 			false,
 		);
 		const after = await readItemLock({

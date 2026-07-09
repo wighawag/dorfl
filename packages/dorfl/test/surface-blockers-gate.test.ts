@@ -109,9 +109,9 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		);
 	}
 
-	/** A `needsAnswers: true` PRD in `work/prds/ready/` (a declared blocker, no sidecar). */
+	/** A `needsAnswers: true` PRD in `work/specs/ready/` (a declared blocker, no sidecar). */
 	function seedBlockedPrd(slug: string): void {
-		const dir = join(repo, 'work', 'prds', 'ready');
+		const dir = join(repo, 'work', 'specs', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, `${slug}.md`),

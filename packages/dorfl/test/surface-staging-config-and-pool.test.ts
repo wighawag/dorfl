@@ -84,7 +84,7 @@ function seedPoolTask(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 }
 
 function seedStagedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'prds', 'proposed');
+	const dir = join(repo, 'work', 'specs', 'proposed');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');

@@ -337,7 +337,7 @@ const DEFAULT_ARBITER = 'origin';
  * ({@link promoteFromPrePrd} in `needs-attention.ts`) moves an approved prd
  * `prds/proposed/ → prds/ready/` to make it taskable.
  */
-export const STAGED_PRDS_DIR = workFolderRel('prds-proposed');
+export const STAGED_PRDS_DIR = workFolderRel('specs-proposed');
 
 /**
  * The POOL folder prds land in when the runner-deterministic placement
@@ -345,7 +345,7 @@ export const STAGED_PRDS_DIR = workFolderRel('prds-proposed');
  * an `--prds-land-in ready` operator override). This is `work/prds/ready/`,
  * the tasking candidate pool.
  */
-const POOL_PRDS_DIR = workFolderRel('prds-ready');
+const POOL_PRDS_DIR = workFolderRel('specs-ready');
 
 /** The placement slots for the prd lifecycle (folder names). */
 const PRD_PLACEMENT_SLOTS: PlacementSlots = {

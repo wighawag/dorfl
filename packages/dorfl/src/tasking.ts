@@ -391,9 +391,9 @@ export async function performTask(
 
 	// 0. The prd must exist in the checkout (`work/prds/ready/<slug>.md`) — it is the
 	//    source the agent tasks + the file the lock holds.
-	const prdPath = workItemPath(cwd, 'prds-ready', slug);
+	const prdPath = workItemPath(cwd, 'specs-ready', slug);
 	if (!existsSync(prdPath)) {
-		const message = `no prd '${slug}' found at ${workFolderRel('prds-ready')}/${slug}.md.`;
+		const message = `no prd '${slug}' found at ${workFolderRel('specs-ready')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
@@ -612,7 +612,7 @@ export async function performTask(
 		// completing commit now.
 		const stale = await heldPrdIsStale(cwd, arbiter, slug, lockedBlob, env);
 		if (stale) {
-			const prdRel = workItemRel('prds-ready', `${slug}.md`);
+			const prdRel = workItemRel('specs-ready', `${slug}.md`);
 			const message =
 				`RELEASE CONFLICT for '${slug}': the prd was edited (${prdRel} ` +
 				`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
@@ -671,7 +671,7 @@ export async function performTask(
 			type: 'tasking',
 			lifecycle: {
 				// Read the PR title / commit summary from the held prd (before it moves).
-				titlePath: workItemPath(cwd, 'prds-ready', slug),
+				titlePath: workItemPath(cwd, 'specs-ready', slug),
 				commitTag: 'tasked',
 				stage: () =>
 					stageTaskingLifecycle({
@@ -921,7 +921,7 @@ async function heldPrdIsStale(
 	}
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const held = await gitSoft(
-		['rev-parse', `${arbiter}/main:${workFolderRel('prds-ready')}/${slug}.md`],
+		['rev-parse', `${arbiter}/main:${workFolderRel('specs-ready')}/${slug}.md`],
 		cwd,
 		env,
 	);
@@ -982,8 +982,8 @@ async function stageTaskingLifecycle(params: {
 		note,
 		env,
 	} = params;
-	const prd = workItemRel('prds-ready', `${slug}.md`);
-	const prdTasked = workItemRel('prds-tasked', `${slug}.md`);
+	const prd = workItemRel('specs-ready', `${slug}.md`);
+	const prdTasked = workItemRel('specs-tasked', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (task
 	// `untrusted-origin-forces-build-propose`): read the held prd's `origin`/
 	// `originTrust` stamp BEFORE the move, so each emitted task can carry it. A
@@ -1272,7 +1272,7 @@ function gateRefusalReason(
  */
 function readTaskedSlugs(cwd: string): Set<string> {
 	const slugs = new Set<string>();
-	const dir = workFolderPath(cwd, 'prds-tasked');
+	const dir = workFolderPath(cwd, 'specs-tasked');
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);

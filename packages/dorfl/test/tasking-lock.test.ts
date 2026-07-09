@@ -56,8 +56,8 @@ function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 /**
  * The tasking lock is the UNIFIED per-item lock now (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): the
- * `git mv work/prds/ready/ → work/tasking/` marker is RETIRED, so the prd body STAYS in
- * `work/prds/ready/` while it is being tasked (the lock is the `prd:<slug>` ref,
+ * `git mv work/specs/ready/ → work/tasking/` marker is RETIRED, so the prd body STAYS in
+ * `work/specs/ready/` while it is being tasked (the lock is the `prd:<slug>` ref,
  * `action: task`). The durable `prd → prd-tasked` success move + the read-stability
  * stale check live at the integrate seam (`tasking.ts`), not in the lock.
  */
@@ -99,10 +99,10 @@ describe('acquireTaskingLock — happy path', () => {
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		// The lockedBlob is the blob of work/prds/ready/alpha.md on the arbiter.
+		// The lockedBlob is the blob of work/specs/ready/alpha.md on the arbiter.
 		const blob = run(
 			'git',
-			['rev-parse', 'arbiter/main:work/prds/ready/alpha.md'],
+			['rev-parse', 'arbiter/main:work/specs/ready/alpha.md'],
 			repo,
 			{env: gitEnv()},
 		).stdout.trim();

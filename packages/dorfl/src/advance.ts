@@ -485,7 +485,7 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
-	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
+	prd: ['specs-proposed', 'specs-ready', 'specs-tasked'],
 	observation: ['observations'],
 };
 
