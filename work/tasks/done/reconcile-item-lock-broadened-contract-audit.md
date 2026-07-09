@@ -85,6 +85,46 @@ observation `review-nits-reaper-no-lock-outcome-benign-not-lost-2026-06-20`
 can be deleted per its q4 disposition — the q2 contingency will then be
 satisfied by this task's done record.
 
+## Decisions
+
+Call-site audit of `reconcileItemLockAgainstMain` in `packages/dorfl/`
+(`rg -n 'reconcileItemLockAgainstMain\(' packages/dorfl/src packages/dorfl/test`
+— invocation sites only; doc-comment mentions in `complete.ts` / `cli.ts` /
+surrounding item-lock JSDoc excluded as they are not callers):
+
+- **`reapStaleItemLocks` in `packages/dorfl/src/item-lock.ts:1409`** (the reaper
+  — sole PRODUCTION caller). Shape change `error` → `no-lock` on the
+  remote-empty leased-delete-rejection arm is **INTENDED / already correct**
+  under the new contract. The reaper explicitly branches on `rec.outcome ===
+  'no-lock'` and routes it to the BENIGN `alreadyReaped` bucket (kept separate
+  from `reaped` so the summary does not lie about who did the deleting) which
+  DOES NOT contribute to needs-attention / a non-zero exit. This is the exact
+  behaviour the broadened contract was designed to enable — no change needed.
+  See `item-lock.ts:1416-1436` and the reaper JSDoc's `alreadyReaped` note. The
+  regression guard on this reaper boundary lives in
+  `packages/dorfl/test/gc-reap-stale-locks.test.ts` (the double-reap benign
+  race, per the promote-slice's q3 disposition).
+
+- **`packages/dorfl/src/index.ts:316`** re-exports
+  `reconcileItemLockAgainstMain` as public API. There is NO other in-repo
+  invocation site (`complete.ts` and `cli.ts` mention it only in doc comments
+  describing the recovery role — they DO NOT call it; `complete`'s crash-recovery
+  path is exercised THROUGH the reaper, not by `complete.ts` invoking reconcile
+  directly). No caller-boundary fix required. Downstream external consumers of
+  the public export are outside this audit's scope; the JSDoc now documents the
+  broadened contract on the function itself so any external caller reading the
+  API sees the `error` → `no-lock` shape change.
+
+- **`packages/dorfl/test/complete-lock-crash-safe.test.ts` (8 call sites)** are
+  TESTS pinning `cleared-stale` / `kept-stuck` / `kept-in-flight` / `no-lock`
+  outcomes on paths that do NOT exercise the leased-delete-rejection arm at
+  all, so the `error` → `no-lock` shape change does not touch them.
+
+Conclusion: all callers are (a) — correct under the broadened contract. No
+caller was fixed, no new regression test was added (the existing reaper
+boundary guard in `gc-reap-stale-locks.test.ts` is the accepted trade-off per
+the originating slice's q3).
+
 ## Prompt
 
 > Build the task 'reconcile-item-lock-broadened-contract-audit', described above.

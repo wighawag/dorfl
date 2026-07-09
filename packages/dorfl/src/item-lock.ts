@@ -948,6 +948,29 @@ export interface ReconcileResult {
  * on an already-reconciled item is a clean `no-lock`. The clear is the SAME
  * leased delete {@link releaseItemLock} uses, so it cannot race off a concurrent
  * change.
+ *
+ * BROADENED CONTRACT (leased-delete-rejection arm, task
+ * `reaper-no-lock-outcome-benign-not-lost`, promote-slice follow-up
+ * `reconcile-item-lock-broadened-contract-audit`, review 2026-06-20): when the
+ * SHARED leased delete is REJECTED (the arbiter ref moved between our read and
+ * our write) this function performs an EXTRA `git ls-remote <arbiter> <ref>`
+ * round-trip to distinguish the two rejection sub-cases, and applies to ALL
+ * callers — NOT only the reaper:
+ *   - REMOTE REF IS EMPTY (a concurrent reaper / release-lock / requeue cleared
+ *     the SAME stale lock first): the desired end state — benign. This function
+ *     ALSO `git update-ref -d`s the LOCAL stale tracking ref as a SIDE-EFFECT
+ *     (so a subsequent read in this clone sees the correct deleted state; a
+ *     non-pruning fetch would otherwise leave a dangling local ref), then
+ *     returns `no-lock`. Note the outcome-shape change: this rejection USED TO
+ *     surface as `error` — it now surfaces as `no-lock` for EVERY caller. A
+ *     caller that keys recovery / surfacing off `error` on this arm must be
+ *     audited (see the follow-up task's `## Decisions` block).
+ *   - REMOTE REF STILL EXISTS AT A DIFFERENT SHA (a genuine concurrent mutation
+ *     — e.g. a racer just marked it `stuck`): back off rather than force —
+ *     `error`.
+ * Because the function name reads "reconcile" (read-style), the local
+ * `update-ref -d` is a deliberate SIDE-EFFECT on the local clone's refs — it
+ * only fires on this specific rejection arm and is otherwise invisible.
  */
 export async function reconcileItemLockAgainstMain(
 	opts: ReleaseOptions,
