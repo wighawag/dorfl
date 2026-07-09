@@ -2,7 +2,7 @@
 title: prd→spec MIGRATE — move frontmatter + slug-namespace + CLI-verb call sites onto spec (additive, no rejection)
 slug: rename-spec-frontmatter-field-and-slug-namespace
 prd: prd-to-spec-vocabulary-cutover-and-migration-command
-blockedBy: [expand-spec-frontmatter-and-namespace-aliases]
+blockedBy: [expand-spec-lock-and-sidecar-namespace]
 covers: [1]
 ---
 
