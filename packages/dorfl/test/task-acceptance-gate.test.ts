@@ -248,8 +248,9 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
+		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -278,8 +279,9 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
+		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

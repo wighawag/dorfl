@@ -234,16 +234,17 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		// and propose does not land the tasks — main is still the seed commit.
 		expect(arbiterHeadSubject(repo)).not.toMatch(/tasked/);
 
-		// The work branch was PUSHED carrying the tasks + the prd restore.
+		// The work branch was PUSHED carrying the tasks + the prd restore. MIGRATE
+		// step: the tasking path MINTs `work/spec-<slug>` now (was `work/prd-<slug>`).
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
+			onArbiterBranch(repo, 'work/spec-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
 		expect(
-			onArbiterBranch(repo, 'work/prd-it', 'work/specs/tasked/it.md'),
+			onArbiterBranch(repo, 'work/spec-it', 'work/specs/tasked/it.md'),
 		).toBe(true);
-		expect(onArbiterBranch(repo, 'work/prd-it', 'work/specs/ready/it.md')).toBe(
-			false,
-		);
+		expect(
+			onArbiterBranch(repo, 'work/spec-it', 'work/specs/ready/it.md'),
+		).toBe(false);
 
 		// A PR was opened (the recording gh stub captured a `pr create`).
 		const args = readFileSync(argsFile, 'utf8');
@@ -296,7 +297,7 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 				// Propose pushed the work branch carrying the tasks (the SAME branch
 				// `performIntegration` integrates on the build path).
 				expect(
-					onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
+					onArbiterBranch(repo, 'work/spec-it', 'work/tasks/backlog/child.md'),
 				).toBe(true);
 			}
 		});

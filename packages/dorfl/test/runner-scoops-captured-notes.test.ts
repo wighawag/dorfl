@@ -319,7 +319,7 @@ describe('the TASK path (do prd:) scoops + reports agent-authored captured notes
 		expect(
 			onArbiterBranch(
 				repo,
-				'work/prd-it',
+				'work/spec-it',
 				'work/notes/findings/tasker-external-fact.md',
 			),
 		).toBe(true);

@@ -235,15 +235,17 @@ describe('advance∥claim and advance∥task exclusion on the SAME item (tree-le
 	it('advance∥task: a tree-less advance on a PRD makes a concurrent tasking lose the SAME ref', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['beta']});
 		const adv = raceClone(seeded, 'adv');
+		// MIGRATE step: the tasking path keys the parent-spec item as `spec:<slug>`
+		// now, so a rival advance holder takes the SAME `spec:` identity to collide.
 		const advance = await acquireAdvancingLock({
-			item: 'prd:beta',
+			item: 'spec:beta',
 			cwd: adv,
 			arbiter: ARBITER,
 			acquireUnified: true,
 			env: racerEnv('adv'),
 		});
 		expect(advance.outcome).toBe('acquired');
-		expect(lockRefOnArbiter(seeded.arbiter, 'prd-beta')).toBe(true);
+		expect(lockRefOnArbiter(seeded.arbiter, 'spec-beta')).toBe(true);
 
 		// A tasking of the SAME PRD now loses the create-only lock CAS.
 		const slc = raceClone(seeded, 'slc');
@@ -258,7 +260,7 @@ describe('advance∥claim and advance∥task exclusion on the SAME item (tree-le
 		// The PRD never moved to tasking/; the advance hold is the single winner.
 		expect(existsOnArbiterMain(slc, 'backlog', 'beta')).toBe(false);
 		const entry = await readItemLock({
-			item: 'prd:beta',
+			item: 'spec:beta',
 			cwd: slc,
 			arbiter: ARBITER,
 			env: gitEnv(),

@@ -474,7 +474,10 @@ export async function performTask(
 	// final commit must scrub any agent writes there (an attempt to self-place into
 	// the pool, prd US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
-	const prompt = buildTaskingPrd(slug, prdFm.prd);
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// read the parent-spec self-pointer off `prdFm.spec` (populated beside
+	// `prdFm.prd` by the expand task).
+	const prompt = buildTaskingPrd(slug, prdFm.spec);
 	let agent: {ok: boolean; detail?: string};
 	try {
 		agent = await runTaskAgent(options, cwd, prompt, slug);
@@ -767,8 +770,10 @@ export async function performTask(
 			// hold over the in-flight tasking is done); the eventual hold-across-the-PR
 			// crash-safe ordering is the capstone task #7's concern, not this interim
 			// half. Best-effort + idempotent (`not-held` is fine).
+			// MIGRATE step: release under the `spec:<slug>` identity (keyed to the
+			// `spec-<slug>` lock entry the acquire now takes). Idempotent.
 			if (useLock) {
-				await releaseItemLock({item: `prd:${slug}`, cwd, arbiter, env});
+				await releaseItemLock({item: `spec:${slug}`, cwd, arbiter, env});
 			}
 		}
 		return integrationToTaskResult(core, {slug, emitted, loop: loopTag});
@@ -888,9 +893,12 @@ async function switchToWorkBranch(
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<void> {
-	// The tasking path is the prd namespace (`do prd:<slug>`): the branch is
-	// `work/prds/ready-<slug>`, distinct from a same-slug task-build's `work/task-<slug>`.
-	const branch = workBranchRef('prd', slug);
+	// The tasking path is the parent-spec namespace (`do spec:<slug>`): the branch
+	// is `work/spec-<slug>`, distinct from a same-slug task-build's `work/task-<slug>`.
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// MINT the work-branch under the `spec` namespace token (`workBranchRef` still
+	// parses the legacy `work/prd-<slug>` form, so in-flight branches keep resolving).
+	const branch = workBranchRef('spec', slug);
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(
 		['switch', '--quiet', '-C', branch, `${arbiter}/main`],
