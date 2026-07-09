@@ -2115,7 +2115,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 				[
 					'cat-file',
 					'-e',
-					`${ARBITER}/work/prd-somePrd:work/tasks/backlog/somePrd-first.md`,
+					`${ARBITER}/work/spec-somePrd:work/tasks/backlog/somePrd-first.md`,
 				],
 				repo,
 				{env: gitEnv()},

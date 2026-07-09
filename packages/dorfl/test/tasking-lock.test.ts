@@ -42,11 +42,12 @@ const prdOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'prd', slug);
 const taskingFolderOnArbiter = (cwd: string, slug: string): boolean =>
 	trackedOnArbiter(cwd, 'tasking', slug);
-/** Does the arbiter HOLD the per-item lock ref for the prd `slug`? */
+/** Does the arbiter HOLD the per-item lock ref for the spec `slug`? (MIGRATE
+ * step: the tasking path now EMITs the `spec-<slug>` entry, not `prd-<slug>`.) */
 function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 	const r = run(
 		'git',
-		['ls-remote', `file://${arbiter}`, itemLockRef(`prd-${slug}`)],
+		['ls-remote', `file://${arbiter}`, itemLockRef(`spec-${slug}`)],
 		scratch.root,
 		{env: gitEnv()},
 	);
@@ -81,7 +82,7 @@ describe('acquireTaskingLock — happy path', () => {
 		expect(taskingFolderOnArbiter(repo, 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'prd:alpha',
+			item: 'spec:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
@@ -207,7 +208,7 @@ describe('tasking-lock race — exactly one winner', () => {
 		expect(acquired).toHaveLength(1);
 		expect(lost).toHaveLength(1);
 		// The arbiter agrees: the lock is held exactly once; the prd never moved.
-		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['prd-solo']);
+		expect(await listItemLocks(a, 'arbiter', gitEnv())).toEqual(['spec-solo']);
 		expect(prdOnArbiter(a, 'solo')).toBe(true);
 		expect(taskingFolderOnArbiter(a, 'solo')).toBe(false);
 	});
@@ -215,9 +216,10 @@ describe('tasking-lock race — exactly one winner', () => {
 
 describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 	it('a held tasking lock and a build claim share the SAME prd: vs task: ref namespaces (no collision)', async () => {
-		// A prd `dual` and a TASK `dual` are DISTINCT entries (`prd-dual` vs
-		// `task-dual`), so a tasking lock on the prd and a build claim on the task
-		// do NOT collide — they are different items.
+		// A spec `dual` and a TASK `dual` are DISTINCT entries (`spec-dual` vs
+		// `task-dual`), so a tasking lock on the spec and a build claim on the task
+		// do NOT collide — they are different items. (MIGRATE step: the tasking path
+		// EMITs the `spec-<slug>` entry now.)
 		const seeded = seedRepoWithArbiter(scratch.root, ['dual'], {
 			prds: ['dual'],
 		});
@@ -236,9 +238,9 @@ describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 		});
 		expect(claim.exitCode).toBe(0);
 		// Both locks are held on DISTINCT refs.
-		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // prd-dual
+		expect(lockRefOnArbiter(seeded.arbiter, 'dual')).toBe(true); // spec-dual
 		const slugs = await listItemLocks(seeded.repo, 'arbiter', gitEnv());
-		expect(slugs.sort()).toEqual(['prd-dual', 'task-dual']);
+		expect(slugs.sort()).toEqual(['spec-dual', 'task-dual']);
 	});
 });
 
@@ -307,7 +309,7 @@ describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', ()
 		expect(trackedOnArbiter(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
 		const entry = await readItemLock({
-			item: 'prd:alpha',
+			item: 'spec:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),

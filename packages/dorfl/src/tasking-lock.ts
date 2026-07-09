@@ -186,8 +186,14 @@ async function runAcquire(
 	// budget). No auto-steal of an orphaned lock, consistent with claim/advance and
 	// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts
 	// a lock is dead via `release-lock` + `gc --ledger`).
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// EMIT the parent-spec item identity as `spec:<slug>` so the unified per-item
+	// lock ref is `refs/dorfl/lock/spec-<slug>` (the expand-lock task made
+	// `spec:<slug>` resolve to a `spec-<slug>` entry). The resolver still ACCEPTS
+	// `prd:<slug>`, so any lock taken under the old identity stays readable; the
+	// contract task removes the legacy form.
 	const lock = await acquireItemLock({
-		item: `prd:${slug}`,
+		item: `spec:${slug}`,
 		action: 'task',
 		cwd,
 		arbiter,
@@ -325,8 +331,9 @@ async function runRelease(
 	// The prd body stays in `work/prds/ready/`; the stuck lock keeps it out of the
 	// taskable pool until a human resolves it (`release-lock`/`resume`).
 	if (options.routeToNeedsAttention !== undefined) {
+		// MIGRATE: EMIT `spec:<slug>` (keyed to the `spec-<slug>` lock entry).
 		const stuck = await markStuckItemLock({
-			item: `prd:${slug}`,
+			item: `spec:${slug}`,
 			reason: options.routeToNeedsAttention.reason,
 			cwd,
 			arbiter,
@@ -349,8 +356,9 @@ async function runRelease(
 	}
 
 	// NORMAL release: delete the lock ref (idempotent).
+	// MIGRATE: EMIT `spec:<slug>` (keyed to the `spec-<slug>` lock entry).
 	const released = await releaseItemLock({
-		item: `prd:${slug}`,
+		item: `spec:${slug}`,
 		cwd,
 		arbiter,
 		env,

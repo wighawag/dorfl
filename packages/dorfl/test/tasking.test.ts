@@ -840,8 +840,9 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/ready/child.md')).toBe(false);
 		// The prd's per-item lock is held STUCK, carrying the questions as the reason.
+		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
 		const entry = await readItemLock({
-			item: 'prd:it',
+			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

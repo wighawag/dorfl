@@ -624,7 +624,11 @@ export function resolveTask(
 			);
 		}
 		const fm = parseFrontmatter(content);
-		return {slug, path, folder, prd: fm.prd, taskPrompt};
+		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// read the parent-spec pointer off the new `fm.spec` field (populated beside
+		// `fm.prd` by the expand task). The `ResolvedTask.prd` field name is left
+		// unchanged (a struct-field rename is out of this batch's scope).
+		return {slug, path, folder, prd: fm.spec, taskPrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no task '${slug}' found in ${searched}`);
@@ -715,8 +719,10 @@ export function resolvePromptGuidanceForItem(options: {
 }): PromptGuidance {
 	const taskFm = parseFrontmatter(options.taskContent);
 	let prdFm: Frontmatter | undefined;
-	if (taskFm.prd !== undefined) {
-		const prdPath = findPrdPath(options.cwd, taskFm.prd);
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// read the parent-spec pointer off `fm.spec` (populated beside `fm.prd`).
+	if (taskFm.spec !== undefined) {
+		const prdPath = findPrdPath(options.cwd, taskFm.spec);
 		if (prdPath !== undefined) {
 			prdFm = parseFrontmatter(readFileSync(prdPath, 'utf8'));
 		}
