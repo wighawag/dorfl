@@ -51,3 +51,7 @@ Keep the gate green; update each module's coupled tests in the SAME batch as the
 > Done means: this batch's modules read/emit `spec`, the ONLY `prd` left is the deliberate alias surface (frontmatter-key/namespace-prefix/config/artifact-type acceptance) that the CONTRACT task removes, coupled tests updated, full gate green.
 >
 > FIRST check drift: confirm batches 1–3 landed; if a shared symbol is still `prd`, that batch has not landed and this one should wait.
+
+## Requeue 2026-07-09
+
+Splitting into -a/-b/-c per §3a (oversized). This task is superseded by the three sub-tasks.
