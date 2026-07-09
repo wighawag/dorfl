@@ -14,7 +14,7 @@ Scope: a repo-wide pass over `packages/dorfl/{src,test}`, `skills/`, `docs/`, `C
 
 This is a pure prefactor: no `prd` identifier changes here. It only clears the field so the subsequent migrate batches (and the migration command's engine) can use plain substring matching without sentinel gymnastics.
 
-Note the mirror-image live evidence this exists to prevent: the prior `brief` cutover left `via: 'brief'` as a live discriminated-union tag in `close-job.ts`/`frontmatter.ts` today — a substring sweep that misses a spelling is a real, current failure mode.
+Note the mirror-image live evidence this exists to prevent: the prior `brief` cutover left `via: 'brief'` as a live discriminated-union tag in `close-job.ts`/`frontmatter.ts` today — a substring sweep that misses a spelling is a real, current failure mode. (That specific `brief → spec` remnant sweep is OWNED by `rename-spec-remaining-src-modules`, not this task; this task only clears artifact-unrelated ENGLISH containing `spec`.)
 
 ## Acceptance criteria
 
