@@ -119,6 +119,11 @@ export interface TickClassification {
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
 	prd: 'task-prd',
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// a `spec` analyses through the SAME `task-prd` rung as `prd` (spec IS the
+	// renamed parent-spec artifact). Mirrored so a `spec:<slug>` tick classifies;
+	// the migrate batch renames the rung + the contract task drops the `prd` key.
+	spec: 'task-prd',
 	observation: 'triage-observation',
 };
 

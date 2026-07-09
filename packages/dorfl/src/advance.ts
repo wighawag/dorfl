@@ -486,6 +486,10 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
 	prd: ['specs-proposed', 'specs-ready', 'specs-tasked'],
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// `spec` rests in the SAME parent-spec regime folders as `prd`. Mirrored so
+	// a `spec:<slug>` legs frontmatter-source read resolves; contract drops `prd`.
+	spec: ['specs-proposed', 'specs-ready', 'specs-tasked'],
 	observation: ['observations'],
 };
 
