@@ -28,7 +28,7 @@ Keep the gate green; update each module's coupled tests in the SAME batch as the
 - [ ] The 22 doubly-retired `brief` remnants (8 live identifiers incl. `via: 'brief'` + `prdCandidates`; 14 doc-comment refs) renamed to `spec`; the `closeComment` user-facing string updated; coupled `close-job`/`frontmatter` tests updated in this batch.
 - [ ] The coupled tests for each renamed module updated in this batch (or its sub-batches).
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
-- [ ] A forward grep for a live `prd`/`Prd`/`PRD` OR `brief` code identifier in `packages/dorfl/src` returns only intentional survivors (provenance strings, historical references, genuine English `debrief`/`briefly`) — the exhaustive bi-word leak scan is the contract task's gate, but this batch should leave essentially nothing.
+- [ ] Every `prd`/`Prd`/`PRD` code identifier in this batch's modules is MIGRATED onto `spec`, EXCEPT the deliberate `prd`-alias surface the expand task added (the `prd:` frontmatter-key acceptance, the `prd:` namespace-prefix acceptance, the `prdsLandIn` config alias, the `'prd'` artifact-type) which STAYS until the contract task removes it. The exhaustive bi-word leak scan (forward `prd`+`brief`) is the CONTRACT task's gate, run AFTER the aliases are removed — not this batch. This batch leaves only those intentional aliases + provenance survivors.
 
 > **May exceed one context window** (~85 src + ~100 test files + the brief sweep). If so, SPLIT at module boundaries — suggested cut: (a) ledger/tasking/scan/select-priority, (b) close-job/frontmatter/lifecycle-gather + the `brief` sweep, (c) do/advance/prompt/integration/triage + `prd-complete.ts` file rename — each `blockedBy` batch 3, each green. Pre-splitting keeps the frontier deterministic rather than relying on the builder to decide mid-flight.
 
@@ -44,6 +44,6 @@ Keep the gate green; update each module's coupled tests in the SAME batch as the
 >
 > Where to look: grep `packages/dorfl/src` for `prd`/`Prd`/`PRD`; rename symbols + `git mv` the `prd-*` files with their tests; update each module's tests in the same batch.
 >
-> Done means: no live `prd` code identifier remains in `src` (only intentional provenance survivors), coupled tests updated, full gate green.
+> Done means: this batch's modules read/emit `spec`, the ONLY `prd` left is the deliberate alias surface (frontmatter-key/namespace-prefix/config/artifact-type acceptance) that the CONTRACT task removes, coupled tests updated, full gate green.
 >
 > FIRST check drift: confirm batches 1–3 landed; if a shared symbol is still `prd`, that batch has not landed and this one should wait.

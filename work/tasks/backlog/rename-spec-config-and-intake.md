@@ -8,7 +8,7 @@ covers: [1]
 
 ## What to build
 
-Rename the CONFIG + intake surface: the per-repo config keys and the intake artifact-type enum.
+MIGRATE the CONFIG + intake surface onto `spec` (the expand task already added `specsLandIn`/`'spec'` beside the `prd` forms, so this stays green). Make `spec` the canonical/primary spelling and migrate the call sites; KEEP the `prd` alias accepted (the contract task removes it). No hard rejection here.
 
 - `repo-config.ts`: `prdsLandIn → specsLandIn` (key + its resolution/precedence + JSDoc); any `prdsFirst`-adjacent naming; the `taskingIntegration` values that name `prd` folders if any.
 - `intake.ts`: `IntakeOutcome`/`IntakeArtifactType` `'prd' → 'spec'`; the intake per-emitted-type key `{task, prd} → {task, spec}`; the `'prd-written'`/`prded` outcome wording (mechanical `spec`-ing — pick the natural phrasing, e.g. `spec-written`); update `intake.test.ts` and any intake-trigger-template assertions in this task.
@@ -18,10 +18,10 @@ Config is a distinct file cluster from batch 2, so this is largely file-orthogon
 
 ## Acceptance criteria
 
-- [ ] `repo-config.ts` key `prdsLandIn → specsLandIn` with resolution + JSDoc updated; config-override tests updated in this task.
-- [ ] `intake.ts` artifact-type + outcome wording renamed; `intake.test.ts` + trigger-template tests updated in this task.
+- [ ] `repo-config.ts` makes `specsLandIn` the canonical key (resolution + JSDoc); the `prdsLandIn` alias STILL resolves (expand added it; contract removes it); config-override tests updated in this task.
+- [ ] `intake.ts` emits/uses the `'spec'` artifact type + `spec`-worded outcome as primary; the `'prd'` type still valid (alias); `intake.test.ts` + trigger-template tests updated in this task.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
-- [ ] `.dorfl.json` schema/example that names `prdsLandIn` (docs or fixtures) is updated to `specsLandIn`; NOTE the migration command must rewrite a downstream repo's actual `.dorfl.json` key (that is the command's job, not this task).
+- [ ] NO hard rejection of `prdsLandIn`/`'prd'` here (contract task); `.dorfl.json` schema/example primary spelling is `specsLandIn` (the migration command rewrites a downstream repo's actual key — not this task).
 
 ## Blocked by
 
