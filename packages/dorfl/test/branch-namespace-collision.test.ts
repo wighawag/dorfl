@@ -115,7 +115,7 @@ describe('intake then do task:<slug> on the same slug + checkout — no collisio
 			issueProvider: minimalIssueProvider(),
 			decide: async () => verdict,
 			reviewTask: async () => ({verdict: 'approve', findings: []}),
-			integration: {task: 'merge', prd: 'merge'},
+			integration: {task: 'merge', spec: 'merge'},
 			env: gitEnv(),
 		});
 		expect(intake.exitCode).toBe(0);

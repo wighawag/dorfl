@@ -82,27 +82,26 @@ export const REPO_ALLOWED_KEYS = [
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
 	'tasksLandIn',
-	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — staging vs pool, prd
+	// `specsLandIn` (the per-repo SPEC-PLACEMENT default — staging vs pool, spec
 	// `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12) is a genuine
 	// repo property exactly like `tasksLandIn`: whether THIS repo's intake-
-	// authored prds land STAGED (`pre-proposed/`, review-without-PR human-promote path)
-	// or straight in the auto-tasking POOL (`ready/`, trusted fast-path) is agreed by
-	// all collaborators + travels with the repo. Resolved per-repo through the
-	// SAME chain as `tasksLandIn` (flag > env > per-repo > global > built-in
-	// `pre-proposed`). Fed into the shared placement resolver as the configured-default
-	// rung for the prd lifecycle (`src/placement.ts`).
-	'prdsLandIn',
-	// `specsLandIn` (the `spec` vocabulary CANONICAL key for the spec-placement
-	// default — prd `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND
-	// step) is a genuine repo property EXACTLY like `prdsLandIn`, which it is added
-	// beside. Whether THIS repo's intake-authored specs land STAGED
-	// (`specs/proposed/`) or in the auto-tasking POOL (`specs/ready/`) is agreed by
-	// all collaborators + travels with the repo. Resolved per-repo through the SAME
-	// chain as `prdsLandIn` (flag `--specs-land-in` > env `DORFL_SPECS_LAND_IN` >
-	// per-repo > global > built-in). The intake resolver reads EITHER key with
-	// `specsLandIn` WINNING when both are present; the contract task removes the
-	// legacy `prdsLandIn`.
+	// authored specs land STAGED (`specs/proposed/`, review-without-PR human-promote
+	// path) or straight in the auto-tasking POOL (`specs/ready/`, trusted fast-path)
+	// is agreed by all collaborators + travels with the repo. Resolved per-repo
+	// through the SAME chain as `tasksLandIn` (flag `--specs-land-in` > env
+	// `DORFL_SPECS_LAND_IN` > per-repo > global > built-in). Fed into the shared
+	// placement resolver as the configured-default rung for the spec lifecycle
+	// (`src/placement.ts`). This is the `spec`-vocabulary CANONICAL key (prd → spec
+	// cutover, MIGRATE batch); the legacy `prdsLandIn` below is its accepted ALIAS.
 	'specsLandIn',
+	// `prdsLandIn` (the LEGACY `prd`-vocabulary spelling of `specsLandIn`, kept as an
+	// accepted alias through the prd → spec cutover). Still a per-repo allowed key
+	// and still RESOLVES through the SAME chain, so an existing committed `.dorfl.json`
+	// keeps working; the intake resolver reads EITHER key with `specsLandIn` WINNING
+	// when both are present (`config.specsLandIn ?? config.prdsLandIn`, at the CLI
+	// seam). The CONTRACT task removes this legacy key once every caller has migrated
+	// onto `specsLandIn`.
+	'prdsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with

@@ -341,14 +341,14 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose output modes',
 			}),
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		gitIn(['fetch', '-q', ARBITER], repo);
 		// `originTrust: untrusted` FORCES staging via the shared placement resolver
 		// (PRD US #12), so the PRD lands at `work/specs/proposed/<slug>.md` on the work
@@ -619,7 +619,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			issueProvider,
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'merge', prd: 'propose'},
+			integration: {task: 'merge', spec: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
@@ -630,7 +630,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		expect(subject).not.toContain('complete work task');
 	});
 
-	it('a PRD outcome: the COMMIT SUBJECT and propose-PR TITLE carry the drafted PRD title', async () => {
+	it('a SPEC outcome: the COMMIT SUBJECT and propose-PR TITLE carry the drafted SPEC title', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 5}});
 		const gh = recordingGh('intake-prd-title');
@@ -641,14 +641,14 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose output modes',
 			}),
 			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
@@ -818,13 +818,13 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider: prdProvider,
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});
-		expect(prdWritten.outcome).toBe('prd-written');
+		expect(prdWritten.outcome).toBe('spec-written');
 		expect(prdProvider.closes).toHaveLength(0);
 		expect(prdWritten.closed).toBeUndefined();
 	});
@@ -861,7 +861,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(bounceProvider.closes[0].reason).toBe('not planned');
 	});
 
-	it('a stubbed `prd` verdict writes work/specs/proposed/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
+	it('a stubbed `spec` verdict writes work/specs/proposed/<slug>.md (issue: N, surfaced gate axes), integrates, and STOPS', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 42}});
 		const result = await performIntake({
@@ -870,7 +870,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose output modes for the CLI',
 				prdHumanOnly: true,
@@ -894,7 +894,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		});
 
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(result.emittedSlug).toBe('quiet-and-verbose-modes');
 		// The built-in PRD-placement floor stages the intake-authored PRD (the PRD
 		// twin of `tasksLandIn`'s `pre-backlog` floor) — it lands at
@@ -904,9 +904,9 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		);
 
 		// One informational completion comment posted (this task): the runner reports
-		// `prd created` back on the issue, framed as created (not resolved).
+		// `spec created` back on the issue, framed as created (not resolved).
 		expect(issueProvider.comments).toHaveLength(1);
-		expect(issueProvider.comments[0].body).toContain('Created prd');
+		expect(issueProvider.comments[0].body).toContain('Created spec');
 
 		// PROPOSE (default): the PRD rides the work/<slug> branch; main is NOT touched.
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -941,7 +941,32 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(onBranch).not.toContain('Fixes #42');
 	});
 
-	it('a `prd` verdict OMITS gate axes the verdict did not declare (undeclared = absent)', async () => {
+	it('the LEGACY `prd` outcome is still a valid ALIAS — it routes through the SAME spec dispatch (→ spec-written)', async () => {
+		// prd → spec cutover (MIGRATE batch): `spec` is canonical, but the legacy
+		// `prd` outcome MUST still route (the contract task removes it later). Prove
+		// an `outcome: 'prd'` verdict lands the spec exactly like an `outcome: 'spec'`.
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 6}});
+		const result = await performIntake({
+			issueNumber: 6,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => ({
+				outcome: 'prd',
+				prdSlug: 'legacy-prd-alias-still-routes',
+				prdTitle: 'Legacy prd alias still routes',
+			}),
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('spec-written');
+		expect(result.emitted).toBe(
+			'work/specs/proposed/legacy-prd-alias-still-routes.md',
+		);
+	});
+
+	it('a `spec` verdict OMITS gate axes the verdict did not declare (undeclared = absent)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 5,
@@ -949,13 +974,13 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdTitle: 'A Coupled But Small Pair',
 			}),
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		// Content-derived slug from the title (never a counter).
 		expect(result.emittedSlug).toBe('a-coupled-but-small-pair');
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -1251,7 +1276,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			reviewTask: convergingReviewGate,
 			// The TASK mode resolves to merge (e.g. from `--merge-task`); the PRD mode
 			// is irrelevant for a task verdict.
-			integration: {task: 'merge', prd: 'propose'},
+			integration: {task: 'merge', spec: 'propose'},
 			env: gitEnv(),
 		});
 
@@ -1278,7 +1303,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			issueProvider: stubIssueProvider(),
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'propose', prd: 'merge'},
+			integration: {task: 'propose', spec: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -1299,7 +1324,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		expect(branchTip).not.toBe('');
 	});
 
-	it('a `prd` verdict with integration.prd=merge LANDS the PRD on arbiter main (task mode irrelevant)', async () => {
+	it('a `prd` verdict with integration.spec=merge LANDS the PRD on arbiter main (task mode irrelevant)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -1307,16 +1332,16 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider(),
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose output modes',
 			}),
 			// The PRD mode resolves to merge; the TASK mode must NOT route the PRD.
-			integration: {task: 'propose', prd: 'merge'},
+			integration: {task: 'propose', spec: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		// MERGE: the PRD landed on arbiter main — STAGED in `work/specs/proposed/` (the
 		// built-in PRD-placement floor); the merge target is the arbiter main, the
 		// folder is the runner's deterministic placement decision.
@@ -1347,7 +1372,7 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({outcome: 'ask', question: 'clarify?'}),
-			integration: {task: 'merge', prd: 'merge'},
+			integration: {task: 'merge', spec: 'merge'},
 			env: gitEnv(),
 		});
 		expect(result.exitCode).toBe(0);
@@ -2187,8 +2212,8 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 // ---------------------------------------------------------------------------
 // The COMPLETION COMMENT on SUCCESSFUL outcomes
 // (`intake-posts-completion-comment-on-slice-prd-outcomes`, PRD `issue-intake`):
-// on a `tasked` / `prd` outcome intake posts ONE INFORMATIONAL comment back on the
-// issue — `task created` / `prd created`, NEVER "resolved"; it links the PR
+// on a `tasked` / `spec` outcome intake posts ONE INFORMATIONAL comment back on the
+// issue — `task created` / `spec created`, NEVER "resolved"; it links the PR
 // (propose) or the landed commit (merge), carries the FULL `created` marker (incl.
 // `seen=`) so the triage SKIPS `already-terminal` on it, and DEGRADES (a missing
 // `gh` never changes the success outcome). Asserted at the stubbed issue seam.
@@ -2236,7 +2261,7 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 		expect(result.closed).toBeUndefined();
 	});
 
-	it('a `prd` outcome posts a `PRD created` comment naming the slug, with NO PRD link beyond the slug', async () => {
+	it('a `spec` outcome posts a `spec created` comment naming the slug, with NO spec link beyond the slug', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 5}});
 		const result = await performIntake({
@@ -2245,16 +2270,16 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			arbiter: ARBITER,
 			issueProvider,
 			decide: async () => ({
-				outcome: 'prd',
+				outcome: 'spec',
 				prdSlug: 'quiet-and-verbose-modes',
 				prdTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(issueProvider.comments).toHaveLength(1);
 		const body = issueProvider.comments[0].body;
-		expect(body).toContain('Created prd `quiet-and-verbose-modes`');
+		expect(body).toContain('Created spec `quiet-and-verbose-modes`');
 		expect(body).not.toMatch(/resolved|closed/i);
 		expect(body).toContain(`kind=created slug=quiet-and-verbose-modes`);
 		// No close, no state change.
@@ -2271,7 +2296,7 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			issueProvider,
 			decide: async () => TASK_VERDICT,
 			reviewTask: convergingReviewGate,
-			integration: {task: 'merge', prd: 'propose'},
+			integration: {task: 'merge', spec: 'propose'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');

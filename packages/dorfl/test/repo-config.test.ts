@@ -432,14 +432,31 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('pre-backlog');
 	});
 
-	// EXPAND (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
-	// `spec` vocabulary canonical key `specsLandIn` is added BESIDE the legacy
-	// `prdsLandIn`. Both are per-repo allowed keys and both resolve through the
-	// SAME chain; the intake resolver reads `specsLandIn ?? prdsLandIn` (canonical
-	// wins) at the CLI seam (see cli.ts).
-	it('`specsLandIn` is a per-repo allowed key beside `prdsLandIn`', () => {
+	// MIGRATE (prd `prd-to-spec-vocabulary-cutover-and-migration-command`, batch 3):
+	// `specsLandIn` is now the CANONICAL `spec`-vocabulary key; the legacy `prdsLandIn`
+	// is kept as an accepted ALIAS (still a per-repo allowed key, still resolves) until
+	// the contract task removes it. Both resolve through the SAME chain; the intake
+	// resolver reads `specsLandIn ?? prdsLandIn` (canonical wins) at the CLI seam.
+	it('`specsLandIn` is the canonical per-repo allowed key; `prdsLandIn` stays an accepted alias', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('specsLandIn');
 		expect(REPO_ALLOWED_KEYS).toContain('prdsLandIn');
+	});
+
+	it('the LEGACY `prdsLandIn` alias STILL resolves through the standard chain (contract task removes it)', () => {
+		const global = mergeConfig({});
+		// A committed `.dorfl.json` using the legacy key keeps working.
+		writeRepoConfig(repo, {prdsLandIn: 'ready'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.prdsLandIn,
+		).toBe('ready');
+		// env (DORFL_PRDS_LAND_IN) still beats the per-repo file for the legacy key.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_PRDS_LAND_IN: 'pre-proposed'},
+			}).config.prdsLandIn,
+		).toBe('pre-proposed');
 	});
 
 	it('resolves a per-repo `specsLandIn` through the standard chain (flag > env > per-repo > global)', () => {

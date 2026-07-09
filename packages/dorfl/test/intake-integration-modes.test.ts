@@ -30,7 +30,11 @@ const both = (
 	mode: IntakeIntegrationModes['task'],
 ): IntakeIntegrationModes => ({
 	task: mode,
-	prd: mode,
+	// prd → spec cutover (MIGRATE batch): the OUTPUT mode key is now `spec`
+	// (canonical); the INPUT flag fields (`mergePrd`/`proposePrd`) keep their `prd`
+	// spelling because they map onto the `--merge-prd`/`--propose-prd` CLI flags,
+	// which are renamed by a later batch.
+	spec: mode,
 });
 
 describe('resolveIntakeIntegrationModes — the per-outcome resolution table', () => {
@@ -50,14 +54,14 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 
 	it('--merge-prd routes per type: merges a prd, leaves a task at the default', () => {
 		expect(resolveIntakeIntegrationModes({mergePrd: true})).toEqual({
-			prd: 'merge',
+			spec: 'merge',
 			task: 'propose',
 		});
 	});
 
 	it('--merge-task routes per type: merges a task, leaves a prd at the default', () => {
 		expect(resolveIntakeIntegrationModes({mergeTask: true})).toEqual({
-			prd: 'propose',
+			spec: 'propose',
 			task: 'merge',
 		});
 	});
@@ -71,13 +75,13 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 	it('GRANULAR OVERRIDES AGGREGATE: --merge --propose-task ⇒ prd merge, task propose', () => {
 		expect(
 			resolveIntakeIntegrationModes({merge: true, proposeTask: true}),
-		).toEqual({prd: 'merge', task: 'propose'});
+		).toEqual({spec: 'merge', task: 'propose'});
 	});
 
 	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-prd ⇒ prd merge, task propose', () => {
 		expect(
 			resolveIntakeIntegrationModes({propose: true, mergePrd: true}),
-		).toEqual({prd: 'merge', task: 'propose'});
+		).toEqual({spec: 'merge', task: 'propose'});
 	});
 
 	it('both granular flags override the aggregate on BOTH axes', () => {
@@ -115,7 +119,7 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		// A granular flag still overrides that config default for its own type.
 		expect(resolveIntakeIntegrationModes({proposeTask: true}, 'merge')).toEqual(
 			{
-				prd: 'merge',
+				spec: 'merge',
 				task: 'propose',
 			},
 		);
@@ -127,7 +131,7 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 
 	// `per-transition-integration-mode-slicing-vs-build`: the NEW `taskingIntegration`
 	// key is a DIFFERENT resolver (per-LIFECYCLE-TRANSITION, inside the trust
-	// boundary), NOT intake's per-EMITTED-TYPE `{task, prd}` (front door,
+	// boundary), NOT intake's per-EMITTED-TYPE `{task, spec}` (front door,
 	// author-trust). intake's resolver takes a FLAT `IntegrationMode` default (the
 	// CLI passes `config.integration`, never `config.taskingIntegration`), so it is
 	// structurally independent of the new key.
