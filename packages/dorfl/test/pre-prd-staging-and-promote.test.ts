@@ -121,7 +121,7 @@ function stubIssueProvider(
 }
 
 const PRD_VERDICT = {
-	outcome: 'prd' as const,
+	outcome: 'spec' as const,
 	prdSlug: 'shiny-new-vision',
 	prdTitle: 'Shiny new vision',
 	prdBody: [
@@ -173,7 +173,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			decide: async () => PRD_VERDICT,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(result.emitted).toBe('work/specs/proposed/shiny-new-vision.md');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 		expect(onArbiterMain(repo, 'work/specs/proposed/shiny-new-vision.md')).toBe(
@@ -198,7 +198,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(result.emitted).toBe('work/specs/proposed/shiny-new-vision.md');
 	});
 
@@ -217,7 +217,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			explicitPrdsLandIn: 'ready',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
 	});
 
@@ -233,7 +233,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
 	});
 });
@@ -249,7 +249,7 @@ describe('STEP A (PRD) \u2014 work/specs/ready/ STILL means the auto-slice POOL 
 			decide: async () => PRD_VERDICT,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 
 		// THE POOL READER (`createLocalLedgerReadStrategy().resolvePrdPool`) reads
@@ -288,7 +288,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 			decide: async () => PRD_VERDICT,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 
 		// Precondition: staged, NOT in the pool.
@@ -347,7 +347,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 			decide: async () => PRD_VERDICT,
 			env: gitEnv(),
 		});
-		expect(result.outcome).toBe('prd-written');
+		expect(result.outcome).toBe('spec-written');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 		const first = await promoteFromPrePrd({
 			slug: 'shiny-new-vision',

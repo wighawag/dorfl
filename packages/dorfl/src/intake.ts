@@ -172,7 +172,7 @@ export interface IntakeVerdict {
 export type IntakeRunOutcome =
 	| 'tasked' // a `task` verdict → backlog task written + integrated
 	| 'asked' // an `ask` verdict → clarifying question posted, nothing emitted
-	| 'prd-written' // a `prd` verdict → the prd file (`work/prds/ready/<slug>.md`) written + integrated
+	| 'spec-written' // a `spec` verdict → the spec file (`work/specs/ready/<slug>.md`) written + integrated
 	| 'bounced' // a `bounce` verdict → split-issues comment posted, nothing emitted
 	| 'no-new-input' // the TRIAGE saw intake had the last word + nothing unseen → SKIP (ran, deliberately did nothing)
 	| 'already-terminal' // the TRIAGE saw the issue was already transformed (a `bounced`/`created` marker) → SKIP
@@ -384,6 +384,8 @@ function prdLandingToSide(
  * no-ops for them.)
  */
 export type IntakeArtifactType = 'task' | 'spec' | 'prd';
+// prd → spec cutover (MIGRATE batch): `'spec'` is the CANONICAL artifact type;
+// `'prd'` stays as an accepted ALIAS until the contract task removes it.
 
 /**
  * The PER-OUTCOME integration mode FLAG SET (prd `issue-intake` US #9). Because
@@ -417,8 +419,12 @@ export interface IntakeIntegrationFlags {
 export interface IntakeIntegrationModes {
 	/** The mode an EMITTED task integrates with. */
 	task: IntegrationMode;
-	/** The mode an EMITTED prd integrates with. */
-	prd: IntegrationMode;
+	/**
+	 * The mode an EMITTED spec integrates with. `spec` is the CANONICAL key (prd →
+	 * spec cutover, MIGRATE batch); the user-facing `--merge-prd`/`--propose-prd`
+	 * flags that FEED it keep their `prd` spelling until the cli-flag rename batch.
+	 */
+	spec: IntegrationMode;
 }
 
 /** Default per-outcome integration mode when no flag selects one — propose (matches `do`). */
@@ -496,10 +502,11 @@ export function resolveIntakeIntegrationModes(
 		flags.proposeTask,
 	);
 	// GRANULAR OVERRIDES AGGREGATE; aggregate over the (config/propose) default.
-	// The result KEYS carry the task/prd vocabulary; the per-type flag axes
-	// (`--merge-prd`/`--merge-task`) keep their user-facing spelling.
+	// The result KEYS carry the `spec` vocabulary (canonical); the per-type flag axes
+	// (`--merge-prd`/`--merge-task`) keep their user-facing `prd` spelling (the
+	// cli-flag rename is a separate batch).
 	return {
-		prd: prdGranular ?? aggregate ?? defaultMode,
+		spec: prdGranular ?? aggregate ?? defaultMode,
 		task: taskGranular ?? aggregate ?? defaultMode,
 	};
 }
@@ -815,10 +822,10 @@ async function decideAndDispatch(
 	// (task/prd) and the `postIssueComment` (ask/bounce).
 	//
 	// PER-OUTCOME integration (prd `issue-intake` US #9): the resolved mode is keyed on the runtime
-	// artifact TYPE — a `task` verdict integrates with the task mode, a `prd`
-	// verdict with the prd mode. Unset ⇒ propose for both. ask/bounce never
+	// artifact TYPE — a `task` verdict integrates with the task mode, a `spec`
+	// verdict with the spec mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
-	const modes = options.integration ?? {task: 'propose', prd: 'propose'};
+	const modes = options.integration ?? {task: 'propose', spec: 'propose'};
 	// The per-run `seen=` DELTA (the HUMAN comment ids intake READ this run, excluding
 	// its own marker-comments + already-seen ids) the marker records on every comment
 	// intake posts — the chain-model primitive the TRIAGE unions into `seenSet`.
@@ -848,18 +855,18 @@ async function decideAndDispatch(
 				agentEnv: options.env,
 				note,
 			});
-		// EXPAND step: the new `spec` outcome routes through the SAME dispatch as the
-		// legacy `prd` outcome (they name the SAME parent-spec artifact). Both use
-		// `modes.prd`; the migrate batch renames the key + dispatcher, the contract
-		// task drops the `prd` case.
+		// The `spec` outcome is the CANONICAL parent-spec verdict (prd → spec cutover,
+		// MIGRATE batch); the legacy `prd` outcome routes through the SAME dispatch
+		// (they name the SAME parent-spec artifact). Both use `modes.spec`; the
+		// contract task drops the `prd` case.
 		case 'spec':
 		case 'prd':
-			return dispatchPrd({
+			return dispatchSpec({
 				verdict,
 				issueNumber,
 				cwd,
 				arbiter,
-				integration: modes.prd,
+				integration: modes.spec,
 				// Same origin-trust stamp on the prd outcome (propagated onto its tasks
 				// later by the tasker). Passed IN; not resolved here.
 				originTrust: options.originTrust,
@@ -1214,17 +1221,18 @@ async function dispatchTask(params: {
 }
 
 /**
- * DISPATCH the `prd` outcome: derive a content-derived slug, write the prd
- * file (`work/prds/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the close JOB
- * reaches via `task.prd: → prd issue:`; on a fanned prd the number lives ONLY on
- * the prd — a fanned task uses `prd:`, NOT its own `issue:`, which is the
- * lone-task outcome's link) + the gate axes the prompt JUDGED, integrate it
- * via {@link performIntegration}, then STOP. Tasking the emitted prd is the SEPARATE
- * `do prd:` step (NOT done here). A coupled-but-SMALL pair lands here too (the prd
- * vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The runner
- * owns the git exactly as the task branch does; the agent did NO git/seam ops.
+ * DISPATCH the `spec` outcome (canonical; the legacy `prd` outcome routes here too
+ * through the cutover): derive a content-derived slug, write the spec file
+ * (`work/specs/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the
+ * close JOB reaches via `task.spec: → spec issue:`; on a fanned spec the number
+ * lives ONLY on the spec — a fanned task uses `spec:`, NOT its own `issue:`, which
+ * is the lone-task outcome's link) + the gate axes the prompt JUDGED, integrate it
+ * via {@link performIntegration}, then STOP. Tasking the emitted spec is the
+ * SEPARATE `do spec:` step (NOT done here). A coupled-but-SMALL pair lands here too
+ * (the spec vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The
+ * runner owns the git exactly as the task branch does; the agent did NO git/seam ops.
  */
-async function dispatchPrd(params: {
+async function dispatchSpec(params: {
 	verdict: IntakeVerdict;
 	issueNumber: number;
 	cwd: string;
@@ -1267,7 +1275,7 @@ async function dispatchPrd(params: {
 	const slug = resolvePrdSlug(verdict);
 	if (slug === '') {
 		const message =
-			`Intake produced a 'prd' verdict for issue #${issueNumber} with no usable ` +
+			`Intake produced a 'spec' verdict for issue #${issueNumber} with no usable ` +
 			`slug/title to derive a content-derived slug from (never a counter).`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
@@ -1337,7 +1345,7 @@ async function dispatchPrd(params: {
 		issueNumber,
 		slug,
 		relPath,
-		kind: 'prd',
+		kind: 'spec',
 		cwd,
 		issueProvider,
 		seen,
@@ -1360,7 +1368,7 @@ async function integrationToIntakeResult(
 		issueNumber: number;
 		slug: string;
 		relPath: string;
-		kind?: 'task' | 'prd';
+		kind?: 'task' | 'spec';
 		/** The working checkout the issue seam shells `gh` in. */
 		cwd: string;
 		/** The issue seam the completion comment is posted back through. */
@@ -1373,7 +1381,7 @@ async function integrationToIntakeResult(
 ): Promise<IntakeResult> {
 	const {issueNumber, slug, relPath, cwd, issueProvider, seen, env, note} = ctx;
 	const kind = ctx.kind ?? 'task';
-	const artifact = kind === 'prd' ? 'prd' : 'task';
+	const artifact = kind === 'spec' ? 'spec' : 'task';
 	if (core.outcome === 'completed') {
 		const landed =
 			core.integration?.mode === 'merge'
@@ -1390,8 +1398,8 @@ async function integrationToIntakeResult(
 			`the runner integrated it through the shared core and ${landed}.`;
 		// CLOSE THE LOOP (this task): post ONE INFORMATIONAL completion comment back on
 		// the issue for the SUCCESSFUL outcome — the confirmation the ASK/BOUNCE comments
-		// already give the author. It reports `task created` / `prd created` (NEVER
-		// "issue resolved"; intake never closes on task/prd — CI's close-job does, via
+		// already give the author. It reports `task created` / `spec created` (NEVER
+		// "issue resolved"; intake never closes on task/spec — CI's close-job does, via
 		// the `issue:` field) and links the artifact by integration mode: the PR `url` in
 		// propose, the landed `commit` in merge. The marker carries `kind=created` (the
 		// TRIAGE treats it as TERMINAL → `already-terminal`), so the comment cannot
@@ -1410,7 +1418,7 @@ async function integrationToIntakeResult(
 		});
 		return {
 			exitCode: 0,
-			outcome: kind === 'prd' ? 'prd-written' : 'tasked',
+			outcome: kind === 'spec' ? 'spec-written' : 'tasked',
 			issueNumber,
 			emittedSlug: slug,
 			emitted: relPath,
@@ -1441,12 +1449,12 @@ async function integrationToIntakeResult(
 
 /**
  * Build the INFORMATIONAL completion-comment BODY (with its FULL `created` marker)
- * for a SUCCESSFUL `task` / `prd` outcome — the PURE, seam-free core of
+ * for a SUCCESSFUL `task` / `spec` outcome — the PURE, seam-free core of
  * {@link postCompletionComment}, exported so both link variants are unit-testable
  * without a live seam. The comment:
  *
- * - reports `task created` / `prd created` framed as CREATED — NEVER "issue
- *   resolved/closed" (intake never closes on the task/prd path).
+ * - reports `task created` / `spec created` framed as CREATED — NEVER "issue
+ *   resolved/closed" (intake never closes on the task/spec path).
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
  *   `commit` (the additive {@link IntegrateResult.commit}) in merge. A degraded
  *   propose (no `url`) or a failed merge-tip read (no `commit`) simply OMITS the
@@ -1457,13 +1465,13 @@ async function integrationToIntakeResult(
  *   branch consumes it — the comment cannot re-trigger intake.
  */
 export function composeIntakeCompletionComment(params: {
-	kind: 'task' | 'prd';
+	kind: 'task' | 'spec';
 	slug: string;
 	integration: IntegrateResult | undefined;
 	seen: string[];
 }): string {
 	const {kind, slug, integration, seen} = params;
-	const artifact = kind === 'prd' ? 'prd' : 'task';
+	const artifact = kind === 'spec' ? 'spec' : 'task';
 	const link =
 		integration?.mode === 'merge'
 			? integration.commit !== undefined
@@ -1482,13 +1490,13 @@ export function composeIntakeCompletionComment(params: {
 }
 
 /**
- * Post the INFORMATIONAL completion comment for a SUCCESSFUL `task` / `prd`
+ * Post the INFORMATIONAL completion comment for a SUCCESSFUL `task` / `spec`
  * outcome (this task). It closes the loop the ASK/BOUNCE comments already close
  * for the other outcomes: the issue author gets a confirmation when intake did the
  * useful thing. The comment:
  *
- * - reports `task created` / `prd created` — NEVER "issue resolved/closed".
- *   Intake never closes the issue on the task/prd path (CI's future close-job
+ * - reports `task created` / `spec created` — NEVER "issue resolved/closed".
+ *   Intake never closes the issue on the task/spec path (CI's future close-job
  *   does, via the `issue:` field); this comment changes NO issue state.
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
  *   `commit` (the additive {@link IntegrateResult.commit} this task surfaces) in
@@ -1505,7 +1513,7 @@ export function composeIntakeCompletionComment(params: {
 async function postCompletionComment(params: {
 	issueProvider: IssueProvider;
 	issueNumber: number;
-	kind: 'task' | 'prd';
+	kind: 'task' | 'spec';
 	slug: string;
 	/** The integrate result — carries the propose `url` / the merge `commit` link. */
 	integration: IntegrateResult | undefined;
@@ -1527,7 +1535,7 @@ async function postCompletionComment(params: {
 		env,
 		note,
 	} = params;
-	const artifact = kind === 'prd' ? 'prd' : 'task';
+	const artifact = kind === 'spec' ? 'spec' : 'task';
 	// Build the full stamped body (CREATED wording + mode-keyed link + the FULL
 	// `created` marker) via the exported pure builder — unit-tested directly for both
 	// link variants (propose `url` / merge `commit`).
