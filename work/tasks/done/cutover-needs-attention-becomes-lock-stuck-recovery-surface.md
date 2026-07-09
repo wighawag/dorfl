@@ -42,7 +42,7 @@ move, per decision (i+):
   working-tree-visibility drop the ADR already made for `in-progress`.
 
 > Future (NOT this slice; captured in
-> `work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`): the
+> `work/notes/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`): the
 > advance loop can later surface a stuck lock's reason/questions as a
 > `work/questions/` sidecar and self-clear the lock on an apply pass. Keep the stuck
 > reason/questions on the entry in a shape a surface rung could later render; do NOT
@@ -123,7 +123,7 @@ onto the lock `state: stuck`:
 > code reads or writes `work/needs-attention/<slug>.md` after this slice. Keep the
 > `done`+`stuck` co-existence. Extend the lock entry to carry rich reason + questions
 > in a shape a future advance surface rung could render (see
-> `work/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`), but do
+> `work/notes/ideas/advance-surfaces-and-self-clears-stuck-locks-via-questions.md`), but do
 > NOT build that loop here.
 >
 > SCOPE FENCE: removing `needs-attention` from the folder SETS may land here or in 9c
