@@ -69,19 +69,27 @@ describe('item-lock — identity seam (reuses resolveSidecarIdentity)', () => {
 		// The SAME single-source-of-truth resolver the sidecar / advancing marker use.
 		expect(lockEntryFor('task:alpha')).toBe('task-alpha');
 		expect(lockEntryFor('prd:autotask')).toBe('prd-autotask');
+		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// `spec:` gets its OWN `spec-<slug>` entry, NOT the `task-<slug>`
+		// fall-through the first expand task left it with.
+		expect(lockEntryFor('spec:autotask')).toBe('spec-autotask');
+		expect(lockEntryFor('spec:x')).toBe('spec-x');
 		expect(lockEntryFor('observation:beta')).toBe('observation-beta');
 		expect(lockEntryFor('obs:beta')).toBe('observation-beta'); // alias → canonical
 		expect(lockEntryFor('bare-slug')).toBe('task-bare-slug'); // bare = task
 	});
 
-	it('a task, a PRD, and an observation sharing a slug get DISTINCT refs', () => {
+	it('a task, a PRD, a SPEC, and an observation sharing a slug get DISTINCT refs', () => {
 		const slug = 'shared';
+		// EXPAND step: `spec:` must NOT collide with the same-slug `task:` build
+		// lock (the isolation-invariant break the second expand task fixes).
 		const refs = new Set([
 			itemLockRef(lockEntryFor(`task:${slug}`)),
 			itemLockRef(lockEntryFor(`prd:${slug}`)),
+			itemLockRef(lockEntryFor(`spec:${slug}`)),
 			itemLockRef(lockEntryFor(`observation:${slug}`)),
 		]);
-		expect(refs.size).toBe(3);
+		expect(refs.size).toBe(4);
 	});
 });
 

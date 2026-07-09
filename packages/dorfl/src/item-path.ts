@@ -37,6 +37,11 @@ export const APPLY_LIFECYCLE_FOLDERS: Record<
 > = {
 	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
 	prd: ['specs-proposed', 'specs-ready', 'specs-tasked'],
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// `spec` rests in the SAME parent-spec regime folders as `prd` (both name the
+	// spec artifact). Mirrored so a `spec:<slug>` identity resolves; the contract
+	// task drops the `prd` entry.
+	spec: ['specs-proposed', 'specs-ready', 'specs-tasked'],
 	observation: ['observations'],
 };
 

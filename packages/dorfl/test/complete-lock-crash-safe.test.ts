@@ -374,6 +374,12 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			'work/specs/tasked/p.md',
 			'work/specs/dropped/p.md',
 		]);
+		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// a `spec` shares the parent-spec regime's durable terminals with `prd`.
+		expect(terminalMainPaths('spec', 'p')).toEqual([
+			'work/specs/tasked/p.md',
+			'work/specs/dropped/p.md',
+		]);
 		// An observation has NO durable terminal — it leaves by deletion.
 		expect(terminalMainPaths('observation', 'o')).toEqual([]);
 	});

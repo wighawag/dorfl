@@ -881,6 +881,13 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 	switch (type) {
 		case 'task':
 			return [workItemRel('done', file), workItemRel('cancelled', file)];
+		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// `spec` shares the parent-spec regime's durable terminals with `prd`
+		// (`specs/tasked` tasked, `specs/dropped` won't-proceed) — a `spec:<slug>`
+		// lock resolves to the SAME `work/specs/*` records as `prd:<slug>`. Stacked
+		// BEFORE `case 'prd'` (empty fall-through) so the mapping is byte-identical;
+		// the contract task collapses the two labels.
+		case 'spec':
 		case 'prd':
 			return [
 				workItemRel('specs-tasked', file),
@@ -1542,7 +1549,11 @@ export function formatReapReport(report: ReapReport): string[] {
  * {@link lockEntryFor} for the three known namespaces.
  */
 export function itemFromLockEntry(entry: string): string {
-	for (const prefix of ['task', 'prd', 'observation'] as const) {
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// `'spec'` is enumerated BESIDE `'prd'` so a `spec-<slug>` lock entry
+	// round-trips back to its namespaced `spec:<slug>` form (the inverse of
+	// `lockEntryFor('spec:<slug>')`). The contract task removes `'prd'`.
+	for (const prefix of ['task', 'spec', 'prd', 'observation'] as const) {
 		const tag = `${prefix}-`;
 		if (entry.startsWith(tag)) {
 			return `${prefix}:${entry.slice(tag.length)}`;

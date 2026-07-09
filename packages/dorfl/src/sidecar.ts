@@ -68,8 +68,17 @@ import {workItemRel} from './work-layout.js';
  *     sidecar is the item's full Q&A history).
  */
 
-/** The three item-types a sidecar can key onto (the slug-namespace + obs). */
-export type SidecarType = 'prd' | 'task' | 'observation';
+/**
+ * The item-types a sidecar can key onto (the slug-namespace + obs).
+ *
+ * EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * parent-spec type is being renamed `prd → spec`. `'spec'` is a member BESIDE
+ * `'prd'` through the cutover so a `spec:<slug>` identity gets its OWN
+ * `spec-<slug>` lock/sidecar entry instead of silently falling through to
+ * `task-<slug>` (the isolation-invariant collision the first expand task missed).
+ * `'prd'` and its mapping stay intact; the contract task removes `'prd'`.
+ */
+export type SidecarType = 'prd' | 'spec' | 'task' | 'observation';
 
 /**
  * The optional, machine-only `kind` AXIS on a question entry — the dispatch
@@ -180,6 +189,7 @@ export function allAnswered(model: SidecarModel): boolean {
 
 const TYPE_TO_NAMESPACE: Record<SidecarType, string> = {
 	prd: 'prd',
+	spec: 'spec',
 	task: 'task',
 	observation: 'observation',
 };
@@ -191,6 +201,14 @@ function typeForNamespace(
 ): SidecarType {
 	if (explicit === 'prd') {
 		return 'prd';
+	}
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): a
+	// `spec:` prefix / `explicit === 'spec'` maps to the `'spec'` type BESIDE
+	// `'prd'` — NOT the `task` fall-through below — so `spec:<slug>` gets its own
+	// `spec-<slug>` lock/sidecar entry. The contract task collapses this into the
+	// `prd` branch's replacement.
+	if (explicit === 'spec') {
+		return 'spec';
 	}
 	if (explicit === 'task') {
 		return 'task';
