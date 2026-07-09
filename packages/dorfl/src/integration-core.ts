@@ -1816,6 +1816,9 @@ async function recoverAlreadyCommitted(params: {
 		const tip = (
 			await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
 		).stdout.trim();
+		// No `review:` callback here: the recovery tail re-verifies an already-
+		// reviewed, already-committed result, so Gate-2 review semantics do not
+		// apply on this path.
 		const gated = await runFreshWorktreeGate({
 			cwd,
 			commit: tip,
@@ -1853,7 +1856,7 @@ async function recoverAlreadyCommitted(params: {
 						'to backlog/ once resolved). Fix the work, or use --skip-verify ' +
 						'to override.'
 					: `${what} on the rebased tip during committed-recovery; not ` +
-						`integrating '${slug}'. Fix the work, or use --skip-verify to ` +
+						`completing '${slug}'. Fix the work, or use --skip-verify to ` +
 						'override.',
 			};
 		}
