@@ -38,6 +38,18 @@ Each task is a **tracer bullet** — a thin vertical path through ALL layers end
   - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't guess.** `needsAnswers` is cheap (a human clears it in seconds) and a confidently-underspecified task is expensive (an agent builds the wrong thing, convincingly). Defects concentrate in TASKING far more than in implementation: an ambiguous premise, an unresolved design fork, a "reuse X" where X's shape is unverified, or a seam you _assume_ exists — each is a `needsAnswers` with the open question written in the body, NOT a guess dressed as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one human glance; a false confidence ships wrong-but-compiling work.
 - **Prefer file-orthogonal tasks to minimise merge conflicts.** `blockedBy` encodes logical ordering, but two independent tasks that edit the SAME files will conflict when the second integrates after the first. Parallel agents make this real. So: split along file/module boundaries where you can; and when two tasks are known to touch the same module, add a `blockedBy` to **serialize** them even if there's no strict logical dependency. The runner only rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at tasking time is the cheap win.
 
+### 3a. Wide refactors are the EXCEPTION to vertical slicing (expand → migrate → contract)
+
+Most work slices vertically (§3). A **wide refactor** does not, and forcing it to is the failure mode this subsection exists to stop. A wide refactor is one mechanical change — rename a shared symbol or a column, retype a pervasive identifier, cut a vocabulary over — whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and **no vertical tracer-bullet task can land green on its own**. Sequence it as **expand → migrate → contract** instead:
+
+- **Expand** (one task): add the NEW form BESIDE the old so nothing breaks yet. Nothing is removed; the gate stays green because every existing caller still resolves.
+- **Migrate** (one task PER batch, each `blockedBy` the expand task): move call sites onto the new form in batches sized by blast radius — per package, per directory, per module. Each batch is its own task and stays green because the old form still exists. Split batches file-orthogonally (§3's merge-conflict rule) so parallel agents don't collide.
+- **Contract** (one task, `blockedBy` EVERY migrate batch): delete the old form once no caller remains. It cannot start until every migrate batch is done — that is what its `blockedBy` fan-in encodes.
+
+**When even the batches cannot stay green alone** (the change is so entangled that an individual batch can't pass the gate in isolation), keep the same expand → migrate → contract shape but let the batches share a common **integration point**: task each batch onto the work-branch discipline the runner already uses, and add a final **integrate-and-verify** task `blockedBy` all of them where green is promised — green is guaranteed only at that fan-in, not batch-by-batch. Prefer the plain green-batch-by-batch form; reach for the shared-integration form only when a batch genuinely cannot be made to pass alone.
+
+The test for "is this a wide refactor?" is whether a single mechanical edit breaks the gate across many call sites at once such that no thin vertical path can be green. If yes, use this sequence; if a normal vertical slice CAN be green, it is not a wide refactor — slice it vertically (§3).
+
 ### 3b. Prd gate vs task gate are DISJOINT + honour cross-prd `taskedAfter`
 
 - **`humanOnly` on a prd and `humanOnly` on a task are DISJOINT — they gate different verbs and DO NOT flow into each other.**

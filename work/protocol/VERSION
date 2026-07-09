@@ -1,4 +1,4 @@
-protocol-version: 2026-06-26
+protocol-version: 2026-07-09
 synced-from: skills/setup/protocol/
-synced-at: 2026-06-26T00:00:00+0000
-source-commit: land-time-reverify-invariant-and-human-reconcile-warning
+synced-at: 2026-07-09T00:00:00+0000
+source-commit: tasking-protocol-expand-contract-wide-refactor-subsection

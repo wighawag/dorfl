@@ -9,6 +9,8 @@ created: 2026-06-03
 
 > **Forward note (2026-06-21 — Matt Pocock skills v1.0.0 alignment):** §2's heading word "disabled" predates v1.0.0 and now COLLIDES with the real `disable-model-invocation` flag v1 introduced. Read §2's "disabled" as **superseded by a `work/`-native equivalent** (the tracker skills' JOB is done by our file-based skills, not switched off). The new v1 decisions — adopting `disable-model-invocation: true` on our user-invoked orchestration skills, the user-invoked/model-invoked taxonomy, the `work` router, the file-path composition divergence, and the TDD-invisibility gap for the autonomous worker — are recorded in **§6** below. The original §2–§5 text is left intact.
 
+> **Forward note (2026-07-09 — Matt Pocock skills v1.1 alignment):** v1.1 renamed his `to-prd → to-spec` and merged his `to-plan`+`to-issues → to-tickets`. §2's `to-prd → skills/to-prd` and `to-issues → to-task` names are therefore stale on HIS side (the mapping stands; only his source names moved). The v1.1 decisions — adopt the `prd → spec` noun (rename our `to-prd → to-spec`, cut over the whole `prd` vocabulary), ship a self-contained `prd-to-spec` migration command whose data-migration is validated by running it on dorfl itself, DECLINE `ticket` (keeping our `task`), and backport his wide-refactor / expand–contract paragraph into `TASKING-PROTOCOL.md` — are recorded in **§7** below. §2–§6 text is left intact; where §2–§6 say `prd`/`to-prd`, read the noun as `spec`/`to-spec` per §7.
+
 Records the decisions about how this monorepo's `work/` methodology relates to the third-party "Matt Pocock" engineering skills, and the prd/task/triage/gate shape — so future sessions don't re-litigate them. (This monorepo IS the project: the `work/` methodology + tooling; `packages/dorfl` is one implementation; `skills/` holds the methodology skills.)
 
 ## 1. The monorepo owns the methodology skills
@@ -78,3 +80,45 @@ Matt's skills reached v1.0.0. Its two central mechanics are the `disable-model-i
 - **Standing rule: NO spawned-agent prompt may name a skill that is not resolvable IN-BAND.** Why this is a rule and not just a habit: the prompt's verdict-gate parses whatever JSON the agent returns and NEVER errors on a missing skill — there is no compile-time check that a skill named in a prompt actually exists in the spawned agent's working directory. So a prompt that says "apply the `review` skill" in a repo that does not have `review` simply produces a weaker, hallucinated review, with no signal that the discipline was absent. The blast radius is exactly the skill-named prompts the runner emits. This rule closes that class: if the runner is going to invoke a discipline by name, that discipline ships in `work/protocol/` (and is vendored into the package), and the prompt builder points at the resolved doc. The next runner-invoked discipline is therefore born as a protocol doc, not as a fourth instance of this bug.
 - **The `capture-signal` boundary.** `capture-signal` is model-invoked (the value is the agent firing it autonomously on noticing something), but the autonomous RUNNER does not spawn an agent against `capture-signal` BY NAME — so it is not in the runner-invoked-discipline class and stays out-of-band like the other orchestration skills. If a future runner ever DOES spawn an agent whose prompt names `capture-signal`, the standing rule above kicks in and `capture-signal` becomes a protocol doc on the same terms as the three current disciplines.
 - **TDD-by-default for AFK builds: DECIDED as a NUDGE, not enforcement** (closes the gap noted in the first cut of this section). Matt's `tdd` is a model-invoked discipline the spawned `dorfl do` worker cannot see. The runner CANNOT enforce test-first, because it observes outcomes (the verify gate going green), not process (write order) — so test-first is a per-repo POLICY the maintainer decides, delivered as a prompt nudge. Design: a new `promptGuidance` config namespace (first member `testFirst: boolean`), named to signal "nudge, not guarantee" and kept CATEGORICALLY SEPARATE from the enforced gate family (`verify`/`autoBuild`/`humanOnly`). setup asks once; the resolved flag (resolution `flag > env > per-repo > global > default:false`, per-item-overridable in frontmatter like `humanOnly`/`autoBuild`) STRENGTHENS the existing in-band "TDD where the task asks for it" line in the CLAIM-PROTOCOL wrapper; the verify gate stays the only acceptance bar. Captured as the prd `work/prds/ready/prompt-guidance-test-first.md`. (Enforcing that the worker actually went red→green is explicitly out of scope: order is unobservable from outcomes by design.)
+
+## 7. v1.1 alignment (2026-07-09): adopt `spec`, decline `ticket`, ship a `prd-to-spec` migration
+
+Matt's skills reached v1.1 with two renames: `to-prd → to-spec`, and `to-plan`+`to-issues` merged into `to-tickets`. We took each on its own merits — one adopt, one decline — plus a content backport and a new command.
+
+The mechanical detail (rename surfaces, the migration command's four data layers, the leak-scan and pre-isolation techniques) lives in the enacting spec, `work/{prds→specs}/*/prd-to-spec-vocabulary-cutover-and-migration-command.md`. This section records only the DECISIONS and their WHY.
+
+### 7a. Adopt the noun: `prd → spec`, `to-prd → to-spec`
+
+**Decision: rename `to-prd → to-spec` and cut the whole `prd` vocabulary over to `spec`.** Matt's rationale is a conceptual correction: what the skill produces was never a product-requirements doc (product-only), it is a **specification** — technical, non-technical, or a blend. That leak applies to us (our `prd` bodies carry non-product technical/testing decisions). It also retro-explains our own `prd → brief → prd` thrash (`403a5be9`, 2026-06-24): `spec` is the broader word both attempts were circling. Adopting it settles the noun AND re-converges with canonical Matt. Clean break (this repo owes no external users a migration window — matches `allowAgents → autoBuild`, `slice → task`), enacted via the spec, not a hand-sweep. The full rename surface + the `spec`-collides-with-English watch-out are in the spec.
+
+### 7b. DECLINE the noun `ticket`; keep `task`
+
+**Decision: do NOT adopt `to-tickets`/`ticket`; keep `task`.** We already merged plan+issues into `to-task` (his merge is catching up to a shape we have). `ticket` is MORE tracker-flavoured than `task`, not less; `issue:` is already a load-bearing distinct frontmatter concept; and adopting `ticket` would MANUFACTURE a `task`/`ticket` collision that does not exist today. The decline is a feature: our `task` staying distinct from his `ticket` keeps a dorfl+Matt repo legible (see §7d).
+
+### 7c. Backport his wide-refactor / expand–contract paragraph into `TASKING-PROTOCOL.md`
+
+**Decision: add an expand → migrate → contract subsection to `TASKING-PROTOCOL.md` (§3a), mirror + `VERSION` bump.** His v1.1 `to-tickets` codified the one pattern where ours was thinner: a wide refactor whose blast radius breaks all call sites at once, so no vertical tracer-bullet task lands green, and must be sequenced expand → migrate-batches → contract. We practise it (proven twice) but had never written it into the discipline. Not academic: §7a's spec-rename IS this case, so the backport is the discipline its own tasks are sequenced under. Everything else in his `to-tickets` is parity-or-us-ahead (two-axis gate, no-human confidence check, `taskedAfter`, one-time spec trim — he has none).
+
+### 7d. Compatibility with Matt's skills is UNAFFECTED by his rename
+
+**Finding: his `task → ticket` rename does not make his skills blind to our `work/tasks/`, because no skill uses the work-item noun as a lookup KEY.** Two patterns, neither goes blind: (a) work-passed-as-ARGUMENT — `implement` (the real reuse target), `resolving-merge-conflicts`, `code-review` act on whatever you point them at, incl. a `work/tasks/…` file; the noun is a label, not a selector; (b) tracker-INDIRECTED query — `wayfinder`, `triage`, `to-tickets` resolve through per-repo `docs/agents/*` config (or their own `.scratch/`/`tickets.md` store) and never read `work/tasks/` under any name. A dorfl user reuses his non-tracker engineering skills verbatim; the tracker-coupled ones operate their own store either way.
+
+### 7e. NEW: a `dorfl prd-to-spec` migration command, split at the CONTRACT-VERSION boundary
+
+**Decision: ship a `dorfl prd-to-spec` command, split at the contract-version boundary.** The migration is two parts: a **source part** hand-authored in dorfl (the new `spec` contract in `skills/setup/protocol/*` + the dorfl code rename — this makes dorfl SPEAK spec, and is itself the §7c wide refactor), and a reusable **command part** that mechanically migrates a repo's `work/` DATA + config + refs and does NOT author contract text. Load-bearing sub-decisions:
+
+- **Self-contained (decision B, over two-step A):** the command runs the `setup` contract re-sync FIRST, then the data migration — one command for a downstream user.
+- **dorfl's own migration IS the acceptance test:** because the command touches only data/config/refs, running it on dorfl (the gnarliest `prd` repo) after the source part lands is a real end-to-end test — no hand-sweep of dorfl's data.
+- **Done/history items ARE converted** (determinism overrides the old "don't touch done" hand-sweep convenience — a `done/` full of dangling `prd:` refs is a broken repo).
+- **The forward+reverse leak scan is the acceptance GATE, exhaustive-by-construction** (the lesson from `403a5be9` leaving lingering `brief` refs in live code — verified still present today).
+- **Quiescence-required (1a, over active mid-flight ref-rename):** refuse on dirty tree / held lock / in-progress `work/prd-*` branch, naming the offender; `--dry-run`; idempotent.
+- **Purpose-named verb, reusable engine:** `prd-to-spec`, not a general `migrate <from> <to>`; the data-migration engine is factored so a future cutover reuses the structure.
+
+### 7f. Enactment order
+
+1. This ADR record (§7) — cheapest, reversible, no code.
+2. Backport §7c into `TASKING-PROTOCOL.md` (+ mirror + `VERSION`) — small, standalone, and the discipline §7a's own tasks need.
+3. Write the `prd-to-spec` **spec** (records §7a's source-part surfaces + §7e's two-part split + data-migration contract), then task it.
+4. **Source part first:** author the `spec` contract in `skills/setup/protocol/*` + rename the dorfl `src` code, sequenced expand → migrate-batches → contract (§7c).
+5. **Command part:** build `dorfl prd-to-spec` (self-contained: setup-re-sync + data migration incl. `done/` + refs), with a fixture-repo test (folders + frontmatter + config + refs → deterministic conversion, dry-run, idempotency, refuse-on-held-lock, leak-scan-green).
+6. **Run the command on dorfl** = the real acceptance test: it does dorfl's `work/protocol/` mirror re-sync + all data conversion. Leak scan green on dorfl is the trust signal for downstream.
