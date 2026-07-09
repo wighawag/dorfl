@@ -76,7 +76,7 @@ A concept that is coherent in ISOLATION but incoherent against the system's exis
 
 _"If every task is built / the code is merged exactly as written, do we END UP WITH the system the prd/ADR describes?"_ — distinct from per-piece correctness, and the strongest signal a decomposition is trustworthy (especially with no human).
 
-- Take the prd/ADR end-state as the spec; **map every promised element to a delivering task** — a hole = an element no task delivers.
+- Take the prd/ADR end-state as the target; **map every promised element to a delivering task** — a hole = an element no task delivers.
 - Confirm **coverage is complete + non-duplicated** — every user story covered exactly once.
 - Audit the **deletion sweep** — a new system means the OLD surface is GONE; every removal owned by exactly one task, none unowned or double-owned.
 - Check for **orphans** (a task delivering something the end-state doesn't need) and that assumed-pre-existing foundations actually exist.

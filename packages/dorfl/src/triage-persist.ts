@@ -396,7 +396,7 @@ export async function promoteObservation(
  *
  * The artifact TYPE selects the frontmatter + lead heading: a `task` gets
  * `## What to build` + `blockedBy: []` + a `## Prompt` (the buildable-task shape);
- * a `prd` gets `## Problem Statement` (the PRD-spec shape, with no `blockedBy` —
+ * a `prd` gets `## Problem Statement` (the PRD document shape, with no `blockedBy` —
  * a PRD is not a blockable task — and no `## Prompt`, since a PRD is not
  * dispatched by `do`/`run`). BOTH carry the SAME transcribed mechanism prose +
  * open-question block, so a PRD minted into `proposed/` is just as self-contained
@@ -433,7 +433,7 @@ export async function promoteObservation(
  * guard in `prompt.ts`). This is the robust backstop that closes that hole
  * regardless of agent compliance: for a TASK, if the body has no `## Prompt`
  * heading, append a seeded one (blockquoted, matching the renderer's shape). A PRD
- * is left UNTOUCHED — a PRD is a spec, not dispatched by `do`/`run`, and carries no
+ * is left UNTOUCHED — a PRD is a north-star doc, not dispatched by `do`/`run`, and carries no
  * `## Prompt` by design.
  */
 function ensureTaskDispatchable(
@@ -470,7 +470,7 @@ function buildPromotedBody(
 		`title: ${slug}`,
 		`slug: ${slug}`,
 		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
-		// A PRD is a spec, not a blockable task — only the task shape carries
+		// A PRD is a north-star doc, not a blockable task — only the task shape carries
 		// `blockedBy`.
 		...(artifact === 'prd' ? [] : ['blockedBy: []']),
 		'---',

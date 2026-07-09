@@ -157,7 +157,7 @@ export interface RenderPrdBodyInput {
  * Render a PRD body (the markdown AFTER the frontmatter fence). Emits, in the
  * canonical order, `## Problem Statement`, then `## Solution`, `## User Stories`,
  * and `## Open questions` (each only when its input is given), and NEVER a
- * `## Prompt` — a PRD is a spec, not a dispatchable task. The symmetric twin of
+ * `## Prompt` — a PRD is a north-star doc, not a dispatchable task. The symmetric twin of
  * {@link renderTaskBody}, owning the FULL PRD section schema both producers need
  * (intake's default scaffold supplies Problem Statement + Solution + User Stories;
  * promotion's structured body supplies Problem Statement + optional Open

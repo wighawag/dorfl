@@ -38,7 +38,7 @@ A starting situation that generates work, then merges onto the main flow.
 
 There is **no issue tracker and no label state-machine** — their job is done by `work/` files and folders-as-status:
 
-- a feature spec is a **prd file** (`to-prd`), not a tracker epic; buildable units are **task files** (`to-task`), not tracker issues.
+- a feature's north-star doc is a **prd file** (`to-prd`), not a tracker epic; buildable units are **task files** (`to-task`), not tracker issues.
 - signal triage is **`triage-observations`** over the `work/notes/observations/` inbox plus folders-as-status plus the autonomy gate, not a label workflow.
 - onboarding a repo is **`setup`**, not a tracker integration.
 
