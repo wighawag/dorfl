@@ -32,3 +32,7 @@ Do NOT touch the deliberate alias surface (`PrdsLandIn`/`prdsLandIn`/`--prds-lan
 > Scope: rename `LedgerPrdItem`/`LedgerPrdPool`/`resolvePrdPool`/`resolveMirrorPrdPool`/`PrdExistence`/`resolvePrdExistence`/`taskablePrds`/`scorePrds`/`.prds`/`prdsFirst`/`prdPool` and peers in THESE files; add `|| === 'spec'` beside `namespace === 'prd'` switches in scan/select-priority. Do NOT touch the alias surface (`prdsLandIn`, `'prd'` namespace/artifact-type acceptance, `PRD_PREFIX` — contract task removes them) or sub-batch (b)/(c) files (close-job, do*, advance*, prompt, prd-complete).
 >
 > Done means: these four modules' `Prd*` symbols are `Spec*`, consumers match `spec`, coupled tests green, full gate green. FIRST check drift: confirm `rename-spec-config-and-intake` landed and the expand aliases are present (a `prd` symbol you rename must still resolve elsewhere via the alias).
+
+## Requeue 2026-07-09
+
+Re-scoped: exported Prd* symbols have NO alias and span 14 importer files (index, mirror-pool-scan, slug-namespace, etc.) — not file-orthogonal. Making 4a the ATOMIC exported-symbol rename (def + all importers in one green shot), no alias. 4b (file-local + comments) and 4c (verb + whole-file prd-complete rename) stay as-is.
