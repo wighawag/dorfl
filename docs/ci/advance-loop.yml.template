@@ -89,7 +89,7 @@ on:
   workflow_dispatch:
     inputs:
       integrationMode:
-        description: 'Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a matrix, each leg `advance --merge` (one item — build/gate/review fan out in parallel; the LAND tail is serialised by the engine''s `mergeRetries` CAS-retry loop, not by the workflow shape).'
+        description: "Integration mode (drives BOTH the integration flag passed to `advance` AND the job shape): propose ⇒ a matrix, each leg `advance --propose` (one PR per item); merge ⇒ a matrix, each leg `advance --merge` (one item — build/gate/review fan out in parallel; the LAND tail is serialised by the engine's `mergeRetries` CAS-retry loop, not by the workflow shape)."
         required: false
         default: 'propose'
         type: choice
