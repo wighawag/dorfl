@@ -701,16 +701,37 @@ function explicitTasksLandInFromFlag(
  */
 function explicitPrdsLandInFromFlag(
 	raw: string | undefined,
+	flagName = '--prds-land-in',
 ): 'pre-proposed' | 'ready' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
 	if (raw !== 'pre-proposed' && raw !== 'ready') {
 		throw new Error(
-			`--prds-land-in must be 'pre-proposed' or 'ready' (got '${raw}').`,
+			`${flagName} must be 'pre-proposed' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
+}
+
+/**
+ * The `spec` vocabulary FLAG twin of {@link explicitPrdsLandInFromFlag} (prd
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND step). Resolve
+ * the EXPLICIT operator spec-placement override from EITHER `--specs-land-in`
+ * (canonical) or the legacy `--prds-land-in`, with `--specs-land-in` WINNING when
+ * both are given. Both feed the SAME `explicitPrdsLandIn` rung of the shared
+ * placement resolver, so intake's dispatch is unchanged; this only widens which
+ * flag the operator may type. Each is validated against the same enum and FAILS
+ * LOUDLY on a bad value, naming the flag actually typed. The contract task drops
+ * the `--prds-land-in` half.
+ */
+function explicitSpecsLandInFromFlags(
+	specsRaw: string | undefined,
+	prdsRaw: string | undefined,
+): 'pre-proposed' | 'ready' | undefined {
+	const specs = explicitPrdsLandInFromFlag(specsRaw, '--specs-land-in');
+	const prds = explicitPrdsLandInFromFlag(prdsRaw, '--prds-land-in');
+	return specs ?? prds;
 }
 
 interface DoFlags {
@@ -780,8 +801,10 @@ interface IntakeFlags {
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
-	/** `--prds-land-in <pre-proposed|ready>`: the explicit operator prd-placement override (top of the precedence). Resolves into the `prdsLandIn` config key. */
+	/** `--prds-land-in <pre-proposed|ready>`: the explicit operator spec-placement override (top of the precedence). Resolves into the `prdsLandIn` config key. LEGACY alias of {@link specsLandIn}, kept beside it through the prd→spec cutover. */
 	prdsLandIn?: string;
+	/** `--specs-land-in <pre-proposed|ready>`: the `spec` vocabulary CANONICAL explicit operator spec-placement override (top of the precedence). Beside {@link prdsLandIn}; wins when both are given. Resolves into the `specsLandIn` config key. */
+	specsLandIn?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -3673,7 +3696,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--prds-land-in <where>',
-			'where an intake-authored prd lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > prdsLandIn default > built-in). Resolved flag > env (DORFL_PRDS_LAND_IN) > per-repo > global > built-in.',
+			'where an intake-authored spec lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > prdsLandIn default > built-in). Resolved flag > env (DORFL_PRDS_LAND_IN) > per-repo > global > built-in. LEGACY alias of `--specs-land-in`.',
+		)
+		.option(
+			'--specs-land-in <where>',
+			'the `spec` vocabulary CANONICAL form of `--prds-land-in` (wins when both are given): where an intake-authored spec lands: `pre-proposed` (staged) or `ready` (the auto-tasking pool). Resolved flag > env (DORFL_SPECS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
@@ -3763,9 +3790,15 @@ export function buildProgram(): Command {
 			// The OPERATOR's EXPLICIT prd-placement override (`--prds-land-in`), the TOP
 			// of the placement precedence — mirrors `explicitTasksLandInFromFlag` on
 			// the `do prd:` path. Fails loudly on a bad value.
+			// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+			// accept EITHER `--specs-land-in` (canonical) or `--prds-land-in` (legacy),
+			// specs winning when both are given. Both feed the same placement rung.
 			let explicitPrdsLandIn: 'pre-proposed' | 'ready' | undefined;
 			try {
-				explicitPrdsLandIn = explicitPrdsLandInFromFlag(flags.prdsLandIn);
+				explicitPrdsLandIn = explicitSpecsLandInFromFlags(
+					flags.specsLandIn,
+					flags.prdsLandIn,
+				);
 			} catch (err) {
 				console.error(
 					`error: ${err instanceof Error ? err.message : String(err)}`,
@@ -3783,7 +3816,9 @@ export function buildProgram(): Command {
 				// PRD-PLACEMENT: the configured-default rung + the EXPLICIT
 				// `--prds-land-in` override (top of the precedence). The shared placement
 				// resolver in `intake.ts` overlays the untrusted-origin staging force.
-				prdsLandIn: config.prdsLandIn,
+				// EXPAND step: the configured-default rung reads EITHER config key,
+				// `specsLandIn` (canonical) winning over the legacy `prdsLandIn`.
+				prdsLandIn: config.specsLandIn ?? config.prdsLandIn,
 				explicitPrdsLandIn,
 				harness,
 				agentCmd: config.agentCmd,

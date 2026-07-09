@@ -60,6 +60,16 @@ export type TasksLandIn = 'pre-backlog' | 'ready';
 export type PrdsLandIn = 'pre-proposed' | 'ready';
 
 /**
+ * The `spec` vocabulary ALIAS for {@link PrdsLandIn} (prd
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`). The EXPAND step adds
+ * the canonical `spec`-named type beside the legacy `PrdsLandIn`; the two are the
+ * SAME value spelling (`'pre-proposed' | 'ready'`) so every existing `PrdsLandIn`
+ * annotation keeps compiling. The migrate batches move annotations onto
+ * `SpecsLandIn`; the contract task removes `PrdsLandIn`.
+ */
+export type SpecsLandIn = PrdsLandIn;
+
+/**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
  * 3-state ENUM governing the observation INBOX (raw captured signal). It REPLACES
  * the old `autoTriage` boolean, whose name read like "is triage on?" but only
@@ -387,6 +397,19 @@ export interface Config {
 	 * lifecycles, one precedence change touches ONE place.
 	 */
 	prdsLandIn: PrdsLandIn;
+	/**
+	 * **The `spec` vocabulary CANONICAL key for the spec-placement default** (prd
+	 * `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND step). Added
+	 * BESIDE {@link prdsLandIn} so intake's spec-placement default can migrate onto
+	 * the `spec` name one batch at a time. The resolver reads EITHER key with
+	 * `specsLandIn` WINNING when both are present (`config.specsLandIn ??
+	 * config.prdsLandIn`); the `--specs-land-in` flag / `DORFL_SPECS_LAND_IN` env sit
+	 * beside `--prds-land-in` / `DORFL_PRDS_LAND_IN`. `undefined`/unset here means
+	 * "no `spec`-named override", so the legacy `prdsLandIn` value applies unchanged
+	 * — the additive, zero-behaviour-change default. The contract task removes
+	 * `prdsLandIn` and makes this the sole key.
+	 */
+	specsLandIn?: SpecsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the

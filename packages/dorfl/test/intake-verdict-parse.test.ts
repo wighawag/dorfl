@@ -135,10 +135,30 @@ describe('parseIntakeVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in {ask,task,prd,bounce}', () => {
+	it('THROWS on an outcome not in {ask,task,spec,prd,bounce}', () => {
 		expect(() => parseIntakeVerdict('{"outcome":"merge"}')).toThrow(
-			/ask\|task\|prd\|bounce/,
+			/ask\|task\|spec\|prd\|bounce/,
 		);
+	});
+
+	// EXPAND (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the new
+	// `spec` outcome is ACCEPTED beside the legacy `prd` outcome (both name the
+	// parent-spec classification). `prd` still parses (covered above).
+	it('parses a `spec` verdict beside the legacy `prd` outcome', () => {
+		const output = [
+			'```json',
+			JSON.stringify({
+				outcome: 'spec',
+				prdSlug: 'big-feature',
+				prdTitle: 'A big coherent feature',
+				prdBody: '## Problem Statement\n\nIt is big.',
+			}),
+			'```',
+		].join('\n');
+		const v = parseIntakeVerdict(output);
+		expect(v.outcome).toBe('spec');
+		expect(v.prdSlug).toBe('big-feature');
+		expect(v.prdTitle).toBe('A big coherent feature');
 	});
 });
 

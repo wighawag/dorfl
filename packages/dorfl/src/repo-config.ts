@@ -92,6 +92,17 @@ export const REPO_ALLOWED_KEYS = [
 	// `pre-proposed`). Fed into the shared placement resolver as the configured-default
 	// rung for the prd lifecycle (`src/placement.ts`).
 	'prdsLandIn',
+	// `specsLandIn` (the `spec` vocabulary CANONICAL key for the spec-placement
+	// default — prd `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND
+	// step) is a genuine repo property EXACTLY like `prdsLandIn`, which it is added
+	// beside. Whether THIS repo's intake-authored specs land STAGED
+	// (`specs/proposed/`) or in the auto-tasking POOL (`specs/ready/`) is agreed by
+	// all collaborators + travels with the repo. Resolved per-repo through the SAME
+	// chain as `prdsLandIn` (flag `--specs-land-in` > env `DORFL_SPECS_LAND_IN` >
+	// per-repo > global > built-in). The intake resolver reads EITHER key with
+	// `specsLandIn` WINNING when both are present; the contract task removes the
+	// legacy `prdsLandIn`.
+	'specsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with

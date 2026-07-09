@@ -54,6 +54,10 @@ describe('parseSlugArg — pure prefix splitting', () => {
 		expect(parseSlugArg('prd:foo')).toEqual({explicit: 'prd', slug: 'foo'});
 	});
 
+	it('strips the new canonical spec: prefix (EXPAND: beside prd:)', () => {
+		expect(parseSlugArg('spec:foo')).toEqual({explicit: 'spec', slug: 'foo'});
+	});
+
 	it('treats a bare slug as having no explicit namespace', () => {
 		expect(parseSlugArg('foo')).toEqual({explicit: undefined, slug: 'foo'});
 	});
@@ -202,6 +206,21 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 			read: currentLedgerRead,
 		});
 		expect(resolved.namespace).toBe('prd');
+	});
+
+	it('EXPAND: an explicit spec: prefix resolves to the spec namespace (beside prd:)', () => {
+		// The new canonical `spec:` prefix resolves to `{namespace: 'spec'}`
+		// unambiguously by construction — exactly like the legacy `prd:` above.
+		const resolved = resolveSlug({
+			arg: 'spec:my-spec',
+			repoPath: repoPath(),
+			read: currentLedgerRead,
+		});
+		expect(resolved).toEqual({
+			namespace: 'spec',
+			slug: 'my-spec',
+			explicit: true,
+		});
 	});
 
 	it('the HARD CUTOVER: a pre-rename slice:/brief: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
@@ -382,6 +401,17 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		}
 	});
 
+	it('EXPAND: REJECTS a spec: argument with an "operates on tasks, not specs" error (beside prd:)', () => {
+		expect(() => resolveTaskOnlyArg('spec:feature')).toThrow(
+			SlugResolutionError,
+		);
+		try {
+			resolveTaskOnlyArg('spec:feature');
+		} catch (err) {
+			expect((err as Error).message).toContain('tasks, not specs');
+		}
+	});
+
 	it('REJECTS an obs: argument with an "operates on tasks, not observations" error', () => {
 		expect(() => resolveTaskOnlyArg('obs:bar')).toThrow(SlugResolutionError);
 		try {
@@ -509,6 +539,26 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 		});
 	});
 
+	it('EXPAND: builds and parses `work/spec-<slug>` beside `work/prd-<slug>`', () => {
+		// The new canonical `spec` type token round-trips exactly like the legacy
+		// `prd` token, and both forms stay distinct.
+		const spec = workBranchRef('spec', 'foo');
+		expect(spec).toBe('work/spec-foo');
+		expect(parseWorkBranchRef('work/spec-foo')).toEqual({
+			namespace: 'spec',
+			slug: 'foo',
+		});
+		expect(parseWorkBranchRef('work/prd-foo')).toEqual({
+			namespace: 'prd',
+			slug: 'foo',
+		});
+		expect(parseWorkBranchRef('work/intake-spec-foo')).toEqual({
+			producer: 'intake',
+			namespace: 'spec',
+			slug: 'foo',
+		});
+	});
+
 	it('a slug that literally starts with a type/producer token is NOT mis-parsed', () => {
 		// The `slug` group must never swallow the `task-`/`intake-` prefixes.
 		expect(parseWorkBranchRef('work/task-intake-task-foo')).toEqual({
@@ -533,7 +583,7 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 	});
 
 	it('workBranchRef and parseWorkBranchRef are inverses (no second derivation)', () => {
-		for (const ns of ['task', 'prd'] as const) {
+		for (const ns of ['task', 'spec', 'prd'] as const) {
 			for (const producer of [undefined, 'intake'] as const) {
 				const ref = workBranchRef(ns, 'my-slug', {producer});
 				const parsed = parseWorkBranchRef(ref);

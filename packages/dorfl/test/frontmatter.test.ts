@@ -517,3 +517,55 @@ describe('parseFrontmatter — the SHIPPED templates parse coherently (parser �
 		});
 	}
 });
+
+describe('parseFrontmatter — spec/prd EXPAND (prd→spec cutover: both forms accepted)', () => {
+	it('populates BOTH fm.spec and fm.prd from the legacy `prd:` key', () => {
+		const md = ['---', 'slug: t', 'prd: my-spec', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.prd).toBe('my-spec');
+		expect(fm.spec).toBe('my-spec');
+	});
+
+	it('populates BOTH fm.spec and fm.prd from the new `spec:` key', () => {
+		const md = ['---', 'slug: t', 'spec: my-spec', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.spec).toBe('my-spec');
+		expect(fm.prd).toBe('my-spec');
+	});
+
+	it('leaves BOTH undefined when neither key is present', () => {
+		const md = ['---', 'slug: t', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.spec).toBeUndefined();
+		expect(fm.prd).toBeUndefined();
+	});
+
+	it('lets the canonical `spec:` key WIN when both keys are present', () => {
+		// Either ordering: the canonical `spec:` value populates both fields.
+		const prdFirst = ['---', 'prd: legacy', 'spec: canonical', '---'].join(
+			'\n',
+		);
+		const specFirst = ['---', 'spec: canonical', 'prd: legacy', '---'].join(
+			'\n',
+		);
+		for (const md of [prdFirst, specFirst]) {
+			const fm = parseFrontmatter(md);
+			expect(fm.spec).toBe('canonical');
+			expect(fm.prd).toBe('canonical');
+		}
+	});
+
+	it('an empty `prd:` does NOT clobber a value already read from `spec:`', () => {
+		const md = ['---', 'spec: canonical', 'prd:', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.spec).toBe('canonical');
+		expect(fm.prd).toBe('canonical');
+	});
+
+	it('an empty `spec:` does NOT clobber a value already read from `prd:`', () => {
+		const md = ['---', 'prd: legacy', 'spec:', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect(fm.spec).toBe('legacy');
+		expect(fm.prd).toBe('legacy');
+	});
+});
