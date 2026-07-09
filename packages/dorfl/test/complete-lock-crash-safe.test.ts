@@ -371,8 +371,8 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		// A prd: tasked (tasked, resting) OR the prd regime's terminal
 		// (prds/dropped). A task-drop and a prd-drop sharing a slug never collide.
 		expect(terminalMainPaths('prd', 'p')).toEqual([
-			'work/prds/tasked/p.md',
-			'work/prds/dropped/p.md',
+			'work/specs/tasked/p.md',
+			'work/specs/dropped/p.md',
 		]);
 		// An observation has NO durable terminal — it leaves by deletion.
 		expect(terminalMainPaths('observation', 'o')).toEqual([]);

@@ -952,8 +952,8 @@ export async function promoteFromPrePrd(
 		return {moved: false, reasonNotMoved: message};
 	}
 	try {
-		const sourceRel = workItemRel('prds-proposed', `${slug}.md`);
-		const destRel = workItemRel('prds-ready', `${slug}.md`);
+		const sourceRel = workItemRel('specs-proposed', `${slug}.md`);
+		const destRel = workItemRel('specs-ready', `${slug}.md`);
 
 		const hasSource =
 			(
@@ -973,16 +973,16 @@ export async function promoteFromPrePrd(
 			).status === 0;
 		if (!hasSource && !hasDest) {
 			const message =
-				`'${slug}' is not staged in ${workFolderPrefix('prds-proposed')} on ${arbiter}/main ` +
-				`(and not already in ${workFolderPrefix('prds-ready')}) — nothing to promote ` +
+				`'${slug}' is not staged in ${workFolderPrefix('specs-proposed')} on ${arbiter}/main ` +
+				`(and not already in ${workFolderPrefix('specs-ready')}) — nothing to promote ` +
 				'(wrong slug, or never staged?).';
 			note(message);
 			return {moved: false, reasonNotMoved: message};
 		}
 
 		const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
-			'prds-proposed',
-		)} -> ${workFolderPrefix('prds-ready')}`;
+			'specs-proposed',
+		)} -> ${workFolderPrefix('specs-ready')}`;
 		const moved = await runTreelessLedgerMove({
 			cwd,
 			slug,
@@ -1087,7 +1087,7 @@ export async function listPromotable(
 		env,
 	);
 	const prds = await listMarkdownSlugsInTree(
-		`${arbiter}/main:${workFolderRel('prds-proposed')}`,
+		`${arbiter}/main:${workFolderRel('specs-proposed')}`,
 		cwd,
 		env,
 	);

@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 /**
- * Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter), optionally stamped
+ * Seed a `work/specs/ready/<slug>.md` (committed onto the arbiter), optionally stamped
  * with an `originTrust:` provenance (`trusted` | `untrusted`). The tasker reads
  * this stamp from the held PRD and feeds it as the trust signal into the
  * runner-deterministic placement resolver.
@@ -55,7 +55,7 @@ function seedPrd(
 	slug: string,
 	originTrust?: 'trusted' | 'untrusted',
 ): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const fm = [
 		'---',

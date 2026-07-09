@@ -168,7 +168,7 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<slug>');
 	});
 
-	it('substitutes the source prd path (work/prds/ready/<prd>.md)', () => {
+	it('substitutes the source prd path (work/specs/ready/<prd>.md)', () => {
 		const emitted = wrapper('example', 'dorfl');
 		expect(emitted).toContain('dorfl');
 		expect(emitted).not.toContain('<prd>');
@@ -1015,14 +1015,14 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 	/** Write a prd file with the given testFirst marker (or none). */
 	function seedPrd(
 		root: string,
-		folder: 'prds-ready' | 'prds-tasked',
+		folder: 'specs-ready' | 'specs-tasked',
 		slug: string,
 		testFirst: boolean | undefined,
 	): void {
 		const dir = join(
 			root,
 			'work',
-			folder === 'prds-ready' ? 'prds/ready' : 'prds/tasked',
+			folder === 'specs-ready' ? 'specs/ready' : 'specs/tasked',
 		);
 		mkdirSync(dir, {recursive: true});
 		const body = ['---', `slug: ${slug}`];
@@ -1050,7 +1050,7 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 	}
 
 	it('loads the prd at prds/ready and applies its override over the repo policy', () => {
-		seedPrd(scratch.root, 'prds-ready', 'my-prd', true);
+		seedPrd(scratch.root, 'specs-ready', 'my-prd', true);
 		const content = taskContent('t', 'my-prd', undefined);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
@@ -1061,7 +1061,7 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 	});
 
 	it('falls back to prds/tasked when the prd is not in prds/ready', () => {
-		seedPrd(scratch.root, 'prds-tasked', 'tasked-prd', true);
+		seedPrd(scratch.root, 'specs-tasked', 'tasked-prd', true);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
@@ -1071,7 +1071,7 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 	});
 
 	it('a task override beats the prd override (per-task wins)', () => {
-		seedPrd(scratch.root, 'prds-ready', 'my-prd', true);
+		seedPrd(scratch.root, 'specs-ready', 'my-prd', true);
 		const out = resolvePromptGuidanceForItem({
 			cwd: scratch.root,
 			repoResolved: {testFirst: false},
@@ -1125,7 +1125,7 @@ describe('renderPrompt — per-item override is honoured at the assembly seam', 
 		t.push('---', '', '## Prompt', '', '> TASK-BODY', '');
 		writeFileSync(join(taskDir, `${slug}.md`), t.join('\n'));
 		if (opts.prd !== undefined) {
-			const prdDir = join(root, 'work', 'prds', 'ready');
+			const prdDir = join(root, 'work', 'specs', 'ready');
 			mkdirSync(prdDir, {recursive: true});
 			const b = ['---', `slug: ${opts.prd}`];
 			if (opts.prdTestFirst !== undefined) {

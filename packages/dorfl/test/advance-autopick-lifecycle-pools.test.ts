@@ -55,7 +55,7 @@ function seedTask(
 }
 
 function seedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');

@@ -36,7 +36,7 @@ export const APPLY_LIFECYCLE_FOLDERS: Record<
 	readonly WorkFolderKey[]
 > = {
 	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
-	prd: ['prds-proposed', 'prds-ready', 'prds-tasked'],
+	prd: ['specs-proposed', 'specs-ready', 'specs-tasked'],
 	observation: ['observations'],
 };
 

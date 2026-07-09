@@ -425,7 +425,7 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		// A `prd` verdict mints into prds/proposed (NOT tasks/ready) — the verdict
 		// chose the artifact type.
 		expect(
-			pathOnArbiterMain(seeded.repo, 'work/prds/proposed/prdprom.md'),
+			pathOnArbiterMain(seeded.repo, 'work/specs/proposed/prdprom.md'),
 		).toBe(true);
 		expect(pathOnArbiterMain(seeded.repo, 'work/tasks/ready/prdprom.md')).toBe(
 			false,

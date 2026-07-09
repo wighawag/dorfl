@@ -14,20 +14,18 @@ import {
 	TASK_RESOLUTION_FOLDERS,
 	TASK_LIFECYCLE_FOLDERS,
 	LEDGER_STATUS_FOLDERS,
-	PRD_FOLDERS,
+	SPEC_FOLDERS,
 } from '../src/work-layout.js';
 
 describe('work-layout — the single source of every work/ path + folder union', () => {
-	it('the symbolic KEYS read in the new task/prd vocabulary; the VALUES are unchanged', () => {
-		// The key-vocabulary cutover task
-		// (`work-layout-keys-and-folder-union-names-to-new-vocabulary`) flips only the
-		// KEYS to the new task/prd words (`pre-backlog` -> `tasks-backlog`,
-		// `backlog` -> `tasks-ready`, `pre-prd` -> `prds-proposed`,
-		// `prd` -> `prds-ready`, `prd-tasked` -> `prds-tasked`). It is a PURE in-code
-		// symbol rename: every VALUE string below is byte-identical to before the task,
-		// so NO on-disk folder moved. The already-clean keys (`done`/`cancelled`/
-		// `prds-dropped`/`questions`/`protocol` and the lock-ref-state keys
-		// `in-progress`/`needs-attention`) are unchanged.
+	it('the symbolic KEYS read in the task/spec vocabulary; the spec VALUES are under work/specs', () => {
+		// The prd→spec cutover migrate-batch 1
+		// (`rename-spec-work-layout-and-folders`) flips the spec-regime KEYS to the
+		// `spec` words (`prds-proposed` -> `specs-proposed`, `prds-ready` ->
+		// `specs-ready`, `prds-tasked` -> `specs-tasked`, `prds-dropped` ->
+		// `specs-dropped`) AND their VALUES (`prds/*` -> `specs/*`) in lockstep with the
+		// on-disk `git mv work/prds/* -> work/specs/*`. The task-regime keys/values and
+		// the lock-ref-state keys (`in-progress`/`needs-attention`) are unchanged.
 		expect(WORK_ROOT).toBe('work');
 		expect(WORK_FOLDER_NAME).toEqual({
 			'tasks-backlog': 'tasks/backlog',
@@ -36,10 +34,10 @@ describe('work-layout — the single source of every work/ path + folder union',
 			'needs-attention': 'needs-attention',
 			done: 'tasks/done',
 			cancelled: 'tasks/cancelled',
-			'prds-proposed': 'prds/proposed',
-			'prds-ready': 'prds/ready',
-			'prds-tasked': 'prds/tasked',
-			'prds-dropped': 'prds/dropped',
+			'specs-proposed': 'specs/proposed',
+			'specs-ready': 'specs/ready',
+			'specs-tasked': 'specs/tasked',
+			'specs-dropped': 'specs/dropped',
 			observations: 'notes/observations',
 			ideas: 'notes/ideas',
 			findings: 'notes/findings',
@@ -48,28 +46,28 @@ describe('work-layout — the single source of every work/ path + folder union',
 		});
 	});
 
-	it('the prd regime resolves to staging / pool / resting, and the terminals are per-regime', () => {
-		// The prd lifecycle: proposed (staging) -> ready (pool) -> tasked (resting).
-		expect(workFolderName('prds-proposed')).toBe('prds/proposed');
-		expect(workFolderName('prds-ready')).toBe('prds/ready');
-		expect(workFolderName('prds-tasked')).toBe('prds/tasked');
+	it('the spec regime resolves to staging / pool / resting, and the terminals are per-regime', () => {
+		// The spec lifecycle: proposed (staging) -> ready (pool) -> tasked (resting).
+		expect(workFolderName('specs-proposed')).toBe('specs/proposed');
+		expect(workFolderName('specs-ready')).toBe('specs/ready');
+		expect(workFolderName('specs-tasked')).toBe('specs/tasked');
 		// The two PER-REGIME won't-proceed terminals (the slug-collision fix): a
-		// dropped task and a dropped prd sharing a slug resolve to DIFFERENT paths.
+		// dropped task and a dropped spec sharing a slug resolve to DIFFERENT paths.
 		expect(workFolderName('cancelled')).toBe('tasks/cancelled');
-		expect(workFolderName('prds-dropped')).toBe('prds/dropped');
+		expect(workFolderName('specs-dropped')).toBe('specs/dropped');
 	});
 
 	it('workFolderName resolves a symbolic key to its on-disk name', () => {
 		expect(workFolderName('tasks-ready')).toBe('tasks/ready');
-		expect(workFolderName('prds-tasked')).toBe('prds/tasked');
+		expect(workFolderName('specs-tasked')).toBe('specs/tasked');
 	});
 
 	it('workFolderPath builds <root>/work/<folder>', () => {
 		expect(workFolderPath('/repo', 'tasks-ready')).toBe(
 			join('/repo', 'work', 'tasks', 'ready'),
 		);
-		expect(workFolderPath('/repo', 'prds-ready')).toBe(
-			join('/repo', 'work', 'prds', 'ready'),
+		expect(workFolderPath('/repo', 'specs-ready')).toBe(
+			join('/repo', 'work', 'specs', 'ready'),
 		);
 	});
 
@@ -133,6 +131,6 @@ describe('work-layout — the single source of every work/ path + folder union',
 			'done',
 			'cancelled',
 		]);
-		expect([...PRD_FOLDERS]).toEqual(['prds-ready', 'prds-tasked']);
+		expect([...SPEC_FOLDERS]).toEqual(['specs-ready', 'specs-tasked']);
 	});
 });

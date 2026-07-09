@@ -8,7 +8,7 @@ import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
 
 /**
  * A `needsAnswers:true` PRD that drifted AFTER it was tasked rests IN PLACE in
- * `work/prds/tasked/` (WORK-CONTRACT "A PRD that has drifted AFTER it was
+ * `work/specs/tasked/` (WORK-CONTRACT "A PRD that has drifted AFTER it was
  * TASKED"). Before this fix the lifecycle GATHER read only `prds/ready/` (pool) +
  * `prds/proposed/` (staging), so a tasked PRD's ANSWERED sidecar was enumerated
  * by NO pool and the human's answer was STRANDED (apply never ran on it).
@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 function seedTaskedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
-	const dir = join(repo, 'work', 'prds', 'tasked');
+	const dir = join(repo, 'work', 'specs', 'tasked');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.needsAnswers) lines.push('needsAnswers: true');

@@ -681,7 +681,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const itemPath = seedAnsweredPromotePrd(seeded.repo, 'prdprom');
 		const sidecarPath = 'work/questions/observation-prdprom.md';
-		const prdPath = 'work/prds/proposed/prdprom.md';
+		const prdPath = 'work/specs/proposed/prdprom.md';
 		gitIn(['add', '-A'], seeded.repo);
 		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
 		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
@@ -740,7 +740,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 	it('a same-slug CAS race on the PRD target leaves the observation INTACT for a retry (the loser backs off)', async () => {
 		// Pre-create the PRD target on the arbiter so the promote always loses the CAS.
 		const seeded = seedRepoWithArbiter(scratch.root, []);
-		const dest = join(seeded.repo, 'work', 'prds', 'proposed');
+		const dest = join(seeded.repo, 'work', 'specs', 'proposed');
 		mkdirSync(dest, {recursive: true});
 		writeFileSync(join(dest, 'taken.md'), '---\ntitle: taken\n---\n\ntaken.\n');
 		gitIn(['add', '-A'], seeded.repo);
@@ -812,7 +812,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 		});
 		expect(result.outcome).toBe('promoted');
 		const prdBody = gitIn(
-			['show', 'arbiter/main:work/prds/proposed/prdnoq.md'],
+			['show', 'arbiter/main:work/specs/proposed/prdnoq.md'],
 			seeded.repo,
 		);
 		expect(prdBody).toContain(MECHANISM_SIGNAL);

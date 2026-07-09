@@ -55,7 +55,7 @@ function seedTask(
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Seed a `work/prds/ready/<slug>.md` PRD with the given gate frontmatter. */
+/** Seed a `work/specs/ready/<slug>.md` PRD with the given gate frontmatter. */
 function seedPrd(
 	slug: string,
 	fm: {
@@ -64,7 +64,7 @@ function seedPrd(
 		taskedAfter?: string[];
 	} = {},
 ): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');

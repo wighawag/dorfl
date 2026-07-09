@@ -33,8 +33,8 @@ import {workFolderPath, isWorkItemFile} from './work-layout.js';
 const PARTICIPATING_POOLS = [
 	'tasks-ready',
 	'tasks-backlog',
-	'prds-proposed',
-	'prds-ready',
+	'specs-proposed',
+	'specs-ready',
 	'observations',
 	'questions',
 ] as const;

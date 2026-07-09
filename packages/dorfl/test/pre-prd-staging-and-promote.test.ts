@@ -33,19 +33,19 @@ import type {
  * `intake`'s `prd` dispatcher end-to-end against a `--bare file://` arbiter
  * (house pattern via `test/helpers/gitRepo.ts`) and proves:
  *
- *   (a) an `intake`-authored PRD lands STAGED in `work/prds/proposed/`, NOT in
- *       `work/prds/ready/`, by default (the built-in floor) AND under
+ *   (a) an `intake`-authored PRD lands STAGED in `work/specs/proposed/`, NOT in
+ *       `work/specs/ready/`, by default (the built-in floor) AND under
  *       `originTrust: untrusted` (the untrusted-origin force) even when the
  *       repo configures `prdsLandIn: 'ready'`;
- *   (b) `work/prds/ready/` STILL means the auto-slice POOL: the pool reader
- *       (`createLocalLedgerReadStrategy().resolvePrdPool`) reads `work/prds/ready/`
+ *   (b) `work/specs/ready/` STILL means the auto-slice POOL: the pool reader
+ *       (`createLocalLedgerReadStrategy().resolvePrdPool`) reads `work/specs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
  *       tasking-eligibility gate refuses a staged slug;
  *   (c) the runner-owned promotion (`promoteFromPrePrd`) moves the staged
  *       PRD `pre-prd/ \u2192 prd/` on the arbiter and the same slug becomes
  *       auto-sliceable. There is no agent-facing path that performs the
  *       promotion (asserted structurally: no agent surface imports it);
- *   (d) the `taskedAfter` (against `work/prds/tasked/`) and `blockedBy`
+ *   (d) the `taskedAfter` (against `work/specs/tasked/`) and `blockedBy`
  *       (against `work/tasks/done/`) resolution is UNCHANGED \u2014 PRD US #14.
  */
 
@@ -163,7 +163,7 @@ function landIntakeBranchOnMain(repo: string, slug: string): void {
 }
 
 describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not prd/', () => {
-	it('the built-in floor stages a PRD: a default intake \u2192 work/prds/proposed/<slug>.md (the pool is untouched)', async () => {
+	it('the built-in floor stages a PRD: a default intake \u2192 work/specs/proposed/<slug>.md (the pool is untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -174,12 +174,12 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('prd-written');
-		expect(result.emitted).toBe('work/prds/proposed/shiny-new-vision.md');
+		expect(result.emitted).toBe('work/specs/proposed/shiny-new-vision.md');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
-		expect(onArbiterMain(repo, 'work/prds/proposed/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/proposed/shiny-new-vision.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(repo, 'work/prds/ready/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/ready/shiny-new-vision.md')).toBe(
 			false,
 		);
 	});
@@ -199,7 +199,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('prd-written');
-		expect(result.emitted).toBe('work/prds/proposed/shiny-new-vision.md');
+		expect(result.emitted).toBe('work/specs/proposed/shiny-new-vision.md');
 	});
 
 	it('the EXPLICIT operator flag wins over the untrusted-origin force (operator is present; CLI always wins)', async () => {
@@ -218,7 +218,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('prd-written');
-		expect(result.emitted).toBe('work/prds/ready/shiny-new-vision.md');
+		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
 	});
 
 	it('prdsLandIn: ready (configured default, trusted origin) lands the PRD in the pool', async () => {
@@ -234,11 +234,11 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('prd-written');
-		expect(result.emitted).toBe('work/prds/ready/shiny-new-vision.md');
+		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
 	});
 });
 
-describe('STEP A (PRD) \u2014 work/prds/ready/ STILL means the auto-slice POOL (readers unchanged)', () => {
+describe('STEP A (PRD) \u2014 work/specs/ready/ STILL means the auto-slice POOL (readers unchanged)', () => {
 	it('a staged PRD is NOT in the auto-slice pool: the pool reader sees nothing, the tasking-eligibility gate refuses', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
@@ -253,7 +253,7 @@ describe('STEP A (PRD) \u2014 work/prds/ready/ STILL means the auto-slice POOL (
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 
 		// THE POOL READER (`createLocalLedgerReadStrategy().resolvePrdPool`) reads
-		// `work/prds/ready/` BYTE-FOR-BYTE UNCHANGED: a staged PRD is NOT in the pool.
+		// `work/specs/ready/` BYTE-FOR-BYTE UNCHANGED: a staged PRD is NOT in the pool.
 		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
 		expect(pool.prds.map((p) => p.slug)).not.toContain('shiny-new-vision');
 
@@ -267,11 +267,11 @@ describe('STEP A (PRD) \u2014 work/prds/ready/ STILL means the auto-slice POOL (
 			taskedSlugs: new Set(),
 		});
 		// The gate itself is open (no axes block it); the POSITION (residence
-		// outside `work/prds/ready/`) is what keeps the staged PRD out of the candidate
+		// outside `work/specs/ready/`) is what keeps the staged PRD out of the candidate
 		// pool the selector consults. So we ALSO assert the file is not in
-		// `work/prds/ready/` on main (the structural fence).
+		// `work/specs/ready/` on main (the structural fence).
 		expect(eligibility.taskable).toBe(true); // axes-only, sanity
-		expect(onArbiterMain(repo, 'work/prds/ready/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/ready/shiny-new-vision.md')).toBe(
 			false,
 		);
 	});
@@ -292,10 +292,10 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
 
 		// Precondition: staged, NOT in the pool.
-		expect(onArbiterMain(repo, 'work/prds/proposed/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/proposed/shiny-new-vision.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(repo, 'work/prds/ready/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/ready/shiny-new-vision.md')).toBe(
 			false,
 		);
 
@@ -308,14 +308,14 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		});
 		expect(promoted.moved).toBe(true);
 		expect(promoted.commitMessage).toMatch(
-			/promote work\/prds\/proposed\/ -> work\/prds\/ready\//,
+			/promote work\/specs\/proposed\/ -> work\/specs\/ready\//,
 		);
 
 		// Postcondition: in the pool, no longer staged.
-		expect(onArbiterMain(repo, 'work/prds/proposed/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/proposed/shiny-new-vision.md')).toBe(
 			false,
 		);
-		expect(onArbiterMain(repo, 'work/prds/ready/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/ready/shiny-new-vision.md')).toBe(
 			true,
 		);
 
@@ -371,40 +371,40 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		// branch) OR a `moved: false` with a clean reason. The DURABLE state matters,
 		// not the second-call return.
 		expect(typeof second.moved).toBe('boolean');
-		expect(onArbiterMain(repo, 'work/prds/ready/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/ready/shiny-new-vision.md')).toBe(
 			true,
 		);
-		expect(onArbiterMain(repo, 'work/prds/proposed/shiny-new-vision.md')).toBe(
+		expect(onArbiterMain(repo, 'work/specs/proposed/shiny-new-vision.md')).toBe(
 			false,
 		);
 	});
 });
 
 describe('STEP A (PRD) \u2014 taskedAfter (prd-tasked/) and blockedBy (done/) resolution is UNCHANGED (PRD US #14)', () => {
-	it('taskedAfter still resolves against work/prds/tasked/ residence \u2014 not work/prds/proposed/, not work/prds/ready/', () => {
+	it('taskedAfter still resolves against work/specs/tasked/ residence \u2014 not work/specs/proposed/, not work/specs/ready/', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// Seed an already-tasked PRD into work/prds/tasked/, AND a counterpart in
+		// Seed an already-tasked PRD into work/specs/tasked/, AND a counterpart in
 		// the STAGING pre-prd/ folder. `taskedAfter` resolution must read
 		// `prd-tasked/` for its satisfied set \u2014 the staging folder must not
 		// satisfy a `taskedAfter` dependency.
-		mkdirSync(join(repo, 'work', 'prds', 'tasked'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'specs', 'tasked'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'prds', 'tasked', 'already-tasked.md'),
+			join(repo, 'work', 'specs', 'tasked', 'already-tasked.md'),
 			'---\nslug: already-tasked\n---\n\nbody\n',
 		);
-		mkdirSync(join(repo, 'work', 'prds', 'proposed'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'specs', 'proposed'), {recursive: true});
 		writeFileSync(
-			join(repo, 'work', 'prds', 'proposed', 'staged-not-tasked.md'),
+			join(repo, 'work', 'specs', 'proposed', 'staged-not-tasked.md'),
 			'---\nslug: staged-not-tasked\n---\n\nbody\n',
 		);
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'seed prd-tasked + pre-prd'], repo);
 		gitIn(['push', '-q', ARBITER, 'main'], repo);
 
-		// The pool reader reads `work/prds/ready/` (the auto-slice pool, unchanged).
+		// The pool reader reads `work/specs/ready/` (the auto-slice pool, unchanged).
 		const pool = ledgerRead.resolvePrdPool({repoPath: repo});
-		// `taskedSlugs` is RESIDENCE in `work/prds/tasked/` (mirror of `done/` for
-		// blockedBy). The staged PRD in `work/prds/proposed/` must NOT appear here.
+		// `taskedSlugs` is RESIDENCE in `work/specs/tasked/` (mirror of `done/` for
+		// blockedBy). The staged PRD in `work/specs/proposed/` must NOT appear here.
 		expect(pool.taskedSlugs.has('already-tasked')).toBe(true);
 		expect(pool.taskedSlugs.has('staged-not-tasked')).toBe(false);
 
@@ -420,7 +420,7 @@ describe('STEP A (PRD) \u2014 taskedAfter (prd-tasked/) and blockedBy (done/) re
 		expect(okIfPriorTasked.taskedAfter.satisfied).toBe(true);
 
 		// `taskedAfter: [staged-not-tasked]` is NOT satisfied \u2014 a STAGED PRD
-		// (residence in `work/prds/proposed/`) does NOT count as already-tasked.
+		// (residence in `work/specs/proposed/`) does NOT count as already-tasked.
 		const blockedByStaged = resolveTaskingEligibility({
 			humanOnly: false,
 			needsAnswers: false,

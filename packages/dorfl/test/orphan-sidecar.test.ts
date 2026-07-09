@@ -99,7 +99,7 @@ describe('sweepOrphanSidecars — reap a sidecar whose source is gone, keep the 
 		const repo = seedRepo();
 		// live: source present across DIFFERENT lifecycle folders
 		commitSource(repo, 'tasks/ready', 'task-live');
-		commitSource(repo, 'prds/proposed', 'prd-live');
+		commitSource(repo, 'specs/proposed', 'prd-live');
 		commitSource(repo, 'notes/observations', 'obs-live');
 		commitSidecar(repo, 'task:task-live');
 		commitSidecar(repo, 'prd:prd-live');

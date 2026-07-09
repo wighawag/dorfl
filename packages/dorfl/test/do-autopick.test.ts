@@ -55,7 +55,7 @@ function seedDone(slug: string): void {
 	writeFileSync(join(dir, `${slug}.md`), `---\nslug: ${slug}\n---\n`);
 }
 
-/** Seed a `work/prds/ready/<slug>.md` PRD with the given gate frontmatter. */
+/** Seed a `work/specs/ready/<slug>.md` PRD with the given gate frontmatter. */
 function seedPrd(
 	slug: string,
 	fm: {
@@ -64,7 +64,7 @@ function seedPrd(
 		taskedAfter?: string[];
 	} = {},
 ): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -75,16 +75,16 @@ function seedPrd(
 }
 
 /**
- * Seed a TASKED PRD as RESIDENCE in `work/prds/tasked/` (the source of truth for
+ * Seed a TASKED PRD as RESIDENCE in `work/specs/tasked/` (the source of truth for
  * tasked-ness, task `prd-sliced-folder-step-a`) — it has left the to-task pool
- * (`work/prds/ready/`) and now resolves another PRD's `taskedAfter` by FOLDER residence
+ * (`work/specs/ready/`) and now resolves another PRD's `taskedAfter` by FOLDER residence
  * (the `tasked:` marker was removed in `remove-sliced-marker-step-b`).
  */
 function seedTaskedPrd(slug: string): void {
-	const fromDir = join(repo, 'work', 'prds', 'ready');
+	const fromDir = join(repo, 'work', 'specs', 'ready');
 	const from = join(fromDir, `${slug}.md`);
 	rmSync(from, {force: true});
-	const dir = join(repo, 'work', 'prds', 'tasked');
+	const dir = join(repo, 'work', 'specs', 'tasked');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -323,7 +323,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
 		expect(blocked.args).toEqual(['prd:alpha']);
 
-		// Move alpha into `work/prds/tasked/` (the source of truth for tasked-ness) ⇒
+		// Move alpha into `work/specs/tasked/` (the source of truth for tasked-ness) ⇒
 		// beta's taskedAfter is satisfied (resolved against FOLDER residence) and beta
 		// joins the pool. alpha itself has LEFT the to-task pool (it now rests in
 		// prd-tasked/), so only beta is selectable.

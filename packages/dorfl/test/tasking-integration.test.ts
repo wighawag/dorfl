@@ -39,9 +39,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter). */
+/** Seed a `work/specs/ready/<slug>.md` (committed onto the arbiter). */
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -63,7 +63,7 @@ function seedPrd(repo: string, slug: string): void {
 }
 
 /**
- * Seed a `work/prds/ready/<slug>.md` STAMPED with origin-trust provenance (task
+ * Seed a `work/specs/ready/<slug>.md` STAMPED with origin-trust provenance (task
  * `untrusted-origin-forces-build-propose`) — an intake-born prd whose stamp the
  * tasker must PROPAGATE onto every emitted task.
  */
@@ -72,7 +72,7 @@ function seedPrdWithOrigin(
 	slug: string,
 	originTrust: 'trusted' | 'untrusted',
 ): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -169,12 +169,12 @@ describe('do prd: output through performIntegration — --merge lands on main', 
 		// commit). The prd now rests in prd-tasked/ (the source of truth for
 		// tasked-ness — residence, no marker), NOT back in prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		const prd = run(
 			'git',
-			['show', `${ARBITER}/main:work/prds/tasked/it.md`],
+			['show', `${ARBITER}/main:work/specs/tasked/it.md`],
 			repo,
 			{env: gitEnv()},
 		).stdout;
@@ -227,8 +227,8 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		// in prd/ on main (the lock is a ref now — it never moves the body; the PR
 		// carries the prd → prd-tasked move). NO tasking/ marker.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The OUTPUT never advanced main: the lock is a hidden ref (not a main commit),
 		// and propose does not land the tasks — main is still the seed commit.
@@ -238,10 +238,10 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(
 			onArbiterBranch(repo, 'work/prd-it', 'work/tasks/backlog/child.md'),
 		).toBe(true);
-		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prds/tasked/it.md')).toBe(
-			true,
-		);
-		expect(onArbiterBranch(repo, 'work/prd-it', 'work/prds/ready/it.md')).toBe(
+		expect(
+			onArbiterBranch(repo, 'work/prd-it', 'work/specs/tasked/it.md'),
+		).toBe(true);
+		expect(onArbiterBranch(repo, 'work/prd-it', 'work/specs/ready/it.md')).toBe(
 			false,
 		);
 

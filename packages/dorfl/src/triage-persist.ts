@@ -334,7 +334,7 @@ export async function promoteObservation(
 	// promotes to `ready/`. Both still go through the SAME createItemThroughCas
 	// writer below — only the destination folder + body shape differ.
 	const newItemPath = workItemRel(
-		artifact === 'prd' ? 'prds-proposed' : 'tasks-ready',
+		artifact === 'prd' ? 'specs-proposed' : 'tasks-ready',
 		`${newSlug}.md`,
 	);
 	const by = options.by || resolveBy(cwd, env);

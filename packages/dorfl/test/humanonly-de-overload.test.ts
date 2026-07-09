@@ -233,7 +233,7 @@ function task(frontmatter: Record<string, string>): string {
 }
 
 function seedPrdRaw(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),

@@ -71,7 +71,7 @@ describe('isParticipatingRepo', () => {
 	});
 
 	it('is true off a proposed prd alone', () => {
-		expect(isParticipatingRepo(seedPool('e2', 'prds/proposed', 'p.md'))).toBe(
+		expect(isParticipatingRepo(seedPool('e2', 'specs/proposed', 'p.md'))).toBe(
 			true,
 		);
 	});

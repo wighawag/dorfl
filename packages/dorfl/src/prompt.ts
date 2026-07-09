@@ -690,8 +690,8 @@ export function resolveItemPromptGuidance(
  */
 export function findPrdPath(cwd: string, prdSlug: string): string | undefined {
 	const candidates = [
-		workItemPath(cwd, 'prds-ready', prdSlug),
-		workItemPath(cwd, 'prds-tasked', prdSlug),
+		workItemPath(cwd, 'specs-ready', prdSlug),
+		workItemPath(cwd, 'specs-tasked', prdSlug),
 	];
 	for (const path of candidates) {
 		if (existsSync(path)) {

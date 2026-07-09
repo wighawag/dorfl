@@ -47,7 +47,7 @@ function stageTask(repo: string, slug: string): void {
 	stageStaged(repo, 'pre-backlog', slug);
 }
 
-/** Stage a PRD file in `work/prds/proposed/` on the arbiter. */
+/** Stage a PRD file in `work/specs/proposed/` on the arbiter. */
 function stagePrd(repo: string, slug: string): void {
 	stageStaged(repo, 'pre-prd', slug);
 }
@@ -206,11 +206,11 @@ describe('promote <item> — admits a staged item into its pool', () => {
 	it('promote prd:<slug> moves pre-prd/ -> prd/ on the arbiter (auto-sliceable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stagePrd(repo, 'vision');
-		expect(onArbiterMain(repo, 'work/prds/proposed/vision.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(true);
 		const {out} = await runPromote(repo, ['prd:vision']);
 		expect(out).toMatch(/Promoted prd 'vision' into the pool/);
-		expect(onArbiterMain(repo, 'work/prds/ready/vision.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/proposed/vision.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/specs/ready/vision.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(false);
 	});
 });
 

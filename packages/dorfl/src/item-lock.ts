@@ -883,8 +883,8 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 			return [workItemRel('done', file), workItemRel('cancelled', file)];
 		case 'prd':
 			return [
-				workItemRel('prds-tasked', file),
-				workItemRel('prds-dropped', file),
+				workItemRel('specs-tasked', file),
+				workItemRel('specs-dropped', file),
 			];
 		case 'observation':
 			return [];

@@ -3494,7 +3494,7 @@ export function buildProgram(): Command {
 			}
 			const dest =
 				namespace === 'prd'
-					? workFolderPrefix('prds-ready')
+					? workFolderPrefix('specs-ready')
 					: workFolderPrefix('tasks-ready');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${

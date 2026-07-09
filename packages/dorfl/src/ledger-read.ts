@@ -4,7 +4,7 @@ import {parseFrontmatter} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
 import {
 	type WorkFolderKey,
-	type PrdFolder,
+	type SpecFolder,
 	workFolderPath,
 	workFolderRel,
 	isWorkItemFile,
@@ -445,7 +445,7 @@ function readLocalTaskStaging(repoPath: string): LedgerReadyItem[] {
  * the SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns.
  */
 function readLocalPrdStaging(repoPath: string): LedgerPrdItem[] {
-	return readLocalPrdFolder(repoPath, 'prds-proposed');
+	return readLocalPrdFolder(repoPath, 'specs-proposed');
 }
 
 /**
@@ -455,13 +455,13 @@ function readLocalPrdStaging(repoPath: string): LedgerPrdItem[] {
  * `prds/tasked/` — so its answered sidecar is never stranded.
  */
 function readLocalPrdTasked(repoPath: string): LedgerPrdItem[] {
-	return readLocalPrdFolder(repoPath, 'prds-tasked');
+	return readLocalPrdFolder(repoPath, 'specs-tasked');
 }
 
 /** Shared body for the local prd-FOLDER readers (proposed/tasked) — same item shape. */
 function readLocalPrdFolder(
 	repoPath: string,
-	folder: 'prds-proposed' | 'prds-tasked',
+	folder: 'specs-proposed' | 'specs-tasked',
 ): LedgerPrdItem[] {
 	const dir = workFolderPath(repoPath, folder);
 	const prds: LedgerPrdItem[] = [];
@@ -528,7 +528,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
  */
 function findPrdFileBySlug(
 	repoPath: string,
-	folder: PrdFolder,
+	folder: SpecFolder,
 	slug: string,
 ): string | undefined {
 	const dir = workFolderPath(repoPath, folder);
@@ -554,7 +554,7 @@ function findPrdFileBySlug(
  * matches `tasking.ts`'s `readTaskedSlugs`. Missing folders read as empty.
  */
 function readLocalPrdPool(repoPath: string): LocalPrdPool {
-	const dir = workFolderPath(repoPath, 'prds-ready');
+	const dir = workFolderPath(repoPath, 'specs-ready');
 	const prds: LedgerPrdItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
@@ -574,7 +574,7 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 	// `remove-sliced-marker-step-b`), mirroring tasking.ts's readTaskedSlugs. Missing
 	// folder reads as empty.
 	const taskedSlugs = new Set<string>();
-	const taskedDir = workFolderPath(repoPath, 'prds-tasked');
+	const taskedDir = workFolderPath(repoPath, 'specs-tasked');
 	for (const file of listMarkdown(taskedDir)) {
 		const content = readFileSync(join(taskedDir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -737,7 +737,7 @@ async function readPrdStagingFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdItem[]> {
-	return readPrdFolderFromTree('prds-proposed', ref, cwd, env);
+	return readPrdFolderFromTree('specs-proposed', ref, cwd, env);
 }
 
 /** Parse `<ref>:work/prds/tasked/*.md` (TASKED resting) into prd items, sorted by slug. */
@@ -746,12 +746,12 @@ async function readPrdTaskedFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdItem[]> {
-	return readPrdFolderFromTree('prds-tasked', ref, cwd, env);
+	return readPrdFolderFromTree('specs-tasked', ref, cwd, env);
 }
 
 /** Shared body for the mirror-ref prd-FOLDER readers (proposed/tasked) — same item shape. */
 async function readPrdFolderFromTree(
-	folder: 'prds-proposed' | 'prds-tasked',
+	folder: 'specs-proposed' | 'specs-tasked',
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
@@ -787,7 +787,7 @@ async function readPrdPoolFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerPrdPool> {
-	const prdBase = `${ref}:${workFolderRel('prds-ready')}`;
+	const prdBase = `${ref}:${workFolderRel('specs-ready')}`;
 	const prds: LedgerPrdItem[] = [];
 	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
 		const content = await showInTree(prdBase, file, cwd, env);
@@ -808,7 +808,7 @@ async function readPrdPoolFromTree(
 	// Tasked-ness is RESIDENCE in `work/prds/tasked/` — the FOLDER is the source of
 	// truth (the `tasked:` marker was removed in `remove-sliced-marker-step-b`),
 	// exactly as the working-tree reader resolves it.
-	const taskedBase = `${ref}:${workFolderRel('prds-tasked')}`;
+	const taskedBase = `${ref}:${workFolderRel('specs-tasked')}`;
 	const taskedSlugs = new Set<string>();
 	for (const file of await listMarkdownInTree(taskedBase, cwd, env)) {
 		const content = await showInTree(taskedBase, file, cwd, env);
@@ -869,8 +869,8 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		return {task, doneSlugs};
 	},
 	resolvePrdExistence({repoPath, slug}) {
-		const prdFile = findPrdFileBySlug(repoPath, 'prds-ready', slug);
-		const prdTaskedFile = findPrdFileBySlug(repoPath, 'prds-tasked', slug);
+		const prdFile = findPrdFileBySlug(repoPath, 'specs-ready', slug);
+		const prdTaskedFile = findPrdFileBySlug(repoPath, 'specs-tasked', slug);
 		return {
 			exists: prdFile !== undefined || prdTaskedFile !== undefined,
 			prdFile,

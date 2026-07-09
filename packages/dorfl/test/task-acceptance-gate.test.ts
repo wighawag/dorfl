@@ -49,9 +49,9 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter). */
+/** Seed a `work/specs/ready/<slug>.md` (committed onto the arbiter). */
 function seedPrd(repo: string, slug: string): void {
-	const dir = join(repo, 'work', 'prds', 'ready');
+	const dir = join(repo, 'work', 'specs', 'ready');
 	mkdirSync(dir, {recursive: true});
 	writeFileSync(
 		join(dir, `${slug}.md`),
@@ -174,8 +174,8 @@ describe('task acceptance gate — APPROVE lets the set integrate (default --mer
 		// move). The prd rests in prd-tasked/ (residence = source of truth for
 		// tasked-ness, no marker), not prd/.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 	});
 });
@@ -240,12 +240,12 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(gate.calls).toBe(1);
 		// The task-path block route is a per-item lock `active → stuck` amend now
 		// (task `cutover-...-trim-folder-sets`), NOT a folder move: the prd body STAYS
-		// in work/prds/ready/, the tasks did NOT land, and NO needs-attention/ or tasking/
+		// in work/specs/ready/, the tasks did NOT land, and NO needs-attention/ or tasking/
 		// folder file is written.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
-		expect(onArbiterMain(repo, 'work/prds/tasked/it.md')).toBe(false);
+		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
 		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
 		const entry = await readItemLock({
@@ -276,7 +276,7 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(result.outcome).toBe('needs-attention');
 		// The block route is the stuck lock; the prd body stays in prd/, no PR opened.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiterMain(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		const entry = await readItemLock({
 			item: 'prd:it',

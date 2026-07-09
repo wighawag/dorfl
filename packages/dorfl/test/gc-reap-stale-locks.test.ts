@@ -222,13 +222,13 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 			{
 				item: 'prd:b-tasked',
 				action: 'task',
-				folder: 'prds-tasked',
+				folder: 'specs-tasked',
 				entry: 'prd-b-tasked',
 			},
 			{
 				item: 'prd:b-dropped',
 				action: 'task',
-				folder: 'prds-dropped',
+				folder: 'specs-dropped',
 				entry: 'prd-b-dropped',
 			},
 		];

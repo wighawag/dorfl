@@ -14,12 +14,12 @@ import {LEDGER_STATUS_FOLDERS} from '../src/ledger-lint.js';
  * `work/dropped/` is split per regime so a dropped task and a dropped prd
  * sharing a slug never collide on one bare-slug `work/dropped/<slug>.md`:
  *   - a TASK drops to `work/tasks/cancelled/`,
- *   - a PRD (PRD) drops to `work/prds/dropped/`,
+ *   - a PRD (PRD) drops to `work/specs/dropped/`,
  *   - an OBSERVATION has NO terminal folder (notes leave by deletion).
  *
  * Pool-eligibility BY RESIDENCE: an item resting in its regime's won't-proceed
  * terminal is OUT of every pool, the SAME way `work/tasks/done/` /
- * `work/prds/tasked/` exclude — the pool readers enumerate ONLY their pool
+ * `work/specs/tasked/` exclude — the pool readers enumerate ONLY their pool
  * folders (`tasks/ready/` for tasks, `prds/ready/` for prds), so a terminal
  * file is invisible to every reader by construction; no reader re-implements the
  * rule.
@@ -57,13 +57,13 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		expect([...LEDGER_STATUS_FOLDERS]).toContain('cancelled');
 	});
 
-	it('a PRD resting in work/prds/dropped/ is OUT of the auto-slice pool (by residence, like work/prds/tasked/)', () => {
-		// A live prd in work/prds/ready/ + a SUPERSEDED prd in
-		// work/prds/dropped/. Only the live one is in the pool the auto-slicer
+	it('a PRD resting in work/specs/dropped/ is OUT of the auto-slice pool (by residence, like work/specs/tasked/)', () => {
+		// A live prd in work/specs/ready/ + a SUPERSEDED prd in
+		// work/specs/dropped/. Only the live one is in the pool the auto-slicer
 		// enumerates. The dropped prd must NEVER be auto-sliced.
-		writeMd('repo/work/prds/ready/live.md', {slug: 'live'});
+		writeMd('repo/work/specs/ready/live.md', {slug: 'live'});
 		writeMd(
-			'repo/work/prds/dropped/superseded.md',
+			'repo/work/specs/dropped/superseded.md',
 			{slug: 'superseded'},
 			'reason: superseded by live\n\nbody',
 		);
@@ -98,7 +98,7 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 	it('a task-drop and a prd-drop sharing a slug NO LONGER collide (the per-regime correctness fix)', () => {
 		// The load-bearing reason the terminal is per-regime: a task `shared` and a
 		// prd `shared` that are BOTH dropped land in DIFFERENT files
-		// (work/tasks/cancelled/shared.md vs work/prds/dropped/shared.md), never
+		// (work/tasks/cancelled/shared.md vs work/specs/dropped/shared.md), never
 		// the one bare-slug work/dropped/shared.md they used to collide on.
 		writeMd(
 			'repo/work/tasks/cancelled/shared.md',
@@ -106,7 +106,7 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 			'reason: a cancelled TASK',
 		);
 		writeMd(
-			'repo/work/prds/dropped/shared.md',
+			'repo/work/specs/dropped/shared.md',
 			{slug: 'shared'},
 			'reason: a dropped PRD',
 		);

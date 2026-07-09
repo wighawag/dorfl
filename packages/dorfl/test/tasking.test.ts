@@ -45,7 +45,7 @@ afterEach(() => {
 	scratch.cleanup();
 });
 
-/** Seed a `work/prds/ready/<slug>.md` (committed onto the arbiter) with frontmatter. */
+/** Seed a `work/specs/ready/<slug>.md` (committed onto the arbiter) with frontmatter. */
 function seedPrd(
 	repo: string,
 	slug: string,
@@ -59,11 +59,11 @@ function seedPrd(
 		 * leftover marker does NOT count toward tasked-ness (residence does).
 		 */
 		tasked?: string;
-		/** Seed into `work/prds/tasked/` (the tasked resting state) instead of `prd/`. */
+		/** Seed into `work/specs/tasked/` (the tasked resting state) instead of `prd/`. */
 		inPrdTasked?: boolean;
 	} = {},
 ): void {
-	const dir = join(repo, 'work', 'prds', fm.inPrdTasked ? 'tasked' : 'ready');
+	const dir = join(repo, 'work', 'specs', fm.inPrdTasked ? 'tasked' : 'ready');
 	mkdirSync(dir, {recursive: true});
 	const lines = ['---', `title: ${slug}`, `slug: ${slug}`];
 	if (fm.humanOnly) lines.push('humanOnly: true');
@@ -291,8 +291,8 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('passes the gate once the taskedAfter PRD IS tasked', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` is TASKED — it RESIDES in work/prds/tasked/ (the source of truth), not
-		// a `tasked:` marker in work/prds/ready/. `it`'s taskedAfter resolves against that
+		// `dep` is TASKED — it RESIDES in work/specs/tasked/ (the source of truth), not
+		// a `tasked:` marker in work/specs/ready/. `it`'s taskedAfter resolves against that
 		// folder residence (mirroring blockedBy -> done/).
 		seedPrd(repo, 'dep', {inPrdTasked: true});
 		seedPrd(repo, 'it', {taskedAfter: ['dep']});
@@ -309,7 +309,7 @@ describe('performTask — agent gate refusal (honest, names why it skipped)', ()
 
 	it('STILL refuses when the taskedAfter PRD only carries an INERT `tasked:` line in prd/ (folder, not marker)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		// `dep` sits in work/prds/ready/ with a leftover (INERT) `tasked:` line but is NOT in
+		// `dep` sits in work/specs/ready/ with a leftover (INERT) `tasked:` line but is NOT in
 		// prd-tasked/. Folder residence is the SOLE source of truth — the marker was
 		// removed in remove-tasked-marker-step-b, so the line is ignored and does NOT
 		// satisfy taskedAfter.
@@ -382,15 +382,15 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		expect(onArbiter(repo, 'work/tasks/backlog/it-first.md')).toBe(true);
 		expect(onArbiter(repo, 'work/tasks/ready/it-first.md')).toBe(false);
 		// The lock was released into the TASKED resting state: the prd now resides in
-		// work/prds/tasked/ (the source of truth, like done/), NOT back in prd/; tasking/
+		// work/specs/tasked/ (the source of truth, like done/), NOT back in prd/; tasking/
 		// is empty.
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// Tasked-ness is RESIDENCE in prd-tasked/ (asserted above). The `tasked:` marker
 		// was removed in remove-tasked-marker-step-b, so the resting prd carries NO
 		// tasked: line.
-		expect(showArbiter(repo, 'work/prds/tasked/it.md')).not.toMatch(
+		expect(showArbiter(repo, 'work/specs/tasked/it.md')).not.toMatch(
 			/^tasked:/m,
 		);
 	});
@@ -434,7 +434,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		expect(subject).toMatch(/; tasked$/);
 		// The completing commit carries BOTH the emitted backlog task AND the
 		// tasking→prd-tasked move (a rename), in ONE runner-owned commit (rename
-		// detection shows the move as `work/prds/tasked/it.md`; tasking/ verified empty).
+		// detection shows the move as `work/specs/tasked/it.md`; tasking/ verified empty).
 		const files = run(
 			'git',
 			['show', '--name-status', '--format=', `${ARBITER}/main`],
@@ -442,12 +442,12 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			{env: gitEnv()},
 		).stdout;
 		expect(files).toMatch(/work\/tasks\/backlog\/it-a\.md/);
-		expect(files).toMatch(/work\/prds\/tasked\/it\.md/);
+		expect(files).toMatch(/work\/specs\/tasked\/it\.md/);
 		// The prd is no longer held in tasking/ (the lock was released in this commit)
 		// and now rests in prd-tasked/ (the source of truth), NOT back in prd/.
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(false);
 	});
 
 	it('REGRESSION (`do prd:` titlePath read): the commit subject carries the PRD `title:` (read from titlePath, NOT the generic fallback)', async () => {
@@ -459,7 +459,7 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		// A DISTINCT multi-word title (not just the slug) so the subject is provably
 		// derived from the prd title, not a generic fallback.
-		const dir = join(repo, 'work', 'prds', 'ready');
+		const dir = join(repo, 'work', 'specs', 'ready');
 		mkdirSync(dir, {recursive: true});
 		writeFileSync(
 			join(dir, 'it.md'),
@@ -539,13 +539,13 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		// The arbiter was NOT modified by the tasking: the prd body stays in prd/ (the
 		// lock is still held on the ref), and no backlog task landed on main. The prd
 		// did NOT move to prd-tasked/.
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
 	it('RE-TASK round-trip: prd-tasked/ -> prd/ reopens a tasked PRD into the task pool', async () => {
-		// Task `it` ONCE: it lands in work/prds/tasked/ (the tasked resting state).
+		// Task `it` ONCE: it lands in work/specs/tasked/ (the tasked resting state).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const first = await performTask({
@@ -558,17 +558,17 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 			env: gitEnv(),
 		});
 		expect(first.outcome).toBe('tasked');
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(true);
 
-		// REOPEN-TO-READY: git mv work/prds/tasked/it.md -> work/prds/ready/it.md (mirroring
+		// REOPEN-TO-READY: git mv work/specs/tasked/it.md -> work/specs/ready/it.md (mirroring
 		// done/ -> backlog/), so the reshaped prd re-enters the task pool with no
 		// special case. Do it on a throwaway clone + push (the runner owns git; this is
 		// a test's own throwaway repo).
 		reopenTaskedPrd(scratch.root, 'it');
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(false);
 		// Sync the local checkout to the reopened arbiter main so its working tree has
-		// work/prds/ready/it.md (the to-task source `performTask` reads at step 0).
+		// work/specs/ready/it.md (the to-task source `performTask` reads at step 0).
 		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
 		run('git', ['reset', '-q', '--hard', `${ARBITER}/main`], repo, {
 			env: gitEnv(),
@@ -587,14 +587,14 @@ describe('performTask — tasks + commits the runner-owned transition', () => {
 		});
 		expect(second.outcome).toBe('tasked');
 		expect(onArbiter(repo, 'work/tasks/backlog/it-second.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(false);
 	});
 });
 
 /**
  * REOPEN a tasked prd to ready: from a throwaway clone of the arbiter,
- * `git mv work/prds/tasked/<slug>.md -> work/prds/ready/<slug>.md` and push it to `main`
+ * `git mv work/specs/tasked/<slug>.md -> work/specs/ready/<slug>.md` and push it to `main`
  * (the re-task / reopen-to-ready move, mirroring done/ -> backlog/).
  */
 function reopenTaskedPrd(root: string, slug: string): void {
@@ -609,10 +609,10 @@ function reopenTaskedPrd(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'reopen', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	mkdirSync(join(dest, 'work', 'prds', 'ready'), {recursive: true});
+	mkdirSync(join(dest, 'work', 'specs', 'ready'), {recursive: true});
 	run(
 		'git',
-		['mv', `work/prds/tasked/${slug}.md`, `work/prds/ready/${slug}.md`],
+		['mv', `work/specs/tasked/${slug}.md`, `work/specs/ready/${slug}.md`],
 		dest,
 		{env: gitEnv()},
 	);
@@ -623,9 +623,9 @@ function reopenTaskedPrd(root: string, slug: string): void {
 }
 
 /**
- * From a throwaway clone of the arbiter, EDIT the held `work/prds/ready/<slug>.md` body
+ * From a throwaway clone of the arbiter, EDIT the held `work/specs/ready/<slug>.md` body
  * and push it to `main` — simulating a concurrent writer editing the prd under the
- * tasking lock (the body stays in `work/prds/ready/` now; the read-stability backstop must
+ * tasking lock (the body stays in `work/specs/ready/` now; the read-stability backstop must
  * detect the changed blob and fail the integrate as `stale`).
  */
 function editHeldPrdOnArbiter(root: string, slug: string): void {
@@ -640,7 +640,7 @@ function editHeldPrdOnArbiter(root: string, slug: string): void {
 	run('git', ['checkout', '-q', '-B', 'edit', 'origin/main'], dest, {
 		env: gitEnv(),
 	});
-	const held = join(dest, 'work', 'prds', 'ready', `${slug}.md`);
+	const held = join(dest, 'work', 'specs', 'ready', `${slug}.md`);
 	writeFileSync(
 		held,
 		readFileSync(held, 'utf8') + '\nCONCURRENT EDIT under the lock.\n',
@@ -768,7 +768,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		// tasked-ness signal; the `tasked:` marker was removed in
 		// remove-tasked-marker-step-b).
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(true);
 	});
 
 	it('a persistent block hits taskerLoopMax → emits the uncertain task needsAnswers + questions', async () => {
@@ -830,11 +830,11 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		expect(result.exitCode).toBe(1);
 		// The needs-attention surface is the per-item lock `state: stuck` now (task
 		// `cutover-...-trim-folder-sets`), NOT a folder move: the prd body STAYS in
-		// work/prds/ready/ (it never moved under the lock), and NO needs-attention/ or
+		// work/specs/ready/ (it never moved under the lock), and NO needs-attention/ or
 		// tasking/ folder file is written.
-		expect(onArbiter(repo, 'work/prds/ready/it.md')).toBe(true);
+		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
-		expect(onArbiter(repo, 'work/prds/tasked/it.md')).toBe(false);
+		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasking/it.md')).toBe(false);
 		// No guessed tasks emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);

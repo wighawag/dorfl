@@ -15,8 +15,9 @@ import {join} from 'node:path';
  * The whole point of the seam: the LATER rename tasks flip the VALUES in
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
  * Call sites reference folders by their SYMBOLIC key (`'tasks-ready'`,
- * `'prds-ready'`, …), never by a raw string, so renaming a folder never
- * re-touches a single call site.
+ * `'specs-ready'`, …), never by a raw string, so a folder-VALUE flip never
+ * re-touches a single call site (a KEY rename, e.g. the prd→spec cutover below,
+ * is a mechanical relabel of the key literal at each site — behaviour-preserving).
  *
  * Domain note (crown-jewel invariant): a `work/` tree is a set of governance
  * folders where "status IS the folder" — a CAS `git mv` between durable folders is
@@ -47,13 +48,13 @@ export const WORK_ROOT = 'work' as const;
  *     `tasks-backlog`) → `tasks/ready` (the agent pool, key `tasks-ready`) →
  *     `tasks/done` / `tasks/cancelled` (the PER-REGIME won't-proceed terminal, key
  *     `cancelled`).
- *   - PRD lifecycle, the `prds/` regime: `prds/proposed` (staging, key
- *     `prds-proposed`) → `prds/ready` (auto-task pool, key `prds-ready`) →
- *     `prds/tasked` (tasked, resting, key `prds-tasked`) / `prds/dropped`
- *     (the PER-REGIME won't-proceed terminal, key `prds-dropped`).
- *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `prds/dropped`)
+ *   - SPEC lifecycle, the `specs/` regime: `specs/proposed` (staging, key
+ *     `specs-proposed`) → `specs/ready` (auto-task pool, key `specs-ready`) →
+ *     `specs/tasked` (tasked, resting, key `specs-tasked`) / `specs/dropped`
+ *     (the PER-REGIME won't-proceed terminal, key `specs-dropped`).
+ *   - The PER-REGIME won't-proceed terminals (`tasks/cancelled` + `specs/dropped`)
  *     replace the previous shared top-level `work/dropped/`: a dropped task and a
- *     dropped prd sharing a slug used to COLLIDE on one bare-slug
+ *     dropped spec sharing a slug used to COLLIDE on one bare-slug
  *     `work/dropped/<slug>.md`; namespacing each regime's terminal removes the
  *     collision. A dropped OBSERVATION needs no terminal — notes leave by deletion.
  *   - Capture buckets under the `notes/` umbrella (do NOT flow; leave by deletion):
@@ -64,15 +65,18 @@ export const WORK_ROOT = 'work' as const;
  *     and `needs-attention` (both are really lock-ref state, NOT durable folders;
  *     routed here only so no reader hand-writes the literal).
  *
- * NOTE on the symbolic-key vocabulary cutover
- * (`work-layout-keys-and-folder-union-names-to-new-vocabulary`): the KEYS below now
- * read in the NEW task/prd vocabulary (`tasks-backlog`/`tasks-ready`,
- * `prds-proposed`/`prds-ready`/`prds-tasked`). This is a PURE in-code symbol
- * rename — the VALUE strings are byte-identical to before, so no on-disk folder
- * moved. An earlier sibling task (`folder-taxonomy-reorg-and-rename` Phase 1)
- * flipped the VALUES (`tasks/ready`, `prds/ready`, …) while deliberately leaving
- * the KEYS on the old words; this task flips only the KEYS so the registry reads
- * coherently. The folder-as-status invariant and every resolved path are unchanged.
+ * NOTE on the prd→spec vocabulary cutover
+ * (`rename-spec-work-layout-and-folders`, migrate-batch 1 of
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`): the spec-regime KEYS
+ * below now read in the `spec` vocabulary (`specs-proposed`/`specs-ready`/
+ * `specs-tasked`/`specs-dropped`) AND their VALUES flip to `work/specs/*` in
+ * lockstep with the on-disk `git mv work/prds/* → work/specs/*`. Unlike the earlier
+ * key-only relabel, this batch moves the folders too, so the KEY and VALUE change
+ * together and the self-renaming-folder guard stays green. The KEY rename is a
+ * mechanical relabel of the key literal at each call site (behaviour-preserving);
+ * the frontmatter `prd:` field, the `--prds-land-in` flag/`prdsLandIn` config, and
+ * the remaining `Prd*` symbols are LATER batches. The folder-as-status invariant is
+ * unchanged.
  */
 export const WORK_FOLDER_NAME = {
 	'tasks-backlog': 'tasks/backlog',
@@ -81,10 +85,10 @@ export const WORK_FOLDER_NAME = {
 	'needs-attention': 'needs-attention',
 	done: 'tasks/done',
 	cancelled: 'tasks/cancelled',
-	'prds-proposed': 'prds/proposed',
-	'prds-ready': 'prds/ready',
-	'prds-tasked': 'prds/tasked',
-	'prds-dropped': 'prds/dropped',
+	'specs-proposed': 'specs/proposed',
+	'specs-ready': 'specs/ready',
+	'specs-tasked': 'specs/tasked',
+	'specs-dropped': 'specs/dropped',
 	observations: 'notes/observations',
 	ideas: 'notes/ideas',
 	findings: 'notes/findings',
@@ -230,9 +234,9 @@ export type TaskLifecycleFolder = (typeof TASK_LIFECYCLE_FOLDERS)[number];
  * (ledger-lint.ts + integration-core.ts `LEDGER_STATUS_FOLDERS`). The transient
  * `in-progress`/`needs-attention`/`tasking` are NOT here (they are lock-ref state).
  * `cancelled` is the task regime's won't-proceed terminal (the per-regime split
- * of the previous shared `dropped/`); the prd regime's terminal `prds-dropped`
+ * of the previous shared `dropped/`); the spec regime's terminal `specs-dropped`
  * is NOT here (this set is the TASK board's state machine, keyed by `tasks/`-slug,
- * and a prd never co-resides with a task on the tasks board).
+ * and a spec never co-resides with a task on the tasks board).
  */
 export const LEDGER_STATUS_FOLDERS = [
 	'tasks-ready',
@@ -244,14 +248,14 @@ export const LEDGER_STATUS_FOLDERS = [
 export type LedgerStatusFolder = (typeof LEDGER_STATUS_FOLDERS)[number];
 
 /**
- * The PRD-lifecycle folders an `issue:`-bearing prd / a tasked prd can reside
- * in: `prds-ready` (source / pool), `prds-tasked` (tasked, resting) —
- * close-job.ts `PRD_FOLDERS`.
+ * The SPEC-lifecycle folders an `issue:`-bearing spec / a tasked spec can reside
+ * in: `specs-ready` (source / pool), `specs-tasked` (tasked, resting) —
+ * close-job.ts `SPEC_FOLDERS`.
  */
-export const PRD_FOLDERS = [
-	'prds-ready',
-	'prds-tasked',
+export const SPEC_FOLDERS = [
+	'specs-ready',
+	'specs-tasked',
 ] as const satisfies readonly WorkFolderKey[];
 
-/** One of the prd-lifecycle folders (close-job.ts / ledger-read.ts). */
-export type PrdFolder = (typeof PRD_FOLDERS)[number];
+/** One of the spec-lifecycle folders (close-job.ts / ledger-read.ts). */
+export type SpecFolder = (typeof SPEC_FOLDERS)[number];
