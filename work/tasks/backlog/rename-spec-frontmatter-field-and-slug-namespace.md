@@ -42,3 +42,7 @@ This repo's live `work/tasks/*` `prd:` frontmatter is NOT hand-converted (the mi
 ## Requeue 2026-07-09
 
 Blocked on missing spec lock/sidecar namespace. Adding a follow-up expand task (expand-spec-lock-and-sidecar-namespace) before this batch; this batch's 'lock spec-<slug>' clause becomes satisfiable once that lands.
+
+## Requeue 2026-07-09
+
+Re-scoped (agent Option A): the 'do spec:' verb-dispatch clause belongs in batch 4 (owns do.ts/advance.ts), not here. Narrowing this task to frontmatter reads + work/spec-<slug> branch + spec-<slug> lock emit + fm.spec migration; verb-dispatch moves to batch 4.
