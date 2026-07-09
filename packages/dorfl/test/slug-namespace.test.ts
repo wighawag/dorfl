@@ -438,10 +438,10 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 	});
 });
 
-describe('ledger-read seam — resolvePrdExistence (the prd read path)', () => {
+describe('ledger-read seam — resolveSpecExistence (the prd read path)', () => {
 	it('reports a prd present in work/prds/ready/', () => {
 		writeItem('prd', 'p.md', {slug: 'p'});
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveSpecExistence({
 			repoPath: repoPath(),
 			slug: 'p',
 		});
@@ -452,7 +452,7 @@ describe('ledger-read seam — resolvePrdExistence (the prd read path)', () => {
 
 	it('reports a prd present only via its work/prds/tasked/ resting file (already tasked)', () => {
 		writeItem('prd-tasked', 's.md', {slug: 's'});
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveSpecExistence({
 			repoPath: repoPath(),
 			slug: 's',
 		});
@@ -465,7 +465,7 @@ describe('ledger-read seam — resolvePrdExistence (the prd read path)', () => {
 		// Frontmatter slug wins over the filename.
 		writeItem('prd', 'on-disk-name.md', {slug: 'real-slug'});
 		expect(
-			currentLedgerRead.resolvePrdExistence({
+			currentLedgerRead.resolveSpecExistence({
 				repoPath: repoPath(),
 				slug: 'real-slug',
 			}).exists,
@@ -473,7 +473,7 @@ describe('ledger-read seam — resolvePrdExistence (the prd read path)', () => {
 		// Filename fallback when no frontmatter slug.
 		writeItem('prd', 'filename-slug.md', {});
 		expect(
-			currentLedgerRead.resolvePrdExistence({
+			currentLedgerRead.resolveSpecExistence({
 				repoPath: repoPath(),
 				slug: 'filename-slug',
 			}).exists,
@@ -481,7 +481,7 @@ describe('ledger-read seam — resolvePrdExistence (the prd read path)', () => {
 	});
 
 	it('reports absent when no ready/ or tasked/ record names the slug (no throw on missing folders)', () => {
-		const r = currentLedgerRead.resolvePrdExistence({
+		const r = currentLedgerRead.resolveSpecExistence({
 			repoPath: repoPath(),
 			slug: 'nope',
 		});

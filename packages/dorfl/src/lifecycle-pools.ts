@@ -19,7 +19,7 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  * divergent enumerations. The per-substrate I/O (reading `work/notes/observations/` +
  * the per-item sidecar state) is done CALLER-SIDE through the read seam (sync
  * in-place, async mirror-ref) and the already-resolved inputs are handed here \u2014
- * exactly as `taskablePrds` is fed by each caller. This unit is then pure: no I/O.
+ * exactly as `taskableSpecs` is fed by each caller. This unit is then pure: no I/O.
  *
  * **Three lifecycle sub-pools, gated by PURPOSE (ADR `ci-config-policy-and-gate-
  * family.md` \u00a74 \u2014 gates govern CREATE only; CONSUME is always-on):**
@@ -77,7 +77,7 @@ export interface LifecyclePoolGates {
 	 * candidates in the first place; this gate widens that input set when `true`.
 	 * Default `false` at THIS library boundary (calm; the CLI threads
 	 * `config.surfaceStaging` which itself defaults to `true`, so the user-visible
-	 * default is `true`). Prd `staging-surface-and-apply-promote-safety` F2.
+	 * default is `true`). Spec `staging-surface-and-apply-promote-safety` F2.
 	 * BUILD/claim eligibility is UNCHANGED in either mode — staging items stay
 	 * non-claimable, the trust model is untouched.
 	 */

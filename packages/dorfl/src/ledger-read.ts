@@ -85,7 +85,7 @@ export interface LedgerReadyItem {
  * from frontmatter `slug:`, falling back to the filename — the SAME shape the task
  * readers use.
  */
-export interface PrdExistence {
+export interface SpecExistence {
 	/**
 	 * Whether a prd named `<slug>` exists in `work/prds/ready/` and/or `work/prds/tasked/`
 	 * (up-for-tasking OR already tasked — either still claims the slug).
@@ -106,12 +106,12 @@ export interface PrdExistence {
  * "tasks-first then prds to task" priority). A prd is NOT in the task
  * scan/candidate model, so the auto-pick pool is built HERE from `work/prds/ready/`
  * through this single shared prd read path (the same path
- * {@link PrdExistence} uses, widened from existence to the gate axes the tasking
+ * {@link SpecExistence} uses, widened from existence to the gate axes the tasking
  * predicate needs). The tasking-eligibility predicate (`autoslice-gate`'s
  * `resolveTaskingEligibility`) is applied to these by the selection layer; this
  * reader does NOT itself decide eligibility (it just surfaces the inputs).
  */
-export interface LedgerPrdItem {
+export interface LedgerSpecItem {
 	/** Filename within `work/prds/ready/` (e.g. `auto-slice.md`). */
 	file: string;
 	/** Resolved slug (frontmatter `slug:`, falling back to the filename). */
@@ -120,7 +120,7 @@ export interface LedgerPrdItem {
 	humanOnly: boolean | undefined;
 	/** Autonomy axis 2 (DISCOVERED): `true` (open questions) | `undefined`. */
 	needsAnswers: boolean | undefined;
-	/** Prd-only cross-prd order: prd slugs that must already be TASKED first. */
+	/** Spec-only cross-prd order: prd slugs that must already be TASKED first. */
 	taskedAfter: string[];
 }
 
@@ -132,12 +132,12 @@ export interface LedgerPrdItem {
  * FOLDER is the source of truth, like `done/` for tasks (the auto-tasker reads
  * folder-residence; the `tasked:` marker was removed in
  * `remove-sliced-marker-step-b`). Built
- * through the SAME prd read path as {@link PrdExistence}; there is no second prd
+ * through the SAME prd read path as {@link SpecExistence}; there is no second prd
  * reader.
  */
-export interface LedgerPrdPool {
+export interface LedgerSpecPool {
 	/** Every prd in `work/prds/ready/`, sorted by slug. */
-	prds: LedgerPrdItem[];
+	prds: LedgerSpecItem[];
 	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 }
@@ -202,7 +202,7 @@ export interface ResolveLocalStateInput {
 }
 
 /** What the prd-existence resolve method needs: which repo + which slug. */
-export interface ResolvePrdExistenceInput {
+export interface ResolveSpecExistenceInput {
 	/** The repo root whose `work/prds/ready/`+`work/prds/tasked/` to read. */
 	repoPath: string;
 	/** The slug to look up (matched against frontmatter `slug:`, then filename). */
@@ -210,7 +210,7 @@ export interface ResolvePrdExistenceInput {
 }
 
 /** What the prd-pool resolve method needs: which repo's `work/prds/ready/` to enumerate. */
-export interface ResolvePrdPoolInput {
+export interface ResolveSpecPoolInput {
 	/** The repo working-tree root whose `work/prds/ready/` to read. */
 	repoPath: string;
 }
@@ -236,7 +236,7 @@ export interface ResolveMirrorStateInput {
  * What the MIRROR-ref prd-pool method needs: which bare hub mirror's committed
  * `work/prds/ready/`+`work/prds/tasked/` tree to enumerate.
  */
-export interface ResolveMirrorPrdPoolInput {
+export interface ResolveMirrorSpecPoolInput {
 	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
 	mirrorPath: string;
 	/** The mirror-LOCAL ref whose `work/prds*` tree to read (default `main`). */
@@ -281,17 +281,17 @@ export interface LedgerReadStrategy {
 	/**
 	 * Enumerate the repo's prd pool from a BARE hub mirror's committed `work/prds/ready/`
 	 * tree (+ already-TASKED slugs from `work/prds/tasked/` residence) — the
-	 * mirror-ref counterpart of {@link LedgerReadStrategy.resolvePrdPool}, for the
+	 * mirror-ref counterpart of {@link LedgerReadStrategy.resolveSpecPool}, for the
 	 * NO-CHECKOUT mirror-side auto-pick (`run`'s isolated loop + the one-shot/CI
 	 * `advance --remote -n`). A mirror is bare, so this reads the committed tree via
 	 * `git ls-tree`/`git show` (the SAME mechanism {@link resolveMirrorState} uses),
-	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerPrdPool} shape
+	 * not a working-tree `readdirSync`. Returns the SAME {@link LedgerSpecPool} shape
 	 * the working-tree reader returns, so the tasking-eligibility predicate
-	 * (`taskablePrds`) applies byte-identically to either source.
+	 * (`taskableSpecs`) applies byte-identically to either source.
 	 */
-	resolveMirrorPrdPool(
-		input: ResolveMirrorPrdPoolInput,
-	): Promise<LedgerPrdPool>;
+	resolveMirrorSpecPool(
+		input: ResolveMirrorSpecPoolInput,
+	): Promise<LedgerSpecPool>;
 	/**
 	 * Resolve whether a prd named `<slug>` exists in the LOCAL working tree's
 	 * `work/prds/ready/` (the prd source — where a mid-tasking prd ALSO rests now that the
@@ -305,7 +305,7 @@ export interface LedgerReadStrategy {
 	 * share ONE prd read path rather than each growing a bespoke scan. Synchronous
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
 	 */
-	resolvePrdExistence(input: ResolvePrdExistenceInput): PrdExistence;
+	resolveSpecExistence(input: ResolveSpecExistenceInput): SpecExistence;
 	/**
 	 * Enumerate the repo's prd pool from `work/prds/ready/` (the auto-task candidate
 	 * source for the `do`/`run` "tasks-first then prds to task" priority, ADR
@@ -313,12 +313,12 @@ export interface LedgerReadStrategy {
 	 * PLUS the set of already-TASKED slugs so the selection layer can resolve
 	 * `taskedAfter` against `work/prds/tasked/` residence (the FOLDER is the source of
 	 * truth) and apply `autoslice-gate`'s
-	 * predicate. This is the SAME prd read path {@link resolvePrdExistence} uses,
+	 * predicate. This is the SAME prd read path {@link resolveSpecExistence} uses,
 	 * widened from a single-slug existence check to a full enumeration — NOT a
 	 * second prd reader. Synchronous and OFFLINE (a working-tree read), like
 	 * {@link resolveLocalState}.
 	 */
-	resolvePrdPool(input: ResolvePrdPoolInput): LedgerPrdPool;
+	resolveSpecPool(input: ResolveSpecPoolInput): LedgerSpecPool;
 	/**
 	 * Enumerate `work/tasks/backlog/*.md` (the TASK STAGING folder) into the SAME
 	 * {@link LedgerReadyItem} shape `resolveLocalState().ready` returns for the pool
@@ -334,25 +334,25 @@ export interface LedgerReadStrategy {
 	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerReadyItem[];
 	/**
 	 * Enumerate `work/prds/proposed/*.md` (the PRD STAGING folder) into the
-	 * SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns for the
+	 * SAME {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns for the
 	 * pool — the PRD-symmetric `surfaceStaging` widening (prd
 	 * `staging-surface-and-apply-promote-safety` F2, prd q4 answer). Sync + OFFLINE.
 	 */
-	resolveLocalPrdStaging(input: ResolvePrdPoolInput): LedgerPrdItem[];
+	resolveLocalSpecStaging(input: ResolveSpecPoolInput): LedgerSpecItem[];
 	/**
 	 * Enumerate `work/prds/tasked/*.md` (the TASKED resting folder) into the SAME
-	 * {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns. UNLIKE the pool
+	 * {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns. UNLIKE the pool
 	 * (`prds/ready/`) and staging (`prds/proposed/`) readers, this exists so the
 	 * lifecycle GATHER can surface/apply a `needsAnswers:true` prd that drifted
 	 * AFTER it was tasked and rests IN PLACE in `prds/tasked/` (WORK-CONTRACT
 	 * "A PRD that has drifted AFTER it was TASKED"). Without it, such a prd's
 	 * ANSWERED sidecar is enumerated by no pool and the human's answer is STRANDED
 	 * (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
-	 * `resolvePrdPool` deliberately returns tasked prds only as `taskedSlugs`
+	 * `resolveSpecPool` deliberately returns tasked prds only as `taskedSlugs`
 	 * (residence, for `taskedAfter`), NOT as enumerable gate-bearing items, so this
 	 * is a SEPARATE read. Sync + OFFLINE.
 	 */
-	resolveLocalPrdTasked(input: ResolvePrdPoolInput): LedgerPrdItem[];
+	resolveLocalSpecTasked(input: ResolveSpecPoolInput): LedgerSpecItem[];
 	/**
 	 * Mirror-ref counterpart of {@link resolveLocalTaskStaging}: read
 	 * `<ref>:work/tasks/backlog/*.md` from a BARE hub mirror via `git ls-tree` +
@@ -362,21 +362,21 @@ export interface LedgerReadStrategy {
 		input: ResolveMirrorStateInput,
 	): Promise<LedgerReadyItem[]>;
 	/**
-	 * Mirror-ref counterpart of {@link resolveLocalPrdStaging}: read
+	 * Mirror-ref counterpart of {@link resolveLocalSpecStaging}: read
 	 * `<ref>:work/prds/proposed/*.md` from a bare mirror.
 	 */
-	resolveMirrorPrdStaging(
-		input: ResolveMirrorPrdPoolInput,
-	): Promise<LedgerPrdItem[]>;
+	resolveMirrorSpecStaging(
+		input: ResolveMirrorSpecPoolInput,
+	): Promise<LedgerSpecItem[]>;
 	/**
-	 * Mirror-ref counterpart of {@link resolveLocalPrdTasked}: read
+	 * Mirror-ref counterpart of {@link resolveLocalSpecTasked}: read
 	 * `<ref>:work/prds/tasked/*.md` from a bare mirror, so a `needsAnswers` tasked
 	 * prd's answered sidecar is never stranded on the mirror-side advance path
 	 * either.
 	 */
-	resolveMirrorPrdTasked(
-		input: ResolveMirrorPrdPoolInput,
-	): Promise<LedgerPrdItem[]>;
+	resolveMirrorSpecTasked(
+		input: ResolveMirrorSpecPoolInput,
+	): Promise<LedgerSpecItem[]>;
 }
 
 // --- The sole strategy: exactly today's behaviour -------------------------
@@ -442,29 +442,29 @@ function readLocalTaskStaging(repoPath: string): LedgerReadyItem[] {
 /**
  * Read `work/prds/proposed/*.md` (the PRD STAGING folder, the prd twin
  * of {@link readLocalTaskStaging}, prd q4 answer) from the local tree. Returns
- * the SAME {@link LedgerPrdItem} shape `resolvePrdPool().prds` returns.
+ * the SAME {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns.
  */
-function readLocalPrdStaging(repoPath: string): LedgerPrdItem[] {
-	return readLocalPrdFolder(repoPath, 'specs-proposed');
+function readLocalSpecStaging(repoPath: string): LedgerSpecItem[] {
+	return readLocalSpecFolder(repoPath, 'specs-proposed');
 }
 
 /**
  * Read `work/prds/tasked/*.md` (the TASKED resting folder) into the SAME
- * {@link LedgerPrdItem} shape. Used by the lifecycle gather to surface/apply a
+ * {@link LedgerSpecItem} shape. Used by the lifecycle gather to surface/apply a
  * `needsAnswers` prd that drifted after tasking and rests in place in
  * `prds/tasked/` — so its answered sidecar is never stranded.
  */
-function readLocalPrdTasked(repoPath: string): LedgerPrdItem[] {
-	return readLocalPrdFolder(repoPath, 'specs-tasked');
+function readLocalSpecTasked(repoPath: string): LedgerSpecItem[] {
+	return readLocalSpecFolder(repoPath, 'specs-tasked');
 }
 
 /** Shared body for the local prd-FOLDER readers (proposed/tasked) — same item shape. */
-function readLocalPrdFolder(
+function readLocalSpecFolder(
 	repoPath: string,
 	folder: 'specs-proposed' | 'specs-tasked',
-): LedgerPrdItem[] {
+): LedgerSpecItem[] {
 	const dir = workFolderPath(repoPath, folder);
-	const prds: LedgerPrdItem[] = [];
+	const prds: LedgerSpecItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -526,7 +526,7 @@ function readLocalObservations(repoPath: string): LedgerObservationItem[] {
  * readers use — so a renamed file whose frontmatter slug matches still resolves.
  * Returns the matching filename, or `undefined`.
  */
-function findPrdFileBySlug(
+function findSpecFileBySlug(
 	repoPath: string,
 	folder: SpecFolder,
 	slug: string,
@@ -542,7 +542,7 @@ function findPrdFileBySlug(
 
 /**
  * Enumerate `work/prds/ready/*.md` into the auto-task prd pool (the tasks-first/prd
- * priority's prd source) — the SAME prd read path {@link findPrdFileBySlug} uses,
+ * priority's prd source) — the SAME prd read path {@link findSpecFileBySlug} uses,
  * widened from a single-slug existence check to a full enumeration. Each prd's
  * slug is resolved from frontmatter `slug:` (falling back to the filename) and
  * its gate axes (`humanOnly`/`needsAnswers`/`taskedAfter`) parsed. The
@@ -553,9 +553,9 @@ function findPrdFileBySlug(
  * frontmatter marker was removed entirely in `remove-sliced-marker-step-b`. This
  * matches `tasking.ts`'s `readTaskedSlugs`. Missing folders read as empty.
  */
-function readLocalPrdPool(repoPath: string): LocalPrdPool {
+function readLocalSpecPool(repoPath: string): LocalSpecPool {
 	const dir = workFolderPath(repoPath, 'specs-ready');
-	const prds: LedgerPrdItem[] = [];
+	const prds: LedgerSpecItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
@@ -583,8 +583,8 @@ function readLocalPrdPool(repoPath: string): LocalPrdPool {
 	return {prds, taskedSlugs};
 }
 
-/** Internal alias for {@link LedgerPrdPool} (kept local to the reader). */
-type LocalPrdPool = LedgerPrdPool;
+/** Internal alias for {@link LedgerSpecPool} (kept local to the reader). */
+type LocalSpecPool = LedgerSpecPool;
 
 /** Run git, returning the raw result (no throw) — for soft checks. */
 function gitSoft(
@@ -732,32 +732,32 @@ async function readTaskStagingFromTree(
 }
 
 /** Parse `<ref>:work/prds/proposed/*.md` (PRD STAGING) into prd items, sorted by slug. */
-async function readPrdStagingFromTree(
+async function readSpecStagingFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdItem[]> {
-	return readPrdFolderFromTree('specs-proposed', ref, cwd, env);
+): Promise<LedgerSpecItem[]> {
+	return readSpecFolderFromTree('specs-proposed', ref, cwd, env);
 }
 
 /** Parse `<ref>:work/prds/tasked/*.md` (TASKED resting) into prd items, sorted by slug. */
-async function readPrdTaskedFromTree(
+async function readSpecTaskedFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdItem[]> {
-	return readPrdFolderFromTree('specs-tasked', ref, cwd, env);
+): Promise<LedgerSpecItem[]> {
+	return readSpecFolderFromTree('specs-tasked', ref, cwd, env);
 }
 
 /** Shared body for the mirror-ref prd-FOLDER readers (proposed/tasked) — same item shape. */
-async function readPrdFolderFromTree(
+async function readSpecFolderFromTree(
 	folder: 'specs-proposed' | 'specs-tasked',
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdItem[]> {
+): Promise<LedgerSpecItem[]> {
 	const base = `${ref}:${workFolderRel(folder)}`;
-	const prds: LedgerPrdItem[] = [];
+	const prds: LedgerSpecItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
 		if (content === undefined) {
@@ -778,17 +778,17 @@ async function readPrdFolderFromTree(
 /**
  * Parse `<ref>:work/prds/ready/*.md` into the auto-task prd pool, sorted by slug, plus
  * the already-TASKED slugs from `<ref>:work/prds/tasked/` RESIDENCE (the folder is
- * the source of truth, mirroring the working-tree {@link readLocalPrdPool}). Reads
+ * the source of truth, mirroring the working-tree {@link readLocalSpecPool}). Reads
  * a committed tree (bare-mirror or any ref) via `ls-tree`/`show`. Missing folders
  * read as empty.
  */
-async function readPrdPoolFromTree(
+async function readSpecPoolFromTree(
 	ref: string,
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-): Promise<LedgerPrdPool> {
+): Promise<LedgerSpecPool> {
 	const prdBase = `${ref}:${workFolderRel('specs-ready')}`;
-	const prds: LedgerPrdItem[] = [];
+	const prds: LedgerSpecItem[] = [];
 	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
 		const content = await showInTree(prdBase, file, cwd, env);
 		if (content === undefined) {
@@ -868,35 +868,35 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		const doneSlugs = await readDoneSlugsOnArbiter(arbiter, cwd, env);
 		return {task, doneSlugs};
 	},
-	resolvePrdExistence({repoPath, slug}) {
-		const prdFile = findPrdFileBySlug(repoPath, 'specs-ready', slug);
-		const prdTaskedFile = findPrdFileBySlug(repoPath, 'specs-tasked', slug);
+	resolveSpecExistence({repoPath, slug}) {
+		const prdFile = findSpecFileBySlug(repoPath, 'specs-ready', slug);
+		const prdTaskedFile = findSpecFileBySlug(repoPath, 'specs-tasked', slug);
 		return {
 			exists: prdFile !== undefined || prdTaskedFile !== undefined,
 			prdFile,
 			prdTaskedFile,
 		};
 	},
-	resolvePrdPool({repoPath}) {
-		return readLocalPrdPool(repoPath);
+	resolveSpecPool({repoPath}) {
+		return readLocalSpecPool(repoPath);
 	},
 	resolveLocalTaskStaging({repoPath}) {
 		return readLocalTaskStaging(repoPath);
 	},
-	resolveLocalPrdStaging({repoPath}) {
-		return readLocalPrdStaging(repoPath);
+	resolveLocalSpecStaging({repoPath}) {
+		return readLocalSpecStaging(repoPath);
 	},
-	resolveLocalPrdTasked({repoPath}) {
-		return readLocalPrdTasked(repoPath);
+	resolveLocalSpecTasked({repoPath}) {
+		return readLocalSpecTasked(repoPath);
 	},
 	async resolveMirrorTaskStaging({mirrorPath, ref = 'main', env}) {
 		return readTaskStagingFromTree(ref, mirrorPath, env);
 	},
-	async resolveMirrorPrdStaging({mirrorPath, ref = 'main', env}) {
-		return readPrdStagingFromTree(ref, mirrorPath, env);
+	async resolveMirrorSpecStaging({mirrorPath, ref = 'main', env}) {
+		return readSpecStagingFromTree(ref, mirrorPath, env);
 	},
-	async resolveMirrorPrdTasked({mirrorPath, ref = 'main', env}) {
-		return readPrdTaskedFromTree(ref, mirrorPath, env);
+	async resolveMirrorSpecTasked({mirrorPath, ref = 'main', env}) {
+		return readSpecTaskedFromTree(ref, mirrorPath, env);
 	},
 	async resolveMirrorState({mirrorPath, ref = 'main', env}) {
 		// A hub mirror is BARE — read the full `work/` lifecycle from its committed
@@ -909,11 +909,11 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		]);
 		return {ready, doneSlugs, observations};
 	},
-	async resolveMirrorPrdPool({mirrorPath, ref = 'main', env}) {
+	async resolveMirrorSpecPool({mirrorPath, ref = 'main', env}) {
 		// The prd pool from the bare mirror's committed `<ref>:work/prds*` tree — the
-		// mirror-ref counterpart of `resolvePrdPool` (a working-tree read). Same shape,
-		// so `taskablePrds` applies identically to either source.
-		return readPrdPoolFromTree(ref, mirrorPath, env);
+		// mirror-ref counterpart of `resolveSpecPool` (a working-tree read). Same shape,
+		// so `taskableSpecs` applies identically to either source.
+		return readSpecPoolFromTree(ref, mirrorPath, env);
 	},
 };
 

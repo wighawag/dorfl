@@ -37,8 +37,8 @@ import {
  *     primitive `run` uses, so `run` and this helper SHARE it (they share
  *     `selectCandidates`, the task-pool core).
  *   - the **`task` pool** (prd-to-task) — a pool the caller builds from the prd reader
- *     (`ledgerRead.resolvePrdPool`) filtered by `autoslice-gate`'s pure predicate
- *     ({@link resolveTaskingEligibility}); see {@link taskablePrds}. The helper
+ *     (`ledgerRead.resolveSpecPool`) filtered by `autoslice-gate`'s pure predicate
+ *     ({@link resolveTaskingEligibility}); see {@link taskableSpecs}. The helper
  *     does NOT reinvent prd eligibility.
  *
  * `do` is STRICTLY SEQUENTIAL (parallelism is `run`'s job, ADR §3) — this helper
@@ -83,7 +83,7 @@ export interface SelectedItem {
 export type LifecycleSelectedItem = SelectedItem;
 
 /** A prd candidate for the tasking pool, before the eligibility gate runs. */
-export interface PrdCandidate {
+export interface SpecCandidate {
 	repoPath: string;
 	slug: string;
 	humanOnly: HumanOnlyGate;
@@ -91,10 +91,10 @@ export interface PrdCandidate {
 	taskedAfter: string[];
 }
 
-/** Inputs to {@link taskablePrds}: the raw prd pool + the gate context. */
-export interface TaskablePrdsInput {
+/** Inputs to {@link taskableSpecs}: the raw prd pool + the gate context. */
+export interface TaskableSpecsInput {
 	/** Every prd enumerated from `work/prds/ready/` (the auto-task candidate source). */
-	candidates: PrdCandidate[];
+	candidates: SpecCandidate[];
 	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autoslice-gate`'s per-repo key). */
@@ -106,9 +106,9 @@ export interface TaskablePrdsInput {
  * `autoslice-gate`'s pure predicate ({@link resolveTaskingEligibility}) — NOT a
  * reinvented eligibility model. A prd is taskable iff `needsAnswers !== true &&
  * humanOnly !== true && autoTask` AND every `taskedAfter` prd is already tasked.
- * Pure: no I/O (the caller reads the pool through `ledgerRead.resolvePrdPool`).
+ * Pure: no I/O (the caller reads the pool through `ledgerRead.resolveSpecPool`).
  */
-export function taskablePrds(input: TaskablePrdsInput): PrdCandidate[] {
+export function taskableSpecs(input: TaskableSpecsInput): SpecCandidate[] {
 	return input.candidates.filter(
 		(prd) =>
 			resolveTaskingEligibility({
@@ -133,10 +133,10 @@ export interface SelectPrioritisedInput {
 	/** Caps for the task-pool selection (round-robin/per-repo/total). */
 	caps: SelectCaps;
 	/**
-	 * The ALREADY-FILTERED taskable prd pool (run {@link taskablePrds} first).
+	 * The ALREADY-FILTERED taskable prd pool (run {@link taskableSpecs} first).
 	 * In declaration order; this helper does not re-gate them.
 	 */
-	prds: PrdCandidate[];
+	prds: SpecCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
 	 * `task` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
@@ -199,7 +199,7 @@ export interface SelectedLifecyclePools {
  * applying the configurable {@link selectionOrder} with `apply` PINNED FIRST and
  * the count bound. The task pool is selected via the EXISTING
  * {@link selectCandidates} (the shared primitive `run` uses); the prd pool is the
- * pre-filtered {@link taskablePrds} output; the lifecycle pools (`apply` /
+ * pre-filtered {@link taskableSpecs} output; the lifecycle pools (`apply` /
  * `surface` / `triage`) are caller-built (none for `do`).
  *
  * Ordering: `apply` is always prepended (consume-always-wins; not orderable),

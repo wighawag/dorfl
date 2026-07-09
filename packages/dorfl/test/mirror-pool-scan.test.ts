@@ -3,7 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {scanMirrorPool} from '../src/mirror-pool-scan.js';
 import {scanRepoPaths} from '../src/scan.js';
-import {taskablePrds, selectPrioritised} from '../src/select-priority.js';
+import {taskableSpecs, selectPrioritised} from '../src/select-priority.js';
 import {mergeConfig} from '../src/config.js';
 import {
 	makeScratch,
@@ -18,12 +18,12 @@ import {
  * counterpart to `do-autopick`'s in-place pool scan. It enumerates eligible
  * TASKS + taskable PRDs from a BARE hub mirror's `main` (NOT a working
  * checkout), using the SAME eligibility (`scan`/`eligibility`) + tasking
- * predicates (`taskablePrds`/`tasking-eligibility`) as the in-place scan.
+ * predicates (`taskableSpecs`/`tasking-eligibility`) as the in-place scan.
  *
  * House `--bare`-mirror style: seed a bare hub mirror (via `registerMirrorWithWork`)
  * whose committed `main` carries a mix of eligible/blocked/needsAnswers/humanOnly
  * tasks + taskable/non-taskable PRDs, then assert the scan returns exactly the
- * eligible set — and is PARITY-equal to the in-place `scanRepoPaths` + `taskablePrds`
+ * eligible set — and is PARITY-equal to the in-place `scanRepoPaths` + `taskableSpecs`
  * on the SAME logical `work/` state.
  */
 
@@ -181,7 +181,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 });
 
 describe('PARITY with the in-place do-autopick pool scan on the SAME logical state', () => {
-	it('mirror-side scan returns the same eligible tasks + taskable PRDs as scanRepoPaths + taskablePrds in-place', async () => {
+	it('mirror-side scan returns the same eligible tasks + taskable PRDs as scanRepoPaths + taskableSpecs in-place', async () => {
 		const mixed = {
 			backlog: {
 				'ready.md': task({slug: 'ready'}),
@@ -226,9 +226,9 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 			}
 		}
 		const inPlaceReport = scanRepoPaths([checkout], cfg);
-		const inPlacePrds = taskablePrds({
+		const inPlacePrds = taskableSpecs({
 			candidates: (await import('../src/ledger-read.js')).ledgerRead
-				.resolvePrdPool({repoPath: checkout})
+				.resolveSpecPool({repoPath: checkout})
 				.prds.map((p) => ({
 					repoPath: checkout,
 					slug: p.slug,
@@ -238,7 +238,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 				})),
 			taskedSlugs: (
 				await import('../src/ledger-read.js')
-			).ledgerRead.resolvePrdPool({repoPath: checkout}).taskedSlugs,
+			).ledgerRead.resolveSpecPool({repoPath: checkout}).taskedSlugs,
 			autoTask: cfg.autoTask,
 		});
 

@@ -13,8 +13,8 @@ import {scanRepoPaths} from './scan.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
-	taskablePrds,
-	type PrdCandidate,
+	taskableSpecs,
+	type SpecCandidate,
 	type SelectedItem,
 } from './select-priority.js';
 import {gatherLifecycleInPlace} from './lifecycle-gather.js';
@@ -150,7 +150,7 @@ const ALL_ELIGIBLE = Number.MAX_SAFE_INTEGER;
  * (plus the lifecycle pools) per the resolved `selectionOrder` with `apply`
  * pinned first, take `count` (default 1), and run the EXISTING advance tick per
  * selected item, SEQUENTIALLY. The pools are the EXACT
- * `do-autopick` pools (the SAME `scoreItems`/`taskablePrds` predicates), so the
+ * `do-autopick` pools (the SAME `scoreItems`/`taskableSpecs` predicates), so the
  * per-action gate family is honoured by construction.
  *
  * The bare/`-n` selection draws ONLY from the autonomous pools (eligible tasks +
@@ -182,15 +182,15 @@ export async function performAdvanceAuto(
 	// Pool 2 — TASKABLE prds filtered by `autoslice-gate`'s predicate (gated on
 	// `autoTask`). With `autoTask` off NO prd is selected — the task rung is
 	// never reached by the bare/`-n` selection.
-	const pool = read.resolvePrdPool({repoPath: cwd});
-	const prdCandidates: PrdCandidate[] = pool.prds.map((prd) => ({
+	const pool = read.resolveSpecPool({repoPath: cwd});
+	const prdCandidates: SpecCandidate[] = pool.prds.map((prd) => ({
 		repoPath: cwd,
 		slug: prd.slug,
 		humanOnly: prd.humanOnly,
 		needsAnswers: prd.needsAnswers,
 		taskedAfter: prd.taskedAfter,
 	}));
-	const eligiblePrds = taskablePrds({
+	const eligiblePrds = taskableSpecs({
 		candidates: prdCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,

@@ -122,7 +122,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		});
 		writePrd('prd', 'alpha.md', {slug: 'alpha', humanOnly: 'true'});
 
-		const pool = currentLedgerRead.resolvePrdPool({
+		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool.prds.map((p) => p.slug)).toEqual(['alpha', 'beta']);
@@ -149,14 +149,14 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		// ignored): delta carries one but resides in prd/, so it is NOT tasked.
 		writePrd('prd', 'delta.md', {slug: 'delta', tasked: '2026-03-03'});
 
-		const pool = currentLedgerRead.resolvePrdPool({
+		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool.taskedSlugs).toEqual(new Set(['alpha', 'gamma']));
 	});
 
 	it('is OFFLINE/synchronous and reads an absent work/prd as an empty pool', () => {
-		const pool = currentLedgerRead.resolvePrdPool({
+		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool).not.toBeInstanceOf(Promise);
@@ -166,7 +166,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 
 	it('falls back to the filename when a PRD has no slug frontmatter', () => {
 		writePrd('prd', 'no-slug.md', {title: 'x'});
-		const pool = currentLedgerRead.resolvePrdPool({
+		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
@@ -412,7 +412,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		return lines.join('\n');
 	}
 
-	it('enumerates work/prds/ready/*.md (gate axes, sorted by slug) + prd-tasked/ residence from a BARE mirror main ref — the resolvePrdPool counterpart', async () => {
+	it('enumerates work/prds/ready/*.md (gate axes, sorted by slug) + prd-tasked/ residence from a BARE mirror main ref — the resolveSpecPool counterpart', async () => {
 		const ws = join(scratch.root, '.dorfl');
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			prd: {
@@ -426,7 +426,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			prdTasked: {'alpha.md': prd({slug: 'alpha'})},
 		});
 
-		const pool = await currentLedgerRead.resolveMirrorPrdPool({
+		const pool = await currentLedgerRead.resolveMirrorSpecPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
@@ -447,7 +447,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			prd: {'no-slug.md': '---\ntitle: x\n---\n\n# PRD'},
 		});
-		const pool = await currentLedgerRead.resolveMirrorPrdPool({
+		const pool = await currentLedgerRead.resolveMirrorSpecPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
@@ -460,7 +460,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			done: {'a.md': prd({slug: 'a'})},
 		});
-		const pool = await currentLedgerRead.resolveMirrorPrdPool({
+		const pool = await currentLedgerRead.resolveMirrorSpecPool({
 			mirrorPath,
 			env: gitEnv(),
 		});
