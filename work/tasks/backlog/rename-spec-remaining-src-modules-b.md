@@ -2,7 +2,7 @@
 title: prd→spec batch 4b — close-job/lifecycle-gather consumers + the doubly-retired brief→spec sweep
 slug: rename-spec-remaining-src-modules-b
 prd: prd-to-spec-vocabulary-cutover-and-migration-command
-blockedBy: [rename-spec-config-and-intake]
+blockedBy: [rename-spec-remaining-src-modules-a]
 covers: [1]
 ---
 
