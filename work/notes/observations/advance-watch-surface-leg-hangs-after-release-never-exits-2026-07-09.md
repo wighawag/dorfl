@@ -1,10 +1,42 @@
 ---
 title: An `advance --propose --watch` leg on a SURFACE outcome finishes its work (logs RELEASED) but the process NEVER EXITS — the CI job hangs ~20-55min until cancelled
 type: observation
-status: spotted
+status: diagnosed
 spotted: 2026-07-09
-needsAnswers: true
+needsAnswers: false
 ---
+
+## RESOLVED (root cause found, reproduced, fixed) — 2026-07-09
+
+Fixed in `0b0039d0` (`fix(pi-harness): launchAsync resolves on pi \`exit\`, not \`close\``). The `needsAnswers` question is answered; keeping this open only until a live CI lifecycle run re-confirms end-to-end (the GitHub-hosted runner queue was backed up at fix time, so the confirming run had not started — the hang mechanism itself is conclusively reproduced and eliminated locally).
+
+### Root cause (reproduced, NOT guessed)
+
+`PiHarness.launchAsync` (`pi-harness.ts`) resolved its promise on the child's **`close`** event. Node fires `close` only once EVERY stdio pipe of the child is closed — and that includes pipes **inherited by any grandchild** pi spawns (an MCP server, a model proxy, a subshell). When such a grandchild OUTLIVES pi while holding the inherited stdout/stderr write end, `close` never fires, so the `await launchWithOptionalWatch(...)` inside `harnessSurfaceGate` never resolves. The surface leg therefore never returns from `runAdvanceTickWithTreelessPublish` and never reaches the CLI's `process.exit(result.exitCode)` — the whole `dorfl advance ... --watch` process hangs after logging `RELEASED`, exactly as seen.
+
+Lead #3 in the original writeup was WRONG on one point: the single-item advance CLI path DOES `process.exit(result.exitCode)` (cli.ts ~2993), as do the multi/auto/isolated paths. The backstop already exists; the hang was that the awaited promise never resolved, so `process.exit` was never reached. So this was a real never-resolve, not a lingering-handle-after-return.
+
+Minimal repro (in-repo now as a regression test): a stub `pi` that exits 0 immediately but leaves a `sleep 30 &` grandchild inheriting the stdio pipes. Pre-fix `launchAsync` never resolves (verified by a `Promise.race` timeout); a bare `spawn` shows `exit` firing in ~8ms while `close` never fires.
+
+### Fix
+
+Resolve on **`exit`** (pi itself terminated), not `close`. On exit we destroy our end of the stdio pipes and `unref` the child so a leaked grandchild's inherited FDs release what they can; a single-settle guard keeps `exit`/`error` from double-settling. The agent's answer is still read from the `.jsonl` (final once pi exited, independent of stdout). Regression test in `pi-harness.test.ts` (`launchAsync resolves on pi EXIT even when a grandchild inherits the pipes and outlives it`) is red against the old code, green with the fix. Full acceptance gate (`pnpm -r build && pnpm -r test && pnpm format:check`) green.
+
+### Backstop decision (recorded per the ask)
+
+No additional defensive `process.exit` was added: every advance CLI terminal path already calls `process.exit(code)` after the awaited result, so a second one would be redundant and could mask a future genuine wait. The hang required BOTH the promise never resolving AND that backstop never being reached; resolving on `exit` restores the path to it.
+
+### Compounding data-loss symptom
+
+The lost surfaced-question sidecar was a downstream consequence of the leg being cancelled by hand mid-flight, before `runAdvanceTickWithTreelessPublish` could publish/integrate. With the hang gone the leg completes and publishes normally, so no separate fix is needed.
+
+### What remains (why still open, not dropped)
+
+Only the live CI re-confirmation: dispatch run 29018787541 was still `pending` (no jobs) behind a backed-up hosted-runner queue and the `concurrency: advance-lifecycle-<ref>` group. Drop this observation via `dorfl drop obs:advance-watch-surface-leg-hangs-after-release-never-exits-2026-07-09` once a lifecycle run shows an `advance one item in-place` step on a surface/triage leg going in_progress -> completed promptly (not stuck ~20-55min) after logging RELEASED.
+
+---
+
+## Original writeup (preserved)
 
 ## What was seen
 
