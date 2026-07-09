@@ -432,6 +432,42 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('pre-backlog');
 	});
 
+	// EXPAND (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+	// `spec` vocabulary canonical key `specsLandIn` is added BESIDE the legacy
+	// `prdsLandIn`. Both are per-repo allowed keys and both resolve through the
+	// SAME chain; the intake resolver reads `specsLandIn ?? prdsLandIn` (canonical
+	// wins) at the CLI seam (see cli.ts).
+	it('`specsLandIn` is a per-repo allowed key beside `prdsLandIn`', () => {
+		expect(REPO_ALLOWED_KEYS).toContain('specsLandIn');
+		expect(REPO_ALLOWED_KEYS).toContain('prdsLandIn');
+	});
+
+	it('resolves a per-repo `specsLandIn` through the standard chain (flag > env > per-repo > global)', () => {
+		const global = mergeConfig({});
+		// per-repo file sets the canonical key.
+		writeRepoConfig(repo, {specsLandIn: 'ready'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config.specsLandIn,
+		).toBe('ready');
+		// env (DORFL_SPECS_LAND_IN) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_SPECS_LAND_IN: 'pre-proposed'},
+			}).config.specsLandIn,
+		).toBe('pre-proposed');
+		// a flag beats env.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_SPECS_LAND_IN: 'pre-proposed'},
+				flags: {specsLandIn: 'ready'},
+			}).config.specsLandIn,
+		).toBe('ready');
+	});
+
 	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {
 		// default false; global false; per-repo opts in ⇒ per-repo wins.
 		writeRepoConfig(repo, {autoBuild: true});

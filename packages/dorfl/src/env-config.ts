@@ -113,6 +113,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// > global > built-in `pre-proposed`); fed into the shared placement resolver
 	// (`src/placement.ts`) as the configured-default rung for the prd lifecycle.
 	prdsLandIn: {enum: ['pre-proposed', 'ready']},
+	// `specsLandIn` (the `spec` vocabulary CANONICAL key for the spec-placement
+	// default — prd `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND
+	// step) coerces as the SAME `pre-proposed`/`ready` enum as `prdsLandIn`, which
+	// it is added beside, so `DORFL_SPECS_LAND_IN=ready` works and a typo FAILS
+	// LOUDLY. Same precedence chain as `prdsLandIn`; the intake resolver reads
+	// EITHER key with `specsLandIn` winning when both are present. The contract
+	// task removes the legacy `prdsLandIn`.
+	specsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `DORFL_PROVIDER` is ignored

@@ -43,7 +43,23 @@ export interface Frontmatter {
 	originTrust: OriginTrust | undefined;
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
-	/** Source prd slug (frontmatter `prd:`); the prd lives at `work/prds/ready/<prd>.md`. */
+	/**
+	 * Source SPEC slug (frontmatter `spec:`); the spec lives at
+	 * `work/specs/ready/<spec>.md`. The `spec` vocabulary name for the parent-spec
+	 * pointer (prd `prd-to-spec-vocabulary-cutover-and-migration-command`). This is
+	 * the EXPAND-step ADDITION beside {@link prd}: `parseFrontmatter` populates BOTH
+	 * from EITHER the `spec:` OR the `prd:` key with the SAME value, so a caller
+	 * reading either sees the parent-spec slug. The migrate batches move `fm.prd`
+	 * reads onto `fm.spec` one at a time; the contract task removes `prd`.
+	 */
+	spec: string | undefined;
+	/**
+	 * Source spec slug (frontmatter `prd:`); the spec lives at
+	 * `work/specs/ready/<prd>.md`. The LEGACY vocabulary name for the parent-spec
+	 * pointer, kept BESIDE {@link spec} through the expand→migrate→contract cutover
+	 * (prd `prd-to-spec-vocabulary-cutover-and-migration-command`) so every existing
+	 * `fm.prd` reader keeps working; populated from EITHER the `spec:` or `prd:` key.
+	 */
 	prd: string | undefined;
 	/**
 	 * The GitHub issue number an `intake`-emitted artifact was transformed from
@@ -317,6 +333,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		origin: undefined,
 		originTrust: undefined,
 		slug: undefined,
+		spec: undefined,
 		prd: undefined,
 		issue: undefined,
 		humanOnly: undefined,
@@ -361,8 +378,25 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.originTrust = v === 'trusted' || v === 'untrusted' ? v : undefined;
 		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'prd') {
-			result.prd = rawValue === '' ? undefined : unquote(rawValue);
+		} else if (key === 'spec' || key === 'prd') {
+			// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+			// the parent-spec pointer is written under EITHER the new `spec:` key or the
+			// legacy `prd:` key. Populate BOTH `fm.spec` and `fm.prd` with the same value
+			// so a caller reading either field sees it. `spec:` wins if both are present
+			// (the canonical key takes precedence over the legacy alias); an empty value
+			// on one key does NOT clobber a non-empty value already read from the other.
+			const value = rawValue === '' ? undefined : unquote(rawValue);
+			if (key === 'spec') {
+				// The canonical key wins: overwrite whatever `prd:` may have set.
+				if (value !== undefined) {
+					result.spec = value;
+					result.prd = value;
+				}
+			} else if (result.spec === undefined) {
+				// Legacy `prd:` only fills in when `spec:` has not already set the pair.
+				result.spec = value;
+				result.prd = value;
+			}
 		} else if (key === 'issue') {
 			// Integer issue link (`intake`'s prd-emit OR a lone-task emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather

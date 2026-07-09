@@ -90,8 +90,16 @@ import {renderTaskBody, renderPrdBody} from './buildable-body.js';
  * boundary (the SAME discipline the build/tasker agents follow).
  */
 
-/** The four outcomes the decision prompt classifies an issue into (the decision table). */
-export type IntakeOutcome = 'ask' | 'task' | 'prd' | 'bounce';
+/**
+ * The four outcomes the decision prompt classifies an issue into (the decision
+ * table). EXPAND step (prd
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`): the `spec` outcome is
+ * added BESIDE the legacy `prd` outcome — both name the SAME "clear + coherent but
+ * >1 task" classification (a parent SPEC), dispatched through the SAME path. Both
+ * are valid through the cutover so the intake emit path can produce either until
+ * the migrate batch flips the prompt onto `spec`; the contract task removes `prd`.
+ */
+export type IntakeOutcome = 'ask' | 'task' | 'spec' | 'prd' | 'bounce';
 
 /**
  * The VERDICT the decision prompt returns — `{ask,task,prd,bounce}` + the drafted
@@ -375,7 +383,7 @@ function prdLandingToSide(
  * `--propose-prd`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
-export type IntakeArtifactType = 'task' | 'prd';
+export type IntakeArtifactType = 'task' | 'spec' | 'prd';
 
 /**
  * The PER-OUTCOME integration mode FLAG SET (prd `issue-intake` US #9). Because
@@ -840,6 +848,11 @@ async function decideAndDispatch(
 				agentEnv: options.env,
 				note,
 			});
+		// EXPAND step: the new `spec` outcome routes through the SAME dispatch as the
+		// legacy `prd` outcome (they name the SAME parent-spec artifact). Both use
+		// `modes.prd`; the migrate batch renames the key + dispatcher, the contract
+		// task drops the `prd` case.
+		case 'spec':
 		case 'prd':
 			return dispatchPrd({
 				verdict,
@@ -1838,11 +1851,16 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 	if (
 		outcome !== 'ask' &&
 		outcome !== 'task' &&
+		outcome !== 'spec' &&
 		outcome !== 'prd' &&
 		outcome !== 'bounce'
 	) {
+		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// the new `spec` outcome is ACCEPTED beside the legacy `prd` outcome (both
+		// name the parent-spec classification). Additive — `prd` stays valid; the
+		// contract task removes it.
 		throw new Error(
-			`intake verdict 'outcome' was not one of ask|task|prd|bounce (got ` +
+			`intake verdict 'outcome' was not one of ask|task|spec|prd|bounce (got ` +
 				`${JSON.stringify(outcome)}).`,
 		);
 	}

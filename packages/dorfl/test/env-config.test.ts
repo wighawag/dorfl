@@ -231,6 +231,15 @@ describe('envOverrides — enum coercion', () => {
 		expect(envOverrides({DORFL_TASKS_LAND_IN: 'pre-backlog'})).toEqual({
 			tasksLandIn: 'pre-backlog',
 		});
+		// EXPAND (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// `specsLandIn` (the `spec` vocabulary canonical key) coerces as the SAME
+		// `pre-proposed`/`ready` enum as the legacy `prdsLandIn`, beside it.
+		expect(envOverrides({DORFL_SPECS_LAND_IN: 'ready'})).toEqual({
+			specsLandIn: 'ready',
+		});
+		expect(envOverrides({DORFL_PRDS_LAND_IN: 'pre-proposed'})).toEqual({
+			prdsLandIn: 'pre-proposed',
+		});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({DORFL_OBSERVATION_TRIAGE: 'off'})).toEqual({
 			observationTriage: 'off',

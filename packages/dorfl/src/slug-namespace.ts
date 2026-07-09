@@ -43,7 +43,15 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  * deliberately do NOT span `observation` — only the `advance` resolver does (see
  * {@link resolveAdvanceArg}).
  */
-export type SlugNamespace = 'task' | 'prd' | 'observation';
+/**
+ * EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * parent-spec namespace is being renamed `prd → spec`. Both literals are members
+ * BESIDE each other through the cutover so every existing site that emits or reads
+ * `'prd'` keeps compiling; the migrate batches move call sites onto `'spec'` one
+ * at a time, and the contract task removes `'prd'`. `spec:<slug>` and `prd:<slug>`
+ * both resolve; `work/spec-<slug>` and `work/prd-<slug>` branch refs both parse.
+ */
+export type SlugNamespace = 'task' | 'spec' | 'prd' | 'observation';
 
 /**
  * The PRODUCER axis (ORTHOGONAL to {@link SlugNamespace}): WHICH lifecycle
@@ -106,7 +114,13 @@ export function parseWorkBranchRef(
 ):
 	| {producer?: BranchProducer; namespace: SlugNamespace; slug: string}
 	| undefined {
-	const match = /^work\/(?:(intake)-)?(task|prd)-(.+)$/.exec(branch);
+	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// accept BOTH the new `spec` type token and the legacy `prd` token in the
+	// alternation so `work/spec-<slug>` and `work/prd-<slug>` both parse. A
+	// `work/prd-<slug>` ref still resolves to `{namespace: 'prd'}` (unchanged); a
+	// `work/spec-<slug>` ref resolves to `{namespace: 'spec'}`. The contract task
+	// drops the `prd` alternative.
+	const match = /^work\/(?:(intake)-)?(task|spec|prd)-(.+)$/.exec(branch);
 	if (!match) {
 		return undefined;
 	}
@@ -143,6 +157,14 @@ export interface ResolvedSlug {
 
 /** The explicit-prefix forms the resolver understands. */
 const TASK_PREFIX = 'task:';
+/**
+ * EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * new canonical `spec:` prefix beside the legacy `prd:` prefix. Both parse to the
+ * parent-spec namespace — `spec:<slug>` → `{explicit: 'spec'}`, `prd:<slug>` →
+ * `{explicit: 'prd'}` — so a caller may write either through the cutover. The
+ * contract task removes `PRD_PREFIX`.
+ */
+const SPEC_PREFIX = 'spec:';
 const PRD_PREFIX = 'prd:';
 /**
  * The observation namespace's prefixes: the short `obs:` CLI alias and the
@@ -174,6 +196,9 @@ export class SlugResolutionError extends Error {
 export function parseSlugArg(arg: string): ParsedSlugArg {
 	if (arg.startsWith(TASK_PREFIX)) {
 		return {explicit: 'task', slug: arg.slice(TASK_PREFIX.length)};
+	}
+	if (arg.startsWith(SPEC_PREFIX)) {
+		return {explicit: 'spec', slug: arg.slice(SPEC_PREFIX.length)};
 	}
 	if (arg.startsWith(PRD_PREFIX)) {
 		return {explicit: 'prd', slug: arg.slice(PRD_PREFIX.length)};
@@ -337,6 +362,18 @@ export function resolveTaskOnlyArg(arg: string): string {
 			`this command operates on tasks, not prds — '${arg}' names a prd. ` +
 				`Drop the \`prd:\` prefix to act on the task, or use \`do ${arg}\` ` +
 				`to task the prd.`,
+		);
+	}
+	if (parsed.explicit === 'spec') {
+		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): a
+		// `spec:` argument is rejected BESIDE the legacy `prd:` argument (both name
+		// the parent-spec namespace, which task-only commands do not act on). Kept a
+		// SEPARATE branch so the legacy `prd:` message stays byte-identical; the
+		// contract task collapses the two.
+		throw new SlugResolutionError(
+			`this command operates on tasks, not specs — '${arg}' names a spec. ` +
+				`Drop the \`spec:\` prefix to act on the task, or use \`do ${arg}\` ` +
+				`to task the spec.`,
 		);
 	}
 	if (parsed.explicit === 'observation') {
