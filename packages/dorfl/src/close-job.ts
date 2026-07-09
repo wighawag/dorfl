@@ -70,9 +70,9 @@ export type CloseDecision =
 export interface CloseCandidate {
 	/** The resolved issue number. */
 	issueNumber: number;
-	/** Whether the closing link was a lone task's `issue:` or a prd's `issue:`. */
-	via: 'issue' | 'brief';
-	/** The slug of the artifact carrying the closing link (prd slug / task slug). */
+	/** Whether the closing link was a lone task's `issue:` or a spec's `issue:`. */
+	via: 'issue' | 'spec';
+	/** The slug of the artifact carrying the closing link (spec slug / task slug). */
 	slug: string;
 	/** What the close-job decided for this candidate. */
 	decision: CloseDecision;
@@ -146,11 +146,11 @@ function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
  */
 function resolveCandidates(repoPath: string): {
 	issueNumber: number;
-	via: 'issue' | 'brief';
+	via: 'issue' | 'spec';
 	slug: string;
 }[] {
 	const seen = new Set<number>();
-	const prdCandidates: {issueNumber: number; via: 'brief'; slug: string}[] = [];
+	const specCandidates: {issueNumber: number; via: 'spec'; slug: string}[] = [];
 	const taskCandidates: {issueNumber: number; via: 'issue'; slug: string}[] =
 		[];
 
@@ -167,7 +167,7 @@ function resolveCandidates(repoPath: string): {
 			// `issue:`-bearing prd becomes a candidate here.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
-				prdCandidates.push({issueNumber: closing.issue, via: 'brief', slug});
+				specCandidates.push({issueNumber: closing.issue, via: 'spec', slug});
 			}
 		}
 	}
@@ -191,9 +191,9 @@ function resolveCandidates(repoPath: string): {
 		}
 	}
 
-	prdCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
+	specCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
 	taskCandidates.sort((a, b) => a.slug.localeCompare(b.slug));
-	return [...prdCandidates, ...taskCandidates];
+	return [...specCandidates, ...taskCandidates];
 }
 
 /** True iff the lone task with this slug resides in `work/done/`. */
@@ -211,9 +211,9 @@ function loneTaskLanded(repoPath: string, taskSlug: string): boolean {
 }
 
 /** The closing comment posted (atomically, on the close call) for each kind. */
-function closeComment(via: 'issue' | 'brief', slug: string): string {
-	return via === 'brief'
-		? `Closed by dorfl: every task of brief \`${slug}\` has landed in \`work/done/\`.`
+function closeComment(via: 'issue' | 'spec', slug: string): string {
+	return via === 'spec'
+		? `Closed by dorfl: every task of spec \`${slug}\` has landed in \`work/done/\`.`
 		: `Closed by dorfl: the task \`${slug}\` has landed in \`work/done/\`.`;
 }
 
@@ -239,7 +239,7 @@ export async function runCloseJob(
 		// computation of "complete" / "landed" is the UNCHANGED engine query.
 		let shouldClose: boolean;
 		let notReady: CloseDecision;
-		if (cand.via === 'brief') {
+		if (cand.via === 'spec') {
 			shouldClose = isPrdComplete({repoPath, slug: cand.slug}).complete;
 			notReady = 'not-complete';
 		} else {

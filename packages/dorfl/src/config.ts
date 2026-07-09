@@ -28,7 +28,7 @@ export type IntegrationMode = 'propose' | 'merge';
  * POOL — the trusted fast-path landing, on-disk `work/tasks/ready/`). The pool
  * value was renamed `'backlog'` → `'todo'` → `'ready'` (ADR
  * `rename-task-pool-folder-todo-to-ready`, a CLEAN BREAK matching the on-disk
- * folder `tasks/ready/` and the brief-side `'ready'` pool spelling). The runner-deterministic
+ * folder `tasks/ready/` and the spec-side `'ready'` pool spelling). The runner-deterministic
  * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
  * > untrusted-origin ⇒ pre-backlog > tasksLandIn default > built-in
  * (pre-backlog)`. An untrusted-origin tasker output is FORCED to staging even in

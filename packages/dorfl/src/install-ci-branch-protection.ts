@@ -6,7 +6,7 @@
  * `strict: true` ("require branches up to date before merging") rule together
  * force a rebase + re-verify against current `main` before the merge button works.
  *
- * BEHAVIOUR (Applied Answer / Implementation Decision, brief §"Implementation
+ * BEHAVIOUR (Applied Answer / Implementation Decision, spec §"Implementation
  * Decisions" — Tier-1 GitHub provisioning is auto-when-admin, instruct-otherwise):
  *
  *   - When the configured credential is repo-admin-scoped, install-ci
@@ -17,9 +17,9 @@
  *   - When only the ambient `GITHUB_TOKEN` (or any non-admin credential) is
  *     available, install-ci NEVER attempts the call — it PRINTS the exact
  *     ready-to-run `gh api` command + a one-liner pointing to the manual UI
- *     fallback (the documented behaviour the brief fixes at launch).
+ *     fallback (the documented behaviour the spec fixes at launch).
  *
- * SCOPE DETECTION — cheapest of the two options the brief offers. The seam
+ * SCOPE DETECTION — cheapest of the two options the spec offers. The seam
  * provides `getRepoAdminScope?()` (implemented on the GitHub adapter by reading
  * `permissions.admin` from `GET /repos/{owner}/{repo}` — ONE low-cost read that
  * works uniformly for every token kind: classic PAT, fine-grained PAT, GitHub
@@ -31,7 +31,7 @@
  * number of round-trips at best. ONE uniform repo-permissions read is therefore
  * the cheaper choice on both implementation effort AND wall-clock (a single API
  * call against an endpoint every token can hit). RECORDED IN-PLACE so a future
- * change can flip it knowingly; the brief calls this "pick the cheaper of the
+ * change can flip it knowingly; the spec calls this "pick the cheaper of the
  * two and record the choice."
  *
  * DEADLOCK GUARD — a NEVER-RUN required check would block every merge (GitHub
@@ -51,10 +51,10 @@
  * in the success log. We chose this "run-the-check-once-by-construction-of-the-
  * trigger" ordering over the ruleset `do_not_enforce_on_create` toggle because
  * (a) one PUT against the existing branch-protection endpoint is simpler than
- * minting a ruleset shape this brief otherwise does not need, AND (b) the
+ * minting a ruleset shape this spec otherwise does not need, AND (b) the
  * `merge_queue` Tier-2 forward seam already lives in the verify workflow's
  * `on:` trigger (so the ruleset seam is not needed here either — it is the
- * follow-on brief's lever). Trade-off RECORDED so a future merge-queue task can
+ * follow-on spec's lever). Trade-off RECORDED so a future merge-queue task can
  * flip to rulesets knowingly without re-deciding why we did not now.
  */
 
@@ -68,7 +68,7 @@ export {VERIFY_CHECK_CONTEXT};
  * `/repos/{owner}/{repo}/branches/{branch}/protection`. Shape mirrors the REST
  * docs (the GitHub PUT REQUIRES `enforce_admins`, `required_pull_request_reviews`,
  * and `restrictions` to be present; `null` for "not configured"). We set only
- * the two fields the brief names — the required `${VERIFY_CHECK_CONTEXT}` check
+ * the two fields the spec names — the required `${VERIFY_CHECK_CONTEXT}` check
  * AND `strict: true` (= "require branches up to date before merging") — and
  * leave the others `null` so install-ci does not silently impose unrelated
  * gates (reviews, admin enforcement, push restrictions) the user did not opt
@@ -103,7 +103,7 @@ export function buildBranchProtectionSpec(): BranchProtectionSpec {
 }
 
 /**
- * The repo's default branch the protection rule targets (the rule the brief
+ * The repo's default branch the protection rule targets (the rule the spec
  * names: protect `main` so a propose-mode PR cannot be merged stale). Exposed
  * as a parameter on the orchestrator so a non-default-branch repo can override.
  */
