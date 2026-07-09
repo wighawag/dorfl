@@ -400,32 +400,32 @@ describe('parseFrontmatter', () => {
 });
 
 describe('resolveClosingIssue', () => {
-	it('a fanned task (prd: only) closes via the `prd:` hop', () => {
-		expect(resolveClosingIssue({prd: 'my-prd', issue: undefined})).toEqual({
-			via: 'brief',
-			prd: 'my-prd',
+	it('a fanned task (spec: only) closes via the `spec:` hop', () => {
+		expect(resolveClosingIssue({spec: 'my-spec', issue: undefined})).toEqual({
+			via: 'spec',
+			spec: 'my-spec',
 		});
 	});
 
 	it('a lone task (issue: only) closes via its own `issue:` field', () => {
-		expect(resolveClosingIssue({prd: undefined, issue: 7})).toEqual({
+		expect(resolveClosingIssue({spec: undefined, issue: 7})).toEqual({
 			via: 'issue',
 			issue: 7,
 		});
 	});
 
-	it('when both are present (a hand-edit contradiction), `prd:` WINS and `issue:` is ignored', () => {
+	it('when both are present (a hand-edit contradiction), `spec:` WINS and `issue:` is ignored', () => {
 		// The one-closure-path invariant: intake never emits both; a human typo degrades
-		// to "use the prd's number" rather than crashing (no throwing validator).
-		expect(resolveClosingIssue({prd: 'my-prd', issue: 9})).toEqual({
-			via: 'brief',
-			prd: 'my-prd',
+		// to "use the spec's number" rather than crashing (no throwing validator).
+		expect(resolveClosingIssue({spec: 'my-spec', issue: 9})).toEqual({
+			via: 'spec',
+			spec: 'my-spec',
 		});
 	});
 
 	it('neither present → no closure path (undefined)', () => {
 		expect(
-			resolveClosingIssue({prd: undefined, issue: undefined}),
+			resolveClosingIssue({spec: undefined, issue: undefined}),
 		).toBeUndefined();
 	});
 });

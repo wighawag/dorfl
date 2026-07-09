@@ -35,7 +35,7 @@ import {workItemRel, type WorkFolderKey} from './work-layout.js';
  * merge-question by the shape of `default` (that string-sniff workaround is
  * exactly what a first build of this task was BLOCKED at review for).
  *
- * Layered like the brief asks: the FLOOR (git-alone reachability) is the
+ * Layered like the spec asks: the FLOOR (git-alone reachability) is the
  * authoritative enumerator — it works against a bare `--bare` arbiter with
  * `NoneProvider`. The CEILING (`gh pr list` PR metadata) is pure ENRICHMENT
  * layered on top when a GitHub host is configured; the surfacer functions

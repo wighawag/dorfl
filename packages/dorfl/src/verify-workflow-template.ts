@@ -18,7 +18,7 @@
  *
  * `merge_group` is present (with no extra wiring) so a follow-on Tier-2 task
  * (GitHub Merge Queue) can flip the ruleset on without changing this workflow's
- * trigger surface — the forward seam the brief's Applied Answers q3 names.
+ * trigger surface — the forward seam the spec's Applied Answers q3 names.
  */
 
 import type {ResolvedCIConfig} from './install-ci-core.js';
