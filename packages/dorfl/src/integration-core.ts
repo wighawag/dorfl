@@ -313,8 +313,8 @@ export interface IntegrationCoreInput {
 	// like a normal build.
 	source: 'tasks-ready' | 'tasks-backlog' | 'in-progress' | 'done';
 	/**
-	 * Vestigial: was `true` when completing FROM `work/needs-attention/` (a
-	 * recovery finish under the legacy folder model). The per-item-lock cutover
+	 * Vestigial: was `true` when completing FROM the retired `needs-attention/`
+	 * folder (a recovery finish under the legacy folder model). The per-item-lock cutover
 	 * (`cutover-needs-attention-becomes-lock-stuck-recovery-surface`) retired
 	 * that folder — a stuck item is now the lock `state: stuck` and the body
 	 * stays in `tasks/ready/`, so a recovery `complete` is structurally a normal
@@ -579,9 +579,11 @@ export interface IntegrationCoreResult {
 	/** What the core resolved (the tail maps this 1:1 onto its own outcome). */
 	outcome: IntegrationCoreOutcome;
 	/**
-	 * True iff a FAILURE outcome was routed to `work/needs-attention/` via the
-	 * shared mechanism. False on the success path and when a failure was NOT moved
-	 * (e.g. a red re-gate that stays put in recovery).
+	 * True iff a FAILURE outcome was routed through the shared needs-attention
+	 * mechanism — post lock-cutover, the per-item lock was amended to
+	 * `state: stuck` with the reason on the lock entry (no folder move). False
+	 * on the success path and when a failure was NOT surfaced (e.g. a red
+	 * re-gate that stays put in recovery).
 	 */
 	routedToNeedsAttention: boolean;
 	/** The work branch that was processed (`work/<slug>`). */
@@ -810,10 +812,10 @@ export async function performIntegration(
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: routed.moved
-					? `Env-prep (prepare) failed (exit ${prep.exitCode}); routed '${slug}' ` +
-						'to work/needs-attention/ (the environment could not be made ready, ' +
+					? `Env-prep (prepare) failed (exit ${prep.exitCode}); marked '${slug}' ` +
+						'stuck on its per-item lock (the environment could not be made ready, ' +
 						'so the acceptance gate was NOT run). Fix the prepare command, then ' +
-						'return it to backlog/.'
+						'`requeue` to release the stuck lock.'
 					: `Env-prep (prepare) failed (exit ${prep.exitCode}); not completing ` +
 						`'${slug}' (the environment could not be made ready, so the ` +
 						'acceptance gate was NOT run). Fix the prepare command, then retry.',
@@ -860,9 +862,9 @@ export async function performIntegration(
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: routed.moved
-					? `Acceptance gate failed (exit ${gate.exitCode}); routed '${slug}' ` +
-						'to work/needs-attention/ (surfaced by status; return to backlog/ ' +
-						'once resolved). Fix the work, or use --skip-verify to override.'
+					? `Acceptance gate failed (exit ${gate.exitCode}); marked '${slug}' ` +
+						'stuck on its per-item lock (surfaced by status; `requeue` once ' +
+						'resolved). Fix the work, or use --skip-verify to override.'
 					: `Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
 						`'${slug}'. Fix the work, or use --skip-verify to override.`,
 			};
@@ -1236,9 +1238,9 @@ export async function performIntegration(
 				commitMessage,
 				reason: routed.moved
 					? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-						`aborted (never auto-resolved) and '${slug}' was routed to ` +
-						'work/needs-attention/ (surfaced by status). Resolve against the ' +
-						'latest main, then return it to backlog/ and re-run.'
+						`aborted (never auto-resolved) and '${slug}' was marked stuck on ` +
+						'its per-item lock (surfaced by status). Resolve against the latest ' +
+						'main, then `requeue` to release the stuck lock and re-run.'
 					: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
 						'aborted (never auto-resolved). Resolve against the latest main, ' +
 						'then re-run complete.',
@@ -1318,9 +1320,9 @@ export async function performIntegration(
 					branch,
 					commitMessage,
 					reason: routed.moved
-						? `${what} on the rebased tip; routed '${slug}' to ` +
-							'work/needs-attention/ (surfaced by status; return to backlog/ ' +
-							'once resolved). Fix the work, or use --skip-verify to override.'
+						? `${what} on the rebased tip; marked '${slug}' stuck on its ` +
+							'per-item lock (surfaced by status; `requeue` once resolved). ' +
+							'Fix the work, or use --skip-verify to override.'
 						: `${what} on the rebased tip; not completing '${slug}'. Fix the ` +
 							'work, or use --skip-verify to override.',
 				};
@@ -1503,9 +1505,10 @@ export async function performIntegration(
 				commitMessage,
 				reason: routed.moved
 					? `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
-						`non-fast-forward push (a sibling advanced main); '${slug}' was routed ` +
-						`to work/needs-attention/ (surfaced by status). Resolve against the ` +
-						`latest main, then return it to backlog/ and re-run.`
+						`non-fast-forward push (a sibling advanced main); '${slug}' was ` +
+						`marked stuck on its per-item lock (surfaced by status). Resolve ` +
+						`against the latest main, then \`requeue\` to release the stuck ` +
+						`lock and re-run.`
 					: `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
 						`non-fast-forward push (a sibling advanced main). Resolve against the ` +
 						`latest main, then re-run complete.`,
@@ -1859,9 +1862,9 @@ async function recoverAlreadyCommitted(params: {
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: routed.moved
-					? `${what} on the rebased tip during committed-recovery; routed ` +
-						`'${slug}' to work/needs-attention/ (surfaced by status; return ` +
-						'to backlog/ once resolved). Fix the work, or use --skip-verify ' +
+					? `${what} on the rebased tip during committed-recovery; marked ` +
+						`'${slug}' stuck on its per-item lock (surfaced by status; ` +
+						'`requeue` once resolved). Fix the work, or use --skip-verify ' +
 						'to override.'
 					: `${what} on the rebased tip during committed-recovery; not ` +
 						`completing '${slug}'. Fix the work, or use --skip-verify to ` +
@@ -2849,8 +2852,8 @@ async function runGate2Review(params: {
 			});
 			const message = routed.moved
 				? `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
-					'routed it to work/needs-attention/ (work branch pushed + surfaced; ' +
-					'transient-infra — re-run). NOT integrated.'
+					'marked it stuck on its per-item lock (work branch pushed + lock ' +
+					'surfaced; transient-infra — re-run). NOT integrated.'
 				: `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
 					'NOT integrating.';
 			note(message);
@@ -2896,9 +2899,9 @@ async function runGate2Review(params: {
 			note,
 		});
 		const message = routed.moved
-			? `PR/code review (Gate 2) blocked '${slug}'; routed it to ` +
-				'work/needs-attention/ (surfaced by status; the blocking findings are ' +
-				'recorded in the item body). NOT integrated.'
+			? `PR/code review (Gate 2) blocked '${slug}'; marked it stuck on its ` +
+				'per-item lock (surfaced by status; the blocking findings are ' +
+				'recorded on the lock entry). NOT integrated.'
 			: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
 		note(message);
 		return {

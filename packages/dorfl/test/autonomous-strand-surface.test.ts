@@ -121,8 +121,9 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 		});
 		expect(lock?.reason).toMatch(/nothing to complete/i);
 		// LOUD: a surface note fired (distinct from a normal completion message),
-		// so the CI/job log records the autonomous bounce.
-		expect(notes.some((n) => /surfaced.*needs-attention/i.test(n))).toBe(true);
+		// so the CI/job log records the autonomous bounce. Post lock-cutover the
+		// surface is the lock amend to `state: stuck`, not a folder move.
+		expect(notes.some((n) => /stuck on its per-item lock/i.test(n))).toBe(true);
 	});
 
 	it('HUMAN refusal (no surfaceArbiter) is UNCHANGED: bare `refused`, checkout NOT bounced, arbiter unchanged', async () => {

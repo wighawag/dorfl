@@ -405,7 +405,7 @@ async function continueConflictResult(params: {
 	}
 	const message =
 		`Could not continue '${params.slug}': the kept work branch did not rebase ` +
-		`cleanly onto ${params.arbiter}/main; routed to work/needs-attention/ ` +
+		`cleanly onto ${params.arbiter}/main; marked stuck on its per-item lock ` +
 		'(surfaced by status). Resolve against the latest main, or `requeue --reset` ' +
 		'to discard and start fresh.';
 	return {
@@ -439,8 +439,8 @@ async function continuePushFailureResult(params: {
 	}
 	const message =
 		`Could not continue '${params.slug}': publishing the rebased work branch to ` +
-		`${params.arbiter} failed terminally (${params.pushFailure}); routed to ` +
-		'work/needs-attention/ (surfaced by status), the kept branch left intact on ' +
+		`${params.arbiter} failed terminally (${params.pushFailure}); marked stuck ` +
+		'on its per-item lock (surfaced by status), the kept branch left intact on ' +
 		'the arbiter (recoverable). `requeue` to retry once the churn settles.';
 	return {
 		exitCode: 1,
