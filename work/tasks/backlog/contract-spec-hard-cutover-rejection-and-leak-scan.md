@@ -53,3 +53,7 @@ STOPPED (agent, verified-correct): the migrate step left ~50 live 'prd' EMIT-sit
 ## Requeue 2026-07-10
 
 STOPPED (agent, verified-correct, 2nd contract-phase gap): ~7 live EXPORTED Prd* symbols (renderPrd, buildIntakeDecisionPrd+index re-export, findPrdPath, promoteFromPrePrd*, PrdsLandIn plumbing) were never owned by any migrate batch (4a/4c curated lists omitted them; batch 3 left PrdsLandIn internal field). Inserting an atomic-migrate batch before contract (option A). Requeued.
+
+## Requeue 2026-07-10
+
+STOPPED (agent, verified-correct, 3rd contract-phase gap): the intake integration-mode CLI-flag family (--merge-prd/--propose-prd, mergePrd/proposePrd, trigger-template prd_flag) was a DOCUMENTED deferral (intake.ts:425 + observation note) that no batch owned; plus exported STAGED_PRDS_DIR + internal prd identifiers. Human decided: CLEAN BREAK on flags + FULLY PURGE internal identifiers. Inserting batch 4f; requeued.
