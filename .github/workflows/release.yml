@@ -17,6 +17,10 @@ name: release
 on:
   push:
     branches: [main]
+  # Manual trigger from the Actions tab, e.g. to (re-)run the Version-PR / publish
+  # step after a merge that did not emit a push event (a GITHUB_TOKEN API merge
+  # does not trigger `on: push`), or to re-publish idempotently.
+  workflow_dispatch: {}
 
 # Serialize release runs on main, but NEVER cancel an in-progress one:
 # `changeset publish` may be mid-publish, and cancelling it would drop the
