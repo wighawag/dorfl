@@ -25,11 +25,11 @@ import {
  * fully-answered OBSERVATION reaches the apply rung, this decider reads the answer
  * + the source's FULL context (body, type, surrounding signal — decision 3, the
  * analogue of intake reading the whole issue thread) and returns ONE of the LAUNCH
- * outcomes the apply rung allows. The artifact-type SELECTION (task vs prd) comes
+ * outcomes the apply rung allows. The artifact-type SELECTION (task vs spec) comes
  * from the agent's VERDICT, NOT a human `promote-*` field.
  *
  * **The allowed set** (the SUBSET the apply rung passes to `decide`):
- * `{task | prd | adr | delete | ask}` \u2014 i.e. `{mint-task | mint-prd | mint-adr |
+ * `{task | spec | adr | delete | ask}` \u2014 i.e. `{mint-task | mint-spec | mint-adr |
  * delete-source | ask-follow-up}`. `adr` was DEFERRED at the keystone launch (no
  * ADR-mint path existed yet) and is now WIRED by the follow-on task
  * `agentic-apply-mint-adr-route`, which added the {@link
@@ -52,7 +52,7 @@ import {
  */
 export const APPLY_ALLOWED_OUTCOMES: readonly DecisionOutcome[] = [
 	'task',
-	'prd',
+	'spec',
 	'adr',
 	'delete',
 	'ask',
@@ -135,7 +135,7 @@ export function buildApplyDecisionInput(opts: {
  * Render the apply-decision agent PROMPT: instruct a fresh-context agent to read
  * the human's recorded ANSWER(S) + the SOURCE item and emit a single
  * `{outcome, \u2026}` verdict ({@link parseDecisionVerdict} reads it). The agent decides
- * what to DO with the answered signal \u2014 mint a self-contained task, mint a PRD,
+ * what to DO with the answered signal \u2014 mint a self-contained task, mint a SPEC,
  * mint an ADR, delete the source, or ask one BATCH of follow-up questions \u2014
  * grounded in the source's full context. It writes NOTHING (the engine acts on
  * the verdict).
@@ -172,8 +172,8 @@ export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
 		`    agent can start from) — a task with no "## Prompt" is NOT dispatchable and the`,
 		`    build refuses it. Emit {"outcome":"task","taskSlug":"\u2026",`,
 		`    "taskTitle":"\u2026","taskBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
-		`  - "prd": mint a PRD from this signal (a larger, coherent piece of work).`,
-		`    Emit {"outcome":"prd","prdSlug":"\u2026","prdTitle":"\u2026","prdBody":"\u2026"}.`,
+		`  - "spec": mint a SPEC from this signal (a larger, coherent piece of work).`,
+		`    Emit {"outcome":"spec","prdSlug":"\u2026","prdTitle":"\u2026","prdBody":"\u2026"}.`,
 		`  - "adr": the answer SETTLES an architectural decision worth recording. Mint`,
 		`    a self-contained ADR (docs/adr/, the context/decision/why shape) carrying`,
 		`    the WHY from the answer(s). Emit {"outcome":"adr","adrSlug":"\u2026",`,

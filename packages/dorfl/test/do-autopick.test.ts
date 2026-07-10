@@ -174,14 +174,14 @@ describe('do (auto-pick, no arg) — picks ONE eligible item', () => {
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('auto-picks a PRD (do prd:<slug>) when NO task is eligible', async () => {
+	it('auto-picks a PRD (do spec:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
 		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({...base(run), config: cfg()});
 		expect(result.exitCode).toBe(0);
-		// the PRD dispatches to the `do prd:` path (prefixed arg).
-		expect(args).toEqual(['prd:gamma']);
+		// the PRD dispatches to the `do spec:` path (prefixed arg).
+		expect(args).toEqual(['spec:gamma']);
 	});
 
 	it('an empty backlog + no taskable PRD is NOT a failure (exit 0, nothing run)', async () => {
@@ -206,7 +206,7 @@ describe('do -n <x> — x eligible items, in SEQUENCE', () => {
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'spec:delta', 'spec:gamma']);
 	});
 
 	it('-n bounds the count (does not over-take)', async () => {
@@ -271,7 +271,7 @@ describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 1,
 		});
-		expect(args).toEqual(['prd:gamma']);
+		expect(args).toEqual(['spec:gamma']);
 	});
 
 	it('the FULL ordering flips with the order (all tasks vs all PRDs)', async () => {
@@ -279,7 +279,7 @@ describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 		seedPrd('gamma');
 		const off = recordingRunner();
 		await performDoAuto({...base(off.run), config: cfg(), count: 9});
-		expect(off.args).toEqual(['alpha', 'prd:gamma']);
+		expect(off.args).toEqual(['alpha', 'spec:gamma']);
 
 		const on = recordingRunner();
 		await performDoAuto({
@@ -287,7 +287,7 @@ describe('tasks-first PRIORITY + the configurable selectionOrder FLIP', () => {
 			config: cfg({selectionOrder: ['task', 'build', 'surface', 'triage']}),
 			count: 9,
 		});
-		expect(on.args).toEqual(['prd:gamma', 'alpha']);
+		expect(on.args).toEqual(['spec:gamma', 'alpha']);
 	});
 });
 
@@ -311,7 +311,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		seedPrd('ready'); // the only taskable one
 		const {run, args} = recordingRunner();
 		await performDoAuto({...base(run), config: cfg(), count: 9});
-		expect(args).toEqual(['prd:ready']);
+		expect(args).toEqual(['spec:ready']);
 	});
 
 	it('a taskedAfter PRD becomes selectable once its blocker resides in prd-tasked/ (folder residence, not done/)', async () => {
@@ -321,7 +321,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		seedPrd('beta', {taskedAfter: ['alpha']});
 		const blocked = recordingRunner();
 		await performDoAuto({...base(blocked.run), config: cfg(), count: 9});
-		expect(blocked.args).toEqual(['prd:alpha']);
+		expect(blocked.args).toEqual(['spec:alpha']);
 
 		// Move alpha into `work/specs/tasked/` (the source of truth for tasked-ness) ⇒
 		// beta's taskedAfter is satisfied (resolved against FOLDER residence) and beta
@@ -330,7 +330,7 @@ describe('PRD pool eligibility is autoslice-gate (not reinvented)', () => {
 		seedTaskedPrd('alpha');
 		const unblocked = recordingRunner();
 		await performDoAuto({...base(unblocked.run), config: cfg(), count: 9});
-		expect(unblocked.args).toEqual(['prd:beta']);
+		expect(unblocked.args).toEqual(['spec:beta']);
 	});
 
 	it('blocked task is excluded from the task pool (existing eligibility path)', async () => {

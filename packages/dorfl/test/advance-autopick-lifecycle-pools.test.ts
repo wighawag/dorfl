@@ -157,7 +157,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 		expect(args).toEqual(['blocked-task']);
 	});
 
-	it('a needsAnswers PRD (no sidecar) → surface arg (prd:<slug>)', async () => {
+	it('a needsAnswers PRD (no sidecar) → surface arg (spec:<slug>)', async () => {
 		seedPrd('blocked-prd', {needsAnswers: true});
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
@@ -167,7 +167,7 @@ describe('advance auto-pick — needsAnswers-blocked items → surface', () => {
 			lifecycleGates: FORCE_ON,
 			count: 5,
 		});
-		expect(args).toEqual(['prd:blocked-prd']);
+		expect(args).toEqual(['spec:blocked-prd']);
 	});
 
 	it('a PENDING-sidecar blocked item is NOT selected (calm, no thrash)', async () => {
@@ -201,12 +201,15 @@ describe('advance auto-pick — answered-sidecar items → apply (ALWAYS on)', (
 		expect(args).toEqual(['answered']);
 	});
 
-	it('an answered PRD sidecar → apply (prd:<slug>), gates off', async () => {
+	it('an answered PRD sidecar → apply (spec:<slug>), gates off', async () => {
 		seedPrd('answered-prd', {needsAnswers: true});
+		// LEGACY on-disk `prd-answered-prd.md` sidecar; the producer emits
+		// `spec:answered-prd`, so the reader's fallback resolves it (proof the
+		// legacy sidecar filename is still found for a `spec:`-emitted item).
 		seedSidecar('prd', 'answered-prd', true);
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({cwd: repo, run, config: cfg(), count: 5});
-		expect(args).toEqual(['prd:answered-prd']);
+		expect(args).toEqual(['spec:answered-prd']);
 	});
 });
 
@@ -246,7 +249,7 @@ describe('advance auto-pick — INTERIM born-OFF default is CALM (F-INTERIM)', (
 		expect(args).toEqual([
 			'apply-me', // apply: PINNED FIRST (consume-always-wins)
 			'build-me', // build: eligible task
-			'prd:task-me', // task: taskable PRD
+			'spec:task-me', // task: taskable PRD
 			'surface-me', // surface
 			'obs:triage-me', // triage
 		]);
@@ -280,7 +283,7 @@ describe('do auto-pick is PROVABLY UNCHANGED (F-SHARE)', () => {
 		const {run, args} = doRunner();
 		await performDoAuto({cwd: repo, run, config: cfg(), count: 99});
 		// `do` passes NO lifecycle pools → selects ONLY the eligible task + PRD.
-		expect(args).toEqual(['build-me', 'prd:task-me']);
+		expect(args).toEqual(['build-me', 'spec:task-me']);
 		expect(args.some((a) => a.startsWith('obs:'))).toBe(false);
 	});
 });

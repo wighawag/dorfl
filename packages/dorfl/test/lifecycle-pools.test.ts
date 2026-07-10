@@ -40,7 +40,7 @@ function answeredSidecar(item: string): SidecarModel {
 }
 
 function blocked(
-	namespace: 'task' | 'prd',
+	namespace: 'task' | 'spec',
 	slug: string,
 	sidecar: SidecarModel | undefined,
 ): NeedsAnswersCandidate {
@@ -169,14 +169,14 @@ describe('buildLifecyclePools — apply sub-pool (answered sidecar; CONSUME, ALW
 			observations: [obs('open')],
 			needsAnswers: [
 				blocked('task', 'answered-task', answeredSidecar('task:answered-task')),
-				blocked('prd', 'answered-prd', answeredSidecar('prd:answered-prd')),
+				blocked('spec', 'answered-prd', answeredSidecar('spec:answered-prd')),
 			],
 			// create-side gates OFF (the default/interim) — apply is NOT gated.
 			gates: {},
 		});
 		expect(pools.apply).toEqual([
 			{repoPath: '/repo', slug: 'answered-task', namespace: 'task'},
-			{repoPath: '/repo', slug: 'answered-prd', namespace: 'prd'},
+			{repoPath: '/repo', slug: 'answered-prd', namespace: 'spec'},
 		]);
 		// create-side pools stay empty (gates off).
 		expect(pools.surface).toEqual([]);

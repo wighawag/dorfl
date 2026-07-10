@@ -226,14 +226,16 @@ export interface PromoteObservationOptions {
 	/**
 	 * The artifact TYPE to mint, chosen by the AGENTIC apply VERDICT (task
 	 * `agentic-apply-retire-disposition-vocabulary` — NOT a human `promote-*` field
-	 * any more): `'task'` → `work/tasks/ready/<slug>.md` (the default); `'prd'` →
-	 * `work/prds/proposed/<slug>.md` (a PRD-sized signal lands in `proposed/`
+	 * any more): `'task'` → `work/tasks/ready/<slug>.md` (the default); `'spec'` →
+	 * `work/specs/proposed/<slug>.md` (a SPEC-sized signal lands in `proposed/`
 	 * staging, which a human later promotes to `ready/`). BOTH go through the SAME
 	 * triage-local {@link createItemThroughCas} writer (one local commit through the
 	 * CAS) — NOT intake's branch+integrate band — so the CAS-loser-backs-off
 	 * guarantee and the same-commit note deletion are uniform across the two routes.
+	 * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+	 * produced VALUE is `'spec'` (the verdict outcome renamed from `'prd'`).
 	 */
-	artifact?: 'task' | 'prd';
+	artifact?: 'task' | 'spec';
 	/**
 	 * The NEW backlog slug to draft. Defaults to the observation's own slug (the
 	 * promoted item is `work/backlog/<obs-slug>.md`). The CAS is keyed on the new
@@ -330,11 +332,11 @@ export async function promoteObservation(
 		};
 	}
 	// Branch the target on artifact TYPE: `task` → the agent pool (`tasks-ready`);
-	// `prd` → PRD STAGING (`prds-proposed`), the conservative default a human later
+	// `spec` → SPEC STAGING (`specs-proposed`), the conservative default a human later
 	// promotes to `ready/`. Both still go through the SAME createItemThroughCas
 	// writer below — only the destination folder + body shape differ.
 	const newItemPath = workItemRel(
-		artifact === 'prd' ? 'specs-proposed' : 'tasks-ready',
+		artifact === 'spec' ? 'specs-proposed' : 'tasks-ready',
 		`${newSlug}.md`,
 	);
 	const by = options.by || resolveBy(cwd, env);
@@ -437,11 +439,11 @@ export async function promoteObservation(
  * `## Prompt` by design.
  */
 function ensureTaskDispatchable(
-	artifact: 'task' | 'prd',
+	artifact: 'task' | 'spec',
 	slug: string,
 	body: string,
 ): string {
-	if (artifact === 'prd') {
+	if (artifact === 'spec') {
 		return body;
 	}
 	// A task WITH a `## Prompt` heading (any level-2 spelling the validator matches)
@@ -459,7 +461,7 @@ function ensureTaskDispatchable(
 }
 
 function buildPromotedBody(
-	artifact: 'task' | 'prd',
+	artifact: 'task' | 'spec',
 	slug: string,
 	observation: string,
 ): string {
@@ -472,7 +474,7 @@ function buildPromotedBody(
 		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
 		// A PRD is a north-star doc, not a blockable task — only the task shape carries
 		// `blockedBy`.
-		...(artifact === 'prd' ? [] : ['blockedBy: []']),
+		...(artifact === 'spec' ? [] : ['blockedBy: []']),
 		'---',
 	];
 	// One BLANK line separates the closing frontmatter fence from the rendered
@@ -490,7 +492,7 @@ function buildPromotedBody(
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A PRD
 	// goes through `renderSpecBody` (no `## Prompt`); a task through
 	// `renderTaskBody` (always a `## Prompt`).
-	if (artifact === 'prd') {
+	if (artifact === 'spec') {
 		return (
 			fenceToBody +
 			renderSpecBody({

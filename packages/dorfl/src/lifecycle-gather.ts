@@ -1,7 +1,11 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
-import {parseSidecar, sidecarPathFor, type SidecarModel} from './sidecar.js';
+import {
+	parseSidecar,
+	sidecarPathCandidates,
+	type SidecarModel,
+} from './sidecar.js';
 import {runAsync} from './git.js';
 import {
 	buildLifecyclePools,
@@ -33,9 +37,9 @@ import type {SelectedLifecyclePools} from './select-priority.js';
  * BOTH OFF (the interim hardcoded-off; the gate tasks flip them on).
  */
 
-/** A `needsAnswers:true` task/prd pulled from the live `work/` state (pre-sidecar). */
+/** A `needsAnswers:true` task/spec pulled from the live `work/` state (pre-sidecar). */
 interface BlockedItem {
-	namespace: 'task' | 'prd';
+	namespace: 'task' | 'spec';
 	slug: string;
 }
 
@@ -46,15 +50,18 @@ interface BlockedItem {
  */
 function readSidecarInPlace(
 	repoPath: string,
-	namespace: 'task' | 'prd' | 'observation',
+	namespace: 'task' | 'spec' | 'observation',
 	slug: string,
 ): SidecarModel | undefined {
-	const rel = sidecarPathFor(`${namespace}:${slug}`);
-	const abs = join(repoPath, rel);
-	if (!existsSync(abs)) {
-		return undefined;
+	// Probe every candidate path (spec-<slug>.md, then the legacy prd-<slug>.md the
+	// migration command has not converted yet) and read the FIRST that exists.
+	for (const rel of sidecarPathCandidates(`${namespace}:${slug}`)) {
+		const abs = join(repoPath, rel);
+		if (existsSync(abs)) {
+			return parseSidecar(readFileSync(abs, 'utf8'));
+		}
 	}
-	return parseSidecar(readFileSync(abs, 'utf8'));
+	return undefined;
 }
 
 /**
@@ -79,7 +86,7 @@ function blockedItemsInPlace(
 	const pool = read.resolveSpecPool({repoPath});
 	for (const prd of pool.prds) {
 		if (prd.needsAnswers === true) {
-			out.push({namespace: 'prd', slug: prd.slug});
+			out.push({namespace: 'spec', slug: prd.slug});
 		}
 	}
 	// TASKED resting prds (`prds/tasked/`) — enumerated UNCONDITIONALLY (NOT behind
@@ -94,7 +101,7 @@ function blockedItemsInPlace(
 	// on it (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
 	for (const prd of read.resolveLocalSpecTasked({repoPath})) {
 		if (prd.needsAnswers === true) {
-			out.push({namespace: 'prd', slug: prd.slug});
+			out.push({namespace: 'spec', slug: prd.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (prd
@@ -112,7 +119,7 @@ function blockedItemsInPlace(
 		}
 		for (const prd of read.resolveLocalSpecStaging({repoPath})) {
 			if (prd.needsAnswers === true) {
-				out.push({namespace: 'prd', slug: prd.slug});
+				out.push({namespace: 'spec', slug: prd.slug});
 			}
 		}
 	}
@@ -167,17 +174,21 @@ export function gatherLifecycleInPlace(input: {
 async function readSidecarMirror(
 	mirrorPath: string,
 	ref: string,
-	namespace: 'task' | 'prd' | 'observation',
+	namespace: 'task' | 'spec' | 'observation',
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<SidecarModel | undefined> {
-	const rel = sidecarPathFor(`${namespace}:${slug}`);
-	const object = `${ref}:${rel}`;
-	const show = await runAsync('git', ['show', object], mirrorPath, {env});
-	if (show.status !== 0) {
-		return undefined;
+	// Probe every candidate committed path (spec-<slug>.md, then the legacy
+	// prd-<slug>.md the migration command has not converted yet) via `git show`,
+	// returning the FIRST that resolves.
+	for (const rel of sidecarPathCandidates(`${namespace}:${slug}`)) {
+		const object = `${ref}:${rel}`;
+		const show = await runAsync('git', ['show', object], mirrorPath, {env});
+		if (show.status === 0) {
+			return parseSidecar(show.stdout);
+		}
 	}
-	return parseSidecar(show.stdout);
+	return undefined;
 }
 
 /**
@@ -218,7 +229,7 @@ export async function gatherLifecycleMirror(input: {
 	}
 	for (const prd of prdPool.prds) {
 		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'prd', slug: prd.slug});
+			blocked.push({namespace: 'spec', slug: prd.slug});
 		}
 	}
 	// TASKED resting prds (`<ref>:work/prds/tasked/`) — enumerated UNCONDITIONALLY,
@@ -228,7 +239,7 @@ export async function gatherLifecycleMirror(input: {
 	const prdTasked = await read.resolveMirrorSpecTasked({mirrorPath, ref, env});
 	for (const prd of prdTasked) {
 		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'prd', slug: prd.slug});
+			blocked.push({namespace: 'spec', slug: prd.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (prd
@@ -245,7 +256,7 @@ export async function gatherLifecycleMirror(input: {
 	}
 	for (const prd of prdStaging) {
 		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'prd', slug: prd.slug});
+			blocked.push({namespace: 'spec', slug: prd.slug});
 		}
 	}
 

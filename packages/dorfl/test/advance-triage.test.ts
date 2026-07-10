@@ -404,14 +404,14 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		expect(pathOnArbiterMain(seeded.repo, sidecarPath)).toBe(false);
 	});
 
-	it('verdict prd → mint-prd: the artifact type comes from the VERDICT (a PRD into prds/proposed)', async () => {
+	it('verdict spec → mint-spec: the artifact type comes from the VERDICT (a SPEC into specs/proposed)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		seedAnsweredObservation(seeded.repo, 'prdprom');
 		gitIn(['add', '-A'], seeded.repo);
 		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
 		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
 
-		const {decide} = spyDecide({outcome: 'prd'});
+		const {decide} = spyDecide({outcome: 'spec'});
 		const result = await performAdvance({
 			arg: 'obs:prdprom',
 			cwd: seeded.repo,
@@ -422,7 +422,7 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('advanced');
-		// A `prd` verdict mints into prds/proposed (NOT tasks/ready) — the verdict
+		// A `spec` verdict mints into specs/proposed (NOT tasks/ready) — the verdict
 		// chose the artifact type.
 		expect(
 			pathOnArbiterMain(seeded.repo, 'work/specs/proposed/prdprom.md'),

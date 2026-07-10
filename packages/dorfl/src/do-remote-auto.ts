@@ -144,9 +144,9 @@ export async function performDoRemoteAuto(
 	return {results, exitCode, message};
 }
 
-/** The `do --remote` arg for a selected item: `prd:<slug>` for a prd, bare slug for a task. */
+/** The `do --remote` arg for a selected item: `spec:<slug>` for a spec, bare slug for a task. */
 function remoteArgFor(item: SelectedItem): string {
-	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
+	return item.namespace === 'spec' ? `spec:${item.slug}` : item.slug;
 }
 
 /**

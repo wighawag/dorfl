@@ -39,7 +39,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * decides to DO with an input (the analogue of intake's {@link IntakeOutcome}):
  *
  * - **task** — mint a self-contained task from the input.
- * - **prd** — mint a prd from the input.
+ * - **spec** — mint a spec from the input.
  * - **adr** — mint an adr from the input (NO caller wires this yet; the keystone's
  *   allowed set will, and `agentic-apply-mint-adr-route` adds the route — decision
  *   14 keeps the engine agnostic so this is added without re-architecting).
@@ -51,7 +51,11 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * No caller is forced to allow ALL of these: each passes its own SUBSET to
  * {@link decide}. The engine is agnostic to which subset a caller permits.
  */
-export type DecisionOutcome = 'task' | 'prd' | 'adr' | 'delete' | 'ask';
+// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+// parent-spec verdict outcome is `'spec'` (renamed from `'prd'`); the decider
+// prompt emits it and the parser accepts it. This is a fresh per-call LLM verdict
+// (nothing `'prd'`-valued is persisted), so the rename needs no on-disk alias.
+export type DecisionOutcome = 'task' | 'spec' | 'adr' | 'delete' | 'ask';
 
 /**
  * The VERDICT the decider returns — the chosen {@link DecisionOutcome} plus the
@@ -229,13 +233,13 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 	const outcome = obj.outcome;
 	if (
 		outcome !== 'task' &&
-		outcome !== 'prd' &&
+		outcome !== 'spec' &&
 		outcome !== 'adr' &&
 		outcome !== 'delete' &&
 		outcome !== 'ask'
 	) {
 		throw new Error(
-			`decision verdict 'outcome' was not one of task|prd|adr|delete|ask (got ` +
+			`decision verdict 'outcome' was not one of task|spec|adr|delete|ask (got ` +
 				`${JSON.stringify(outcome)}).`,
 		);
 	}

@@ -139,7 +139,7 @@ describe('listPromotable — reads the arbiter staging folders', () => {
 		expect(result.items).toEqual([
 			{namespace: 'task', slug: 'alpha-task'},
 			{namespace: 'task', slug: 'beta-task'},
-			{namespace: 'prd', slug: 'some-prd'},
+			{namespace: 'spec', slug: 'some-prd'},
 		]);
 	});
 
@@ -174,7 +174,7 @@ describe('promote [item] — no argument LISTS what is staged', () => {
 		const {out, code} = await runPromote(repo, []);
 		expect(code, out).toBeUndefined(); // a plain return, not process.exit
 		expect(out).toMatch(/task:my-task/);
-		expect(out).toMatch(/prd:my-prd/);
+		expect(out).toMatch(/spec:my-prd/);
 	});
 
 	it('says nothing is staged when both staging folders are empty', async () => {
@@ -203,12 +203,14 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		expect(onArbiterMain(repo, 'work/tasks/ready/bare-one.md')).toBe(true);
 	});
 
-	it('promote prd:<slug> moves pre-prd/ -> prd/ on the arbiter (auto-sliceable)', async () => {
+	it('promote prd:<slug> (legacy input alias) moves proposed/ -> ready/ on the arbiter (auto-sliceable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stagePrd(repo, 'vision');
 		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(true);
+		// `prd:` INPUT is still accepted (contract task removes it); the produced
+		// namespace VALUE + message speak `spec`.
 		const {out} = await runPromote(repo, ['prd:vision']);
-		expect(out).toMatch(/Promoted prd 'vision' into the pool/);
+		expect(out).toMatch(/Promoted spec 'vision' into the pool/);
 		expect(onArbiterMain(repo, 'work/specs/ready/vision.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(false);
 	});

@@ -152,12 +152,14 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		seedStagedPrd(seeded.repo, 'prd-race');
 
-		// Apply-style advance hold on `prd:prd-race` (the prd lock entry is
+		// Apply-style advance hold on `spec:prd-race` (the spec lock entry is
 		// distinct from a task with the same slug, via `lockEntryFor`'s
-		// `<type>-<slug>` encoding).
+		// `<type>-<slug>` encoding). MIGRATE step: `promoteFromPrePrd` now takes the
+		// `spec:<slug>` lock, so the competing hold must key the same `spec:` identity
+		// for the apply×promote mutual exclusion to bite.
 		const holder = raceClone(seeded, 'apply');
 		const held = await acquireItemLock({
-			item: 'prd:prd-race',
+			item: 'spec:prd-race',
 			action: 'advance',
 			cwd: holder,
 			arbiter: ARBITER,
@@ -185,7 +187,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		);
 
 		await releaseItemLock({
-			item: 'prd:prd-race',
+			item: 'spec:prd-race',
 			cwd: holder,
 			arbiter: ARBITER,
 			env: racerEnv('apply'),
@@ -237,7 +239,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 			false,
 		);
 		const after = await readItemLock({
-			item: 'prd:happy-prd',
+			item: 'spec:happy-prd',
 			cwd: seeded.repo,
 			arbiter: ARBITER,
 			env: gitEnv(),

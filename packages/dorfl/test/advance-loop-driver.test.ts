@@ -96,7 +96,7 @@ describe('advanceOnce — loops the tick over the eligible SET (mirror pool), ga
 			env: gitEnv(),
 		});
 		// the eligible task + the taskable PRD (not the humanOnly task).
-		expect(args.sort()).toEqual(['alpha', 'prd:gamma']);
+		expect(args.sort()).toEqual(['alpha', 'spec:gamma']);
 		expect(result.items).toHaveLength(2);
 	});
 
