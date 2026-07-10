@@ -112,6 +112,16 @@ Notes for the hand-writer:
 - The fixed marker `**Your answer** (write below this line):` is followed by an empty region; the answer is everything from the marker up to the next `## ` heading (heading-delimited so a `---` inside an answer cannot break parsing).
 - The human just types prose under the answer marker — no `key:`, no escaping, no fence.
 
+### The optional `kind=` dispatch axis (interim primitive)
+
+An entry MAY carry an optional `kind=<value>` machine-only dispatch axis in its per-entry HTML comment (`<value>` ∈ `merge` | `stuck` | `triage` | `spec`), read by the `advance` apply rung to route runner-ACTION questions (`merge`, `stuck`) to deterministic dispatch vs CONTENT questions (`triage`, `spec`) to the agentic `decide()` path. Absent ⇒ the plain binary content entry (every pre-`kind` sidecar parses + renders byte-identically). This is an INTERIM primitive — removable once question sidecars move to kind-based SUBFOLDERS (`work/questions/merge/`, …), where the folder ENCODES the kind and this per-entry field is redundant.
+
+Three ratified rules govern the on-disk shape of this axis (recorded here so `packages/dorfl/src/sidecar.ts` is not the sole home):
+
+- **Token spelling is `kind=<value>`.** No alternative spelling, no synonyms — the literal token is `kind=`, mirroring the `id=` / `answered=` house style.
+- **Order within the comment: `kind=` is emitted AFTER any `answered=` token** (i.e. `<!-- qN fields: id=qN [answered=…] [kind=…] -->`). Emit order is load-bearing because the comment IS the on-disk surface — downstream diff tools see it, so the order is fixed rather than left implementation-defined.
+- **Unknown `kind=` values are SILENTLY DROPPED on re-serialise** (silent-on-malformed, matching the retired `disposition=` precedent — never a throw, never a coerce). A mistyped or unknown token parses to `undefined` and is NOT echoed back on serialise. CONSEQUENCE: round-trip is NOT byte-preserving for unknown tokens. This is BY DESIGN — it keeps parse/serialise symmetric on the KNOWN grammar and stops downstream code from silently depending on opaque passthrough. Do NOT "fix" it by adding echo-through; that would reverse the decision.
+
 **No separate write-skill is added.** Hand-writing the sidecar (or the `advance` verb) is enough. Do not invent one here.
 
 ## Boundaries (the scope fence)
