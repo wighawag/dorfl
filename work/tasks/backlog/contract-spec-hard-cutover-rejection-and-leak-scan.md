@@ -49,3 +49,7 @@ The CONTRACT phase of the wide refactor (`TASKING-PROTOCOL.md` §3a): now that e
 ## Requeue 2026-07-10
 
 STOPPED (agent, verified-correct): the migrate step left ~50 live 'prd' EMIT-site + local-union-DEFINITION identifiers un-migrated across ~14 modules (4a/b/c widened CONSUMER === checks only). Removing the alias would silently misroute prd:<slug> sidecar/lock identity to task (compiles clean). Re-scoping option A: inserting a migrate batch (rename-spec-namespace-emit-sites-and-local-unions) before this, and keeping the sidecar-FILE-path prd-<slug>.md reader as an alias the migration command removes. Requeued.
+
+## Requeue 2026-07-10
+
+STOPPED (agent, verified-correct, 2nd contract-phase gap): ~7 live EXPORTED Prd* symbols (renderPrd, buildIntakeDecisionPrd+index re-export, findPrdPath, promoteFromPrePrd*, PrdsLandIn plumbing) were never owned by any migrate batch (4a/4c curated lists omitted them; batch 3 left PrdsLandIn internal field). Inserting an atomic-migrate batch before contract (option A). Requeued.
