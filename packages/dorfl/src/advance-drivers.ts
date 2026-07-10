@@ -359,7 +359,7 @@ export async function runAdvanceTickWithTreelessPublish(
  * classifies into the right rung:
  *   - `observation` → `obs:<slug>` (the triage rung; bare would resolve to a
  *     task, so the `obs:` prefix is required);
- *   - `prd` → `prd:<slug>` (a taskable prd's task rung, OR a `needsAnswers` prd
+ *   - `spec` → `spec:<slug>` (a taskable spec's task rung, OR a `needsAnswers` spec
  *     the tick surfaces/applies);
  *   - `task` → bare `<slug>` (an eligible task's build rung, OR a `needsAnswers`
  *     task the tick surfaces/applies).
@@ -371,8 +371,8 @@ function argForSelectedItem(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	if (item.namespace === 'prd') {
-		return `prd:${item.slug}`;
+	if (item.namespace === 'spec') {
+		return `spec:${item.slug}`;
 	}
 	return item.slug;
 }

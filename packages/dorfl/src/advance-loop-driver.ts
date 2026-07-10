@@ -240,15 +240,15 @@ export async function advanceOnce(
 
 /**
  * The advance arg for a selected item (the SELECTION->ARG dispatch): `obs:<slug>`
- * for an observation (the triage rung), `prd:<slug>` for a prd, bare slug for a
+ * for an observation (the triage rung), `spec:<slug>` for a spec, bare slug for a
  * task. The tick re-classifies each arg into the right rung (surface/apply for a
- * `needsAnswers`-blocked task/prd; triage for an observation).
+ * `needsAnswers`-blocked task/spec; triage for an observation).
  */
 function argForSelected(item: SelectedItem): string {
 	if (item.namespace === 'observation') {
 		return `obs:${item.slug}`;
 	}
-	return item.namespace === 'prd' ? `prd:${item.slug}` : item.slug;
+	return item.namespace === 'spec' ? `spec:${item.slug}` : item.slug;
 }
 
 /**

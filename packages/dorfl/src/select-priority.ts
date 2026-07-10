@@ -56,7 +56,7 @@ import {
  * emits `observation` (its lifecycle pools default to none, see
  * {@link selectPrioritised}).
  */
-export type SelectedNamespace = 'task' | 'prd' | 'observation';
+export type SelectedNamespace = 'task' | 'spec' | 'observation';
 
 /** One item the selection layer picked, in run order. */
 export interface SelectedItem {
@@ -65,8 +65,8 @@ export interface SelectedItem {
 	/** The bare slug to act on. */
 	slug: string;
 	/**
-	 * `'task'` ⇒ run the task-build `do` pipeline; `'prd'` ⇒ dispatch to the
-	 * `do prd:<slug>` tasking path (tasking itself is `autoslice-command`, not
+	 * `'task'` ⇒ run the task-build `do` pipeline; `'spec'` ⇒ dispatch to the
+	 * `do spec:<slug>` tasking path (tasking itself is `autoslice-command`, not
 	 * here); `'observation'` ⇒ (advance only) the triage rung via `obs:<slug>`. The
 	 * caller turns this into the right `do`/`advance` arg/dispatch.
 	 */
@@ -228,7 +228,7 @@ export function selectPrioritised(
 	const taskItems: SelectedItem[] = input.prds.map((prd) => ({
 		repoPath: prd.repoPath,
 		slug: prd.slug,
-		namespace: 'prd' as const,
+		namespace: 'spec' as const,
 	}));
 
 	const lifecycle = input.lifecycle;

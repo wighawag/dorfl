@@ -94,14 +94,14 @@ describe('toScannedLifecycle (pool → scan-shape projection)', () => {
 	// 'observation'). The scan projection MUST keep it, or every answered
 	// observation is stranded — gone from `triage` AND dropped from `apply` — so
 	// the CI enumerate schedules none of them. This asserts the projection keeps
-	// an answered observation in apply while surface stays task/prd-only.
+	// an answered observation in apply while surface stays task/spec-only.
 	it('keeps an answered observation in apply (namespace observation)', () => {
 		const out = toScannedLifecycle({
 			triage: [{slug: 'untriaged-obs'}],
 			surface: [{namespace: 'task', slug: 'blocked-task'}],
 			apply: [
 				{namespace: 'task', slug: 'answered-task'},
-				{namespace: 'prd', slug: 'answered-prd'},
+				{namespace: 'spec', slug: 'answered-prd'},
 				{namespace: 'observation', slug: 'answered-obs'},
 			],
 		});
@@ -109,7 +109,7 @@ describe('toScannedLifecycle (pool → scan-shape projection)', () => {
 		expect(out.surface).toEqual([{namespace: 'task', slug: 'blocked-task'}]);
 		expect(out.apply).toEqual([
 			{namespace: 'task', slug: 'answered-task'},
-			{namespace: 'prd', slug: 'answered-prd'},
+			{namespace: 'spec', slug: 'answered-prd'},
 			{namespace: 'observation', slug: 'answered-obs'},
 		]);
 	});
@@ -752,7 +752,7 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 		);
 		const surface = report.repos[0].lifecycle.surface;
 		expect(surface).toContainEqual({namespace: 'task', slug: 'blocked'});
-		expect(surface).toContainEqual({namespace: 'prd', slug: 'blocked-prd'});
+		expect(surface).toContainEqual({namespace: 'spec', slug: 'blocked-prd'});
 	});
 
 	it('APPLY is ALWAYS-ON: an answered sidecar applies even with BOTH create-gates calm', () => {

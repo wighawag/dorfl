@@ -74,12 +74,12 @@ describe('cli.ts wires a real apply decider at every advance entry point', () =>
 		// `adr` was DEFERRED at the keystone launch and is now WIRED by task
 		// `agentic-apply-mint-adr-route` (which added the mintAdr route). The reachable
 		// rung now PERMITS an `adr` verdict (routed to docs/adr/), so the allowed set
-		// is the full `{task | prd | adr | delete | ask}`.
+		// is the full `{task | spec | adr | delete | ask}`.
 		expect([...APPLY_ALLOWED_OUTCOMES].sort()).toEqual([
 			'adr',
 			'ask',
 			'delete',
-			'prd',
+			'spec',
 			'task',
 		]);
 		expect(APPLY_ALLOWED_OUTCOMES).toContain('adr');

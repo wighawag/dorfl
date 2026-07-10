@@ -69,6 +69,7 @@ export {
 	allAnswered,
 	resolveSidecarIdentity,
 	sidecarPathFor,
+	sidecarPathCandidates,
 	parseSidecar,
 	serialiseSidecar,
 	appendQuestions,

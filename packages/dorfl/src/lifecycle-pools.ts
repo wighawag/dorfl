@@ -85,9 +85,9 @@ export interface LifecyclePoolGates {
 }
 
 /**
- * One `needsAnswers`-blocked task/prd candidate for the SURFACE/APPLY sub-pools,
+ * One `needsAnswers`-blocked task/spec candidate for the SURFACE/APPLY sub-pools,
  * before this unit routes it. The caller resolves the item's namespace + slug
- * (from `work/backlog` tasks + `work/prds` prds carrying `needsAnswers:true`) and
+ * (from `work/backlog` tasks + `work/specs` specs carrying `needsAnswers:true`) and
  * its ACTIVE sidecar (parsed from `work/questions/<type>-<slug>.md`, or
  * `undefined` when none exists) \u2014 through the read seam (sync in-place / async
  * mirror-ref). This unit then routes it to APPLY (sidecar all-answered, consume,
@@ -96,8 +96,8 @@ export interface LifecyclePoolGates {
 export interface NeedsAnswersCandidate {
 	/** The repo this item lives in (a working checkout in-place, the mirror path remote). */
 	repoPath: string;
-	/** `'task'` (a `work/backlog/` task) or `'prd'` (a `work/prds/` prd). */
-	namespace: 'task' | 'prd';
+	/** `'task'` (a `work/backlog/` task) or `'spec'` (a `work/specs/` spec). */
+	namespace: 'task' | 'spec';
 	/** The bare slug. */
 	slug: string;
 	/** The parsed ACTIVE sidecar, or `undefined` when none exists yet. */
@@ -106,7 +106,7 @@ export interface NeedsAnswersCandidate {
 
 /**
  * One OBSERVATION candidate for the TRIAGE/APPLY sub-pools, resolved through
- * the same read seam as its `needsAnswers` task/prd siblings (task
+ * the same read seam as its `needsAnswers` task/spec siblings (task
  * `route-answered-observation-sidecar-to-apply-pool`). The classifier receives
  * a sidecar-aware observation shape so an ANSWERED observation sidecar routes
  * to the always-on APPLY pool (a CONSUME act — the human's answer is never

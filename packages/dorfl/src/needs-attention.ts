@@ -929,13 +929,17 @@ export async function promoteFromPrePrd(
 	// UNIFIED PER-ITEM LOCK around the CAS window — symmetric with
 	// {@link promoteFromPreBacklog} (prd `staging-surface-and-apply-promote-safety`,
 	// task `f3b-promote-takes-per-item-advancing-lock`, decisive prd q4 answer:
-	// prds share the apply×promote mutual-exclusion fix with tasks). The lock
-	// keys on `prd:${slug}` (a distinct ref from a task with the same slug, via
+	// specs share the apply×promote mutual-exclusion fix with tasks). The lock
+	// keys on `spec:${slug}` (a distinct ref from a task with the same slug, via
 	// {@link lockEntryFor}'s `<type>-<slug>` encoding), with `action: advance` —
-	// the SAME action an apply for a prd would take — so prd promote and prd
-	// apply on the same item are mutually exclusive by construction. Loss / crash
-	// semantics mirror the task case.
-	const item = `prd:${slug}`;
+	// the SAME action an apply for a spec would take — so spec promote and spec
+	// apply on the same item are mutually exclusive by construction. MIGRATE step
+	// (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the lock
+	// identity is `spec:${slug}` to match the `spec-<slug>` entry the tasking/apply
+	// path now acquires (`tasking.ts` releases under `spec:${slug}`); a stale
+	// `prd:${slug}` here would key a DIFFERENT ref and break the mutual exclusion.
+	// Loss / crash semantics mirror the task case.
+	const item = `spec:${slug}`;
 	const acquired = await acquireItemLock({
 		item,
 		action: 'advance',
@@ -1032,10 +1036,10 @@ export async function promoteFromPrePrd(
 	}
 }
 
-/** One staged item awaiting promotion (a task in `pre-backlog/` or a prd in `prds/proposed/`). */
+/** One staged item awaiting promotion (a task in `pre-backlog/` or a spec in `specs/proposed/`). */
 export interface PromotableItem {
-	/** `'task'` (staged in `work/pre-backlog/`) or `'prd'` (staged in `work/prds/proposed/`). */
-	namespace: 'task' | 'prd';
+	/** `'task'` (staged in `work/pre-backlog/`) or `'spec'` (staged in `work/specs/proposed/`). */
+	namespace: 'task' | 'spec';
 	/** The slug (filename minus `.md`). */
 	slug: string;
 }
@@ -1094,7 +1098,7 @@ export async function listPromotable(
 	return {
 		items: [
 			...tasks.map((slug) => ({namespace: 'task' as const, slug})),
-			...prds.map((slug) => ({namespace: 'prd' as const, slug})),
+			...prds.map((slug) => ({namespace: 'spec' as const, slug})),
 		],
 	};
 }

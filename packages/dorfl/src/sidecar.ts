@@ -267,6 +267,30 @@ export function sidecarPathFor(identity: string): string {
 	return workItemRel('questions', `${type}-${slug}.md`);
 }
 
+/**
+ * The ordered candidate sidecar PATHS a READER should probe for `identity`: the
+ * canonical {@link sidecarPathFor} path FIRST, then any legacy-data fallback that
+ * may still be on disk before the migration command converts it.
+ *
+ * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * producer side now emits `spec:<slug>`, so {@link sidecarPathFor} resolves
+ * `work/questions/spec-<slug>.md`. But the ON-DISK sidecar is still the legacy
+ * `work/questions/prd-<slug>.md` until `dorfl prd-to-spec` renames the DATA. So a
+ * `spec`-typed identity ALSO probes the legacy `prd-<slug>.md` as a fallback, and
+ * a reader takes the FIRST candidate that exists. This is a FILE-PATH DATA alias
+ * the migration command removes (it converts `prd-<slug>.md → spec-<slug>.md` on
+ * disk); it is NOT the `SlugNamespace`/`SidecarType` `'prd'` type member. Every
+ * non-`spec` type has a single candidate (its canonical path), unchanged.
+ */
+export function sidecarPathCandidates(identity: string): string[] {
+	const {type, slug} = resolveSidecarIdentity(identity);
+	const canonical = workItemRel('questions', `${type}-${slug}.md`);
+	if (type === 'spec') {
+		return [canonical, workItemRel('questions', `prd-${slug}.md`)];
+	}
+	return [canonical];
+}
+
 // --- Format constants -----------------------------------------------------
 
 /** The fixed answer marker the human types prose under. */

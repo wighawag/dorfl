@@ -690,7 +690,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 			cwd: seeded.repo,
 			item: 'observation:prdprom',
 			itemPath,
-			artifact: 'prd',
+			artifact: 'spec',
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
@@ -755,7 +755,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 			cwd: seeded.repo,
 			item: 'observation:taken',
 			itemPath,
-			artifact: 'prd',
+			artifact: 'spec',
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
@@ -806,7 +806,7 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 			cwd: seeded.repo,
 			item: 'observation:prdnoq',
 			itemPath,
-			artifact: 'prd',
+			artifact: 'spec',
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});

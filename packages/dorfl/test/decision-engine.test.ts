@@ -17,7 +17,7 @@ import {
  * dispatcher tests:
  *
  *  1. The INJECTED decider seam drives the engine with a CANNED verdict — one per
- *     outcome of the superset {task | prd | adr | delete | ask}.
+ *     outcome of the superset {task | spec | adr | delete | ask}.
  *  2. The allowed-outcome GUARD: a verdict outside the caller's `allowedOutcomes`
  *     is rejected LOUDLY (never silently coerced); a caller that does not allow
  *     `adr` can never receive it. An empty set is a programming error caught up
@@ -37,7 +37,7 @@ function cannedDecider<TInput>(
 }
 
 /** The full superset every caller draws its allowed SUBSET from. */
-const SUPERSET: DecisionOutcome[] = ['task', 'prd', 'adr', 'delete', 'ask'];
+const SUPERSET: DecisionOutcome[] = ['task', 'spec', 'adr', 'delete', 'ask'];
 
 // ---------------------------------------------------------------------------
 // 1. The injected decider seam — one canned verdict PER outcome.
@@ -54,9 +54,9 @@ describe('decide — the injected seam drives one canned verdict per outcome', (
 		expect(out).toEqual(verdict);
 	});
 
-	it('returns a `prd` verdict verbatim', async () => {
+	it('returns a `spec` verdict verbatim', async () => {
 		const verdict: DecisionVerdict = {
-			outcome: 'prd',
+			outcome: 'spec',
 			prdSlug: 'big-feature',
 			prdTitle: 'A big coherent feature',
 			prdBody: '## Problem Statement\n\nIt is big.',
@@ -102,7 +102,7 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 	it('a caller that does NOT allow `adr` can never receive it', async () => {
 		// The keystone-minus-adr subset (what advance-apply launches with before
 		// `agentic-apply-mint-adr-route` widens it).
-		const allowed: DecisionOutcome[] = ['task', 'prd', 'delete', 'ask'];
+		const allowed: DecisionOutcome[] = ['task', 'spec', 'delete', 'ask'];
 		const verdict: DecisionVerdict = {outcome: 'adr', adrTitle: 'sneaky'};
 		await expect(
 			decide({}, cannedDecider(verdict), allowed),
@@ -124,11 +124,11 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 		}
 	});
 
-	it('intake-like subset {task,prd,ask} still ACCEPTS an in-set verdict', async () => {
+	it('intake-like subset {task,spec,ask} still ACCEPTS an in-set verdict', async () => {
 		// The engine is outcome-AGNOSTIC: it hard-codes no caller's outcomes, so an
 		// intake-shaped subset works exactly as the keystone's wider one does.
-		const allowed: DecisionOutcome[] = ['task', 'prd', 'ask'];
-		const verdict: DecisionVerdict = {outcome: 'prd', prdTitle: 'ok'};
+		const allowed: DecisionOutcome[] = ['task', 'spec', 'ask'];
+		const verdict: DecisionVerdict = {outcome: 'spec', prdTitle: 'ok'};
 		const out = await decide({}, cannedDecider(verdict), allowed);
 		expect(out).toEqual(verdict);
 	});
@@ -195,11 +195,11 @@ describe('parseDecisionVerdict — the parse table', () => {
 		expect(v.taskBody).toBe('## What to build\n\nA --quiet flag.');
 	});
 
-	it('parses a `prd` verdict', () => {
+	it('parses a `spec` verdict', () => {
 		const v = parseDecisionVerdict(
-			'```json\n{"outcome":"prd","prdTitle":"Big","prdBody":"## Problem Statement\\n\\nbig"}\n```',
+			'```json\n{"outcome":"spec","prdTitle":"Big","prdBody":"## Problem Statement\\n\\nbig"}\n```',
 		);
-		expect(v.outcome).toBe('prd');
+		expect(v.outcome).toBe('spec');
 		expect(v.prdTitle).toBe('Big');
 		expect(v.prdBody).toBe('## Problem Statement\n\nbig');
 	});
@@ -249,9 +249,9 @@ describe('parseDecisionVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in the superset {task,prd,adr,delete,ask}', () => {
+	it('THROWS on an outcome not in the superset {task,spec,adr,delete,ask}', () => {
 		expect(() => parseDecisionVerdict('{"outcome":"bounce"}')).toThrow(
-			/task\|prd\|adr\|delete\|ask/,
+			/task\|spec\|adr\|delete\|ask/,
 		);
 	});
 });

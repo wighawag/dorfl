@@ -283,7 +283,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 		expect(loopSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:alpha',
 			'task:beta',
-			'prd:gamma',
+			'spec:gamma',
 		]);
 
 		// ONE-SHOT driver shape (`advance --remote -n 2`): ALWAYS SEQUENTIAL, bound by

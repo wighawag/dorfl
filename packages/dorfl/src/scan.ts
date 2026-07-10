@@ -84,11 +84,11 @@ export interface ScannedTriageItem {
  * all-answered to `apply` (CONSUME, always-on), the projection MUST keep it here
  * so the CI enumerate `jq` (`.namespace + ":" + .slug`) emits an `observation:<slug>`
  * apply leg. Dropping it (the pre-`route-answered-observation-sidecar-to-apply-pool`
- * assumption that apply is task/prd-only) STRANDS every answered observation:
+ * assumption that apply is task/spec-only) STRANDS every answered observation:
  * gone from `triage` AND absent from `apply`, so CI never schedules it.
  */
 export interface ScannedBlockedItem {
-	namespace: 'task' | 'prd' | 'observation';
+	namespace: 'task' | 'spec' | 'observation';
 	slug: string;
 }
 
@@ -293,8 +293,8 @@ export function toScannedLifecycle(pools: {
 	surface: {namespace: string; slug: string}[];
 	apply: {namespace: string; slug: string}[];
 }): ScannedLifecycle {
-	const BLOCKED_NAMESPACES = new Set(['task', 'prd', 'observation']);
-	// SURFACE stays task/prd-only; APPLY additionally keeps an answered observation.
+	const BLOCKED_NAMESPACES = new Set(['task', 'spec', 'observation']);
+	// SURFACE stays task/spec-only; APPLY additionally keeps an answered observation.
 	const asBlocked = (
 		items: {namespace: string; slug: string}[],
 		allowObservation: boolean,
@@ -303,12 +303,12 @@ export function toScannedLifecycle(pools: {
 			.filter(
 				(i) =>
 					i.namespace === 'task' ||
-					i.namespace === 'prd' ||
+					i.namespace === 'spec' ||
 					(allowObservation && i.namespace === 'observation'),
 			)
 			.filter((i) => BLOCKED_NAMESPACES.has(i.namespace))
 			.map((i) => ({
-				namespace: i.namespace as 'task' | 'prd' | 'observation',
+				namespace: i.namespace as 'task' | 'spec' | 'observation',
 				slug: i.slug,
 			}));
 	return {

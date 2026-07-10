@@ -109,7 +109,9 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 			prds: [prd('p1'), prd('p2')],
 			count: 1,
 		});
-		expect(picked).toEqual([{repoPath: '/repo', slug: 'p1', namespace: 'prd'}]);
+		expect(picked).toEqual([
+			{repoPath: '/repo', slug: 'p1', namespace: 'spec'},
+		]);
 	});
 
 	it('orders ALL tasks before ANY PRD (drain ready work first)', () => {
@@ -122,8 +124,8 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
 			'task:b',
-			'prd:p1',
-			'prd:p2',
+			'spec:p1',
+			'spec:p2',
 		]);
 	});
 
@@ -138,7 +140,7 @@ describe('selectPrioritised — tasks-first, then PRDs-to-task', () => {
 		// one task drains, then the first PRD.
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'prd:p1',
+			'spec:p1',
 		]);
 	});
 
@@ -173,7 +175,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'prd:p1',
+			'spec:p1',
 		]);
 		// And an EXPLICIT `drain` preset gives the same as omitting it.
 		const viaPreset = selectPrioritised({
@@ -194,7 +196,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectionOrder: ['task', 'build', 'surface', 'triage'],
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'prd:p1',
+			'spec:p1',
 			'task:a',
 		]);
 	});
@@ -215,7 +217,7 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			count: 1,
 		});
 		expect(tasksFirst[0]).toMatchObject({namespace: 'task', slug: 'a'});
-		expect(prdsFirst[0]).toMatchObject({namespace: 'prd', slug: 'p1'});
+		expect(prdsFirst[0]).toMatchObject({namespace: 'spec', slug: 'p1'});
 	});
 
 	it('the `groom` preset puts surface+triage AHEAD of build+task', () => {
@@ -227,15 +229,15 @@ describe('selectPrioritised — selectionOrder FLIPS the order (subsumes prdsFir
 			selectionOrder: 'groom',
 			lifecycle: {
 				apply: [],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'spec'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			},
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
-			'prd:su', // surface
+			'spec:su', // surface
 			'observation:tr', // triage
 			'task:s', // build
-			'prd:p', // task (PRD)
+			'spec:p', // task (PRD)
 		]);
 	});
 
@@ -271,7 +273,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:a',
-			'prd:p1',
+			'spec:p1',
 		]);
 		expect(picked.some((s) => s.namespace === 'observation')).toBe(false);
 	});
@@ -284,15 +286,15 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 			prds: [prd('p')],
 			lifecycle: lifecycle({
 				apply: [{repoPath: '/repo', slug: 'ap', namespace: 'task'}],
-				surface: [{repoPath: '/repo', slug: 'su', namespace: 'prd'}],
+				surface: [{repoPath: '/repo', slug: 'su', namespace: 'spec'}],
 				triage: [{repoPath: '/repo', slug: 'tr', namespace: 'observation'}],
 			}),
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply: PINNED FIRST (consume-always-wins)
 			'task:s', // build: eligible task
-			'prd:p', // task: taskable PRD
-			'prd:su', // surface
+			'spec:p', // task: taskable PRD
+			'spec:su', // surface
 			'observation:tr', // triage
 		]);
 	});
@@ -349,7 +351,7 @@ describe('selectPrioritised — the LIFECYCLE pools (advance-autopick-lifecycle-
 		});
 		expect(picked.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:ap', // apply STILL first (not orderable)
-			'prd:p', // task (PRD) flipped ahead of build
+			'spec:p', // task (PRD) flipped ahead of build
 			'task:s', // build
 			'observation:tr', // triage (still last)
 		]);

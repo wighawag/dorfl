@@ -86,6 +86,11 @@ const WORK = {
 	questions: {
 		'task-answered-task.md': sidecar('task:answered-task', true),
 		'task-half-task.md': sidecar('task:half-task', false), // pending
+		// LEGACY on-disk sidecar filename (`prd-<slug>.md`): the producer now emits
+		// `spec:answered-prd`, but the migration command has NOT renamed the sidecar
+		// file yet, so the reader must fall back from `spec-answered-prd.md` to this
+		// legacy `prd-answered-prd.md`. The apply-pool assertions below expect the
+		// `spec:answered-prd` identity, proving the fallback resolves.
 		'prd-answered-prd.md': sidecar('prd:answered-prd', true),
 		'observation-answered-obs.md': sidecar('observation:answered-obs', true),
 	},
@@ -108,7 +113,7 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
 		).toEqual([
 			'observation:answered-obs',
-			'prd:answered-prd',
+			'spec:answered-prd',
 			'task:answered-task',
 		]);
 	});
@@ -124,13 +129,13 @@ describe('scanMirrorPool — enumerates the LIFECYCLE pools from a bare mirror m
 		expect(result.lifecycle.triage).toEqual([]);
 		expect(result.lifecycle.surface).toEqual([]);
 		// APPLY is always-on — an answered OBSERVATION sidecar reaches it too,
-		// not just task/prd (task
+		// not just task/spec (task
 		// `route-answered-observation-sidecar-to-apply-pool`).
 		expect(
 			result.lifecycle.apply.map((s) => `${s.namespace}:${s.slug}`).sort(),
 		).toEqual([
 			'observation:answered-obs',
-			'prd:answered-prd',
+			'spec:answered-prd',
 			'task:answered-task',
 		]);
 	});

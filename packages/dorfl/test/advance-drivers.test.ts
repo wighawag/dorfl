@@ -159,13 +159,13 @@ describe('advance (bare, no arg) — auto-picks ONE eligible item', () => {
 		expect(args).toEqual(['alpha']);
 	});
 
-	it('auto-picks a PRD (advance prd:<slug>) when NO task is eligible', async () => {
+	it('auto-picks a PRD (advance spec:<slug>) when NO task is eligible', async () => {
 		seedTask('humanly', {humanOnly: true}); // not eligible
 		seedPrd('gamma');
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({cwd: repo, run, config: cfg()});
 		expect(result.exitCode).toBe(0);
-		expect(args).toEqual(['prd:gamma']);
+		expect(args).toEqual(['spec:gamma']);
 	});
 
 	it('an empty backlog + no taskable PRD is calm-at-rest (exit 0, nothing run)', async () => {
@@ -191,7 +191,7 @@ describe('advance -n <x> — x eligible items, ALWAYS SEQUENTIAL (US #25)', () =
 		});
 		expect(result.exitCode).toBe(0);
 		// one eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'spec:delta', 'spec:gamma']);
 	});
 
 	it('-n runs the ticks SEQUENTIALLY (no overlap) — a serialised in-flight count', async () => {

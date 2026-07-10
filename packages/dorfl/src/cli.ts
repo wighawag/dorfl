@@ -3496,20 +3496,29 @@ export function buildProgram(): Command {
 				return;
 			}
 
-			// AN ITEM → promote it. `task:`/`prd:` are explicit; a bare slug defaults to
-			// a task (mirrors `requeue`). An `obs:`/`observation:` prefix is rejected
-			// (observations have no pool).
+			// AN ITEM → promote it. `task:`/`spec:` are explicit (the legacy `prd:`
+			// prefix is still ACCEPTED as an input alias through the cutover — the
+			// contract task drops it); a bare slug defaults to a task (mirrors
+			// `requeue`). An `obs:`/`observation:` prefix is rejected (observations have
+			// no pool).
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
 				console.error(
-					`error: promote takes a task or prd, not an observation ('${rawItem}'). Observations have no agent pool.`,
+					`error: promote takes a task or spec, not an observation ('${rawItem}'). Observations have no agent pool.`,
 				);
 				process.exit(1);
 			}
-			const namespace = parsed.explicit === 'prd' ? 'prd' : 'task';
+			// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+			// the produced namespace VALUE is `spec` (both the new `spec:` prefix and the
+			// legacy `prd:` input alias map onto it), so the dispatch + messages speak
+			// `spec`; only bare/`task:` stays `task`.
+			const namespace =
+				parsed.explicit === 'spec' || parsed.explicit === 'prd'
+					? 'spec'
+					: 'task';
 			const slug = parsed.slug;
 			const result =
-				namespace === 'prd'
+				namespace === 'spec'
 					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
@@ -3517,12 +3526,12 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 			const dest =
-				namespace === 'prd'
+				namespace === 'spec'
 					? workFolderPrefix('specs-ready')
 					: workFolderPrefix('tasks-ready');
 			console.log(
 				`Promoted ${namespace} '${slug}' into the pool (${dest}); it is now ${
-					namespace === 'prd' ? 'auto-taskable' : 'claimable'
+					namespace === 'spec' ? 'auto-taskable' : 'claimable'
 				}.`,
 			);
 		});

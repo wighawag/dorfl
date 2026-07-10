@@ -1208,8 +1208,8 @@ async function applyAgenticDecision(
 		}
 	}
 
-	if (verdict.outcome === 'task' || verdict.outcome === 'prd') {
-		// mint-task / mint-prd → CAS-create a SELF-CONTAINED artifact + delete the
+	if (verdict.outcome === 'task' || verdict.outcome === 'spec') {
+		// mint-task / mint-spec → CAS-create a SELF-CONTAINED artifact + delete the
 		// source + sidecar in the SAME commit (delete-on-promote, preserved). The
 		// verdict's drafted body (when present) seeds the new item; else the writer
 		// builds a self-contained body FROM the observation (carrying the answers +

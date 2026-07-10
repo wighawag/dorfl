@@ -188,7 +188,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		expect(args).toEqual(['blocked']);
 	});
 
-	it('on ⇒ a blocked PRD pool IS enumerated (auto-picked as prd:<slug>)', async () => {
+	it('on ⇒ a blocked PRD pool IS enumerated (auto-picked as spec:<slug>)', async () => {
 		seedBlockedPrd('blocked-prd');
 		const {run, args} = recordingRunner();
 		await performAdvanceAuto({
@@ -198,7 +198,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 			lifecycleGates: surfaceGateFor(true),
 			count: 5,
 		});
-		expect(args).toEqual(['prd:blocked-prd']);
+		expect(args).toEqual(['spec:blocked-prd']);
 	});
 
 	it('APPLY is NOT gated: an answered blocker sidecar is auto-picked + applied EVEN under surfaceBlockers off', async () => {

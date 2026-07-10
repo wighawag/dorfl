@@ -190,8 +190,8 @@ async function runSelectedInSequence(
 	for (const item of selected) {
 		const arg = mode.verbatimArg
 			? item.slug
-			: item.namespace === 'prd'
-				? `prd:${item.slug}`
+			: item.namespace === 'spec'
+				? `spec:${item.slug}`
 				: item.slug;
 		const result = await run({...shared, arg});
 		results.push(result);

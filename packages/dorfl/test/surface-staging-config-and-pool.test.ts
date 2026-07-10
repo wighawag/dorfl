@@ -139,7 +139,7 @@ describe('surfaceStaging:true (default) — staged needsAnswers items appear in 
 			gates: {surface: true, surfaceStaging: true},
 		});
 		expect(pools.surface.map((i) => `${i.namespace}:${i.slug}`)).toContain(
-			'prd:staged-prd',
+			'spec:staged-prd',
 		);
 	});
 
@@ -158,7 +158,7 @@ describe('surfaceStaging:true (default) — staged needsAnswers items appear in 
 			(i) => `${i.namespace}:${i.slug}`,
 		);
 		expect(surface).toEqual(
-			expect.arrayContaining(['task:staged-task', 'prd:staged-prd']),
+			expect.arrayContaining(['task:staged-task', 'spec:staged-prd']),
 		);
 	});
 });

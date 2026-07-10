@@ -104,7 +104,7 @@ describe('performDoRemoteAuto — auto-pick / -n over the mirror-side pool', () 
 		});
 		expect(result.exitCode).toBe(0);
 		// the eligible task drains first, then the two taskable PRDs (by slug).
-		expect(args).toEqual(['alpha', 'prd:delta', 'prd:gamma']);
+		expect(args).toEqual(['alpha', 'spec:delta', 'spec:gamma']);
 	});
 
 	it('honours the per-action GATES via the mirror scan: gates off ⇒ nothing selected', async () => {

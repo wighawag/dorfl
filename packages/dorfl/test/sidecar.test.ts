@@ -9,6 +9,7 @@ import {
 	isEntryAnswered,
 	resolveSidecarIdentity,
 	sidecarPathFor,
+	sidecarPathCandidates,
 	SidecarParseError,
 	type SidecarModel,
 	type SidecarKind,
@@ -510,6 +511,35 @@ describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver S
 	});
 	it('the `:`→`-` mapping is in the FILENAME only (item keeps the colon)', () => {
 		expect(resolveSidecarIdentity('prd:x').item).toBe('prd:x');
+	});
+});
+
+describe('sidecarPathCandidates — spec probes the legacy prd-<slug>.md fallback', () => {
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+	// producer now emits `spec:<slug>`, but the on-disk sidecar is still the legacy
+	// `prd-<slug>.md` until the migration command renames the DATA. A `spec`-typed
+	// identity therefore probes `spec-<slug>.md` FIRST, then the legacy
+	// `prd-<slug>.md` — so a `spec:`-emitted item still finds its `prd-<slug>.md`
+	// sidecar. This file-path alias is DATA the migration command removes.
+	it('spec:<slug> → [spec-<slug>.md, prd-<slug>.md] (canonical first, legacy fallback)', () => {
+		expect(sidecarPathCandidates('spec:autotask')).toEqual([
+			'work/questions/spec-autotask.md',
+			'work/questions/prd-autotask.md',
+		]);
+	});
+	it('the first candidate is exactly sidecarPathFor (the canonical path)', () => {
+		expect(sidecarPathCandidates('spec:x')[0]).toBe(sidecarPathFor('spec:x'));
+	});
+	it('a non-spec type has a SINGLE candidate (its canonical path, no fallback)', () => {
+		expect(sidecarPathCandidates('task:foo')).toEqual([
+			'work/questions/task-foo.md',
+		]);
+		expect(sidecarPathCandidates('prd:autotask')).toEqual([
+			'work/questions/prd-autotask.md',
+		]);
+		expect(sidecarPathCandidates('observation:bar')).toEqual([
+			'work/questions/observation-bar.md',
+		]);
 	});
 });
 
