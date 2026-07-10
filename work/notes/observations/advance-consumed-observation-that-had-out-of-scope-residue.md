@@ -17,4 +17,4 @@ I restored the observation with point 3 marked RESOLVED-BY the task and points
 1-2 preserved verbatim, so the signal survives. Worth checking whether the
 advance workflow should either (a) leave the observation in place when a task
 only addresses a subset of its residue, or (b) migrate the un-consumed residue
-into a fresh observation/prd so no live signal is lost.
+into a fresh observation/spec so no live signal is lost.

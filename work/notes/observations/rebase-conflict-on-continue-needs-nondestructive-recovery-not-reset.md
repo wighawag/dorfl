@@ -64,7 +64,7 @@ note to that residue.
 
 RESOLVED (delete from this note's scope):
 - The self-conflict / bookkeeping-rebase class is gone at the SOURCE. The per-item-lock
-  cutover (PRD `ledger-status-per-item-lock-refs`) means NO transient status lands on
+  cutover (spec `ledger-status-per-item-lock-refs`) means NO transient status lands on
   `main` (claim/needs-attention/slicing/advancing are lock-ref state, not folder moves),
   so a continue rebase (`rebaseContinuedBranchOntoMain`, `continue-branch.ts`) is now a
   PLAIN rebase with NO runner-authored move-only commit to self-conflict on (the old
