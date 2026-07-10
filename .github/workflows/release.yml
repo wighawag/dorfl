@@ -1,0 +1,67 @@
+name: release
+
+# Changesets release flow:
+#   1. Land PRs that include a changeset (`.changeset/*.md`) on main.
+#   2. This workflow opens/updates a "Version Packages" PR that bumps versions
+#      and updates changelogs from the pending changesets.
+#   3. Merging that PR (which removes the changesets) makes this workflow run
+#      `changeset publish`, publishing the changed packages to npm.
+#
+# Auth is npm Trusted Publishing (OIDC): NO NPM_TOKEN secret. npm trusts this
+# repo + workflow (release.yml) via the trusted publisher registered on the
+# package's npmjs.com settings. The OIDC handshake needs `id-token: write`,
+# Node >= 22, and a recent pnpm; publishes are stamped with provenance.
+# `dorfl@0.0.0` already exists on npm with the trusted publisher tied, so every
+# release (starting from the first 0.1.0 bump) goes through this tokenless OIDC
+# flow automatically — no manual first publish needed.
+on:
+  push:
+    branches: [main]
+
+# Serialize release runs on main, but NEVER cancel an in-progress one:
+# `changeset publish` may be mid-publish, and cancelling it would drop the
+# release. `changeset publish` is idempotent (it skips versions already on npm),
+# so letting each queued run finish is always safe, and the run for the latest
+# `main` state always publishes the current version. Without
+# `cancel-in-progress: false` a fast feature-push + Version-PR-merge could cancel
+# the publish run and leave the bumped version unpublished.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24 # >= 22 required for npm OIDC trusted publishing
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Release PR or Publish
+        uses: changesets/action@v1
+        with:
+          # release:ci builds + format-checks then runs `changeset publish`
+          # (the action itself handles git commits/tags, so no git push here).
+          # No NPM_TOKEN: npm detects the OIDC environment and authenticates via
+          # the registered trusted publisher.
+          publish: pnpm release:ci
+          version: pnpm changeset version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
