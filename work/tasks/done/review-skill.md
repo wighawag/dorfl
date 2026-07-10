@@ -1,7 +1,7 @@
 ---
 title: review-skill — author skills/review/ (a standalone, protocol-native review discipline)
 slug: review-skill
-prd: review-skill
+spec: review-skill
 blockedBy: []
 covers: [1, 2, 3, 4, 5, 6]
 ---

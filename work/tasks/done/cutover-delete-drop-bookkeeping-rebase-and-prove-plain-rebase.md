@@ -1,7 +1,7 @@
 ---
 title: Cut-over 9d — delete drop-bookkeeping-rebase; prove a plain rebase (no rename/rename ledger conflict)
 slug: cutover-delete-drop-bookkeeping-rebase-and-prove-plain-rebase
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [cutover-claim-body-stays-and-complete-sources-from-backlog, cutover-needs-attention-becomes-lock-stuck-recovery-surface, cutover-retire-slicing-advancing-markers-and-trim-folder-sets]
 covers: [6]

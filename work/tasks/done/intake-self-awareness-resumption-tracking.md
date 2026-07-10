@@ -1,7 +1,7 @@
 ---
 title: intake-self-awareness-resumption-tracking — a deterministic pre-decision triage gate (read intake's own MARKER on the thread) so intake skips when it has the last word or the issue is already terminal, and only runs the prompt on genuine new human input
 slug: intake-self-awareness-resumption-tracking
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: [2, 10]
 ---
@@ -89,7 +89,7 @@ This stands alone (it fixes the existing ASK/BOUNCE self-loop) and is the founda
 
 ## Prompt
 
-> Give intake a DETERMINISTIC pre-decision TRIAGE GATE built on a MARKER stamped on every comment intake posts, so it skips when it has the last word or the issue is already terminal, and runs the prompt ONLY on genuine new human input. PRD: `work/prd-sliced/issue-intake.md`. This also fixes a PRE-EXISTING hazard: intake's own comments are new thread comments, so a naive re-run reads its OWN comment as a new turn → intake re-triggers itself. The TRIAGE GATE is the COMPLETE fix (do NOT add a `classifyIntakeEvent` self-filter — that classifier is deliberately `{kind}`-only; CI-side scheduling is `runner-in-ci`'s).
+> Give intake a DETERMINISTIC pre-decision TRIAGE GATE built on a MARKER stamped on every comment intake posts, so it skips when it has the last word or the issue is already terminal, and runs the prompt ONLY on genuine new human input. PRD: `work/spec-sliced/issue-intake.md`. This also fixes a PRE-EXISTING hazard: intake's own comments are new thread comments, so a naive re-run reads its OWN comment as a new turn → intake re-triggers itself. The TRIAGE GATE is the COMPLETE fix (do NOT add a `classifyIntakeEvent` self-filter — that classifier is deliberately `{kind}`-only; CI-side scheduling is `runner-in-ci`'s).
 >
 > DRIFT CHECK FIRST: confirm there is still NO marker / bot-identity / cursor in `src/intake.ts`. If a triage gate / marker already exists, re-scope.
 >

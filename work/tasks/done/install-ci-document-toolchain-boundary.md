@@ -1,7 +1,7 @@
 ---
 title: install-ci documents the project-toolchain boundary (no knob, no detection)
 slug: install-ci-document-toolchain-boundary
-prd: install-ci-project-provisioning
+spec: install-ci-project-provisioning
 blockedBy: []
 covers: [5, 6]
 ---
@@ -33,7 +33,7 @@ A tiny, self-contained docs/output task: it touches the README/completion-messag
 
 > Make `install-ci` STATE the project-toolchain boundary in its generated output, and confirm dorfl's own Node step still emits — WITHOUT adding any knob or any detection. This is the (A) axis of the `install-ci-project-provisioning` PRD: dorfl needs only `node >=18`, so there is no dorfl-Node-version knob to add; the project's toolchain is the project's concern (the project-setup hook, a sibling task). The only deliverable here is an honest documented boundary.
 >
-> FIRST, drift-check (launch snapshot): re-read `work/prds/tasked/install-ci-project-provisioning.md` (the (A) decisions + Out of Scope). Confirm the install-ci core still emits a `setup-node` step in the composite action and still produces a README / completion message you can extend. If a sibling task already added the project-setup hook with different vocabulary, align the boundary text to the real hook name; if the composite-action generator changed shape, do not build on the stale premise — route to needs-attention.
+> FIRST, drift-check (launch snapshot): re-read `work/specs/tasked/install-ci-project-provisioning.md` (the (A) decisions + Out of Scope). Confirm the install-ci core still emits a `setup-node` step in the composite action and still produces a README / completion message you can extend. If a sibling task already added the project-setup hook with different vocabulary, align the boundary text to the real hook name; if the composite-action generator changed shape, do not build on the stale premise — route to needs-attention.
 >
 > DOMAIN VOCABULARY: the COMPOSITE setup action (`dorfl-setup`) provisions dorfl + the harness; `install-ci` is a one-time human-run scaffolder that prints a completion message and (per the existing seed) ships a README documenting the generated CI. dorfl's `engines.node` is `>=18`. The project-setup hook (sibling task `install-ci-project-setup-hook`) is the supported way to provision a custom/conflicting project toolchain.
 >

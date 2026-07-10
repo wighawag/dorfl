@@ -1,7 +1,7 @@
 ---
 title: advance — the observation TRIAGE rung + the NEW `autoTriage` gate: question-gated by default, conservative auto-disposition (high bar), promote-via-CAS new-item creation
 slug: advance-rung-triage
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-rung-apply]
 covers: [16, 17, 23, 24, 30]
 ---
@@ -37,7 +37,7 @@ This rung is sequenced AFTER `advance-rung-apply` to serialize the shared rung-e
 
 ## Prompt
 
-> Build the observation TRIAGE rung + the NEW `autoTriage` gate. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #16/17/23/24/30, "Per-item-type transitions", "Repo-config: a FLAT per-action gate family", "Observation-triage option-c"). Triage is QUESTION-GATED by default (surface promote/keep/delete and WAIT — never decide "worth building?" autonomously). A conservative `autoTriage`-gated exception (high bar) auto-dispositions ONLY no-question cases (exact-duplicate → suggest delete; unambiguous map onto an existing item) — NEVER auto-delete a non-duplicate, NEVER auto-promote a judgement call. An answered "promote" CAS-creates a new `work/backlog/<new-slug>.md` keyed on the NEW item's identity (reuse the new-item-creation CAS helper from `advancing-lock-borrow`). "keep" → `triaged:keep` drop-out; "delete" → recommend deletion (human deletes). Add the `autoTriage` key to `repo-config.ts` (default off, standard resolution chain); surface + apply stay always-allowed.
+> Build the observation TRIAGE rung + the NEW `autoTriage` gate. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #16/17/23/24/30, "Per-item-type transitions", "Repo-config: a FLAT per-action gate family", "Observation-triage option-c"). Triage is QUESTION-GATED by default (surface promote/keep/delete and WAIT — never decide "worth building?" autonomously). A conservative `autoTriage`-gated exception (high bar) auto-dispositions ONLY no-question cases (exact-duplicate → suggest delete; unambiguous map onto an existing item) — NEVER auto-delete a non-duplicate, NEVER auto-promote a judgement call. An answered "promote" CAS-creates a new `work/backlog/<new-slug>.md` keyed on the NEW item's identity (reuse the new-item-creation CAS helper from `advancing-lock-borrow`). "keep" → `triaged:keep` drop-out; "delete" → recommend deletion (human deletes). Add the `autoTriage` key to `repo-config.ts` (default off, standard resolution chain); surface + apply stay always-allowed.
 >
 > READ FIRST: `packages/dorfl/src/repo-config.ts` (`REPO_ALLOWED_KEYS` + `resolveRepoConfig` — add `autoTriage` alongside `allowAgents`/`autoSlice`), the new-item-creation CAS helper from `advancing-lock-borrow`, the surface rung (`advance-rung-surface`) and apply rung (`advance-rung-apply`) it reuses, and the capture-bucket contract (observations are append-only, leave by deletion — WORK-CONTRACT.md).
 >

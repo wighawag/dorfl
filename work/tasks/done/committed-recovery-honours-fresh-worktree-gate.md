@@ -1,7 +1,7 @@
 ---
 title: committed-recovery tail honours freshWorktreeGate (rebase → fresh re-verify → integrate)
 slug: committed-recovery-honours-fresh-worktree-gate
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [gate-on-rebased-tip-fresh-worktree, recovery-rebase-retry-against-moving-arbiter-main]
 covers: [15, 16]

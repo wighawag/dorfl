@@ -1,7 +1,7 @@
 ---
 title: Test — clean-rebase-but-semantically-broken merge is caught at the rebased tip
 slug: test-clean-rebase-semantic-break
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [12]
 ---

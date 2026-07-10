@@ -1,7 +1,7 @@
 ---
 title: arbiter management — provision/locate a local bare arbiter from a repo
 slug: arbiter-management
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scaffold]
 covers: []

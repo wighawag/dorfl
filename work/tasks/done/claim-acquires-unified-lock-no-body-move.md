@@ -1,7 +1,7 @@
 ---
 title: CLAIM additionally acquires the unified lock (interim dual-write; body still moves to in-progress/)
 slug: claim-acquires-unified-lock-no-body-move
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [unified-item-lock-module-from-tracer]
 covers: [1, 3, 15, 16]

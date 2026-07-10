@@ -1,7 +1,7 @@
 ---
 title: intake <N> tracer bullet — issue seam read → decision prompt → dispatch the SLICE outcome through performIntegration (a runnable local one-shot)
 slug: intake-tracer-slice-outcome
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: [1, 6, 8, 11]
 ---

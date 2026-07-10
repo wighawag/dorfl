@@ -1,7 +1,7 @@
 ---
 title: Route the complete transition through the ledger write seam
 slug: ledger-write-seam-complete
-prd: ledger-transition-seam
+spec: ledger-transition-seam
 blockedBy: [ledger-write-seam]
 covers: [3, 7, 8, 10]
 ---

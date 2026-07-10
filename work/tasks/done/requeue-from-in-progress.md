@@ -1,7 +1,7 @@
 ---
 title: requeue recovers a slice from in-progress/ too (not only needs-attention/) — arbiter-resolved current folder -> backlog/ via the same tree-less CAS, keep+continue default / --reset discards
 slug: requeue-from-in-progress
-prd: ledger-integrity
+spec: ledger-integrity
 blockedBy: []
 covers: [4]
 ---
@@ -33,7 +33,7 @@ This reuses the existing requeue machinery and the tree-less CAS; it does not in
 
 ## Prompt
 
-> Make dorfl's `requeue` recover a slice stuck in `in-progress/` too, not only `needs-attention/` (story 4 of the ledger-integrity PRD, `work/prd-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 2). Today `requeue` is hardcoded to `needs-attention/ -> backlog/` and a slice stranded in `in-progress/` (un-surfaced abort, killed run, or an in-place requeue note) errors with a bare "not found".
+> Make dorfl's `requeue` recover a slice stuck in `in-progress/` too, not only `needs-attention/` (story 4 of the ledger-integrity PRD, `work/spec-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 2). Today `requeue` is hardcoded to `needs-attention/ -> backlog/` and a slice stranded in `in-progress/` (un-surfaced abort, killed run, or an in-place requeue note) errors with a bare "not found".
 >
 > FIRST, check this slice against current reality (launch snapshot — WORK-CONTRACT.md "Drift is a needs-attention signal"). Confirm `packages/dorfl/src/cli.ts`'s `requeue` action + `packages/dorfl/src/needs-attention.ts`'s return-to-backlog transition still resolve source as needs-attention-only, and that `ledgerWrite.applyTransition` (`packages/dorfl/src/ledger-write.ts`, #89) is still the tree-less CAS. If a dependency landed differently, reconcile or route to `needs-attention/`.
 >

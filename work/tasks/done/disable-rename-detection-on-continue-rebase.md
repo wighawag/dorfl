@@ -78,12 +78,12 @@ current main, where the source folder is no longer sparse so the whole-dir-renam
 heuristic no longer fires).
 
 This bites ANY branch carrying a durable folder transition
-(`tasks/ready → tasks/done`, `prds/ready → prds/tasked`,
-`tasks/ready → tasks/cancelled`, `prds/ready → prds/dropped`) WHEN the SOURCE
+(`tasks/ready → tasks/done`, `specs/ready → specs/tasked`,
+`tasks/ready → tasks/cancelled`, `specs/ready → specs/dropped`) WHEN the SOURCE
 folder is sparse (0-1 items) at branch time AND `main` later adds files into that
 same folder. It is a latent FALSE needs-attention source. The taxonomy reorg makes
 it MORE likely, not less: more folders, several often holding 0-1 files
-(`tasks/cancelled/`, `prds/dropped/`, `prds/proposed/`).
+(`tasks/cancelled/`, `specs/dropped/`, `specs/proposed/`).
 
 ### Approach decision: rename-off, NOT a per-folder sentinel (maintainer, 2026-06-20)
 

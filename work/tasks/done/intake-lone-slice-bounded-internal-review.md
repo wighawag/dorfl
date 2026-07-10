@@ -1,7 +1,7 @@
 ---
 title: intake-lone-slice-bounded-internal-review — the lone-SLICE outcome runs a bounded (3-round, hard-capped) adversarial self-review on the single drafted slice before emitting; non-converge flips SLICE→ASK carrying the draft + open question(s) in the comment body
 slug: intake-lone-slice-bounded-internal-review
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: []
 ---
@@ -38,7 +38,7 @@ The review step's JUDGEMENT is NOT unit-tested (exactly as the decision prompt's
 
 ## Prompt
 
-> Give intake's lone-SLICE outcome the adversarial refinement the PRD path already gets — but as a small intake-NATIVE bounded review, NOT by integrating the slicer loop. PRD: `work/prd-sliced/issue-intake.md`. Source observation: `work/observations/intake-lone-slice-skips-adversarial-review-the-prd-path-gets.md` (rulings A/B/C are SETTLED — read them).
+> Give intake's lone-SLICE outcome the adversarial refinement the PRD path already gets — but as a small intake-NATIVE bounded review, NOT by integrating the slicer loop. PRD: `work/spec-sliced/issue-intake.md`. Source observation: `work/observations/intake-lone-slice-skips-adversarial-review-the-prd-path-gets.md` (rulings A/B/C are SETTLED — read them).
 >
 > DRIFT CHECK FIRST: confirm `dispatchSlice` in `packages/dorfl/src/intake.ts` today runs the decision prompt ONCE and writes/integrates the slice with NO review-edit pass (the `do prd:` path's `runSliceReviewLoop` in `src/slicer-review-loop.ts` is the asymmetry). If a bounded internal review already runs before the lone-slice emit, this slice is done. Read `slicer-review-loop.ts` to MIRROR its verdict/output conventions (fenced JSON `{verdict, findings, edits}`, `extractJsonObjectSpan`, injectable gate seam) — but do NOT import or call it.
 >

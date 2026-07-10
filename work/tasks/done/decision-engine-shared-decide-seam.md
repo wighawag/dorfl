@@ -1,7 +1,7 @@
 ---
 title: Shared decision engine — decide(input, allowedOutcomes) → verdict
 slug: decision-engine-shared-decide-seam
-prd: agentic-question-resolution-retire-disposition-vocabulary
+spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: []
 covers: [9]
 ---

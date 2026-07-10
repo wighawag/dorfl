@@ -1,7 +1,7 @@
 ---
 title: Surface promote-prd as a human-only disposition (never auto-picked)
 slug: surface-promote-prd-as-human-only-disposition
-prd: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
+spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: [promote-prd-disposition-and-triage-local-cas-prd-writer]
 covers: [5]
 ---

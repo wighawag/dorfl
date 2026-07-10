@@ -1,7 +1,7 @@
 ---
 title: Generic terminal dropped/ folder generalising out-of-scope/ (out of the pool by residence)
 slug: generic-terminal-dropped-folder-generalising-out-of-scope
-prd: staging-pool-position-gate-and-trust-model
+spec: staging-pool-position-gate-and-trust-model
 blockedBy: []
 covers: [16, 17, 18]
 ---

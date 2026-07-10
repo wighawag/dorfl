@@ -76,7 +76,7 @@ revisits a PRD-RESOLVED format.
   compatible).
 - `packages/dorfl/test/sidecar.test.ts` — the round-trip + tolerant-parse
   tests any reformat must keep green.
-- `work/prd-sliced/advance-loop.md` — "The sidecar FORMAT (RESOLVED here)" +
+- `work/spec-sliced/advance-loop.md` — "The sidecar FORMAT (RESOLVED here)" +
   MAINTAINER-RESOLVED §1 (the answered predicate); the PRD that froze the shape.
 - `skills/surface-questions/SKILL.md` — the documented sidecar format the surface
   rung hand-writes.

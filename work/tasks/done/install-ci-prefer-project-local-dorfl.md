@@ -1,7 +1,7 @@
 ---
 title: install-ci generated CI prefers a project-pinned dorfl over the global one
 slug: install-ci-prefer-project-local-dorfl
-prd: install-ci-project-provisioning
+spec: install-ci-project-provisioning
 blockedBy: [install-ci-project-setup-hook]
 covers: [7, 8]
 ---
@@ -33,7 +33,7 @@ A thin vertical task: the resolver + every generated invocation routed through i
 
 > Make the `install-ci`-generated CI prefer a PROJECT-PINNED dorfl (the repo's `devDependencies` version) over a global latest, falling back to the global install when none is pinned — so CI runs the dorfl the repo declares, not a skewed global. This is the (C) axis of the `install-ci-project-provisioning` PRD (C1 + C3).
 >
-> FIRST, drift-check (launch snapshot): re-read `work/prds/tasked/install-ci-project-provisioning.md` (the (C) decisions) AND confirm the blocking task `install-ci-project-setup-hook` landed in `work/tasks/done/` with the project-setup hook shape this task assumes (the hook is what runs the project's `pnpm install`, making C3 reachable). Confirm where the generated dorfl invocations live today (currently the literal `dorfl <verb>` strings are spread across the per-capability workflow templates) and the global-install step in the composite action. If the invocation surface or the hook changed shape since this was written, do not build on the stale premise — route to needs-attention.
+> FIRST, drift-check (launch snapshot): re-read `work/specs/tasked/install-ci-project-provisioning.md` (the (C) decisions) AND confirm the blocking task `install-ci-project-setup-hook` landed in `work/tasks/done/` with the project-setup hook shape this task assumes (the hook is what runs the project's `pnpm install`, making C3 reachable). Confirm where the generated dorfl invocations live today (currently the literal `dorfl <verb>` strings are spread across the per-capability workflow templates) and the global-install step in the composite action. If the invocation surface or the hook changed shape since this was written, do not build on the stale premise — route to needs-attention.
 >
 > DOMAIN VOCABULARY: the COMPOSITE setup action installs the GLOBAL dorfl (the bootstrap); the capability workflows then invoke `dorfl <verb>`. `installSource: registry` ⇒ `npm install -g dorfl`; `workspace` ⇒ build-from-source for the dorfl monorepo (leave that path's behaviour intact — it already links a specific dorfl). C1 = resolve local `node_modules/.bin/dorfl` then global; C3 = once the project-setup hook's `pnpm install` makes dorfl a devDep, the resolver finds it. The running CI job never edits `.github/workflows/**` (US #9) — the resolver lands in the generated artifacts via the EMITTER.
 >

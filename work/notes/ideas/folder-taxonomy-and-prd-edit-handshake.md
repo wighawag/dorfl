@@ -7,7 +7,7 @@ status: incubating
 
 > **UPDATE 2026-06-16 — the DEFERRED umbrella names are now DECIDED, and the rename is sketched as a safe two-phase migration.** A design conversation settled the placeholder names (`<lifecycle-umbrella>`/`<design>`/`<build>`/`<notes>`) AND the slice→task / prd→brief vocabulary rename, plus the four lifecycle states the first sketch forgot and the run-lock placement. See `## DECIDED 2026-06-16` near the end. Still an INCUBATING idea (becomes a PRD only when the maintainer commits to the reorg); the 2026-06-08 PRD-state work below already shipped the `prd-sliced/` family that this builds on.
 
-> **UPDATE 2026-06-08 — the sliced-PRD folder split is now DECIDED (reversing one rejection below) and spun into its own PRD `work/prd/slicing-coherence.md`.** A design session (during the `do prd:advance-loop` test-drive) settled three coupled decisions that this idea had left open or rejected. They are recorded in the new `## DECIDED 2026-06-08` section at the end (and the affected REJECTED bullet is annotated inline). The folder-NAME bikeshed below is also resolved: the sliced-PRD folder is **`prd-sliced/`**. The `<build>/<design>/<notes>` umbrella reorg remains an incubating idea; only the PRD-state folder family (`prd/` → `slicing/` → `prd-sliced/`) is being acted on now.
+> **UPDATE 2026-06-08 — the sliced-PRD folder split is now DECIDED (reversing one rejection below) and spun into its own PRD `work/prd/slicing-coherence.md`.** A design session (during the `do spec:advance-loop` test-drive) settled three coupled decisions that this idea had left open or rejected. They are recorded in the new `## DECIDED 2026-06-08` section at the end (and the affected REJECTED bullet is annotated inline). The folder-NAME bikeshed below is also resolved: the sliced-PRD folder is **`prd-sliced/`**. The `<build>/<design>/<notes>` umbrella reorg remains an incubating idea; only the PRD-state folder family (`prd/` → `slicing/` → `prd-sliced/`) is being acted on now.
 
 # Folder taxonomy: regroup the lifecycle under one umbrella (names DEFERRED)
 
@@ -65,7 +65,7 @@ Spawned by `work/observations/slicing-lock-does-not-stabilise-prd-content.md`. A
 
 ## DECIDED 2026-06-08 (the PRD-state folder family + slicing-path coherence)
 
-Settled during the `do prd:advance-loop` test-drive. These are spun into a small precursor PRD `work/prd/slicing-coherence.md` (to be sliced + built BEFORE advance-loop, because advance-loop's tick assumes one integrate back-half for every rung and a coherent sliced-PRD model). Background: `work/observations/slice-output-bypasses-integration-vs-build.md`.
+Settled during the `do spec:advance-loop` test-drive. These are spun into a small precursor PRD `work/prd/slicing-coherence.md` (to be sliced + built BEFORE advance-loop, because advance-loop's tick assumes one integrate back-half for every rung and a coherent sliced-PRD model). Background: `work/observations/slice-output-bypasses-integration-vs-build.md`.
 
 ### D1 — PRDs flow through the SAME shape as slices ("minus done")
 

@@ -7,7 +7,7 @@ needsAnswers: false
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is tasked — they move into tasks/ADRs and this prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
 
-> One of the LAST artifacts this repo authors under the `prd` vocabulary. Its own migration renames `work/prds/proposed/<this>.md` → `work/specs/proposed/<this>.md` and flips its own filename/vocabulary — fitting provenance.
+> One of the LAST artifacts this repo authors under the `prd` vocabulary. Its own migration renames `work/specs/proposed/<this>.md` → `work/specs/proposed/<this>.md` and flips its own filename/vocabulary — fitting provenance.
 
 > Durable rationale + all resolved decisions live in `docs/adr/methodology-and-skills.md` §7 (v1.1 alignment). This prd SEEDS the tasking; §7 is the source of truth for the WHY and the decision record. Read §7 before tasking.
 
@@ -27,7 +27,7 @@ Split the cutover at the **contract-version boundary** (ADR §7e), into a source
 
 - **Command part (`dorfl prd-to-spec`, self-contained — decision B):** a new CLI verb that (a) runs the `setup` re-sync FIRST (so the target repo's `work/protocol/` picks up the new `spec` contract from the upgraded package), THEN (b) mechanically converts the repo's `work/` DATA + config + refs from `prd` to `spec`. One command for a downstream user. It does NOT author contract text — it only invokes the source-authored setup sync + migrates data.
 
-- **dorfl's own migration = the acceptance test.** After the source part lands and the command is built, RUN `dorfl prd-to-spec` on dorfl itself: it does dorfl's `work/protocol/` mirror re-sync (via its setup step) AND all of dorfl's data conversion (`work/prds/* → work/specs/*`, frontmatter, config, refs). Dorfl is the gnarliest `prd`-using repo, so a green forward+reverse leak scan on dorfl is the trust signal for downstream. No hand-sweep of dorfl's data; the command does it.
+- **dorfl's own migration = the acceptance test.** After the source part lands and the command is built, RUN `dorfl prd-to-spec` on dorfl itself: it does dorfl's `work/protocol/` mirror re-sync (via its setup step) AND all of dorfl's data conversion (`work/specs/* → work/specs/*`, frontmatter, config, refs). Dorfl is the gnarliest `prd`-using repo, so a green forward+reverse leak scan on dorfl is the trust signal for downstream. No hand-sweep of dorfl's data; the command does it.
 
 ## User Stories
 
@@ -36,7 +36,7 @@ Split the cutover at the **contract-version boundary** (ADR §7e), into a source
 3. As a dorfl maintainer, I want the rename sequenced as a wide refactor (expand → migrate-batches → contract per `TASKING-PROTOCOL.md` §3a), so each task lands green and the review is per-batch, not one unreviewable diff.
 4. As a downstream dorfl user, I want a single `dorfl prd-to-spec` command that upgrades my contract (setup re-sync) AND migrates my `work/` data + config + refs, so I convert in one step after upgrading the package.
 5. As a downstream dorfl user, I want the command to convert EVERY data item including `work/tasks/done/` and `work/specs/tasked/`, so my repo is internally consistent and no `prd:` reference is left dangling.
-6. As a downstream dorfl user, I want the command to REFUSE to run unless my repo is quiescent (clean tree, no held lock, no in-progress `work/prd-*` branch), naming the offending lock/branch, so it never corrupts in-flight work.
+6. As a downstream dorfl user, I want the command to REFUSE to run unless my repo is quiescent (clean tree, no held lock, no in-progress `work/spec-*` branch), naming the offending lock/branch, so it never corrupts in-flight work.
 7. As a downstream dorfl user, I want a `--dry-run` that reports exactly what would change before anything is touched, and idempotent re-runs (a no-op on an already-migrated repo), so the migration is safe to preview and safe to re-run.
 8. As a dorfl maintainer, I want the command's forward+reverse leak scan to be the BI-WORD acceptance GATE (fails on a stray `prd` OR `brief`, green on dorfl before trusting it downstream), so a missed spelling — the `brief`-leftover failure of `403a5be9`, incl. the live `via: 'brief'` tag — is caught by construction, not by hope.
 11. As a dorfl maintainer, I want the ~22 leftover `brief` remnants (the doubly-retired word that still means the artifact, incl. the `via: 'brief'` union tag) swept to `spec` in the same cutover, so the code is coherently `spec` end-to-end with no third stale spelling.

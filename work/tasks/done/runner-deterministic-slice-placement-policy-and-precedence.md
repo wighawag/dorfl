@@ -1,7 +1,7 @@
 ---
 title: Runner-deterministic slice placement — slicesLandIn default + fixed trust precedence
 slug: runner-deterministic-slice-placement-policy-and-precedence
-prd: staging-pool-position-gate-and-trust-model
+spec: staging-pool-position-gate-and-trust-model
 blockedBy: [pre-backlog-staging-folder-and-promote-step-a]
 covers: [3, 5, 6, 12]
 ---

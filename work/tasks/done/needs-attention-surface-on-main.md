@@ -1,7 +1,7 @@
 ---
 title: Surface needs-attention on main (cherry-pick the move) + resolve via start
 slug: needs-attention-surface-on-main
-prd: needs-attention-cherry-pick
+spec: needs-attention-cherry-pick
 blockedBy: [ledger-write-seam-needs-attention]
 covers: [1, 2, 3, 4, 5, 6, 7]
 ---

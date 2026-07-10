@@ -1,7 +1,7 @@
 ---
 title: prd→spec EXPAND (follow-up) — add spec beside prd in the lock/sidecar identity (SidecarType, item-lock, typeForNamespace)
 slug: expand-spec-lock-and-sidecar-namespace
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [expand-spec-frontmatter-and-namespace-aliases]
 covers: [1]
 ---

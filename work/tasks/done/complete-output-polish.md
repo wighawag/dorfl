@@ -1,7 +1,7 @@
 ---
 title: complete output polish — make the propose-mode next-step stand out
 slug: complete-output-polish
-prd: dorfl
+spec: dorfl
 blockedBy: [complete-integration-flag]
 covers: [7]
 ---

@@ -1,7 +1,7 @@
 ---
 title: Merge-questions gate axis — separate from `observationTriage`, higher default
 slug: merge-questions-gate-axis
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [merge-retries-gate-precedence]
 covers: [17]

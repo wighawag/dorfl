@@ -1,7 +1,7 @@
 ---
 title: scan human dashboard — group items by who-can-take-it
 slug: scan-human-dashboard
-prd: dorfl
+spec: dorfl
 blockedBy: [scan]
 covers: [1, 4, 9]
 ---

@@ -1,7 +1,7 @@
 ---
 title: human-face-verbs — resume verb + work-on cd-by-default
 slug: human-face-verbs
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: [slug-namespace-resolution]
 covers: [13, 15]
 ---

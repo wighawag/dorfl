@@ -1,7 +1,7 @@
 ---
 title: Retire the disposition vocabulary from the triage-observations skill
 slug: triage-observations-skill-retire-disposition-vocabulary
-prd: agentic-question-resolution-retire-disposition-vocabulary
+spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [surface-skill-prose-drop-disposition-vocabulary]
 covers: [6]
 ---

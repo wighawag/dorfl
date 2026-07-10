@@ -1,7 +1,7 @@
 ---
 title: "is this PRD complete?" read-only core query — ≥1 slice with prd:<slug> AND all such slices in work/done/ (pure work/-folder logic)
 slug: prd-complete-query
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: [8]
 ---
@@ -38,7 +38,7 @@ NOTE the consumer linkage (why this query matters): the CI close JOB (`runner-in
 
 > Build the read-only "is this PRD complete?" CORE QUERY: given a PRD slug + a `work/` tree, COMPLETE iff ≥1 slice carries `prd:<slug>` AND all such slices are in `work/done/` (US #8 — the closure-linkage half). Pure `work/`-folder logic — no seam, no git, no `gh`.
 >
-> CONTEXT (the loop-closure model, from `work/prd-sliced/issue-intake.md`): a lone slice's PR carries `Fixes #N` (its merge closes the issue); a PRD fans out to N slices = N PRs carrying `Refs #N`, and the issue is closed by CI's merge-to-main JOB that runs THIS query + `closeIssue`. That JOB is `runner-in-ci`'s — NOT built here. Build ONLY the query.
+> CONTEXT (the loop-closure model, from `work/spec-sliced/issue-intake.md`): a lone slice's PR carries `Fixes #N` (its merge closes the issue); a PRD fans out to N slices = N PRs carrying `Refs #N`, and the issue is closed by CI's merge-to-main JOB that runs THIS query + `closeIssue`. That JOB is `runner-in-ci`'s — NOT built here. Build ONLY the query.
 >
 > WHAT TO BUILD: a read-only function over the `work/` tree returning the PRD's completeness per the rule above. REUSE the existing frontmatter read (`prd:` is on `src/frontmatter.ts`) + the existing folder/ledger read seam — do NOT reinvent a folder walk.
 >

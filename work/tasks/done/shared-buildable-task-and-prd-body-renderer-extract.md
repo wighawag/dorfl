@@ -1,7 +1,7 @@
 ---
 title: Extract ONE shared buildable-task (and PRD-body) renderer
 slug: shared-buildable-task-and-prd-body-renderer-extract
-prd: centralize-buildable-task-renderer-shared-by-intake-and-promotion
+spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: []
 covers: [1, 4, 7]
 ---

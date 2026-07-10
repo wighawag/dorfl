@@ -1,7 +1,7 @@
 ---
 title: Leak-fence assertions — --allow-backlog is explicit-invocation-only
 slug: allow-backlog-leak-fence-assertions
-prd: do-allow-backlog-drive-staged-tasks-without-promotion
+spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: [do-allow-backlog-flag-resolver-claim-and-done-move]
 covers: [4]
 ---

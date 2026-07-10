@@ -1,7 +1,7 @@
 ---
 title: advance — the TWO drivers (one-shot sequential + loop) over the tick, `-n` ALWAYS sequential, the FLAT per-action gate family (build/slice/triage), isolation+chaining fall out of the seam
 slug: advance-drivers-and-gates
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-rung-triage, mirror-side-eligible-pool-scan]
 covers: [2, 7, 22, 23, 25, 26, 31]
 ---
@@ -44,7 +44,7 @@ It is sequenced AFTER the rungs (it drives them) and after the pool scan (it sel
 
 ## Prompt
 
-> Build the two DRIVERS over the advance tick (one-shot sequential + loop), `-n` ALWAYS sequential, the FLAT per-action gate family, and the bare/eligible-set selection. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("One substrate-agnostic TICK, two drivers", "Two drivers + -n + CI", "Repo-config: a FLAT per-action gate family", US #2/7/22/23/25/26/31). The tick (classifier + rungs) is already built; this slice WRAPS it. `run` ≡ CI (same tick, different substrate; no new execution model). `-n` is ALWAYS sequential for both `do` and `advance` — parallelism is only `run` or the CI matrix; remove the inline `-n`×`--remote` refusal (the mirror-side scan now backs it). Each rung RESPECTS its gate (build→`allowAgents`, slice→`autoSlice`, auto-triage→`autoTriage`); surface + apply ALWAYS allowed (the zero-autonomy question loop). Isolation = the isolation-strategy seam; chaining = rebase-before-integrate (ADR §10); chain conflict → needs-attention; build NO new isolation/chaining machinery. The `advancing` lock is MANDATORY for the autonomous driver, a no-op for a solo human. The loop provably DRAINS (monotonic pool shrink; stable/idle at rest).
+> Build the two DRIVERS over the advance tick (one-shot sequential + loop), `-n` ALWAYS sequential, the FLAT per-action gate family, and the bare/eligible-set selection. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("One substrate-agnostic TICK, two drivers", "Two drivers + -n + CI", "Repo-config: a FLAT per-action gate family", US #2/7/22/23/25/26/31). The tick (classifier + rungs) is already built; this slice WRAPS it. `run` ≡ CI (same tick, different substrate; no new execution model). `-n` is ALWAYS sequential for both `do` and `advance` — parallelism is only `run` or the CI matrix; remove the inline `-n`×`--remote` refusal (the mirror-side scan now backs it). Each rung RESPECTS its gate (build→`allowAgents`, slice→`autoSlice`, auto-triage→`autoTriage`); surface + apply ALWAYS allowed (the zero-autonomy question loop). Isolation = the isolation-strategy seam; chaining = rebase-before-integrate (ADR §10); chain conflict → needs-attention; build NO new isolation/chaining machinery. The `advancing` lock is MANDATORY for the autonomous driver, a no-op for a solo human. The loop provably DRAINS (monotonic pool shrink; stable/idle at rest).
 >
 > READ FIRST: `packages/dorfl/src/run.ts` (the existing concurrent loop driver
 >

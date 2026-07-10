@@ -1,7 +1,7 @@
 ---
 title: intake processing LOCK — a provider-native GitHub label as a transient concurrency mutex (acquire/release; best-effort degrade)
 slug: intake-processing-lock
-prd: issue-intake
+spec: issue-intake
 blockedBy: [intake-tracer-slice-outcome]
 covers: [10]
 ---
@@ -42,7 +42,7 @@ Extends the issue seam with `addLabel` / `removeLabel` / `getLabels`, implemente
 
 > Add `intake`'s PROCESSING LOCK: a provider-native `processing` label (e.g. `dorfl:processing`) as a TRANSIENT concurrency mutex — added on start (winner only), removed on finish — serialising two concurrent runs on the SAME issue (US #10).
 >
-> CRITICAL FRAMING (from `work/prd-sliced/issue-intake.md` — do NOT drift): this is a transient CONCURRENCY mutex carrying NO `work/` state. It is NOT a `work/`-file CAS (the contended thing is the ISSUE; the output slug is unknown pre-run). It is NOT a whitesmith-style label STATE-MACHINE — ADR §12 forbids modelling `work/` lifecycle in labels. ONE transient lock label, nothing more. A non-label provider DEGRADES to best-effort (CI's per-issue concurrency group — `runner-in-ci`'s, out of scope — is then the only serialiser).
+> CRITICAL FRAMING (from `work/spec-sliced/issue-intake.md` — do NOT drift): this is a transient CONCURRENCY mutex carrying NO `work/` state. It is NOT a `work/`-file CAS (the contended thing is the ISSUE; the output slug is unknown pre-run). It is NOT a whitesmith-style label STATE-MACHINE — ADR §12 forbids modelling `work/` lifecycle in labels. ONE transient lock label, nothing more. A non-label provider DEGRADES to best-effort (CI's per-issue concurrency group — `runner-in-ci`'s, out of scope — is then the only serialiser).
 >
 > REUSE: whitesmith (`~/dev/github/wighawag/whitesmith`) is the reference for the label + per-issue-concurrency PATTERN — reuse the concurrency PATTERN, NOT its label state-machine.
 >

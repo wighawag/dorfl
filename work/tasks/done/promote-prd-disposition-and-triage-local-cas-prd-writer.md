@@ -1,7 +1,7 @@
 ---
 title: Add promote-prd disposition + triage-local CAS PRD writer (observation→PRD route)
 slug: promote-prd-disposition-and-triage-local-cas-prd-writer
-prd: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
+spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: [promotion-self-contained-body-and-delete-on-promote-task-route]
 covers: [4, 9]
 ---
@@ -19,7 +19,7 @@ End-to-end behaviour:
   needs-attention`.
 - Branch the promotion writer on the disposition's artifact TYPE: `promote-task`
   → mint a task in `tasks-ready`; `promote-prd` → mint
-  `prds/proposed/<slug>.md`. BOTH use the SAME triage-local `createItemThroughCas`
+  `specs/proposed/<slug>.md`. BOTH use the SAME triage-local `createItemThroughCas`
   writer (one local commit through the CAS) — NOT intake's branch+integrate band
   (`switchToWorkBranch`/`performIntegration`). A promoted PRD always lands in
   `proposed/` (staging); a human later promotes it to `ready/`.
@@ -34,7 +34,7 @@ End-to-end behaviour:
 
 - [ ] `promote-prd` is a recognised disposition (type + parser set); an unknown
       value still reads as undefined (no silent coerce).
-- [ ] A `promote-prd` answer mints `prds/proposed/<slug>.md` through the SAME
+- [ ] A `promote-prd` answer mints `specs/proposed/<slug>.md` through the SAME
       `createItemThroughCas` writer the task route uses (assert NOT intake's
       branch+integrate band).
 - [ ] The minted PRD body is self-contained (mechanism + transcribed open
@@ -75,7 +75,7 @@ End-to-end behaviour:
 > own time (and CI cannot race them).
 >
 > Seams to test at: the promote function over a throwaway git repo with a
-> `promote-prd` disposition; assert a `prds/proposed/<slug>.md` is created via the
+> `promote-prd` disposition; assert a `specs/proposed/<slug>.md` is created via the
 > CAS writer and the note is deleted in the same commit. Mirror the task route's
 > tests.
 >

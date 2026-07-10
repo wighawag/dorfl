@@ -1,7 +1,7 @@
 ---
 title: prd→spec batch 4a — ATOMIC rename of every exported Prd* symbol + all its importers (one green shot, no alias)
 slug: rename-spec-remaining-src-modules-a
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-config-and-intake]
 covers: [1]
 ---

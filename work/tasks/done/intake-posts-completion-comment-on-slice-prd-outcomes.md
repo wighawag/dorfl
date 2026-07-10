@@ -1,7 +1,7 @@
 ---
 title: intake-posts-completion-comment-on-slice-prd-outcomes — on a successful SLICE/PRD outcome, post an informational "slice created"/"prd created" comment on the issue (PR link or commit link), never closing it
 slug: intake-posts-completion-comment-on-slice-prd-outcomes
-prd: issue-intake
+spec: issue-intake
 blockedBy:
   - slice-level-issue-field-for-lone-issue-derived-slice
   - intake-self-awareness-resumption-tracking
@@ -48,7 +48,7 @@ The integrate core already computes the propose-vs-merge wording for the LOCAL `
 
 ## Prompt
 
-> Make intake post an INFORMATIONAL completion comment on the issue for the SUCCESSFUL outcomes (`sliced` / `prd`), closing the loop the ASK/BOUNCE comments already close for the other outcomes. PRD: `work/prd-sliced/issue-intake.md`. The comment reports `slice created` / `prd created` — NEVER `issue resolved`; intake never closes the issue (that is the future CI close-job's job).
+> Make intake post an INFORMATIONAL completion comment on the issue for the SUCCESSFUL outcomes (`sliced` / `prd`), closing the loop the ASK/BOUNCE comments already close for the other outcomes. PRD: `work/spec-sliced/issue-intake.md`. The comment reports `slice created` / `prd created` — NEVER `issue resolved`; intake never closes the issue (that is the future CI close-job's job).
 >
 > DRIFT CHECK FIRST: confirm intake posts NO comment on the slice/prd success paths today (only the `note`/stdout + GitHub's own cross-reference). Confirm the blocking slice `slice-level-issue-field-for-lone-issue-derived-slice` has landed (lone slice carries `issue:`, no `Fixes #N`) — the comment wording depends on it. If intake already posts a completion comment, this slice is done.
 >

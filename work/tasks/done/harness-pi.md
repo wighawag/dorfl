@@ -1,7 +1,7 @@
 ---
 title: harness adapter — pi (liveness + invocation)
 slug: harness-pi
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [6, 11]

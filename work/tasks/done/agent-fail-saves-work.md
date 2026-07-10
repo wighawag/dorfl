@@ -1,7 +1,7 @@
 ---
 title: a non-zero agent exit SAVES partial work (commit + push + route to needs-attention) instead of silently dropping it
 slug: agent-fail-saves-work
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: [requeue-continue-and-reset]
 covers: []
 ---

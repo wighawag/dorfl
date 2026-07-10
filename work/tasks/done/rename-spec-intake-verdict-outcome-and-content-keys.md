@@ -1,7 +1,7 @@
 ---
 title: prd→spec batch 4g — flip the intake/decision VERDICT contract onto spec (the prd outcome token in the prompt + the prd* verdict CONTENT keys)
 slug: rename-spec-intake-verdict-outcome-and-content-keys
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-intake-cli-flags-and-residual-prd-identifiers]
 covers: [1]
 ---
@@ -34,7 +34,7 @@ Rename across BOTH verdict contracts and every reader:
 
 - The `IntakeOutcome`/`IntakeArtifactType` `'prd'` TYPE MEMBER + the `case 'prd':` dispatch (contract task removes).
 - `intake.ts:1306` `switchToWorkBranch(..., 'prd', ...)` (contract task flips it when it removes the `SlugNamespace 'prd'` member — TS-forced).
-- The `prd:` frontmatter FIELD + `parseFrontmatter` `prd:` key (CARVE-OUT #2, command), `work/prds/` folder literals, sidecar `prd-<slug>.md` fallback (CARVE-OUT #1, command), domain-prose.
+- The `prd:` frontmatter FIELD + `parseFrontmatter` `prd:` key (CARVE-OUT #2, command), `work/specs/` folder literals, sidecar `prd-<slug>.md` fallback (CARVE-OUT #1, command), domain-prose.
 
 ## Acceptance criteria
 
@@ -52,6 +52,6 @@ Rename across BOTH verdict contracts and every reader:
 
 > Goal: the FINAL migrate before contract — flip the intake/decision VERDICT contract onto `spec`. Read the parent spec + `TASKING-PROTOCOL.md` §3a + the contract STOP-diagnosis observation (`intake-verdict-outcome-and-content-keys-half-migrated-...`) + batch 4d's decisions note §4 (which flipped the outcome VALUE but inconsistently kept these content keys). TWO pieces: (1) the `prd` OUTCOME token — the `buildIntakeDecisionSpec` prompt teaches `outcome:"spec"` (not `prd`) and `parseIntakeVerdict` accepts `ask|task|spec|bounce`; (2) the `prd*` verdict CONTENT keys `prdSlug`/`prdTitle`/`prdBody`/`prdHumanOnly`/`prdNeedsAnswers` → `spec*` across BOTH `IntakeVerdict` + `DecisionVerdict`, every reader (intake/advance/apply-decide/decision-engine), the prompt JSON keys, and ~58 coupled tests. These are TRANSIENT LLM-JSON keys (never on `work/` disk), so flipping them is safe value-migration, NOT data conversion.
 >
-> Scope boundary: LEAVE the `case 'prd':` dispatch + the `IntakeOutcome`/`IntakeArtifactType` `'prd'` TYPE MEMBER (contract task removes), `switchToWorkBranch(...,'prd',...)` (contract, TS-forced), the `prd:` frontmatter field + `work/prds/` literals + sidecar fallback (command). Additive-green: routing stays valid on the still-present `case 'prd':`.
+> Scope boundary: LEAVE the `case 'prd':` dispatch + the `IntakeOutcome`/`IntakeArtifactType` `'prd'` TYPE MEMBER (contract task removes), `switchToWorkBranch(...,'prd',...)` (contract, TS-forced), the `prd:` frontmatter field + `work/specs/` literals + sidecar fallback (command). Additive-green: routing stays valid on the still-present `case 'prd':`.
 >
 > Done means: the verdict contract speaks `spec` (outcome + content keys), no `prd*` verdict key remains, full gate green. FIRST check drift: confirm 4f landed; grep `prdSlug|prdTitle|prdBody|prdHumanOnly|prdNeedsAnswers` + the prompt `outcome ... prd` to confirm they are still live.

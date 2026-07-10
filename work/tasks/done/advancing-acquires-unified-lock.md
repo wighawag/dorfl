@@ -1,7 +1,7 @@
 ---
 title: ADVANCING acquires the unified lock for the tree-less rungs only (interim dual-write; advancing/ marker kept)
 slug: advancing-acquires-unified-lock
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [unified-item-lock-module-from-tracer, lock-entry-state-machine-and-invariants]
 covers: [1, 3, 18]

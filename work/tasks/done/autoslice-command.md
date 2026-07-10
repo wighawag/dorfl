@@ -1,7 +1,7 @@
 ---
 title: autoslice-command — the `do prd:<slug>` slicing path (harness + runner-owns-git)
 slug: autoslice-command
-prd: auto-slice
+spec: auto-slice
 blockedBy: [autoslice-gate, autoslice-lock, do-in-place]
 covers: [1, 6]
 ---

@@ -1,7 +1,7 @@
 ---
 title: advance — the `advance` sibling top-level verb + the `obs:` resolver extension (no `do` subcommand, no standalone `slice` verb)
 slug: advance-verb-resolver
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-tick-classifier, advancing-lock-borrow]
 covers: [1, 5, 6, 18]
 ---
@@ -45,7 +45,7 @@ The two DRIVERS (one-shot sequential / loop) and `-n`, plus the per-action gates
 
 ## Prompt
 
-> Add `advance` as a sibling top-level verb (NOT a `do` subcommand) reusing the shared `prefix:arg` resolver, and wire the classify → lock → execute SKELETON. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The command surface", "The advance TICK", "Classify → lock → execute", US #1/5/6/18, and Out of Scope — `do` subcommands and a standalone `slice` verb are REJECTED). This slice delivers the verb + arg shapes + the skeleton + an `obs:` resolver extension; the rung BODIES (surface/apply/triage) and the DRIVERS/`-n`/gates are LATER slices — dispatch to a named executor seam and orchestrate `do`/`do prd:` for the build/slice rungs (one build path, one slice path; `advance` is a driver ON TOP, never a duplicate).
+> Add `advance` as a sibling top-level verb (NOT a `do` subcommand) reusing the shared `prefix:arg` resolver, and wire the classify → lock → execute SKELETON. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The command surface", "The advance TICK", "Classify → lock → execute", US #1/5/6/18, and Out of Scope — `do` subcommands and a standalone `slice` verb are REJECTED). This slice delivers the verb + arg shapes + the skeleton + an `obs:` resolver extension; the rung BODIES (surface/apply/triage) and the DRIVERS/`-n`/gates are LATER slices — dispatch to a named executor seam and orchestrate `do`/`do prd:` for the build/slice rungs (one build path, one slice path; `advance` is a driver ON TOP, never a duplicate).
 >
 > Shapes: `advance <slug>` (bare = slice), `advance prd:<slug>`, `advance obs:<slug>` (NEW namespace), `advance` (bare eligible-set — wire to single named item or stub with a clear "needs the driver slice" error, recorded in `## Decisions`). Extend `slug-namespace.ts` with the `obs:` namespace (it has `slice`/`prd` today); keep the bare-slug cross-check as `do` has it. Classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only; a loser backs off having spent ~nothing.
 >

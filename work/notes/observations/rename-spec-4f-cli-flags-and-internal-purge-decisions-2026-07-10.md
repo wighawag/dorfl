@@ -29,7 +29,7 @@ The task's "Do NOT touch" list names `prdSlug`/`prdTitle`/`prdBody` verdict cont
 
 ### D4 — the `<prd>` protocol-template cluster LEFT `prd`-spelled
 
-`wrapper(slug, prd, …)` / `buildAgentPrompt(…, task.prd, …)` (prompt.ts, do.ts, run.ts) + `ResolvedTask.prd` (spelled `prd:`, grep-excluded) + the `.replace(/<prd>/g, …)` substitution are COUPLED to the `<prd>` placeholder in the protocol doc `CLAIM-PROTOCOL.md` (`work/prds/ready/<prd>.md`), which the SEPARATE `rename-spec-protocol-contract-and-to-spec-skill` batch renames. Renaming the code `<prd>`→`<spec>` here would desync it from the still-`<prd>` protocol template and break substitution. A prior batch already recorded this same carve-out at prompt.ts (`ResolvedTask.prd … out of this batch's scope`). Left for the protocol-contract batch.
+`wrapper(slug, prd, …)` / `buildAgentPrompt(…, task.prd, …)` (prompt.ts, do.ts, run.ts) + `ResolvedTask.prd` (spelled `prd:`, grep-excluded) + the `.replace(/<prd>/g, …)` substitution are COUPLED to the `<prd>` placeholder in the protocol doc `CLAIM-PROTOCOL.md` (`work/specs/ready/<prd>.md`), which the SEPARATE `rename-spec-protocol-contract-and-to-spec-skill` batch renames. Renaming the code `<prd>`→`<spec>` here would desync it from the still-`<prd>` protocol template and break substitution. A prior batch already recorded this same carve-out at prompt.ts (`ResolvedTask.prd … out of this batch's scope`). Left for the protocol-contract batch.
 
 ### D5 — `--prds-land-in` INPUT plumbing survivors LEFT (`cli.ts:730/734` `prdsRaw`/`return specs ?? prds`)
 
@@ -37,7 +37,7 @@ Explicitly out of scope per the task ("piece B does NOT touch the `prdsLandIn` i
 
 ### D6 — `to-prd`-shape intake prompt strings (intake.ts ~2388/2393) LEFT
 
-Agent-prompt PROSE naming the `to-prd` skill + the `prd` artifact word + `work/prds/`/`do prd:`. These are the contract task's enumerated allow-list items ("sweep to `to-spec` if live prompt text, else allow-list") and the `to-prd`→`to-spec` skill rename is the protocol-contract batch's job. Domain-prose, not a code identifier. Left.
+Agent-prompt PROSE naming the `to-prd` skill + the `prd` artifact word + `work/specs/`/`do prd:`. These are the contract task's enumerated allow-list items ("sweep to `to-spec` if live prompt text, else allow-list") and the `to-prd`→`to-spec` skill rename is the protocol-contract batch's job. Domain-prose, not a code identifier. Left.
 
 ## What DID get purged (Piece B)
 

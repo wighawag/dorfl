@@ -1,7 +1,7 @@
 ---
 title: onboard resolveSlice finds a slice in done/ on a CONTINUE (safely) — a done/ slice that is STRANDED (tip not on arbiter) is re-onboardable; a genuinely-COMPLETE one (tip reachable on arbiter) is NOT, disambiguated by tip-vs-arbiter, never folder alone
 slug: onboard-resolveslice-done-aware-tip-vs-arbiter
-prd: ledger-integrity
+spec: ledger-integrity
 blockedBy: []
 covers: [5]
 ---
@@ -37,7 +37,7 @@ This is the SEPARATE, hazardous slice that `finish-already-committed-branch` (st
 
 ## Prompt
 
-> Teach dorfl's onboard find-slice (`resolveSlice` in `packages/dorfl/src/prompt.ts`) to find a slice in `done/` on a CONTINUE — safely (story 5 of the ledger-integrity PRD, `work/prd-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 3). Today `resolveSlice`'s order is `['in-progress','backlog']`, blind to `done/`, so a continue onto an already-done-moved branch fails with "no slice '<slug>' found in work/in-progress/ or work/backlog/" (the conductor hand-moved the slice `done/ -> in-progress/` on the branch to work around it).
+> Teach dorfl's onboard find-slice (`resolveSlice` in `packages/dorfl/src/prompt.ts`) to find a slice in `done/` on a CONTINUE — safely (story 5 of the ledger-integrity PRD, `work/spec-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 3). Today `resolveSlice`'s order is `['in-progress','backlog']`, blind to `done/`, so a continue onto an already-done-moved branch fails with "no slice '<slug>' found in work/in-progress/ or work/backlog/" (the conductor hand-moved the slice `done/ -> in-progress/` on the branch to work around it).
 >
 > FIRST, check this slice against current reality (launch snapshot — WORK-CONTRACT.md "Drift is a needs-attention signal"). Confirm `resolveSlice` is still `['in-progress','backlog']`-only, and that `packages/dorfl/src/gc.ts` still exposes the reachability check (`isAncestor` / `git merge-base --is-ancestor <tip> refs/remotes/<arbiter>/main`). If a dependency landed differently, reconcile or route to `needs-attention/`.
 >

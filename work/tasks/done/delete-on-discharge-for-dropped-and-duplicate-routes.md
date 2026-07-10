@@ -1,7 +1,7 @@
 ---
 title: Delete-on-discharge for the dropped/delete/duplicate routes (retire resting-state machinery)
 slug: delete-on-discharge-for-dropped-and-duplicate-routes
-prd: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
+spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: []
 covers: [2, 7]
 ---
@@ -77,7 +77,7 @@ DROPPED/DUPLICATE NOTES leave — by deletion.
 >
 > CRITICAL scope fence: this is about NOTES (observations), which leave by
 > deletion (WORK-CONTRACT.md L59/L65/L74). WORK ITEMS (tasks/prds) have terminal
-> FOLDERS (`tasks/cancelled/`, `prds/dropped/`) and are NOT deleted — if the
+> FOLDERS (`tasks/cancelled/`, `specs/dropped/`) and are NOT deleted — if the
 > `delete` disposition code is shared, branch on item type so you change only the
 > observation/note path. Do not regress work-item terminal routing.
 >

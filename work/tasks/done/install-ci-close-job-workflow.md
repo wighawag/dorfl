@@ -1,7 +1,7 @@
 ---
 title: install-ci issue-close-job workflow (capability E)
 slug: install-ci-close-job-workflow
-prd: runner-in-ci
+spec: runner-in-ci
 blockedBy: [install-ci-core-and-github-adapter]
 covers: [1, 2, 5, 9]
 ---

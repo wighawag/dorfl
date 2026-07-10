@@ -1,7 +1,7 @@
 ---
 title: install-ci build/slice tick workflow (capabilities A + B)
 slug: install-ci-build-slice-tick-workflow
-prd: runner-in-ci
+spec: runner-in-ci
 blockedBy: [install-ci-core-and-github-adapter]
 covers: [1, 2, 3, 5, 6, 9]
 ---
@@ -16,7 +16,7 @@ End-to-end path:
 - Encode the **propose=matrix / merge=sequential** discipline verbatim from the existing seed (validated by `src/advance-ci-template.ts`): `propose` ⇒ a DYNAMIC matrix (`dorfl scan --json | jq` emits the deduplicated eligible list, one leg per id, each leg carries `--propose` so it can NEVER merge to `main`); `merge` ⇒ a SINGLE SEQUENTIAL `advance -n <x> --merge`. ONE word `integrationMode` drives BOTH the job shape AND the integration flag so they cannot desync.
 - Use the engine gate family via the workflow's `DORFL_*` env block (`DORFL_AUTO_BUILD`, `DORFL_AUTO_SLICE`), with both lifecycle question-gates at their calm defaults (this is "calm build-only `advance`", NOT a different verb). No new `autoAdvance` gate.
 - CI runs IN-PLACE in the checkout (the CI container IS the isolation; no `--isolated`/`--remote`/registry). Add a CI **concurrency group** so overlapping ticks never collide; the claim CAS is the real cross-run serialiser.
-- CI / automation uses explicit slug prefixes (`advance slice:foo` / `advance prd:foo`), NEVER bare (ADR command-surface-and-journeys §3a). (CI always invokes `advance`, never `do` directly — see below.)
+- CI / automation uses explicit slug prefixes (`advance slice:foo` / `advance spec:foo`), NEVER bare (ADR command-surface-and-journeys §3a). (CI always invokes `advance`, never `do` directly — see below.)
 - The generated artifact is tested by emitting into the `--fake` scratch dir and asserting on the produced YAML (reuse `src/advance-ci-template.ts`'s structural validator); no live Actions run.
 - **File-orthogonality:** add this capability as a NEW self-registering emitter module via the core's capability-registry seam (from `install-ci-core-and-github-adapter`) — do NOT hand-edit a shared central list/switch, so this slice and the other capability workflow slices (build-tick, advance-lifecycle, intake, close-job) stay mergeable in parallel.
 

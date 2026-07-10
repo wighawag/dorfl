@@ -1,7 +1,7 @@
 ---
 title: claim command — dorfl claim, a TS reimplementation of the claim CAS
 slug: claim-command
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [5]

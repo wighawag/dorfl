@@ -1,7 +1,7 @@
 ---
 title: run --once — claim N eligible items, run an agent in isolation, integrate
 slug: run-once
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [5, 6, 7, 8, 10, 12]

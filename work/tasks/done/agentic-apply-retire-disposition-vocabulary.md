@@ -1,7 +1,7 @@
 ---
 title: Agentic apply rung + retire the disposition vocabulary (keystone)
 slug: agentic-apply-retire-disposition-vocabulary
-prd: agentic-question-resolution-retire-disposition-vocabulary
+spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [decision-engine-shared-decide-seam]
 covers: [1, 2, 3, 4, 6, 7, 8]
 ---
@@ -262,7 +262,7 @@ imports.
 >   only the human's recorded answer text. Keep the assertion that a subset apply
 >   is a loud error.
 > - Do NOT touch the `needs-attention/` LIFECYCLE state (bounced build / stuck
->   lock), the work-item terminal MOVES (`tasks/cancelled`, `prds/dropped`),
+>   lock), the work-item terminal MOVES (`tasks/cancelled`, `specs/dropped`),
 >   `requeue` recovery, or status surfacing. Only the triage-ANSWER `needs-attention`
 >   disposition is removed, NOT the lifecycle routing. Removing the picker must not
 >   regress the work-item terminal-move path that survives as a lifecycle concern.

@@ -1,7 +1,7 @@
 ---
 title: Route do prd:<slug> slice output through performIntegration (the keystone — honor --propose/--merge, arg parity by construction)
 slug: slice-output-through-integration
-prd: slicing-coherence
+spec: slicing-coherence
 blockedBy: []
 covers: [1, 2]
 ---

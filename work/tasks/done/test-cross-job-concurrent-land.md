@@ -1,7 +1,7 @@
 ---
 title: Test — cross-job concurrent land (separate processes against one arbiter; CAS loop is the queue)
 slug: test-cross-job-concurrent-land
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: [merge-retries-gate-precedence]
 covers: [13]
 ---

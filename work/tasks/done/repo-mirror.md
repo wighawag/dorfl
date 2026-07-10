@@ -1,7 +1,7 @@
 ---
 title: repo-mirror — the shared bare hub mirror primitive (ensure/locate/fetch)
 slug: repo-mirror
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [6]

@@ -1,7 +1,7 @@
 ---
 title: agent-interactive-launch — --agent on start/work-on launches the harness INTERACTIVELY
 slug: agent-interactive-launch
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: [human-face-verbs]
 covers: [14]
 ---

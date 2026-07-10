@@ -1,7 +1,7 @@
 ---
 title: Advance surfacer — emit MERGE-QUESTIONS for unmerged `work/*` branches (+ `gh pr list` ceiling)
 slug: merge-question-surfacer
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [sidecar-kind-field]
 covers: [14]

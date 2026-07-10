@@ -9,7 +9,7 @@ covers: []
 
 Delete the dead `emitSlices` limb from the slicing-lock release path. Since the `slice-output-through-integration` keystone, the SUCCESS slicing transition routes through `stageSlicingLifecycle` → `performIntegration`, which owns the lifecycle move (now `slicing/ → prd-sliced/`). `emitSlices` is only ever passed to `stageSlicingLifecycle`, NEVER to `releaseSlicingLock` — so the `emitSlices` branch inside `slicing-lock.ts`'s `releaseAttempt` is **dead code**.
 
-It is also **wrong-destination**: that branch restores the held PRD with `git mv work/slicing/<slug>.md → work/prd/<slug>.md` — the PRE-folder-lifecycle destination, NOT `work/prd-sliced/` (the current source of truth). A future author who wires `emitSlices` into a `releaseSlicingLock` call (reasonably assuming the lock release still owns slice emission, as it did pre-keystone) would land the PRD in `work/prd/`, silently contradicting the `prd-sliced/` source of truth. A latent branch that does the WRONG thing is worse than one that does nothing — it reads as "supported".
+It is also **wrong-destination**: that branch restores the held PRD with `git mv work/slicing/<slug>.md → work/prd/<slug>.md` — the PRE-folder-lifecycle destination, NOT `work/spec-sliced/` (the current source of truth). A future author who wires `emitSlices` into a `releaseSlicingLock` call (reasonably assuming the lock release still owns slice emission, as it did pre-keystone) would land the PRD in `work/prd/`, silently contradicting the `prd-sliced/` source of truth. A latent branch that does the WRONG thing is worse than one that does nothing — it reads as "supported".
 
 ### Precise scope
 

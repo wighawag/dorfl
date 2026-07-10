@@ -1,7 +1,7 @@
 ---
 title: do-autopick — `do` auto-pick, multi-arg, `-n x`, slices-first priority (per-repo toggle)
 slug: do-autopick
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: [do-in-place, do-remote, autoslice-gate]
 covers: [10]
 ---

@@ -1,7 +1,7 @@
 ---
 title: advance gains the same `--isolated` ergonomic `do` has — run the advance tick in an ISOLATED job worktree off this repo's arbiter (no checkout takeover), single named item AND `-n`/auto-pick/multi-arg (sequential, mirror-pool-scan), so you can run advance from a busy checkout or anywhere with a participating arbiter
 slug: advance-isolated-one-shot
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-do-isolated-autopick-and-help]
 covers: []
 ---
@@ -73,7 +73,7 @@ The isolated advance-tick runner runs `performAdvance` with its cwd pointed at t
 
 ## Prompt
 
-> Give the dorfl `advance` command the SAME isolation ergonomic `do --isolated` has: run the advance tick in an ISOLATED job worktree off THIS repo's arbiter (resolved from cwd), then integrate + reap — instead of the in-place checkout takeover. This is the "isolated one-shot" cell `advance` is missing (it has in-place one-shot + the `run --advance` isolated loop, but no isolated one-shot). Source PRD: `work/prd-sliced/advance-loop.md` (US #26 — "isolation FALLS OUT of the isolation-strategy seam; build NO new isolation machinery"). You obey US #26: you reuse `do`'s isolation SUBSTRATE; the only new code is an advance-specific per-item runner the existing seam carries.
+> Give the dorfl `advance` command the SAME isolation ergonomic `do --isolated` has: run the advance tick in an ISOLATED job worktree off THIS repo's arbiter (resolved from cwd), then integrate + reap — instead of the in-place checkout takeover. This is the "isolated one-shot" cell `advance` is missing (it has in-place one-shot + the `run --advance` isolated loop, but no isolated one-shot). Source PRD: `work/spec-sliced/advance-loop.md` (US #26 — "isolation FALLS OUT of the isolation-strategy seam; build NO new isolation machinery"). You obey US #26: you reuse `do`'s isolation SUBSTRATE; the only new code is an advance-specific per-item runner the existing seam carries.
 >
 > HONEST SCOPE — read this before assuming "thin caller": the per-item runner is genuinely NEW, not a reuse.
 >   REUSED VERBATIM: `resolveArbiterUrlFromCheckout` (`do.ts`); the isolation seam + `ensureMirror` + reap path; the SCAN→SELECT→REFETCH SKELETON of `performDoRemoteAuto` (`do-remote-auto.ts`).

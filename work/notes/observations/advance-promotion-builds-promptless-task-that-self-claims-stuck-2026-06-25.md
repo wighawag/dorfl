@@ -114,7 +114,7 @@ throw), `intake.ts:~1617` (renderTask scaffold WITH `## Prompt`). Lock evidence:
 
 This is the SAME `promoteObservation` / `buildPromotedBody` machinery already targeted by
 the tasked PRD
-`work/prds/tasked/observation-discharge-by-deletion-self-contained-promotion-and-prd-route.md`
+`work/specs/tasked/observation-discharge-by-deletion-self-contained-promotion-and-prd-route.md`
 (origin observation
 `work/notes/observations/advance-promote-leaves-resolved-note-in-inbox-and-mints-non-self-contained-stub-2026-06-24.md`).
 That PRD's Defect B ("non-self-contained promotion") is the closest sibling, and its
@@ -151,7 +151,7 @@ auto-committed):
   — `buildPromotedBody` emits a `## Prompt` + a pre-claim well-formedness check so a
   promptless body is refused BEFORE the claim lock is taken (cause 1 + cause 2). Lands
   independently and fast.
-- DURABLE fix: `work/prds/proposed/centralize-buildable-task-renderer-shared-by-intake-and-promotion.md`
+- DURABLE fix: `work/specs/proposed/centralize-buildable-task-renderer-shared-by-intake-and-promotion.md`
   — one shared buildable-task renderer used by both `intake.renderTask` and
   `triage-persist.buildPromotedBody` (the deferred Resolved-decision-1 extraction). It
   SUPERSEDES the interim task's `## Prompt` synthesis while KEEPING its pre-claim guard.

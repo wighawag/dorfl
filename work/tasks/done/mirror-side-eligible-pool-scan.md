@@ -1,7 +1,7 @@
 ---
 title: advance — the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from the BARE hub mirror's main (the isolated counterpart to do-autopick's in-place scan) — ONE reusable unit
 slug: mirror-side-eligible-pool-scan
-prd: advance-loop
+spec: advance-loop
 blockedBy: []
 covers: [25, 27]
 ---
@@ -33,7 +33,7 @@ A MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs fro
 
 ## Prompt
 
-> Build the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from a BARE hub mirror's `main` (NOT an in-place checkout) — the isolated counterpart to `do-autopick`'s in-place scan. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (the "FOLD-IN: the mirror-side pool scan" note — design it ONCE so BOTH the `run` loop driver and the one-shot/CI `advance` driver consume the SAME scan; a standalone `do --remote -n` falls out as a thin caller; do NOT invent it twice) and US #25/27. `-n` stays ALWAYS SEQUENTIAL — this scan only ENUMERATES; parallelism is `run` or the CI matrix.
+> Build the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from a BARE hub mirror's `main` (NOT an in-place checkout) — the isolated counterpart to `do-autopick`'s in-place scan. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (the "FOLD-IN: the mirror-side pool scan" note — design it ONCE so BOTH the `run` loop driver and the one-shot/CI `advance` driver consume the SAME scan; a standalone `do --remote -n` falls out as a thin caller; do NOT invent it twice) and US #25/27. `-n` stays ALWAYS SEQUENTIAL — this scan only ENUMERATES; parallelism is `run` or the CI matrix.
 >
 > Mirror the in-place pool scan but read the BARE mirror. READ FIRST: `packages/dorfl/src/do-autopick.ts` (the in-place pool scan to mirror), `packages/dorfl/src/eligibility.ts` + `slicing-eligibility.ts` (the predicates to REUSE — not re-derive), `packages/dorfl/src/repo-mirror.ts` (the bare hub mirror), and the existing inline `-n`×`--remote` REFUSAL in `cli.ts` (the placeholder this scan replaces — but REMOVING the refusal is the caller/drivers' job, not this slice).
 >

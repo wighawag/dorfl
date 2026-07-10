@@ -1,7 +1,7 @@
 ---
 title: integration provider — GitHub (gh) propose/PR adapter
 slug: integration-github
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [7, 8]

@@ -1,7 +1,7 @@
 ---
 title: advance — the SURFACE-question rung: spawn `surface-questions` fresh-context, engine writes the sidecar CAS-atomically (always allowed)
 slug: advance-rung-surface
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-verb-resolver, surface-questions-skill]
 covers: [3, 4, 33]
 ---
@@ -36,7 +36,7 @@ This is the FIRST rung body filling the executor seam from `advance-verb-resolve
 
 ## Prompt
 
-> Build the SURFACE rung of the advance engine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("batch-qa → surface-questions", US #33, "The per-item state machine"). On classify=surface: under the `advancing` CAS lock, spawn a fresh-context agent with `surface-questions` loaded, collect its emitted questions, and the ENGINE writes/appends them to the sidecar CAS-atomically + sets `needsAnswers:true` in the same atomic step — exactly as the review gate uses `review` (skill judges, engine persists). Surfacing is ALWAYS allowed (no gate). Expensive work is POST-lock, winner-only.
+> Build the SURFACE rung of the advance engine. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("batch-qa → surface-questions", US #33, "The per-item state machine"). On classify=surface: under the `advancing` CAS lock, spawn a fresh-context agent with `surface-questions` loaded, collect its emitted questions, and the ENGINE writes/appends them to the sidecar CAS-atomically + sets `needsAnswers:true` in the same atomic step — exactly as the review gate uses `review` (skill judges, engine persists). Surfacing is ALWAYS allowed (no gate). Expensive work is POST-lock, winner-only.
 >
 > READ FIRST: `packages/dorfl/src/review-gate.ts` (the fresh-context skill-loaded spawn + structured-emit-parse pattern to MIRROR), the sidecar append/atomic-apply from `advance-sidecar-contract`, the `advancing` lock from `advancing-lock-borrow`, the rung-executor seam from `advance-verb-resolver`, and the `surface-questions` skill. Use the house stubbed-harness test pattern (so no real agent/model is invoked in tests).
 >

@@ -1,7 +1,7 @@
 ---
 title: advance — author the NEW `surface-questions` skill (GATHER-only, PERSIST-NEVER — mirrors `review`)
 slug: surface-questions-skill
-prd: advance-loop
+spec: advance-loop
 blockedBy: []
 covers: [32, 33, 34, 35]
 ---
@@ -39,7 +39,7 @@ The emitted question shape must MATCH the sidecar entry fields from `advance-sid
 
 ## Prompt
 
-> Author a NEW skill `surface-questions` (doc-shaped, like `review`): GATHER-only + PERSIST-NEVER. Read the PRD `advance-loop` (it now resides in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("batch-qa → surface-questions", US #32–35, and MAINTAINER-RESOLVED §2 — it is a NEW skill, NOT an in-place rename; the OLD `batch-qa` is retired in a SEPARATE slice). It EMITS questions and writes NOTHING — exactly as `review` emits a verdict and the caller routes it; the advance engine spawns it fresh-context and ITSELF writes the sidecar (CAS-atomic).
+> Author a NEW skill `surface-questions` (doc-shaped, like `review`): GATHER-only + PERSIST-NEVER. Read the PRD `advance-loop` (it now resides in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("batch-qa → surface-questions", US #32–35, and MAINTAINER-RESOLVED §2 — it is a NEW skill, NOT an in-place rename; the OLD `batch-qa` is retired in a SEPARATE slice). It EMITS questions and writes NOTHING — exactly as `review` emits a verdict and the caller routes it; the advance engine spawns it fresh-context and ITSELF writes the sidecar (CAS-atomic).
 >
 > GATHER by composing `review` (slice/PRD/code) + the native observation-triage question (promote/keep/delete) + pre-existing `needsAnswers`/`## Open questions`; inline context + an optional suggested default per question; the humility rule (surface residue, NEVER invent an answer). Keep `to-slices`/`review` COMPOSED and UNCHANGED (single sources). Stay human-invokable for the no-runner path (persist via the `advance` verb — NOT `do advance`; `advance` is a sibling top-level verb — or hand-write the documented sidecar format) — no separate write-skill.
 >

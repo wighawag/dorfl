@@ -1,7 +1,7 @@
 ---
 title: Retire the transient folders + remove drop-bookkeeping-rebase
 slug: retire-transient-folders-and-drop-rebase
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [claim-acquires-unified-lock-no-body-move, slicing-acquires-unified-lock, advancing-acquires-unified-lock, needs-attention-as-stuck-lock-state, complete-lock-then-durable-main-move-crash-safe]
 covers: [5, 6, 7]

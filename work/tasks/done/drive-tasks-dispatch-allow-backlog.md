@@ -1,7 +1,7 @@
 ---
 title: drive-tasks opt-in-backlog mode dispatches --allow-backlog
 slug: drive-tasks-dispatch-allow-backlog
-prd: do-allow-backlog-drive-staged-tasks-without-promotion
+spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: [do-allow-backlog-flag-resolver-claim-and-done-move]
 covers: [5]
 ---

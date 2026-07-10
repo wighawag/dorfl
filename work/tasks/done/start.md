@@ -1,7 +1,7 @@
 ---
 title: start — claim then onboard the human onto the work branch
 slug: start
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [claim-command]
 covers: [5]

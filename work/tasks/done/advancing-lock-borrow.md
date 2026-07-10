@@ -1,7 +1,7 @@
 ---
 title: advance — the `work/advancing/` CAS lock BORROW (one primitive, action=folder, identity=entry), type-encoded, never colliding with slicing/build
 slug: advancing-lock-borrow
-prd: advance-loop
+spec: advance-loop
 blockedBy: []
 covers: [19, 20, 21, 22, 24]
 ---
@@ -41,7 +41,7 @@ This slice delivers acquire/release for the `advancing` borrow + the new-item cr
 
 ## Prompt
 
-> Build the `work/advancing/` CAS lock BORROW — a SHORT borrow shaped like `slicing/`, using the EXISTING CAS ledger-write primitive (no new lock semantics). Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The lock model", "Classify → lock → execute, and new-item creation", US #19–24). The lock-FOLDER encodes the ACTION (`advancing`); the entry name `<type>-<slug>` encodes IDENTITY (same type-encoded scheme as the sidecar, via the resolver). It is file-orthogonal to the tick classifier — build in parallel.
+> Build the `work/advancing/` CAS lock BORROW — a SHORT borrow shaped like `slicing/`, using the EXISTING CAS ledger-write primitive (no new lock semantics). Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The lock model", "Classify → lock → execute, and new-item creation", US #19–24). The lock-FOLDER encodes the ACTION (`advancing`); the entry name `<type>-<slug>` encodes IDENTITY (same type-encoded scheme as the sidecar, via the resolver). It is file-orthogonal to the tick classifier — build in parallel.
 >
 > Mirror `packages/dorfl/src/slicing-lock.ts` (`acquireSlicingLock`/`releaseSlicingLock` — the CAS micro-commit / force-with-lease on a distinct branch ref, the winner/loser/exit-code shape) on a DISTINCT `advancing` ref so an advancing-borrow NEVER collides with a slicing-borrow or a build-claim on the same slug. Deliver new-item-creation-through-CAS (keyed on the NEW item's identity) as a reusable helper for the later triage rung. `needsAnswers` is the PURE answer-required axis (NOT a lock); the human edit-handshake becomes taking the `advancing` lock via CAS (supersedes `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`). Lock discipline: MANDATORY for the autonomous driver, no-op for a solo human.
 >

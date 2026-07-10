@@ -1,7 +1,7 @@
 ---
 title: the stranded-done auto-recover must fire ONLY when there is NOTHING TO COMMIT — gate committedRecovery on a clean tree so a CONTINUE with new agent work is NEVER silently DISCARDED (it surfaces a continue-specific needs-attention instead; auto-LANDING the dirty continue is the humanOnly sibling slice)
 slug: recover-autodetect-gated-on-nothing-to-commit
-prd: recover-autodetect-and-advancing-lock-crash-safety
+spec: recover-autodetect-and-advancing-lock-crash-safety
 blockedBy: []
 covers: [1, 2, 3]
 ---

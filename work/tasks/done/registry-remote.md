@@ -1,7 +1,7 @@
 ---
 title: registry-remote — the registry IS the hub-mirror set (remote add/rm/ls/find; fold arbiter; kill roots)
 slug: registry-remote
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: []
 covers: [1, 2, 3, 4, 5]
 ---

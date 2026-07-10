@@ -1,7 +1,7 @@
 ---
 title: prd→spec batch 4e — atomic rename of the residual exported Prd* symbols + complete the PrdsLandIn internal plumbing migration
 slug: rename-spec-residual-exported-symbols-and-prdslandIn-plumbing
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-namespace-emit-sites-and-local-unions]
 covers: [1]
 ---
@@ -37,14 +37,14 @@ Green-in-isolation: the `prdsLandIn` config-field alias + `--prds-land-in` input
 ### Do NOT touch (other batches / command own these)
 
 - The `--merge-prd`/`--propose-prd`/`--prds-land-in` user-facing CLI FLAGS + `DORFL_PRDS_LAND_IN` env (contract task removes the input aliases).
-- The `SlugNamespace`/`SidecarType` `'prd'` TYPE member, the `prd:` frontmatter field, `work/prds/` folder literals, the sidecar `prd-<slug>.md` file-path fallback (4d added it; command removes it), domain-prose.
+- The `SlugNamespace`/`SidecarType` `'prd'` TYPE member, the `prd:` frontmatter field, `work/specs/` folder literals, the sidecar `prd-<slug>.md` file-path fallback (4d added it; command removes it), domain-prose.
 - The `prdSlug`/`prdTitle`/`prdBody` verdict CONTENT field names (4d note §4 kept them, analogous to the `prd:` field).
 
 ## Acceptance criteria
 
 - [ ] The ~5 exported symbols renamed atomically (`renderPrd→renderSpec`, `buildIntakeDecisionPrd→buildIntakeDecisionSpec` incl. `index.ts` re-export, `findPrdPath→findSpecPath`, `promoteFromPrePrd*→promoteFromPreSpec*`) + all importers + coupled tests; no `Prd*` twin remains for them.
 - [ ] `PrdsLandIn` internal plumbing migrated: `SpecsLandIn` primary (`PrdsLandIn` the alias), `config.specsLandIn` primary field (`prdsLandIn?` readable alias, resolver keeps `?? prdsLandIn`), `specLandingToSide`, `PerformIntakeOptions.specsLandIn`/`explicitSpecsLandIn`, `env-config` `specsLandIn`, `cli.ts` internal `explicitSpecsLandIn`. User-facing `--prds-land-in`/`DORFL_PRDS_LAND_IN`/`--merge-prd`/`--propose-prd` flags LEFT (contract task).
-- [ ] `SlugNamespace`/`SidecarType` `'prd'` type member, `prd:` field, `work/prds/` literals, sidecar `prd-<slug>.md` fallback, verdict `prd*` content keys UNTOUCHED.
+- [ ] `SlugNamespace`/`SidecarType` `'prd'` type member, `prd:` field, `work/specs/` literals, sidecar `prd-<slug>.md` fallback, verdict `prd*` content keys UNTOUCHED.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
 - [ ] After this, `grep -rnE "\b(renderPrd|buildIntakeDecisionPrd|findPrdPath|promoteFromPrePrd|PrdsLandIn)\b" packages/dorfl/src` returns only the deliberate `PrdsLandIn`/`prdsLandIn` readable-alias survivors (contract task's remaining scope) — no other exported `Prd*` symbol.
 
@@ -56,6 +56,6 @@ Green-in-isolation: the `prdsLandIn` config-field alias + `--prds-land-in` input
 
 > Goal: complete the exported-SYMBOL migrate the C-audit dropped. Read `work/notes/observations/contract-spec-blocked-by-untasked-residual-prd-exported-symbols-2026-07-10.md` (full file:line list) + the parent spec + `TASKING-PROTOCOL.md` §3a + the batch-4a symbol-vs-value observation (`prd-to-spec-value-aliases-are-not-symbol-aliases-exported-Prd-symbols-need-atomic-rename.md`). TWO pieces: (1) ATOMIC rename of ~5 exported `Prd*` symbols (`renderPrd`, `buildIntakeDecisionPrd` + its `index.ts` re-export, `findPrdPath`, `promoteFromPrePrd*`) — definition + all importers + coupled tests in ONE green commit, no alias (exported symbols have no dual form); (2) complete the `PrdsLandIn` INTERNAL plumbing migration onto `spec` (invert the `SpecsLandIn = PrdsLandIn` alias + the `config.prdsLandIn` primary field so `spec` is primary, `specLandingToSide`, `PerformIntakeOptions.specsLandIn`, env-config, the cli INTERNAL var) — value-migration, green because the `prdsLandIn` config-field + `--prds-land-in` input-flag ALIASES stay readable.
 >
-> Scope boundary: LEAVE the user-facing `--prds-land-in`/`--merge-prd`/`--propose-prd` FLAGS + `DORFL_PRDS_LAND_IN` (contract task removes the input aliases), the `SlugNamespace`/`SidecarType` `'prd'` type member, the `prd:` field, `work/prds/` literals, the sidecar `prd-<slug>.md` fallback, and the `prd*` verdict content keys. Over-renaming into those breaks the contract task's/command's scope; under-renaming a symbol leaves the contract scan red.
+> Scope boundary: LEAVE the user-facing `--prds-land-in`/`--merge-prd`/`--propose-prd` FLAGS + `DORFL_PRDS_LAND_IN` (contract task removes the input aliases), the `SlugNamespace`/`SidecarType` `'prd'` type member, the `prd:` field, `work/specs/` literals, the sidecar `prd-<slug>.md` fallback, and the `prd*` verdict content keys. Over-renaming into those breaks the contract task's/command's scope; under-renaming a symbol leaves the contract scan red.
 >
 > Done means: no residual exported `Prd*` symbol (only the deliberate `prdsLandIn` readable-alias survivors), full gate green. FIRST check drift: confirm 4d landed and grep the 5 symbols to confirm they are still live + un-twinned.

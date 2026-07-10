@@ -1,7 +1,7 @@
 ---
 title: Phase 0: a single work-layout module owns every work/ path, folder union, and the item-scan predicate (no rename, no behaviour change)
 slug: work-layout-module-centralises-all-work-paths
-prd: folder-taxonomy-reorg-and-rename
+spec: folder-taxonomy-reorg-and-rename
 humanOnly: true
 blockedBy: []
 covers: [4, 5, 11]

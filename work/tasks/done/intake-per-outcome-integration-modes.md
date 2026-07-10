@@ -1,7 +1,7 @@
 ---
 title: intake per-outcome integration mode resolution (the KNOBS) — granular + aggregates, granular-overrides-aggregate, default propose
 slug: intake-per-outcome-integration-modes
-prd: issue-intake
+spec: issue-intake
 blockedBy: [intake-decision-prompt-and-four-outcome-dispatch]
 covers: [9]
 ---
@@ -42,7 +42,7 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 
 > Add `intake`'s PER-OUTCOME integration mode KNOBS + pure resolution, threading the resolved mode into `performIntegration`. `intake` decides the artifact TYPE (slice/PRD) at runtime, so one `--merge`/`--propose` can't express a type-conditional policy — hence per-outcome flags (US #9). `intake` owns the KNOBS only; WHICH knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
 >
-> THE CANONICAL RULE (from `work/prd-sliced/issue-intake.md`):
+> THE CANONICAL RULE (from `work/spec-sliced/issue-intake.md`):
 >
 > - granular: `--merge-prd`/`--propose-prd` (if PRD), `--merge-slice`/`--propose-slice` (if slice).
 > - aggregates: `--merge` = both-merge, `--propose` = both-propose.

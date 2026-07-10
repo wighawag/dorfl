@@ -1,7 +1,7 @@
 ---
 title: do --allow-backlog — flag + resolver + claim predicate + done-move (keystone)
 slug: do-allow-backlog-flag-resolver-claim-and-done-move
-prd: do-allow-backlog-drive-staged-tasks-without-promotion
+spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: []
 covers: [1, 2, 3]
 ---

@@ -1,7 +1,7 @@
 ---
 title: Extend renderPrdBody with optional ## Solution + ## User Stories inputs
 slug: extend-renderprdbody-with-solution-and-userstories-inputs
-prd: centralize-buildable-task-renderer-shared-by-intake-and-promotion
+spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: []
 covers: [4]
 ---

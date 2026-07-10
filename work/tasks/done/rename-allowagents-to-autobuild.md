@@ -1,7 +1,7 @@
 ---
 title: advance — RENAME `allowAgents` → `autoBuild` (the clean breaking-config migration, alias/deprecation window) so the gate family is symmetric (autoBuild/autoSlice/autoTriage) — SEQUENCED LAST
 slug: rename-allowagents-to-autobuild
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-drivers-and-gates, advance-rung-triage]
 covers: [36]
 ---
@@ -33,7 +33,7 @@ The `allowAgents` → `autoBuild` config rename — a clean, ISOLATED breaking-c
 
 ## Prompt
 
-> RENAME the config key `allowAgents` → `autoBuild` — a clean, ISOLATED breaking-config migration with an alias/deprecation window, SEQUENCED LAST so the gate family becomes symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #36, "The allowAgents → autoBuild rename", and MAINTAINER-RESOLVED §3 — it is IN-SET, NOT `humanOnly`, sequenced LAST). Build the rest of the advance work with `allowAgents` as-is; this slice does the rename ALONE. The OLD key/flag/env must still work for a deprecation window (aliased to `autoBuild` with a deprecation warning) so existing configs don't break. Mirror the precedent migration `rename-reviewpr-to-review` for the alias/warning shape.
+> RENAME the config key `allowAgents` → `autoBuild` — a clean, ISOLATED breaking-config migration with an alias/deprecation window, SEQUENCED LAST so the gate family becomes symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #36, "The allowAgents → autoBuild rename", and MAINTAINER-RESOLVED §3 — it is IN-SET, NOT `humanOnly`, sequenced LAST). Build the rest of the advance work with `allowAgents` as-is; this slice does the rename ALONE. The OLD key/flag/env must still work for a deprecation window (aliased to `autoBuild` with a deprecation warning) so existing configs don't break. Mirror the precedent migration `rename-reviewpr-to-review` for the alias/warning shape.
 >
 > READ FIRST: `packages/dorfl/src/repo-config.ts` (`REPO_ALLOWED_KEYS` has `allowAgents` — rename + alias), `packages/dorfl/src/config.ts` + `env-config.ts` (the resolution chain + `DORFL_*` env var + the CLI flag), the `rename-reviewpr-to-review` migration (the precedent alias/deprecation pattern — look in `work/done/` / git history), and the docs / WORK-CONTRACT references to `allowAgents`. Grep the whole codebase for `allowAgents`.
 >

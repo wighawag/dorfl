@@ -1,7 +1,7 @@
 ---
 title: review-gate-pr — Gate 2 (PR/code review) on the `do` path; run the review skill after verify, merge only on approve, route block to needs-attention
 slug: review-gate-pr
-prd: review
+spec: review
 blockedBy: []
 covers: [3, 4, 6, 7]
 ---

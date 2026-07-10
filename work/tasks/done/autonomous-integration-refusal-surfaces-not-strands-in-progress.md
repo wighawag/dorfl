@@ -1,7 +1,7 @@
 ---
 title: an AUTONOMOUS (do/advance) integration-time REFUSAL must SURFACE the item to needs-attention (or fail loud), never silently strand it in in-progress/ — today a post-claim `refused` is caught in performComplete and returned as exit 1 with NO surface, so the slug rots in in-progress/ and the next tick re-claims it forever
 slug: autonomous-integration-refusal-surfaces-not-strands-in-progress
-prd: ledger-integrity
+spec: ledger-integrity
 needsAnswers: false
 blockedBy: [autonomous-path-auto-recovers-already-committed-stranded-branch]
 covers: [7]

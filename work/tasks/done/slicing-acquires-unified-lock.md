@@ -1,7 +1,7 @@
 ---
 title: SLICING additionally acquires the unified lock (interim dual-write; slicing/ marker kept)
 slug: slicing-acquires-unified-lock
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [unified-item-lock-module-from-tracer, lock-entry-state-machine-and-invariants]
 covers: [1, 3]

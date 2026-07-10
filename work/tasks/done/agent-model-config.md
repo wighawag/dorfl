@@ -1,7 +1,7 @@
 ---
 title: agent model config — first-class model through the harness seam (per-repo)
 slug: agent-model-config
-prd: dorfl
+spec: dorfl
 blockedBy: [config-env-layer]
 covers: []
 ---

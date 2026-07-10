@@ -1,7 +1,7 @@
 ---
 title: prd→spec batch 3 — config keys + intake artifact type
 slug: rename-spec-config-and-intake
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-frontmatter-field-and-slug-namespace]
 covers: [1]
 ---

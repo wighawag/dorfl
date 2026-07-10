@@ -1,7 +1,7 @@
 ---
 title: prd→spec batch 4f — clean-break rename the intake integration-mode CLI flags + FULLY PURGE all residual internal prd code identifiers
 slug: rename-spec-intake-cli-flags-and-residual-prd-identifiers
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-residual-exported-symbols-and-prdslandIn-plumbing]
 covers: [1]
 ---
@@ -32,14 +32,14 @@ Rename every remaining `prd`-spelled CODE identifier (exported OR internal: cons
 ### Do NOT touch (the deliberate alias/field/folder/prose the CONTRACT task or the COMMAND owns)
 
 - The `SlugNamespace`/`SidecarType`/`IntakeArtifactType`/`IntakeOutcome` `'prd'` TYPE MEMBERS + `PRD_PREFIX='prd:'` + `parseFrontmatter`'s `prd:` key read + `item-lock`'s `'prd'` cases + `config`'s `prdsLandIn`/`PrdsLandIn` readable alias — the CONTRACT task removes these (this batch's grep-clean target EXCLUDES the type-member/alias surface).
-- The `prd:` frontmatter FIELD name, the `.spec` frontmatter reads, `work/prds/` string literals, the sidecar `prd-<slug>.md` fallback (4d), the `prdSlug`/`prdTitle`/`prdBody` verdict CONTENT keys (4d §4), and domain-PROSE — DATA/command territory.
+- The `prd:` frontmatter FIELD name, the `.spec` frontmatter reads, `work/specs/` string literals, the sidecar `prd-<slug>.md` fallback (4d), the `prdSlug`/`prdTitle`/`prdBody` verdict CONTENT keys (4d §4), and domain-PROSE — DATA/command territory.
 - `DORFL_PRDS_LAND_IN` env var + `--prds-land-in` flag + `explicitPrdsLandInFromFlag`/`flags.prdsLandIn` INPUT plumbing — the config INPUT alias the CONTRACT task removes (piece B does NOT touch the `prdsLandIn` input surface; 4e already made `specsLandIn` primary internally).
 
 ## Acceptance criteria
 
 - [ ] Piece A: `--merge-prd`/`--propose-prd` → `--merge-spec`/`--propose-spec` (clean break, NO alias); `mergePrd`/`proposePrd` fields → `mergeSpec`/`proposeSpec`; the trigger-template `prd_flag`/`--*-prd` → `spec_flag`/`--*-spec` + its test. `.github/workflows/*` regeneration flagged as manual follow-up.
-- [ ] Piece B: every residual `prd`-spelled CODE identifier (exported `STAGED_PRDS_DIR`, the `taskPrd` method, private consts/functions, local vars) renamed to `spec`. `grep -rniE "\bprd[A-Za-z_]*\b" packages/dorfl/src | grep -vE "prdsLandIn|PrdsLandIn|prd:|'prd'|prd-<slug>|work/prds|prdSlug|prdTitle|prdBody|PRD_PREFIX|SlugNamespace|SidecarType|IntakeArtifact|IntakeOutcome"` returns ONLY comment/prose + the deliberate contract-owned alias survivors — no live `prd` CODE identifier.
-- [ ] The contract-owned survivors UNTOUCHED: `'prd'` type members, `PRD_PREFIX`, `parseFrontmatter` `prd:` key, `item-lock` `'prd'`, `prdsLandIn`/`--prds-land-in` input alias, sidecar `prd-<slug>.md` fallback, `prd*` verdict content keys, `prd:` field / `work/prds/` literals / prose.
+- [ ] Piece B: every residual `prd`-spelled CODE identifier (exported `STAGED_PRDS_DIR`, the `taskPrd` method, private consts/functions, local vars) renamed to `spec`. `grep -rniE "\bprd[A-Za-z_]*\b" packages/dorfl/src | grep -vE "prdsLandIn|PrdsLandIn|prd:|'prd'|prd-<slug>|work/specs|prdSlug|prdTitle|prdBody|PRD_PREFIX|SlugNamespace|SidecarType|IntakeArtifact|IntakeOutcome"` returns ONLY comment/prose + the deliberate contract-owned alias survivors — no live `prd` CODE identifier.
+- [ ] The contract-owned survivors UNTOUCHED: `'prd'` type members, `PRD_PREFIX`, `parseFrontmatter` `prd:` key, `item-lock` `'prd'`, `prdsLandIn`/`--prds-land-in` input alias, sidecar `prd-<slug>.md` fallback, `prd*` verdict content keys, `prd:` field / `work/specs/` literals / prose.
 - [ ] Coupled tests updated; `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
 ## Blocked by
@@ -50,6 +50,6 @@ Rename every remaining `prd`-spelled CODE identifier (exported OR internal: cons
 
 > Goal: the FINAL migrate sweep before the contract task — (A) CLEAN-BREAK rename the intake integration-mode CLI flags `--merge-prd`/`--propose-prd` → `--merge-spec`/`--propose-spec` (+ `mergePrd`/`proposePrd` fields + the CI trigger-template `prd_flag` + tests; NO back-compat alias — human decision), and (B) FULLY PURGE every residual internal `prd` code identifier (exported `STAGED_PRDS_DIR`, the `taskPrd` interface method, private consts `POOL_PRDS_DIR`/`PRD_PLACEMENT_SLOTS`/`PRD_FOLDERS`, private fns `prdExists`/`heldPrdIsStale`/`resolvePrdSlug`/`buildTaskingPrd`, and ~all `prd*` local vars across ~15 files) → `spec`. Read the parent spec + `TASKING-PROTOCOL.md` §3a + the 4d/4e/4f STOP observation notes.
 >
-> Scope boundary — do NOT touch the CONTRACT-owned alias/type-member surface (`'prd'` members in SlugNamespace/SidecarType/IntakeArtifactType/IntakeOutcome, `PRD_PREFIX`, `parseFrontmatter` `prd:` key, `item-lock` `'prd'`, the `prdsLandIn`/`--prds-land-in` INPUT alias, the sidecar `prd-<slug>.md` fallback), the `prd:` FIELD / `work/prds/` literals / `prd*` verdict-content keys / domain-prose (command/data territory). Over-renaming into those breaks the contract task / command; the acceptance grep tells you exactly what must remain vs go.
+> Scope boundary — do NOT touch the CONTRACT-owned alias/type-member surface (`'prd'` members in SlugNamespace/SidecarType/IntakeArtifactType/IntakeOutcome, `PRD_PREFIX`, `parseFrontmatter` `prd:` key, `item-lock` `'prd'`, the `prdsLandIn`/`--prds-land-in` INPUT alias, the sidecar `prd-<slug>.md` fallback), the `prd:` FIELD / `work/specs/` literals / `prd*` verdict-content keys / domain-prose (command/data territory). Over-renaming into those breaks the contract task / command; the acceptance grep tells you exactly what must remain vs go.
 >
 > Done means: the CLI flags are `spec` (clean break), no live `prd` CODE identifier remains (only the enumerated contract-owned alias survivors + prose), `.github/workflows` regeneration flagged for the human, full gate green. FIRST check drift: confirm 4e landed; grep the flag family + `STAGED_PRDS_DIR` to confirm they are still `prd`-spelled + un-twinned.

@@ -196,7 +196,7 @@ no longer lingers.
 - The `needs-attention/` LIFECYCLE state and its recovery (`requeue`, status
   surfacing) — untouched; only the triage-answer disposition is removed.
 - Work-item (task/prd) terminal-folder routing (`tasks/cancelled`,
-  `prds/dropped`) as a LIFECYCLE concern — this PRD is about question-resolution,
+  `specs/dropped`) as a LIFECYCLE concern — this PRD is about question-resolution,
   not item-lifecycle terminals. (A task/prd is "dropped" by its own lifecycle, not
   by a question disposition.)
 - Changing intake's existing verdict behaviour (task/prd/ask/bounce) — the engine

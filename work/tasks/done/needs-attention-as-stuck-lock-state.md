@@ -1,7 +1,7 @@
 ---
 title: needs-attention ALSO marks the stuck lock state, read by status/scan (interim dual-write)
 slug: needs-attention-as-stuck-lock-state
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [lock-entry-state-machine-and-invariants, claim-acquires-unified-lock-no-body-move]
 covers: [5, 8]

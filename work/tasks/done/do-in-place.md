@@ -1,7 +1,7 @@
 ---
 title: do-in-place — the per-repo in-place worker (the CI command); absorbs ar-run.sh
 slug: do-in-place
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: [isolation-strategy-seam, slug-namespace-resolution]
 covers: [8, 11]
 ---

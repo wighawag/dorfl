@@ -1,7 +1,7 @@
 ---
 title: agent workspaces — hub mirrors + isolated job worktrees + seams (core)
 slug: agent-workspaces
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [run-once, repo-mirror]
 covers: [5, 6, 10, 12]

@@ -334,9 +334,9 @@ as fixing issues 1, 2. See `## Supersedes`.
 **The split, drawn on the property that actually matters (referenceable vs transient):**
 
 - **Stays on `main` (referenceable, human-glanceable, dependency-resolving, useful as agent work-input):**
-  `work/backlog/`, `work/done/`, `work/prd/`, `work/prd-sliced/`. VERIFIED these are exactly the files the
+  `work/backlog/`, `work/done/`, `work/prd/`, `work/spec-sliced/`. VERIFIED these are exactly the files the
   dependency/eligibility reads target: `blockedBy` resolves against `work/done/` (`readiness.ts`,
-  `eligibility.ts`); `sliceAfter` against `work/prd-sliced/` (`select-priority.ts`, `ledger-read.ts`);
+  `eligibility.ts`); `sliceAfter` against `work/spec-sliced/` (`select-priority.ts`, `ledger-read.ts`);
   backlog enumeration against `work/backlog/`; PRD source `work/prd/`. So the things a claim/slice must
   READ to decide eligibility ALL stay on `main`: the partial split does NOT force those reads onto the
   network. This is the key advantage over the ADR's all-in-one P-opt-2.
@@ -851,7 +851,7 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 >    (`backlog/` is no longer the clean claimable pool; readers must subtract lock-held slugs).
 
 **The verified fact that unlocks it:** dependency/eligibility resolution targets ONLY two folders,
-`blockedBy` , `work/done/` (`eligibility.ts`, `readiness.ts`) and `sliceAfter` , `work/prd-sliced/`
+`blockedBy` , `work/done/` (`eligibility.ts`, `readiness.ts`) and `sliceAfter` , `work/spec-sliced/`
 (`select-priority.ts`, `ledger-read.ts`). NOTHING resolves a dependency or eligibility decision against
 `in-progress/` or `needs-attention/` (a full grep finds only ONE incidental line, reading a slice
 BODY from backlog/ OR in-progress/, never a STATE check). So `in-progress` and `needs-attention` are

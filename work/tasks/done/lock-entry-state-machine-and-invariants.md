@@ -1,7 +1,7 @@
 ---
 title: Lock-entry two-axis state machine + invariants
 slug: lock-entry-state-machine-and-invariants
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [unified-item-lock-module-from-tracer]
 covers: [4, 10]

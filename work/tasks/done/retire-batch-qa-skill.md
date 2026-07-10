@@ -1,7 +1,7 @@
 ---
 title: advance — RETIRE the old `batch-qa` skill (its judgement survives in `surface-questions`, its orchestration is absorbed by the advance engine, its human-batching by `orchestrate`)
 slug: retire-batch-qa-skill
-prd: advance-loop
+spec: advance-loop
 blockedBy: [surface-questions-skill, advance-drivers-and-gates]
 covers: [32]
 ---
@@ -35,7 +35,7 @@ This is a small, clean removal sequenced LATE — after both the new skill exist
 
 ## Prompt
 
-> RETIRE the old `batch-qa` skill. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #32, "batch-qa → surface-questions", MAINTAINER-RESOLVED §2 — it is a NEW skill + retirement, NOT an in-place rename). `batch-qa`'s three roles now have homes: its question-formulation JUDGEMENT → the new `surface-questions` skill; its BOUND/APPLY/ITERATE/one-file ORCHESTRATION → the advance engine; its human-batching → `orchestrate` + `surface-questions`. Remove the skill file (+ any registration/index), update doc/skill/ADR references to the new homes, and VERIFY no live code path emits the literal `batch-qa` name (the gate-nit generator was already made skill-agnostic in `gate-nit-triage-text-skill-agnostic` — confirm it still holds). `to-slices`/`review` stay UNCHANGED.
+> RETIRE the old `batch-qa` skill. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #32, "batch-qa → surface-questions", MAINTAINER-RESOLVED §2 — it is a NEW skill + retirement, NOT an in-place rename). `batch-qa`'s three roles now have homes: its question-formulation JUDGEMENT → the new `surface-questions` skill; its BOUND/APPLY/ITERATE/one-file ORCHESTRATION → the advance engine; its human-batching → `orchestrate` + `surface-questions`. Remove the skill file (+ any registration/index), update doc/skill/ADR references to the new homes, and VERIFY no live code path emits the literal `batch-qa` name (the gate-nit generator was already made skill-agnostic in `gate-nit-triage-text-skill-agnostic` — confirm it still holds). `to-slices`/`review` stay UNCHANGED.
 >
 > READ FIRST: the existing `batch-qa` skill (what is being retired), the new `surface-questions` skill (`surface-questions-skill`), the advance engine (`advance-drivers-and-gates`), and grep the codebase for `batch-qa` to find every reference. Check `gate-nit-triage-text-skill-agnostic` (landed) for the already-fixed generator.
 >

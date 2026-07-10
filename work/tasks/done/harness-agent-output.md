@@ -1,7 +1,7 @@
 ---
 title: harness-agent-output — capture an agent invocation's final assistant message at launch and return it in LaunchResult (Option C), per-adapter from its native channel
 slug: harness-agent-output
-prd: review
+spec: review
 blockedBy: []
 covers: []
 ---

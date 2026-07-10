@@ -1,7 +1,7 @@
 ---
 title: autoslice-gate — autoSlice policy + slicing-eligibility predicate (pure)
 slug: autoslice-gate
-prd: auto-slice
+spec: auto-slice
 blockedBy: [config-env-layer]
 covers: [2, 3]
 ---

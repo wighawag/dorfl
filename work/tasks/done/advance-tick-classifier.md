@@ -1,7 +1,7 @@
 ---
 title: advance — the pure one-item TICK classifier + the deterministic per-type state machine (two signals only, read-only, no model, no lock)
 slug: advance-tick-classifier
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-sidecar-contract]
 covers: [7, 12, 13, 14, 18, 31]
 ---
@@ -58,7 +58,7 @@ The state machine is per-item-TYPE (slice / PRD / observation) — encode the pe
 
 ## Prompt
 
-> Build the pure `advance` TICK classifier + the deterministic per-type state machine. Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The advance TICK", "The per-item state machine — two signals only", "Per-item-type transitions"). The classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
+> Build the pure `advance` TICK classifier + the deterministic per-type state machine. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The advance TICK", "The per-item state machine — two signals only", "Per-item-type transitions"). The classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
 >
 > Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon must never spin hot). A subset of answered entries → SKIP. The state machine is per-item-TYPE (slice / PRD / observation); encode the transition-table CELLS, but only CLASSIFY them here — execution is later.
 >

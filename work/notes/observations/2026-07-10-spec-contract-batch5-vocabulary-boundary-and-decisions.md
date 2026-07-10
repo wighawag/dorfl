@@ -14,9 +14,9 @@ In `skills/setup/protocol/*` (`WORK-CONTRACT.md`, `TASKING-PROTOCOL.md`, `REVIEW
 The doc-consistency tests PIN several of these; do NOT read them as leaks:
 
 - **Role 2 — the `prd:` frontmatter FIELD** and its mentions: `prd: historical-store`, `prd: example-prd`, "the required `prd`", `covers` "within `prd`", "inherit (prd, else repo)", the whole `### The prd link` section in `WORK-CONTRACT.md`, and the `### Prd gate vs task gate` cross-references that describe the field. `tasking-protocol-doc.test.ts` asserts `toMatch(/\bprd\b/)` (twice) and parses a canonical `prd: example-prd` fixture.
-- **Role 3 — the `work/prds/...` FOLDER paths + verb/lock forms**: every `work/prds/{proposed,ready,tasked,dropped}/` path, `prds/` in the layout tree, `refs/dorfl/lock/prd-<slug>`, the `do prd:<slug>` / `advance prd:` verb forms, `taskedAfter` + `taskedAfter (cross-prd order)` (incl. `[other-prd]` slug references and the whole `### taskedAfter — prd tasking-order` section, which reads against `work/prds/tasked/` residence). `tasking-protocol-doc.test.ts` asserts the runtime tasking prompt still emits `work/prds/ready|tasked/` — but that test reads `packages/dorfl/src/tasking.ts`, which was left UNTOUCHED (a separate folder concern).
+- **Role 3 — the `work/specs/...` FOLDER paths + verb/lock forms**: every `work/specs/{proposed,ready,tasked,dropped}/` path, `specs/` in the layout tree, `refs/dorfl/lock/prd-<slug>`, the `do prd:<slug>` / `advance prd:` verb forms, `taskedAfter` + `taskedAfter (cross-prd order)` (incl. `[other-prd]` slug references and the whole `### taskedAfter — prd tasking-order` section, which reads against `work/specs/tasked/` residence). `tasking-protocol-doc.test.ts` asserts the runtime tasking prompt still emits `work/specs/ready|tasked/` — but that test reads `packages/dorfl/src/tasking.ts`, which was left UNTOUCHED (a separate folder concern).
 
-Rule of thumb applied: token followed by `:` (field), OR part of a `work/prds/...` path, OR `do/advance prd:` / `prd-<slug>` lock ref → LEFT as `prd`. Otherwise (artifact word) → `spec`.
+Rule of thumb applied: token followed by `:` (field), OR part of a `work/specs/...` path, OR `do/advance prd:` / `prd-<slug>` lock ref → LEFT as `prd`. Otherwise (artifact word) → `spec`.
 
 ## Decisions (recorded per the record-durably rule; also in the done record / PR body)
 

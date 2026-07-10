@@ -1,7 +1,7 @@
 ---
 title: Promote the tracer to the production unified item-lock module
 slug: unified-item-lock-module-from-tracer
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: []
 covers: [2, 3, 4, 11, 17, 19, 20, 21]

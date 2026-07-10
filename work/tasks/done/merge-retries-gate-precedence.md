@@ -1,7 +1,7 @@
 ---
 title: `mergeRetries` resolves through the gate-family precedence chain (flag > env > per-repo > global > default)
 slug: merge-retries-gate-precedence
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [5]
 ---

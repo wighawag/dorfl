@@ -1,7 +1,7 @@
 ---
 title: status/scan LINT the ledger + a gc-style SWEEP that REPORTS (never auto-deletes) any slug present in more than one work/ status folder
 slug: ledger-one-slug-one-folder-lint-and-sweep
-prd: ledger-integrity
+spec: ledger-integrity
 blockedBy: [atomic-done-move-one-slug-one-folder]
 covers: [3]
 ---
@@ -31,7 +31,7 @@ This slice is file-orthogonal to the atomic-done-move slice (it lives in the sca
 
 ## Prompt
 
-> Add a one-slug-one-folder LINT to dorfl's `status`/`scan` and a `gc`-style SWEEP that REPORTS (never auto-deletes) any slug present in more than one `work/` status folder. This is story 3 of the ledger-integrity PRD (`work/prd-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands) — the read-side belt-and-suspenders so a PRE-EXISTING orphan (e.g. the one hand-cleaned in `279b542`, PR #86) is DISCOVERABLE and a drive isn't misled into "recovering" an already-done slice.
+> Add a one-slug-one-folder LINT to dorfl's `status`/`scan` and a `gc`-style SWEEP that REPORTS (never auto-deletes) any slug present in more than one `work/` status folder. This is story 3 of the ledger-integrity PRD (`work/spec-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands) — the read-side belt-and-suspenders so a PRE-EXISTING orphan (e.g. the one hand-cleaned in `279b542`, PR #86) is DISCOVERABLE and a drive isn't misled into "recovering" an already-done slice.
 >
 > FIRST, check this slice against current reality (it is a launch snapshot — WORK-CONTRACT.md "Drift is a needs-attention signal"). Confirm the `atomic-done-move-one-slug-one-folder` slice (its blocker) has landed and DEFINES the one-slug-one-folder invariant; report against that same canonical notion. Read `packages/dorfl/src/scan.ts`, `packages/dorfl/src/status.ts`, and `packages/dorfl/src/gc.ts` for the existing surfaces. If a dependency landed differently, reconcile or route to `needs-attention/`.
 >

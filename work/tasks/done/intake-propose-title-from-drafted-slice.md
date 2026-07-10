@@ -1,7 +1,7 @@
 ---
 title: intake's emitted commit subject + propose-PR title must carry the DRAFTED slice title — stop degrading to generic "complete work slice" / "feat(<slug>)" because integration-core reads titlePath BEFORE the dispatcher stages the output file
 slug: intake-propose-title-from-drafted-slice
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: []
 ---
@@ -39,7 +39,7 @@ Fix the ordering/threading so the drafted title reaches the commit subject + pro
 >
 > Fix the ordering/threading so the drafted title reaches `performIntegration` before it computes the commit subject / propose title: EITHER write the output file in `dispatchSlice` BEFORE `performIntegration`, OR (preferred if cleaner) pass the drafted title explicitly via the `message`/stage option instead of a read-from-path that races the write. Do NOT regress the `do prd:` path (titlePath = existing PRD, already works).
 >
-> READ FIRST: `src/intake.ts` `dispatchSlice()` (sets `lifecycle.titlePath` + the `stage()` that writes the output file); `src/integration-core.ts` around the title read (`defaultSummary` / `readSliceTitle` / `synthesiseProposeTitle`) vs. the later `lifecycle.stage()` call — confirm the read happens before the stage write. `work/prd-sliced/issue-intake.md` for the lone-slice outcome.
+> READ FIRST: `src/intake.ts` `dispatchSlice()` (sets `lifecycle.titlePath` + the `stage()` that writes the output file); `src/integration-core.ts` around the title read (`defaultSummary` / `readSliceTitle` / `synthesiseProposeTitle`) vs. the later `lifecycle.stage()` call — confirm the read happens before the stage write. `work/spec-sliced/issue-intake.md` for the lone-slice outcome.
 >
 > SEAM TO TEST AT: the intake dispatch + integration path — assert the emitted COMMIT SUBJECT and the propose-PR TITLE both carry the drafted slice title (this is also the missing test that let the bug ship green).
 >

@@ -1,7 +1,7 @@
 ---
 title: unify-claim — retire the claim.sh wrapper; use the in-process claim everywhere
 slug: unify-claim
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [run-once, claim-command]
 covers: [5]

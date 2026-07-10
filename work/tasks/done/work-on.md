@@ -1,7 +1,7 @@
 ---
 title: work-on — create a human worktree (parallel work) from current main
 slug: work-on
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [repo-mirror, claim-command]
 covers: [5, 6]

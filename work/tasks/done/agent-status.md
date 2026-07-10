@@ -1,7 +1,7 @@
 ---
 title: agent status — operational view of live / failed / retained jobs
 slug: agent-status
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [11]

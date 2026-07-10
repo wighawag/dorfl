@@ -13,7 +13,7 @@ Today `integration` (`propose` | `merge`) is a SINGLE repo-wide value, so the PR
 
 There are TWO distinct lifecycle transitions that integrate, and they are the two axes:
 
-- **`slicing`** — turning a PRD into backlog slice FILES: the emitted `work/backlog/*.md` + the PRD lifecycle move (`work/slicing/ → work/prd-sliced/`). `merge` here means the slice FILES appear on `main` directly (no PR). VERIFIED home: `slicing.ts` (~L552, `mode: options.integration ?? 'propose'`, `type: 'slicing'`).
+- **`slicing`** — turning a PRD into backlog slice FILES: the emitted `work/backlog/*.md` + the PRD lifecycle move (`work/slicing/ → work/spec-sliced/`). `merge` here means the slice FILES appear on `main` directly (no PR). VERIFIED home: `slicing.ts` (~L552, `mode: options.integration ?? 'propose'`, `type: 'slicing'`).
 - **`build`** — turning a slice into CODE: the agent implements it, `verify`/review gate, done-move. `propose` here means the IMPLEMENTATION is a PR. VERIFIED home: `do.ts` threads `options.integration` into the build integrate path (~L605/~L694/~L966/~L1579/~L2039/~L2257).
 
 So the maintainer's need is exactly `{ slicing: "merge", build: "propose" }`: slice files land on main; code is a PR.

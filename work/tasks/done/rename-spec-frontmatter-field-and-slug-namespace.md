@@ -1,7 +1,7 @@
 ---
 title: prd→spec MIGRATE — move frontmatter reads + branch/lock EMIT onto spec (additive; NOT the do/advance verb, that is batch 4)
 slug: rename-spec-frontmatter-field-and-slug-namespace
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [expand-spec-lock-and-sidecar-namespace]
 covers: [1]
 ---

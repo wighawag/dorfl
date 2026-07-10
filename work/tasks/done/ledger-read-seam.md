@@ -1,7 +1,7 @@
 ---
 title: Ledger read seam — unify the work/ state readers behind one resolve-state entry
 slug: ledger-read-seam
-prd: ledger-transition-seam
+spec: ledger-transition-seam
 blockedBy: []
 covers: [5, 6, 7, 8, 9]
 ---

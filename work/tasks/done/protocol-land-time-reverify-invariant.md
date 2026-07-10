@@ -1,7 +1,7 @@
 ---
 title: Protocol — write the land-time re-verify invariant + human-reconcile warning (dual-write SOURCE + mirror)
 slug: protocol-land-time-reverify-invariant
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: [adr-land-primitive-rebase-reverify-advance]
 covers: [1, 2, 3]
 ---
@@ -59,8 +59,8 @@ AND MIRROR byte-identically into `work/protocol/`. Bump
 
 ## Prompt
 
-> Read `work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
-> (or `prds/ready/`) — especially Stories 1-3, the Solution section, and
+> Read `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
+> (or `specs/ready/`) — especially Stories 1-3, the Solution section, and
 > Applied Answer q4 for the verbatim warning wording. Read this repo's
 > AGENTS.md "Protocol docs — edit the SOURCE, never `work/protocol/`" rule
 > before touching anything. Edit `skills/setup/protocol/WORK-CONTRACT.md`

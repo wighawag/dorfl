@@ -1,7 +1,7 @@
 ---
 title: intake-closes-issue-on-bounce — a BOUNCE is terminal, so intake CLOSES the issue (atomically, with the bounce text as the closing comment + reason "not planned"); supersedes the PRD's "intake never closes / leave open" lines for the bounce case
 slug: intake-closes-issue-on-bounce
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: [5]
 ---
@@ -24,7 +24,7 @@ Build:
 - **DEGRADE on the REAL cause (not a hard-coded guess).** `closeIssue` NEVER throws on a missing/unauthenticated `gh`; it surfaces the ACTUAL `gh` stderr via the existing **`ghFailureReason(result)`** helper (`issue-provider.ts`) \u2014 NOT a copy of `postIssueComment`'s hard-coded "`gh` is unavailable or unauthenticated" string. (That hard-coded string is the SAME misattribution bug already fixed in `mutateLabel` \u2014 commit on 2026-06-10; do NOT propagate it into new code. See `work/observations/issue-provider-hardcoded-gh-unauth-string-survives-in-comment-and-comment-paths.md`.)
 - **Bounce closes via the atomic call.** `dispatchComment` (`src/intake.ts`) is SHARED by `ask` and `bounce`. CONDITIONALLY, when `outcome === 'bounced'`, replace the `postIssueComment`-then-leave-open path with a single `closeIssue({issueNumber, comment: <bounce text>, reason: 'not planned'})`. The `ask` branch is UNCHANGED (still `postIssueComment`, issue stays open). A close DEGRADE does not change the terminal outcome (still `bounced`, exit 0); it is surfaced honestly.
 - **Surface the close on the result.** Add an additive `closed?: boolean` to `IntakeResult` (mirroring the existing `commented?`), set true iff the issue was closed \u2014 so CI / callers can observe it.
-- **Correct the `issue-intake` PRD** (`work/prd-sliced/issue-intake.md`): the BOUNCE decision-table row ("leave the issue OPEN"), the "Loop closure" / "intake never closes the issue" lines, and the Out-of-Scope `closeIssue`/CI-only framing \u2014 amend to the settled split (bounce \u2192 intake closes directly as "not planned"; slice/prd \u2192 CI close-job; ask \u2192 never). `closeIssue` is no longer exclusively CI's. Fix in place (PRD is in `work/prd-sliced/`; a deliberate, recorded reversal).
+- **Correct the `issue-intake` PRD** (`work/spec-sliced/issue-intake.md`): the BOUNCE decision-table row ("leave the issue OPEN"), the "Loop closure" / "intake never closes the issue" lines, and the Out-of-Scope `closeIssue`/CI-only framing \u2014 amend to the settled split (bounce \u2192 intake closes directly as "not planned"; slice/prd \u2192 CI close-job; ask \u2192 never). `closeIssue` is no longer exclusively CI's. Fix in place (PRD is in `work/spec-sliced/`; a deliberate, recorded reversal).
 - **Reconcile the in-code "never closes" statements** (`src/intake.ts`): (i) the `dispatchComment` DOC-COMMENT ("The issue is left OPEN in BOTH cases ... closing the issue is NEVER `intake`'s") \u2014 the bluntest contradiction, it sits on the function this slice changes; (ii) the decision-table doc-comment BOUNCE bullet ("leave the issue OPEN ... never `intake`'s"); (iii) the `integrationToIntakeResult` "intake never closes the issue" comment; (iv) the decision-prompt BOUNCE line ("leaves the issue OPEN ... never closes the issue"). Update all four to "intake closes on BOUNCE (as not planned); never on slice/prd/ask".
 
 Relation to the other slices: `intake-self-awareness-resumption-tracking` classifies `bounced` as TERMINAL (its `already-terminal` skip branch) \u2014 this slice is the OTHER half of "bounce is terminal": the terminal CLASSIFICATION (C, the skip side) + the terminal ACTION, closing the issue (this slice). Independent (C governs re-trigger/skip; this governs the close side-effect), so neither blocks the other, but they express ONE decision and should land together.
@@ -49,7 +49,7 @@ Relation to the other slices: `intake-self-awareness-resumption-tracking` classi
 
 ## Prompt
 
-> Make a BOUNCE close the issue ATOMICALLY. Maintainer decision (2026-06-10): a bounce is TERMINAL \u2014 the asks are unrelated and must be re-filed \u2014 so an OPEN issue is a dishonest "still in play" signal; intake CLOSES it, carrying the bounce text as the closing comment and `reason: not planned` (the honest GitHub-native signal). This REVERSES, for BOUNCE only, the PRD's "intake never closes / leave the issue OPEN". PRD: `work/prd-sliced/issue-intake.md`.
+> Make a BOUNCE close the issue ATOMICALLY. Maintainer decision (2026-06-10): a bounce is TERMINAL \u2014 the asks are unrelated and must be re-filed \u2014 so an OPEN issue is a dishonest "still in play" signal; intake CLOSES it, carrying the bounce text as the closing comment and `reason: not planned` (the honest GitHub-native signal). This REVERSES, for BOUNCE only, the PRD's "intake never closes / leave the issue OPEN". PRD: `work/spec-sliced/issue-intake.md`.
 >
 > DRIFT CHECK FIRST: confirm `closeIssue` is still NOT on `IssueProvider` (`src/issue-provider.ts`), the bounce path (`dispatchComment`, `outcome:'bounced'`, `src/intake.ts`) still only posts a comment + leaves the issue open, and the "never closes" / "leave OPEN" statements still stand in (i) the `dispatchComment` doc-comment, (ii) the decision-table doc, (iii) `integrationToIntakeResult`, (iv) the decision prompt. If `closeIssue`/bounce-close already exists, re-scope.
 >

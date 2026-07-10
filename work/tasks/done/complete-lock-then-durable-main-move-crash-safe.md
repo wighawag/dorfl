@@ -1,7 +1,7 @@
 ---
 title: Crash-safe complete (hold lock, land durable main move, release)
 slug: complete-lock-then-durable-main-move-crash-safe
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [claim-acquires-unified-lock-no-body-move, needs-attention-as-stuck-lock-state]
 covers: [9, 10]

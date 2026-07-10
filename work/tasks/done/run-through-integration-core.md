@@ -1,7 +1,7 @@
 ---
 title: run-through-integration-core — route runOneItem through performIntegration + unify the gate (delete defaultTestGate/TestGate); fleet gets review gate, PR title/body, and the per-repo verify gate
 slug: run-through-integration-core
-prd: run-do-integrate-convergence
+spec: run-do-integrate-convergence
 blockedBy: [extract-integration-core]
 covers: [1, 2, 3]
 ---

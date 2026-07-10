@@ -1,7 +1,7 @@
 ---
 title: Cut-over 9b — needs-attention becomes the lock stuck state (reason on the entry); retire the folder
 slug: cutover-needs-attention-becomes-lock-stuck-recovery-surface
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [cutover-claim-body-stays-and-complete-sources-from-backlog]
 covers: [5, 8]

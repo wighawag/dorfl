@@ -1,7 +1,7 @@
 ---
 title: Cut-over 9a — claim stops moving the body; complete/integration source the done-move from backlog/
 slug: cutover-claim-body-stays-and-complete-sources-from-backlog
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [claim-acquires-unified-lock-no-body-move, complete-lock-then-durable-main-move-crash-safe, release-lock-verb-and-gc-stuck-report]
 covers: [1, 15, 16]

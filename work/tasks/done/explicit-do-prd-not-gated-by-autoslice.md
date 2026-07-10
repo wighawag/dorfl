@@ -33,7 +33,7 @@ This mirrors the build path EXACTLY: `allowAgents` is consumed only in the scan/
 
 ## Prompt
 
-> Fix a build/slice GATE ASYMMETRY: `do prd:<slug>` refuses an EXPLICITLY-named PRD when the repo's `autoSlice` policy is off, but `do <slice>` (build) does NOT refuse an explicitly-named slice on `allowAgents`. The contract (`docs/adr/methodology-and-skills.md` §4; `work/prd-sliced/auto-slice.md` §57) is that `autoSlice`/`allowAgents` gate "may an agent slice/claim _UNDECLARED_ items here?" — i.e. the AUTO-PICK / pool / CI path, NOT a target the operator explicitly typed. The slice path drifted by re-applying the policy on the explicit form. Make the two paths symmetric: an explicitly-named `do prd:<slug>` slices regardless of `autoSlice` (naming it IS the authorization), exactly as `do <slice>` builds regardless of `allowAgents`.
+> Fix a build/slice GATE ASYMMETRY: `do prd:<slug>` refuses an EXPLICITLY-named PRD when the repo's `autoSlice` policy is off, but `do <slice>` (build) does NOT refuse an explicitly-named slice on `allowAgents`. The contract (`docs/adr/methodology-and-skills.md` §4; `work/spec-sliced/auto-slice.md` §57) is that `autoSlice`/`allowAgents` gate "may an agent slice/claim _UNDECLARED_ items here?" — i.e. the AUTO-PICK / pool / CI path, NOT a target the operator explicitly typed. The slice path drifted by re-applying the policy on the explicit form. Make the two paths symmetric: an explicitly-named `do prd:<slug>` slices regardless of `autoSlice` (naming it IS the authorization), exactly as `do <slice>` builds regardless of `allowAgents`.
 >
 > WHAT STILL BINDS on the explicit path (do NOT remove these): the PRD's own readiness axes — `humanOnly: true` (a human must drive the slicing) and `needsAnswers: true` (open questions) STILL refuse the agent `doer`, and `sliceAfter` ordering STILL enforced. ONLY the repo's `autoSlice` POLICY is dropped from the explicit path. The HUMAN `doer` path is already unbound — leave it.
 >
@@ -54,4 +54,4 @@ This mirrors the build path EXACTLY: `allowAgents` is consumed only in the scan/
 
 ## Source
 
-Spotted during the `do prd:advance-loop` orchestrate sitting (2026-06-09); captured in `work/observations/explicit-do-prd-still-gated-by-autoslice-vs-autopick-eligibility.md` (see its "Update 2026-06-09" — reading A confirmed, the build/slice asymmetry is the bug). Contract basis: `docs/adr/methodology-and-skills.md` §4, `work/prd-sliced/auto-slice.md` §57.
+Spotted during the `do spec:advance-loop` orchestrate sitting (2026-06-09); captured in `work/observations/explicit-do-prd-still-gated-by-autoslice-vs-autopick-eligibility.md` (see its "Update 2026-06-09" — reading A confirmed, the build/slice asymmetry is the bug). Contract basis: `docs/adr/methodology-and-skills.md` §4, `work/spec-sliced/auto-slice.md` §57.

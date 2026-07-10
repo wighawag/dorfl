@@ -1,7 +1,7 @@
 ---
 title: WORK-CONTRACT.md — state that staging is also the human-control position
 slug: work-contract-staging-is-human-control-position
-prd: do-allow-backlog-drive-staged-tasks-without-promotion
+spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: []
 covers: [6]
 ---
@@ -15,9 +15,9 @@ drive-in-place, not promote-then-drive — generalising both the PRD-tasking fix
 End-to-end behaviour (protocol-doc only):
 
 - In the staging description (and/or the position/`humanOnly`-is-narrow section),
-  state: a staging folder (`tasks/backlog/`, `prds/proposed/`) is review-first
+  state: a staging folder (`tasks/backlog/`, `specs/proposed/`) is review-first
   admission AND the HUMAN-CONTROL position. Promoting an item into the pool
-  (`tasks/ready/`, `prds/ready/`) surrenders it to ANY claimer (a CI `advance`
+  (`tasks/ready/`, `specs/ready/`) surrenders it to ANY claimer (a CI `advance`
   leg, a local `run` daemon) — so a human who wants to DRIVE an item themselves
   drives it IN PLACE from staging, never promote-then-drive (which opens a
   competition window). Cross-reference the mechanisms: PRDs task in place
@@ -49,7 +49,7 @@ End-to-end behaviour (protocol-doc only):
 > `do-allow-backlog-drive-staged-tasks-without-promotion` (US #6, Resolved
 > decision 7).
 >
-> Where to look: the staging-folder descriptions (the `tasks/`/`prds/` lifecycle
+> Where to look: the staging-folder descriptions (the `tasks/`/`specs/` lifecycle
 > layout) and the "Task `humanOnly` is NARROW — POSITION carries review-first"
 > section. Add: staging is review-first admission AND the human-control position;
 > promoting to the pool surrenders the item to any claimer (CI `advance` / a

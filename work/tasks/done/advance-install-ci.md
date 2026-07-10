@@ -1,7 +1,7 @@
 ---
 title: advance — the CI-integration deliverable: a GitHub Actions workflow TEMPLATE (the `install-ci` notion) wiring "on cron / on-answer-committed → the right shape" (propose=matrix, merge=single-sequential)
 slug: advance-install-ci
-prd: advance-loop
+spec: advance-loop
 blockedBy: [advance-drivers-and-gates]
 covers: [27, 28]
 ---
@@ -39,7 +39,7 @@ A separate CI-INTEGRATION deliverable: a GitHub Actions workflow TEMPLATE (the `
 
 ## Prompt
 
-> Build the CI-integration deliverable: a GitHub Actions workflow TEMPLATE (the `install-ci` notion) wiring "on cron / on-answer-committed → the right shape". Read the PRD `advance-loop` (in `work/prd-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #27/28, "Two drivers + -n + CI"). `propose` mode → a MATRIX of independent jobs (one PR per item, true parallelism, `-n` not needed); `merge` mode → a SINGLE SEQUENTIAL job (merge items chain via rebase; parallel merge jobs would thrash the main-CAS). It only INVOKES the existing `advance`/`run` drivers — NOT entangled with the tick. `install-ci` is a one-step adoption (a CLI subcommand OR a documented template copy — pick the lighter, record in `## Decisions`). Enumerate matrix items via the mirror-side pool scan. Do NOT let a live workflow self-trigger in THIS repo unintentionally (record the decision).
+> Build the CI-integration deliverable: a GitHub Actions workflow TEMPLATE (the `install-ci` notion) wiring "on cron / on-answer-committed → the right shape". Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (US #27/28, "Two drivers + -n + CI"). `propose` mode → a MATRIX of independent jobs (one PR per item, true parallelism, `-n` not needed); `merge` mode → a SINGLE SEQUENTIAL job (merge items chain via rebase; parallel merge jobs would thrash the main-CAS). It only INVOKES the existing `advance`/`run` drivers — NOT entangled with the tick. `install-ci` is a one-step adoption (a CLI subcommand OR a documented template copy — pick the lighter, record in `## Decisions`). Enumerate matrix items via the mirror-side pool scan. Do NOT let a live workflow self-trigger in THIS repo unintentionally (record the decision).
 >
 > READ FIRST: the drivers from `advance-drivers-and-gates` (the one-shot + loop the CI invokes), the mirror-side pool scan from `mirror-side-eligible-pool-scan`, the existing `.github/workflows/` (if any) for the house CI convention, and the PRD's CI shape section. Look for any existing "install"/setup-convenience command pattern in `cli.ts` to mirror if you add a subcommand.
 >

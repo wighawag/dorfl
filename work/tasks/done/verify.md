@@ -1,7 +1,7 @@
 ---
 title: verify — run the per-repo acceptance gate (the shared test boundary)
 slug: verify
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [12]

@@ -5,7 +5,7 @@ humanOnly: true
 sliceAfter: [auto-slice]
 ---
 
-> **Launch snapshot — SLICED** (this PRD lives in `work/prd-sliced/`; the folder is its sliced-ness — there is no `sliced:` marker). The Implementation / Testing detail was relocated into the slices at slice time (2026-06-09): `intake-tracer-slice-outcome`, `intake-decision-prompt-and-four-outcome-dispatch`, `intake-per-outcome-integration-modes`, `intake-processing-lock`, `intake-event-classification`, `prd-complete-query`. What remains here is the DURABLE spec + rationale (the decision table, the scope boundary, loop closure, the stories, the autonomy axes) — the source of truth the slices reference. Provenance + history at the BOTTOM (Further Notes); the spec leads.
+> **Launch snapshot — SLICED** (this PRD lives in `work/spec-sliced/`; the folder is its sliced-ness — there is no `sliced:` marker). The Implementation / Testing detail was relocated into the slices at slice time (2026-06-09): `intake-tracer-slice-outcome`, `intake-decision-prompt-and-four-outcome-dispatch`, `intake-per-outcome-integration-modes`, `intake-processing-lock`, `intake-event-classification`, `prd-complete-query`. What remains here is the DURABLE spec + rationale (the decision table, the scope boundary, loop closure, the stories, the autonomy axes) — the source of truth the slices reference. Provenance + history at the BOTTOM (Further Notes); the spec leads.
 
 ## Problem Statement
 

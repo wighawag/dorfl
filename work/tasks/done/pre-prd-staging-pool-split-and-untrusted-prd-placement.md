@@ -1,7 +1,7 @@
 ---
 title: STEP A for PRDs — pre-prd/ staging + runner-deterministic PRD placement (prd/ stays the pool)
 slug: pre-prd-staging-pool-split-and-untrusted-prd-placement
-prd: staging-pool-position-gate-and-trust-model
+spec: staging-pool-position-gate-and-trust-model
 blockedBy: [runner-deterministic-slice-placement-policy-and-precedence]
 covers: [2, 6, 12, 14]
 ---
@@ -25,7 +25,7 @@ behaviour:
    auto-slice pool (a durable `main` move, mirroring the slice `pre-backlog →
    backlog` promotion). An agent path CANNOT perform it.
 3. **`sliceAfter` / `blockedBy` resolution is UNCHANGED** — still resolved against
-   `work/prd-sliced/` / `work/done/` residence respectively. This split changes only
+   `work/spec-sliced/` / `work/done/` residence respectively. This split changes only
    WHICH folder is the eligible/auto-slice pool, not dependency resolution
    (PRD US #14); add a check that proves it.
 
@@ -38,7 +38,7 @@ with the slice STEP A.
 - [ ] A `work/pre-prd/` staging folder exists; `intake`/untrusted-origin PRD output
       that the policy/trust routes to staging lands there, NOT in `work/prd/`.
 - [ ] `work/prd/` STILL means the auto-slice pool: the auto-slice candidate pool and
-      `sliceAfter` resolution read `work/prd/` / `work/prd-sliced/` and behave
+      `sliceAfter` resolution read `work/prd/` / `work/spec-sliced/` and behave
       byte-for-byte as before; existing PRDs in `work/prd/` are untouched.
 - [ ] A staged PRD in `pre-prd/` is NOT in the auto-slice pool (never auto-sliced)
       until promoted; the runner/human-owned `pre-prd → prd` promotion makes it
@@ -76,7 +76,7 @@ with the slice STEP A.
 > in `src/config.ts`, and apply the precedence `explicit operator flag >
 > untrusted-origin ⇒ staging > prdsLandIn default > built-in` from the PRD's
 > `originTrust:` stamp. The auto-slice POOL READERS to leave UNCHANGED read
-> `work/prd/` + resolve `sliceAfter` against `work/prd-sliced/` residence
+> `work/prd/` + resolve `sliceAfter` against `work/spec-sliced/` residence
 > (`src/ledger-read.ts`, `src/slicing.ts readSlicedSlugs`, the mirror PRD pool,
 > `src/select-priority.ts`). The promotion verb mirrors the slice `pre-backlog →
 > backlog` promotion: a runner/human-owned `work/pre-prd/<slug>.md →

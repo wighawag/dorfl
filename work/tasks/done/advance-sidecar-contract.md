@@ -1,7 +1,7 @@
 ---
 title: advance — the question/answer SIDECAR contract (parse/serialise/atomic-apply), the genuinely-new keystone
 slug: advance-sidecar-contract
-prd: advance-loop
+spec: advance-loop
 blockedBy: []
 covers: [8, 9, 10, 11, 15]
 ---
@@ -18,7 +18,7 @@ detail but not the shape)
 
 ```
 ---
-item: prd:autoslice          # the NAMESPACED identity (the resolver is the source of truth)
+item: spec:autoslice          # the NAMESPACED identity (the resolver is the source of truth)
 type: prd                    # prd | slice | observation  (redundant w/ filename; explicit for the parser)
 slug: autoslice
 allAnswered: false           # DERIVED mirror — recompute from entries on every write; never trusted over entries
@@ -73,7 +73,7 @@ disposition:                 # optional, triage/terminal entries: promote-slice 
 
 ## Prompt
 
-> Build the question/answer SIDECAR contract — the one genuinely-new piece of the `advance` family. A per-item file `work/questions/<type>-<slug>.md` in a strict, tooling-OWNED format with per-entry answered-state, plus parse/serialise/append/ derived-allAnswered/atomic-apply operations and tests. Read the PRD `work/prd/advance-loop.md` (it now resides in `work/prd-sliced/` or `work/slicing/` while being sliced) — specifically "The sidecar (the keystone — Option B)", "The sidecar FORMAT (RESOLVED here)", and "MAINTAINER-RESOLVED SLICE-TIME DECISIONS §1" (the answered predicate: non-empty `answer:` ⇒ answered, explicit `answered:` is the override). The format is RESOLVED — do NOT re-open it; an ADR may finalise byte detail, not the shape.
+> Build the question/answer SIDECAR contract — the one genuinely-new piece of the `advance` family. A per-item file `work/questions/<type>-<slug>.md` in a strict, tooling-OWNED format with per-entry answered-state, plus parse/serialise/append/ derived-allAnswered/atomic-apply operations and tests. Read the PRD `work/prd/advance-loop.md` (it now resides in `work/spec-sliced/` or `work/slicing/` while being sliced) — specifically "The sidecar (the keystone — Option B)", "The sidecar FORMAT (RESOLVED here)", and "MAINTAINER-RESOLVED SLICE-TIME DECISIONS §1" (the answered predicate: non-empty `answer:` ⇒ answered, explicit `answered:` is the override). The format is RESOLVED — do NOT re-open it; an ADR may finalise byte detail, not the shape.
 >
 > Domain vocabulary: the sidecar is IDENTITY-keyed (`<type>-<slug>`, derived from the namespaced identity via the existing resolver `slug-namespace.ts` — `:`→`-` for the filename), NOT folder-keyed, so it survives the item's `git mv`s with no lock-step move. The ONLY in-body signal is the existing `needsAnswers` flag — there is NO back-pointer field. `allAnswered` is a DERIVED mirror (recompute from entries every write; never trusted over them). Append never overwrites (the sidecar is the full Q&A history); ids are stable + monotonic, never reused. Atomic-apply mutates the item body + sidecar in ONE commit and, on full resolution, clears `needsAnswers` + deletes the sidecar in that same commit (the invariant `needsAnswers:false ⟺ no active sidecar`).
 >

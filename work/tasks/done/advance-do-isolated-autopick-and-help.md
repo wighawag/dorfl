@@ -1,7 +1,7 @@
 ---
 title: do --isolated -n/auto-pick already WORKS (mirror-pool scan + sequential refetch) but its help text still says "a single named item; not for -n/auto-pick" — fix the stale doc + lock the behaviour with an explicit drain test
 slug: advance-do-isolated-autopick-and-help
-prd: advance-loop
+spec: advance-loop
 blockedBy: []
 covers: []
 ---

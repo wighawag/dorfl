@@ -1,7 +1,7 @@
 ---
 title: Cross-job ref-based land-lock accelerator (portable, with stale-lock reclaim)
 slug: cross-job-ref-based-land-lock
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [merge-retries-gate-precedence]
 covers: [5]

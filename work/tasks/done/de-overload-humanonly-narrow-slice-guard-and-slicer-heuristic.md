@@ -1,7 +1,7 @@
 ---
 title: De-overload humanOnly — narrow the slice guard, shift the slicer heuristic to staging-birth, name the three modes
 slug: de-overload-humanonly-narrow-slice-guard-and-slicer-heuristic
-prd: staging-pool-position-gate-and-trust-model
+spec: staging-pool-position-gate-and-trust-model
 blockedBy: [runner-deterministic-slice-placement-policy-and-precedence]
 covers: [8, 9, 10, 11]
 ---

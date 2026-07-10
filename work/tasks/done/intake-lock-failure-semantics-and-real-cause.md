@@ -45,7 +45,7 @@ Settled at build time (no open questions — `needsAnswers` omitted):
 
 ## Prompt
 
-> Fix `intake`'s processing-lock failure semantics (the lock in `src/intake.ts` `performIntake` + the label ops in `src/issue-provider.ts`). Source: `work/observations/intake-lock-degrade-misattributes-gh-failure-and-silently-proceeds.md`; spec: `work/prd-sliced/issue-intake.md` US #10; the slice it fixes: `work/done/intake-processing-lock.md`.
+> Fix `intake`'s processing-lock failure semantics (the lock in `src/intake.ts` `performIntake` + the label ops in `src/issue-provider.ts`). Source: `work/observations/intake-lock-degrade-misattributes-gh-failure-and-silently-proceeds.md`; spec: `work/spec-sliced/issue-intake.md` US #10; the slice it fixes: `work/done/intake-processing-lock.md`.
 >
 > DRIFT CHECK FIRST: confirm `mutateLabel`/`getLabels` still collapse every gh failure into "unavailable or unauthenticated" + a silent degrade. If already three-way (`applied`/`unsupported`/`failed`) with the real stderr surfaced, this slice is done.
 >

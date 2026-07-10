@@ -1,7 +1,7 @@
 ---
 title: batch-qa — author skills/batch-qa/ (the one-file, one-step human-batching review loop)
 slug: batch-qa
-prd: batch-qa
+spec: batch-qa
 blockedBy: [review-skill]
 covers: [] # one slice delivers the whole PRD — story-index bookkeeping adds no signal here
 ---

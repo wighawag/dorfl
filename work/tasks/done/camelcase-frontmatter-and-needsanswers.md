@@ -1,7 +1,7 @@
 ---
 title: camelCase frontmatter + needsAnswers axis — parser/eligibility migration
 slug: camelcase-frontmatter-and-needsanswers
-prd: auto-slice
+spec: auto-slice
 humanOnly: true
 blockedBy: []
 covers: []

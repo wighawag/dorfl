@@ -1,7 +1,7 @@
 ---
 title: scan — cross-repo eligible-work queue (read-only)
 slug: scan
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scaffold]
 covers: [1, 2, 3, 4, 9]

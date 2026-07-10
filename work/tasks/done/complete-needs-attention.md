@@ -1,7 +1,7 @@
 ---
 title: complete → needs-attention — route complete's failure paths to the stuck folder
 slug: complete-needs-attention
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [needs-attention]
 covers: [12]

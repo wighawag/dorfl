@@ -1,7 +1,7 @@
 ---
 title: Self-contained promotion body + delete-on-promote (observation→task route)
 slug: promotion-self-contained-body-and-delete-on-promote-task-route
-prd: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
+spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: []
 covers: [1, 3, 8]
 ---

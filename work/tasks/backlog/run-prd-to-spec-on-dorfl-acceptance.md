@@ -1,7 +1,7 @@
 ---
 title: Run dorfl prd-to-spec on dorfl itself — the end-to-end acceptance test
 slug: run-prd-to-spec-on-dorfl-acceptance
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 humanOnly: true
 blockedBy: [build-prd-to-spec-migration-command]
 covers: [5, 8, 10]
@@ -16,13 +16,13 @@ The final step: run the built `dorfl prd-to-spec` command on THIS repo (dorfl) t
 Steps (human-driven):
 1. Ensure dorfl is quiescent (clean tree, no held lock, no in-flight `work/*` build) — the command will refuse otherwise; that refusal is itself a passing test.
 2. Run `dorfl prd-to-spec --dry-run`; inspect the reported changes for correctness across all four layers.
-3. Run `dorfl prd-to-spec`; it does the `work/protocol/` mirror re-sync (via its setup step) + all data conversion (`work/prds/* → work/specs/*`, frontmatter incl. `done/`, config, inert refs).
+3. Run `dorfl prd-to-spec`; it does the `work/protocol/` mirror re-sync (via its setup step) + all data conversion (`work/specs/* → work/specs/*`, frontmatter incl. `done/`, config, inert refs).
 4. Run the full acceptance gate + both leak scans; confirm green.
 5. Run the command a SECOND time; confirm it is a no-op (idempotency on the real repo).
 
 ## Acceptance criteria
 
-- [ ] `dorfl prd-to-spec` run on dorfl converts `work/prds/* → work/specs/*`, all `prd:` frontmatter → `spec:` (incl. `work/tasks/done/` + `work/specs/tasked/`), `.dorfl.json` keys, and inert `prd-*` refs.
+- [ ] `dorfl prd-to-spec` run on dorfl converts `work/specs/* → work/specs/*`, all `prd:` frontmatter → `spec:` (incl. `work/tasks/done/` + `work/specs/tasked/`), `.dorfl.json` keys, and inert `prd-*` refs.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green after migration; forward+reverse leak scans clean on dorfl (the downstream trust signal).
 - [ ] A second run is a verified no-op (idempotency on the real repo).
 - [ ] The parent spec itself now resides at `work/specs/{ready|tasked}/prd-to-spec-vocabulary-cutover-and-migration-command.md` (it migrated itself — the fitting provenance).

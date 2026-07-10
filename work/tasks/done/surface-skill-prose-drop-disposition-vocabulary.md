@@ -1,7 +1,7 @@
 ---
 title: Drop the disposition vocabulary from surface/skill prose
 slug: surface-skill-prose-drop-disposition-vocabulary
-prd: agentic-question-resolution-retire-disposition-vocabulary
+spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [agentic-apply-retire-disposition-vocabulary]
 covers: [6]
 ---

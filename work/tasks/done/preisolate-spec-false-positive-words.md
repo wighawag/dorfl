@@ -1,7 +1,7 @@
 ---
 title: Prefactor — pre-isolate spec false-positive words to synonyms before any prd→spec sweep
 slug: preisolate-spec-false-positive-words
-prd: prd-to-spec-vocabulary-cutover-and-migration-command
+spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: []
 covers: [1, 3]
 ---
@@ -30,7 +30,7 @@ Note the mirror-image live evidence this exists to prevent: the prior `brief` cu
 
 ## Prompt
 
-> Goal: make the substring `spec` unambiguous across the live source trees BEFORE the `prd → spec` vocabulary cutover begins, by synonym-renaming every artifact-unrelated word that contains `spec`. This is the expand-phase prefactor of a wide refactor (read `work/protocol/TASKING-PROTOCOL.md` §3a) and the parent spec `work/prds/{ready|tasked}/prd-to-spec-vocabulary-cutover-and-migration-command.md` (Implementation Decisions → "Rename MECHANICS — PRE-ISOLATE"). Do NOT touch `.github/workflows/*` (the CI identity cannot push workflow changes) or landed `work/` history (the migration command converts that later).
+> Goal: make the substring `spec` unambiguous across the live source trees BEFORE the `prd → spec` vocabulary cutover begins, by synonym-renaming every artifact-unrelated word that contains `spec`. This is the expand-phase prefactor of a wide refactor (read `work/protocol/TASKING-PROTOCOL.md` §3a) and the parent spec `work/specs/{ready|tasked}/prd-to-spec-vocabulary-cutover-and-migration-command.md` (Implementation Decisions → "Rename MECHANICS — PRE-ISOLATE"). Do NOT touch `.github/workflows/*` (the CI identity cannot push workflow changes) or landed `work/` history (the migration command converts that later).
 >
 > Domain vocabulary: the artifact today is a `prd`; the cutover renames it to `spec`. The hazard is that `spec` lives inside common English (`specify`, `specific`, `specification`, `.spec.ts`, `respectively`, `especially`, `inspect`, `spectrum`). Rename those to synonyms so that after this task, a bare `spec` substring means the artifact (once introduced) and nothing else.
 >

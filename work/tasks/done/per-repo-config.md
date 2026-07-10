@@ -1,7 +1,7 @@
 ---
 title: per-repo config — a committed repo-level config layered over global
 slug: per-repo-config
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: [3, 8]

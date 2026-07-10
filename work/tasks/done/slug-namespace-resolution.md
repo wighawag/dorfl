@@ -1,7 +1,7 @@
 ---
 title: slug-namespace-resolution — bare = slice, slice:/prd: explicit, ERROR on collision (§3a)
 slug: slug-namespace-resolution
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 blockedBy: []
 covers: [7]
 ---

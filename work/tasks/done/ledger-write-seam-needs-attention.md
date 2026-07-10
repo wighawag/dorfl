@@ -1,7 +1,7 @@
 ---
 title: Route the needs-attention transition through the ledger write seam
 slug: ledger-write-seam-needs-attention
-prd: ledger-transition-seam
+spec: ledger-transition-seam
 blockedBy: [ledger-write-seam-complete]
 covers: [4, 7, 8, 10]
 ---

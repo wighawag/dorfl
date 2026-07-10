@@ -1,7 +1,7 @@
 ---
 title: install-ci advance lifecycle workflow (capability C: triage / surface / apply + answer trigger)
 slug: install-ci-advance-lifecycle-workflow
-prd: runner-in-ci
+spec: runner-in-ci
 blockedBy:
   [
     install-ci-core-and-github-adapter,

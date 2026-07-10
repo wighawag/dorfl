@@ -2,13 +2,13 @@
 
 Date: 2026-07-09. Linked from the done record of `rename-spec-work-layout-and-folders`.
 
-These are scope/coherence decisions made while building batch 1 (the `work-layout.ts` folder key/value rename + on-disk `work/prds/* → work/specs/*` git-mv). Recorded here so the reviewer and the human can ratify or reverse.
+These are scope/coherence decisions made while building batch 1 (the `work-layout.ts` folder key/value rename + on-disk `work/specs/* → work/specs/*` git-mv). Recorded here so the reviewer and the human can ratify or reverse.
 
 ## 1. Renaming the folder KEYS forces updating every call-site key literal (in THIS batch)
 
 - **Chose:** rename the folder KEYS `prds-* → specs-*` in `WORK_FOLDER_NAME` AND update every call site that passes those keys as string literals (`workItemPath(cwd, 'prds-ready', …)`, the `PARTICIPATING_POOLS`/`APPLY_LIFECYCLE_FOLDERS`/`advance.ts` folder arrays, `ledger-read.ts` local param unions `'prds-proposed' | 'prds-tasked'`, etc.), so the package still compiles.
 - **Why:** the keys are `WorkFolderKey`-typed string literals (`as const satisfies readonly WorkFolderKey[]`, `Record<SidecarType, readonly WorkFolderKey[]>`). Renaming a key without updating its literal call sites is a hard TypeScript break, so a "migrate batch" that renames keys MUST update its call sites in the same batch to land green (that is exactly the expand→migrate→contract discipline, ADR §7c: each batch lands green).
-- **Tension noted:** the task's domain note says "every call site references keys, never raw strings, so renaming a folder should not re-touch call sites." That claim is true for the VALUE flip (`work/prds/* → work/specs/*`) but NOT for the KEY rename, which necessarily re-touches the key literal at every call site. I read the task's explicit "rename the folder KEYS and VALUES" as authoritative and updated the literals.
+- **Tension noted:** the task's domain note says "every call site references keys, never raw strings, so renaming a folder should not re-touch call sites." That claim is true for the VALUE flip (`work/specs/* → work/specs/*`) but NOT for the KEY rename, which necessarily re-touches the key literal at every call site. I read the task's explicit "rename the folder KEYS and VALUES" as authoritative and updated the literals.
 - **Touches:** the call sites in `prompt.ts`, `tasking.ts`, `tasking-lock.ts`, `detect.ts`, `advance.ts`, `needs-attention.ts`, `item-lock.ts`, `ledger-read.ts`, `item-path.ts`, `triage-persist.ts`, `intake.ts`, `cli.ts`, and the tests that pass these keys (`prompt.test.ts`, `gc-reap-stale-locks.test.ts`, `work-layout.test.ts`, `helpers/gitRepo.ts`). Batch 4 (`rename-spec-remaining-src-modules`) still owns the REMAINING `Prd*` identifiers/prose/frontmatter-adjacent symbols in those same modules; this batch only touches the folder-key LITERAL, not those symbols.
 - **Alternative considered:** rename only the VALUES + `PRD_FOLDERS`/`PrdFolder`, leaving keys as `prds-*`. Rejected: contradicts the task's explicit "rename the folder KEYS".
 

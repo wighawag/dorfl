@@ -1,7 +1,7 @@
 ---
 title: wire in-place `do` onto the IsolatedTree seam — the one remaining seam consumer (run + do --remote already adopted it); the convergence the advance tick wraps
 slug: do-run-share-isolation-seam
-prd: command-surface-phase-2
+spec: command-surface-phase-2
 covers: []
 ---
 

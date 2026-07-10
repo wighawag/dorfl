@@ -1,7 +1,7 @@
 ---
 title: Agentic apply — add the mint-adr route
 slug: agentic-apply-mint-adr-route
-prd: agentic-question-resolution-retire-disposition-vocabulary
+spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [agentic-apply-retire-disposition-vocabulary]
 covers: [2]
 ---

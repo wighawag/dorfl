@@ -47,7 +47,7 @@ Concretely:
 **`arbiter/main` must NEVER show a COMPLETED-state lifecycle file without the artifacts it asserts, atomically:**
 
 - `work/done/<slug>.md` never on `main` without the slug's CODE (slice done-move).
-- `work/prd-sliced/<slug>.md` never on `main` without its emitted `work/backlog/*.md` slices (PRD slicing move).
+- `work/spec-sliced/<slug>.md` never on `main` without its emitted `work/backlog/*.md` slices (PRD slicing move).
 
 These completed-state moves stay on the work branch and land atomically via the merge/integrate — they are NOT bookkeeping and are NEVER dropped. The drop-mechanism this slice generalises targets ONLY the `route to needs-attention` BOOKKEEPING move-only commits, never the done-move / slicing move. (The integration rebase already respects this: `recovering && !lifecycle` gates the drop; the continue-rebase fix must likewise drop only bookkeeping move-only commits, never a completed-state move.)
 

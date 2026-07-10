@@ -85,11 +85,11 @@ self-contained here):
 
 > NOTE (process gap observed THEN FIXED): this PRD's OWN answered sidecar could
 > not be applied by the engine at the time — a `needsAnswers` PRD resting in
-> `prds/tasked/` was enumerated by neither the surface nor the apply lifecycle
-> pool (the gather read `prds/ready` + staging `prds/proposed`, not `prds/tasked`),
+> `specs/tasked/` was enumerated by neither the surface nor the apply lifecycle
+> pool (the gather read `specs/ready` + staging `specs/proposed`, not `specs/tasked`),
 > so its human answer was stranded and a human applied it directly (cleared the
 > flag + deleted the sidecar here). That gap is now FIXED: the lifecycle gather
-> enumerates `prds/tasked/` unconditionally (`resolveLocalPrdTasked` /
+> enumerates `specs/tasked/` unconditionally (`resolveLocalPrdTasked` /
 > `resolveMirrorPrdTasked` in `ledger-read.ts`, consumed by `lifecycle-gather.ts`;
 > an answered tasked-prd sidecar now routes to the always-on apply pool), proven
 > by `test/tasked-prd-needsanswers-lifecycle.test.ts`. So a future tasked-prd
@@ -97,10 +97,10 @@ self-contained here):
 
 ## DRIFTED-WHILE-TASKED 2026-06-26 (the merge-question tasks are premised on the retired disposition vocabulary)
 
-This prd STAYS in `prds/tasked/` with `needsAnswers: true` (it WAS tasked; that
+This prd STAYS in `specs/tasked/` with `needsAnswers: true` (it WAS tasked; that
 is truthful and must not be rewound). Per WORK-CONTRACT "Drift is a needs-attention
 signal" -> "A PRD that has drifted AFTER it was TASKED": do NOT move a tasked prd
-back to `prds/proposed/` (that is the untrusted-admission staging position and
+back to `specs/proposed/` (that is the untrusted-admission staging position and
 would orphan the tasks this prd already emitted). The GOAL is still valid, but the
 MECHANISM three of its tasks assume was retired, so those three tasks carry
 `needsAnswers: true` and must be re-decomposed before they are built; the
@@ -108,12 +108,12 @@ non-drifted tasks (the land primitive ADR + protocol, the parallel-merge CI shap
 the tests, `mergeRetries` precedence, the install-ci Tier-1 work) are UNAFFECTED
 and promotable now.
 
-> History: this prd was briefly moved `prds/tasked/ -> prds/proposed/` on
+> History: this prd was briefly moved `specs/tasked/ -> specs/proposed/` on
 > 2026-06-25 to signal the drift. That move was reverted on 2026-06-26: it
 > invented an unsanctioned transition and falsely un-recorded a real tasking. The
 > correct in-place mechanism (this annotation + per-task `needsAnswers`) is now
 > codified in WORK-CONTRACT. When ready to re-decompose, use the sanctioned reopen
-> path `prds/tasked/ -> prds/ready/`, re-task, and supersede the stale
+> path `specs/tasked/ -> specs/ready/`, re-task, and supersede the stale
 > merge-question tasks into `tasks/cancelled/`.
 
 What drifted (verified on `main` 2026-06-25): the merged PRD

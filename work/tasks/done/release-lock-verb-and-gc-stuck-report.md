@@ -1,7 +1,7 @@
 ---
 title: release-lock <item> verb + stuck-lock report in gc --ledger
 slug: release-lock-verb-and-gc-stuck-report
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [lock-entry-state-machine-and-invariants, advancing-acquires-unified-lock]
 covers: [12, 13, 14, 21]

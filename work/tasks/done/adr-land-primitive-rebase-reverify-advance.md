@@ -1,7 +1,7 @@
 ---
 title: ADR — Land = rebase + re-verify + advance, one primitive with two frontends
 slug: adr-land-primitive-rebase-reverify-advance
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [1, 2, 3, 10]
 ---
@@ -62,8 +62,8 @@ line POINTS to.
 
 > You are writing the durable rationale ADR for the land-time re-verify
 > doctrine. The engine that implements it ALREADY EXISTS — do not change
-> code in this task. Read `work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
-> (or `prds/ready/` if not yet moved) end-to-end first, then
+> code in this task. Read `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md`
+> (or `specs/ready/` if not yet moved) end-to-end first, then
 > `integration-core.ts`, `integrator.ts`, and `run.ts` enough to name the
 > surfaces correctly. Follow `docs/adr/ADR-FORMAT.md`. Keep it durable:
 > name the principle, the primitive, the two frontends, the floor/ceiling

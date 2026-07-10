@@ -1,7 +1,7 @@
 ---
 title: intake event-classification — new-comment / issue-body-edited → re-evaluate; buried comment-edit ignored (pure control-path logic)
 slug: intake-event-classification
-prd: issue-intake
+spec: issue-intake
 blockedBy: []
 covers: [2]
 ---
@@ -34,7 +34,7 @@ This is pure, file-orthogonal logic over an event shape — no seam, no git, no 
 
 > Build `intake`'s PURE event-classification logic: given an issue event, decide RE-EVALUATE vs IGNORE (US #2 — the resume-on-thread-change behaviour).
 >
-> THE CANONICAL RULE (from `work/prd-sliced/issue-intake.md`):
+> THE CANONICAL RULE (from `work/spec-sliced/issue-intake.md`):
 >
 > - a NEW COMMENT or an ISSUE-BODY EDIT → RE-EVALUATE the whole thread (re-read body + full thread; edit-vs-reply changes only the comment's framing, not the control path);
 > - editing a BURIED PRIOR COMMENT is IGNORED (not a new turn — re-triggering on old-comment edits invites loops).

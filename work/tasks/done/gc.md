@@ -1,7 +1,7 @@
 ---
 title: gc — provably-safe deletion of job worktrees
 slug: gc
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [agent-workspaces]
 covers: [12]

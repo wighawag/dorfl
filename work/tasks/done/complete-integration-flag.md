@@ -1,7 +1,7 @@
 ---
 title: complete integration flag — merge/propose per invocation; switch to main + delete merged branch (both modes)
 slug: complete-integration-flag
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [complete]
 covers: [7, 8]

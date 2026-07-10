@@ -1,7 +1,7 @@
 ---
 title: `install-ci` auto-configures Tier-1 GitHub branch protection when admin token present, else prints fallback
 slug: install-ci-tier1-branch-protection
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []
 covers: [11]
 ---

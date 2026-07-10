@@ -1,14 +1,14 @@
 ---
 title: Remove the sliced: frontmatter marker entirely once prd-sliced/ is the sole source of truth — STEP B, the clean isolated breaking change (sequenced LAST)
 slug: remove-sliced-marker-step-b
-prd: slicing-coherence
+spec: slicing-coherence
 blockedBy: [prd-sliced-folder-step-a]
 covers: [12]
 ---
 
 ## What to build
 
-The FINAL, sequenced-LAST slice of this PRD: now that `work/prd-sliced/` is the sole source of truth for sliced-ness (Step A landed and nothing READS the `sliced:` marker anymore), delete the marker entirely — a clean isolated breaking change, mirroring the `allowAgents→autoBuild` / `reviewPr→review` clean-rename precedent.
+The FINAL, sequenced-LAST slice of this PRD: now that `work/spec-sliced/` is the sole source of truth for sliced-ness (Step A landed and nothing READS the `sliced:` marker anymore), delete the marker entirely — a clean isolated breaking change, mirroring the `allowAgents→autoBuild` / `reviewPr→review` clean-rename precedent.
 
 - Delete the `setSlicedMarker` WRITES (the release transition stops writing the derived `sliced:` copy).
 - Drop `sliced` from the PRD frontmatter TYPE / parser (`frontmatter.ts`, `ledger-read.ts`'s `LedgerPrdItem.sliced`, any `ResolvePrdPool` plumbing).
@@ -39,7 +39,7 @@ Migration ordering is the whole point: Step A made the change non-breaking (fold
 
 > Remove the `sliced:` PRD frontmatter marker ENTIRELY — Step B of the two-step migration in `work/prd/slicing-coherence.md` (US #12), the clean isolated breaking change sequenced LAST. Mirror the `allowAgents→autoBuild` / `reviewPr→review` clean-rename precedent (`work/done/rename-reviewpr-to-review.md`): a deletion, no back-compat.
 >
-> PRECONDITION (drift check FIRST): Step A (`prd-sliced-folder-step-a`) MUST have landed — `work/prd-sliced/` is the source of truth and the `slicedSlugs` builders (`slicing.ts:readSlicedSlugs`, `ledger-read.ts`'s PRD pool) already read FOLDER residence, with `sliced:` only a derived copy. Verify NOTHING reads the marker anymore before deleting. If Step A has not landed, or a reader still consults the marker for truth, route this slice to `needs-attention/` (its blocker is not done) rather than removing a still-load-bearing field.
+> PRECONDITION (drift check FIRST): Step A (`prd-sliced-folder-step-a`) MUST have landed — `work/spec-sliced/` is the source of truth and the `slicedSlugs` builders (`slicing.ts:readSlicedSlugs`, `ledger-read.ts`'s PRD pool) already read FOLDER residence, with `sliced:` only a derived copy. Verify NOTHING reads the marker anymore before deleting. If Step A has not landed, or a reader still consults the marker for truth, route this slice to `needs-attention/` (its blocker is not done) rather than removing a still-load-bearing field.
 >
 > DELETE: `setSlicedMarker` writes in the release transition (`src/slicing-lock.ts` / wherever Step A left the derived-copy write); `sliced` from the frontmatter type
 >

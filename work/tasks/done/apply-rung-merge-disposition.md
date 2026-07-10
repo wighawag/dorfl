@@ -1,7 +1,7 @@
 ---
 title: Apply-rung — answered merge-question invokes the land primitive (conditional, refuses on red re-verify)
 slug: apply-rung-merge-disposition
-prd: land-time-reverify-and-parallel-merge-ceiling
+spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [merge-question-surfacer, sidecar-kind-field, committed-recovery-honours-fresh-worktree-gate, strict-merge-approval-gate]
 covers: [15, 16]

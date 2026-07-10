@@ -1,7 +1,7 @@
 ---
 title: complete — gate, mark done, commit, and integrate a work item
 slug: complete
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [verify, claim-command]
 covers: [12, 7, 8]

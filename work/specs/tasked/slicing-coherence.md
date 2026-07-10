@@ -6,7 +6,7 @@ sliceAfter: [auto-slice]
 
 > Launch snapshot \u2014 records intent at creation, NOT maintained. Current truth: `docs/adr/` + the code; remaining work: `work/backlog/` slices. The technical-detail sections are trimmed by `to-slices` once sliced.
 >
-> **Source:** a design session during the `do prd:advance-loop` test-drive (2026-06-08). Background + the corrected model: `work/observations/slice-output-bypasses-integration-vs-build.md` and the `## DECIDED 2026-06-08` section of `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`. Every seam here is RESOLVED \u2014 hence non-`humanOnly` (dogfood-able by auto-slice).
+> **Source:** a design session during the `do spec:advance-loop` test-drive (2026-06-08). Background + the corrected model: `work/observations/slice-output-bypasses-integration-vs-build.md` and the `## DECIDED 2026-06-08` section of `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`. Every seam here is RESOLVED \u2014 hence non-`humanOnly` (dogfood-able by auto-slice).
 >
 > **This PRD is a PRECURSOR to `work/prd/advance-loop.md`** and must be sliced + built FIRST: advance-loop's substrate-agnostic tick assumes (a) ONE integrate back-half for every rung \u2014 including the slice rung \u2014 and (b) a coherent sliced-PRD model. advance-loop's `sliceAfter` is updated to include this PRD.
 

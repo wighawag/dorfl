@@ -1,7 +1,7 @@
 ---
 title: intake decision PROMPT asset + the full four-outcome dispatcher (ask / prd / bounce branches on top of the slice tracer)
 slug: intake-decision-prompt-and-four-outcome-dispatch
-prd: issue-intake
+spec: issue-intake
 blockedBy: [intake-tracer-slice-outcome]
 covers: [2, 3, 4, 5, 8]
 ---
@@ -46,7 +46,7 @@ The agent only DRAFTS (verdict + drafted content / comment text); the runner own
 
 > Complete `intake`'s dispatcher to the FULL four-outcome decision and author the real decision PROMPT asset. The tracer slice (`intake-tracer-slice-outcome`, in `work/done/` when you run) wired the `slice` branch; add `ask`, `prd`, `bounce` against STUBBED verdicts (the prompt's JUDGEMENT is NOT unit-tested — only the dispatch is, exactly as the review prompt's judgement is not) (US #2, #3, #4, #5, #8).
 >
-> THE CANONICAL DECISION TABLE (from `work/prd-sliced/issue-intake.md` — the source of truth; the PROMPT encodes it):
+> THE CANONICAL DECISION TABLE (from `work/spec-sliced/issue-intake.md` — the source of truth; the PROMPT encodes it):
 >
 > - ASK = not clear enough to act on (the `to-slices`/`needsAnswers` "would I build the wrong thing if I guessed?" bar) → `postIssueComment` the next clarifying question; emit nothing; STOP.
 > - SLICE = clear AND fits ONE tracer-bullet slice → (unchanged) write `work/backlog/<slug>.md` + `Fixes #N`, integrate.

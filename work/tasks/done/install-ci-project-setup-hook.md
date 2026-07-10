@@ -1,7 +1,7 @@
 ---
 title: install-ci project-setup hook (provider-namespaced, opaque, native-syntax pass-through)
 slug: install-ci-project-setup-hook
-prd: install-ci-project-provisioning
+spec: install-ci-project-provisioning
 blockedBy: []
 covers: [1, 2, 3, 4, 9, 10, 11, 12]
 ---
@@ -36,7 +36,7 @@ This is the keystone of the `install-ci-project-provisioning` PRD. It reuses the
 
 > Build the project-setup escape hatch for `install-ci`: a provider-namespaced, opaque, native-syntax pass-through that splices the user's own project-toolchain steps into the generated composite setup action, so the generated CI can build an ARBITRARY project (rust, pnpm@pinned, a custom Node, system packages), not just dorfl itself.
 >
-> FIRST, drift-check (this is a launch snapshot): re-read `work/prds/tasked/install-ci-project-provisioning.md` (Solution + Out of Scope) and the ADR `docs/adr/install-ci-project-provisioning-native-passthrough.md` (the durable rationale). Confirm the install-ci core still exposes the composite-setup-action generator and the serializable/resolved CI config types, and that the GitHub provider adapter + the capability-emitter / `--fake` snapshot machinery still exist as the PRD describes. If a sibling task or ADR has changed the config shape or the composite-action generator since this was written, do NOT build on the stale premise — route to needs-attention with the discrepancy.
+> FIRST, drift-check (this is a launch snapshot): re-read `work/specs/tasked/install-ci-project-provisioning.md` (Solution + Out of Scope) and the ADR `docs/adr/install-ci-project-provisioning-native-passthrough.md` (the durable rationale). Confirm the install-ci core still exposes the composite-setup-action generator and the serializable/resolved CI config types, and that the GitHub provider adapter + the capability-emitter / `--fake` snapshot machinery still exist as the PRD describes. If a sibling task or ADR has changed the config shape or the composite-action generator since this was written, do NOT build on the stale premise — route to needs-attention with the discrepancy.
 >
 > DOMAIN VOCABULARY: the COMPOSITE setup action (`dorfl-setup`, `uses: ./.github/actions/dorfl-setup`) is the shared per-capability provisioning action; every capability workflow is `checkout → dorfl-setup → dorfl <verb>`. `install-ci` is a human-run, one-time SCAFFOLDER; the running CI job NEVER edits `.github/workflows/**` (US #9) — your hook lands in the composite action via the EMITTER, never by hand-editing a workflow. `--fake` = generate into a scratch dir and snapshot, no network / no real `gh` / no real GitHub. The provider SEAM (`CIProviderContext` and the capability-emitter registry) is the provider-agnostic-core / thin-adapter split you extend: the core stays dumb (opaque pass-through), the GitHub adapter owns the native injection point.
 >

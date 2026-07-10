@@ -1,7 +1,7 @@
 ---
 title: prompt — emit the work-agent prompt for a slice (wrapper + slice Prompt)
 slug: prompt
-prd: dorfl
+spec: dorfl
 humanOnly: true
 blockedBy: [scan]
 covers: []

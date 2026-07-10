@@ -1,7 +1,7 @@
 ---
 title: Promoted task emits a `## Prompt` + a pre-claim well-formedness guard (no more stuck locks)
 slug: promoted-task-emits-prompt-and-pre-claim-wellformedness-guard
-prd: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
+spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: []
 covers: [1]
 ---

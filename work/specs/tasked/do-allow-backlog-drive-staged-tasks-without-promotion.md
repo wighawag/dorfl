@@ -16,7 +16,7 @@ promote-then-drive opens a COMPETITION WINDOW: the autonomous claimer races the
 human who wanted to drive the work themselves.
 
 This is the SECOND instance of one recurring shape (the first was PRD tasking:
-promoting `prds/proposed → ready` exposed a PRD to the auto-tasker, fixed by
+promoting `specs/proposed → ready` exposed a PRD to the auto-tasker, fixed by
 tasking in place from `proposed/` — see TASKING-PROTOCOL.md §6 and the PRD
 `observation-discharge-...`). The general principle the contract states only
 implicitly: **a staging folder is not just "review-first admission"; it is also
@@ -172,7 +172,7 @@ backlog mode actually work.
 
 ## Further Notes
 
-- Recurring-shape lineage: instance 1 = PRD tasking (`prds/proposed → ready`
+- Recurring-shape lineage: instance 1 = PRD tasking (`specs/proposed → ready`
   race), fixed by tasking in place (TASKING-PROTOCOL.md §6 + the
   `observation-discharge-...` PRD). Instance 2 = this (task building;
   `tasks/backlog → ready` race). The WORK-CONTRACT principle (Resolved decision

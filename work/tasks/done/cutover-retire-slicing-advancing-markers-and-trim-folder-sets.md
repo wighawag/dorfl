@@ -1,7 +1,7 @@
 ---
 title: Cut-over 9c — retire the slicing/advancing markers + trim the status folder sets
 slug: cutover-retire-slicing-advancing-markers-and-trim-folder-sets
-prd: ledger-status-per-item-lock-refs
+spec: ledger-status-per-item-lock-refs
 humanOnly: true
 blockedBy: [cutover-claim-body-stays-and-complete-sources-from-backlog, cutover-needs-attention-becomes-lock-stuck-recovery-surface]
 covers: [5, 7]

@@ -6,7 +6,7 @@ Verified against the advance-loop code (`surface-gate.ts`, `sidecar-apply.ts`, `
 
 ## How surface -> answer -> apply works today
 
-- **surface rung** (`surface-gate.ts`): on `classify=surface`, a fresh-context agent runs the `surface-questions` skill, GATHERS an item's open-judgement residue, and EMITS questions; the ENGINE persists them to the sidecar + sets `needsAnswers: true`. "The skill JUDGES, the engine PERSISTS." Questions are keyed to a work/ ITEM (`slice:foo` / `prd:bar` / `observation:baz`).
+- **surface rung** (`surface-gate.ts`): on `classify=surface`, a fresh-context agent runs the `surface-questions` skill, GATHERS an item's open-judgement residue, and EMITS questions; the ENGINE persists them to the sidecar + sets `needsAnswers: true`. "The skill JUDGES, the engine PERSISTS." Questions are keyed to a work/ ITEM (`slice:foo` / `spec:bar` / `observation:baz`).
 - **apply rung** (`sidecar-apply.ts` `applyAtomic`): a single atomic commit that rewrites item body + sidecar; on FULL resolution (every question answered) it clears `needsAnswers` and deletes the sidecar.
 - **disposition precedent** (`sidecar.ts` `SidecarDisposition` = `promote-slice|promote-adr|keep|delete|dropped|needs-attention`; `triage-persist.ts`): an answered question's `disposition` ALREADY triggers a RUNNER ACTION on apply (e.g. promote/drop/route an observation), not merely a body edit. So "an answer drives an action beyond body+sidecar" is an EXISTING pattern, not a new concept.
 
