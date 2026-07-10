@@ -164,16 +164,16 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. `scan --json` reports
-  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].prds[]`,
+  # BOTH the registry/hub-mirror pool (`repos[].items[]`, `repos[].specs[]`,
   # `repos[].lifecycle`) AND the in-place working checkout (`cwd.repo.items[]`,
-  # `cwd.repo.prds[]`, `cwd.repo.lifecycle`); CI runs IN-PLACE so the items live
+  # `cwd.repo.specs[]`, `cwd.repo.lifecycle`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
   # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
-  # Actions matrix list of explicit `task:<slug>` / `prd:<slug>` / `obs:<slug>`
+  # Actions matrix list of explicit `task:<slug>` / `spec:<slug>` / `obs:<slug>`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): `obs:` (triage untriaged
-  # observations), surface `task:`/`prd:` (`needsAnswers`, no answered sidecar)
-  # AND apply `task:`/`prd:` (`needsAnswers`, answered sidecar — consume the
+  # observations), surface `task:`/`spec:` (`needsAnswers`, no answered sidecar)
+  # AND apply `task:`/`spec:` (`needsAnswers`, answered sidecar — consume the
   # committed answer, closing the on-answer `push: work/questions/**` loop). Each
   # becomes one matrix leg → one independent `advance --propose`. Skipped in merge
   # mode. Inert with calm-default gates (empty triage/surface pools).
@@ -203,13 +203,13 @@ jobs:
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit `task:` / `prd:` / `obs:` prefixes, never bare (ADR
+        # uses explicit `task:` / `spec:` / `obs:` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ `task:<slug>` legs (`advance`
-        # builds them); TASKABLE PRDS ⇒ `prd:<slug>` legs (`advance` auto-tasks
+        # builds them); TASKABLE SPECS ⇒ `spec:<slug>` legs (`advance` auto-tasks
         # them, capability B — `DORFL_AUTO_TASK` above). LIFECYCLE pools:
         # `lifecycle.triage[]` ⇒ `obs:<slug>` (the `obs:` prefix is fixed here),
         # `lifecycle.surface[]` + `lifecycle.apply[]` ⇒ `.namespace + ":" + .slug`
-        # (surface: `task:`/`prd:` blocker-question legs; apply: `task:`/`prd:`
+        # (surface: `task:`/`spec:` blocker-question legs; apply: `task:`/`spec:`
         # AND `observation:` legs — an answered observation sidecar is consumed by
         # the apply rung too, so it MUST carry through here). CI runs IN-PLACE, so we use
         # `scan --here`: it reports ONLY the cwd checkout (`cwd.repo.*`) and SKIPS
@@ -220,7 +220,7 @@ jobs:
         # leg per item.
         run: |
           items="$(dorfl scan --json --here \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].specs[]?, .cwd.repo.specs[]?) | select(.eligibility.eligible == true) | "spec:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -233,7 +233,7 @@ jobs:
   # parallel shape and `-n` is NOT needed. Each leg passes `--propose`, tying the
   # integration mode to THIS shape: it sits at the top of the precedence chain, so
   # the workflow mode always wins over the repo config default and a leg can NEVER
-  # merge to main. Explicit `task:`/`prd:` prefixes only, never bare.
+  # merge to main. Explicit `task:`/`spec:` prefixes only, never bare.
   advance-propose:
     needs: enumerate
     if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}

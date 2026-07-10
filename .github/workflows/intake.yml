@@ -24,8 +24,8 @@
 # can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
 # author (`author_association` not OWNER/MEMBER/COLLABORATOR) forces
 # `--propose-task` REGARDLESS of the `autoBuild` gate — a task from a public
-# front-door issue can never auto-merge — while `--merge-prd` stays allowed (a
-# human must still task a prd before anything autonomous acts on it, so the human
+# front-door issue can never auto-merge — while `--merge-spec` stays allowed (a
+# human must still task a spec before anything autonomous acts on it, so the human
 # checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
 # fully-gateless "merge everything" path (both gates off + a trusted author) is a
 # LOUD, NON-DEFAULT opt-in; the default is conservative (propose).
@@ -112,9 +112,9 @@ jobs:
         # The merge-vs-propose POLICY, executed at runtime — the SAME rule
         # `deriveIntakeFlags` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
-        #   * PRD — gate-derived ONLY: --merge-prd iff autoTask OFF (a human
+        #   * SPEC — gate-derived ONLY: --merge-spec iff autoTask OFF (a human
         #            tasks it before anything autonomous acts — the checkpoint
-        #            stays ahead even for an UNTRUSTED author), else --propose-prd.
+        #            stays ahead even for an UNTRUSTED author), else --propose-spec.
         #   * TASK  — --propose-task iff (autoBuild ON) OR (author UNTRUSTED);
         #            --merge-task ONLY iff (autoBuild OFF AND author TRUSTED).
         # author_association comes from the COMMENT on an `issue_comment` event,
@@ -125,11 +125,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PRD flag: gate-derived only (author-trust does NOT bite a prd).
+          # SPEC flag: gate-derived only (author-trust does NOT bite a spec).
           if [ "${DORFL_AUTO_TASK}" = "true" ]; then
-            prd_flag="--propose-prd"
+            spec_flag="--propose-spec"
           else
-            prd_flag="--merge-prd"
+            spec_flag="--merge-spec"
           fi
 
           # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
@@ -162,10 +162,10 @@ jobs:
             origin_trust_flag="--origin-trust=untrusted"
           fi
 
-          echo "prd_flag=${prd_flag}" >> "$GITHUB_OUTPUT"
+          echo "spec_flag=${spec_flag}" >> "$GITHUB_OUTPUT"
           echo "task_flag=${task_flag}" >> "$GITHUB_OUTPUT"
           echo "origin_trust_flag=${origin_trust_flag}" >> "$GITHUB_OUTPUT"
-          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${prd_flag} ${task_flag} ${origin_trust_flag}"
+          echo "intake policy: author_association='${AUTHOR_ASSOCIATION:-}' trusted=${trusted} → ${spec_flag} ${task_flag} ${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -178,7 +178,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           dorfl intake "${{ github.event.issue.number }}" \
-            "${{ steps.policy.outputs.prd_flag }}" \
+            "${{ steps.policy.outputs.spec_flag }}" \
             "${{ steps.policy.outputs.task_flag }}" \
             "${{ steps.policy.outputs.origin_trust_flag }}" \
             --arbiter origin
