@@ -53,7 +53,7 @@ task).
 
 ## Prompt
 
-> Read Stories 4 and 6 of the prd, and Applied Answer q1 (the cross-job
+> Read Stories 4 and 6 of the spec, and Applied Answer q1 (the cross-job
 > serialiser decision: scaled CAS-retry as the floor, optional ref-lock as
 > the accelerator, GitHub `concurrency:` only as optional sugar). Read
 > `docs/ci/README.md`, `src/advance-ci-template.ts`, and

@@ -20,7 +20,7 @@ covers: [1, 3, 18]
 >    `retire-transient-folders-and-drop-rebase` (#9).
 >
 > 2. **The advance-tick nesting fix (the reason this slice first STOPped).**
->    `performAdvance` is a DRIVER: for the `build-slice` and `slice-prd` rungs it
+>    `performAdvance` is a DRIVER: for the `build-slice` and `slice-spec` rungs it
 >    ORCHESTRATES an inner `performDo`, which ITSELF acquires the SAME unified
 >    `slice-<slug>` / `prd-<slug>` lock. So the advancing hold and the inner `do`'s
 >    lock are NESTED (one logical operation), not two racers — taking the unified
@@ -29,7 +29,7 @@ covers: [1, 3, 18]
 >    there is no re-entrancy/auto-steal, per the ADR). THE DECIDED FIX (option a):
 >    advancing takes the unified lock ONLY for the TREE-LESS rungs (`surface`,
 >    `apply`, `triage`) — which have NO inner `do` and so genuinely need the unified
->    hold to realise issue-3 exclusion. The `build-slice` / `slice-prd` rungs do NOT
+>    hold to realise issue-3 exclusion. The `build-slice` / `slice-spec` rungs do NOT
 >    take the unified lock; their exclusion is the INNER `do`'s claim/slice lock,
 >    which IS the single exclusion point (the same `slice-<slug>` / `prd-<slug>` ref).
 >    This keeps the ADR's no-re-entrancy posture intact and confines the change to
@@ -38,7 +38,7 @@ covers: [1, 3, 18]
 > CONSEQUENCE carried to #9 (recorded in `work/observations/`): after #9 removes the
 > legacy advancing marker, the build/slice rungs are guarded SOLELY by the inner
 > `do`'s unified lock. #9 must PROVE (test) that advance∥claim and advance∥slice on a
-> build-slice/slice-prd item remain mutually exclusive through the inner `do`'s lock
+> build-slice/slice-spec item remain mutually exclusive through the inner `do`'s lock
 > alone, and that the brief advance-layer TOCTOU resolves to one winner at the inner
 > lock. An advance-driven build/slice in flight is represented by the inner `do`'s
 > lock (`slice-<slug>` held `implement`, or `prd-<slug>` held `slice`), NOT a distinct
@@ -50,7 +50,7 @@ covers: [1, 3, 18]
 Make the ADVANCING lock ALSO acquire the item's unified per-item lock
 (`action: advance`) **for the TREE-LESS rungs only** (`surface`, `apply`,
 `triage`), **in addition to** today's CAS-published `work/advancing/<entry>.md`
-marker on `main`. The `build-slice` and `slice-prd` rungs KEEP publishing the marker
+marker on `main`. The `build-slice` and `slice-spec` rungs KEEP publishing the marker
 but do NOT take the unified lock (the inner `performDo` they orchestrate already
 takes the SAME unified ref; taking it again at the advance layer would deadlock the
 tick against itself).
@@ -64,7 +64,7 @@ Concretely, after this slice:
   advancing acquire loses definitively (no retry) and does NOT publish the marker
   either. `releaseAdvancingLock` deletes the marker AND releases the unified lock.
   The advance hold can reach `stuck` via the lock's mark-stuck transition.
-- For a **build-slice / slice-prd rung**: `acquireAdvancingLock` keeps publishing
+- For a **build-slice / slice-spec rung**: `acquireAdvancingLock` keeps publishing
   the marker UNCHANGED and does NOT take the unified lock; the inner `performDo`'s
   claim (`slice-<slug>`, `implement`) or slicing (`prd-<slug>`, `slice`) lock is the
   single exclusion point. `releaseAdvancingLock` deletes the marker; there is no
@@ -89,7 +89,7 @@ The marker removal + `advancing/` folder retirement are OUT OF SCOPE here, owned
       `work/advancing/<entry>.md` marker CAS is KEPT. A lock `lost` makes the acquire
       lose definitively (no retry) and publishes NO marker. `releaseAdvancingLock`
       releases the unified lock AND deletes the marker.
-- [ ] For a BUILD-SLICE / SLICE-PRD rung: `acquireAdvancingLock` does NOT take the
+- [ ] For a BUILD-SLICE / SLICE-SPEC rung: `acquireAdvancingLock` does NOT take the
       unified lock (the inner `performDo`'s claim/slice lock is the exclusion point);
       the marker CAS is KEPT. The advance tick does NOT deadlock against itself
       (the previously-failing `run-uses-advance-tick` / `advance-registry-set`
@@ -117,7 +117,7 @@ The marker removal + `advancing/` folder retirement are OUT OF SCOPE here, owned
 > Make the ADVANCING lock ALSO acquire the unified per-item lock (`action: advance`)
 > FOR THE TREE-LESS RUNGS ONLY (`surface`/`apply`/`triage`), IN ADDITION to today's
 > `work/advancing/<type>-<slug>.md` marker CAS. READ THE RE-SCOPED BANNER FIRST: the
-> `build-slice` / `slice-prd` rungs must NOT take the unified lock, because
+> `build-slice` / `slice-spec` rungs must NOT take the unified lock, because
 > `performAdvance` (`packages/dorfl/src/advance.ts`) orchestrates an inner
 > `performDo` for those rungs that ITSELF acquires the SAME unified ref — taking it at
 > the advance layer too would DEADLOCK the tick against itself (verified: it red-ed 9
@@ -135,7 +135,7 @@ The marker removal + `advancing/` folder retirement are OUT OF SCOPE here, owned
 > lock. For a build/slice rung, do NOT touch the unified lock at the advance layer.
 > Prefer keeping `advancing-lock.ts` rung-agnostic via an `acquireUnified: boolean`
 > option set per rung by `advance.ts`, so the tree-less-only policy lives where the
-> rung is known. PRD `work/prd/ledger-status-per-item-lock-refs.md` (US #1, #3, #18);
+> rung is known. SPEC `work/spec/ledger-status-per-item-lock-refs.md` (US #1, #3, #18);
 > ADR `docs/adr/ledger-status-on-per-item-lock-refs.md`; state machine in the trail's
 > "### The C8 lock-entry STATE MACHINE".
 >
@@ -153,4 +153,4 @@ The marker removal + `advancing/` folder retirement are OUT OF SCOPE here, owned
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> SPEC propagation. Record non-obvious in-scope decisions per the slice template.

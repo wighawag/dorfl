@@ -1,5 +1,5 @@
 ---
-title: Rename the prd:/slice: lock+CLI namespace tokens to brief:/task: (+ orphan-lock sweep)
+title: Rename the spec:/slice: lock+CLI namespace tokens to brief:/task: (+ orphan-lock sweep)
 slug: rename-lock-cli-namespace-tokens-prd-slice-to-brief-task
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []
@@ -17,7 +17,7 @@ reason: superseded
 > (lock entry = `task-<slug>`/`brief-<slug>`), the advance arg resolver (bare/`task:`/`brief:`/`obs:`),
 > and the CI emitters (they emit `task:`/`brief:`/`obs:` legs). No `slice:`/`prd:` token literal remains
 > in live code. The 3rd criterion (document the one-shot orphan-lock sweep) needs NO code: `release-lock`
-> / `gc --ledger` already name lock refs by raw ref string, so they can clear an old-token (`slice-`/`prd-`)
+> / `gc --ledger` already name lock refs by raw ref string, so they can clear an old-token (`slice-`/`spec-`)
 > ref already (6 such orphaned `slice-*` locks were observed lingering on the local hub mirror at drive time
 > — harmless, and clearable with the existing `release-lock`). The dependent `rename-config-keys-slicing-to-tasking`
 > had its `blockedBy` updated to drop this slug, since this task's substance is already on `main`.

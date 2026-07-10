@@ -5,9 +5,9 @@ type: idea
 status: incubating
 ---
 
-# Gate flake-resistance (pre-PRD / incubating idea)
+# Gate flake-resistance (pre-SPEC / incubating idea)
 
-> This is a **pre-PRD idea**, not a committed north-star, captured so it is not lost. The maintainer explicitly said: **do NOT plan or build this yet.** It is here for when/if it ripens.
+> This is a **pre-SPEC idea**, not a committed north-star, captured so it is not lost. The maintainer explicitly said: **do NOT plan or build this yet.** It is here for when/if it ripens.
 
 ## Where this came from
 
@@ -25,4 +25,4 @@ Even with that specific flake fixed, the **gate has a structural hole**: the acc
 
 ## Why not now
 
-The maintainer judged this not the right time; the concrete flake that triggered it is already fixed. Promote to a PRD only if gate flukes recur.
+The maintainer judged this not the right time; the concrete flake that triggered it is already fixed. Promote to a SPEC only if gate flukes recur.

@@ -28,7 +28,7 @@ Because the two gates read the per-repo config through two different mechanisms,
 repo that carries a COMMITTED per-repo `.dorfl.json` override can have its
 `autoBuild` and `autoSlice` gates resolved from DIFFERENT views of that config — the
 working-tree reader pointed at a bare mirror path may not see what the mirror-ref
-reader sees. So within a single repo iteration the slice pool gate and the PRD pool
+reader sees. So within a single repo iteration the slice pool gate and the SPEC pool
 gate can disagree.
 
 ## Why it matters / scope

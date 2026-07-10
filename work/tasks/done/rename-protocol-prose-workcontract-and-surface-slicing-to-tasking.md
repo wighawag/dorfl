@@ -1,5 +1,5 @@
 ---
-title: Sweep WORK-CONTRACT.md + SURFACE-PROTOCOL.md prose slice/PRD/slicing to task/brief/tasking (after the lock-action/flag code rename)
+title: Sweep WORK-CONTRACT.md + SURFACE-PROTOCOL.md prose slice/SPEC/slicing to task/brief/tasking (after the lock-action/flag code rename)
 slug: rename-protocol-prose-workcontract-and-surface-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-lock-action-token-slice-to-task]
@@ -10,20 +10,20 @@ covers: []
 
 ## What to build
 
-Sweep the retired slice/PRD/slicing/slicer vocabulary out of `skills/setup/protocol/WORK-CONTRACT.md` and `skills/setup/protocol/SURFACE-PROTOCOL.md` (and their byte-identical `work/protocol/` mirrors) to task/brief/tasking, where the word denotes the CURRENT concept. Bump `work/protocol/VERSION`; keep source vs mirror byte-identical apart from VERSION (per AGENTS.md: edit the SOURCE, mirror the change).
+Sweep the retired slice/SPEC/slicing/slicer vocabulary out of `skills/setup/protocol/WORK-CONTRACT.md` and `skills/setup/protocol/SURFACE-PROTOCOL.md` (and their byte-identical `work/protocol/` mirrors) to task/brief/tasking, where the word denotes the CURRENT concept. Bump `work/protocol/VERSION`; keep source vs mirror byte-identical apart from VERSION (per AGENTS.md: edit the SOURCE, mirror the change).
 
-- `WORK-CONTRACT.md`: ~38 occurrences (slicing/sliced/slicer/auto-slice/re-slice/sliceable/double-sliced and any `slice`/`PRD` noun for the current concept).
+- `WORK-CONTRACT.md`: ~38 occurrences (slicing/sliced/slicer/auto-slice/re-slice/sliceable/double-sliced and any `slice`/`SPEC` noun for the current concept).
 - `SURFACE-PROTOCOL.md`: line 115 "the single sources for slicing/reviewing judgement" → "tasking/reviewing judgement", plus any other residue.
 
 When you write a CODE-IDENTIFIER reference in the prose (e.g. the lock action, the placement flag), use the SETTLED post-rename name (this task is sequenced after that code rename) — do NOT reintroduce `action: slice` / `--slices-land-in`.
 
 ## KEEP verbatim
 
-Real historical slugs, the intake `{slice,prd}` wire vocabulary (Decision 2 lineage), and any genuinely-frozen token — called out where kept. Do not falsify a recorded historical state; note the current name in parentheses where helpful.
+Real historical slugs, the intake `{slice,spec}` wire vocabulary (Decision 2 lineage), and any genuinely-frozen token — called out where kept. Do not falsify a recorded historical state; note the current name in parentheses where helpful.
 
 ## Acceptance criteria
 
-- [ ] `WORK-CONTRACT.md` and `SURFACE-PROTOCOL.md` carry no retired slice/PRD/slicing/slicer vocabulary for a CURRENT concept (keep-verbatim categories preserved + called out).
+- [ ] `WORK-CONTRACT.md` and `SURFACE-PROTOCOL.md` carry no retired slice/SPEC/slicing/slicer vocabulary for a CURRENT concept (keep-verbatim categories preserved + called out).
 - [ ] Any code-identifier reference in the swept prose matches the SETTLED post-rename code name (no `action: slice` / `--slices-land-in` reintroduced).
 - [ ] Source `skills/setup/protocol/` and mirror `work/protocol/` byte-identical apart from VERSION; VERSION bumped.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green; any doc-consistency test updated in this task.
@@ -34,9 +34,9 @@ Real historical slugs, the intake `{slice,prd}` wire vocabulary (Decision 2 line
 
 ## Prompt
 
-> Goal: sweep `WORK-CONTRACT.md` + `SURFACE-PROTOCOL.md` (source + mirror) prose slice/PRD/slicing → task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. PROSE only.
+> Goal: sweep `WORK-CONTRACT.md` + `SURFACE-PROTOCOL.md` (source + mirror) prose slice/SPEC/slicing → task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. PROSE only.
 >
-> FIRST check reality: confirm the lock-action token + `--slices-land-in` flag have been RENAMED in code (this task is sequenced after that); if they are still `slice`/`--slices-land-in`, STOP — the prose would get ahead of the code. For each `slic`/`prd` hit decide current-concept (rename) vs allowed-keep (historical slug / intake `{slice,prd}` wire / frozen token). Per AGENTS.md edit the SOURCE under `skills/setup/protocol/` and mirror into `work/protocol/`; bump VERSION; `diff -r` clean apart from VERSION. Run `pnpm format`.
+> FIRST check reality: confirm the lock-action token + `--slices-land-in` flag have been RENAMED in code (this task is sequenced after that); if they are still `slice`/`--slices-land-in`, STOP — the prose would get ahead of the code. For each `slic`/`spec` hit decide current-concept (rename) vs allowed-keep (historical slug / intake `{slice,spec}` wire / frozen token). Per AGENTS.md edit the SOURCE under `skills/setup/protocol/` and mirror into `work/protocol/`; bump VERSION; `diff -r` clean apart from VERSION. Run `pnpm format`.
 >
 > Done = build/test/format:check green, both files coherent with task/brief/tasking, code-identifier references matching settled code, source/mirror in sync.
 

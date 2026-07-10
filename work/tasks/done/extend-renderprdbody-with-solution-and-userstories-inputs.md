@@ -8,20 +8,20 @@ covers: [4]
 
 ## What to build
 
-Extend the shared PRD-body renderer `renderPrdBody`
-(`packages/dorfl/src/buildable-body.ts`) so it can express the FULL set of PRD
+Extend the shared SPEC-body renderer `renderPrdBody`
+(`packages/dorfl/src/buildable-body.ts`) so it can express the FULL set of SPEC
 sections both producers need, by adding OPTIONAL `solution` and `userStories`
 inputs (each emitted only when supplied). This is the prerequisite that lets
-intake's PRD default scaffold be sourced from the shared renderer byte-for-byte
+intake's SPEC default scaffold be sourced from the shared renderer byte-for-byte
 (the follow-on intake-rewire task).
 
 Why: `renderPrdBody` currently emits ONLY `## Problem Statement` + optional
 `## Open questions`. But intake's `renderPrd` default scaffold (the no-body case)
 emits `## Problem Statement` + `## Solution` + `## User Stories` (no Open
-questions), while promotion's `buildPromotedBody(artifact:'prd')` emits
+questions), while promotion's `buildPromotedBody(artifact:'spec')` emits
 `## Problem Statement` + prose + optional `## Open questions` (no Solution/User
 Stories). The renderer must own BOTH shapes via optional inputs, so neither
-producer hand-rolls PRD sections and the two cannot drift.
+producer hand-rolls SPEC sections and the two cannot drift.
 
 End-to-end behaviour:
 
@@ -31,10 +31,10 @@ End-to-end behaviour:
   optional `openQuestions`.
 - Section ORDER is fixed and canonical: `## Problem Statement` → `## Solution`
   (when given) → `## User Stories` (when given) → `## Open questions` (when given).
-  Still NO `## Prompt` (a PRD is not dispatched).
-- The renderer can now reproduce intake's default PRD scaffold byte-for-byte
+  Still NO `## Prompt` (a SPEC is not dispatched).
+- The renderer can now reproduce intake's default SPEC scaffold byte-for-byte
   (Problem Statement + Solution + User Stories, no Open questions) AND promotion's
-  PRD body (Problem Statement + prose, optional Open questions, no Solution/User
+  SPEC body (Problem Statement + prose, optional Open questions, no Solution/User
   Stories) — verified by the golden-shape test.
 - This task does NOT rewire either producer (that is the intake-rewire follow-on,
   and promotion already calls `renderPrdBody` with neither new input, so it is
@@ -61,10 +61,10 @@ End-to-end behaviour:
 ## Prompt
 
 > Goal: extend the shared `renderPrdBody` (`packages/dorfl/src/buildable-body.ts`)
-> with optional `solution` + `userStories` section inputs, per PRD
+> with optional `solution` + `userStories` section inputs, per SPEC
 > `centralize-buildable-task-renderer-shared-by-intake-and-promotion` (US #4), so
-> the renderer owns the FULL PRD section schema both producers need. This is the
-> prerequisite for sourcing intake's PRD default scaffold from the shared renderer
+> the renderer owns the FULL SPEC section schema both producers need. This is the
+> prerequisite for sourcing intake's SPEC default scaffold from the shared renderer
 > byte-for-byte.
 >
 > FIRST check drift: confirm `renderPrdBody` (landed by the keystone task

@@ -5,7 +5,7 @@ status: incubating
 source: read of packages/dorfl/src on 2026-06-16 — advance-drivers.ts, advance-loop-driver.ts, advance-isolated.ts, advance-treeless-publish.ts, advance-lifecycle-template.ts, scan.ts, lifecycle-pools.ts, select-priority.ts, select-order.ts, cli.ts (advance command), eligibility.ts
 ---
 
-This is the design analysis that must back the PRD. It establishes that the fix
+This is the design analysis that must back the SPEC. It establishes that the fix
 is real, locates it precisely per CI integration mode, shows there is NO
 redundancy, and answers the ordering / matrix-interaction questions.
 
@@ -54,7 +54,7 @@ The in-place paths are the ONLY ones CI uses (the workflow runs in-place: "no
 - A does NOT duplicate the merge path's enumeration: merge uses the sequential
   `performAdvanceAuto` pool; propose uses the matrix `jq` over `scan --json`. They
   are different shapes for different integration modes (the same split the merged
-  #144 PRD-enumeration fix already lives within). A just brings the propose `jq`
+  #144 SPEC-enumeration fix already lives within). A just brings the propose `jq`
   to parity with what `performAdvanceAuto` already enumerates.
 
 ## Ordering & matrix interaction (the questions raised)
@@ -74,18 +74,18 @@ sequential `-n` mixes rungs exactly like the loop does).
 
 The propose matrix has NO cross-pool ordering: each eligible/surfaceable/triageable
 item becomes an INDEPENDENT leg → its own `advance <id> --propose` → its own PR.
-This is fine and even desirable, but four interactions must be stated in the PRD:
+This is fine and even desirable, but four interactions must be stated in the SPEC:
 
 1. **No double-leg for one item.** A `needsAnswers:true` slice has `eligible:false`
    (`eligibility.ts`), so it is NOT in the build pool — it appears ONLY as a
    `surface` leg. An untriaged observation is a separate namespace (`obs:`),
    never also a `slice:`/`prd:` leg. So A's `jq` union cannot emit two legs for
-   the same item. (The PRD must require the `jq` to keep `unique` and to keep the
+   the same item. (The SPEC must require the `jq` to keep `unique` and to keep the
    pools disjoint by construction.)
 
 2. **PR semantics of a tree-less leg.** A surface/triage/apply leg produces a
    COMMIT (sidecar / `triaged:` / answer-application), not a feature branch from a
-   build. The PRD must decide HOW that commit reaches the human in propose mode.
+   build. The SPEC must decide HOW that commit reaches the human in propose mode.
    Option (a): the tree-less push lands it straight on `main` even under
    `--propose` (surfacing a question is not "merging code" — it is the ledger
    update the human then answers; the on-answer-committed `push: work/questions/**`
@@ -97,15 +97,15 @@ This is fine and even desirable, but four interactions must be stated in the PRD
    is NO integration-mode branch around the tree-less push. So tree-less ledger
    writes already go straight to `main` regardless of propose/merge; Part B in-place
    must MATCH that. This keeps "one word integrationMode" honest: it governs code,
-   not the question ledger. The PRD states this as DECIDED (precedent cited), not an
+   not the question ledger. The SPEC states this as DECIDED (precedent cited), not an
    open question.
 
 3. **Cross-tick, not within-tick, progression.** Surfacing a question (create) and
    building a now-ready slice (consume) generally happen across SEPARATE cron ticks,
    not within one matrix run: a surfaced question needs a HUMAN answer before its
    item is buildable, and the human is the clock. Within ONE tick the matrix just
-   fans out whatever is currently actionable in parallel. PRD-slicing → slice-build
-   is likewise cross-tick (slicing a PRD CREATES backlog slices that become eligible
+   fans out whatever is currently actionable in parallel. SPEC-slicing → slice-build
+   is likewise cross-tick (slicing a SPEC CREATES backlog slices that become eligible
    legs on a LATER tick). So there is no intra-tick ordering dependency to model in
    the matrix — the cron cadence + the on-answer trigger ARE the ordering.
 
@@ -116,13 +116,13 @@ This is fine and even desirable, but four interactions must be stated in the PRD
    "apply-pinned-first" rule is a SEQUENTIAL-driver concern and simply does not
    arise in the matrix.
 
-## What the PRD should therefore specify (slice boundaries)
+## What the SPEC should therefore specify (slice boundaries)
 
 - **Slice A — propose-matrix enumerates lifecycle items.** Add a surface/triage(/
   apply) pool to `scan --json` (reusing `buildLifecyclePools`' predicates + the
   config gates, NOT a forked predicate), and extend the `enumerate` `jq` +
   `validateAdvanceLifecycleWorkflow` to emit `slice:`/`prd:`/`obs:` legs for them,
-  keeping pools disjoint + `unique`. Mirrors the merged #144 PRD-enumeration fix.
+  keeping pools disjoint + `unique`. Mirrors the merged #144 SPEC-enumeration fix.
 - **Slice B — in-place advance publishes tree-less results.** Wire
   `pushTreelessResult` (with the load-bearing rebase-retry) into the in-place
   drivers (`performAdvanceAuto` / `performAdvance`) when an arbiter is configured,
@@ -136,11 +136,11 @@ useless alone. B without A fixes merge mode fully and is independently valuable.
 So **B is the foundation; A builds on it** (A's acceptance test needs B's push to
 prove a sidecar lands on the arbiter from a propose leg).
 
-## Decisions settled by this analysis (so the PRD need NOT carry `needsAnswers`)
+## Decisions settled by this analysis (so the SPEC need NOT carry `needsAnswers`)
 
 The PR-vs-direct-push question for tree-less rungs (interaction #2) is SETTLED by
 precedent: direct ff-push to `main` in both modes, matching the loop + isolated
-drivers (which push unconditionally on `TREELESS_RUNGS`). The PRD states it as a
+drivers (which push unconditionally on `TREELESS_RUNGS`). The SPEC states it as a
 DECIDED constraint. No open `needsAnswers` remains for the core design; the only
 remaining judgement is slice granularity / acceptance phrasing, which `to-slices`
 resolves.

@@ -4,7 +4,7 @@ slug: skill-eval-engine
 humanOnly: true
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices. (Technical-detail sections below are trimmed by `to-slices` once sliced — they move into slices/ADRs and this PRD settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/backlog/` slices. (Technical-detail sections below are trimmed by `to-slices` once sliced — they move into slices/ADRs and this SPEC settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
 
 ## Problem Statement
 
@@ -49,7 +49,7 @@ It is an **eval** (a graded, somewhat-non-deterministic quality measure), distin
 **Per-skill DEFINITIONS (the seam that proves reusability):**
 
 9. As the `setup` skill's author, I want a `setup` eval-definition (input = pinned rocketh clone; an answerer with rocketh's description/gate/mapping/ADR-whys/delete-confirmations; graders for the `work/`-contract invariants) that DEPENDS ON the engine and lives in dorfl, so that the engine stays generic and `setup`'s specifics stay with `setup`.
-10. As a skill author of ANOTHER skill (e.g. `hardhat-deploy-migration`), I want to write my own eval-definition (my input repo, my graders, optionally no answerer) against the SAME engine, so that the engine is validated as reusable, not over-fit to `setup`. (Named second consumer; its definition is a follow-on, not built in this PRD — but the engine's API must satisfy it on paper.)
+10. As a skill author of ANOTHER skill (e.g. `hardhat-deploy-migration`), I want to write my own eval-definition (my input repo, my graders, optionally no answerer) against the SAME engine, so that the engine is validated as reusable, not over-fit to `setup`. (Named second consumer; its definition is a follow-on, not built in this SPEC — but the engine's API must satisfy it on paper.)
 11. As a skill author, I want `setup`'s graders to include the specific failure modes we have already hit (a dotfolder source missed; a fully-converted source not proposed for deletion; a same-feature duplicate across buckets; a destructive delete on an ambiguous reply; the gate baking in install or ordered expensive-first; an enumerated ADR index in `CONTEXT.md`; the decision-hunt skipped), so that known regressions are caught automatically.
 12. As a skill author, I want the answer-bank and graders to live ENTIRELY in the definition (never leaked into the skill), so that a passing eval reflects the skill genuinely working, not the skill being told the answers (no teaching-to-the-test).
 13. As a skill author, I want to add a grader or an answer to a definition without touching the engine, so that an eval grows as we learn new failure modes.
@@ -81,7 +81,7 @@ It is an **eval** (a graded, somewhat-non-deterministic quality measure), distin
   - The answerer matches by INTENT (it is an agent, so it judges meaning, not strings). **It must be honest about "no match":** if a question is not covered by either section, it does NOT fabricate — it returns an explicit "UNANSWERABLE: <the question>" which the engine turns into a run failure (the surface/hard-error path).
 - **Invariant extraction operates on ARTIFACTS, not transcript wording.** After the run finishes, grade the produced files in the clone: existence/shape of `work/` items, `docs/adr/NNNN-*.md`, `.dorfl.json` contents, `CONTEXT.md` content — checkable structurally. A few invariants need the TRANSCRIPT (the captured event/message stream) for a behaviour (e.g. "a delete was proposed before any `rm`", "the cleanup prompt was the only numbered list in its message", "no destructive action on an ambiguous reply") — capture the full JSONL transcript per run so these are gradable; prefer artifact checks where an artifact suffices.
 - **Candidate structural invariants (the grading checklist — extend over time):**
-  - the dotfolder design doc is discovered and routed to a **PRD** (≥1 file in `work/prd/`), not under-routed to an `idea` (the dotfolder-miss regression).
+  - the dotfolder design doc is discovered and routed to a **SPEC** (≥1 file in `work/spec/`), not under-routed to an `idea` (the dotfolder-miss regression).
   - every fully-converted source (e.g. the `TODO.md`) has a **delete proposed** for it (the source-cleanup-checkpoint regression).
   - `.dorfl.json` `verify` is **cheap-first** (lint/format before build before test) and contains **no install/bootstrap** prefix.
   - `CONTEXT.md` does **not enumerate** items (no `0001 … 0002 …` ADR index); the folder is the index.
@@ -92,7 +92,7 @@ It is an **eval** (a graded, somewhat-non-deterministic quality measure), distin
   - the protocol docs were copied into `work/protocol/` (+ VERSION), and the deterministic skeleton exists.
   - nothing was auto-committed; nothing outside the scratch clone was touched.
 - **It is an EVAL, not a `verify`-gate test.** Non-deterministic and model-dependent; **run manually when judging a skill change**, never on `do`/CI-blocking. Report per-invariant pass-rate across N runs (N small, human-chosen per judging session).
-- **No teaching-to-the-test.** The answer-bank and graders live ENTIRELY in the eval-definition (in `tests/` / the consumer repo); nothing about the expected answers or shapes leaks into `skills/setup/`. (This PRD's existence is itself a guard: if a future skill edit "passes" only because the skill now names the expected output, that is a regression of the eval's validity, not a win.)
+- **No teaching-to-the-test.** The answer-bank and graders live ENTIRELY in the eval-definition (in `tests/` / the consumer repo); nothing about the expected answers or shapes leaks into `skills/setup/`. (This SPEC's existence is itself a guard: if a future skill edit "passes" only because the skill now names the expected output, that is a regression of the eval's validity, not a win.)
 
 ## Testing Decisions
 
@@ -100,12 +100,12 @@ It is an **eval** (a graded, somewhat-non-deterministic quality measure), distin
 
 - The ENGINE's own logic (clone provisioning, the RPC turn-loop, answerer routing, the surface/hard-error-on-unanswered path, the report) is deterministic and gets ordinary unit/integration tests in the `packages/skill-eval` package — distinct from the (non-deterministic) eval it runs. Mock the pi RPC stream so these are deterministic (feed canned `agent_end`/assistant-text/`extension_ui_request` events).
 - Test the surface/hard-error path explicitly: a question with no answerer match (and a no-answerer eval that gets asked anything) → assert the run fails and names the question.
-- The `setup` DEFINITION's graders are tested against fixed sample artifacts (a known-good `work/` tree → all green; a known-bad one with an enumerated CONTEXT index / a missed PRD / a same-feature duplicate → the right graders go red).
+- The `setup` DEFINITION's graders are tested against fixed sample artifacts (a known-good `work/` tree → all green; a known-bad one with an enumerated CONTEXT index / a missed SPEC / a same-feature duplicate → the right graders go red).
 
 ## Out of Scope
 
 - **Extracting the engine to its own repo NOW.** It is designed for extraction (standalone package, no dorfl deps, generic `EvalDefinition` seam) but ships as a monorepo package first — extract only once a second real consumer (e.g. `hardhat-deploy-migration`'s definition) exercises it and the seam is proven. (Design-for-extraction now; extract on the second real use, not on speculation.)
-- **Building the `hardhat-deploy-migration` definition in THIS PRD.** It is the named second consumer that keeps the engine API honest (the API must satisfy it on paper), but writing its definition is a follow-on in its own repo — here we build the engine + the `setup` definition only.
+- **Building the `hardhat-deploy-migration` definition in THIS SPEC.** It is the named second consumer that keeps the engine API honest (the API must satisfy it on paper), but writing its definition is a follow-on in its own repo — here we build the engine + the `setup` definition only.
 - A fully unattended "self-improving" loop that edits a skill based on eval results (the engine MEASURES; a human decides skill changes).
 - Making the eval part of the blocking `verify` gate (it is a non-blocking quality signal; non-deterministic by nature; run manually).
 
@@ -122,9 +122,9 @@ The original feasibility questions are settled by `packages/coding-agent/docs/rp
 
 1. **Run cost / N.** Each run is a full multi-turn agent session (real model, real repo). This is a **manually-run, separate eval** — NOT a `verify`-gate test, never on `do`/CI-blocking (skills are edited by interactive conversation, so the eval is run by hand when judging a skill change). So N is small and human-chosen (e.g. 3–5); pick per judging session. Not a blocker.
 2. **Is the in-clone gate-run inside the eval?** The skill runs `verify` once (A5), which needs deps installed in the clone (`pnpm install` for rocketh). Options: (a) pre-install deps in the clone before the run (so the skill's gate-run goes green and that invariant is exercised), or (b) skip/expect-red the gate-run and don't grade it. This intersects the prepare-vs-verify gap observation. Decide at slice time; default to (a) so the gate-run invariant is real. Not a blocker.
-3. **`Harness` seam scope for THIS PRD.** Build the seam + the pi-RPC adapter only (the one we'll actually run); a second adapter / cross-harness comparison is a follow-on. The seam must just not be designed so narrowly that pi-RPC's specifics (its event names, its dialog protocol) leak into the engine — keep it at "launch skill / next question / answer / final state + transcript / capabilities". Confirm the minimal seam shape at slice time.
+3. **`Harness` seam scope for THIS SPEC.** Build the seam + the pi-RPC adapter only (the one we'll actually run); a second adapter / cross-harness comparison is a follow-on. The seam must just not be designed so narrowly that pi-RPC's specifics (its event names, its dialog protocol) leak into the engine — keep it at "launch skill / next question / answer / final state + transcript / capabilities". Confirm the minimal seam shape at slice time.
 4. **Answerer model/agent choice.** Which agent runs the answerer (a plain pi session given the answer file as context? a subagent?), and is it the same model as the skill-runner. A quality/cost tuning choice; not a blocker.
 
 ## Provenance
 
-Written 2026-06-09 from a maintainer discussion after several hand-driven `setup`/migrate runs on rocketh surfaced regressions only by chance (a dotfolder source missed → a PRD under-routed to an idea; converted sources not proposed for deletion; ADR-count variance run-to-run). The maintainer's design: clone rocketh as input, an answerer agent supplies answers from known repo knowledge, the eval HARD-ERRORS (with the exact question) on anything the answerer cannot fulfil, and it grades structural invariants across runs — an eval that still allows interactive answers. Dogfoods the `work/` contract this very session hardened.
+Written 2026-06-09 from a maintainer discussion after several hand-driven `setup`/migrate runs on rocketh surfaced regressions only by chance (a dotfolder source missed → a SPEC under-routed to an idea; converted sources not proposed for deletion; ADR-count variance run-to-run). The maintainer's design: clone rocketh as input, an answerer agent supplies answers from known repo knowledge, the eval HARD-ERRORS (with the exact question) on anything the answerer cannot fulfil, and it grades structural invariants across runs — an eval that still allows interactive answers. Dogfoods the `work/` contract this very session hardened.

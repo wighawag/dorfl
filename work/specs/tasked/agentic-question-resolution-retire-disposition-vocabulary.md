@@ -3,12 +3,12 @@ title: Agentic question-resolution — retire the disposition vocabulary, genera
 slug: agentic-question-resolution-retire-disposition-vocabulary
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: the tasks below. This prd has been TASKED: the Implementation/Testing detail moved into the task files (see the task map at the end), and it now settles to its durable framing (Problem / Solution / User Stories / Resolved decisions / Out of Scope).
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: the tasks below. This spec has been TASKED: the Implementation/Testing detail moved into the task files (see the task map at the end), and it now settles to its durable framing (Problem / Solution / User Stories / Resolved decisions / Out of Scope).
 
 ## Problem Statement
 
 The question-resolution system uses a hard-coded **disposition vocabulary** —
-`promote-task | promote-prd | promote-adr | keep | delete | dropped |
+`promote-task | promote-spec | promote-adr | keep | delete | dropped |
 needs-attention` — carried as a `disposition=` field in the sidecar's per-entry
 HTML comment. This has accreted into several coherence problems (surfaced while
 draining the question backlog, 2026-06-24):
@@ -47,7 +47,7 @@ the shape `intake` already has (read input → emit a typed verdict → dispatch
 
 From the operator's perspective: I answer a question in my own words; I never
 learn or type a vocabulary. The system READS my answer (together with the source
-item it is about) and acts on it — turning the signal into a task, a PRD, or an
+item it is about) and acts on it — turning the signal into a task, a SPEC, or an
 ADR; deleting it if that's what my answer means; or asking me a follow-up if it
 needs more. A sidecar is just an open conversation: open questions I answer, and
 the agent may append more. If I want to throw something away outright, I (or a
@@ -60,12 +60,12 @@ no longer lingers.
    disposition token — the system understands my answer.
 2. As an operator, when I answer an observation's question, the apply rung runs a
    DECISION AGENT that reads my answer + the source item and acts: mint a
-   self-contained task, mint a PRD, mint an ADR, delete the source, or ask me a
+   self-contained task, mint a SPEC, mint an ADR, delete the source, or ask me a
    follow-up.
    _(Tasking note: the `mint an ADR` clause is DEFERRED past the keystone — there
-   is no ADR-mint path in the codebase today, and PRD decision 14 makes the engine
+   is no ADR-mint path in the codebase today, and SPEC decision 14 makes the engine
    outcome-agnostic so `adr` is added separately. The agentic apply path LAUNCHES
-   with task / prd / delete / ask; `mint-adr` is the follow-on task
+   with task / spec / delete / ask; `mint-adr` is the follow-on task
    `agentic-apply-mint-adr-route`. This is a flagged, named non-delivery, not a
    hole.)_
 3. As an operator, the agent's decision is grounded in the SOURCE ITEM's full
@@ -109,7 +109,7 @@ no longer lingers.
   are RESOLVED (see Resolved decisions 11–13): delete is direct/no-confirm;
   intake's core is extracted ONLY where it makes sense (not a forced refactor);
   intake does NOT gain `adr` (the engine is outcome-agnostic so it can be added
-  later). The PRD launches tasking-ready.
+  later). The SPEC launches tasking-ready.
 
 ## Resolved decisions
 
@@ -126,8 +126,8 @@ no longer lingers.
 3. **The decision engine is GENERALISED + parameterised by `(input-adapter,
    allowed-outcomes)`.** Shared machinery = `prompt → verdict → dispatch` (intake's
    stubbable seam). The allowed-outcome SET is a parameter: advance-apply allows
-   `{mint-task | mint-prd | mint-adr | delete-source | ask-follow-up}`; intake
-   keeps its current `{task | prd | ask | bounce}`. The INPUT adapter differs per
+   `{mint-task | mint-spec | mint-adr | delete-source | ask-follow-up}`; intake
+   keeps its current `{task | spec | ask | bounce}`. The INPUT adapter differs per
    front door (issue thread vs answered sidecar + source item) and is NOT forced
    to be shared. Share what is natural; do not force it.
 4. **Apply fires ONLY on a FULLY-answered sidecar; follow-ups are BATCHED.** The
@@ -160,14 +160,14 @@ no longer lingers.
 9. **`needs-attention/` lifecycle state is UNTOUCHED.** Only the triage-ANSWER
    `needs-attention` disposition is removed. The bounced-build / stuck-lock
    routing, `requeue` recovery, and `run`/status surfacing keep working.
-10. **Self-containment on promote is preserved.** The mint-task / mint-prd verdicts
+10. **Self-containment on promote is preserved.** The mint-task / mint-spec verdicts
    carry the answer(s) + remaining open-question scoping into the spawned artifact
-   (the discharge PRD already established self-containment; the agentic path must
+   (the discharge SPEC already established self-containment; the agentic path must
    not regress it). The source is deleted in the same atomic commit as the create
    (delete-on-promote), exactly as today.
-11. **No coordination blocker.** The discharge PRD
+11. **No coordination blocker.** The discharge SPEC
     (`observation-discharge-by-deletion-self-contained-promotion-and-prd-route`)
-    is FULLY LANDED (all 5 tasks in `tasks/done/`), so this PRD `taskedAfter`
+    is FULLY LANDED (all 5 tasks in `tasks/done/`), so this SPEC `taskedAfter`
     nothing; it SIMPLIFIES on top — removing the `keep` token, the `disposition=`
     field, and the deterministic routing that discharge built upon, while keeping
     discharge's deletion-on-apply + self-containment semantics.
@@ -186,20 +186,20 @@ no longer lingers.
     necessarily one monolithic implementation is an acceptable outcome.
 14. **Intake does NOT gain `adr`; the engine stays outcome-AGNOSTIC (fork 3
     resolved).** `mint-adr` is an available outcome the engine supports and
-    advance-apply allows; intake keeps `{task | prd | ask | bounce}` unchanged.
+    advance-apply allows; intake keeps `{task | spec | ask | bounce}` unchanged.
     The engine being agnostic to the allowed-outcome set means `adr` (or any
     future outcome) CAN be added to intake later by a separate decision, without
-    re-architecting — but this PRD makes no behaviour change to intake's outcomes.
+    re-architecting — but this SPEC makes no behaviour change to intake's outcomes.
 
 ## Out of Scope
 
 - The `needs-attention/` LIFECYCLE state and its recovery (`requeue`, status
   surfacing) — untouched; only the triage-answer disposition is removed.
-- Work-item (task/prd) terminal-folder routing (`tasks/cancelled`,
-  `specs/dropped`) as a LIFECYCLE concern — this PRD is about question-resolution,
-  not item-lifecycle terminals. (A task/prd is "dropped" by its own lifecycle, not
+- Work-item (task/spec) terminal-folder routing (`tasks/cancelled`,
+  `specs/dropped`) as a LIFECYCLE concern — this SPEC is about question-resolution,
+  not item-lifecycle terminals. (A task/spec is "dropped" by its own lifecycle, not
   by a question disposition.)
-- Changing intake's existing verdict behaviour (task/prd/ask/bounce) — the engine
+- Changing intake's existing verdict behaviour (task/spec/ask/bounce) — the engine
   is generalised, but intake's adoption of new outcomes (`adr`) is gated on open
   question 3.
 - A natural-language classifier as a STANDALONE always-on layer — the decision is
@@ -207,7 +207,7 @@ no longer lingers.
 
 ## Further Notes
 
-- Lineage: this PRD is the SIMPLIFICATION that the discharge PRD's work made
+- Lineage: this SPEC is the SIMPLIFICATION that the discharge SPEC's work made
   visible. Discharge fixed "notes don't leave cleanly"; draining the resulting
   question backlog exposed that the disposition VOCABULARY itself is the wrong
   abstraction — the engine should read the human's answer, not a token. Same
@@ -222,7 +222,7 @@ no longer lingers.
 
 ## Task map
 
-This prd was decomposed (2026-06-24) into seven vertical tasks (born in
+This spec was decomposed (2026-06-24) into seven vertical tasks (born in
 `work/tasks/backlog/`). The Implementation/Testing detail above moved into them:
 
 1. **`decision-engine-shared-decide-seam`** (US #9) — the shared
@@ -258,7 +258,7 @@ This prd was decomposed (2026-06-24) into seven vertical tasks (born in
    `mint-adr` outcome: widens advance-apply's allowed set to permit `adr` and adds
    the ADR-mint route (`docs/adr/`, ADR-FORMAT shape, source deleted in the same
    commit). Deferred past the keystone because no ADR-mint path exists today and
-   PRD decision 14 makes the engine outcome-agnostic. Blocked by #2.
+   SPEC decision 14 makes the engine outcome-agnostic. Blocked by #2.
 6. **`orphan-sidecar-gc-sweep`** (US #10) — reaps a sidecar whose source was
    deleted out-of-band, as a SWEEP over `work/questions/` folded into `dorfl gc`
    (which runs on the scheduled CI tick). It CANNOT be an apply step: a deleted

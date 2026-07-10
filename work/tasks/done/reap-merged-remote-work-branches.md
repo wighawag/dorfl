@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained HYGIENE slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/propose-pr-remote-work-branch-not-deleted-after-merge.md` (2026-06-09; maintainer: "the remote PR branch should be closed when merged").
+> Self-contained HYGIENE slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/propose-pr-remote-work-branch-not-deleted-after-merge.md` (2026-06-09; maintainer: "the remote PR branch should be closed when merged").
 >
 > MAINTAINER DECISIONS (settled 2026-06-12 — implement, do not re-open):
 > - **Q1 = (a) provider-agnostic sweep** (NOT relying on the GitHub setting alone): delete a merged `<arbiter>/work/<slug>` via `git push --delete`, guarded by the ancestor predicate, so it works on a `--bare` arbiter and any provider.

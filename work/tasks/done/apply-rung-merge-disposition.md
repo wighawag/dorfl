@@ -21,7 +21,7 @@ to "extend the apply rung's `promote-slice`/`dropped` disposition-
 dispatch in `triage-persist.ts`". That disposition-dispatch, its
 picker, and the disposition vocabulary were REMOVED by the keystone
 `agentic-question-resolution-retire-disposition-vocabulary`. Apply is
-now the agentic `decide(input, allowedOutcomes) -> {task | prd | adr |
+now the agentic `decide(input, allowedOutcomes) -> {task | spec | adr |
 delete | ask}` (`apply-decide.ts` / `decision-engine.ts`), and "land
 this merge" is NOT a `decide()` content outcome. So the answered-merge
 land must be a DISTINCT answer-driven runner-ACTION dispatch layer
@@ -83,11 +83,11 @@ through `decide()`'s content-outcome union. Confirm this is a sibling
 dispatch to the agentic content decision, and whether the sibling
 stuck-lock requeue action shares the SAME layer (resolve once).
 
-OQ6 (prd, still open): when `main` moved between the human's answer
+OQ6 (spec, still open): when `main` moved between the human's answer
 and the apply step but the rebased tip STILL verifies GREEN, does apply
 
   (a) HONOUR the prior approval and land — cheap; trusts that a green
-      re-verify is sufficient (the prd calls this the likely default);
+      re-verify is sufficient (the spec calls this the likely default);
       or
   (b) RE-SURFACE the question because the merge-base CHANGED — the
       host-agnostic analogue of GitHub's "dismiss stale approvals when
@@ -139,7 +139,7 @@ WHETHER the surfacer runs, not what the dispatch does.)
 > Do NOT build until OQ-A (mechanism) and OQ6 (policy) are answered —
 > the disposition-dispatch this task was authored against was retired.
 > Once answered: read Stories 15-16, the relevant Implementation
-> Decision in the prd, the observation
+> Decision in the spec, the observation
 > `merge-question-tasks-premised-on-retired-disposition-vocabulary-2026-06-25.md`,
 > the keystone done record `agentic-apply-retire-disposition-vocabulary.md`,
 > and the current apply rung (`apply-persist.ts` / `apply-decide.ts` /
@@ -161,17 +161,17 @@ WHETHER the surfacer runs, not what the dispatch does.)
 
 ## Applied answers 2026-06-26
 
-### q1: What is your answer to PRD OPEN QUESTION 6 (the stale-approval policy)? When `main` moves between the human's answer and the apply step but the rebased tip STILL verifies GREEN, does apply (a) HONOUR the prior approval and land (cheap; trusts that a green re-verify is sufficient), or (b) RE-SURFACE the question because the merge-base CHANGED (the host-agnostic analogue of GitHub's 'dismiss stale approvals when the base changes')? And the sub-question: if both ship (a + b opt-in), what flag/config axis controls (b), and what is its default?
+### q1: What is your answer to SPEC OPEN QUESTION 6 (the stale-approval policy)? When `main` moves between the human's answer and the apply step but the rebased tip STILL verifies GREEN, does apply (a) HONOUR the prior approval and land (cheap; trusts that a green re-verify is sufficient), or (b) RE-SURFACE the question because the merge-base CHANGED (the host-agnostic analogue of GitHub's 'dismiss stale approvals when the base changes')? And the sub-question: if both ship (a + b opt-in), what flag/config axis controls (b), and what is its default?
 
-(a) HONOUR the prior approval and land when the rebased tip re-verifies GREEN, with (b) re-surface-on-changed-merge-base as an OPT-IN strictness layered on top. The opt-in (b) is controlled by a per-repo `strictMergeApproval` setting (resolved via the gate-family precedence chain: flag > env > per-repo > global > default), defaulting OFF, so the cheap green-re-verify-is-enough path is the default. On the binary sidecar, (b) clears the answer back to no-answer and re-surfaces the merge-question (authored on `main`/runner under the `advancing` lock, so no branch-side mutation). This matches PRD sidecar Q4. Story #16's RED-re-verify refusal is unchanged.
+(a) HONOUR the prior approval and land when the rebased tip re-verifies GREEN, with (b) re-surface-on-changed-merge-base as an OPT-IN strictness layered on top. The opt-in (b) is controlled by a per-repo `strictMergeApproval` setting (resolved via the gate-family precedence chain: flag > env > per-repo > global > default), defaulting OFF, so the cheap green-re-verify-is-enough path is the default. On the binary sidecar, (b) clears the answer back to no-answer and re-surfaces the merge-question (authored on `main`/runner under the `advancing` lock, so no branch-side mutation). This matches SPEC sidecar Q4. Story #16's RED-re-verify refusal is unchanged.
 
 ### q2: This task's premise appears STALE: it specifies mirroring the apply rung's `promote-slice`/`dropped` disposition-dispatch and dispatching an answered `merge` DISPOSITION, but that whole disposition vocabulary has since been RETIRED. Should this task be re-scoped (and re-reviewed) against the new AGENTIC apply model before it is built, or has its premise already been reconciled somewhere I have not seen?
 
-Yes — the premise was stale (the disposition vocabulary is retired), and it has now been RECONCILED in this pass (see PRD sidecar Q1/Q2). The task body has been amended in place to the new model: do NOT mirror a `promote-slice`/`dropped` disposition-dispatch (gone) and do NOT route through the agentic `decide()`. Build the answered-merge land as a DETERMINISTIC runner-ACTION dispatch (see Q3). The task stays `needsAnswers: true` only until Q1 (policy) + Q3 (mechanism) here are applied.
+Yes — the premise was stale (the disposition vocabulary is retired), and it has now been RECONCILED in this pass (see SPEC sidecar Q1/Q2). The task body has been amended in place to the new model: do NOT mirror a `promote-slice`/`dropped` disposition-dispatch (gone) and do NOT route through the agentic `decide()`. Build the answered-merge land as a DETERMINISTIC runner-ACTION dispatch (see Q3). The task stays `needsAnswers: true` only until Q1 (policy) + Q3 (mechanism) here are applied.
 
-### q3: Given the disposition vocabulary is retired and the agentic apply outcome set is `{task | prd | adr | delete | ask}` (a content-mint / delete / follow-up model), HOW should an answered merge-question dispatch the LAND primitive (rebase -> re-verify -> advance) within that model? It is a runner ACTION, not a content outcome, so it does not map onto any current `DecisionOutcome`. Does `merge` become a new agentic outcome wired only into the merge-question caller, a separate non-agentic state-action dispatch keyed off the merge-question's answer, or something else?
+### q3: Given the disposition vocabulary is retired and the agentic apply outcome set is `{task | spec | adr | delete | ask}` (a content-mint / delete / follow-up model), HOW should an answered merge-question dispatch the LAND primitive (rebase -> re-verify -> advance) within that model? It is a runner ACTION, not a content outcome, so it does not map onto any current `DecisionOutcome`. Does `merge` become a new agentic outcome wired only into the merge-question caller, a separate non-agentic state-action dispatch keyed off the merge-question's answer, or something else?
 
-A SEPARATE, DETERMINISTIC answer-driven runner-ACTION dispatch layer — NOT a new `DecisionOutcome` and NOT a route through the agentic `decide()`. This is the keystone decision (PRD sidecar Q1): a merge-acceptance has no judgement content (the human's plain merge|hold|drop answer IS the decision; the correctness gate is the apply-time re-verify on the rebased tip, never an agent), so routing it through an LLM only adds cost and non-determinism.
+A SEPARATE, DETERMINISTIC answer-driven runner-ACTION dispatch layer — NOT a new `DecisionOutcome` and NOT a route through the agentic `decide()`. This is the keystone decision (SPEC sidecar Q1): a merge-acceptance has no judgement content (the human's plain merge|hold|drop answer IS the decision; the correctness gate is the apply-time re-verify on the rebased tip, never an agent), so routing it through an LLM only adds cost and non-determinism.
 
 Concretely, the apply rung gains a kind-check BEFORE the agentic decider:
 ```
@@ -185,7 +185,7 @@ apply(answered sidecar):
   else:                                   # observation / spec / triage
       verdict = decide(input, allowedOutcomes); route verdict   # agent, as today
 ```
-The `kind` is read from the sidecar's typed identity field (PRD sidecar Q5-ii), introduced by the foundational task `sidecar-kind-field` (a `blockedBy` of this task). Read the typed `kind` field directly — do NOT string-sniff the `default` menu (the workaround that got `merge-question-surfacer`'s first build blocked at review). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).
+The `kind` is read from the sidecar's typed identity field (SPEC sidecar Q5-ii), introduced by the foundational task `sidecar-kind-field` (a `blockedBy` of this task). Read the typed `kind` field directly — do NOT string-sniff the `default` menu (the workaround that got `merge-question-surfacer`'s first build blocked at review). The merge-question sidecar carries a deterministic CHOICE shape (merge|hold|drop) the human picks and the system parses unambiguously, distinct from the free-text content-question shape. The sibling stuck-lock requeue action SHARES this same runner-action layer (resolve once). Invoke the land via the EXISTING `integration-core.ts` `performIntegration` — do not re-implement rebase/verify/advance. Record the split as an ADR (working name `answered-question-dispatch-splits-runner-action-vs-agentic-content`).
 
 ### q4: The build agent STOPPED here (2026-06-26): the applied answers pin the dispatch layer but not (1) the committed-recovery tail re-verifying on the rebased tip, (2) the worktree/checkout seam, (3) the strictMergeApproval config axis. Resolve the scope.
 

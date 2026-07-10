@@ -30,7 +30,7 @@ Add a one-line note to the advance rung's contract doc describing the workspaces
 
 File: `apply-merge-action.ts` (`performMergeAction`, currently calls `createJob({slug, type: 'task', ...})` with hard-coded `type: 'task'`).
 
-Today the surfacer only emits merge-questions for tasks, so the hard-coded `type` is correct in practice. But if a future surfacer change ever stamps a `kind: merge` sidecar on a non-task item (e.g. a prd-level unmerged branch), the branch name `work/task-<slug>` will silently mis-target.
+Today the surfacer only emits merge-questions for tasks, so the hard-coded `type` is correct in practice. But if a future surfacer change ever stamps a `kind: merge` sidecar on a non-task item (e.g. a spec-level unmerged branch), the branch name `work/task-<slug>` will silently mis-target.
 
 Assert at `performMergeAction` entry that the sidecar's source item is a task, and throw a clear error otherwise (message should name the offending item and its actual type, and point at this assertion as the invariant that was violated). Add a unit test that feeds a non-task source item and asserts the loud failure.
 

@@ -31,7 +31,7 @@ End-to-end behaviour:
   stays in the inbox stamped `triaged:keep` and must keep working. Only
   `dropped`/`delete`/`duplicate` discharge by deletion; `keep` is untouched.
 - Be careful to scope this to the NOTE (observation) paths — do NOT touch the
-  `delete` disposition behaviour for WORK ITEMS (tasks/prds) if that shares
+  `delete` disposition behaviour for WORK ITEMS (tasks/specs) if that shares
   code; a work item has a terminal FOLDER and is not deleted.
 
 Note: WORK ITEMS keep their existing terminal-folder routing, and `keep`
@@ -60,7 +60,7 @@ DROPPED/DUPLICATE NOTES leave — by deletion.
 ## Prompt
 
 > Goal: discharge `dropped`/`delete`/`duplicate` observations BY DELETION and
-> retire the resting-state machinery, per the PRD
+> retire the resting-state machinery, per the SPEC
 > `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
 > (Defects A + G/US #2,#7; Resolved decision 4: dropped = standalone commit with
 > reason in the message).
@@ -76,7 +76,7 @@ DROPPED/DUPLICATE NOTES leave — by deletion.
 > signal and must still rest in the inbox; only dropped/delete/duplicate delete.
 >
 > CRITICAL scope fence: this is about NOTES (observations), which leave by
-> deletion (WORK-CONTRACT.md L59/L65/L74). WORK ITEMS (tasks/prds) have terminal
+> deletion (WORK-CONTRACT.md L59/L65/L74). WORK ITEMS (tasks/specs) have terminal
 > FOLDERS (`tasks/cancelled/`, `specs/dropped/`) and are NOT deleted — if the
 > `delete` disposition code is shared, branch on item type so you change only the
 > observation/note path. Do not regress work-item terminal routing.

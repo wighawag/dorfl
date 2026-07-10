@@ -31,7 +31,7 @@ A thin vertical task: the resolver + every generated invocation routed through i
 
 ## Prompt
 
-> Make the `install-ci`-generated CI prefer a PROJECT-PINNED dorfl (the repo's `devDependencies` version) over a global latest, falling back to the global install when none is pinned — so CI runs the dorfl the repo declares, not a skewed global. This is the (C) axis of the `install-ci-project-provisioning` PRD (C1 + C3).
+> Make the `install-ci`-generated CI prefer a PROJECT-PINNED dorfl (the repo's `devDependencies` version) over a global latest, falling back to the global install when none is pinned — so CI runs the dorfl the repo declares, not a skewed global. This is the (C) axis of the `install-ci-project-provisioning` SPEC (C1 + C3).
 >
 > FIRST, drift-check (launch snapshot): re-read `work/specs/tasked/install-ci-project-provisioning.md` (the (C) decisions) AND confirm the blocking task `install-ci-project-setup-hook` landed in `work/tasks/done/` with the project-setup hook shape this task assumes (the hook is what runs the project's `pnpm install`, making C3 reachable). Confirm where the generated dorfl invocations live today (currently the literal `dorfl <verb>` strings are spread across the per-capability workflow templates) and the global-install step in the composite action. If the invocation surface or the hook changed shape since this was written, do not build on the stale premise — route to needs-attention.
 >

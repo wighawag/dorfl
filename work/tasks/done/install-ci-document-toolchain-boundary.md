@@ -10,9 +10,9 @@ covers: [5, 6]
 
 State the project-toolchain boundary explicitly in `install-ci`'s generated output, WITHOUT adding any knob or detection logic. End to end:
 
-- dorfl's own `setup-node` step in the generated composite action keeps emitting (dorfl declares `node >=18`, so it runs on any modern Node and needs NO pinned version). NO `nodeVersion` knob is added — it was considered and dropped as over-engineering (PRD Out of Scope).
+- dorfl's own `setup-node` step in the generated composite action keeps emitting (dorfl declares `node >=18`, so it runs on any modern Node and needs NO pinned version). NO `nodeVersion` knob is added — it was considered and dropped as over-engineering (SPEC Out of Scope).
 - The generated README / `install-ci` completion message carries a clear boundary line: a custom or conflicting project toolchain (a different Node/pnpm version, rust, etc.) is supported ONLY via the project-setup hook (task `install-ci-project-setup-hook`); without that hook the conflicting case is unsupported. This is documentation, a deliberate honest line — NOT silently enforced.
-- install-ci does NOT sniff `.nvmrc` / `packageManager` / `rust-toolchain.toml` to detect a likely conflict and warn. NO detection path is built (PRD Out of Scope).
+- install-ci does NOT sniff `.nvmrc` / `packageManager` / `rust-toolchain.toml` to detect a likely conflict and warn. NO detection path is built (SPEC Out of Scope).
 
 A tiny, self-contained docs/output task: it touches the README/completion-message emitter and a snapshot/output assertion, NOT the project-setup config field, so it is file-orthogonal to the hook task and can land independently.
 
@@ -31,7 +31,7 @@ A tiny, self-contained docs/output task: it touches the README/completion-messag
 
 ## Prompt
 
-> Make `install-ci` STATE the project-toolchain boundary in its generated output, and confirm dorfl's own Node step still emits — WITHOUT adding any knob or any detection. This is the (A) axis of the `install-ci-project-provisioning` PRD: dorfl needs only `node >=18`, so there is no dorfl-Node-version knob to add; the project's toolchain is the project's concern (the project-setup hook, a sibling task). The only deliverable here is an honest documented boundary.
+> Make `install-ci` STATE the project-toolchain boundary in its generated output, and confirm dorfl's own Node step still emits — WITHOUT adding any knob or any detection. This is the (A) axis of the `install-ci-project-provisioning` SPEC: dorfl needs only `node >=18`, so there is no dorfl-Node-version knob to add; the project's toolchain is the project's concern (the project-setup hook, a sibling task). The only deliverable here is an honest documented boundary.
 >
 > FIRST, drift-check (launch snapshot): re-read `work/specs/tasked/install-ci-project-provisioning.md` (the (A) decisions + Out of Scope). Confirm the install-ci core still emits a `setup-node` step in the composite action and still produces a README / completion message you can extend. If a sibling task already added the project-setup hook with different vocabulary, align the boundary text to the real hook name; if the composite-action generator changed shape, do not build on the stale premise — route to needs-attention.
 >

@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-The per-item-lock substrate (PRD `ledger-status-per-item-lock-refs`) has landed: claim/slice/advance
+The per-item-lock substrate (SPEC `ledger-status-per-item-lock-refs`) has landed: claim/slice/advance
 no longer touch `main` (they ride per-item parentless lock refs), so the bulk of `main`'s write
 traffic is gone. But THREE durable `main` promotions still write the SHARED `main` ref:
 
@@ -91,7 +91,7 @@ reached under sustained parallel load).
 
 ## Blocked by
 
-- None. Can start immediately: the lock substrate this depended on (PRD
+- None. Can start immediately: the lock substrate this depended on (SPEC
   `ledger-status-per-item-lock-refs`, the nine lock slices) is already in `work/tasks/done/`.
 
 ## Prompt
@@ -102,7 +102,7 @@ reached under sustained parallel load).
 > and the won't-proceed terminals `tasks/todo` to `tasks/cancelled` / `briefs/ready` to
 > `briefs/dropped`.
 >
-> Background: the per-item-lock substrate (PRD `ledger-status-per-item-lock-refs`) landed, so
+> Background: the per-item-lock substrate (SPEC `ledger-status-per-item-lock-refs`) landed, so
 > claim/slice/advance ride per-item parentless lock refs and no longer touch `main`. The bulk of
 > `main`'s write traffic is gone. But these three DURABLE promotions still write the SHARED `main`
 > ref, so two DIFFERENT items' promotions can still falsely-contend (same class as the original

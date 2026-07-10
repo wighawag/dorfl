@@ -14,10 +14,10 @@ Separate the SURFACE polarity from the BUILD polarity in the lifecycle pool: sur
 
 - New config key `surfaceStaging: boolean`, camelCase, default **true**. Resolution precedence matches the gate family: `flag > env > per-repo > global > default`. Add it to `env-config.ts` with the same schema/precedence pattern as the existing gate-family keys.
 - In `lifecycle-gather.ts` / `buildLifecyclePools`, the SURFACE candidate set draws from STAGING + POOL when `surfaceStaging:true`, and from POOL only when `surfaceStaging:false`. APPLY stays always-on (unchanged). BUILD/claim eligibility is UNCHANGED — still pool-only, still trust-gated — even with `surfaceStaging:true`.
-- Briefs symmetrically (PRD q4 answer): the brief surface pool draws from `briefs/proposed/` (staging) when `surfaceStaging:true`, not only `briefs/ready/`. A `needsAnswers` brief in staging surfaces its questions before promotion, exactly like a task.
+- Briefs symmetrically (SPEC q4 answer): the brief surface pool draws from `briefs/proposed/` (staging) when `surfaceStaging:true`, not only `briefs/ready/`. A `needsAnswers` brief in staging surfaces its questions before promotion, exactly like a task.
 - `scan --json`'s `lifecycle.surface[]` reflects the expanded pool so the CI matrix enumerates staging surface legs.
 
-Why this lands AFTER F3 (PRD q3): F3's correctness fixes (folder-agnostic apply + promote-respects-lock) must be in place first, because once a staged `needsAnswers` item surfaces and gets answered, the subsequent apply runs alongside the human's promote — exactly the interleaving F3 closes. F2 tests assert the F3 invariants are green as a precondition (i.e. the e2e surface→answer→apply happy path runs without a manual promote AND without split-brain).
+Why this lands AFTER F3 (SPEC q3): F3's correctness fixes (folder-agnostic apply + promote-respects-lock) must be in place first, because once a staged `needsAnswers` item surfaces and gets answered, the subsequent apply runs alongside the human's promote — exactly the interleaving F3 closes. F2 tests assert the F3 invariants are green as a precondition (i.e. the e2e surface→answer→apply happy path runs without a manual promote AND without split-brain).
 
 ## Acceptance criteria
 
@@ -35,7 +35,7 @@ Why this lands AFTER F3 (PRD q3): F3's correctness fixes (folder-agnostic apply 
 - `f3a-apply-resolves-item-by-identity-at-write-time`
 - `f3b-promote-takes-per-item-advancing-lock`
 
-Both must land first: F2's surface→answer→apply path on staging is only SAFE once apply×promote can no longer corrupt each other (PRD q3 answer: F3 strictly before F2, separate slices).
+Both must land first: F2's surface→answer→apply path on staging is only SAFE once apply×promote can no longer corrupt each other (SPEC q3 answer: F3 strictly before F2, separate slices).
 
 ## Prompt
 
@@ -43,7 +43,7 @@ Both must land first: F2's surface→answer→apply path on staging is only SAFE
 >
 > Add a `surfaceStaging: boolean` config key (camelCase) to `env-config.ts`, default **true**, resolved with the existing gate-family precedence chain (`flag > env > per-repo > global > default`). In `lifecycle-gather.ts` / `buildLifecyclePools`, change ONLY the SURFACE candidate set: when `surfaceStaging:true`, include STAGING + POOL; when `false`, POOL only. Do NOT touch the BUILD/claim candidate set — staged items stay non-claimable, the trust model is untouched.
 >
-> Briefs symmetrically (per the PRD q4 answer): the brief surface pool must include `briefs/proposed/` (staging) when `surfaceStaging:true`, not only `briefs/ready/`.
+> Briefs symmetrically (per the SPEC q4 answer): the brief surface pool must include `briefs/proposed/` (staging) when `surfaceStaging:true`, not only `briefs/ready/`.
 >
 > `scan --json`'s `lifecycle.surface[]` must reflect the expanded pool so the CI matrix enumerates staging surface legs.
 >

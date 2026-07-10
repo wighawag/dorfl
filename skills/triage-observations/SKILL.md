@@ -15,9 +15,9 @@ Drain `work/notes/observations/` toward a **live-only inbox**: every note that s
 Default to **alphabetical order** (the folder listing — `ls work/notes/observations/`), so a full pass deterministically covers the whole inbox with nothing skipped or repeated. The human may override with their own order or name specific files; when they do, follow that and do NOT jump ahead or batch. For each:
 
 1. **READ** the observation in full.
-2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, prds, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE? **Also read the item's own open-question surface**: any `work/questions/<type>-<slug>.md` sidecar for this note and the source's `needsAnswers` / `## Open questions` state. An exact-item question match is cheap and required (the note may already be mid-resolution, which changes the call). Topical overlap with ANOTHER item's open questions is a signal to surface to the human, never to auto-decide on.
+2. **INVESTIGATE** its claim against _current reality_ — read the actual code, tasks, specs, ADRs, and protocol docs it references. Confirm every file/line pointer (repos drift; paths move — e.g. a monorepo's `packages/*/src/`). Establish: is this signal still LIVE? **Also read the item's own open-question surface**: any `work/questions/<type>-<slug>.md` sidecar for this note and the source's `needsAnswers` / `## Open questions` state. An exact-item question match is cheap and required (the note may already be mid-resolution, which changes the call). Topical overlap with ANOTHER item's open questions is a signal to surface to the human, never to auto-decide on.
 3. **RECOMMEND** exactly one outcome (the recommendation set below), with reasoning grounded in what you found — not a guess.
-4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this prd's untasked state intentional?") as an explicit question.
+4. **WAIT** for the human's decision. Never auto-decide. Surface any genuine judgement residue (e.g. "is this spec's untasked state intentional?") as an explicit question.
 5. **EXECUTE** the chosen outcome. For light ones (delete, small amend) do the write + **COMMIT** (scoped — one logical change per commit) before moving on. For heavy ones (make-task, non-trivial fold-into-ADR) do NOT build inline — hand off a copy-pasteable fresh-context prompt (see below) and move on; the note is deleted by that follow-on work, not here.
 6. **UPDATE** a running checklist of outcomes so the session has an at-a-glance summary.
 
@@ -35,7 +35,7 @@ This is THIS skill's own human-workflow recommendation set — the small menu of
 
 A note's liveness test is **"is this still a useful signal?"** — NOT "has the work it points at completed?".
 
-> **Throwing a signal away is a DIRECT delete, not a token.** When the call is to discard a note, you (or the human) just delete it: `git rm` the file, or `dorfl drop <identity>` (the one-line CLI helper, which removes the source AND its question sidecar in one revertible commit with the reason in the message). It does NOT round-trip through the decision engine — there is no `delete`/`dropped` token to stamp. Promotion is the mirror: minting a self-contained task/prd/ADR that carries the signal, after which the note discharges by deletion.
+> **Throwing a signal away is a DIRECT delete, not a token.** When the call is to discard a note, you (or the human) just delete it: `git rm` the file, or `dorfl drop <identity>` (the one-line CLI helper, which removes the source AND its question sidecar in one revertible commit with the reason in the message). It does NOT round-trip through the decision engine — there is no `delete`/`dropped` token to stamp. Promotion is the mirror: minting a self-contained task/spec/ADR that carries the signal, after which the note discharges by deletion.
 
 ## Hand off heavy work as a fresh-context prompt
 

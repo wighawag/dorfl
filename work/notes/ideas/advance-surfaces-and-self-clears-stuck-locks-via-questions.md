@@ -7,7 +7,7 @@ relatesTo: [ledger-status-per-item-lock-refs, advance-rung-surface, advance-rung
 
 ## The idea
 
-Once `needs-attention` is the per-item lock `state: stuck` (PRD
+Once `needs-attention` is the per-item lock `state: stuck` (SPEC
 `ledger-status-per-item-lock-refs`, decision (i+): the lock entry carries the full
 reason prose + any agent-surfaced questions), make a STUCK lock a first-class INPUT
 to the autonomous `advance` loop, so a human's whole interaction with a stuck item
@@ -131,5 +131,5 @@ brief. (Recorded here so a future planner doesn't collapse them: they share the
 NOT part of `retire-transient-folders-and-drop-rebase` (#9 / 9a-9d), which only
 finishes the substrate cut-over (stuck = lock state, human-driven recovery verbs,
 folders retired, drop-rebase gone). This idea is the NEXT layer: question-driven,
-apply-cleared stuck recovery. Promote to a PRD/slice after the lock substrate
+apply-cleared stuck recovery. Promote to a SPEC/slice after the lock substrate
 fully lands.

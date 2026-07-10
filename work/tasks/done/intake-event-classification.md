@@ -10,7 +10,7 @@ covers: [2]
 
 A PURE event-classification function: given an issue event, decide whether `intake` should RE-EVALUATE the whole thread or IGNORE the event. This is the control-path logic the engine's re-run depends on (and that CI's trigger later consults — CI's trigger POLICY itself is `runner-in-ci`'s, out of scope here).
 
-The canonical rule (from the PRD):
+The canonical rule (from the SPEC):
 
 - A **new comment** OR an **issue-body edit** → RE-EVALUATE the whole thread (re-read body + full thread; edit-vs-reply changes only the comment's framing, not the control path).
 - Editing a **buried PRIOR comment** is IGNORED — it is NOT a new turn (re-triggering on old-comment edits invites loops).
@@ -43,7 +43,7 @@ This is pure, file-orthogonal logic over an event shape — no seam, no git, no 
 >
 > SEAM TO TEST AT: the pure classifier (a table of event kinds → re-evaluate/ignore). Stub the event shapes; no network.
 >
-> SCOPE FENCE: ONLY the pure classifier. Do NOT build CI's trigger policy (command/every-issue, maintainer/anyone) — that is `runner-in-ci`. Do NOT wire it into a real webhook/CI path (no CI here). Do NOT touch the seam, dispatcher, lock, mode KNOBS, or the "PRD complete?" query.
+> SCOPE FENCE: ONLY the pure classifier. Do NOT build CI's trigger policy (command/every-issue, maintainer/anyone) — that is `runner-in-ci`. Do NOT wire it into a real webhook/CI path (no CI here). Do NOT touch the seam, dispatcher, lock, mode KNOBS, or the "SPEC complete?" query.
 >
 > FIRST run the drift check: confirm no event-classification logic already exists in `packages/dorfl/src`. If it does, reconcile against it; if a premise is broken, route to `needs-attention/` with the discrepancy.
 >

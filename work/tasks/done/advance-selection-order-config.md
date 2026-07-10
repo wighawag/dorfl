@@ -13,7 +13,7 @@ Today `selectPrioritised` (`select-priority.ts`) orders exactly TWO pools (eligi
 
 - **apply** (consume a human's committed answer on an answered-sidecar item),
 - **build** (build an eligible slice),
-- **slice** (slice a sliceable PRD),
+- **slice** (slice a sliceable SPEC),
 - **surface** (render a `needsAnswers` blocker into a sidecar),
 - **triage** (triage an untriaged observation).
 
@@ -33,7 +33,7 @@ A single per-repo `Config` field, **`selectionOrder`**, that controls the order 
 
 `prdsFirst` is SUBSUMED and removed: "slices before PRDs" is just `build` before `slice` in the order; `prdsFirst: true` ⇒ `slice` before `build`. Migrate it out (no alias, no external users yet, same stance as `remove-deprecated-config-aliases`); the `drain` default preserves today's default behaviour (`build` before `slice`).
 
-Gates compose cleanly + ORTHOGONALLY: a pool gated OFF (`observationTriage: off` ⇒ no observation pool; `surfaceBlockers: off` ⇒ no blocked pool; `autoBuild: false` ⇒ no slice pool; `autoSlice: false` ⇒ no PRD pool) is simply absent from enumeration, so it drops out of the order regardless of its rank. `selectionOrder` ranks what is PRESENT; the gates decide what is present. A pool named in the order but gated off is a no-op, not an error.
+Gates compose cleanly + ORTHOGONALLY: a pool gated OFF (`observationTriage: off` ⇒ no observation pool; `surfaceBlockers: off` ⇒ no blocked pool; `autoBuild: false` ⇒ no slice pool; `autoSlice: false` ⇒ no SPEC pool) is simply absent from enumeration, so it drops out of the order regardless of its rank. `selectionOrder` ranks what is PRESENT; the gates decide what is present. A pool named in the order but gated off is a no-op, not an error.
 
 ## Acceptance criteria
 

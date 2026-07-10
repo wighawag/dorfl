@@ -22,7 +22,7 @@ Pieces:
   SOURCE OF TRUTH) AND the propagated `work/protocol/*` so that
   `diff -r skills/setup/protocol work/protocol` is clean apart from `VERSION`.
   Files: `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `ADR-FORMAT.md`,
-  `slice-template.md`, `prd-template.md`, `VERSION`. The prose must say the NEW
+  `slice-template.md`, `spec-template.md`, `VERSION`. The prose must say the NEW
   names: the `notes/` / `tasks/` / `briefs/` umbrellas; `tasks/{backlog(staging),
   todo(pool),done,cancelled}`; `briefs/{proposed(staging),ready(pool),tasked,dropped}`;
   `questions/` top-level; the `task`/`brief` vocabulary; `do task:`/`do brief:`;
@@ -30,26 +30,26 @@ Pieces:
   (`tasks/cancelled/`, `briefs/dropped/`) and WHY (the slug-collision correctness
   fix); the lock-ref entry `task-<slug>`/`brief-<slug>`. Consider whether the
   template filenames themselves should rename (`slice-template.md` ->
-  `task-template.md`, `prd-template.md` -> `brief-template.md`), if so, do it in
+  `task-template.md`, `spec-template.md` -> `brief-template.md`), if so, do it in
   BOTH copies and update every reference; record the choice.
 - **The in-repo skills (rename + reword).** The skills live IN THIS REPO under
   `skills/`, and the user's `~/.agents/skills/*` are SYMLINKS into them (so editing
   here IS editing the live skills, no copy step). Two kinds of change:
   - **Rename the vocabulary-named skill directories** to match the new verbs:
-    `skills/to-prd/` -> `skills/to-brief/` and `skills/to-slices/` -> `skills/to-task/`
+    `skills/to-spec/` -> `skills/to-brief/` and `skills/to-slices/` -> `skills/to-task/`
     (`git mv` the directories), and update the `name:` frontmatter field inside
     each `SKILL.md` to the new slug (`name: to-brief`, `name: to-task`), plus the
     skill's own self-references in its prose. Rename the `to-slices/scripts/claim.sh`
     only if its path is referenced by name (keep the script working). NOTE: the
     user maintains the `~/.agents/skills/` symlinks; a renamed directory will need
     the symlink re-pointed, but that is OUTSIDE this repo (call it out in the done
-    record / PR description so the user re-points `to-prd -> to-brief`,
+    record / PR description so the user re-points `to-spec -> to-brief`,
     `to-slices -> to-task`).
   - **Reword the skill prose** that names old folders/verbs across ALL skills
     (`to-brief`/`to-task` (renamed), `drive-backlog`, `orchestrate`, `review`,
     `setup`, `surface-questions`, `triage-observations`): the references to
-    `work/backlog/`, `work/prd/`, `pre-backlog`/`pre-prd`, `prd-sliced`,
-    `slice`/`prd`, `sliceAfter`, `do slice:`/`do prd:` become the new
+    `work/backlog/`, `work/spec/`, `pre-backlog`/`pre-spec`, `spec-sliced`,
+    `slice`/`spec`, `sliceAfter`, `do slice:`/`do prd:` become the new
     layout/vocabulary (`work/tasks/todo/`, `work/briefs/ready/`,
     `tasks/backlog`/`briefs/proposed`, `briefs/tasked`, `task`/`brief`,
     `briefAfter`, `do task:`/`do brief:`). Keep each skill's `description:` and any
@@ -80,14 +80,14 @@ must already have moved the folders and cut over the vocabulary.
       `brief:`/`briefAfter:`, and the lock-ref `task-<slug>`/`brief-<slug>` entry.
 - [ ] `diff -r skills/setup/protocol work/protocol` is CLEAN apart from `VERSION`
       (the two copies are byte-identical).
-- [ ] The vocabulary-named skill DIRECTORIES are renamed (`skills/to-prd ->
+- [ ] The vocabulary-named skill DIRECTORIES are renamed (`skills/to-spec ->
       skills/to-brief`, `skills/to-slices -> skills/to-task`), each `SKILL.md`'s
       `name:` field + self-references updated, and the `to-task` claim script kept
       working.
 - [ ] ALL skills' prose (the renamed two + `drive-backlog`, `orchestrate`,
       `review`, `setup`, `surface-questions`, `triage-observations`) uses the new
-      layout/vocabulary; no skill still says `work/prd/`, `work/backlog/`,
-      `pre-prd`/`pre-backlog`, `slice`/`prd`, `sliceAfter`, or `do slice:`/`do prd:`.
+      layout/vocabulary; no skill still says `work/spec/`, `work/backlog/`,
+      `pre-spec`/`pre-backlog`, `slice`/`spec`, `sliceAfter`, or `do slice:`/`do prd:`.
 - [ ] Any ADR path reference uses the new vocabulary/layout (ADR decision history
       is not falsified, references/forward-notes only).
 - [ ] `CONTEXT.md` records that the project's skills live in `skills/` and that
@@ -113,7 +113,7 @@ must already have moved the folders and cut over the vocabulary.
 ## Prompt
 
 > Build the protocol/doc/setup closure of the `folder-taxonomy-reorg-and-rename`
-> PRD: bring the protocol prose, skills, ADR path references, and the `setup`
+> SPEC: bring the protocol prose, skills, ADR path references, and the `setup`
 > scaffold up to the FINAL `notes/`/`tasks/`/`briefs/` layout + `task`/`brief`
 > vocabulary, and keep the two protocol copies byte-identical. This is load-bearing:
 > the protocol is the contract `setup` propagates into every adopted repo, so a
@@ -135,7 +135,7 @@ must already have moved the folders and cut over the vocabulary.
 > The IN-REPO skills (important fact): the project's skills live in THIS repo under
 > `skills/`, and the user's `~/.agents/skills/*` are SYMLINKS into them, so editing
 > `skills/` IS editing the live skills (no copy step). Two kinds of skill change:
-> (1) RENAME the vocabulary-named skill dirs: `git mv skills/to-prd skills/to-brief`
+> (1) RENAME the vocabulary-named skill dirs: `git mv skills/to-spec skills/to-brief`
 > and `git mv skills/to-slices skills/to-task`, update each `SKILL.md`'s `name:`
 > field + self-references, keep the `to-task` claim script working; (2) REWORD the
 > prose of EVERY skill (`to-brief`/`to-task` renamed, plus `drive-backlog`,
@@ -147,10 +147,10 @@ must already have moved the folders and cut over the vocabulary.
 > keeps getting rediscovered).
 >
 > Where else to look: `WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `ADR-FORMAT.md`,
-> `slice-template.md`, `prd-template.md`, `VERSION` (both protocol copies); ADR path
+> `slice-template.md`, `spec-template.md`, `VERSION` (both protocol copies); ADR path
 > references; and the `setup` scaffold (the onboarding code that creates the `work/`
 > skeleton). Decide whether to rename the template files (`slice-template.md` ->
-> `task-template.md`, `prd-template.md` -> `brief-template.md`); if you do, do it in
+> `task-template.md`, `spec-template.md` -> `brief-template.md`); if you do, do it in
 > both copies + every reference and record the choice.
 >
 > The target layout the docs must describe:

@@ -5,7 +5,7 @@ type: idea
 status: incubating
 ---
 
-# Goal-driven bounded loop (pre-PRD / incubating idea)
+# Goal-driven bounded loop (pre-SPEC / incubating idea)
 
 > Captured 2026-06-15 from a comparison pass against [Maestro](https://github.com/RunMaestro/Maestro) (its Auto Run + Goal-Driven docs). This is a **borrowed-mechanism** idea, recorded so the mechanism is not lost, NOT a committed direction.
 >
@@ -62,7 +62,7 @@ State this honestly so a future reader does not over-invest:
 - **It may already be covered.** The combination of a `needsAnswers` slice + the advance-loop's surface-question rung arguably handles "open-ended, can't fully specify" by SURFACING the unknowns as questions rather than spinning an autonomous loop. If the answer to open-endedness is "ask the human," dorfl may not want an autonomous goal-loop at all.
 - **The strongest standalone import is the stall guard + halt marker**, NOT the goal mode. Those two could be adopted to harden the EXISTING build/advance loops (bound them, give the agent a clean abort channel) WITHOUT ever introducing a "goal" work-item. That is the lower-risk extraction.
 
-## Open questions to resolve before it becomes a PRD
+## Open questions to resolve before it becomes a SPEC
 
 - **Does dorfl want open-ended goal items AT ALL,** or only the bounding mechanisms (stall guard + halt marker) applied to existing spec-first loops? (Strong lean: extract the mechanisms, NOT the goal-item, unless a concrete need for goal-items appears.)
 - **If goal-items are wanted:** what is their work-item shape under "status = folder, one file per item"? Where does the progress live so it is not "status in a field"? (A goal-item's transient progress is arguably runner-internal loop state, NOT persisted item status — needs design.)
@@ -77,4 +77,4 @@ State this honestly so a future reader does not over-invest:
 
 ## Disposition
 
-INCUBATING — captured for the mechanism, fit deliberately UNRESOLVED. Most likely useful as **two small hardening extractions** (a bounded-loop stall guard with a `no-progress` cause, and an agent-writable halt marker as a clean abort channel) applied to the existing spec-first loops — NOT as a new open-ended "goal" work-item, unless a concrete need for goal-items emerges. Do NOT promote to a PRD until the overlap with `advance-loop-question-answer-protocol` is resolved and the maintainer decides whether goal-items belong in the model at all.
+INCUBATING — captured for the mechanism, fit deliberately UNRESOLVED. Most likely useful as **two small hardening extractions** (a bounded-loop stall guard with a `no-progress` cause, and an agent-writable halt marker as a clean abort channel) applied to the existing spec-first loops — NOT as a new open-ended "goal" work-item, unless a concrete need for goal-items emerges. Do NOT promote to a SPEC until the overlap with `advance-loop-question-answer-protocol` is resolved and the maintainer decides whether goal-items belong in the model at all.

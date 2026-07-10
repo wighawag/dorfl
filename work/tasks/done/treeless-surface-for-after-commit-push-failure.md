@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained REFINEMENT slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/treeless-surface-for-after-commit-push-failure.md` (2026-06-12). This is the DEFERRED option-(a) the `stale-lease-retry-all-push-sites-and-treeless-surface` slice (in `done/`) flagged: its Part B took option (b) (cwd-bound surface) ONLY ON CONDITION this follow-up was filed. It is LOW PRIORITY — option (b) already fixed the silent-strand bug; this is the no-worktree polish, NOT a defect fix.
+> Self-contained REFINEMENT slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/treeless-surface-for-after-commit-push-failure.md` (2026-06-12). This is the DEFERRED option-(a) the `stale-lease-retry-all-push-sites-and-treeless-surface` slice (in `done/`) flagged: its Part B took option (b) (cwd-bound surface) ONLY ON CONDITION this follow-up was filed. It is LOW PRIORITY — option (b) already fixed the silent-strand bug; this is the no-worktree polish, NOT a defect fix.
 
 ## The gap (verify against current code)
 

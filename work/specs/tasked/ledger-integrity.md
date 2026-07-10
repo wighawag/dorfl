@@ -19,7 +19,7 @@ Concretely, this session surfaced four distinct ledger-integrity defects (each c
 
 4. **A stranded already-committed, already-done-moved branch has no first-class finish path** (the `finish-already-committed-branch` slice — the re-scope of `recover-stranded-green-work`). When a terminal push fails AFTER done-move+commit, `complete` REFUSES it (`IntegrationNothingStaged` — it resolves source as in-progress/needs-attention, never `done/`), so the green work is stranded.
 
-These are all the SAME root theme: **a status transition that is not atomic-against-the-arbiter's-current-state, or a reader/recovery path that doesn't account for every legitimate folder an item can be in.** Fixing them piecemeal leaves the invariant unenforced; this PRD hardens the ledger as a whole.
+These are all the SAME root theme: **a status transition that is not atomic-against-the-arbiter's-current-state, or a reader/recovery path that doesn't account for every legitimate folder an item can be in.** Fixing them piecemeal leaves the invariant unenforced; this SPEC hardens the ledger as a whole.
 
 ## Solution
 
@@ -29,7 +29,7 @@ Make the `work/` ledger rigorously enforce three properties on EVERY path that m
 - **Arbiter-is-truth + atomic transitions** — every transition (done-move, requeue, surface, recover) resolves the slug's ACTUAL current folder ON THE ARBITER and moves it as ONE atomic rename published via the tree-less CAS (the `#89`/`ledgerWrite.applyTransition` model), never a copy/add computed against a divergent base, never a working-tree-dependent move.
 - **Every legitimate folder is reachable by the readers/recovery verbs** — onboard (`resolveSlice`), `requeue`, and the integrate/recover paths each handle the full set of folders a slug can legitimately be in, with safe disambiguation (a `done/` slice that is genuinely COMPLETE vs one that is a STRANDED strand must be distinguished by more than the folder name).
 
-This is a HARDENING PRD over existing primitives (the tree-less CAS transition #89, the surface mechanism, the integration core) — it does not introduce a new ledger model; it makes the existing one's invariant true on every path.
+This is a HARDENING SPEC over existing primitives (the tree-less CAS transition #89, the surface mechanism, the integration core) — it does not introduce a new ledger model; it makes the existing one's invariant true on every path.
 
 ## User Stories
 
@@ -63,11 +63,11 @@ This is a HARDENING PRD over existing primitives (the tree-less CAS transition #
 - **Defect 3 (done/-aware onboard):** `src/prompt.ts` `resolveSlice` (resolution order `['in-progress','backlog']` today — blind to `done/`).
 - **Defect 4 (finish stranded branch):** `src/integration-core.ts` rebase→integrate tail (the recover-already-committed path); `src/do.ts` `resolveArbiterUrlFromCheckout` + `src/workspace.ts` `jobWorktreePath`/`encodeWorkId` (locate the retained worktree). See the `finish-already-committed-branch` slice for the full detail.
 
-## Source material (DISCHARGED into this PRD where noted)
+## Source material (DISCHARGED into this SPEC where noted)
 
-- The two source observations — the orphaned-in-progress root-cause trace and the requeue-from-in-progress gap — have been FOLDED INTO this PRD (Problem Statement defects 1–2, the Where section, and stories 1–4) and DISCHARGED (deleted; git history is the archive). Nothing is lost: the commit topology (`9c5fb29`/`93ef12c`/`279b542`), the why-the-delete-was-lost mechanism, the three in-progress-strand paths, the layered fixes (incl. the `gc` sweep), and the file-level touchpoints are all carried above.
-- `work/backlog/finish-already-committed-branch.md` (defect 4 + the `prompt.ts` onboard note for defect 3 — a reviewed slice; this PRD gives it its home + the surrounding stories; ADOPT it as story 6's slice, do not re-cut).
-- `work/needs-attention/recover-stranded-green-work.md` (the parked original, superseded by `finish-already-committed-branch` + this PRD — its empirical analysis is source; left parked, a separate disposition call).
+- The two source observations — the orphaned-in-progress root-cause trace and the requeue-from-in-progress gap — have been FOLDED INTO this SPEC (Problem Statement defects 1–2, the Where section, and stories 1–4) and DISCHARGED (deleted; git history is the archive). Nothing is lost: the commit topology (`9c5fb29`/`93ef12c`/`279b542`), the why-the-delete-was-lost mechanism, the three in-progress-strand paths, the layered fixes (incl. the `gc` sweep), and the file-level touchpoints are all carried above.
+- `work/backlog/finish-already-committed-branch.md` (defect 4 + the `prompt.ts` onboard note for defect 3 — a reviewed slice; this SPEC gives it its home + the surrounding stories; ADOPT it as story 6's slice, do not re-cut).
+- `work/needs-attention/recover-stranded-green-work.md` (the parked original, superseded by `finish-already-committed-branch` + this SPEC — its empirical analysis is source; left parked, a separate disposition call).
 - Cross-ref the SHIPPED `stale-lease-retry-all-push-sites-and-treeless-surface` (#97, the surface-on-terminal-failure half) and `requeue-treeless-transition` (#89, the tree-less CAS) — the primitives this composes over.
 
-> Slicing note: `finish-already-committed-branch` is already a reviewed, claim-ready slice — when this PRD is sliced, ADOPT it as the slice for story 6 (set its `prd: ledger-integrity` + `covers`) rather than re-cutting it; the other stories (1–5, 7) are new slices. Stories 1+2+3 (atomic done-move + one-slug-one-folder invariant + lint) are tightly related and may be ONE or two slices; 4 (requeue from in-progress) and 5 (safe `done/`-aware onboard) are independent.
+> Slicing note: `finish-already-committed-branch` is already a reviewed, claim-ready slice — when this SPEC is sliced, ADOPT it as the slice for story 6 (set its `prd: ledger-integrity` + `covers`) rather than re-cutting it; the other stories (1–5, 7) are new slices. Stories 1+2+3 (atomic done-move + one-slug-one-folder invariant + lint) are tightly related and may be ONE or two slices; 4 (requeue from in-progress) and 5 (safe `done/`-aware onboard) are independent.

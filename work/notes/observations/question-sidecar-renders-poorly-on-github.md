@@ -20,7 +20,7 @@ id: q1
 question: |
   Should the lock be advisory or mandatory?
 context: |
-  The PRD leaves this open in §4.
+  The SPEC leaves this open in §4.
 default: |
   advisory
 answered: false
@@ -40,7 +40,7 @@ On GitHub this renders BADLY because the entry body is NOT inside a code fence:
 
 ## Why it matters
 
-The sidecar is the human-facing surface of the "human is the clock" loop (PRD
+The sidecar is the human-facing surface of the "human is the clock" loop (SPEC
 `advance-loop`): the human reads the question and writes the answer in this file,
 often through the GitHub web UI (the `on: push work/questions/**` answer-loop
 trigger assumes commits to these files). If the rendered file is ugly/confusing,
@@ -51,7 +51,7 @@ sacrifices it.
 
 ## Tension to respect (NOT a decision)
 
-The format is RESOLVED in the PRD and is load-bearing: round-trip stability
+The format is RESOLVED in the SPEC and is load-bearing: round-trip stability
 (`parseSidecar(serialiseSidecar(m)) === m`), per-entry answered-state, stable
 monotonic ids, tolerant human-edit parsing (human may write only `answer:`). Any
 "format it nicer" change must keep those invariants and keep the human's answer
@@ -66,8 +66,8 @@ edit trivial. Candidate directions (unexplored):
 3. Separate a rendered view from the parsed source (least attractive: two things
    to keep in sync).
 
-Needs a design decision (likely an ADR / PRD touch-up) before any slice, since it
-revisits a PRD-RESOLVED format.
+Needs a design decision (likely an ADR / SPEC touch-up) before any slice, since it
+revisits a SPEC-RESOLVED format.
 
 ## Refs
 
@@ -77,7 +77,7 @@ revisits a PRD-RESOLVED format.
 - `packages/dorfl/test/sidecar.test.ts` — the round-trip + tolerant-parse
   tests any reformat must keep green.
 - `work/spec-sliced/advance-loop.md` — "The sidecar FORMAT (RESOLVED here)" +
-  MAINTAINER-RESOLVED §1 (the answered predicate); the PRD that froze the shape.
+  MAINTAINER-RESOLVED §1 (the answered predicate); the SPEC that froze the shape.
 - `skills/surface-questions/SKILL.md` — the documented sidecar format the surface
   rung hand-writes.
 

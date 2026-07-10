@@ -5,9 +5,9 @@ type: idea
 status: incubating
 ---
 
-# CLI ASCII-art banner (pre-PRD / incubating idea)
+# CLI ASCII-art banner (pre-SPEC / incubating idea)
 
-> A **pre-PRD idea**: a small ASCII-art banner for one-off CLI moments (e.g. `--version`, first run, or `remote add` of the first repo). DELIBERATELY independent of the voice/persona idea (`voice-persona-for-human-facing-output.md`): it is plain ASCII branding that is useful whether or not any personality work ever happens, so it must not be coupled to that work.
+> A **pre-SPEC idea**: a small ASCII-art banner for one-off CLI moments (e.g. `--version`, first run, or `remote add` of the first repo). DELIBERATELY independent of the voice/persona idea (`voice-persona-for-human-facing-output.md`): it is plain ASCII branding that is useful whether or not any personality work ever happens, so it must not be coupled to that work.
 >
 > Lifecycle tier: **`work/notes/ideas/` (incubating) -> `work/briefs/` (committed north-star) -> `work/tasks/todo/` (tasks) -> `work/tasks/done/`.**
 
@@ -26,7 +26,7 @@ Render the project name (or a short mark) as ASCII-art big text for a one-off ba
 - **Yes:** `--version`, possibly first-run / first `remote add`. One-off, human-facing, interactive.
 - **No:** NOT on every command, NOT on routine output, NOT in any machine-read path (`--json`, `--print-dir`, piped/non-TTY). Same gate as color: banner only on an interactive TTY (reuse `output.ts`'s `shouldUseColor` rule), so logs/pipes stay clean.
 
-## Open questions before it becomes a PRD/brief
+## Open questions before it becomes a SPEC/brief
 
 - **Static vs generated.** Pre-render the banner to a static string (zero dependency, no runtime figlet) vs. depend on a `figlet` library. Lean: static string (a CLI does not need a font-rendering dependency for one banner).
 - **Which moments.** Just `--version`, or also first run? Keep it rare so it never becomes noise.

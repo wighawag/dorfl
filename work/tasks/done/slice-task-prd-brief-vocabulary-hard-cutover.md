@@ -1,5 +1,5 @@
 ---
-title: Phase 1: hard cutover of the slice->task / prd->brief vocabulary across CLI, frontmatter, and the identity/lock-ref/sidecar seam (no deprecated aliases)
+title: Phase 1: hard cutover of the slice->task / spec->brief vocabulary across CLI, frontmatter, and the identity/lock-ref/sidecar seam (no deprecated aliases)
 slug: slice-task-prd-brief-vocabulary-hard-cutover
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true
@@ -9,7 +9,7 @@ covers: [2, 3]
 
 ## What to build
 
-The vocabulary HARD CUTOVER: `slice -> task` and `prd -> brief` across every
+The vocabulary HARD CUTOVER: `slice -> task` and `spec -> brief` across every
 user-facing and identity surface, with NO deprecated aliases (we have no external
 users owed a migration window). After this slice, no old prefix is accepted.
 
@@ -18,20 +18,20 @@ Surfaces to flip:
 - **CLI:** `do prd:<slug>` / `do slice:<slug>` → `do brief:<slug>` / `do task:<slug>`;
   any CI-matrix ids likewise.
 - **Frontmatter:** the `prd:` field (a slice's pointer to its parent) → `brief:`;
-  `sliceAfter:` (the cross-PRD ordering field) → `briefAfter:`.
+  `sliceAfter:` (the cross-SPEC ordering field) → `briefAfter:`.
 - **The identity / namespace seam** (the single source of truth shared by the
   CLI resolver, the work-branch ref, the sidecar filename, and the lock ref):
-  - `slug-namespace.ts`: the `SlugNamespace` union (`'slice'|'prd'` → `'task'|'brief'`,
+  - `slug-namespace.ts`: the `SlugNamespace` union (`'slice'|'spec'` → `'task'|'brief'`,
     keeping `observation`); the prefix constants (`SLICE_PREFIX`/`PRD_PREFIX` →
     `task:`/`brief:`); `workBranchRef` / `parseWorkBranchRef` (the
     `work/<type>-<slug>` branch encoding and its parse regex);
     `resolveSlug` / `resolveAdvanceArg` / `resolveSliceOnlyArg` messages + guards.
-  - `sidecar.ts`: `SidecarType` (`'prd'|'slice'` → `'brief'|'task'`),
+  - `sidecar.ts`: `SidecarType` (`'spec'|'slice'` → `'brief'|'task'`),
     `TYPE_TO_NAMESPACE`, `resolveSidecarIdentity`, `typeForNamespace`, and the
     sidecar filename derivation `work/questions/<type>-<slug>.md`.
   - `item-lock.ts`: the lock-ref ENTRY encoding `<type>-<slug>` becomes
     `task-<slug>` / `brief-<slug>`; `itemFromLockEntry` (the prefix list
-    `['slice','prd','observation']` → `['task','brief','observation']`),
+    `['slice','spec','observation']` → `['task','brief','observation']`),
     `heldSliceSlugs` (the `'slice-'` prefix → `'task-'`), and any `lockEntryFor`
     path that threads the type.
 
@@ -39,7 +39,7 @@ The cutover is BREAKING by design: a pre-rename un-namespaced ref / old prefix i
 simply not accepted (the `parseWorkBranchRef` "returns undefined for a pre-rename
 ref" behaviour already documents this clean-break stance, extend it to the new
 type alternation). Keep the `observation`/`obs:` namespace exactly as-is (it is
-unaffected by the slice/prd rename).
+unaffected by the slice/spec rename).
 
 This slice does NOT move on-disk folders (the brief/task folders already moved in
 the prior slices) and does NOT edit the protocol docs (that is the final slice). It
@@ -62,7 +62,7 @@ flake under full-suite parallel load.
       encoding (`task-<slug>`/`brief-<slug>`), `itemFromLockEntry`,
       `heldSliceSlugs`.
 - [ ] The `observation`/`obs:` namespace is unchanged.
-- [ ] No old prefix (`slice`/`prd`) is accepted after cutover (a pre-rename ref
+- [ ] No old prefix (`slice`/`spec`) is accepted after cutover (a pre-rename ref
       resolves to undefined / is rejected, the clean-break stance).
 - [ ] Tests assert the new prefixes/fields/identity resolve and the old ones are
       rejected; the Phase-0 guard still passes; any new git-file://-CAS race test
@@ -79,21 +79,21 @@ flake under full-suite parallel load.
 
 ## Prompt
 
-> Build the `slice->task` / `prd->brief` HARD CUTOVER of the
-> `folder-taxonomy-reorg-and-rename` PRD: rename the vocabulary across the CLI,
+> Build the `slice->task` / `spec->brief` HARD CUTOVER of the
+> `folder-taxonomy-reorg-and-rename` SPEC: rename the vocabulary across the CLI,
 > frontmatter, and the whole identity/lock-ref/sidecar seam, with NO deprecated
 > aliases. After this slice no old prefix is accepted.
 >
 > FIRST, check this slice against current reality: confirm the `tasks/` and
 > `briefs/` folders already landed (the two prior flip slices are in `done/`) and
-> the identity seam still uses `slice`/`prd` prefixes. If the cutover already
+> the identity seam still uses `slice`/`spec` prefixes. If the cutover already
 > happened, route to needs-attention.
 >
 > Domain vocabulary: the system has ONE identity scheme shared by four surfaces,
 > the CLI prefix (`do <prefix>:<slug>`), the work-branch ref (`work/<type>-<slug>`),
 > the sidecar filename (`work/questions/<type>-<slug>.md`), and the per-item lock
 > ref (`refs/dorfl/lock/<type>-<slug>`). All four derive `<type>` from one
-> resolver. This slice flips `<type>` from `slice`/`prd` to `task`/`brief`
+> resolver. This slice flips `<type>` from `slice`/`spec` to `task`/`brief`
 > everywhere, keeping `observation`/`obs:` exactly as-is. The cutover is BREAKING:
 > a pre-rename un-namespaced ref / old prefix is rejected (it is not a
 > migration-window alias).
@@ -123,8 +123,8 @@ flake under full-suite parallel load.
 ## Requeue 2026-06-19
 
 Gate-2 BLOCK (correct, fixable): the cutover MISSED the two hardcoded CI-matrix legs in the emitted workflow templates. FIX (continue on the kept branch, do NOT restart):
-1. advance-lifecycle-template.ts:314 (the jq in the generated workflow body): flip '"slice:" + .slug' -> '"task:" + .slug' (eligible build items) and '"prd:" + .slug' -> '"brief:" + .slug' (sliceable briefs). The .namespace+':'+.slug and 'obs:' legs already survive.
+1. advance-lifecycle-template.ts:314 (the jq in the generated workflow body): flip '"slice:" + .slug' -> '"task:" + .slug' (eligible build items) and '"spec:" + .slug' -> '"brief:" + .slug' (sliceable briefs). The .namespace+':'+.slug and 'obs:' legs already survive.
 2. advance-ci-template.ts: same two hardcoded legs if present there.
-3. The structural validators that ASSERT the old literals: advance-lifecycle-template.ts:675 (explicit-slice-prefix, /"slice:" + .slug/) and :687 (propose-enumerates-sliceable-prds, /"prd:" + .slug/) -> assert the task:/brief: legs instead.
+3. The structural validators that ASSERT the old literals: advance-lifecycle-template.ts:675 (explicit-slice-prefix, /"slice:" + .slug/) and :687 (propose-enumerates-sliceable-specs, /"spec:" + .slug/) -> assert the task:/brief: legs instead.
 4. Their tests: advance-ci-template.test.ts:111-112 and advance-lifecycle-template.test.ts:187-188,362 -> update to expect task:/brief:.
 These tests pinned the broken prefixes (why Gate-1 passed). Keep observation/'obs:' unchanged. Then the full gate + Gate-2 should pass.

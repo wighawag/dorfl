@@ -38,7 +38,7 @@ End-to-end (read-only, building on the existing `scan` core — no new claiming 
 
 ## Prompt
 
-> Enhance `dorfl scan` (in `packages/dorfl/`) so its output is a human decision dashboard. Read the source PRD (`work/prd/dorfl.md`) and the existing `scan` implementation + tests first; reuse its config/detection/ eligibility/frontmatter core — this is a presentation + categorisation change, read-only, no claiming or execution.
+> Enhance `dorfl scan` (in `packages/dorfl/`) so its output is a human decision dashboard. Read the source SPEC (`work/spec/dorfl.md`) and the existing `scan` implementation + tests first; reuse its config/detection/ eligibility/frontmatter core — this is a presentation + categorisation change, read-only, no claiming or execution.
 >
 > Group every `work/backlog/` item by who-can-take-it, derived from the `afk` gate and `blocked_by` status (deps resolved against the SAME repo's `work/done/`):
 >

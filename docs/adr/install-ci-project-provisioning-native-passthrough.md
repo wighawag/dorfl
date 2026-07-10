@@ -21,4 +21,4 @@ Supporting decisions: (a) NO dorfl-Node-version knob — dorfl declares `node >=
 - Non-GitHub CI is never blocked by a GitHub-shaped abstraction and dorfl never mistranslates one provider's steps to another; the cost is that there is no automatic portability (a provider migration means writing that provider's snippet).
 - The escape hatch deliberately performs only a light structural sanity check, no semantic validation — validating it would re-introduce the mini-format it exists to avoid.
 
-(Full framing: PRD `work/prds/tasked/install-ci-project-provisioning.md`; tasks `install-ci-project-setup-hook`, `install-ci-document-toolchain-boundary`, `install-ci-prefer-project-local-dorfl`.)
+(Full framing: SPEC `work/specs/tasked/install-ci-project-provisioning.md`; tasks `install-ci-project-setup-hook`, `install-ci-document-toolchain-boundary`, `install-ci-prefer-project-local-dorfl`.)

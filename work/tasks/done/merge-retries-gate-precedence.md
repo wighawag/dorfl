@@ -51,7 +51,7 @@ unchanged.
 
 ## Prompt
 
-> Read Story 5 + Applied Answer q1 of the prd. Locate the existing
+> Read Story 5 + Applied Answer q1 of the spec. Locate the existing
 > gate-precedence helper (search for sibling gates such as
 > `observationTriage` resolution) and follow its shape exactly — do not
 > invent a parallel chain. Thread the resolved value into the merge loop

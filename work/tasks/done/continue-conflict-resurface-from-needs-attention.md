@@ -4,7 +4,7 @@ slug: continue-conflict-resurface-from-needs-attention
 covers: []
 ---
 
-> Self-contained bug-fix slice \u2014 derives from NO PRD (`covers: []`), omits `prd:`. Source signal: `work/observations/continue-conflict-reroute-is-noop-needs-attention-folder.md`. NOT a work-loss bug (the kept `work/<slug>` branch is the durable artifact) \u2014 it fixes a STALE on-`main` surface.
+> Self-contained bug-fix slice \u2014 derives from NO SPEC (`covers: []`), omits `prd:`. Source signal: `work/observations/continue-conflict-reroute-is-noop-needs-attention-folder.md`. NOT a work-loss bug (the kept `work/<slug>` branch is the durable artifact) \u2014 it fixes a STALE on-`main` surface.
 
 ## What to build
 

@@ -8,7 +8,7 @@ covers: [12]
 
 ## What to build
 
-The load-bearing test for the whole prd's thesis: two work branches,
+The load-bearing test for the whole spec's thesis: two work branches,
 disjoint files, NO textual conflict, where A renames a symbol and B adds
 a caller of the OLD name. Both rebase clean onto each other. The test
 asserts that the SECOND to land FAILS `verify` ON THE REBASED TIP and
@@ -51,7 +51,7 @@ Do NOT assert on which private function was called.
 
 ## Prompt
 
-> Read Story 12 + the Testing Decisions section of the prd. Read the
+> Read Story 12 + the Testing Decisions section of the spec. Read the
 > existing fresh-worktree-gate tests in `integration-core.test.ts` (or
 > equivalent) to mirror their style and fixture pattern. Build the
 > minimal rename-vs-caller scenario — a tiny TS or JS source where A

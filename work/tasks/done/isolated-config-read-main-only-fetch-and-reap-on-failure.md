@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained ROBUSTNESS-FIX slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/failed-isolated-run-leaves-unreaped-worktree-that-poisons-next-build-config-read.md` (2026-06-11), observed live across a drive-backlog session.
+> Self-contained ROBUSTNESS-FIX slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/failed-isolated-run-leaves-unreaped-worktree-that-poisons-next-build-config-read.md` (2026-06-11), observed live across a drive-backlog session.
 >
 > PARTIAL-LANDING NOTE: fix #2 below ALREADY landed for the READ paths (`scan`/`status`/mirror-pool-scan) — `fetchMirrorMain` + `resolveRepoConfigFromMirror` exist and are main-only/no-prune. This slice EXTENDS that same fix to the `--remote`/`--isolated` BUILD-path config read, which still goes through `ensureMirror`'s all-heads pruning fetch and so is NOT fixed on the path the contamination actually occurred on.
 

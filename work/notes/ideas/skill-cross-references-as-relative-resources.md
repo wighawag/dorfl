@@ -1,5 +1,5 @@
 ---
-title: skills that orchestrate or copy from sibling skills should reference them as relative resources (agentskills.io), not by bare name — observed gap in from-idea -> setup/to-prd resolution
+title: skills that orchestrate or copy from sibling skills should reference them as relative resources (agentskills.io), not by bare name — observed gap in from-idea -> setup/to-spec resolution
 slug: skill-cross-references-as-relative-resources
 type: idea
 status: incubating
@@ -9,13 +9,13 @@ status: incubating
 
 > Captured 2026-06-26 from a live from-idea session (scaffolding the `distilly` + `webveil`
 > repos). An agent loaded the INSTALLED `from-idea` copy and could not resolve where its
-> callees (`setup`, `to-prd`) live, so it stopped and asked the human instead of proceeding.
+> callees (`setup`, `to-spec`) live, so it stopped and asked the human instead of proceeding.
 > The fix is NOT absolute user paths (those are non-portable and wrong per agentskills.io);
 > it is to treat sibling/callee skills and their payloads as RELATIVE resources.
 
 ## What actually happened (accurate diagnosis)
 
-The session needed to run `from-idea` (clarify -> `setup` -> `to-prd`). Two facts collided:
+The session needed to run `from-idea` (clarify -> `setup` -> `to-spec`). Two facts collided:
 
 1. **`setup`'s resource bundling is already CORRECT.** The installed copy at
    `~/.agents/skills/setup/` DOES carry its `protocol/` payload, and `setup/SKILL.md`
@@ -24,7 +24,7 @@ The session needed to run `from-idea` (clarify -> `setup` -> `to-prd`). Two fact
    This part is good and should be the model.
 
 2. **`from-idea` references its callees by BARE NAME only.** It says it "calls setup" and
-   "hands the conversation to to-prd" but never says WHERE those skills are relative to
+   "hands the conversation to to-spec" but never says WHERE those skills are relative to
    itself. When `from-idea` is loaded as an installed copy (standalone), "call setup" is a
    dangling reference: the agent has the orchestration instructions but no resolvable
    pointer to the orchestrated skills. There is no relative-resource link, and (correctly)
@@ -52,9 +52,9 @@ that discipline to **inter-skill** references:
 
 - A skill that **copies a payload** (setup -> `protocol/`) already does this right: bundle the
   payload inside the skill, reference it relative to `SKILL.md`. Keep as the exemplar.
-- A skill that **invokes a sibling skill** (from-idea -> setup, from-idea -> to-prd) should
+- A skill that **invokes a sibling skill** (from-idea -> setup, from-idea -> to-spec) should
   reference that sibling as a resolvable resource too: a relative sibling path within the
-  shared skills root (e.g. `../setup/SKILL.md`, `../to-prd/SKILL.md`), and/or a declared
+  shared skills root (e.g. `../setup/SKILL.md`, `../to-spec/SKILL.md`), and/or a declared
   dependency the install tooling co-installs and exposes. Either way the reference is
   RESOLVABLE from the orchestrator alone, with no absolute paths and no "it's probably
   installed under this name" assumption.
@@ -62,11 +62,11 @@ that discipline to **inter-skill** references:
 ## Concrete changes to consider (dorfl skill side)
 
 1. **from-idea: name its callees as relative resources.** Where it says "invoke `setup`" /
-   "hand to `to-prd`", add the relative sibling reference (`../setup/SKILL.md`,
-   `../to-prd/SKILL.md`) so a standalone-loaded from-idea can locate them. No absolute paths.
+   "hand to `to-spec`", add the relative sibling reference (`../setup/SKILL.md`,
+   `../to-spec/SKILL.md`) so a standalone-loaded from-idea can locate them. No absolute paths.
 
 2. **Co-install orchestrated skills as a dependency set.** If `from-idea` is installed, its
-   required siblings (`setup`, `to-prd`) and their payloads should come with it (or be
+   required siblings (`setup`, `to-spec`) and their payloads should come with it (or be
    declared so the install tooling resolves them). An orchestrator without its callees is an
    incomplete bundle.
 

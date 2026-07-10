@@ -20,25 +20,25 @@ tests:
 - **Agentic apply (the core shift).** When a sidecar is FULLY answered, the apply
   rung calls the shared `decide(input, allowedOutcomes)` engine over the input
   `(the answered question(s) + the SOURCE item, its type, and surrounding signal)`,
-  allowing `{mint-task | mint-prd | delete-source | ask-follow-up}` at LAUNCH. The
+  allowing `{mint-task | mint-spec | delete-source | ask-follow-up}` at LAUNCH. The
   decision is grounded in the source item's FULL context (body, type, signal), not
   just the latest answer text. Route the verdict:
   - `ask-follow-up` → the EXISTING append/re-pause loop (`appendQuestions` mints
     `qN+1…`, prior answers preserved, `needsAnswers:true` stays, re-pause in one
     commit). Follow-ups are ONE BATCH (never a drip): one round of answers yields
     one decision (act, or one batch of follow-ups).
-  - `mint-task` / `mint-prd` → the mint-and-delete-source path (reuse
+  - `mint-task` / `mint-spec` → the mint-and-delete-source path (reuse
     `promoteObservation` / `createItemThroughCas`, whose artifact types ARE exactly
-    `task`/`prd`); the source is deleted in the SAME atomic commit as the create
+    `task`/`spec`); the source is deleted in the SAME atomic commit as the create
     (delete-on-promote, preserved).
   - `delete-source` → the discharge-by-deletion path (`git rm` source + sidecar in
     a revertible commit, reason in the commit message). Fires DIRECT, no
     confirm/preview step (decision 12); the human's answer is the source of truth.
 
-  **`mint-adr` is DEFERRED (deliberate non-delivery).** The PRD's Solution / US #2
+  **`mint-adr` is DEFERRED (deliberate non-delivery).** The SPEC's Solution / US #2
   list "mint an ADR" as an agentic outcome, but there is NO ADR-mint path in the
-  codebase today (`promoteObservation` mints only `task`/`prd` into `work/`; ADRs
-  are hand-authored in `docs/adr/` with the `ADR-FORMAT.md` shape). Per PRD decision
+  codebase today (`promoteObservation` mints only `task`/`spec` into `work/`; ADRs
+  are hand-authored in `docs/adr/` with the `ADR-FORMAT.md` shape). Per SPEC decision
   14 the engine is outcome-AGNOSTIC, so `adr` is added LATER by a separate decision.
   This keystone's advance-apply allowed set therefore OMITS `adr` at launch; the
   shared decision engine (task `decision-engine-shared-decide-seam`) KEEPS `adr` in
@@ -65,13 +65,13 @@ With subsume:
   from the surfaced-question shape and the surface/triage GATE code
   (`surface-gate.ts`, `triage-gate.ts`'s emitted-question disposition plumbing).
 - When the human answers, the AGENTIC apply decision (not a stamped field) reads
-  the answer + source and decides `mint-task | mint-prd | delete-source |
+  the answer + source and decides `mint-task | mint-spec | delete-source |
   ask-follow-up` (no `adr` at launch — see the deferral above). The artifact-type
-  SELECTION (task vs prd) now comes from the AGENT'S VERDICT, NOT a human
+  SELECTION (task vs spec) now comes from the AGENT'S VERDICT, NOT a human
   `promote-*` field. REMOVE `answeredPromoteArtifact` and re-point the `applyRung`
   promote branch at the agentic decision path. (The former `promote-adr`
   disposition, which `answeredPromoteArtifact` mapped onto a TASK, has no
-  successor verdict at launch — it folded into `mint-task`/`mint-prd` already, so no
+  successor verdict at launch — it folded into `mint-task`/`mint-spec` already, so no
   capability is lost by deferring the distinct `mint-adr`.)
 - The CONSERVATIVE `observationTriage: 'auto'` exception STAYS (it is a separate,
   narrow no-question path, not the disposition vocabulary): `duplicate` → discharge
@@ -79,7 +79,7 @@ With subsume:
   `keep`/`triaged:keep` is being removed, `map` must instead DISCHARGE the redundant
   note BY DELETION (the note is settled onto its existing home; record the mapping
   in the commit message, then `git rm`, mirroring `duplicate`). There is no resting
-  `triaged:keep` note any more (the PRD's "still-open, acted-on, or deleted").
+  `triaged:keep` note any more (the SPEC's "still-open, acted-on, or deleted").
 
 CRITICAL boundary — do NOT regress the LIFECYCLE state: the `needs-attention/`
 LIFECYCLE folder (bounced build / stuck lock) and the dropped/needs-attention
@@ -88,7 +88,7 @@ triage-ANSWER `needs-attention` disposition is removed, NOT the lifecycle routin
 `requeue` recovery, or status surfacing.
 
 Self-containment on promote (decision 10) MUST be preserved by the agentic path: a
-`mint-task`/`mint-prd` verdict carries the answer(s) + remaining open-question
+`mint-task`/`mint-spec` verdict carries the answer(s) + remaining open-question
 scoping into the spawned artifact, source deleted in the same atomic commit. A
 regression test for this belongs in THIS task.
 
@@ -120,14 +120,14 @@ imports.
 
 - [ ] On a fully-answered sidecar, the apply rung calls the shared decision engine
       over `(answered questions + source item + type/context)` with the LAUNCH
-      allowed set `{mint-task | mint-prd | delete-source | ask-follow-up}` (NO
+      allowed set `{mint-task | mint-spec | delete-source | ask-follow-up}` (NO
       `adr` — deferred to `agentic-apply-mint-adr-route`).
 - [ ] The shared decision engine's superset union still INCLUDES `adr`; only
       advance-apply's allowed SUBSET omits it (verifiable: a stubbed `adr` verdict
       to advance-apply is rejected by the allowed-outcome guard, not dispatched).
 - [ ] `ask-follow-up` routes into the existing append/re-pause loop (one batch of
       `qN+1…`, prior answers preserved, `needsAnswers:true` stays, one commit).
-- [ ] `mint-task`/`mint-prd` mint a SELF-CONTAINED artifact and delete the source
+- [ ] `mint-task`/`mint-spec` mint a SELF-CONTAINED artifact and delete the source
       in the SAME atomic commit; `delete-source` `git rm`s source + sidecar in one
       revertible commit with the reason in the commit message, DIRECT (no confirm
       step).
@@ -164,7 +164,7 @@ imports.
 - [ ] The apply rung still NEVER invents an answer (subset-answered ⇒ classifier
       NO-OP, asserted), and fires only on `allAnswered`.
 - [ ] Tests cover each LAUNCH verdict outcome with a STUBBED verdict (no model):
-      ask→append+re-pause; task/prd→mint self-contained + source deleted in the
+      ask→append+re-pause; task/spec→mint self-contained + source deleted in the
       same commit; delete→source+sidecar removed, reason in commit message; AND a
       disallowed `adr` verdict is rejected (not dispatched). Mirror the existing
       apply-persist / sidecar test style.
@@ -192,10 +192,10 @@ imports.
 >   to the shared `decide(input, allowedOutcomes)` engine (from the dependency task
 >   `decision-engine-shared-decide-seam`) over `(the answered question(s) + the
 >   SOURCE item, its type and surrounding signal)`, allowing the LAUNCH set
->   `{mint-task | mint-prd | delete-source | ask-follow-up}`. NOTE: `mint-adr` is
+>   `{mint-task | mint-spec | delete-source | ask-follow-up}`. NOTE: `mint-adr` is
 >   DEFERRED — the shared engine's verdict union INCLUDES `adr`, but advance-apply
 >   does NOT allow it yet (there is no ADR-mint path; `promoteObservation` mints
->   only task/prd, ADRs are hand-authored in `docs/adr/`). Pass advance-apply's
+>   only task/spec, ADRs are hand-authored in `docs/adr/`). Pass advance-apply's
 >   allowed SUBSET so a stubbed `adr` verdict is rejected by the allowed-outcome
 >   guard, not dispatched. Adding `mint-adr` is the follow-on task
 >   `agentic-apply-mint-adr-route`.
@@ -224,7 +224,7 @@ imports.
 >   promote/keep/delete question that carries a `disposition` token. The surface and
 >   triage GATES (`surface-gate.ts`, `triage-gate.ts`) EMIT that token onto the
 >   surfaced question. The apply rung later EXECUTES it: `answeredPromoteArtifact`
->   (`advance.ts` ~:799) reads `entry.disposition === 'promote-prd'|'promote-task'|
+>   (`advance.ts` ~:799) reads `entry.disposition === 'promote-spec'|'promote-task'|
 >   'promote-adr'` and the `applyRung` promote branch (~:672) routes to
 >   `promoteObservation`.
 > - With subsume: the triage question becomes a PLAIN question (NO disposition
@@ -232,10 +232,10 @@ imports.
 >   the `surface-gate.ts` / `triage-gate.ts` emit plumbing. REMOVE
 >   `answeredPromoteArtifact` and re-point the `applyRung` promote branch so an
 >   answered observation flows through the SAME agentic apply decision as everything
->   else — the agent's VERDICT (`mint-task | mint-prd`) chooses the artifact type,
->   NOT a human `promote-*` field. Do NOT preserve the old `promote-prd`-wins
+>   else — the agent's VERDICT (`mint-task | mint-spec`) chooses the artifact type,
+>   NOT a human `promote-*` field. Do NOT preserve the old `promote-spec`-wins
 >   human-sizing precedence — it is dead. (The old `promote-adr` disposition mapped
->   onto a TASK in `answeredPromoteArtifact`; it folds into `mint-task`/`mint-prd`
+>   onto a TASK in `answeredPromoteArtifact`; it folds into `mint-task`/`mint-spec`
 >   — the DISTINCT `mint-adr` outcome is deferred, so nothing is lost.)
 > - KEEP the conservative `observationTriage: 'auto'` exception — it is a SEPARATE,
 >   narrow no-question path (`triage-gate.ts`'s `auto: true` for `duplicate`/`map`
@@ -266,9 +266,9 @@ imports.
 >   `requeue` recovery, or status surfacing. Only the triage-ANSWER `needs-attention`
 >   disposition is removed, NOT the lifecycle routing. Removing the picker must not
 >   regress the work-item terminal-move path that survives as a lifecycle concern.
-> - Self-containment on promote (decision 10 of the source PRD, established by the
->   landed discharge PRD `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`):
->   a `mint-task`/`mint-prd` verdict MUST carry the answer(s) + remaining
+> - Self-containment on promote (decision 10 of the source SPEC, established by the
+>   landed discharge SPEC `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`):
+>   a `mint-task`/`mint-spec` verdict MUST carry the answer(s) + remaining
 >   open-question scoping into the spawned artifact, source deleted in the same
 >   atomic commit. The agentic path must NOT regress this — add a regression test.
 > - EXTRACT `resolveItemPathByIdentity` (+ `APPLY_LIFECYCLE_FOLDERS`) into a NEUTRAL
@@ -294,7 +294,7 @@ imports.
 > "Done": the apply rung is agent-driven over the shared engine; the disposition
 > vocabulary + picker + keep machinery are gone; the lifecycle state is untouched;
 > self-containment is regression-tested; stubbed-verdict tests cover every LAUNCH
-> outcome (ask→re-pause; task/prd→mint+delete-in-same-commit; delete→rm+reason)
+> outcome (ask→re-pause; task/spec→mint+delete-in-same-commit; delete→rm+reason)
 > PLUS a disallowed-`adr`-verdict-rejected test. git tests run in throwaway repos.
 > Acceptance: `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 >

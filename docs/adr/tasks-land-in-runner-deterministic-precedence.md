@@ -40,13 +40,13 @@ the existing `taskingIntegration`/`integration` precedence:
 Spelling rationale:
 
 - `tasksLandIn` — same shape as `taskingIntegration` / `prdsLandIn`,
-  per-lifecycle, plural ("tasks"), camelCase. The prd-placement caller
+  per-lifecycle, plural ("tasks"), camelCase. The spec-placement caller
   introduces `prdsLandIn` with the IDENTICAL chain (the two are a pair).
 - Values are the actual FOLDER NAMES (`pre-backlog` / `todo`), not abstract
   `staging`/`pool` tokens. The folder is the user-visible artifact; making the
   config name the folder keeps the mental model honest. The lifecycle-generic
   resolver (`src/placement.ts`) maps these folder names onto its internal
-  `'staging' | 'pool'` side enum, so the prd-placement caller can reuse the
+  `'staging' | 'pool'` side enum, so the spec-placement caller can reuse the
   same resolver with its own folder slots (`pre-proposed` / `ready`).
 
 ### 2. The precedence is `explicit > untrusted-origin > configured default > built-in`
@@ -77,7 +77,7 @@ an untrusted-origin tasking on a `'todo'` repo still lands STAGED. The
 conservative floor (`staging`) is the cheap default because a wrongly-staged
 task is recoverable (a human promotes it), a wrongly-pooled task is not (an
 agent may already have claimed it). It also gives the task and the
-prd-placement caller the same floor shape.
+spec-placement caller the same floor shape.
 
 ## Why this is one ADR, not three
 
@@ -105,7 +105,7 @@ would silently change the safety story; one ADR keeps them legible together.
   recovery story symmetric with `autoBuild: false` and the existing untrusted-
   origin force.
 - **Layering the resolver INTO the tasking path** (the trivial inline-it path).
-  Rejected — the prd names `pre-prd-staging-pool-split-and-untrusted-prd-
+  Rejected — the spec names `pre-spec-staging-pool-split-and-untrusted-spec-
   placement` as the next caller, and a future intake variant will reuse the same
   shape. Inlining it would force a refactor to extract it later. The resolver is
   a small pure function whose lifecycle-specific bits (folder slots, default
@@ -118,7 +118,7 @@ would silently change the safety story; one ADR keeps them legible together.
   through the same resolver, with the same untrusted-origin force overlaid.
 - The runner-deterministic placement is THE seam (`src/placement.ts`); a future
   precedence change (a new rung, a different floor) touches one pure function,
-  and both the task and prd-placement callers inherit it.
+  and both the task and spec-placement callers inherit it.
 - The agent NEVER picks placement: it always writes to the staging folder, the
   runner reads + redirects at integrate-stage time. The governing ADR's
   tamper-proof structural guarantee holds: a misbehaving or compromised

@@ -87,4 +87,4 @@ dorfl is also the **first dogfood test** of the `work/` + `to-slices` system: it
 
 - **Bootstrapping:** the claim protocol needs an arbiter remote; this repo must be `git init`'d with a remote (GitHub or a local `--bare`) before B/C can claim its own items. That setup is a first-session step.
 - Build order: **A (scan) first** — read-only, immediately useful, forces the detection/config/eligibility design to be concrete before any agent executes. Then B, then C with the rails above.
-- Slice this PRD with `to-slices` into `work/backlog/` as the first action of the build session — dogfooding the system dorfl is meant to run.
+- Slice this SPEC with `to-slices` into `work/backlog/` as the first action of the build session — dogfooding the system dorfl is meant to run.

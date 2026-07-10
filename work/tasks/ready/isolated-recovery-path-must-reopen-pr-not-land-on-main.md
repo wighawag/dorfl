@@ -11,7 +11,7 @@ The combined failure that produced this:
 
 At that point the `--isolated` recovery path replayed the green work onto `main` DIRECTLY instead of re-opening a PR, bypassing `integration: propose`, Gate-2-as-PR-review, and the conductor's Gate-3 PR review — exactly the runbook's stated risk for the recovery path.
 
-Content trust was restored by the runbook's compensating rule (recovery skips gates ⇒ MUST Gate-3 + manual re-verify): the conductor Gate-3-reviewed the landed diff against task #2's acceptance criteria (rename complete — `TickRungKind` = `build-task`/`task-brief`, `'sliced'` → `'tasked'`; scope fence held — the intake `{slice,prd}` artifact-type cluster left UNTOUCHED for task #3; `intake.ts:1398` == `outcome: kind === 'prd' ? 'prd' : 'tasked'` exactly) and ran the full acceptance gate manually on the real main tree: build + 2585 tests + format:check all GREEN. So the CONTENT on main is trustworthy — this task is about the PROCESS gap, not that landed range.
+Content trust was restored by the runbook's compensating rule (recovery skips gates ⇒ MUST Gate-3 + manual re-verify): the conductor Gate-3-reviewed the landed diff against task #2's acceptance criteria (rename complete — `TickRungKind` = `build-task`/`task-brief`, `'sliced'` → `'tasked'`; scope fence held — the intake `{slice,spec}` artifact-type cluster left UNTOUCHED for task #3; `intake.ts:1398` == `outcome: kind === 'spec' ? 'spec' : 'tasked'` exactly) and ran the full acceptance gate manually on the real main tree: build + 2585 tests + format:check all GREEN. So the CONTENT on main is trustworthy — this task is about the PROCESS gap, not that landed range.
 
 ## Decisions carried in from the observation's answers
 

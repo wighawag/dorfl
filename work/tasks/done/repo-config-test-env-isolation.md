@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained test-hygiene fix — derives from NO PRD (`covers: []`), so it omits `prd:` and is its own source of truth. From `work/observations/repo-config-tests-read-ambient-env.md`.
+> Self-contained test-hygiene fix — derives from NO SPEC (`covers: []`), so it omits `prd:` and is its own source of truth. From `work/observations/repo-config-tests-read-ambient-env.md`.
 
 Several `test/repo-config.test.ts` cases call `resolveRepoConfig({repoPath, global})` WITHOUT injecting `env:`, so they fall through to the real `process.env`. The env layer (`flag > ENV (DORFL_*) > per-repo > global > default`) then leaks any exported `DORFL_*` var into the resolved config and breaks assertions like `expect(resolved.config).toEqual(DEFAULT_CONFIG)`.
 

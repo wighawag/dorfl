@@ -5,7 +5,7 @@ spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 blockedBy: [merge-retries-gate-precedence]
 covers: [5]
-reason: superseded-by-decision — no sound, model-consistent, cheap stale-lock reclaim exists for a land-lock; the PRD explicitly allows splitting it out. The mergeRetries floor (merge-retries-gate-precedence) is correctness-sufficient; this accelerator is deferred to a follow-on. See the ANSWERED block.
+reason: superseded-by-decision — no sound, model-consistent, cheap stale-lock reclaim exists for a land-lock; the SPEC explicitly allows splitting it out. The mergeRetries floor (merge-retries-gate-precedence) is correctness-sufficient; this accelerator is deferred to a follow-on. See the ANSWERED block.
 ---
 
 ## What to build
@@ -23,8 +23,8 @@ and must degrade to that floor if the lock is unavailable.
 
 ## ANSWERED 2026-06-26 — VERDICT: CANCEL (split to a follow-on), the floor suffices
 
-The three open questions are answered, and the answer to Q2 is the PRD's own
-exit clause: this accelerator should NOT ship in this PRD. The task is CANCELLED
+The three open questions are answered, and the answer to Q2 is the SPEC's own
+exit clause: this accelerator should NOT ship in this SPEC. The task is CANCELLED
 (moved to `tasks/cancelled/`); the `mergeRetries` floor
 (`merge-retries-gate-precedence`) is the shipped cross-job serialiser and is
 correctness-sufficient on its own.
@@ -46,11 +46,11 @@ correctness-sufficient on its own.
    floor's spurious bounce, which self-heals (re-rebase + re-gate + retry).
 2. **In-scope-now vs follow-on → FOLLOW-ON (cancel this task).** Given (1),
    there is no SOUND + CHEAP + model-consistent reclaim story, which is exactly
-   the PRD's stated condition for splitting it out (Applied Answer q1: "If a
+   the SPEC's stated condition for splitting it out (Applied Answer q1: "If a
    robust stale-lock story is not cheap, ship (a) scaled NOW and split (b) into
    a follow-on"). The accelerator is a pure THROUGHPUT optimisation over an
    already-correct floor, so it is not worth a deadlock-prone or human-babysat
-   lock. Capture it as a follow-on PRD idea
+   lock. Capture it as a follow-on SPEC idea
    (`work/notes/ideas/cross-job-ref-land-lock-accelerator.md`) to revisit only
    if a real wide-matrix repo shows the floor's bounce rate is a problem AND a
    sound reclaim emerges (e.g. a host-provided lease the bare floor degrades
@@ -67,7 +67,7 @@ change needed there.
 
 ## Open questions (RESOLVED — see the ANSWERED/VERDICT block above)
 
-The prd (Applied Answer q1) says: ship this task only if a SOUND
+The spec (Applied Answer q1) says: ship this task only if a SOUND
 stale-lock reclaim story is cheap; otherwise split it out. Concretely:
 
 1. **Stale-lock reclaim mechanism.** A ref-lock held by a crashed job
@@ -79,8 +79,8 @@ stale-lock reclaim story is cheap; otherwise split it out. Concretely:
    model); (c) a human-only reclaim verb (`release-lock`-style) that
    refuses to ship without admin opt-in. Pick one and justify.
 2. **In-scope-now vs follow-on.** Given (1)'s answer, is this task
-   cheap enough to ship in this prd, or should it be split into a
-   follow-on prd and this task cancelled? The prd explicitly
+   cheap enough to ship in this spec, or should it be split into a
+   follow-on spec and this task cancelled? The spec explicitly
    allows the latter.
 3. **Lock granularity.** One global land-lock per repo, or
    per-target-branch? (Per-repo is simpler; per-branch matches future

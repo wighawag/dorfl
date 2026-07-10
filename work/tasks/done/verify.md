@@ -17,7 +17,7 @@ End-to-end:
 - `dorfl verify` runs it in the repo, streams output, exits with its status (0 = pass). Read-only with respect to `work/` (it runs tests; it does not move or commit anything).
 - It is a plain shell gate: no LLM/model interaction is needed to know or run the gate (it is config, not prose).
 
-Authority note (for consumers, not this slice): the gate is **authoritative and non-skippable** for the autonomous runner (the trust boundary that keeps bad work out of `done/` — PRD story 12), and a **default-on, skippable** safety-net for the human `complete` (`--skip-verify`). `verify` itself just runs the gate; callers decide authority.
+Authority note (for consumers, not this slice): the gate is **authoritative and non-skippable** for the autonomous runner (the trust boundary that keeps bad work out of `done/` — SPEC story 12), and a **default-on, skippable** safety-net for the human `complete` (`--skip-verify`). `verify` itself just runs the gate; callers decide authority.
 
 ## Acceptance criteria
 

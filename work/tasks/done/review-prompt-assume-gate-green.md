@@ -24,7 +24,7 @@ so the constraints read together: the deterministic gate already passed (assume 
 
 ### The nuance (do NOT overreach)
 
-This is **"do not EXECUTE the suite to confirm green,"** NOT "ignore tests." The reviewer may still READ tests and reason about coverage — its job is judgement (does the diff deliver the slice / drift from its premise / hide a defect / reach the slice+PRD destination). Word the instruction so it forbids RE-RUNNING the acceptance gate, not reading/reasoning about tests.
+This is **"do not EXECUTE the suite to confirm green,"** NOT "ignore tests." The reviewer may still READ tests and reason about coverage — its job is judgement (does the diff deliver the slice / drift from its premise / hide a defect / reach the slice+SPEC destination). Word the instruction so it forbids RE-RUNNING the acceptance gate, not reading/reasoning about tests.
 
 ### Scope fence
 
@@ -49,7 +49,7 @@ This is **"do not EXECUTE the suite to confirm green,"** NOT "ignore tests." The
 >
 > The ONLY change is in `buildReviewPrompt(slug)` (`src/review-gate.ts`) — add the assume-green line next to the existing `Do NOT edit any files, run no git — you EMIT a verdict only.` constraint. NUANCE: forbid RE-RUNNING the suite, NOT reading/reasoning about tests (no "ignore tests"). Change NOTHING else (no verdict/parse/routing/verify changes; prompt text only).
 >
-> READ FIRST: `src/review-gate.ts` (`buildReviewPrompt` — the function to edit — and its existing tests); `work/observations/review-agent-reruns-the-verify-gate.md` (the signal); `work/prd/review.md` (Gate 1 = non-skippable floor, Gate 2 = judgement on top, ADR §8).
+> READ FIRST: `src/review-gate.ts` (`buildReviewPrompt` — the function to edit — and its existing tests); `work/observations/review-agent-reruns-the-verify-gate.md` (the signal); `work/spec/review.md` (Gate 1 = non-skippable floor, Gate 2 = judgement on top, ADR §8).
 >
 > TDD with vitest, house style: a test asserts the rendered prompt contains the assume-green instruction; the existing review-gate tests stay green. "Done" = acceptance criteria met and the gate green.
 

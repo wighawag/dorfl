@@ -1,5 +1,5 @@
 ---
-title: Phase 1: rename the brief regime (pre-prd->briefs/proposed, prd->briefs/ready, prd-sliced->briefs/tasked) + per-regime terminals (tasks/cancelled, briefs/dropped) + migrate top-level work/dropped
+title: Phase 1: rename the brief regime (pre-spec->briefs/proposed, spec->briefs/ready, spec-sliced->briefs/tasked) + per-regime terminals (tasks/cancelled, briefs/dropped) + migrate top-level work/dropped
 slug: brief-regime-rename-and-dropped-migration
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true
@@ -17,15 +17,15 @@ centralised `work-layout` module (value change + `git mv`). Two coupled pieces:
 staging-gate-vs-admitted, NOT "unfinished-vs-finished" (a brief is created when it
 is ready to slice, so `draft` was rejected in favour of `proposed`):
 
-- `pre-prd/`     -> `briefs/proposed/`  (the STAGING gate: a brief not yet admitted to the auto-slice pool)
-- `prd/`         -> `briefs/ready/`     (the auto-slice POOL: ready to slice)
-- `prd-sliced/`  -> `briefs/tasked/`    (decomposed, resting, the `done/` analogue)
+- `pre-spec/`     -> `briefs/proposed/`  (the STAGING gate: a brief not yet admitted to the auto-slice pool)
+- `spec/`         -> `briefs/ready/`     (the auto-slice POOL: ready to slice)
+- `spec-sliced/`  -> `briefs/tasked/`    (decomposed, resting, the `done/` analogue)
 
 **2. Per-regime won't-proceed terminals + migrate the shared top-level dropped.**
-This is a CORRECTNESS fix, not cosmetics. A slice, a PRD, and an observation can
+This is a CORRECTNESS fix, not cosmetics. A slice, a SPEC, and an observation can
 share a slug, and the shipped TOP-LEVEL `work/dropped/` keys by BARE slug, so a
 dropped task and a dropped brief sharing a slug COLLIDE on `dropped/<slug>.md`
-(today `item-lock.ts`'s `terminalMainPaths` routes a dropped slice, PRD, AND
+(today `item-lock.ts`'s `terminalMainPaths` routes a dropped slice, SPEC, AND
 observation all to one `work/dropped/`). Give each regime its OWN terminal with the
 DELIBERATELY DIFFERENT word per regime:
 
@@ -39,10 +39,10 @@ terminal, sorting each by what it IS (its type, established below):
 
 - `retire-transient-folders-and-drop-rebase.md`, has `prd: ledger-status-per-item-lock-refs`
   and slice-shaped `blockedBy` → it is a TASK (slice) → `tasks/cancelled/`.
-- `branch-carries-code-not-ledger-status-main-owns-status.md`, full PRD body
+- `branch-carries-code-not-ledger-status-main-owns-status.md`, full SPEC body
   (Problem/Solution/User Stories), `reason: superseded`, no `prd:` parent; git
-  history shows it was renamed `work/prd/ -> work/dropped/` ("retire superseded
-  PRD") → it is a BRIEF (PRD) → `briefs/dropped/`.
+  history shows it was renamed `work/spec/ -> work/dropped/` ("retire superseded
+  SPEC") → it is a BRIEF (SPEC) → `briefs/dropped/`.
 
 Update `terminalMainPaths` (and any other reader that derived a bare-slug
 `work/dropped/<slug>.md`) so each TYPE keys onto its own namespaced terminal
@@ -52,8 +52,8 @@ cross-regime collision. (The disposition value that ROUTES a drop, currently
 regime-namespaced.)
 
 NOTE on vocabulary: this slice renames FOLDERS and routing PATHS only. The
-`slice->task` / `prd->brief` IDENTITY + CLI + frontmatter cutover is the SIBLING
-slice; here keep the existing identity prefixes (`slice`/`prd`) untouched, just
+`slice->task` / `spec->brief` IDENTITY + CLI + frontmatter cutover is the SIBLING
+slice; here keep the existing identity prefixes (`slice`/`spec`) untouched, just
 land the brief folders + the namespaced terminals so the cutover slice has them to
 build on.
 
@@ -104,18 +104,18 @@ build on.
 ## Prompt
 
 > Build the brief-regime rename + per-regime terminal correctness fix of the
-> `folder-taxonomy-reorg-and-rename` PRD: `pre-prd -> briefs/proposed`, `prd ->
-> briefs/ready`, `prd-sliced -> briefs/tasked`; add the per-regime won't-proceed
+> `folder-taxonomy-reorg-and-rename` SPEC: `pre-spec -> briefs/proposed`, `spec ->
+> briefs/ready`, `spec-sliced -> briefs/tasked`; add the per-regime won't-proceed
 > terminals `tasks/cancelled/` (double-l) and `briefs/dropped/`; and MIGRATE the
 > existing top-level `work/dropped/` contents into the right regime terminal. All
 > behind the centralised `work-layout` module (value change + `git mv`).
 >
 > FIRST, check this slice against current reality: confirm `work-layout` exists, the
 > `tasks/` umbrella landed (sibling slice `regroup-notes-and-task-board-rename` is in
-> `done/`), and the live brief folders are still `prd`(pool)/`prd-sliced`/`pre-prd`.
+> `done/`), and the live brief folders are still `spec`(pool)/`spec-sliced`/`pre-spec`.
 > If the layout already moved, route to needs-attention.
 >
-> WHY the terminal split is load-bearing (not cosmetic): a slice, a PRD, and an
+> WHY the terminal split is load-bearing (not cosmetic): a slice, a SPEC, and an
 > observation can share a slug, and the shipped TOP-LEVEL `work/dropped/` keys by
 > BARE slug, so a dropped task and a dropped brief sharing a slug COLLIDE on
 > `dropped/<slug>.md`. `item-lock.ts`'s `terminalMainPaths` today routes all three
@@ -126,8 +126,8 @@ build on.
 > The two files to migrate, with their type already determined (do not re-litigate):
 > `retire-transient-folders-and-drop-rebase.md` is a TASK (it carries
 > `prd: ledger-status-per-item-lock-refs` + slice `blockedBy`) -> `tasks/cancelled/`;
-> `branch-carries-code-not-ledger-status-main-owns-status.md` is a BRIEF (a full PRD
-> body, `reason: superseded`, git history `work/prd/ -> work/dropped/`) ->
+> `branch-carries-code-not-ledger-status-main-owns-status.md` is a BRIEF (a full SPEC
+> body, `reason: superseded`, git history `work/spec/ -> work/dropped/`) ->
 > `briefs/dropped/`.
 >
 > Where to look: the `work-layout` module (flip the brief values, add the two
@@ -138,9 +138,9 @@ build on.
 > two dropped files.
 >
 > SCOPE FENCE: rename FOLDERS and routing PATHS only. Do NOT do the
-> `slice->task`/`prd->brief` identity/CLI/frontmatter cutover here, that is the
+> `slice->task`/`spec->brief` identity/CLI/frontmatter cutover here, that is the
 > sibling slice `slice-task-prd-brief-vocabulary-hard-cutover`; keep the existing
-> `slice`/`prd` identity prefixes untouched so that slice has these folders to build
+> `slice`/`spec` identity prefixes untouched so that slice has these folders to build
 > on.
 >
 > "Done" means: the brief folders resolve at their new paths, the two terminals

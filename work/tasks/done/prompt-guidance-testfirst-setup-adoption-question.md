@@ -15,7 +15,7 @@ End-to-end behaviour:
 1. The setup A-phase question round (`skills/setup/SKILL.md`, the existing adoption chat) gains ONE more question, FOLDED into the existing round (do NOT add a new round — per the brief and per setup's "batch the asks" rule). Phrasing must signal nudge-not-gate, e.g.: _"Should AFK builds in this repo default to writing the failing test BEFORE the production code? Your `verify` gate still decides pass/fail either way — this just strengthens the wording the worker is given."_
 2. On a positive answer, merge `promptGuidance: { testFirst: true }` into the target repo's `.dorfl.json` per setup's existing merge-don't-clobber rule (A1) — preserve sibling keys, do not rewrite the file.
 3. On a negative / skip / don't-know answer, write NOTHING (per setup's "if the user is absent / declines / does not know → write NOTHING" doctrine in `skills/setup/SKILL.md`). The runtime default (`false`) takes over from the sibling tracer slice.
-4. Do NOT write or modify `AGENTS.md`. AGENTS.md is host-owned and setup's explicit invariant forbids writing it (PRD Out of Scope; setup SKILL §A1 / methodology-and-skills.md).
+4. Do NOT write or modify `AGENTS.md`. AGENTS.md is host-owned and setup's explicit invariant forbids writing it (SPEC Out of Scope; setup SKILL §A1 / methodology-and-skills.md).
 5. Update `CONTEXT.md`'s glossary (only if setup is already touching it for this adoption pass — per its existing append-only rule) with one short line on what `promptGuidance` means, so a future reader of a repo that opted in can find what the key does.
 
 ## Acceptance criteria

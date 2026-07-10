@@ -54,8 +54,8 @@ ref), parentless commit (gc-reclaimable), and the entry round-trips.
 > core (per-item hidden ref `refs/dorfl/lock/<entry>`, atomic create-only
 > acquire via `--force-with-lease=<ref>:`, delete-to-release, a PARENTLESS lock-entry
 > commit built with plumbing, and a two-axis `action × state` entry that round-trips).
-> Governing ADR: `docs/adr/ledger-status-on-per-item-lock-refs.md`. PRD:
-> `work/prd/ledger-status-per-item-lock-refs.md` (read its VOCABULARY CORRECTION
+> Governing ADR: `docs/adr/ledger-status-on-per-item-lock-refs.md`. SPEC:
+> `work/spec/ledger-status-per-item-lock-refs.md` (read its VOCABULARY CORRECTION
 > banner: the pool is `backlog/`, the durable terminal is `dropped/`; the `todo/`
 > rename is deferred).
 >
@@ -74,7 +74,7 @@ ref), parentless commit (gc-reclaimable), and the entry round-trips.
 > = the production module exists, the tracer's properties hold on it, no caller is
 > touched, and `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 >
-> NOTE: this slice is `humanOnly: true` by a DECIDED choice (not PRD propagation):
+> NOTE: this slice is `humanOnly: true` by a DECIDED choice (not SPEC propagation):
 > this is a load-bearing concurrency primitive driven via the `drive-backlog` skill so
 > a human reviews each build in turn. RECORD any non-obvious in-scope decision (e.g.
 > whether the production module REPLACES `item-lock-ref.ts` or wraps it) per the

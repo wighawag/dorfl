@@ -11,9 +11,9 @@ Gate-2 review of `merge-retries-gate-precedence` approved the change but surface
 
 ## Scope of this task
 
-### 1. Update the stale PRD line (nit 1)
+### 1. Update the stale SPEC line (nit 1)
 
-- File: the prd for `merge-retries-gate-precedence`, around line 158, currently says `DEFAULT_MERGE_RETRIES = 5`.
+- File: the spec for `merge-retries-gate-precedence`, around line 158, currently says `DEFAULT_MERGE_RETRIES = 5`.
 - Change it to reflect that the ratified modest default is `1000` (the engine's existing `DEFAULT_MERGE_RETRIES`), and note that behaviour is unchanged from pre-task when nothing sets `mergeRetries`.
 - Do not rewrite history/lens narrative beyond correcting the stale number and (if needed) a short sentence explaining the ratification.
 
@@ -47,7 +47,7 @@ For each site:
 ## Acceptance
 
 - `rg 'performIntegration\(' packages/dorfl/src` shows every non-test caller either forwarding a resolved `mergeRetries` or has an explicit comment justifying why it cannot.
-- PRD line ~158 no longer says `5`; it says `1000` (or references `DEFAULT_MERGE_RETRIES` without contradicting it).
+- SPEC line ~158 no longer says `5`; it says `1000` (or references `DEFAULT_MERGE_RETRIES` without contradicting it).
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - The PR/commit body for THIS task includes a Decisions block listing: (a) 1000 ratified as modest default, (b) parse-or-drop mirrors `--review-max-rounds`, (c) resolved once per entry point, (d) which call sites were threaded and how each layer (flag/env/config) applied per site.
 

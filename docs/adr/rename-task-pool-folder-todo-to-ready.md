@@ -20,7 +20,7 @@ a vetted, committed, claimable pool: the Kanban `Ready` sense. A reader carrying
 the fuzzier "loose to-do list" model can misread a `tasks/todo/` item as a note
 rather than a claimable item, the exact inversion the naming invites.
 
-The PRD-side already names its auto-task pool `prds/ready/` and its placement value
+The SPEC-side already names its auto-task pool `specs/ready/` and its placement value
 `'ready'`. The task side using `todo` made the two regimes gratuitously asymmetric.
 
 ## Decision

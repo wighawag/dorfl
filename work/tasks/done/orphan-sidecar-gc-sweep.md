@@ -72,7 +72,7 @@ out the repo); no separate arbiter ref query is needed beyond the existence chec
 >
 > WHY THIS IS A SWEEP, NOT AN APPLY STEP (read this — it is the whole reason the
 > task is shaped this way): an orphan's source item is GONE, so it is in NO
-> lifecycle pool. The advance driver enumerates ITEMS in the pools (tasks / prds /
+> lifecycle pool. The advance driver enumerates ITEMS in the pools (tasks / specs /
 > observations) and looks up THEIR sidecars; it never enumerates orphaned sidecars.
 > So no per-item `advance` tick ever runs on an orphan — neither the `apply` rung
 > nor a `no-op` is ever reached for it (the classifier never sees it). The orphan's

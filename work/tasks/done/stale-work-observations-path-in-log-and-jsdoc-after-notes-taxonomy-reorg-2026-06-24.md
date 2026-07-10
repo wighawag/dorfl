@@ -10,7 +10,7 @@ blockedBy: []
 The canonical observations bucket is `work/notes/observations/` (resolved by
 `work-layout.ts:88` `observations: 'notes/observations'`). Two classes of stale
 reference to the OLD short path `work/observations/` survive the `notes/`
-taxonomy reorg (the `folder-taxonomy-reorg-and-rename` PRD):
+taxonomy reorg (the `folder-taxonomy-reorg-and-rename` SPEC):
 
 1. **A misleading RUNTIME LOG message (highest leverage, fix first).**
    `integration-core.ts:~2042` writes the auto review-nits observation CORRECTLY
@@ -18,7 +18,7 @@ taxonomy reorg (the `folder-taxonomy-reorg-and-rename` PRD):
    `Recorded N non-blocking review nit(s) for '<slug>' in work/observations/<file>.`
    — the printed path is the old short one. An agent/human reading that line is
    told the note lives at the wrong folder. (A prior agent on the
-   agentic-resolution PRD actually wrote its note into a stray top-level
+   agentic-resolution SPEC actually wrote its note into a stray top-level
    `work/observations/` because of this; it had to be relocated.) Fix: derive the
    printed path from `workFolderName('observations')` rather than hardcoding
    `work/observations/${filename}`.

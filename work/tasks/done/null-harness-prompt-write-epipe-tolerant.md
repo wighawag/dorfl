@@ -4,7 +4,7 @@ slug: null-harness-prompt-write-epipe-tolerant
 covers: []
 ---
 
-> Self-contained test-flake/robustness slice \u2014 derives from NO PRD (`covers: []`), omits `prd:`. Source signal: `work/observations/review-gate-test-epipe-under-parallel-load.md` (recurrence consolidated 2\u00d7, past the "second instance is a signal" threshold).
+> Self-contained test-flake/robustness slice \u2014 derives from NO SPEC (`covers: []`), omits `prd:`. Source signal: `work/observations/review-gate-test-epipe-under-parallel-load.md` (recurrence consolidated 2\u00d7, past the "second instance is a signal" threshold).
 
 ## What to build
 

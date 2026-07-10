@@ -5,7 +5,7 @@ blockedBy: [prepare-config-step]
 covers: []
 ---
 
-> Self-contained ROBUSTNESS slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md` (2026-06-08, `severity: low`).
+> Self-contained ROBUSTNESS slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/gate1-could-run-in-fresh-worktree-to-match-pushed-branch.md` (2026-06-08, `severity: low`).
 >
 > MAINTAINER DECISIONS (settled 2026-06-12 — implement, do not re-open):
 > - The fresh-worktree gate is **ON by default** (`freshWorktreeGate: true`): most CI/tooling caches deps and `pnpm install` is fast in that case, so correctness-first (the gate tests what merges) is the right default.

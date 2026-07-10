@@ -13,7 +13,7 @@ Tier-1 GitHub ceiling when run with an admin-scoped credential, and to
 fall back to printing the exact ready-to-run command + manual
 instructions when only the ambient `GITHUB_TOKEN` is available.
 Behaviour fixed at launch (Applied Answer / Implementation Decision in
-the prd; the verified finding `install-ci-can-set-branch-protection-
+the spec; the verified finding `install-ci-can-set-branch-protection-
 via-api-but-needs-admin-token-not-ambient-github-token`).
 
 The API call to make (one of):
@@ -41,7 +41,7 @@ Required behaviour:
   `runner-in-ci`); this task implements WHAT is provisioned + the
   ordering guard.
 - Leave the ruleset shape extensible so the Tier-2 `merge_queue` rule
-  can be added by a follow-on prd without re-architecture.
+  can be added by a follow-on spec without re-architecture.
 
 ## Acceptance criteria
 

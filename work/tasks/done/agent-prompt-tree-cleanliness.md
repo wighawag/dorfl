@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained protocol/prompt fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live: a 402KB pi session log got swept into PR #3 by the runner's `git add -A`.
+> Self-contained protocol/prompt fix \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live: a 402KB pi session log got swept into PR #3 by the runner's `git add -A`.
 
 The runner commits the agent's work with **`git add -A`** (the completion commit sweeps EVERYTHING untracked in the working tree). The agent is the only party that KNOWS whether an untracked file is real work or junk \u2014 the runner's blind `git add -A` cannot tell. But the build-agent prompt currently says nothing about this: it tells the agent to implement + get the gate green + "the runner owns git" \u2014 so any stray/artifact file the agent (or its tooling) leaves behind becomes part of the committed deliverable. (Live example: a runtime pi session log committed into a PR.)
 

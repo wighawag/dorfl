@@ -30,7 +30,7 @@ three governance regimes plus two standalone top-level surfaces:
 ```
 work/
   notes/         # CAPTURE buckets (do NOT flow; leave by deletion)
-    ideas/         # proposed, pre-prd ideas
+    ideas/         # proposed, pre-spec ideas
     observations/  # spotted, unverified signals (append-only)
     findings/      # verified external/domain ground truth
   tasks/         # the BUILD board (status = folder)
@@ -38,11 +38,11 @@ work/
     ready/         # the AGENT POOL: claimable items
     done/          # completed
     cancelled/     # the task regime's won't-proceed terminal
-  prds/          # the PRD lifecycle (status = folder)
+  specs/          # the SPEC lifecycle (status = folder)
     proposed/      # staging (pre-promotion)
     ready/         # the auto-task pool
     tasked/        # tasked, resting (source of truth for tasked-ness)
-    dropped/       # the prd regime's won't-proceed terminal
+    dropped/       # the spec regime's won't-proceed terminal
   questions/     # the "what needs me?" queue a human answers (top-level)
   protocol/      # the contract docs (WORK-CONTRACT.md, CLAIM-PROTOCOL.md, ...)
 ```

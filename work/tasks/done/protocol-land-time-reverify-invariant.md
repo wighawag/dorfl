@@ -9,7 +9,7 @@ covers: [1, 2, 3]
 ## What to build
 
 Add the land-time re-verify invariant to the protocol docs, and the
-human-reconcile WARNING (the resolution of OQ5 in the prd), as a single
+human-reconcile WARNING (the resolution of OQ5 in the spec), as a single
 dual-write change.
 
 Two facts to land in prose:
@@ -28,7 +28,7 @@ Two facts to land in prose:
    `git pull --rebase`, then re-run `verify` on the rebased tree BEFORE
    pushing. The runner path enforces this automatically; on the human path
    it is on you. (Warning, not a gate — the human path is deliberately
-   lighter.) Use the wording from the prd's Applied Answer q4 verbatim
+   lighter.) Use the wording from the spec's Applied Answer q4 verbatim
    unless it needs minor adaptation to match the surrounding doc voice.
 
 Per this repo's protocol-docs rule, EDIT THE SOURCE (`skills/setup/protocol/`)

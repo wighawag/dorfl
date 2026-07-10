@@ -13,7 +13,7 @@ Add the slice-path mirror of the build Gate-2: a **fresh-context ACCEPTANCE revi
 Behaviour:
 
 - Controlled by the BUILD `--review` / `--no-review` family (ON by default), so there is ONE gate-configuration story shared with the build path. `--review-model` applies (de-correlated reviewer model).
-- The gate runs a **slice-SET prompt** (NOT the per-build-diff prompt): coherence / dependency graph / gaps + overlap / "if built, achieves the PRD goal / correct-if-implemented". A bad SET never lands unreviewed.
+- The gate runs a **slice-SET prompt** (NOT the per-build-diff prompt): coherence / dependency graph / gaps + overlap / "if built, achieves the SPEC goal / correct-if-implemented". A bad SET never lands unreviewed.
 - The gate is **ONE-SHOT** — terminal pass/fail, NO rounds. On `approve` the slices integrate; on `block` the set is routed to needs-attention (the slice-path analogue of the build block-route), NOT integrated.
 - The gate does **NOT** inherit `--review-max-rounds`. That flag is an ORPHAN on the build gate (a rounds bound for a revise↔review loop whose revise step does not exist — `work/observations/reviewmaxrounds-on-wrong-concept.md`); the slice gate must not carry it. Any FUTURE revise↔review loop gets its own loop-family flag (mirroring `--slicer-loop-max`), not a gate knob.
 
@@ -22,7 +22,7 @@ This gate is DISTINCT from the slicer IMPROVER loop (`slicer-review-loop.ts`, th
 ## Acceptance criteria
 
 - [ ] On the `do prd:` path, when `review` resolves ON (the default), a fresh-context acceptance gate runs BEFORE the slices integrate; `--no-review` skips it (mirror the build Gate-2 on/off tests).
-- [ ] The gate uses a slice-SET prompt (coherence / dependency graph / gaps+overlap / PRD-goal "correct-if-implemented"), demonstrably distinct from the build per-diff review prompt.
+- [ ] The gate uses a slice-SET prompt (coherence / dependency graph / gaps+overlap / SPEC-goal "correct-if-implemented"), demonstrably distinct from the build per-diff review prompt.
 - [ ] `block` routes the slice set to needs-attention (not integrated); `approve` lets it integrate. Verify both via the throwaway-git integration harness.
 - [ ] The gate is ONE-SHOT (a single reviewer invocation → verdict); it does NOT accept or consult `--review-max-rounds` on the slice path.
 - [ ] `--review-model` de-correlates the gate reviewer's model on this path.
@@ -44,7 +44,7 @@ This gate is DISTINCT from the slicer IMPROVER loop (`slicer-review-loop.ts`, th
 >
 > ONE-SHOT, NO ROUNDS: the slice gate must NOT inherit `--review-max-rounds`. Read `work/observations/reviewmaxrounds-on-wrong-concept.md`: a gate is terminal pass/fail; `--review-max-rounds` is an orphan on the build gate (a revise↔review bound with no revise step). A future revise↔review LOOP would get its OWN loop-family flag (like `--slicer-loop-max`), never a gate knob. Do NOT add rounds to this gate; do NOT also remove `--review-max-rounds` from the BUILD gate here (that build-path cleanup is out of scope — flagged separately in that observation).
 >
-> SLICE-SET PROMPT: review the WHOLE candidate set — coherence, dependency graph, gaps + overlap, and "if every slice is built exactly as written, do we reach the system the PRD describes / is each slice correct-if-implemented". The `review` skill already has a set-of-slices lens; use it.
+> SLICE-SET PROMPT: review the WHOLE candidate set — coherence, dependency graph, gaps + overlap, and "if every slice is built exactly as written, do we reach the system the SPEC describes / is each slice correct-if-implemented". The `review` skill already has a set-of-slices lens; use it.
 >
 > FIRST run the drift check: confirm `performIntegration` has the Gate-2 review-before-integrate block and that `slice-output-through-integration` has landed (the slicing path now goes through `performIntegration`). If the slicing path does NOT yet ride the shared core, this slice is not yet buildable — route it to `needs-attention/` (its blocker has not landed) rather than re-implementing the keystone here.
 >

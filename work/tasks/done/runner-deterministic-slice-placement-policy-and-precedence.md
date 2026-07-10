@@ -65,7 +65,7 @@ staging folder + the placement seam introduced by the tracer slice.
 
 > Generalise slicer-output placement from the tracer's fixed "always staged" to a
 > RUNNER-deterministic decision from unforgeable inputs. Read
-> `work/prd/staging-pool-position-gate-and-trust-model.md` (US #3, #5, #6, #12) and
+> `work/spec/staging-pool-position-gate-and-trust-model.md` (US #3, #5, #6, #12) and
 > the governing ADR. First check for drift against the code (the tracer slice
 > `pre-backlog-staging-folder-and-promote-step-a` must already be in `done/` — this
 > builds on its placement seam); if it landed differently, route to
@@ -87,11 +87,11 @@ staging folder + the placement seam introduced by the tracer slice.
 > PUT THE PRECEDENCE RESOLVER IN A SHARED MODULE (not inlined into the slicing
 > path), exposing a single pure function from the inputs (`originTrust` stamp,
 > resolved `slicesLandIn`/`prdsLandIn` default, explicit flag) to the staging-vs-pool
-> destination. The PRD-placement slice
+> destination. The SPEC-placement slice
 > (`pre-prd-staging-pool-split-and-untrusted-prd-placement`) REUSES this exact
 > resolver for `prdsLandIn`; if it is inlined here it would have to be extracted
 > there. Keep the lifecycle-specific bit (which two folders, which default key) as a
-> parameter so both the slice and PRD callers share one implementation.
+> parameter so both the slice and SPEC callers share one implementation.
 >
 > SEAMS TO TEST AT: the `--bare file://` arbiter house pattern
 > (`test/helpers/gitRepo.ts`); cover each precedence rung + both default landings +
@@ -116,7 +116,7 @@ The first build was BLOCKED by Gate 2 (PR/code review) and routed to
   `cli.ts` into the `DoOptions` the `do prd:` path builds. So the configured-default
   and explicit-flag rungs were dead from the shipped binary (a user setting
   `slicesLandIn: 'backlog'` got the built-in `pre-backlog` floor). Acceptance
-  criterion #1 / PRD US #5 failed in practice; the tests passed only because they
+  criterion #1 / SPEC US #5 failed in practice; the tests passed only because they
   called `performSlice` directly, bypassing the unwired CLI seam.
 - **The fix:** thread `slicesLandIn` (`config.slicesLandIn` / `remoteConfig.slicesLandIn`)
   at the 5 `DoOptions` sites that already carry `slicingIntegration`; register

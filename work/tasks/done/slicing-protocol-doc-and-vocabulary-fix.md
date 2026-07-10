@@ -16,7 +16,7 @@ End-to-end path:
 - **Append `SLICING-PROTOCOL.md` to the runtime-read doc SET** in `vendor-protocol.mjs`.
 - **`setup` Phase A** copies the new doc; setup test asserts it lands and that `work/protocol/VERSION` is bumped.
 - **`buildSlicingBrief` (`slicing.ts`) points at the resolved doc** via `resolveProtocolDoc('SLICING-PROTOCOL.md', cwd)`, dropping the "Use the **to-slices** skill" line AND the partial re-inlining of the confidence-check + `humanOnly` rules.
-- **Fix the STALE vocabulary in `buildSlicingBrief`** (bonus bug called out in the brief): `to-slices` → `to-task`, `work/backlog/` → `work/tasks/backlog/`, `work/prd/` → `work/briefs/ready/`. Audit the whole `slicing.ts` for any other pre-rename strings.
+- **Fix the STALE vocabulary in `buildSlicingBrief`** (bonus bug called out in the brief): `to-slices` → `to-task`, `work/backlog/` → `work/tasks/backlog/`, `work/spec/` → `work/briefs/ready/`. Audit the whole `slicing.ts` for any other pre-rename strings.
 - **Thin `skills/to-task/SKILL.md`** to a human-facing pointer at `work/protocol/SLICING-PROTOCOL.md` (keep it user-invoked — `disable-model-invocation: true` — the brief calls this out explicitly).
 
 ## Acceptance criteria
@@ -26,7 +26,7 @@ End-to-end path:
 - [ ] `vendor-protocol.mjs` ships `dist/protocol/SLICING-PROTOCOL.md`.
 - [ ] `setup` test asserts the new doc lands and VERSION is bumped.
 - [ ] `buildSlicingBrief` REFERENCES the resolved `SLICING-PROTOCOL.md` and contains NO partial re-inlining of the confidence-check / `humanOnly` rules (prompt-snapshot test asserts no slicing-discipline prose remains in the builder).
-- [ ] **Vocabulary regression test:** the assembled slicing prompt contains NONE of `to-slices`, `work/backlog/`, `work/prd/`; it correctly uses `to-task`, `work/tasks/backlog/`, `work/briefs/ready/`.
+- [ ] **Vocabulary regression test:** the assembled slicing prompt contains NONE of `to-slices`, `work/backlog/`, `work/spec/`; it correctly uses `to-task`, `work/tasks/backlog/`, `work/briefs/ready/`.
 - [ ] Per-discipline shape drift guard: a canonical slice-task fixture both PARSES via the slice parser AND matches the shape `SLICING-PROTOCOL.md` describes.
 - [ ] `skills/to-task/SKILL.md` is a thin pointer at `work/protocol/SLICING-PROTOCOL.md` (still user-invoked / `disable-model-invocation: true`).
 - [ ] No regression in existing slicing verdict-parse + routing tests.
@@ -38,7 +38,7 @@ End-to-end path:
 
 ## Prompt
 
-> FIRST, check this task against current reality: do BOTH blockers exist in `tasks/done/` (the keystone + the surface slice)? Re-confirm: (a) `buildSlicingBrief` in `packages/dorfl/src/slicing.ts` STILL says "Use the **to-slices** skill" AND still mentions `work/backlog/` / `work/prd/` (the stale vocabulary the brief calls out); (b) `resolveProtocolDoc(name, cwd)` exists; (c) `vendor-protocol.mjs` vendors a SET. If the stale vocabulary has already been fixed in another slice, route to needs-attention with the discrepancy — do not silently skip the fix or build on a stale premise.
+> FIRST, check this task against current reality: do BOTH blockers exist in `tasks/done/` (the keystone + the surface slice)? Re-confirm: (a) `buildSlicingBrief` in `packages/dorfl/src/slicing.ts` STILL says "Use the **to-slices** skill" AND still mentions `work/backlog/` / `work/spec/` (the stale vocabulary the brief calls out); (b) `resolveProtocolDoc(name, cwd)` exists; (c) `vendor-protocol.mjs` vendors a SET. If the stale vocabulary has already been fixed in another slice, route to needs-attention with the discrepancy — do not silently skip the fix or build on a stale premise.
 >
 > Read the brief `work/briefs/ready/runner-invoked-disciplines-into-protocol.md` (Solution + D1, D2 + the "Bonus bug" paragraph + US #8). The vocabulary fix is in-scope precisely BECAUSE the relocation visits this exact prompt builder; doing it in passing is the cheapest moment.
 >

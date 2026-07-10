@@ -2,7 +2,7 @@
 title: Review verdict — the two CI-advance-surfacing slices (B foundation, A propose-matrix)
 type: finding
 status: incubating
-source: review skill applied 2026-06-16 against work/backlog/{advance-in-place-publishes-treeless-results,ci-propose-matrix-enumerates-lifecycle-items}.md, the PRD work/spec-sliced/ci-advance-surfaces-questions-not-only-builds.md, and packages/dorfl/src (advance.ts, advance-drivers.ts, advance-isolated.ts, advance-loop-driver.ts, advance-treeless-publish.ts, lifecycle-gather.ts, lifecycle-pools.ts, scan.ts, format.ts)
+source: review skill applied 2026-06-16 against work/backlog/{advance-in-place-publishes-treeless-results,ci-propose-matrix-enumerates-lifecycle-items}.md, the SPEC work/spec-sliced/ci-advance-surfaces-questions-not-only-builds.md, and packages/dorfl/src (advance.ts, advance-drivers.ts, advance-isolated.ts, advance-loop-driver.ts, advance-treeless-publish.ts, lifecycle-gather.ts, lifecycle-pools.ts, scan.ts, format.ts)
 ---
 
 Adversarial review of the two slices, per the `review` lenses. Verdict per slice
@@ -66,12 +66,12 @@ VERDICT: **block** (A2 + A3 are spec defects that would mislead a builder).
   body waffle: "surface / triage / apply" and "(and apply)". But an `apply` item has
   an ALL-ANSWERED sidecar, so it is neither `eligible` (build pool) nor a surface
   candidate — and it is unclear whether an `apply` item should become a propose
-  matrix leg at all. Story 4 (PRD) wants the on-answer-committed `push:
+  matrix leg at all. Story 4 (SPEC) wants the on-answer-committed `push:
   work/questions/**` trigger to re-run the loop and APPLY the answer. In PROPOSE
   mode that push fires `enumerate` → the matrix; if the matrix does NOT enumerate
   apply items, the answer is never applied on the propose path (only the merge `-n`
   job applies it). So either (i) slice A MUST emit `slice:`/`prd:` legs for
-  all-answered (apply) items too, or (ii) the PRD must concede that apply-in-propose
+  all-answered (apply) items too, or (ii) the SPEC must concede that apply-in-propose
   is out of scope and story 4 is merge-only. This is a genuine design fork the slice
   silently straddles. RESOLVE it: decide whether the propose matrix enumerates apply
   items, state it, and adjust the title (currently claims apply) + acceptance.
@@ -100,9 +100,9 @@ VERDICT: **block** (A2 + A3 are spec defects that would mislead a builder).
 
 - The B-before-A dependency is correct and load-bearing: A's end-to-end acceptance
   ("a propose leg's sidecar reaches the arbiter") is only true once B lands. Good.
-- Coverage gap surfaced by A2: PRD story 4 (apply the committed answer) is NOT
+- Coverage gap surfaced by A2: SPEC story 4 (apply the committed answer) is NOT
   cleanly delivered on the propose path unless A2 is resolved to enumerate apply
-  legs. Until then, the decomposition does NOT provably reach the PRD end-state in
+  legs. Until then, the decomposition does NOT provably reach the SPEC end-state in
   propose mode — exactly the lens-5 hole that must block.
 
 ## Routing recommendation

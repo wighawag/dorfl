@@ -23,7 +23,7 @@ Acceptance criterion (c) of the source task was: "end-to-end apply of a fully-an
 Add one throwaway-git-repo E2E test (in the style of the existing `triage-persist` / `apply-persist` tests) that:
 1. Sets up an observation in `work/observations/` with a fully-answered sidecar.
 2. Runs the classifier → apply → agentic-decide pipeline.
-3. Asserts the decided artifact IS produced (e.g. task/ADR/PRD/delete outcome materialises correctly).
+3. Asserts the decided artifact IS produced (e.g. task/ADR/SPEC/delete outcome materialises correctly).
 4. Asserts BOTH the source observation file AND its sidecar are removed after apply.
 
 ### (c) Convert the trailing comment into a real dropped-item assertion

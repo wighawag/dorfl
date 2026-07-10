@@ -10,22 +10,22 @@ superseded_by:
 
 > **STATUS: proposed.** Records the decision and its why for a future build. Not yet accepted; the
 > design trail and full edge-case analysis live in
-> `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md` and the prd
-> `work/prds/ready/ledger-status-per-item-lock-refs.md`. This ADR pins the load-bearing WHY so it is not
-> re-litigated; the prd owns the HOW.
+> `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md` and the spec
+> `work/specs/ready/ledger-status-per-item-lock-refs.md`. This ADR pins the load-bearing WHY so it is not
+> re-litigated; the spec owns the HOW.
 
 ## Decision
 
 The git ledger is split by what each kind of state actually is:
 
 - **`main` holds CONTENT + all DURABLE RESTING records.** The readable `work/` content tree
-  (tasks/todo, prds/ready, observations, findings, ideas) stays checked out on `main`, and the
+  (tasks/todo, specs/ready, observations, findings, ideas) stays checked out on `main`, and the
   ONLY moves ever made on `main` are the durable resting transitions: `todo → done`,
-  `prds/ready → prds/tasked`, and `todo → dropped` (the generic "won't-proceed" terminal that
+  `specs/ready → specs/tasked`, and `todo → dropped` (the generic "won't-proceed" terminal that
   GENERALISES the previous `out-of-scope/`; the specific REASON — superseded /
   out-of-scope / duplicate / abandoned — lives in the item body as `reason:`). These are
   exactly the dependency-resolving / permanent records (`blockedBy → done/`,
-  `taskedAfter → prds/tasked/`, the durable "won't-proceed").
+  `taskedAfter → specs/tasked/`, the durable "won't-proceed").
 - **Transient STATUS + LOCKS live on PER-ITEM lock refs**, NOT in main's tree. `in-progress`,
   `needs-attention`, `tasking`, and `advancing` collapse into ONE lock per item, keyed by item
   identity, on a hidden `refs/dorfl/lock/<entry>` ref (or a single `refs/dorfl/locks`
@@ -55,7 +55,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
    the lock. (The two durable `main` promotions still write the shared `main` ref, so they keep a
    retrying-CAS / serialized-promote, that is the only place retry remains.)
 3. **It keeps content checked out and dependency resolution offline.** Unlike moving the whole `work/`
-   tree off `main` (rejected: it strips tasks/prds/observations from a normal `git clone`), content
+   tree off `main` (rejected: it strips tasks/specs/observations from a normal `git clone`), content
    and durable records stay on `main`, so `blockedBy`/`taskedAfter` resolve offline against `main`
    exactly as today, zero change to eligibility.
 4. **It incidentally makes protected-`main` TRACTABLE** (the contradiction the `claim-ledger-vs-
@@ -80,7 +80,7 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
 ## Consequences
 
 - The five status folders on `main` reduce to durable records only (`done`, `dropped`, the
-  resting pools tasks/todo) for tasks, and (`prds/proposed`, `prds/ready`, `prds/tasked`) for prds. The
+  resting pools tasks/todo) for tasks, and (`specs/proposed`, `specs/ready`, `specs/tasked`) for specs. The
   transient three (`in-progress`, `needs-attention`, `tasking`) become lock-ref state.
 - A NEW cross-substrate reconciliation appears for the durable promotions: complete is "hold lock →
   land done-move on `main` → release lock"; a crash between the main-move and the release leaves a

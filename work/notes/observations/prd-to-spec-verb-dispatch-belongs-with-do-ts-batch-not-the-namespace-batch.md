@@ -5,7 +5,7 @@ date: 2026-07-09
 
 ## What happened
 
-The `do` agent building `rename-spec-frontmatter-field-and-slug-namespace` (batch 2, third attempt after the two expand tasks landed) STOPPED with a correct diagnosis: batch 2's acceptance said "make `do spec:` the documented verb", but the `do`/`advance` dispatchers route on `resolved.namespace === 'prd'` inside `do.ts` (L711, L1893) + `advance.ts`/`advance-drivers.ts`/`do-autopick.ts` — and batch 2's OWN scope note forbids touching `do.ts`/`advance.ts` (they are batch 4's). So the verb clause was unsatisfiable within the task's own boundary: documenting `do spec:` without editing the dispatcher would ship a BROKEN verb (it falls through to the task-build path and misroutes). Verified: `do.ts:711`/`:1893` route only on `'prd'`, and `do.ts`/`advance.ts` are in batch 4's file list.
+The `do` agent building `rename-spec-frontmatter-field-and-slug-namespace` (batch 2, third attempt after the two expand tasks landed) STOPPED with a correct diagnosis: batch 2's acceptance said "make `do spec:` the documented verb", but the `do`/`advance` dispatchers route on `resolved.namespace === 'spec'` inside `do.ts` (L711, L1893) + `advance.ts`/`advance-drivers.ts`/`do-autopick.ts` — and batch 2's OWN scope note forbids touching `do.ts`/`advance.ts` (they are batch 4's). So the verb clause was unsatisfiable within the task's own boundary: documenting `do spec:` without editing the dispatcher would ship a BROKEN verb (it falls through to the task-build path and misroutes). Verified: `do.ts:711`/`:1893` route only on `'spec'`, and `do.ts`/`advance.ts` are in batch 4's file list.
 
 ## Why it matters
 
@@ -18,7 +18,7 @@ General lesson for wide-refactor tasking: **a clause belongs in the batch that o
 
 ## The fix (conductor move, agent Option A)
 
-Narrowed batch 2 to what it owns (frontmatter `fm.prd`→`fm.spec` reads in its modules; the tasking work-branch + lock EMIT `work/spec-<slug>`/`spec-<slug>` in `tasking.ts`/`tasking-lock.ts`, now safe because the expand-lock-sidecar task made `spec:` produce a correct `spec-<slug>` entry; `--specs-land-in` already done). Moved the `do spec:`/`advance spec:` verb-dispatch clause into batch 4 (`rename-spec-remaining-src-modules`), which owns `do.ts`/`advance.ts` and the `{namespace:'prd'}` consumer web.
+Narrowed batch 2 to what it owns (frontmatter `fm.spec`→`fm.spec` reads in its modules; the tasking work-branch + lock EMIT `work/spec-<slug>`/`spec-<slug>` in `tasking.ts`/`tasking-lock.ts`, now safe because the expand-lock-sidecar task made `spec:` produce a correct `spec-<slug>` entry; `--specs-land-in` already done). Moved the `do spec:`/`advance spec:` verb-dispatch clause into batch 4 (`rename-spec-remaining-src-modules`), which owns `do.ts`/`advance.ts` and the `{namespace:'spec'}` consumer web.
 
 ## Provenance
 

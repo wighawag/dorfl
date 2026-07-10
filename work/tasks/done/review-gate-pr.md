@@ -19,7 +19,7 @@ This is the unlock for a trustworthy `do <slug> --merge` (and, once `do-autopick
 
 - **IN:** the PR/code review gate on the `do`/`complete` path — invocation after `verify`, verdict parsing, approve→integrate / block→needs-attention routing, the per-repo `review` toggle, the per-repo `review` MODEL OVERRIDE, the `reviewMaxRounds` iteration bound, and the `autoMerge`-on-approve gate (repo policy only).
 - **OUT (deliberate, named follow-ups — do NOT build here):**
-  - **Gate 1 (spec/slice review after auto-slicing)** — guards the `autoslice-*` chain, a separate slice (`review` PRD).
+  - **Gate 1 (spec/slice review after auto-slicing)** — guards the `autoslice-*` chain, a separate slice (`review` SPEC).
   - **Posting the verdict AS a GitHub PR review/comment via a provider seam** — `review.md` makes Gate 2 "more visible" by posting on the PR. There is no provider/PR-comment seam in `src/` today (no `provider*` module). This slice runs the gate and routes via needs-attention (cross-machine visible already); the PR-comment surfacing is a **follow-up slice** (`review-gate-pr-comment`) blocked on the provider seam. State this; do not stub a fake seam.
   - **Author-trust resolver** — `autoMerge` keys on **per-repo policy only** here (the `do`-path author is the operator who ran the command). Author-association / request-channel trust is a CI/issue-front-door concern owned by `issue-intake`, explicitly NOT shared with this gate (decoupled — see `review.md` Autonomy notes).
 
@@ -59,7 +59,7 @@ Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` + `R
 
 ## Prompt
 
-> Build **Gate 2 — the PR/code review gate** on the `do`/`complete` pipeline, per `work/prd/review.md` (the GATES PRD; the protocol it runs is the already-built `review` SKILL at `skills/review/SKILL.md`). Scope is Gate 2 ONLY — NOT Gate 1 (spec review), NOT a provider PR-comment seam, NOT any author-trust resolver (those are named follow-ups; see the slice's "Scope fence").
+> Build **Gate 2 — the PR/code review gate** on the `do`/`complete` pipeline, per `work/spec/review.md` (the GATES SPEC; the protocol it runs is the already-built `review` SKILL at `skills/review/SKILL.md`). Scope is Gate 2 ONLY — NOT Gate 1 (spec review), NOT a provider PR-comment seam, NOT any author-trust resolver (those are named follow-ups; see the slice's "Scope fence").
 >
 > FIRST run the drift check (this slice is a launch snapshot — verify it against what landed):
 >

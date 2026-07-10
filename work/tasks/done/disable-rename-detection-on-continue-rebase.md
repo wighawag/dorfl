@@ -2,7 +2,7 @@
 title: Disable git rename detection on the runner's continue/integration rebase
 slug: disable-rename-detection-on-continue-rebase
 blockedBy: [] # startable now
-covers: [] # self-contained chore; no prd
+covers: [] # self-contained chore; no spec
 ---
 
 > CORRECTION (2026-06-24, after a FAILED first attempt — PR #224, closed unmerged):

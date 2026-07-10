@@ -4,7 +4,7 @@ slug: recover-autodetect-and-advancing-lock-crash-safety
 humanOnly: true
 ---
 
-> Launch snapshot — records intent at creation. Current truth on slicing: the slices in `work/backlog/`. Originating evidence: `work/observations/recover-already-committed-discards-continue-agent-new-work.md` (the live incident) + the commit/ledger archaeology in this PRD.
+> Launch snapshot — records intent at creation. Current truth on slicing: the slices in `work/backlog/`. Originating evidence: `work/observations/recover-already-committed-discards-continue-agent-new-work.md` (the live incident) + the commit/ledger archaeology in this SPEC.
 
 ## Problem Statement
 
@@ -46,23 +46,23 @@ Three fixes, one per defect, that compose (sliced 2026-06-16 — the build detai
 
 ## Sliced 2026-06-16
 
-The build detail (the per-defect mechanics, the chosen disambiguators, the test seams) moved into the slices; the durable cross-PRD composition notes are kept below. Slices (in `work/backlog/`):
+The build detail (the per-defect mechanics, the chosen disambiguators, the test seams) moved into the slices; the durable cross-SPEC composition notes are kept below. Slices (in `work/backlog/`):
 
 - `recover-autodetect-gated-on-nothing-to-commit` (covers 1,2,3) — Defect A, the urgent data-loss fix; standalone, `blockedBy: []`; touches `complete.ts` only.
 - `advancing-lock-release-crash-safe` (covers 4) — Defect B; `blockedBy: []`; introduces `advancingMarkerPath(entry)`.
 - `advancing-lock-human-release-verb-and-surface` (covers 5,6) — Defect C; `blockedBy: [advancing-lock-release-crash-safe]` (same-module serialise + reuse); introduces `listAdvancingMarkers()`.
 
-(Story 7's regression tests are not a separate slice — each slice carries its own incident-reproducing test, per the tracer-bullet rule.) All three slices are agent-buildable (no `humanOnly` — building each is mechanical/well-specified; this PRD's `humanOnly` gates only the slicing, which a human drove). None carries `needsAnswers` — the two design cruxes (A = gate on nothing-to-commit; C = human-invoked named release, no auto-sweep) were decided before slicing.
+(Story 7's regression tests are not a separate slice — each slice carries its own incident-reproducing test, per the tracer-bullet rule.) All three slices are agent-buildable (no `humanOnly` — building each is mechanical/well-specified; this SPEC's `humanOnly` gates only the slicing, which a human drove). None carries `needsAnswers` — the two design cruxes (A = gate on nothing-to-commit; C = human-invoked named release, no auto-sweep) were decided before slicing.
 
 Durable composition notes:
 
-- **`branch-carries-code-not-ledger-status-main-owns-status`:** Defect B's corruption is an instance of the on-branch-`→done`-move self-conflict that PRD targets. These fixes are the IMMEDIATE crash-safety + data-loss fixes; that PRD is the deeper "branch carries no ledger status" consolidation. Separate efforts.
-- **folder-taxonomy reorg (cross-session, DECIDED 2026-06-16):** B/C stay on the FLAT `work/advancing/<entry>.md` path and ship first, routing all marker addressing through `advancingMarkerPath(entry)` + `listAdvancingMarkers()`; `<type>-<slug>` stays in the lock branch name. The folder-taxonomy PRD (`work/ideas/folder-taxonomy-and-prd-edit-handshake.md`) relocates the marker to a co-located `<slug>.lock.md` in a later slice that `sliceAfter`s this PRD and reuses `listAdvancingMarkers()` (recorded reciprocally on the taxonomy side).
+- **`branch-carries-code-not-ledger-status-main-owns-status`:** Defect B's corruption is an instance of the on-branch-`→done`-move self-conflict that SPEC targets. These fixes are the IMMEDIATE crash-safety + data-loss fixes; that SPEC is the deeper "branch carries no ledger status" consolidation. Separate efforts.
+- **folder-taxonomy reorg (cross-session, DECIDED 2026-06-16):** B/C stay on the FLAT `work/advancing/<entry>.md` path and ship first, routing all marker addressing through `advancingMarkerPath(entry)` + `listAdvancingMarkers()`; `<type>-<slug>` stays in the lock branch name. The folder-taxonomy SPEC (`work/ideas/folder-taxonomy-and-prd-edit-handshake.md`) relocates the marker to a co-located `<slug>.lock.md` in a later slice that `sliceAfter`s this SPEC and reuses `listAdvancingMarkers()` (recorded reciprocally on the taxonomy side).
 
 ## Out of Scope
 
-- The deeper "branch carries no ledger status, main owns status" redesign (that is `branch-carries-code-not-ledger-status-main-owns-status`). This PRD is the targeted crash-safety + data-loss + reaper fix, not that consolidation.
-- Adding a liveness heartbeat / owner-TTL to the advancing lock and any AUTOMATIC advancing-lock sweep (DECIDED out: C is human-invoked named-release only). If a future need for a safe automatic sweep arises, a heartbeat becomes its own PRD/slice.
+- The deeper "branch carries no ledger status, main owns status" redesign (that is `branch-carries-code-not-ledger-status-main-owns-status`). This SPEC is the targeted crash-safety + data-loss + reaper fix, not that consolidation.
+- Adding a liveness heartbeat / owner-TTL to the advancing lock and any AUTOMATIC advancing-lock sweep (DECIDED out: C is human-invoked named-release only). If a future need for a safe automatic sweep arises, a heartbeat becomes its own SPEC/slice.
 - The immediate one-off operational cleanup of the specific stuck item from the incident (a human clears the orphaned `work/advancing/` marker + `requeue --reset`); that is a manual recovery, not a slice.
 
 ## Further Notes

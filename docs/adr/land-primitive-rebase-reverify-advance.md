@@ -22,7 +22,7 @@ But the doctrine was never written down. The protocol docs (`WORK-CONTRACT.md`,
 `CLAIM-PROTOCOL.md`) said "done is green", which a future reader could
 reasonably parse as "the build-time gate passed" — making the load-bearing
 re-gate read as accidental engine behaviour rather than a stated invariant. The
-prd `land-time-reverify-and-parallel-merge-ceiling` names this gap and three
+spec `land-time-reverify-and-parallel-merge-ceiling` names this gap and three
 others stacked on top of it (CI parallel-merge shape, propose PR-merge-time
 safety, runner-as-merger for bare hosts). This ADR captures the DURABLE WHY
 behind the whole stack — the principle, the primitive, the two frontends, and
@@ -132,14 +132,14 @@ restated here only because every frontend of the primitive preserves them:
 ### 6. Forward seam: deliberately deferred
 
 **GitHub Merge Queue (Tier 2, `merge_group` trigger) is OUT of scope for the
-current prd and is recorded here as a forward seam, not an oversight.** Tier 1
+current spec and is recorded here as a forward seam, not an oversight.** Tier 1
 (`strict: true` + required `verify` check) closes the stated PR-merge-time
 drift window on GitHub on its own. Tier 2 adds composition-catching (two
 individually-green PRs that break together) and removes Tier 1's rebase
 churn, both real wins, but neither is required for the safety property this
 ADR names. The provisioning seam from `install-ci` carries an extensible
 ruleset shape so the `merge_queue` rule slots in as a mechanical addition
-when the follow-on prd is taken up.
+when the follow-on spec is taken up.
 
 ## Consequences
 
@@ -162,7 +162,7 @@ when the follow-on prd is taken up.
 
 ## Cross-references
 
-- prd: `work/prds/tasked/land-time-reverify-and-parallel-merge-ceiling.md` —
+- prd: `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md` —
   the four-gap brief this ADR answers the durable WHY for.
 - Protocol invariant line: `WORK-CONTRACT.md` and `CLAIM-PROTOCOL.md` (dual
   source: `skills/setup/protocol/` → `work/protocol/`, byte-identical).
@@ -182,7 +182,7 @@ when the follow-on prd is taken up.
 ## In-scope decisions recorded here (per repo convention)
 
 - **Slug.** Filename `land-primitive-rebase-reverify-advance.md` (the task's
-  declared slug), shortened from the prd's working title
+  declared slug), shortened from the spec's working title
   `land-is-rebase-reverify-advance-one-primitive-two-frontends`. The
   short form keeps the URL ergonomic; the full framing ("one primitive, two
   frontends") lives in the title and §3.
@@ -194,6 +194,6 @@ when the follow-on prd is taken up.
 - **Scope boundary.** This ADR records DOCTRINE only. The engine already
   implements it and is NOT changed by the task that produces this ADR;
   the CI parallel-merge shape change, the propose-tier work, and the
-  load-bearing tests live in their own tasks under the same prd. The
+  load-bearing tests live in their own tasks under the same spec. The
   Tier-2 `merge_queue` forward seam is named here so the deferral is
   visible, not so it is built here.

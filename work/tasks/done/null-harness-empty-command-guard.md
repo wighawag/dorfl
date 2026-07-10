@@ -4,7 +4,7 @@ slug: null-harness-empty-command-guard
 covers: []
 ---
 
-> Self-contained fix slice — derives from NO PRD (`covers: []`), so per `work/protocol/WORK-CONTRACT.md` it omits `prd:` and is its own source of truth. Source signal: the observation `work/observations/do-silently-defaults-to-null-harness-noop-when-unconfigured.md` (now discharged into this slice). That observation listed TWO gaps; this slice scopes ONLY **gap #1** (the code root cause). **Gap #2** (the `drive-backlog` skill mentioning `--harness`) is ALREADY DONE and is OUT of scope.
+> Self-contained fix slice — derives from NO SPEC (`covers: []`), so per `work/protocol/WORK-CONTRACT.md` it omits `prd:` and is its own source of truth. Source signal: the observation `work/observations/do-silently-defaults-to-null-harness-noop-when-unconfigured.md` (now discharged into this slice). That observation listed TWO gaps; this slice scopes ONLY **gap #1** (the code root cause). **Gap #2** (the `drive-backlog` skill mentioning `--harness`) is ALREADY DONE and is OUT of scope.
 >
 > **DRIFT NOTE (read before building — verified 2026-06-11):** the observation predates a guard that already shipped. The PRIMARY "up-front refusal" this slice originally proposed **already exists** as `doNeedsAgentCmd` (`packages/dorfl/src/do-config.ts` — `config.harness !== 'pi' && config.agentCmd.trim() === ''`), wired into the `do` path (`cli.ts` ~L1398), the `--remote` path (`cli.ts` ~L1313), AND the `run` path (`cli.ts` ~L644, which inlines the same predicate). So the up-front refusal is DONE for all three commands. What remains is the **BACKSTOP** (genuinely absent) plus two small tidy-ups. Confirm the above still reads as described before building (monorepo — code may have moved within `packages/dorfl/src/`).
 

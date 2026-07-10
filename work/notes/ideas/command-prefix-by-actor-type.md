@@ -56,7 +56,7 @@ Shape 3 (both prefixed) is the most "honest"/symmetric but adds ceremony to the
 common agent path, working against the agent-first goal. Shape 2 (prefix agents)
 is backwards — it marks the thing you want to be the default.
 
-## Open questions / things to resolve before a PRD
+## Open questions / things to resolve before a SPEC
 
 - **Backward compatibility / aliases.** Renaming to `human:complete` would break
   every existing invocation, script, and doc. Likely needs the bare names kept as

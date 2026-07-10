@@ -17,7 +17,7 @@ There are THREE such runner-invoked disciplines, across SEVEN prompt builders:
 
 **Secondary problem: the partially-inlined prompts duplicate discipline content** that also lives in the skill, so the two can drift. The review prompts additionally re-embed the JSON verdict contract verbatim in each builder, and two verdict types model one shape (`ReviewVerdict` in `review-gate.ts`, `SliceReviewVerdict` in `slicer-review-loop.ts`).
 
-**Bonus bug found while investigating (fix in passing):** `buildSlicingBrief` uses PRE-RENAME vocabulary in a live spawned prompt: `to-slices` (now `to-task`), `work/backlog/`, `work/prd/`. This is exactly the claim-vs-reality drift the review discipline exists to catch, leaking into the runner's own output.
+**Bonus bug found while investigating (fix in passing):** `buildSlicingBrief` uses PRE-RENAME vocabulary in a live spawned prompt: `to-slices` (now `to-task`), `work/backlog/`, `work/spec/`. This is exactly the claim-vs-reality drift the review discipline exists to catch, leaking into the runner's own output.
 
 **Scope boundary established by investigation:** the runtime reads NO other this-repo-only files (no `CONTEXT.md`, `docs/adr/`, etc. read at runtime; verified). The blast radius is EXACTLY the skill-named prompts above. There is nothing else of this class.
 
@@ -25,13 +25,13 @@ The root cause is one thing: a discipline the autonomous runner INVOKES BY NAME 
 
 ## Solution
 
-Recognise the GENERAL principle: **any discipline the autonomous runner invokes by name is a PROTOCOL concern and must travel in-band via `work/protocol/`**, exactly like `CLAIM-PROTOCOL.md` and the git boundary. The protocol already owns the full quality contract: how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor). The runner-invoked disciplines are the rest of that same contract (how work is judged, how questions are surfaced, how a PRD is sliced), so they belong with the protocol, not in human-facing skills.
+Recognise the GENERAL principle: **any discipline the autonomous runner invokes by name is a PROTOCOL concern and must travel in-band via `work/protocol/`**, exactly like `CLAIM-PROTOCOL.md` and the git boundary. The protocol already owns the full quality contract: how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor). The runner-invoked disciplines are the rest of that same contract (how work is judged, how questions are surfaced, how a SPEC is sliced), so they belong with the protocol, not in human-facing skills.
 
 Build the SHARED MACHINERY once, then move each discipline onto it:
 
 - **Each runner-invoked discipline becomes a PROTOCOL DOC** (source of truth in `skills/setup/protocol/`, mirrored byte-identical into `work/protocol/`): `REVIEW-PROTOCOL.md`, `SURFACE-PROTOCOL.md`, `SLICING-PROTOCOL.md` (names per D1). Each holds its discipline content + a PROSE DESCRIPTION of its emitted shape (the shape stays code-owned per D2).
 - **Generalise the resolver + vendor + setup to a doc SET** (D3): `resolveClaimProtocolPath` becomes `resolveProtocolDoc(name, cwd)` (precedence: override > target-repo `work/protocol/` > vendored `dist/protocol/` > dev-only `skills/` walk); `vendor-protocol.mjs` vendors the SET of runtime-read docs into `dist/protocol/`; `setup` already copies the whole `skills/setup/protocol/` directory, so adopting the contract adopts every discipline.
-- **Each prompt builder POINTS AT its resolved doc** instead of "use the X skill" + partial re-inlining. The per-builder FRAMING (code-vs-slice, slice-SET, lone-slice, surface-one-item, slice-a-PRD) stays distinct; only the shared discipline + emitted-shape is centralised.
+- **Each prompt builder POINTS AT its resolved doc** instead of "use the X skill" + partial re-inlining. The per-builder FRAMING (code-vs-slice, slice-SET, lone-slice, surface-one-item, slice-a-SPEC) stays distinct; only the shared discipline + emitted-shape is centralised.
 - **Each `SKILL.md` becomes a THIN human-facing pointer** at its protocol doc (the `grill-with-docs`-over-`grilling` thinness): the operator entry point, while the standard lives in the protocol.
 - **De-duplicate within the review family:** one shared verdict-contract prompt helper across the four review builders; one unified verdict type (`ReviewVerdict` + `SliceReviewVerdict` collapse).
 - **Fix the stale slicing vocabulary** as part of porting the slicing discipline.
@@ -60,7 +60,7 @@ Omit both `humanOnly` and `needsAnswers`. The shaping questions are RESOLVED (D1
 - **`resolveClaimProtocolPath` becomes `resolveProtocolDoc(name, cwd)`** (D3), reused for `CLAIM-PROTOCOL.md` and the three new docs; same precedence chain.
 - **`vendor-protocol.mjs` generalised** (D3) to copy the SET of runtime-read protocol docs into `dist/protocol/`.
 - **`setup`** copies the new docs in Phase A alongside the existing ones; bumps `work/protocol/VERSION`.
-- **Prompt builders point at the resolved doc**, dropping "use the X skill" + partial re-inlining: `review-gate.ts` (×2), `intake.ts` (lone-slice), `slicer-review-loop.ts` (review); `surface-gate.ts` (surface); `slicing.ts` (slicing, AND fix the stale `to-slices`/`work/backlog`/`work/prd` vocabulary).
+- **Prompt builders point at the resolved doc**, dropping "use the X skill" + partial re-inlining: `review-gate.ts` (×2), `intake.ts` (lone-slice), `slicer-review-loop.ts` (review); `surface-gate.ts` (surface); `slicing.ts` (slicing, AND fix the stale `to-slices`/`work/backlog`/`work/spec` vocabulary).
 - **Each `SKILL.md`** (`review`, `surface-questions`, `to-task`) reduced to a thin human-facing pointer at its protocol doc (keep `review`/`surface-questions` model-invoked descriptions; `to-task` stays user-invoked).
 - **Review-family de-dup:** one shared JSON-verdict-contract helper across the four review builders; `ReviewVerdict` + `SliceReviewVerdict` unified to one type + one parser.
 - **Per-discipline shape drift guards** (D2): for each discipline, a test asserting a canonical emitted fixture both PARSES (`parseReviewVerdict` / `parseSurfaceEmit` / the slice parser) AND matches the shape its protocol doc documents.
@@ -72,7 +72,7 @@ Omit both `humanOnly` and `needsAnswers`. The shaping questions are RESOLVED (D1
 - Each assembled prompt REFERENCES its discipline doc (and the shared verdict contract, for review), and NO builder re-inlines discipline prose (mirror `prompt.test.ts` assertion style).
 - `setup` copies all discipline docs into `work/protocol/` and stamps VERSION (mirror the existing protocol-copy setup tests).
 - Per-discipline emitted-shape parse tests stay green against the unified/again-parsed types.
-- A regression test that the slicing prompt uses CURRENT vocabulary (no `to-slices` / `work/backlog/` / `work/prd/`).
+- A regression test that the slicing prompt uses CURRENT vocabulary (no `to-slices` / `work/backlog/` / `work/spec/`).
 - Do NOT regress existing review-gate / surface-gate / slicing verdict-parse + routing tests.
 
 ## Out of Scope

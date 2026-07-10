@@ -8,7 +8,7 @@ covers: []
 
 ## What to build
 
-Add an **environment-variable layer** to config resolution so a CI job (or any per-machine context) can set ANY config key without a committed file — including the **host-only** keys (`piBin`, `agentCmd`, `roots`, …) that the per-repo file deliberately rejects. This de-risks the future `runner-in-ci` PRD (which needs per-job config) and lets `agent-model-config` get env support for `model` for free.
+Add an **environment-variable layer** to config resolution so a CI job (or any per-machine context) can set ANY config key without a committed file — including the **host-only** keys (`piBin`, `agentCmd`, `roots`, …) that the per-repo file deliberately rejects. This de-risks the future `runner-in-ci` SPEC (which needs per-job config) and lets `agent-model-config` get env support for `model` for free.
 
 New resolution chain (highest wins):
 

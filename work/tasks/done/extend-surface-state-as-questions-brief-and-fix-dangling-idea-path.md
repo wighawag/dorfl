@@ -36,7 +36,7 @@ Update each to the actual path `work/notes/ideas/advance-surfaces-and-self-clear
 ## Explicitly out of scope (do independently)
 
 - **Adjacent cleanup #1 (Q3):** update `CONTEXT.md` (~lines 19/26 folder-model prose) and the `needs-attention.ts` header ("a folder you can ls") to the lock-`state: stuck` model. The human confirmed this is a standalone doc-sync task, low-risk text-only, may bundle with other stale needs-attention prose cleanup. Not part of this task — leave it for its own item.
-- Actually SLICING the needs-attention surface-state-as-questions rung. That is the promote-to-PRD/slice step called out in the brief's `## Scope note`, which follows the substrate cutover and this brief-extension. Out of scope here.
+- Actually SLICING the needs-attention surface-state-as-questions rung. That is the promote-to-SPEC/slice step called out in the brief's `## Scope note`, which follows the substrate cutover and this brief-extension. Out of scope here.
 - Actually SLICING the merge-questions surface. Gated on the apply-primitive extension (see Q2 resolution above). Out of scope here.
 
 ## Done when

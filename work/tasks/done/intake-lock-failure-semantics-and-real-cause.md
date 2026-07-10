@@ -4,7 +4,7 @@ slug: intake-lock-failure-semantics-and-real-cause
 covers: []
 ---
 
-> Self-contained FIX slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. It FIXES a bug in the already-`done/` slice `intake-processing-lock` (PRD `issue-intake` US #10 is the durable spec it sits on). The source signal (an observation: the degrade misattributed every `gh` failure as "unauthenticated" and silently proceeded lock-less) was discharged by this fix and DELETED — git history is its archive.
+> Self-contained FIX slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. It FIXES a bug in the already-`done/` slice `intake-processing-lock` (SPEC `issue-intake` US #10 is the durable spec it sits on). The source signal (an observation: the degrade misattributed every `gh` failure as "unauthenticated" and silently proceeded lock-less) was discharged by this fix and DELETED — git history is its archive.
 
 ## What to build
 

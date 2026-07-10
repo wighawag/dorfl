@@ -26,7 +26,7 @@ Two candidate angles (NOT decided here — for the human / a future surface-robu
 
 ## Scope note
 
-This is TANGENTIAL to the prd→spec cutover (it just happened to fire on a cutover observation). Captured, not acted on. It does not block the cutover: the observation body is fine; only the CI surface step over it failed, and the item was released untouched.
+This is TANGENTIAL to the spec→spec cutover (it just happened to fire on a cutover observation). Captured, not acted on. It does not block the cutover: the observation body is fine; only the CI surface step over it failed, and the item was released untouched.
 
 ## Provenance
 

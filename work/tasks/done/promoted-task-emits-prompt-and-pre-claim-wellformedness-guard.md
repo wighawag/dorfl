@@ -23,7 +23,7 @@ dispatch and a litter of stuck locks the human must `requeue --reset`. So the
 validation ALREADY EXISTS and is correct; the bug is purely that it runs too
 LATE (post-claim), and that the promotion producer emits a body that fails it.
 
-This is a residual against PRD US #1 ("the spawned task is buildable on its own"):
+This is a residual against SPEC US #1 ("the spawned task is buildable on its own"):
 the keystone task `promotion-self-contained-body-and-delete-on-promote-task-route`
 (now in `tasks/done/`) delivered self-containment of CONTENT but not structural
 dispatchability. Evidence: `grep -n Prompt packages/dorfl/src/triage-persist.ts`
@@ -34,7 +34,7 @@ a promoted body with no `## Prompt`. Full write-up:
 Two changes, defence in depth:
 
 1. **`buildPromotedBody` emits a `## Prompt` section** when `artifact === 'task'`
-   (a PRD does not need one). Seed it from the observation's mechanism prose, the
+   (a SPEC does not need one). Seed it from the observation's mechanism prose, the
    same way intake's `renderTask` default scaffold (`intake.ts:~1617`) already
    emits a thin `## Prompt`. A promoted task must then pass `assembleWorkPrompt`
    without throwing.
@@ -56,9 +56,9 @@ Two changes, defence in depth:
 
 Scope note: this is an INTERIM guard. The durable fix is centralizing ONE shared
 buildable-task renderer used by both `intake.renderTask` and
-`triage-persist.buildPromotedBody` (PRD
+`triage-persist.buildPromotedBody` (SPEC
 `centralize-buildable-task-renderer-shared-by-intake-and-promotion`, the deferred
-Resolved-decision-1 extraction). That PRD SUPERSEDES change 1 by moving the
+Resolved-decision-1 extraction). That SPEC SUPERSEDES change 1 by moving the
 `## Prompt` synthesis into the shared renderer; this task's tests stay valid and
 protect that refactor from regressing. Land this guard now; refactor behind it
 later.
@@ -81,7 +81,7 @@ later.
 
 ## Blocked by
 
-- None — can start immediately. (Independent of the centralization PRD; that PRD
+- None — can start immediately. (Independent of the centralization SPEC; that SPEC
   later folds change 1 into the shared renderer.)
 
 ## Prompt
@@ -89,13 +89,13 @@ later.
 > Goal: make the observation→task promotion path produce a DISPATCHABLE task and
 > stop it stranding stuck locks, per the observation
 > `advance-promotion-builds-promptless-task-that-self-claims-stuck-2026-06-25`
-> and PRD `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
-> (this closes the residual against that PRD's US #1 — "buildable on its own"
+> and SPEC `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
+> (this closes the residual against that SPEC's US #1 — "buildable on its own"
 > must include "passes `assembleWorkPrompt` without throwing").
 >
 > Two changes, defence in depth:
 > 1. In `packages/dorfl/src/triage-persist.ts`, make `buildPromotedBody` emit a
->    `## Prompt` section for the `task` artifact (not for `prd`), seeded from the
+>    `## Prompt` section for the `task` artifact (not for `spec`), seeded from the
 >    observation's mechanism prose. Mirror the thin-`## Prompt` shape intake's
 >    `renderTask` default scaffold already uses (`packages/dorfl/src/intake.ts`,
 >    around the `'## Prompt'` scaffold ~L1617) so the producer and consumer agree
@@ -114,7 +114,7 @@ later.
 >    stranding locks. The guard must apply to a malformed body from ANY source,
 >    not just promotion.
 >
-> Do NOT centralize the renderer here — that is the separate PRD
+> Do NOT centralize the renderer here — that is the separate SPEC
 > `centralize-buildable-task-renderer-shared-by-intake-and-promotion`. This task
 > is the interim guard it supersedes; keep the change minimal and well-tested so
 > that refactor can safely absorb change 1.

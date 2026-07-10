@@ -6,7 +6,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained build slice that FOLDS INTO the existing agent→runner reporting channel — it derives from the advance-loop PRD's reporting-channel fold-in ("EXTEND this channel to agent-authored CAPTURED NOTES") but is its own narrow path through `do`'s commit logic, covering NO PRD user story directly (`covers: []`). It is sequenced as the SINGLE fix the PRD demands (NOT a standalone fork of the channel), but it is file-orthogonal to the advance rungs (it touches `do`'s commit path, not the advance engine), so it can be built in parallel.
+> Self-contained build slice that FOLDS INTO the existing agent→runner reporting channel — it derives from the advance-loop SPEC's reporting-channel fold-in ("EXTEND this channel to agent-authored CAPTURED NOTES") but is its own narrow path through `do`'s commit logic, covering NO SPEC user story directly (`covers: []`). It is sequenced as the SINGLE fix the SPEC demands (NOT a standalone fork of the channel), but it is file-orthogonal to the advance rungs (it touches `do`'s commit path, not the advance engine), so it can be built in parallel.
 
 ## What to build
 
@@ -36,9 +36,9 @@ Fix it ONCE here: a captured note is just another thing the agent EMITS that the
 
 ## Prompt
 
-> Extend the agent→runner reporting channel so the RUNNER scoops + reports agent-authored captured notes (`work/observations/*`, `work/findings/*`) on BOTH `do prd:` (slice) and `do <slice>` (build). Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) (the PRECURSOR-NOTE fold-in "EXTEND this channel to agent-authored CAPTURED NOTES" — fix it ONCE, not a standalone fork) and `work/observations/runner-drops-agent-authored-captured-notes-on-slicing-commit.md`. Today `do prd:` commits only `work/backlog/*` and DROPS such notes. Keep Rule A (the agent does NO git — only writes the files) and extend Rule B (the runner scoops + reports). A captured note is just another thing the agent EMITS that the runner ROUTES — like the `## Decisions` block. Report exactly what landed (compose the landed honest-reporting substrate).
+> Extend the agent→runner reporting channel so the RUNNER scoops + reports agent-authored captured notes (`work/observations/*`, `work/findings/*`) on BOTH `do prd:` (slice) and `do <slice>` (build). Read the SPEC `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/spec/`) (the PRECURSOR-NOTE fold-in "EXTEND this channel to agent-authored CAPTURED NOTES" — fix it ONCE, not a standalone fork) and `work/observations/runner-drops-agent-authored-captured-notes-on-slicing-commit.md`. Today `do prd:` commits only `work/backlog/*` and DROPS such notes. Keep Rule A (the agent does NO git — only writes the files) and extend Rule B (the runner scoops + reports). A captured note is just another thing the agent EMITS that the runner ROUTES — like the `## Decisions` block. Report exactly what landed (compose the landed honest-reporting substrate).
 >
-> READ FIRST: `packages/dorfl/src/do.ts` (the `do prd:` slice-commit path that commits `work/backlog/*` — extend it to scoop the note buckets), the build integration path (`integration-core.ts`/`integrator.ts`), `agent-stop.ts` (the existing reporting channel / `## Decisions` block to mirror), and the failure-trio's honest-reporting code (PRD 2026-06-09 UPDATE).
+> READ FIRST: `packages/dorfl/src/do.ts` (the `do prd:` slice-commit path that commits `work/backlog/*` — extend it to scoop the note buckets), the build integration path (`integration-core.ts`/`integrator.ts`), `agent-stop.ts` (the existing reporting channel / `## Decisions` block to mirror), and the failure-trio's honest-reporting code (SPEC 2026-06-09 UPDATE).
 >
 > FIRST, check this slice against current reality (drift). The reporting channel + `do prd:`-through-integration are LANDED substrate. If they landed differently, reconcile or route to `needs-attention/`.
 >

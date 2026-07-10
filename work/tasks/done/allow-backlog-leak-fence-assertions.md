@@ -44,7 +44,7 @@ the fence the keystone relies on.
 ## Prompt
 
 > Goal: lock in the explicit-invocation-only fence for `--allow-backlog`, per the
-> PRD `do-allow-backlog-drive-staged-tasks-without-promotion` (US #4, Resolved
+> SPEC `do-allow-backlog-drive-staged-tasks-without-promotion` (US #4, Resolved
 > decision 3 — the fence is structural).
 >
 > Where to look: `run.ts` (the daemon calls `performIntegration` directly with a

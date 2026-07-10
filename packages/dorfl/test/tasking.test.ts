@@ -996,7 +996,7 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 });
 
 describe('performTask — usage', () => {
-	it('errors when the prd does not exist', async () => {
+	it('errors when the spec does not exist', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performTask({
 			slug: 'nope',
@@ -1008,6 +1008,6 @@ describe('performTask — usage', () => {
 		});
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('usage-error');
-		expect(result.message).toMatch(/no prd/);
+		expect(result.message).toMatch(/no spec/);
 	});
 });

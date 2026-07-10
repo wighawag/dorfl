@@ -19,7 +19,7 @@ A thin path through every layer:
 - **Eligibility** — resolve, per item: does it pass the **AFK gate** (`afk: true` ⇒ yes; `afk: false` ⇒ no; unspecified ⇒ depends on `allowUnspecifiedGate`) AND are all `blocked_by` slugs present in that repo's `work/done/`? Eligibility is per-repo; deps never cross repos.
 - **Output** — print the queue clearly, grouped by repo, showing per item: repo, slug, afk gate, blocked-by satisfaction, and whether it is eligible now.
 
-This is increment A from the PRD and the smallest useful first slice. It forces the config/detection/eligibility design to be concrete before any agent executes.
+This is increment A from the SPEC and the smallest useful first slice. It forces the config/detection/eligibility design to be concrete before any agent executes.
 
 ## Acceptance criteria
 

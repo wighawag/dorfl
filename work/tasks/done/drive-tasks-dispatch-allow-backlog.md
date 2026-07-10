@@ -42,7 +42,7 @@ End-to-end behaviour (skill-doc only):
 ## Prompt
 
 > Goal: wire `drive-tasks`'s opt-in-backlog mode to the new `--allow-backlog`
-> flag, per the PRD `do-allow-backlog-drive-staged-tasks-without-promotion`
+> flag, per the SPEC `do-allow-backlog-drive-staged-tasks-without-promotion`
 > (US #5, Resolved decision 6 — the mode is a spec without a mechanism today).
 >
 > Where to look: `skills/drive-tasks/SKILL.md` IN THIS REPO, the section

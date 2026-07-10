@@ -1,5 +1,5 @@
 ---
-title: Extract ONE shared buildable-task (and PRD-body) renderer
+title: Extract ONE shared buildable-task (and SPEC-body) renderer
 slug: shared-buildable-task-and-prd-body-renderer-extract
 spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: []
@@ -9,14 +9,14 @@ covers: [1, 4, 7]
 ## What to build
 
 The keystone of the centralization: ONE function that renders a buildable TASK
-body and ONE that renders a PRD body, so the buildable-task/PRD schema lives in a
+body and ONE that renders a SPEC body, so the buildable-task/SPEC schema lives in a
 single owner instead of being hand-rolled in each producer.
 
 Today the section schema is duplicated, and the two producers are ASYMMETRIC:
 `intake.ts` `renderBacklogTask` (~L1580) is a wrapper+fallback — it frontmatter-
 wraps a body the intake agent already drafted, and emits a thin default scaffold
 (`## What to build` + `## Acceptance criteria` + `## Prompt`) ONLY when no body was
-drafted (its PRD sibling is `renderPrd` ~L1636). `triage-persist.ts`
+drafted (its SPEC sibling is `renderPrd` ~L1636). `triage-persist.ts`
 `buildPromotedBody` (~L393) is a true STRUCTURED renderer — it fully builds
 `## What to build` + mechanism prose + optional `## Open questions` + a hand-rolled
 `## Prompt` (added by the interim guard task). The shareable thing is the canonical
@@ -32,10 +32,10 @@ pure addition that cannot regress either producer):
   body. It must express BOTH the shapes its two future callers need: intake's
   default-scaffold skeleton (the empty-body fallback `## What to build` +
   `## Acceptance criteria` + thin default `## Prompt`) AND promotion's
-  mechanism-prose-seeded full body. The `## Prompt` is task-only; a PRD body
+  mechanism-prose-seeded full body. The `## Prompt` is task-only; a SPEC body
   carries none.
-- A symmetric PRD-body renderer (or the same renderer parameterised by artifact
-  type) owns the PRD section skeleton (`## Problem Statement` + transcribed prose +
+- A symmetric SPEC-body renderer (or the same renderer parameterised by artifact
+  type) owns the SPEC section skeleton (`## Problem Statement` + transcribed prose +
   optional `## Open questions`, no `blockedBy`, no `## Prompt`), so the same
   divergence cannot recur for PRDs.
 - A single GOLDEN-SHAPE test asserts the renderer emits the required sections for
@@ -57,7 +57,7 @@ lands the renderer + its golden test.
       both intake's default-scaffold skeleton and promotion's mechanism-seeded
       full body; a rendered task passes `extractPromptSection`/`resolveTask`
       without throwing.
-- [ ] A PRD-body renderer (or the same renderer by artifact type) owns the PRD
+- [ ] A SPEC-body renderer (or the same renderer by artifact type) owns the SPEC
       shape and emits NO `## Prompt`.
 - [ ] A single golden-shape test asserts the required sections per artifact type
       and the task-dispatchability check; it is structured so the two producers
@@ -72,15 +72,15 @@ lands the renderer + its golden test.
 
 ## Prompt
 
-> Goal: create the SINGLE owner of the buildable-task (and PRD-body) markdown
-> schema, per PRD
+> Goal: create the SINGLE owner of the buildable-task (and SPEC-body) markdown
+> schema, per SPEC
 > `centralize-buildable-task-renderer-shared-by-intake-and-promotion` (US #1, #4,
 > #7). This is the keystone extract; the two caller rewires are separate follow-on
 > tasks that block on this one.
 >
 > FIRST check drift: confirm the producers' shapes — `intake.ts`
 > `renderBacklogTask` (~L1580, a wrapper that emits a default scaffold only when no
-> body was drafted) + its PRD sibling `renderPrd` (~L1636), and
+> body was drafted) + its SPEC sibling `renderPrd` (~L1636), and
 > `triage-persist.ts` `buildPromotedBody` (~L393, a structured renderer that now
 > emits its own hand-rolled `## Prompt` after the interim guard task
 > `promoted-task-emits-prompt-and-pre-claim-wellformedness-guard` landed in
@@ -96,7 +96,7 @@ lands the renderer + its golden test.
 > `## Prompt`, used only when no body was drafted) and promotion's full
 > `## What to build` + mechanism prose + optional `## Open questions` + a
 > `## Prompt` seeded (blockquoted) from the mechanism prose. `## Prompt` is
-> task-only; PRD bodies carry none.
+> task-only; SPEC bodies carry none.
 >
 > Record any non-obvious in-scope decision (e.g. the exact parameter shape, how the
 > two `## Prompt` seeding modes are expressed) in the done record / PR description.

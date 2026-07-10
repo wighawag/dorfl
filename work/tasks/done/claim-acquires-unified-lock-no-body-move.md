@@ -91,8 +91,8 @@ predicate's shape is unaffected. Build against `backlog/` now.
 > that exactly as-is. ADD: after (or as part of) a successful claim, acquire the
 > per-item lock (`action: implement`) via the lock module (`acquireItemLock`,
 > keyed through `lockEntryFor`). If the lock acquire returns `lost`, claim loses
-> definitively (no retry) and performs NO body move for that item. PRD
-> `work/prd/ledger-status-per-item-lock-refs.md` (US #1, #3, #15, #16); ADR
+> definitively (no retry) and performs NO body move for that item. SPEC
+> `work/spec/ledger-status-per-item-lock-refs.md` (US #1, #3, #15, #16); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > READ the RE-SCOPED banner at the top of this slice: this is the INTERIM DUAL-WRITE
@@ -108,7 +108,7 @@ predicate's shape is unaffected. Build against `backlog/` now.
 > `claim-cas.ts`): enumerate held locks via the lock module's `list` and exclude
 > those slugs from the `backlog/` pool. With the body still moving this is
 > redundant-but-harmless today; it is wired now so #9 can stop the body move without
-> re-touching these readers. Pool vocabulary: the pool is `backlog/` (read the PRD's
+> re-touching these readers. Pool vocabulary: the pool is `backlog/` (read the SPEC's
 > VOCABULARY CORRECTION banner; `todo/` is the DEFERRED STEP-B rename, NOT this work).
 > Do NOT introduce `todo/`.
 >
@@ -118,7 +118,7 @@ predicate's shape is unaffected. Build against `backlog/` now.
 > "Done" = `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. This is the load-bearing claim invariant; record non-obvious
+> SPEC propagation. This is the load-bearing claim invariant; record non-obvious
 > in-scope decisions per the slice template.
 
 ## Needs attention

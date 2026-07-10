@@ -5,7 +5,7 @@ blockedBy: [do-in-place]
 covers: []
 ---
 
-> Self-contained correctness fix — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live on the `do-run-share-isolation-seam` run during the backlog drive; full diagnosis in `work/observations/agent-stop-on-drift-not-honored-by-runner.md` (delete that note once this lands).
+> Self-contained correctness fix — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live on the `do-run-share-isolation-seam` run during the backlog drive; full diagnosis in `work/observations/agent-stop-on-drift-not-honored-by-runner.md` (delete that note once this lands).
 >
 > SCOPE EXTENDED 2026-06-07 (human decision): this slice now covers BOTH verdicts a build agent can raise on its single reporting channel (`LaunchResult.output`): (1) a HARD **STOP** (the slice drifted / is ambiguous → route to needs-attention, skip the gate) and (2) a SOFT **DECISIONS log** (the agent made a non-obvious in-scope choice the slice didn't specify → record it so Gate-2 + the human can ratify/reverse it, build still proceeds). Both are designed together because they are two verdicts on ONE channel; the second was prompted by an inline `-n`×`--remote` refusal that was decided in code without surfacing (`work/observations/do-remote-no-arg-and-remote-autopick-for-isolated-conductor.md`).
 

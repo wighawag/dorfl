@@ -26,7 +26,7 @@ answered-question apply rung can route a runner-ACTION question (e.g. `merge`,
 of another field.
 
 This is the foundational primitive the three `land-time-reverify` merge-question
-tasks were conditioned on (PRD applied-answers q3 / q5: "an explicit typed `kind`
+tasks were conditioned on (SPEC applied-answers q3 / q5: "an explicit typed `kind`
 field (merge | stuck | triage | spec) in the identity comment — the kind is what
 the apply rung reads to choose deterministic-action vs agentic-content
 dispatch"). It was wrongly left to whichever task touched it first;

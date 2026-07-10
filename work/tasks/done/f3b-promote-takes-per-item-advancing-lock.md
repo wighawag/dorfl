@@ -8,11 +8,11 @@ covers: [6]
 
 ## What to build
 
-Bring the `promote` position-CAS transition under the SAME per-item lock that `apply` runs under, so the two serialise BY CONSTRUCTION and can never interleave on a single item. The PRD's q2 answer is decisive: the per-item two-axis lock exists precisely so that implement/slice/advance on one item are mutually exclusive — "refuse while an advance lock is held" is an advisory check-then-act and is rejected. Promote TAKES the lock.
+Bring the `promote` position-CAS transition under the SAME per-item lock that `apply` runs under, so the two serialise BY CONSTRUCTION and can never interleave on a single item. The SPEC's q2 answer is decisive: the per-item two-axis lock exists precisely so that implement/slice/advance on one item are mutually exclusive — "refuse while an advance lock is held" is an advisory check-then-act and is rejected. Promote TAKES the lock.
 
 Concretely:
 
-- `promote` (both the task promote `tasks/backlog → tasks/todo` and the brief promote `briefs/proposed → briefs/ready` — symmetric per the PRD q4 answer) acquires the item's per-item lock (`advancing` axis), performs its tree-less position CAS, then releases.
+- `promote` (both the task promote `tasks/backlog → tasks/todo` and the brief promote `briefs/proposed → briefs/ready` — symmetric per the SPEC q4 answer) acquires the item's per-item lock (`advancing` axis), performs its tree-less position CAS, then releases.
 - **Action-value decision**: reuse the existing `advance` action value rather than introduce a distinct `'promote'` action axis, unless a concrete reason against reuse emerges during the build. If reuse turns out to be wrong (e.g. it breaks an existing invariant elsewhere), introduce `'promote'` and write an ADR for the choice.
 - Loss is CLEAN: if an apply already holds the lock, promote loses cleanly (no partial state, clear exit code/message); if promote holds the lock, apply loses cleanly the same way. Mirror the existing claim-cas loss semantics.
 - No change to the trust model and no change to BUILD/claim eligibility — only the lock discipline of the position transition itself changes.
@@ -34,11 +34,11 @@ This slice and `f3a-apply-resolves-item-by-identity-at-write-time` are FILE-ORTH
 
 ## Prompt
 
-> Bring `promote` under the per-item lock. Today `promote` is a tree-less position CAS modelled on `requeue`/`claim` that does NOT take the item's `advancing` lock; `apply` does. So they lock DIFFERENT things and can interleave on the same item (lost update / split brain). The two-axis per-item lock exists precisely to make implement/slice/advance on one item mutually exclusive BY CONSTRUCTION; "refuse while an advance lock is held" was rejected by the PRD's q2 answer because it is an advisory check-then-act — the lock is atomic, not advisory. So `promote` TAKES the lock for its CAS window.
+> Bring `promote` under the per-item lock. Today `promote` is a tree-less position CAS modelled on `requeue`/`claim` that does NOT take the item's `advancing` lock; `apply` does. So they lock DIFFERENT things and can interleave on the same item (lost update / split brain). The two-axis per-item lock exists precisely to make implement/slice/advance on one item mutually exclusive BY CONSTRUCTION; "refuse while an advance lock is held" was rejected by the SPEC's q2 answer because it is an advisory check-then-act — the lock is atomic, not advisory. So `promote` TAKES the lock for its CAS window.
 >
-> Apply this to BOTH the task promote (`tasks/backlog → tasks/todo`) and the brief promote (`briefs/proposed → briefs/ready`) — they are symmetric per the PRD q4 answer.
+> Apply this to BOTH the task promote (`tasks/backlog → tasks/todo`) and the brief promote (`briefs/proposed → briefs/ready`) — they are symmetric per the SPEC q4 answer.
 >
-> Action-value choice: prefer reusing the existing `advance` action value rather than introducing `'promote'` (the PRD answer flagged distinct action values as potential over-engineering). If you discover a concrete reason reuse is wrong, introduce `'promote'` and write an ADR. Either way, RECORD the decision.
+> Action-value choice: prefer reusing the existing `advance` action value rather than introducing `'promote'` (the SPEC answer flagged distinct action values as potential over-engineering). If you discover a concrete reason reuse is wrong, introduce `'promote'` and write an ADR. Either way, RECORD the decision.
 >
 > Loss semantics: mirror existing claim-cas — the loser exits clean with a clear exit code/message; no partial state on `main`. Crash-safe release must match the existing advancing-lock-release-crash-safe behaviour.
 >

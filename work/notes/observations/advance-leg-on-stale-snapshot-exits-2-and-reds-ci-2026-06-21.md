@@ -71,7 +71,7 @@ CI is meant to surface REAL failures; a benign, by-design race rendered as a red
 job erodes that signal. And the conflated message means an operator who DID typo a
 slug gets the same output as a harmless race, so neither case is diagnosed well.
 Both are small, well-scoped, and improve the autonomous CI experience the
-`runner-in-ci` PRD is building.
+`runner-in-ci` SPEC is building.
 
 ## The idea (NOT decided here)
 

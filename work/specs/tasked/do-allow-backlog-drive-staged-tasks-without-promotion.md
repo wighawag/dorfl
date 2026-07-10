@@ -3,7 +3,7 @@ title: do --allow-backlog — drive staged tasks in place without promoting (sta
 slug: do-allow-backlog-drive-staged-tasks-without-promotion
 ---
 
-> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is tasked — they move into tasks/ADRs and this prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
+> Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (The technical-detail sections below are trimmed by `to-task` once the work is tasked — they move into tasks/ADRs and this spec settles to its durable framing: Problem / Solution / User Stories / Out of Scope.)
 
 ## Problem Statement
 
@@ -15,9 +15,9 @@ CI `advance` leg OR a machine-local `run` daemon can claim it (both pull from
 promote-then-drive opens a COMPETITION WINDOW: the autonomous claimer races the
 human who wanted to drive the work themselves.
 
-This is the SECOND instance of one recurring shape (the first was PRD tasking:
-promoting `specs/proposed → ready` exposed a PRD to the auto-tasker, fixed by
-tasking in place from `proposed/` — see TASKING-PROTOCOL.md §6 and the PRD
+This is the SECOND instance of one recurring shape (the first was SPEC tasking:
+promoting `specs/proposed → ready` exposed a SPEC to the auto-tasker, fixed by
+tasking in place from `proposed/` — see TASKING-PROTOCOL.md §6 and the SPEC
 `observation-discharge-...`). The general principle the contract states only
 implicitly: **a staging folder is not just "review-first admission"; it is also
 the HUMAN-CONTROL position — an item rests there so a human can drive it WITHOUT
@@ -64,7 +64,7 @@ backlog mode actually work.
    (today it would throw), and I want the skill to state WHY drive-in-place beats
    promote-then-drive (the competition window).
 6. As a contributor reading `WORK-CONTRACT.md`, I want the staging-is-also-the-
-   human-control-position principle stated explicitly (generalising both the PRD
+   human-control-position principle stated explicitly (generalising both the SPEC
    tasking fix and this one), so the next author reaches for drive-in-place, not
    promote-then-drive.
 7. As a reader of `resolveTask`, I want its stale "in-progress over backlog" /
@@ -75,7 +75,7 @@ backlog mode actually work.
 
 ### Autonomy notes (the two gate axes)
 
-- **`humanOnly` (DECIDED):** OMITTED — tasking this PRD does not require a human
+- **`humanOnly` (DECIDED):** OMITTED — tasking this SPEC does not require a human
   to drive it; the design is fully resolved and agent-taskable. (Note: the
   FEATURE is about human-controlled building, but BUILDING the feature is
   ordinary agent work.)
@@ -83,7 +83,7 @@ backlog mode actually work.
   raised during design were each resolved by reading the code (the claim
   predicate → decision 2; the done-move `source` union → decision 4; the
   same-slug precedence → decision 5). The blast radius is now known and bounded,
-  so the PRD is taskable.
+  so the SPEC is taskable.
 
 ## Resolved decisions
 
@@ -100,7 +100,7 @@ backlog mode actually work.
    and writes NOTHING to `main`, and the body STAYS in `tasks/backlog/`.
    - REJECTED ALTERNATIVE — "claim MOVES the task `backlog → ready` along with
      taking the lock": this reintroduces the `git mv` + `main` claim commit that
-     the per-item-lock cutover (prd `ledger-status-per-item-lock-refs`, ADR
+     the per-item-lock cutover (spec `ledger-status-per-item-lock-refs`, ADR
      `ledger-status-on-per-item-lock-refs`) DELETED on purpose — it would lose
      the "claim touches no `main`, so a protected-`main` repo can be claimed"
      property. And it buys nothing: a competitor is excluded by the HELD LOCK,
@@ -144,7 +144,7 @@ backlog mode actually work.
    it's already promoted" hint). Not load-bearing; the builder picks the cheaper.
 6. **The skill mode is a spec without a mechanism today.** `drive-tasks`'s
    opt-in-backlog mode dispatches `do ... --isolated` against a `tasks/backlog/`
-   slug, which currently throws. This PRD's flag is the missing primitive; the
+   slug, which currently throws. This SPEC's flag is the missing primitive; the
    skill is updated to pass `--allow-backlog` and to state the
    drive-in-place-beats-promote-then-drive rationale.
 7. **Generalise the principle into WORK-CONTRACT.md** (SOURCE
@@ -165,16 +165,16 @@ backlog mode actually work.
 - Auto-promotion of staged tasks, or relaxing the review-first nature of staging
   for any non-explicit caller — `--allow-backlog` does NOT change staging's
   meaning for anyone who does not type it.
-- A `--allow-proposed` analogue for PRDs — PRD tasking already solved its
-  instance by tasking-in-place (TASKING-PROTOCOL.md §6); this PRD is the TASK
-  instance only. (If a PRD-side build flag is ever wanted, it is a separate item.)
+- A `--allow-proposed` analogue for PRDs — SPEC tasking already solved its
+  instance by tasking-in-place (TASKING-PROTOCOL.md §6); this SPEC is the TASK
+  instance only. (If a SPEC-side build flag is ever wanted, it is a separate item.)
 - The `do prd:` path — this is `do task:` resolution only.
 
 ## Further Notes
 
-- Recurring-shape lineage: instance 1 = PRD tasking (`specs/proposed → ready`
+- Recurring-shape lineage: instance 1 = SPEC tasking (`specs/proposed → ready`
   race), fixed by tasking in place (TASKING-PROTOCOL.md §6 + the
-  `observation-discharge-...` PRD). Instance 2 = this (task building;
+  `observation-discharge-...` SPEC). Instance 2 = this (task building;
   `tasks/backlog → ready` race). The WORK-CONTRACT principle (Resolved decision
   7) is the generalisation so a third instance is caught by the doc, not
   rediscovered.

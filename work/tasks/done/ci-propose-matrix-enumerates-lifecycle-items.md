@@ -21,7 +21,7 @@ NOT only in merge mode:
   enumerate apply items, so a committed answer is applied on the propose path
   identically to merge. Without this, the on-answer-committed trigger (`push:
   work/questions/**`) would re-run the matrix but find no leg for the answered item,
-  and PRD story 4 (apply the answer) would silently be merge-only. Apply behaves
+  and SPEC story 4 (apply the answer) would silently be merge-only. Apply behaves
   like merge: the leg runs `advance <id> --propose`, the apply rung consumes the
   answer and commits, and the foundation slice's in-place tree-less publish pushes
   it to `main`.
@@ -29,7 +29,7 @@ NOT only in merge mode:
 Today the `enumerate` step builds the matrix from `dorfl scan --json`
 filtered on `eligibility.eligible == true`, which is build/slice-only: a
 `needsAnswers:true` item is `eligible:false` by construction (whether its sidecar
-is answered or not), and untriaged observations are not in the scan's slice/PRD
+is answered or not), and untriaged observations are not in the scan's slice/SPEC
 pools at all. So NO lifecycle rung (triage / surface / apply) ever gets a matrix
 leg. This is the SAME class of bug the merged
 `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` work fixed for
@@ -53,7 +53,7 @@ Scope:
   per-repo `surfaceBlockers` / `observationTriage` config (the SAME
   `LifecyclePoolGates` the drivers pass). Surface the pool on BOTH the registry
   (`repos[]`) and in-place (`cwd.repo`) sections, the same dual-surface the
-  slice/PRD pools use. The pool must distinguish (or let the consumer derive)
+  slice/SPEC pools use. The pool must distinguish (or let the consumer derive)
   triage / surface / apply so the `jq` can emit the right namespace prefix.
 - Extend the `enumerate` step's `jq` to union the lifecycle legs into the matrix:
   `obs:<slug>` (triage), and `slice:`/`prd:<slug>` (surface AND apply), keeping
@@ -61,7 +61,7 @@ Scope:
   surface or apply — is `eligible:false` so it is never also a build leg; an
   observation is a separate `obs:` namespace) so no item gets two legs.
 - Extend `validateAdvanceLifecycleWorkflow` with a presence assertion for the new
-  lifecycle legs, mirroring the existing `propose-enumerates-sliceable-prds`
+  lifecycle legs, mirroring the existing `propose-enumerates-sliceable-specs`
   assertion.
 - The advance-lifecycle workflow is EMITTED by a TypeScript generator
   (`generateAdvanceLifecycleWorkflow`), which interpolates parameters (e.g.
@@ -85,7 +85,7 @@ Scope:
       observations), `slice:`/`prd:<slug>` legs for SURFACE items (`needsAnswers`,
       no all-answered sidecar) AND `slice:`/`prd:<slug>` legs for APPLY items
       (`needsAnswers`, all-answered sidecar), alongside the existing eligible-slice
-      / sliceable-PRD legs, kept `unique`.
+      / sliceable-SPEC legs, kept `unique`.
 - [ ] An apply leg closes the on-answer loop in propose mode: a `needsAnswers` item
       with an all-answered sidecar becomes a propose leg, the apply rung consumes
       the answer, and the result reaches the arbiter (via the foundation slice's
@@ -93,7 +93,7 @@ Scope:
 - [ ] No item produces TWO legs (a `needsAnswers` item is not also a build leg; an
       observation is a separate `obs:` namespace) — asserted on a fixture with both.
 - [ ] `validateAdvanceLifecycleWorkflow` asserts the lifecycle legs are emitted
-      (new assertion mirroring `propose-enumerates-sliceable-prds`).
+      (new assertion mirroring `propose-enumerates-sliceable-specs`).
 - [ ] With gates off (calm defaults), the lifecycle pool is empty and the `jq`
       emits NO added legs (the matrix is unchanged) — asserted.
 - [ ] The change is in the GENERATOR (`generateAdvanceLifecycleWorkflow`) — its `jq`
@@ -127,7 +127,7 @@ Scope:
 > in merge mode. DECIDED: the propose matrix enumerates APPLY items too, so a
 > committed answer is applied on the propose path exactly as in merge (otherwise the
 > on-answer `push: work/questions/**` trigger re-runs the matrix but finds no leg for
-> the answered item, and PRD story 4 is silently merge-only). MIRROR the
+> the answered item, and SPEC story 4 is silently merge-only). MIRROR the
 > already-merged `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`
 > fix (it extended the `jq` from slice-only to also enumerate sliceable PRDs; you
 > extend it again for the lifecycle pool).
@@ -136,10 +136,10 @@ Scope:
 > drifted): confirm the foundation slice
 > (`advance-in-place-publishes-treeless-results`) has LANDED (in-place advance now
 > publishes tree-less results) — this slice depends on it. Confirm `scan --json`
-> still exposes the slice/PRD pools with `eligibility.eligible`, the `enumerate`
+> still exposes the slice/SPEC pools with `eligibility.eligible`, the `enumerate`
 > `jq` still filters on `select(.eligibility.eligible == true)`,
 > `buildLifecyclePools` still exists, and `validateAdvanceLifecycleWorkflow` still
-> carries the `propose-enumerates-sliceable-prds` assertion to mirror. If a
+> carries the `propose-enumerates-sliceable-specs` assertion to mirror. If a
 > dependency landed differently, route to `needs-attention/` rather than build on a
 > stale premise.
 >
@@ -148,10 +148,10 @@ Scope:
 > (`needsAnswers` items WITH an all-answered sidecar). The propose matrix is
 > PARALLEL (one PR/leg per item); `selectionOrder` is a sequential-driver concern
 > that does NOT apply to it. Lifecycle progression is CROSS-TICK (surface → human
-> answers → build; slice-prd → slice-build), so there is no intra-tick ordering to
+> answers → build; slice-spec → slice-build), so there is no intra-tick ordering to
 > model — the cron cadence + the `push: work/questions/**` trigger are the ordering.
 >
-> Where to look: the scan module (the slice pool `scoreItems` + the PRD pool
+> Where to look: the scan module (the slice pool `scoreItems` + the SPEC pool
 > `scorePrds` — add a SIBLING lifecycle pool). CRITICAL: do NOT re-derive the
 > lifecycle enumeration — REUSE `lifecycle-gather.ts`, which already resolves
 > observations + `needsAnswers` items + each sidecar and feeds `buildLifecyclePools`:
@@ -179,7 +179,7 @@ Scope:
 > existing template-test style and assert observable results.
 >
 > Constraints: see `work/findings/ci-advance-surfacing-gap-analysis.md` (driver
-> coverage + ordering analysis) and the PRD
+> coverage + ordering analysis) and the SPEC
 > `ci-advance-surfaces-questions-not-only-builds`. RECORD any non-obvious in-scope
 > decision (e.g. the exact `jq` shape, or how the lifecycle pool is keyed in the
 > scan JSON) per the slice template's decision-recording rule.
@@ -204,7 +204,7 @@ git mv work/in-progress/ci-propose-matrix-enumerates-lifecycle-items.md work/don
   `.github/workflows/advance-lifecycle.yml` without `workflows` permission
 ```
 
-This slice's deliverable is to REGENERATE `.github/workflows/advance-lifecycle.yml` (it edits the generator and re-emits the workflow YAML). The CI runner's GitHub App token deliberately LACKS the `workflows` permission — an autonomous run must never be able to rewrite its own triggers (the `runner-in-ci` PRD states this as a hard safety line: "the running CI job is forbidden from touching `.github/workflows/**`"). So GitHub rejects the WHOLE branch push because it carries a `.github/workflows/` change, and the runner releases the advancing borrow but cannot land the branch — the slug strands in `in-progress/`, and every re-claim re-hits the identical wall (an infinite re-fail loop).
+This slice's deliverable is to REGENERATE `.github/workflows/advance-lifecycle.yml` (it edits the generator and re-emits the workflow YAML). The CI runner's GitHub App token deliberately LACKS the `workflows` permission — an autonomous run must never be able to rewrite its own triggers (the `runner-in-ci` SPEC states this as a hard safety line: "the running CI job is forbidden from touching `.github/workflows/**`"). So GitHub rejects the WHOLE branch push because it carries a `.github/workflows/` change, and the runner releases the advancing borrow but cannot land the branch — the slug strands in `in-progress/`, and every re-claim re-hits the identical wall (an infinite re-fail loop).
 
 **Therefore this slice can ONLY be completed by a human** (or a non-App credential WITH `workflows` permission): a human checks out a branch off `main`, builds the change (the approved review text is a near-complete spec), and pushes/merges it with their own credentials. `humanOnly: true` stops CI from re-claiming it into the dead end.
 
@@ -224,7 +224,7 @@ NOTE: the approved branch was NEVER pushed (the rejection blocked the whole push
 
 ## Decisions
 
-- **`scan --json` lifecycle JSON shape (ratifies review nit 1).** Triage items carry only `{slug}` — the `obs:` prefix is FIXED in the matrix `jq` (an observation has no slice/prd namespace) — while surface/apply items carry `{namespace: 'slice'|'prd', slug}` so the `jq` projects the right `slice:`/`prd:` prefix via `.namespace + ":" + .slug`. This asymmetry STANDS: a `namespace: 'observation'` on triage would be dead shape (the prefix is never read from it). Future consumers must not add one and fork the shape. The `ScannedBlockedItem.namespace` is typed `'slice' | 'prd'` (a strict subset of the upstream `SelectedNamespace`); `toScannedLifecycle` narrows + drops any non-slice/prd defensively, since surface/apply pools never carry observations by construction.
+- **`scan --json` lifecycle JSON shape (ratifies review nit 1).** Triage items carry only `{slug}` — the `obs:` prefix is FIXED in the matrix `jq` (an observation has no slice/spec namespace) — while surface/apply items carry `{namespace: 'slice'|'spec', slug}` so the `jq` projects the right `slice:`/`prd:` prefix via `.namespace + ":" + .slug`. This asymmetry STANDS: a `namespace: 'observation'` on triage would be dead shape (the prefix is never read from it). Future consumers must not add one and fork the shape. The `ScannedBlockedItem.namespace` is typed `'slice' | 'spec'` (a strict subset of the upstream `SelectedNamespace`); `toScannedLifecycle` narrows + drops any non-slice/spec defensively, since surface/apply pools never carry observations by construction.
 - **`lifecycleGatesFrom(config)` mapping (ratifies review nit 2).** `observationTriage !== 'off'` → `triage` ON (BOTH `ask` and `auto` enumerate a triage leg identically — the matrix only decides "is there a leg at all?"; the ask/auto disposition distinction is enforced LATER by the triage rung, not by leg existence), and `surfaceBlockers` → `surface` ON. The ask/auto tri-state is intentionally collapsed to a boolean AT THE SCAN LAYER because that is exactly what the underlying `buildLifecyclePools` gate API takes; `apply` is never gated (consume is always-on, the create-vs-consume invariant, ADR `ci-config-policy-and-gate-family` §4).
-- **APPLY enumerated on the propose matrix (the A2 fork, as the slice specified).** The propose matrix DOES enumerate apply legs, so a committed answer is applied on the propose path identically to merge — closing the on-answer `push: work/questions/**` loop. Without it PRD story 4 would be silently merge-only.
+- **APPLY enumerated on the propose matrix (the A2 fork, as the slice specified).** The propose matrix DOES enumerate apply legs, so a committed answer is applied on the propose path identically to merge — closing the on-answer `push: work/questions/**` loop. Without it SPEC story 4 would be silently merge-only.
 - **Policy (DECIDED — the corrected model): a slice that changes a CI WORKFLOW must change the GENERATOR + the validator (autonomously buildable/pushable SOURCE), and must NOT commit the emitted `.github/workflows/**` file.** The emitted workflow is `install-ci`'s OUTPUT; refreshing the in-repo copy is a separate, human-owned `dorfl install-ci` step (the App token cannot push under `.github/workflows/**`, and shouldn't — the `runner-in-ci` safety line). The original slice conflated the two by instructing the builder to regenerate + commit the `.yml`, which is what stranded it. Future workflow-touching slices: edit the generator + validator only; leave the emitted file to `install-ci`. (`humanOnly` is then NOT required for the slice's source change — only the `install-ci` refresh is human-run.)

@@ -81,8 +81,8 @@ folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 > with the reason in the body (`packages/dorfl/src/needs-attention.ts` + the
 > `ledger-write.ts` transitions), read those. KEEP that folder move as-is. ADD: mark
 > the HELD lock `state: stuck` + reason via the CAS amend (`markStuckItemLock` from
-> `lock-entry-state-machine-and-invariants`). PRD
-> `work/prd/ledger-status-per-item-lock-refs.md` (US #5, #8); ADR
+> `lock-entry-state-machine-and-invariants`). SPEC
+> `work/spec/ledger-status-per-item-lock-refs.md` (US #5, #8); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > READ the RE-SCOPED banner: this is the INTERIM DUAL-WRITE half. Do NOT remove the
@@ -100,4 +100,4 @@ folder bounce are OUT OF SCOPE here and owned by #9 (see the RE-SCOPED banner).
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> SPEC propagation. Record non-obvious in-scope decisions per the slice template.

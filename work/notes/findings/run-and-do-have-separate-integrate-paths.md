@@ -26,9 +26,9 @@ Three confirmed instances, each a feature/behaviour that `do` has and `run` lack
 
 This is latent DUPLICATION of the gate→needs-attention→integrate logic across `run.ts` and `complete.ts`. Every back-half feature (the three above; future ones) must EITHER be duplicated into `run`, OR `run` should be refactored to share the back-half. Duplication is how the two drift (three confirmed instances and counting).
 
-## RESOLVED DESIGN (2026-06-07 grilling pass) — see the convergence PRD
+## RESOLVED DESIGN (2026-06-07 grilling pass) — see the convergence SPEC
 
-Grilled and decided; the design now lives in `work/prd/run-do-integrate-convergence.md`. Summary of the ratified decisions:
+Grilled and decided; the design now lives in `work/spec/run-do-integrate-convergence.md`. Summary of the ratified decisions:
 
 - **Head / core / tail decomposition.** Extract the SHARED band — gate (verify) → review gate → done-move → atomic commit → rebase → integrate, INCLUDING the needs-attention routing — into a new `src/integration-core.ts` (`performIntegration`). Both `performComplete` (`do`/`complete`) and `runOneItem` (`run`) become thin HEAD + core-call + TAIL wrappers. They share a CALLEE, never call each other (no coupling of the human command to the fleet daemon).
 - **The core owns:** the needs-attention routing (one place, both callers) AND the effective-integration-mode decision (incl. today's `autoMerge`-off `merge`→`propose` downgrade — preserved verbatim). It returns DATA (`{outcome, routedToNeedsAttention, branch, commitMessage, integration?, reason?}`); the tails do only their cosmetic post-step.

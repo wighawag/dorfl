@@ -43,4 +43,4 @@ The key rule, repeated here in case nested `AGENTS.md` files are not auto-loaded
 
 When you are dispatched to build a work task, you do NOT perform git operations on this repo: no stage/commit/push, and do not move files between `work/` folders. The runner/human owns every git-state transition (claim, done-move, commit, integration). Your tests MAY use their own throwaway git repos.
 
-> This is only a local reminder. The authoritative statement is **in-band in the prompt** the runner hands you (and in `work/findings/execution-substrate-decisions.md` §9 + the PRD): the dorfl protocol states it in the prompt precisely so it does not rely on this file existing. Do not treat this `AGENTS.md` as the protocol's source of truth for the git rule.
+> This is only a local reminder. The authoritative statement is **in-band in the prompt** the runner hands you (and in `work/findings/execution-substrate-decisions.md` §9 + the SPEC): the dorfl protocol states it in the prompt precisely so it does not rely on this file existing. Do not treat this `AGENTS.md` as the protocol's source of truth for the git rule.

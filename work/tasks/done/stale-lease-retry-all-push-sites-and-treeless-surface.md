@@ -4,7 +4,7 @@ slug: stale-lease-retry-all-push-sites-and-treeless-surface
 covers: []
 ---
 
-> Self-contained fix slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signals (mark resolved on landing): `work/observations/stale-lease-retry-only-on-job-worktree-path.md` (the two uncovered push sites) and `work/observations/needs-attention-route-claims-pushed-when-push-silently-failed.md` (the surfacing-after-push-failure gap). Builds on the SHIPPED `work-branch-push-retry-on-stale-lease` (#88, the retry helper) and `requeue-treeless-transition` (#89, the tree-less CAS ledger move).
+> Self-contained fix slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signals (mark resolved on landing): `work/observations/stale-lease-retry-only-on-job-worktree-path.md` (the two uncovered push sites) and `work/observations/needs-attention-route-claims-pushed-when-push-silently-failed.md` (the surfacing-after-push-failure gap). Builds on the SHIPPED `work-branch-push-retry-on-stale-lease` (#88, the retry helper) and `requeue-treeless-transition` (#89, the tree-less CAS ledger move).
 >
 > WHY: a `do --isolated` continue-from-requeued-branch run built green (gate-1 + Gate-2 approved), then its final `git push <branch> --force-with-lease=<branch>` was REJECTED ("stale info" — the remote branch ref had moved under the lease). The run errored out of the push BEFORE surfacing, leaving the slice silently in `work/in-progress/` on the arbiter with the approved work stranded in the job worktree — a human had to push by hand (it was a clean fast-forward) + finish the integration. Both failure modes are already-captured gaps; this slice closes them.
 

@@ -5,13 +5,13 @@ humanOnly: true
 sliceAfter: [auto-slice, review-skill]
 ---
 
-> **SCOPE NARROWED 2026-06-06 — the review PROTOCOL was extracted to its own PRD (`work/prd/review-skill.md`).** This PRD is now ONLY the review **GATES** (the runner machinery): Gate 1 (slice-time), Gate 2 (PR/code), the per-repo toggles, the `--propose` PR arbiter, auto-merge-on-approve, the model override, the §13 role, and the shared trust resolver. The protocol itself — the four adversarial lenses + destination check, realised as a runner-agnostic `review` SKILL that EMITS verdicts (callers route them) — is `review-skill` and must be built FIRST (hence the added `sliceAfter`). Where this PRD's text below describes "the shared protocol (a SKILL)", that content now LIVES in `review-skill.md`; both gates here CONSUME that skill and ROUTE its verdict to `needsAnswers` / `needs-attention` / auto-merge.
+> **SCOPE NARROWED 2026-06-06 — the review PROTOCOL was extracted to its own SPEC (`work/spec/review-skill.md`).** This SPEC is now ONLY the review **GATES** (the runner machinery): Gate 1 (slice-time), Gate 2 (PR/code), the per-repo toggles, the `--propose` PR arbiter, auto-merge-on-approve, the model override, the §13 role, and the shared trust resolver. The protocol itself — the four adversarial lenses + destination check, realised as a runner-agnostic `review` SKILL that EMITS verdicts (callers route them) — is `review-skill` and must be built FIRST (hence the added `sliceAfter`). Where this SPEC's text below describes "the shared protocol (a SKILL)", that content now LIVES in `review-skill.md`; both gates here CONSUME that skill and ROUTE its verdict to `needsAnswers` / `needs-attention` / auto-merge.
 
 > **RESOLVED 2026-06-15 — the `autoMerge` concept-collision is closed in favour of Model P (slice `remove-automerge-merge-means-auto-on-gate-pass`).** There is NO separate `autoMerge` knob. `integration: merge` MEANS "land automatically when the gate passes" (a green `verify`, plus a Gate-2 `approve` if `review` is on); `integration: propose` MEANS "a human merges" (the PR / PR-less checkpoint). The old per-repo `autoMerge`-on-approve policy (and the `merge` + `autoMerge: false` "downgrade to propose" combination) is DELETED — it was redundant with `propose`. Wherever the text below says "`autoMerge` on/off" or "auto-merge the PR on approve", read it as: `merge` IS the auto-land mode, `propose` IS the human checkpoint. `autoMerge` is gone from config/env/flags and a stale key is silently inert.
 
 > **Launch snapshot, not maintained.** Source material for slicing (`to-slices`); once sliced, technical detail moves into the slices and durable rationale into `docs/adr/`. Expect this to be outrun by the work — that is fine.
 >
-> **Provenance.** This PRD promotes `work/ideas/review-gate-default-for-autoslicing.md` (two independent dogfood sessions reproduced its core finding) AND a maintainer discussion (2026-06-06) that sharpened the framing: there are **two kinds of review gate, complementary, not one mechanism with two defaults**. Read that idea file for the empirical case + the review PROTOCOL; this PRD is the buildable shaping. It **activates** `execution-substrate-decisions.md` §13's staged `review`/`grilling` role (and would add a `review` model override there).
+> **Provenance.** This SPEC promotes `work/ideas/review-gate-default-for-autoslicing.md` (two independent dogfood sessions reproduced its core finding) AND a maintainer discussion (2026-06-06) that sharpened the framing: there are **two kinds of review gate, complementary, not one mechanism with two defaults**. Read that idea file for the empirical case + the review PROTOCOL; this SPEC is the buildable shaping. It **activates** `execution-substrate-decisions.md` §13's staged `review`/`grilling` role (and would add a `review` model override there).
 
 ## Problem Statement
 
@@ -30,7 +30,7 @@ One **`review` role** (the methodology) realised as a runner-agnostic **skill**,
 
 ### The shared protocol (a SKILL — adopt=skill, ADR command-surface §8)
 
-The review PROTOCOL — ordered adversarial lenses ENDING in a destination check — is **methodology, not execution**, so it is a `review` **skill** (tool-agnostic, like `to-slices`/`to-prd`): (1) claim-vs-code, (2) cleanup-vs-behaviour, (3) cross-slice composition, (4) **the destination check** ("if built/sliced exactly as written, do we reach the PRD/ADR goal?"). The skill is the single source of the protocol; both gates run the SAME skill. (Full protocol + the empirical case for multiple independent passes live in the idea file; do not duplicate here.)
+The review PROTOCOL — ordered adversarial lenses ENDING in a destination check — is **methodology, not execution**, so it is a `review` **skill** (tool-agnostic, like `to-slices`/`to-spec`): (1) claim-vs-code, (2) cleanup-vs-behaviour, (3) cross-slice composition, (4) **the destination check** ("if built/sliced exactly as written, do we reach the SPEC/ADR goal?"). The skill is the single source of the protocol; both gates run the SAME skill. (Full protocol + the empirical case for multiple independent passes live in the idea file; do not duplicate here.)
 
 ### RESOLVED DESIGN (2026-06-06 grilling pass) — THREE concepts, ONE mechanism, MANY insertion points
 
@@ -41,7 +41,7 @@ The review PROTOCOL (the ordered adversarial lenses + the destination/goal check
 **Shape 1 — the review GATE (one-shot, terminal: approve / block).**
 
 - A single reviewer invocation → verdict. approve ⇒ proceed; block ⇒ route to `needsAnswers` / `needs-attention` (the existing seam). NOT a loop — **no `reviewMaxRounds` on a gate** (the rounds knob on the built Gate-2 path is an orphan from a miscommunication — see `work/observations/reviewmaxrounds-on-wrong-concept.md`; later removed from the gate).
-- The **destination/goal check is a PROMPT-FRAMING ASPECT folded into the single gate pass**, not a separate step: "do these slices / this diff reach the PRD/ADR goal?" is part of the best review prompt, combinable with the other lenses.
+- The **destination/goal check is a PROMPT-FRAMING ASPECT folded into the single gate pass**, not a separate step: "do these slices / this diff reach the SPEC/ADR goal?" is part of the best review prompt, combinable with the other lenses.
 - Insertion points (same mechanism, different prompt): post-build impl review (**built — #11/#12**); and, later, the pre-build slice check + the run path (see below).
 
 **Shape 2 — the SLICER EDIT LOOP (NOT a gate — an improver).**
@@ -52,7 +52,7 @@ The review PROTOCOL (the ordered adversarial lenses + the destination/goal check
   > **NOTE (reconciled 2026-06-14).** An earlier draft of this section had a contradictory "SINGLE context" headline (one launch looping internally, in-memory accumulation) over a per-pass operative spec. That contradiction is resolved IN FAVOUR of the per-pass model above (which is what was built and is intended). The single-context variant (one launch, internal multipass, in-context accumulation) was the ORIGINAL idea and is genuinely different + potentially cheaper for some contexts; it is deferred, NOT discarded, and parked as an incubating idea for a future revisit: `work/ideas/single-context-review-edit-loop.md`. Full adjudication: `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`. Sibling fresh-context M-layer idea: `work/ideas/lone-slice-review-fresh-context-m-layer.md`.
 
 - **Termination (resolved Q2):** natural terminator = a pass finds no NEW blocking issue; `slicerLoopMax` is the HARD CAP (per-repo configurable, flag `--slicer-loop-max` > env > per-repo > global, cheap default). **On reaching `slicerLoopMax` with unresolved blockers, the slice(s) are REJECTED as `needsAnswers`** (the verdict sink below). `slicerLoopMax` lives HERE (the loop, the `--slicer-loop*` family), never on the gate.
-- **Verdict routing (the loop's sink) = the needsAnswers / needs-attention routing** (the outcome distinction the loop OWNS): (a) a specific uncertain slice → emit with `needsAnswers: true` + questions in its body; (b) the whole decomposition unclear / `slicerLoopMax` exhausted → route the PRD to `needs-attention/` with the questions, emit no guessed slices. Keeping this routing IN the loop slice is why the slice reads coherently: the loop produces the verdict AND owns the three outcomes (converge→land / uncertain-slice→needsAnswers / decomposition-unclear→ PRD-to-needs-attention).
+- **Verdict routing (the loop's sink) = the needsAnswers / needs-attention routing** (the outcome distinction the loop OWNS): (a) a specific uncertain slice → emit with `needsAnswers: true` + questions in its body; (b) the whole decomposition unclear / `slicerLoopMax` exhausted → route the SPEC to `needs-attention/` with the questions, emit no guessed slices. Keeping this routing IN the loop slice is why the slice reads coherently: the loop produces the verdict AND owns the three outcomes (converge→land / uncertain-slice→needsAnswers / decomposition-unclear→ SPEC-to-needs-attention).
 
 **Relation to `autoslice-confidence` (resolved Q4 → decision B, 2026-06-06): FOLD + DELETE.** `autoslice-confidence` bundled (1) a one-shot self-confidence JUDGEMENT — SUPERSEDED by the edit loop (an INDEPENDENT adversarial pass is the confidence mechanism a self-check cannot be); and (2) the needsAnswers / needs-attention ROUTING fallbacks — LOAD-BEARING. **Decision B (chosen for coherence — the routing belongs with the loop that produces the verdicts): `slicer-review-edit-loop` FOLDS IN the routing and `autoslice-confidence` is DELETED**, its 4 references reconciled to point at the loop (done 2026-06-06, at slice-authoring time — the build agent never touches sibling slices). The routing behaviour is preserved IN the loop slice; only the redundant self-check concept is gone.
 
@@ -62,7 +62,7 @@ The review PROTOCOL (the ordered adversarial lenses + the destination/goal check
 - **(B) pre-build slice check** — a slice-review (Shape-1 gate, slice-framed prompt) INSIDE `do <slug>` BEFORE the agent builds, so a slice that slipped through with a missed judgement is caught/refined before implementation. **Later set.**
 - **(C) post-build impl review** — Gate 2. **Built (#11/#12).**
 - **(D) run coverage** — `run` has a SEPARATE integrate path and does NOT inherit the gate today (`work/findings/run-and-do-have-separate-integrate-paths.md`). This is its OWN later set whose FIRST job is to converge `run` on the `do` codepath (`performComplete`); review then integrates naturally, no duplication.
-- **(E) issue-thread surface** — issue-to-prd / issue-intake CI runs the SAME review/edit loop on the generated PRD/slices and surfaces findings as QUESTIONS (and edits where sensible) into the ISSUE COMMENT THREAD. **Later set** (belongs in the issue-intake design; reuses this mechanism).
+- **(E) issue-thread surface** — issue-to-spec / issue-intake CI runs the SAME review/edit loop on the generated SPEC/slices and surfaces findings as QUESTIONS (and edits where sensible) into the ISSUE COMMENT THREAD. **Later set** (belongs in the issue-intake design; reuses this mechanism).
 
 ### Gate 1 — SPEC/SLICE review \*(SUPERSEDED by "RESOLVED DESIGN" above — slice-gen
 
@@ -70,7 +70,7 @@ review is the EDIT LOOP (Shape 2, insertion point A), not a one-shot gate. Retai
 
 - Runs as a distinct STEP after the auto-slicer emits slices (NOT a "review yourself" line in the slicer prompt — a separate invocation/role; a prompt instruction may sit ON TOP, not instead).
 - **Default ON for slicing** — there is no `verify` floor there, so review is the only gate; for an autonomous slicer with no human, the destination check is the strongest trust signal a decomposition is sound.
-- **Verdict routing reuses the existing seam:** a blocking finding sets the PRD/slice `needsAnswers` (or routes the offending slice to `needs-attention`) — the same valve the producer's own humility-check uses (`needsAnswers` is the unifying lever: producer + reviewer, one signal). An `approve` lets the slices land claimable.
+- **Verdict routing reuses the existing seam:** a blocking finding sets the SPEC/slice `needsAnswers` (or routes the offending slice to `needs-attention`) — the same valve the producer's own humility-check uses (`needsAnswers` is the unifying lever: producer + reviewer, one signal). An `approve` lets the slices land claimable.
 
 ### Gate 2 — PR / CODE review (the final arbiter in `--propose`)
 
@@ -116,7 +116,7 @@ review is the EDIT LOOP (Shape 2, insertion point A), not a one-shot gate. Retai
 
 ## Autonomy notes (the gate axes)
 
-- **`humanOnly: true` (PRD-level, DECIDED):** this PRD puts a model in the merge/quality decision (the trust boundary, §8) — security/judgement-sensitive surface a human must drive the SLICING of. Per-slice gates: the pure verdict-routing + toggle-resolution + "post via seam" wiring is agent-buildable; anything that touches the §8 determinism boundary leans `humanOnly`.
+- **`humanOnly: true` (SPEC-level, DECIDED):** this SPEC puts a model in the merge/quality decision (the trust boundary, §8) — security/judgement-sensitive surface a human must drive the SLICING of. Per-slice gates: the pure verdict-routing + toggle-resolution + "post via seam" wiring is agent-buildable; anything that touches the §8 determinism boundary leans `humanOnly`.
 - **`needsAnswers`: CLEARED 2026-06-06 (batch-qa round 2) — all four resolved:**
   - **Context isolation — RESOLVED.** A **fresh-context** reviewer is the floor (a cold read; the `review` skill already insists on this) — enough for now. No different model is MANDATED by default, BUT the `review` step's model is **configurable specifically for reviews** (a per-repo `review` model override, already staged in `execution-substrate-decisions.md` §13) for opt-in stronger de-correlation. So: fresh context + adversarial reframe always; review-model override available per repo.
   - **Role vs grilling — RESOLVED: SAME STEP.** One `review` role/skill; "grilling" is review with the adversarial reframe dialed up, NOT a second role/seam.
@@ -135,17 +135,17 @@ The Gate-2 slice has been emitted: **`work/backlog/review-gate-pr.md`** (the PR/
 
 **The SECOND set is now being sliced (2026-06-06):** the **slicer EDIT LOOP** (insertion point A, Shape 2) on the `do prd:<slug>` path — emitted as **`work/backlog/slicer-review-edit-loop.md`** (built next, to dogfood slicing the not-yet-sliced PRDs). See the RESOLVED DESIGN section.
 
-> **AT REST 2026-06-12 — this PRD now resides in `work/spec-sliced/` (its sliced resting state).** Its CORE is built: the slicer edit loop (A, `done/slicer-review-edit-loop.md`), Gate 2 PR review (C, `done/review-gate-pr.md`), the PR-comment audit trail (`done/review-gate-pr-comment.md` + its blocker `done/propose-pr-body.md`), run coverage (D, `done/run-through-integration-core.md`), and the intake variant (`done/intake-lone-slice-bounded-internal-review.md`). `autoslice-confidence` was folded in + deleted. The remaining named follow-ups have each been CARRIED to a durable owner, so this PRD no longer needs to be held open for them:
+> **AT REST 2026-06-12 — this SPEC now resides in `work/spec-sliced/` (its sliced resting state).** Its CORE is built: the slicer edit loop (A, `done/slicer-review-edit-loop.md`), Gate 2 PR review (C, `done/review-gate-pr.md`), the PR-comment audit trail (`done/review-gate-pr-comment.md` + its blocker `done/propose-pr-body.md`), run coverage (D, `done/run-through-integration-core.md`), and the intake variant (`done/intake-lone-slice-bounded-internal-review.md`). `autoslice-confidence` was folded in + deleted. The remaining named follow-ups have each been CARRIED to a durable owner, so this SPEC no longer needs to be held open for them:
 
-- **pre-build slice check (B)** — CARRIED to `work/ideas/pre-build-slice-review-gate.md` (a speculative insertion point, parked with its YAGNI rationale + promote trigger; it is NOT owned by this PRD's resting).
+- **pre-build slice check (B)** — CARRIED to `work/ideas/pre-build-slice-review-gate.md` (a speculative insertion point, parked with its YAGNI rationale + promote trigger; it is NOT owned by this SPEC's resting).
 - **run coverage (D)** — BUILT: `work/done/run-through-integration-core.md` threaded the review gate into `run` and converged it on `performIntegration`. No longer pending.
-- **issue-thread surface (E)** — CARRIED to `work/prd/runner-in-ci.md` (its rightful owner: an issue-front-door delivery surface that reuses this PRD's review machinery). Sliced when `runner-in-ci` is sliced.
-- **remove `reviewMaxRounds` from the Gate-2 path** (the orphan rounds loop in `integration-core.ts`; the slicer loop owns `slicerLoopMax`) — ON MAINTAINER HOLD, recorded in `work/observations/reviewmaxrounds-on-wrong-concept.md` (re-verified live): remove it only when a real builder-revise step is designed/built (a MOVE + reframe, never a deletion-in-isolation). That standing observation, not this PRD, holds the signal.
+- **issue-thread surface (E)** — CARRIED to `work/spec/runner-in-ci.md` (its rightful owner: an issue-front-door delivery surface that reuses this SPEC's review machinery). Sliced when `runner-in-ci` is sliced.
+- **remove `reviewMaxRounds` from the Gate-2 path** (the orphan rounds loop in `integration-core.ts`; the slicer loop owns `slicerLoopMax`) — ON MAINTAINER HOLD, recorded in `work/observations/reviewmaxrounds-on-wrong-concept.md` (re-verified live): remove it only when a real builder-revise step is designed/built (a MOVE + reframe, never a deletion-in-isolation). That standing observation, not this SPEC, holds the signal.
 
 ## Out of Scope
 
-- The auto-slicer itself (that is `auto-slice`; this PRD adds the review STEP that gates its output).
-- The CI packaging that runs these gates headless (that is `runner-in-ci`'s `install-ci`; this PRD defines the gate, not its CI wiring).
+- The auto-slicer itself (that is `auto-slice`; this SPEC adds the review STEP that gates its output).
+- The CI packaging that runs these gates headless (that is `runner-in-ci`'s `install-ci`; this SPEC defines the gate, not its CI wiring).
 - Replacing `verify` (never — review is ON TOP of the deterministic floor, §8).
 - Issue-front-door author-trust policy (that is `issue-intake`). **DECOUPLED 2026-06-06:** the earlier "the two SHARE a trust primitive" is WITHDRAWN — `review`'s `autoMerge` keys on per-repo policy only; author-association / request-channel trust is a CI / issue-front-door concern, specced in `issue-intake`, not shared with the `do`/review gate.
 - Non-GitHub review providers (GitHub adapter first; the seam allows others later).

@@ -9,7 +9,7 @@ covers: [5, 6, 7, 8, 10, 12]
 
 ## What to build
 
-The `dorfl run --once` command: claim up to N eligible items, run a configured agent on each in an isolated worktree/clone, integrate the results, then stop (supervised — increment B from the PRD).
+The `dorfl run --once` command: claim up to N eligible items, run a configured agent on each in an isolated worktree/clone, integrate the results, then stop (supervised — increment B from the SPEC).
 
 A thin path through every layer, reusing the `scan` core for the queue:
 

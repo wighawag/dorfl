@@ -8,7 +8,7 @@ covers: [1, 4, 7, 13, 15]
 
 ## What to build
 
-The lowest-risk tracer of the staging/pool position gate (PRD US #13, the STEP-A
+The lowest-risk tracer of the staging/pool position gate (SPEC US #13, the STEP-A
 migration). Introduce a `work/pre-backlog/` STAGING folder while `work/backlog/`
 KEEPS meaning "the eligible pool" — so EVERY existing reader (scan, claim,
 select-priority, the mirror pool scan) is byte-for-byte unchanged. The only new
@@ -20,7 +20,7 @@ behaviour is end-to-end:
    untrusted-origin and policy-driven placement decisions are a later slice; here
    the placement is the simple fixed "slicer output is born staged." The agent
    still WRITES only into the staging folder; the runner OWNS the move into it
-   (the "agent does not move files" rule restated to cover CREATION, PRD US #4 /
+   (the "agent does not move files" rule restated to cover CREATION, SPEC US #4 /
    the governing ADR).
 2. **Add the runner-owned `pre-backlog → backlog` PROMOTION.** A new
    runner/human-owned ledger move (a durable `main` move, the same category as the
@@ -34,7 +34,7 @@ human-pool-control and review-without-PR value immediately (slices land staged a
 not eligible; a human promotes the approved ones), with a tiny blast radius
 because no existing reader's meaning changes. It does NOT do the STEP-B rename
 (`backlog → todo`, `pre-backlog → backlog`) — that is deliberately deferred to the
-taxonomy reorg PRD (`folder-taxonomy-reorg-and-rename.md`), which owns the
+taxonomy reorg SPEC (`folder-taxonomy-reorg-and-rename.md`), which owns the
 `work-layout` path module the rename needs. Do NOT introduce that module here.
 
 ## Acceptance criteria
@@ -65,16 +65,16 @@ taxonomy reorg PRD (`folder-taxonomy-reorg-and-rename.md`), which owns the
 
 > Implement STEP A of the staging/pool position gate for SLICES: a
 > `work/pre-backlog/` staging folder while `work/backlog/` keeps meaning the
-> eligible pool. Read `work/prd/staging-pool-position-gate-and-trust-model.md` (US
+> eligible pool. Read `work/spec/staging-pool-position-gate-and-trust-model.md` (US
 > #1, #4, #7, #13, #15) and the governing ADR
 > `docs/adr/placement-is-runner-deterministic-humanonly-is-agent-judgement.md`
 > first. This is the SMALLEST independent tracer; keep it that way.
 >
 > FIRST, check this slice against current reality (it is a launch snapshot and may
 > have DRIFTED): does it still match the code and the relevant ADRs? In particular
-> CONFIRM that the `work-layout` path module referenced by the PRD's STEP B does
-> NOT yet exist — it is Phase 0 of the DEFERRED taxonomy PRD
-> (`work/prd/folder-taxonomy-reorg-and-rename.md`). You must NOT create that module
+> CONFIRM that the `work-layout` path module referenced by the SPEC's STEP B does
+> NOT yet exist — it is Phase 0 of the DEFERRED taxonomy SPEC
+> (`work/spec/folder-taxonomy-reorg-and-rename.md`). You must NOT create that module
 > or do the STEP-B rename here; STEP A is purely ADDITIVE. If a dependency landed
 > differently than this assumes, route the slice to `needs-attention/` with the
 > discrepancy rather than building on a stale premise (WORK-CONTRACT.md "Drift is a

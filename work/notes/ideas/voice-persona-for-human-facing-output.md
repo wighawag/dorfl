@@ -5,9 +5,9 @@ type: idea
 status: incubating
 ---
 
-# Voice / persona for human-facing output (pre-PRD / incubating idea)
+# Voice / persona for human-facing output (pre-SPEC / incubating idea)
 
-> A **pre-PRD idea**: give the CLI an OPTIONAL personality (a "voice"), captured here so it is not lost. The maintainer wants the tool to be able to speak in character (the working name is the golem **Dorfl** from Discworld: terse, literal, a little formal). It is NOT ready to slice; it has open questions and is cosmetic-adjacent, so it must be carefully seamed to never touch the protocol surface or produced code.
+> A **pre-SPEC idea**: give the CLI an OPTIONAL personality (a "voice"), captured here so it is not lost. The maintainer wants the tool to be able to speak in character (the working name is the golem **Dorfl** from Discworld: terse, literal, a little formal). It is NOT ready to slice; it has open questions and is cosmetic-adjacent, so it must be carefully seamed to never touch the protocol surface or produced code.
 >
 > Lifecycle tier: **`work/notes/ideas/` (incubating) -> `work/briefs/` (committed north-star) -> `work/tasks/todo/` (tasks) -> `work/tasks/done/`.**
 
@@ -84,7 +84,7 @@ So the split is: the persona rides the prose layer (CLI messages, and at `all` a
 - A curated set of persona lines for the few moments a human actually reads: claim won / claim lost, gate green / gate red, work pushed (the propose block), needs-attention routed, `gc` reaped a worktree. Curated strings, not generated, so they stay terse and correct.
 - For `all`: the agent prompt and the `work/`-artifact templates gain a persona variant, selected by the resolved `voice` level, with an explicit instruction that the voice is for prose ONLY and must never enter produced code.
 
-## Open questions to resolve before it becomes a PRD/brief
+## Open questions to resolve before it becomes a SPEC/brief
 
 - **Naming.** Is the field `voice` with levels `plain | cli | all`? Or `persona`? Pick one term and check it against `CONTEXT.md` so it does not re-mean an existing concept (coherence is a first-class quality here).
 - **One persona or many?** Hardcode Dorfl, or make the persona itself pluggable (a named persona registry) with Dorfl as the first? Lean: hardcode one first; generalise only if a second is wanted.

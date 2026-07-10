@@ -1,5 +1,5 @@
 ---
-title: Rename CLI verb + flags (do prd: -> do brief:, --prds-land-in, --slicer-loop*) to tasking vocabulary
+title: Rename CLI verb + flags (do prd: -> do brief:, --specs-land-in, --slicer-loop*) to tasking vocabulary
 slug: rename-cli-verb-and-flags-do-prd-to-do-brief
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-config-keys-slicing-to-tasking]
@@ -11,7 +11,7 @@ covers: []
 Rename the operator-facing CLI surface as a CLEAN BREAK (Decision 3):
 
 - `do prd:<slug>` → `do brief:<slug>` (the tasking-transition invocation)
-- the flag NAMES `--prds-land-in` → `--briefs-land-in` and `--slices-land-in` → `--tasks-land-in` (commander option definitions + help text)
+- the flag NAMES `--specs-land-in` → `--briefs-land-in` and `--slices-land-in` → `--tasks-land-in` (commander option definitions + help text)
 - `--slicer-loop` / `--no-slicer-loop` / `--slicer-loop-max` / `--slicer-loop-model` → `--tasker-loop*`
 
 SCOPE BOUNDARY (avoid double-ownership with the config task): the blocking task `rename-config-keys-slicing-to-tasking` already renamed the underlying config KEYS (`tasksLandIn`/`briefsLandIn`), their VALUE sets, and removed the `backlog`-alias shim. THIS task renames only the operator-facing FLAG NAMES + the `do` verb namespace, and rewires them to the already-renamed keys. Do not re-touch the config-key values or the shim.
