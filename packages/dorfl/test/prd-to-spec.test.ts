@@ -412,4 +412,32 @@ describe('scanForLeaks — the acceptance GATE over the converted tree', () => {
 		const leaks = scanForLeaks(repo, undefined, ENV);
 		expect(leaks.some((l) => l.lens === 'reverse')).toBe(true);
 	});
+
+	it('does NOT flag a prose acronym-plural `PRDs/ADRs` as a folder ref (option-A prose exemption)', () => {
+		// REGRESSION (run-on-dorfl acceptance): the bare `prds/` folder-ref pattern
+		// must not fire on the artifact word `PRDs` followed by `/` + another word
+		// in running prose (e.g. `review of slices/PRDs/code`, `PRDs/ADRs point`).
+		// Those are the retired word in NARRATIVE, not a dangling `work/prds/` path.
+		const repo = buildFixture(scratch);
+		runPrdToSpec({repoPath: repo, env: ENV});
+		writeFile(
+			repo,
+			'work/specs/tasked/prose.md',
+			'---\nslug: prose\n---\n\nReview of slices/PRDs/code; the PRDs/ADRs point here.\n',
+		);
+		expect(scanForLeaks(repo, undefined, ENV)).toEqual([]);
+	});
+
+	it('STILL flags a genuine surviving `prds/<lifecycle>` folder ref (guard is not over-loosened)', () => {
+		const repo = buildFixture(scratch);
+		runPrdToSpec({repoPath: repo, env: ENV});
+		// A real dangling folder ref (lowercase path shape) MUST still fail the gate.
+		writeFile(
+			repo,
+			'work/specs/tasked/ref.md',
+			'---\nslug: ref\n---\n\nSee prds/ready/foo.md for the source.\n',
+		);
+		const leaks = scanForLeaks(repo, undefined, ENV);
+		expect(leaks.some((l) => l.why.includes('folder ref'))).toBe(true);
+	});
 });
