@@ -15,7 +15,7 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	gitIn,
-	prdFile,
+	specFile,
 	raceClone,
 	racerEnv,
 	type Scratch,
@@ -68,7 +68,7 @@ const taskingOnArbiter = (cwd: string, slug: string): boolean =>
 describe('acquireTaskingLock acquires the unified per-item lock (the marker is RETIRED)', () => {
 	it('a successful acquire holds the lock (prd:<slug>, action task); the body stays in prd/ (NO tasking/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
@@ -99,7 +99,7 @@ describe('acquireTaskingLock acquires the unified per-item lock (the marker is R
 
 	it('a dry-run takes NO lock and mutates nothing', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
@@ -117,7 +117,7 @@ describe('acquireTaskingLock acquires the unified per-item lock (the marker is R
 
 describe('a lock LOST makes the tasking acquire lose definitively with NO marker', () => {
 	it('a DIFFERENT principal already holding the SAME item lock makes the acquire lose, with NO tasking/ marker', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		// Principal a holds ONLY the unified lock (no marker move): the prd stays in
 		// prd/, so the marker CAS alone would admit a tasker; only the held lock gates.
 		const a = raceClone(seeded, 'a');
@@ -154,7 +154,7 @@ describe('a lock LOST makes the tasking acquire lose definitively with NO marker
 
 describe('task ∥ claim and task ∥ advance are mutually exclusive on the SAME item lock', () => {
 	it('a task action on an item already held for IMPLEMENT loses the SAME lock CAS', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['shared']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['shared']});
 		// Principal a holds the item for IMPLEMENT (the claim action) — the SAME ref
 		// `spec-shared` (the lock is keyed by item identity, shared across actions).
 		// MIGRATE step: the tasking path keys `spec:<slug>` now, so the rival takes
@@ -192,7 +192,7 @@ describe('task ∥ claim and task ∥ advance are mutually exclusive on the SAME
 	});
 
 	it('a task action on an item already held for ADVANCE loses the SAME lock CAS', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['shared']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['shared']});
 		// Principal a holds the item for ADVANCE on the SAME ref `spec-shared`.
 		const a = raceClone(seeded, 'a');
 		const advanceHold = await acquireItemLock({
@@ -225,7 +225,7 @@ describe('task ∥ claim and task ∥ advance are mutually exclusive on the SAME
 	});
 
 	it('conversely, a held tasking lock blocks a claim of the SAME item', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['shared']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['shared']});
 		const a = raceClone(seeded, 'a');
 		const tasked = await acquireTaskingLock({
 			slug: 'shared',
@@ -252,7 +252,7 @@ describe('task ∥ claim and task ∥ advance are mutually exclusive on the SAME
 
 describe('race on a --bare file:// arbiter: two taskers of the SAME PRD', () => {
 	it('exactly one wins; the lock + the marker agree on the single winner', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['solo']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['solo']});
 		const a = raceClone(seeded, 'a');
 		const b = raceClone(seeded, 'b');
 
@@ -286,7 +286,7 @@ describe('race on a --bare file:// arbiter: two taskers of the SAME PRD', () => 
 describe('releaseTaskingLock releases the unified per-item lock', () => {
 	it('a clean release drops the lock; the PRD body stays in prd/', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const acquired = await acquireTaskingLock({
 			slug: 'alpha',
@@ -315,7 +315,7 @@ describe('releaseTaskingLock releases the unified per-item lock', () => {
 	});
 
 	it('after a clean release the PRD is re-acquirable (the lock did not orphan)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const first = await acquireTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -345,7 +345,7 @@ describe('a lockable-check loss takes NO lock (no orphan)', () => {
 		// `nope` has no prd on main → the lockable check returns `lost` BEFORE taking
 		// the lock, so nothing is orphaned.
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const result = await acquireTaskingLock({
 			slug: 'nope',

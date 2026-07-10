@@ -62,7 +62,7 @@ function spyExecutor(): {executor: RungExecutor; calls: string[]} {
 		calls,
 		executor: {
 			buildTask: record('build-task'),
-			taskPrd: record('task-prd'),
+			taskSpec: record('task-spec'),
 			triageObservation: record('triage-observation'),
 			surface: record('surface'),
 			apply: record('apply'),
@@ -113,7 +113,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(calls).toEqual(['build-task:task:feature']);
 	});
 
-	it('resolves prd:<slug> to the task-prd rung', async () => {
+	it('resolves prd:<slug> to the task-spec rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'prd:autotask',
@@ -123,15 +123,15 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('task-prd');
-		expect(calls).toEqual(['task-prd:prd:autotask']);
+		expect(result.rung).toBe('task-spec');
+		expect(calls).toEqual(['task-spec:prd:autotask']);
 	});
 
-	it('resolves spec:<slug> (the new canonical prefix) to the task-prd rung', async () => {
+	it('resolves spec:<slug> (the new canonical prefix) to the task-spec rung', async () => {
 		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 		// `resolveAdvanceArg('spec:<slug>')` returns `{namespace:'spec'}`,
 		// `sidecarTypeFor` maps it to the `spec` type, and the classifier ANALYSES a
-		// `spec` through the SAME `task-prd` rung as `prd` — so `advance spec:<slug>`
+		// `spec` through the SAME `task-spec` rung as `prd` — so `advance spec:<slug>`
 		// routes to tasking beside the legacy `prd:` form (which is KEPT).
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
@@ -142,8 +142,8 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('task-prd');
-		expect(calls).toEqual(['task-prd:spec:autotask']);
+		expect(result.rung).toBe('task-spec');
+		expect(calls).toEqual(['task-spec:spec:autotask']);
 	});
 
 	it('resolves obs:<slug> (the NEW namespace) to the triage-observation rung', async () => {
@@ -203,7 +203,7 @@ describe('advance \u2014 classify \u2192 lock \u2192 execute ORDER (the skeleton
 					order.push('execute');
 					return {exitCode: 0, outcome: 'advanced', message: 'built'};
 				},
-				taskPrd: async () => ({
+				taskSpec: async () => ({
 					exitCode: 0,
 					outcome: 'advanced',
 					message: '',

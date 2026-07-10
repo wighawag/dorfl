@@ -233,7 +233,7 @@ describe('advance∥claim and advance∥task exclusion on the SAME item (tree-le
 	});
 
 	it('advance∥task: a tree-less advance on a PRD makes a concurrent tasking lose the SAME ref', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['beta']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['beta']});
 		const adv = raceClone(seeded, 'adv');
 		// MIGRATE step: the tasking path keys the parent-spec item as `spec:<slug>`
 		// now, so a rival advance holder takes the SAME `spec:` identity to collide.

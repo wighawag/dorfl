@@ -39,7 +39,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
 import {
 	TASK_LIFECYCLE_FOLDERS,
-	SPEC_FOLDERS as WORK_LAYOUT_PRD_FOLDERS,
+	SPEC_FOLDERS,
 	type WorkFolderKey,
 	workFolderPath,
 	workItemRel,
@@ -56,8 +56,8 @@ import {
 /** The task lifecycle folders a lone-task `issue:` can reside in. */
 const TASK_FOLDERS = TASK_LIFECYCLE_FOLDERS;
 
-/** The prd folders an `issue:`-bearing prd can reside in. */
-const PRD_FOLDERS = WORK_LAYOUT_PRD_FOLDERS;
+/** The spec folders an `issue:`-bearing spec can reside in. */
+const SPEC_LIFECYCLE_FOLDERS = SPEC_FOLDERS;
 
 /** Why the close-job acted (or did not act) on a candidate issue. */
 export type CloseDecision =
@@ -115,14 +115,17 @@ function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
  * `undefined` when no prd with that slug carries an `issue:` (a prd with no source
  * issue, or a typo'd `prd:` hop — degrades to "no issue to close", never crashes).
  */
-function prdIssueNumber(repoPath: string, prdSlug: string): number | undefined {
-	for (const folder of PRD_FOLDERS) {
+function specIssueNumber(
+	repoPath: string,
+	specSlug: string,
+): number | undefined {
+	for (const folder of SPEC_LIFECYCLE_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 			);
 			const slug = fm.slug ?? basename(file, '.md');
-			if (slug === prdSlug && fm.issue !== undefined) {
+			if (slug === specSlug && fm.issue !== undefined) {
 				return fm.issue;
 			}
 		}
@@ -154,8 +157,8 @@ function resolveCandidates(repoPath: string): {
 	const taskCandidates: {issueNumber: number; via: 'issue'; slug: string}[] =
 		[];
 
-	// Prd candidates: a prd's `issue:` closes when ITS query is complete.
-	for (const folder of PRD_FOLDERS) {
+	// Spec candidates: a spec's `issue:` closes when ITS query is complete.
+	for (const folder of SPEC_LIFECYCLE_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
 			const fm = parseFrontmatter(
 				readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),

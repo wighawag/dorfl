@@ -391,14 +391,14 @@ export async function performTask(
 
 	// 0. The prd must exist in the checkout (`work/prds/ready/<slug>.md`) — it is the
 	//    source the agent tasks + the file the lock holds.
-	const prdPath = workItemPath(cwd, 'specs-ready', slug);
-	if (!existsSync(prdPath)) {
+	const specPath = workItemPath(cwd, 'specs-ready', slug);
+	if (!existsSync(specPath)) {
 		const message = `no prd '${slug}' found at ${workFolderRel('specs-ready')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
-	const prdContent = readFileSync(prdPath, 'utf8');
-	const prdFm = parseFrontmatter(prdContent);
+	const specContent = readFileSync(specPath, 'utf8');
+	const specFm = parseFrontmatter(specContent);
 
 	// 1. RESOLVE THE GATE (agent path only). The human path is UNBOUND — a human
 	//    decides for themselves whether a prd is taskable.
@@ -406,12 +406,12 @@ export async function performTask(
 		const eligibility = resolveAgentGate(
 			cwd,
 			slug,
-			prdFm,
+			specFm,
 			options.autoTask,
 			options.explicit ?? false,
 		);
 		if (!eligibility.taskable) {
-			const message = gateRefusalReason(slug, prdFm, eligibility, options);
+			const message = gateRefusalReason(slug, specFm, eligibility, options);
 			note(message);
 			return {exitCode: 1, outcome: 'gate-refused', slug, message};
 		}
@@ -477,7 +477,7 @@ export async function performTask(
 	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 	// read the parent-spec self-pointer off `prdFm.spec` (populated beside
 	// `prdFm.prd` by the expand task).
-	const prompt = buildTaskingPrd(slug, prdFm.spec);
+	const prompt = buildTaskingSpec(slug, specFm.spec);
 	let agent: {ok: boolean; detail?: string};
 	try {
 		agent = await runTaskAgent(options, cwd, prompt, slug);
@@ -529,7 +529,7 @@ export async function performTask(
 		if (loopDisposition.outcome === 'decomposition-unclear') {
 			const reason = decompositionUnclearReason(
 				slug,
-				loopDisposition.prdQuestions,
+				loopDisposition.specQuestions,
 			);
 			if (useLock) {
 				const routed = await lock.release({
@@ -581,7 +581,7 @@ export async function performTask(
 	// `work/tasks/backlog/`, and the runner redirects at `stage()` time.
 	const placementDecision = resolvePlacement({
 		explicit: landingToSide(options.explicitTasksLandIn),
-		originTrust: prdFm.originTrust,
+		originTrust: specFm.originTrust,
 		configuredDefault: landingToSide(options.tasksLandIn),
 	});
 	const placementDir = placementFolder(
@@ -613,11 +613,11 @@ export async function performTask(
 		// needs-attention). It is the SAME content-identity check `releaseTaskingLock`
 		// runs — relocated here because this transition, not the release, owns the
 		// completing commit now.
-		const stale = await heldPrdIsStale(cwd, arbiter, slug, lockedBlob, env);
+		const stale = await heldSpecIsStale(cwd, arbiter, slug, lockedBlob, env);
 		if (stale) {
-			const prdRel = workItemRel('specs-ready', `${slug}.md`);
+			const specRel = workItemRel('specs-ready', `${slug}.md`);
 			const message =
-				`RELEASE CONFLICT for '${slug}': the prd was edited (${prdRel} ` +
+				`RELEASE CONFLICT for '${slug}': the prd was edited (${specRel} ` +
 				`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
 				`STALE — re-task from the edited prd or route it to needs-attention. ` +
 				`The arbiter was NOT modified (lock still held).`;
@@ -917,7 +917,7 @@ async function switchToWorkBranch(
  * CLEANLY). When `lockedBlob` is absent (never, in production) it reads as
  * not-stale (the lock acquire always returns it).
  */
-async function heldPrdIsStale(
+async function heldSpecIsStale(
 	cwd: string,
 	arbiter: string,
 	slug: string,
@@ -990,8 +990,8 @@ async function stageTaskingLifecycle(params: {
 		note,
 		env,
 	} = params;
-	const prd = workItemRel('specs-ready', `${slug}.md`);
-	const prdTasked = workItemRel('specs-tasked', `${slug}.md`);
+	const spec = workItemRel('specs-ready', `${slug}.md`);
+	const specTasked = workItemRel('specs-tasked', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (task
 	// `untrusted-origin-forces-build-propose`): read the held prd's `origin`/
 	// `originTrust` stamp BEFORE the move, so each emitted task can carry it. A
@@ -999,9 +999,9 @@ async function stageTaskingLifecycle(params: {
 	// transition can force `propose` for untrusted-origin work. An UNSTAMPED prd (a
 	// human/local-authored one ⇒ trusted) propagates nothing — the normal path is
 	// untouched.
-	const prdAbs = join(cwd, prd);
-	const prdProvenance = existsSync(prdAbs)
-		? parseFrontmatter(readFileSync(prdAbs, 'utf8'))
+	const specAbs = join(cwd, spec);
+	const specProvenance = existsSync(specAbs)
+		? parseFrontmatter(readFileSync(specAbs, 'utf8'))
 		: {origin: undefined, originTrust: undefined};
 	if (placementReason === 'untrusted-origin') {
 		note(
@@ -1014,9 +1014,9 @@ async function stageTaskingLifecycle(params: {
 	// source of truth, like done/ for tasks). This is the DURABLE `prd → prd-tasked`
 	// success move, owned by THIS transition's commit (the lock no longer moved the
 	// body, so the source is `work/prds/ready/`, never `work/tasking/`).
-	mkdirSync(dirname(join(cwd, prdTasked)), {recursive: true});
-	await gitHard(['mv', prd, prdTasked], cwd, env);
-	await gitHard(['add', '--', prdTasked], cwd, env);
+	mkdirSync(dirname(join(cwd, specTasked)), {recursive: true});
+	await gitHard(['mv', spec, specTasked], cwd, env);
+	await gitHard(['add', '--', specTasked], cwd, env);
 	// **POOL-PLACEMENT FENCE (prd US #4 / governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The
 	// agent ALWAYS writes to the STAGING folder (`work/tasks/backlog/`); the POOL
@@ -1039,7 +1039,7 @@ async function stageTaskingLifecycle(params: {
 		const destRel = `${placementDir}/${filename}`;
 		const destAbs = join(cwd, destRel);
 		mkdirSync(dirname(destAbs), {recursive: true});
-		writeFileSync(destAbs, propagateOrigin(prdProvenance, content));
+		writeFileSync(destAbs, propagateOrigin(specProvenance, content));
 		await gitHard(['add', '--', destRel], cwd, env);
 		if (destRel !== agentRel) {
 			const srcAbs = join(cwd, agentRel);
@@ -1216,14 +1216,14 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
 function resolveAgentGate(
 	cwd: string,
 	slug: string,
-	prdFm: {humanOnly?: boolean; needsAnswers?: boolean; taskedAfter: string[]},
+	specFm: {humanOnly?: boolean; needsAnswers?: boolean; taskedAfter: string[]},
 	autoTask: boolean | undefined,
 	explicit: boolean,
 ): TaskingEligibilityResult {
 	return resolveTaskingEligibility({
-		humanOnly: prdFm.humanOnly,
-		needsAnswers: prdFm.needsAnswers,
-		taskedAfter: prdFm.taskedAfter,
+		humanOnly: specFm.humanOnly,
+		needsAnswers: specFm.needsAnswers,
+		taskedAfter: specFm.taskedAfter,
 		taskedSlugs: readTaskedSlugs(cwd),
 		autoTask: autoTask ?? false,
 		explicit,
@@ -1233,15 +1233,15 @@ function resolveAgentGate(
 /** Build an HONEST gate-refusal message naming WHY the agent skipped the prd. */
 function gateRefusalReason(
 	slug: string,
-	prdFm: {humanOnly?: boolean; needsAnswers?: boolean},
+	specFm: {humanOnly?: boolean; needsAnswers?: boolean},
 	eligibility: TaskingEligibilityResult,
 	options: PerformTaskOptions,
 ): string {
 	const reasons: string[] = [];
-	if (prdFm.humanOnly === true) {
+	if (specFm.humanOnly === true) {
 		reasons.push('the prd is humanOnly (a human must drive its tasking)');
 	}
-	if (prdFm.needsAnswers === true) {
+	if (specFm.needsAnswers === true) {
 		reasons.push(
 			'the prd has needsAnswers (open questions block auto-tasking)',
 		);
@@ -1251,8 +1251,8 @@ function gateRefusalReason(
 	// build path's autoBuild precedent), so the policy is never the reason there.
 	if (
 		options.explicit !== true &&
-		prdFm.humanOnly !== true &&
-		prdFm.needsAnswers !== true &&
+		specFm.humanOnly !== true &&
+		specFm.needsAnswers !== true &&
 		(options.autoTask ?? false) !== true
 	) {
 		reasons.push("the repo's autoTask policy is off");
@@ -1306,7 +1306,7 @@ function readTaskedSlugs(cwd: string): Set<string> {
  * boundary on the agent path. The shared discipline body is NOT duplicated
  * here.
  */
-function buildTaskingPrd(slug: string, _prd: string | undefined): string {
+function buildTaskingSpec(slug: string, _spec: string | undefined): string {
 	return [
 		`You are a FRESH-CONTEXT tasker for the prd \`work/prds/ready/${slug}.md\`.`,
 		`Apply the tasking discipline defined in \`work/protocol/TASKING-PROTOCOL.md\``,

@@ -66,7 +66,7 @@ function lockRefOnArbiter(arbiter: string, slug: string): boolean {
 describe('acquireTaskingLock — happy path', () => {
 	it('takes the prd:<slug> unified lock; the PRD body STAYS in prd/ (no tasking/ marker)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
@@ -92,7 +92,7 @@ describe('acquireTaskingLock — happy path', () => {
 	});
 
 	it('returns the acquire-time lockedBlob (the prd/ body snapshot)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -112,7 +112,7 @@ describe('acquireTaskingLock — happy path', () => {
 
 	it('dry-run reports the lockable snapshot and does NOT take the lock', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const notes: string[] = [];
 		const result = await acquireTaskingLock({
@@ -133,7 +133,7 @@ describe('acquireTaskingLock — happy path', () => {
 
 describe('acquireTaskingLock — not lockable (exit 2)', () => {
 	it('returns "lost" when there is no such PRD', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'nope',
 			cwd: repo,
@@ -145,7 +145,7 @@ describe('acquireTaskingLock — not lockable (exit 2)', () => {
 	});
 
 	it('returns "lost" when the PRD is already held (unified lock taken)', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const other = seeded.clone('other');
 		const first = await acquireTaskingLock({
 			slug: 'alpha',
@@ -167,7 +167,7 @@ describe('acquireTaskingLock — not lockable (exit 2)', () => {
 
 describe('acquireTaskingLock — usage / env errors (exit 1)', () => {
 	it('errors when the arbiter remote does not exist', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const result = await acquireTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -181,7 +181,7 @@ describe('acquireTaskingLock — usage / env errors (exit 1)', () => {
 
 describe('tasking-lock race — exactly one winner', () => {
 	it('two simultaneous taskers ⇒ one acquires, the loser gets exit-2', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, [], {prds: ['solo']});
+		const seeded = seedRepoWithArbiter(scratch.root, [], {specs: ['solo']});
 		// Distinct committer identity per racer so the two lock commits get DISTINCT
 		// shas (as two real taskers would) and the loser loses through the genuine
 		// create-only ref CAS, not a fixture sha-collision. See racerEnv.
@@ -221,7 +221,7 @@ describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 		// do NOT collide — they are different items. (MIGRATE step: the tasking path
 		// EMITs the `spec-<slug>` entry now.)
 		const seeded = seedRepoWithArbiter(scratch.root, ['dual'], {
-			prds: ['dual'],
+			specs: ['dual'],
 		});
 		const tasking = await acquireTaskingLock({
 			slug: 'dual',
@@ -247,7 +247,7 @@ describe('tasking∥claim exclusion on the SAME slug-namespace ref', () => {
 describe('releaseTaskingLock — deletes the unified lock', () => {
 	it('deletes the prd: lock ref on a clean release (exit 0); the PRD stays in prd/', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const acquired = await acquireTaskingLock({
 			slug: 'alpha',
@@ -270,7 +270,7 @@ describe('releaseTaskingLock — deletes the unified lock', () => {
 	});
 
 	it('an already-absent lock is an idempotent "released"', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const result = await releaseTaskingLock({
 			slug: 'alpha',
 			cwd: repo,
@@ -285,7 +285,7 @@ describe('releaseTaskingLock — deletes the unified lock', () => {
 describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', () => {
 	it('amends the prd: lock active → stuck with the reason (no folder write)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['alpha'],
+			specs: ['alpha'],
 		});
 		const acquired = await acquireTaskingLock({
 			slug: 'alpha',
@@ -319,7 +319,7 @@ describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', ()
 	});
 
 	it('returns "lost" when there is no held lock to mark stuck', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, [], {prds: ['alpha']});
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {specs: ['alpha']});
 		const result = await releaseTaskingLock({
 			slug: 'alpha',
 			cwd: repo,

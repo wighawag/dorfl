@@ -209,12 +209,12 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			const text = generateAdvanceLifecycleWorkflow(config);
 			// Without this, `DORFL_AUTO_TASK: 'true'` above is dead on the hourly
 			// cron — a ready ungated PRD never becomes a matrix leg. The `jq` must read
-			// `scan --json`'s taskable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+			// `scan --json`'s taskable-SPEC pool (`repos[].specs[]` + `cwd.repo.specs[]`)
 			// AND the task pool, and emit BOTH `task:<slug>` and `prd:<slug>` ids.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
 			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
-			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
-			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.specs\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.specs\[\]\?/.test(text)).toBe(true);
 		},
 	);
 
@@ -578,9 +578,9 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 			// be flagged so `DORFL_AUTO_TASK` is never silently dead on the cron.
 			const broken = base
 				.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
-				.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
-				.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
-			expectFlagged(broken, 'propose-enumerates-taskable-prds');
+				.replace(/\.repos\[\]\.specs\[\]\?/g, '.repos[].items[]?')
+				.replace(/\.cwd\.repo\.specs\[\]\?/g, '.cwd.repo.items[]?');
+			expectFlagged(broken, 'propose-enumerates-taskable-specs');
 		},
 	);
 

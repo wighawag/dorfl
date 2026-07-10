@@ -117,11 +117,11 @@ export interface MirrorPoolScanResult {
 	/** Just the eligible subset of {@link tasks} (convenience for assertions/callers). */
 	eligibleTasks: ScannedItem[];
 	/**
-	 * The TASKABLE PRD pool — already filtered through `taskableSpecs`
+	 * The TASKABLE SPEC pool — already filtered through `taskableSpecs`
 	 * (`autoslice-gate`'s predicate). In declaration order; the selection layer
 	 * does not re-gate it.
 	 */
-	prds: SpecCandidate[];
+	specs: SpecCandidate[];
 	/**
 	 * The LIFECYCLE pools (task `advance-autopick-lifecycle-pools`): untriaged
 	 * observations (triage), `needsAnswers`-blocked items with no all-answered
@@ -181,10 +181,10 @@ export async function scanMirrorPool(
 	const items = scoreItems(state, repoConfig.autoBuild, counts, heldSlugs);
 	// Pool 2 — TASKABLE PRDS from the bare mirror's `work/prds/ready`+`work/prds/tasked`,
 	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
-	// we can populate the `prds[]` companion of `items[]` on the RepoReport below.
+	// we can populate the `specs[]` companion of `items[]` on the RepoReport below.
 	const pool = await read.resolveMirrorSpecPool({mirrorPath, ref, env});
-	const prds = taskableSpecs({
-		candidates: pool.prds.map((p) => ({
+	const specs = taskableSpecs({
+		candidates: pool.specs.map((p) => ({
 			repoPath: mirrorPath,
 			slug: p.slug,
 			humanOnly: p.humanOnly,
@@ -198,8 +198,8 @@ export async function scanMirrorPool(
 	// mirror-side pool scan exists only to SCORE the task/prd candidate pools for
 	// autonomous selection, never to render a dashboard, so it carries an empty lint
 	// (the duplicate surface is the user-facing `scan`/`status`, per the task). The
-	// `prds[]` companion of `items[]` is filled via the SAME `scoreSpecs` helper
-	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].prds[] |
+	// `specs[]` companion of `items[]` is filled via the SAME `scoreSpecs` helper
+	// `scan`/`scanRepoPaths` call — so the propose-matrix `jq` (`repos[].specs[] |
 	// select(.eligibility.eligible)`) sees the same shape on every surface.
 	// Pools 3 + 4 — the LIFECYCLE pools, gathered from the SAME mirror `main` (the
 	// `needsAnswers` backlog/prds + their sidecars + `work/notes/observations/`) and built
@@ -217,7 +217,7 @@ export async function scanMirrorPool(
 	const repo: RepoReport = {
 		path: mirrorPath,
 		items,
-		prds: scoreSpecs(mirrorPath, pool, repoConfig.autoTask),
+		specs: scoreSpecs(mirrorPath, pool, repoConfig.autoTask),
 		// The propose-matrix lifecycle pool on this mirror's `RepoReport` — the SAME
 		// `gatherLifecycleMirror` result projected onto the `scan --json` shape, so
 		// the dashboard/matrix surface agrees with the selection scoring below.
@@ -234,7 +234,7 @@ export async function scanMirrorPool(
 		report,
 		tasks: items,
 		eligibleTasks: items.filter((i) => i.eligibility.eligible),
-		prds,
+		specs,
 		lifecycle,
 	};
 }

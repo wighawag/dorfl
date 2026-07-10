@@ -161,10 +161,10 @@ export interface RunTaskReviewLoopResult {
 	 */
 	uncertainTasks: UncertainTask[];
 	/**
-	 * On `decomposition-unclear`: the questions to record as the prd's
+	 * On `decomposition-unclear`: the questions to record as the spec's
 	 * needs-attention reason (no guessed tasks emitted). Empty otherwise.
 	 */
-	prdQuestions: string[];
+	specQuestions: string[];
 	/** How many review passes ran in total across all M executions. */
 	passes: number;
 	/** How many fresh-context executions (M) ran. */
@@ -277,7 +277,7 @@ export async function runTaskReviewLoop(
 				outcome: 'converged',
 				tasks: readCandidates(options.cwd, before),
 				uncertainTasks: [],
-				prdQuestions: [],
+				specQuestions: [],
 				passes: totalPasses,
 				executions: m,
 				message:
@@ -302,7 +302,7 @@ export async function runTaskReviewLoop(
 			outcome: 'decomposition-unclear',
 			tasks: readCandidates(options.cwd, before),
 			uncertainTasks: [],
-			prdQuestions: questions,
+			specQuestions: questions,
 			passes: totalPasses,
 			executions,
 			message:
@@ -348,7 +348,7 @@ export async function runTaskReviewLoop(
 		outcome: 'uncertain-tasks',
 		tasks: readCandidates(options.cwd, before),
 		uncertainTasks: uncertain,
-		prdQuestions: [],
+		specQuestions: [],
 		passes: totalPasses,
 		executions,
 		message:

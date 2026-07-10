@@ -91,19 +91,19 @@ export interface SpecExistence {
 	 * (up-for-tasking OR already tasked — either still claims the slug).
 	 */
 	exists: boolean;
-	/** The prd source file, when present (`work/prds/ready/<slug>.md`). */
-	prdFile: string | undefined;
+	/** The spec source file, when present (`work/prds/ready/<slug>.md`). */
+	specFile: string | undefined;
 	/**
 	 * The tasked resting file, when present (`work/prds/tasked/<slug>.md`) — i.e. the
-	 * prd HAS BEEN tasked (the source of truth for tasked-ness, task
+	 * spec HAS BEEN tasked (the source of truth for tasked-ness, task
 	 * `prd-sliced-folder-step-a`). A re-task moves it back `prds/tasked/ -> prds/ready/`.
 	 */
-	prdTaskedFile: string | undefined;
+	specTaskedFile: string | undefined;
 }
 
 /**
  * One prd enumerated for the AUTO-TASK selection pool (ADR §3 — the
- * "tasks-first then prds to task" priority). A prd is NOT in the task
+ * "tasks-first then specs to task" priority). A prd is NOT in the task
  * scan/candidate model, so the auto-pick pool is built HERE from `work/prds/ready/`
  * through this single shared prd read path (the same path
  * {@link SpecExistence} uses, widened from existence to the gate axes the tasking
@@ -137,8 +137,8 @@ export interface LedgerSpecItem {
  */
 export interface LedgerSpecPool {
 	/** Every prd in `work/prds/ready/`, sorted by slug. */
-	prds: LedgerSpecItem[];
-	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
+	specs: LedgerSpecItem[];
+	/** Slugs whose spec resides in `work/prds/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 }
 
@@ -149,7 +149,7 @@ export interface LedgerSpecPool {
  * UNTRIAGED (still in the triage pool); a non-empty `triaged:` value (`keep` /
  * `duplicate`) means it is SETTLED and DROPS OUT of the pool (US #30). This is the
  * FIRST read of `work/notes/observations/` in the seam — `scan`/eligibility read only
- * `backlog`/`done`/`prds*`.
+ * `backlog`/`done`/`specs*`.
  */
 export interface LedgerObservationItem {
 	/** Filename within `work/notes/observations/` (e.g. `stray-note.md`). */
@@ -308,7 +308,7 @@ export interface LedgerReadStrategy {
 	resolveSpecExistence(input: ResolveSpecExistenceInput): SpecExistence;
 	/**
 	 * Enumerate the repo's prd pool from `work/prds/ready/` (the auto-task candidate
-	 * source for the `do`/`run` "tasks-first then prds to task" priority, ADR
+	 * source for the `do`/`run` "tasks-first then specs to task" priority, ADR
 	 * §3). Returns every prd's gate axes (`humanOnly`/`needsAnswers`/`taskedAfter`)
 	 * PLUS the set of already-TASKED slugs so the selection layer can resolve
 	 * `taskedAfter` against `work/prds/tasked/` residence (the FOLDER is the source of
@@ -334,21 +334,21 @@ export interface LedgerReadStrategy {
 	resolveLocalTaskStaging(input: ResolveLocalStateInput): LedgerReadyItem[];
 	/**
 	 * Enumerate `work/prds/proposed/*.md` (the PRD STAGING folder) into the
-	 * SAME {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns for the
+	 * SAME {@link LedgerSpecItem} shape `resolveSpecPool().specs` returns for the
 	 * pool — the PRD-symmetric `surfaceStaging` widening (prd
 	 * `staging-surface-and-apply-promote-safety` F2, prd q4 answer). Sync + OFFLINE.
 	 */
 	resolveLocalSpecStaging(input: ResolveSpecPoolInput): LedgerSpecItem[];
 	/**
 	 * Enumerate `work/prds/tasked/*.md` (the TASKED resting folder) into the SAME
-	 * {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns. UNLIKE the pool
+	 * {@link LedgerSpecItem} shape `resolveSpecPool().specs` returns. UNLIKE the pool
 	 * (`prds/ready/`) and staging (`prds/proposed/`) readers, this exists so the
 	 * lifecycle GATHER can surface/apply a `needsAnswers:true` prd that drifted
 	 * AFTER it was tasked and rests IN PLACE in `prds/tasked/` (WORK-CONTRACT
 	 * "A PRD that has drifted AFTER it was TASKED"). Without it, such a prd's
 	 * ANSWERED sidecar is enumerated by no pool and the human's answer is STRANDED
 	 * (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
-	 * `resolveSpecPool` deliberately returns tasked prds only as `taskedSlugs`
+	 * `resolveSpecPool` deliberately returns tasked specs only as `taskedSlugs`
 	 * (residence, for `taskedAfter`), NOT as enumerable gate-bearing items, so this
 	 * is a SEPARATE read. Sync + OFFLINE.
 	 */
@@ -442,7 +442,7 @@ function readLocalTaskStaging(repoPath: string): LedgerReadyItem[] {
 /**
  * Read `work/prds/proposed/*.md` (the PRD STAGING folder, the prd twin
  * of {@link readLocalTaskStaging}, prd q4 answer) from the local tree. Returns
- * the SAME {@link LedgerSpecItem} shape `resolveSpecPool().prds` returns.
+ * the SAME {@link LedgerSpecItem} shape `resolveSpecPool().specs` returns.
  */
 function readLocalSpecStaging(repoPath: string): LedgerSpecItem[] {
 	return readLocalSpecFolder(repoPath, 'specs-proposed');
@@ -464,11 +464,11 @@ function readLocalSpecFolder(
 	folder: 'specs-proposed' | 'specs-tasked',
 ): LedgerSpecItem[] {
 	const dir = workFolderPath(repoPath, folder);
-	const prds: LedgerSpecItem[] = [];
+	const specs: LedgerSpecItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
-		prds.push({
+		specs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -476,7 +476,7 @@ function readLocalSpecFolder(
 			taskedAfter: fm.taskedAfter,
 		});
 	}
-	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	return specs.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /** Collect the slugs present in `work/done/` on the local tree. */
@@ -555,11 +555,11 @@ function findSpecFileBySlug(
  */
 function readLocalSpecPool(repoPath: string): LocalSpecPool {
 	const dir = workFolderPath(repoPath, 'specs-ready');
-	const prds: LedgerSpecItem[] = [];
+	const specs: LedgerSpecItem[] = [];
 	for (const file of listMarkdown(dir)) {
 		const content = readFileSync(join(dir, file), 'utf8');
 		const fm = parseFrontmatter(content);
-		prds.push({
+		specs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -567,7 +567,7 @@ function readLocalSpecPool(repoPath: string): LocalSpecPool {
 			taskedAfter: fm.taskedAfter,
 		});
 	}
-	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	specs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Tasked-ness is RESIDENCE in `work/prds/tasked/` — the FOLDER is the source of
 	// truth, like `done/` for tasks (the `tasked:` marker was removed in
@@ -580,7 +580,7 @@ function readLocalSpecPool(repoPath: string): LocalSpecPool {
 		const fm = parseFrontmatter(content);
 		taskedSlugs.add(fm.slug ?? basename(file, '.md'));
 	}
-	return {prds, taskedSlugs};
+	return {specs, taskedSlugs};
 }
 
 /** Internal alias for {@link LedgerSpecPool} (kept local to the reader). */
@@ -757,14 +757,14 @@ async function readSpecFolderFromTree(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerSpecItem[]> {
 	const base = `${ref}:${workFolderRel(folder)}`;
-	const prds: LedgerSpecItem[] = [];
+	const specs: LedgerSpecItem[] = [];
 	for (const file of await listMarkdownInTree(base, cwd, env)) {
 		const content = await showInTree(base, file, cwd, env);
 		if (content === undefined) {
 			continue;
 		}
 		const fm = parseFrontmatter(content);
-		prds.push({
+		specs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -772,7 +772,7 @@ async function readSpecFolderFromTree(
 			taskedAfter: fm.taskedAfter,
 		});
 	}
-	return prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	return specs.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /**
@@ -787,15 +787,15 @@ async function readSpecPoolFromTree(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LedgerSpecPool> {
-	const prdBase = `${ref}:${workFolderRel('specs-ready')}`;
-	const prds: LedgerSpecItem[] = [];
-	for (const file of await listMarkdownInTree(prdBase, cwd, env)) {
-		const content = await showInTree(prdBase, file, cwd, env);
+	const specBase = `${ref}:${workFolderRel('specs-ready')}`;
+	const specs: LedgerSpecItem[] = [];
+	for (const file of await listMarkdownInTree(specBase, cwd, env)) {
+		const content = await showInTree(specBase, file, cwd, env);
 		if (content === undefined) {
 			continue;
 		}
 		const fm = parseFrontmatter(content);
-		prds.push({
+		specs.push({
 			file,
 			slug: fm.slug ?? basename(file, '.md'),
 			humanOnly: fm.humanOnly,
@@ -803,7 +803,7 @@ async function readSpecPoolFromTree(
 			taskedAfter: fm.taskedAfter,
 		});
 	}
-	prds.sort((a, b) => a.slug.localeCompare(b.slug));
+	specs.sort((a, b) => a.slug.localeCompare(b.slug));
 
 	// Tasked-ness is RESIDENCE in `work/prds/tasked/` — the FOLDER is the source of
 	// truth (the `tasked:` marker was removed in `remove-sliced-marker-step-b`),
@@ -818,7 +818,7 @@ async function readSpecPoolFromTree(
 		const fm = parseFrontmatter(content);
 		taskedSlugs.add(fm.slug ?? basename(file, '.md'));
 	}
-	return {prds, taskedSlugs};
+	return {specs, taskedSlugs};
 }
 
 /**
@@ -869,12 +869,12 @@ export const currentLedgerRead: LedgerReadStrategy = {
 		return {task, doneSlugs};
 	},
 	resolveSpecExistence({repoPath, slug}) {
-		const prdFile = findSpecFileBySlug(repoPath, 'specs-ready', slug);
-		const prdTaskedFile = findSpecFileBySlug(repoPath, 'specs-tasked', slug);
+		const specFile = findSpecFileBySlug(repoPath, 'specs-ready', slug);
+		const specTaskedFile = findSpecFileBySlug(repoPath, 'specs-tasked', slug);
 		return {
-			exists: prdFile !== undefined || prdTaskedFile !== undefined,
-			prdFile,
-			prdTaskedFile,
+			exists: specFile !== undefined || specTaskedFile !== undefined,
+			specFile,
+			specTaskedFile,
 		};
 	},
 	resolveSpecPool({repoPath}) {

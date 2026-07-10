@@ -244,8 +244,8 @@ function taskExists(
 	return state.ready.some((item) => item.slug === slug);
 }
 
-/** Does a PRD named `slug` exist (ready or being tasked) in this repo? */
-function prdExists(
+/** Does a spec named `slug` exist (ready or being tasked) in this repo? */
+function specExists(
 	read: LedgerReadStrategy,
 	repoPath: string,
 	slug: string,
@@ -288,7 +288,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 
 	// Bare slug: resolve to the task, but ONLY after the cross-namespace check.
 	// A task/prd collision is a loud ERROR — never a silent guess.
-	if (prdExists(read, input.repoPath, parsed.slug)) {
+	if (specExists(read, input.repoPath, parsed.slug)) {
 		throw new SlugResolutionError(
 			`'${parsed.slug}' is ambiguous: both a task and a prd share that slug. ` +
 				`Use \`task:${parsed.slug}\` or \`prd:${parsed.slug}\` to disambiguate.`,
@@ -330,7 +330,7 @@ export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
 
 	// Bare slug: the SAME task/prd cross-namespace check `do` makes — bare = task,
 	// a task/prd collision is a loud ERROR, never a silent guess.
-	if (prdExists(read, input.repoPath, parsed.slug)) {
+	if (specExists(read, input.repoPath, parsed.slug)) {
 		throw new SlugResolutionError(
 			`'${parsed.slug}' is ambiguous: both a task and a prd share that slug. ` +
 				`Use \`task:${parsed.slug}\` or \`prd:${parsed.slug}\` to disambiguate.`,

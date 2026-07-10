@@ -314,7 +314,7 @@ describe('held-slug subtraction in the pool readers', () => {
 				{
 					path: '/repo',
 					items: scoreItems(state, true, {totalItems: 0, totalEligible: 0}),
-					prds: [],
+					specs: [],
 					lifecycle: {triage: [], surface: [], apply: []},
 					ledgerDuplicates: [],
 				},
@@ -325,7 +325,7 @@ describe('held-slug subtraction in the pool readers', () => {
 		const picked = selectPrioritised({
 			report,
 			caps: {maxParallel: 10, perRepoMax: 10},
-			prds: [],
+			specs: [],
 			heldSlugs: new Set(['alpha']),
 		});
 		expect(picked.map((p) => p.slug)).toEqual(['beta']);

@@ -106,7 +106,7 @@ import type {NewQuestion} from './sidecar.js';
  *     the verb here is a SINGLE named-item tick; the bare form errors clearly
  *     ("needs the driver task"). See the `## Decisions` block in the task.
  *
- * The build-task / task-prd rungs ORCHESTRATE the existing `do` / `do prd:`
+ * The build-task / task-spec rungs ORCHESTRATE the existing `do` / `do spec:`
  * machinery ({@link performDo}) — `advance` is a driver layered ON TOP, NEVER a
  * peer that duplicates the build/task path (ONE build path, ONE task path —
  * US #6).
@@ -152,8 +152,8 @@ export type AdvanceExitCode = 0 | 1 | 2 | 3;
 export interface RungExecutor {
 	/** A ready task → build it by ORCHESTRATING `do <slug>` (NOT a re-implementation). */
 	buildTask(input: RungExecInput): Promise<RungExecResult>;
-	/** A ready prd → task it by ORCHESTRATING `do prd:<slug>` (NOT a re-implementation). */
-	taskPrd(input: RungExecInput): Promise<RungExecResult>;
+	/** A ready spec → task it by ORCHESTRATING `do spec:<slug>` (NOT a re-implementation). */
+	taskSpec(input: RungExecInput): Promise<RungExecResult>;
 	/** An untriaged observation → triage it (LATER task fills this body). */
 	triageObservation(input: RungExecInput): Promise<RungExecResult>;
 	/** `needsAnswers` but no sidecar → surface the questions (LATER task fills this). */
@@ -193,7 +193,7 @@ export interface AdvanceContext {
 	doOptions?: Omit<DoOptions, 'arg'>;
 	/**
 	 * The build/task ORCHESTRATION DRIVER seam (task
-	 * `advance-loop-driver-registry-set-job-worktrees`). The build-task / task-prd
+	 * `advance-loop-driver-registry-set-job-worktrees`). The build-task / task-spec
 	 * rungs ORCHESTRATE `do` by handing the resolved arg + the threaded
 	 * {@link doOptions} to THIS driver. `undefined` ⇒ {@link performDo} (the IN-PLACE
 	 * substrate — the human-local one-shot `advance` command + today's
@@ -530,7 +530,7 @@ export const defaultRungExecutor: RungExecutor = {
 	async buildTask(input) {
 		return orchestrateDo(input);
 	},
-	async taskPrd(input) {
+	async taskSpec(input) {
 		return orchestrateDo(input);
 	},
 	async triageObservation(input) {
@@ -545,7 +545,7 @@ export const defaultRungExecutor: RungExecutor = {
 };
 
 /**
- * ORCHESTRATE `do`/`do prd:` for the build-task / task-prd rungs: hand the
+ * ORCHESTRATE `do`/`do spec:` for the build-task / task-spec rungs: hand the
  * resolved namespaced identity to {@link performDo} (the ONE build path / ONE
  * task path). `advance` is a driver ON TOP — it does NOT duplicate `do`. The
  * `do` outcome is mapped back onto the tick's outcome surface.
@@ -1532,7 +1532,7 @@ export async function performAdvance(
  * Is this a TREE-LESS rung (`surface`/`apply`/`triage-observation`) — the rungs
  * that have NO inner `performDo`, so the advancing acquire must ALSO take the
  * unified per-item lock (`action: advance`) to realise advance∥claim / advance∥task
- * exclusion? The build/task rungs (`build-task`/`task-prd`) are the inverse:
+ * exclusion? The build/task rungs (`build-task`/`task-spec`) are the inverse:
  * their inner `do` holds the SAME unified ref, so the advance layer must NOT take
  * it (it would deadlock the tick against itself). `no-op`/`invariant-violation`
  * never reach the lock step. This is the single place the tree-less-only policy
@@ -1552,8 +1552,8 @@ function dispatchRung(
 	switch (input.classification.kind) {
 		case 'build-task':
 			return executor.buildTask(input);
-		case 'task-prd':
-			return executor.taskPrd(input);
+		case 'task-spec':
+			return executor.taskSpec(input);
 		case 'triage-observation':
 			return executor.triageObservation(input);
 		case 'surface':

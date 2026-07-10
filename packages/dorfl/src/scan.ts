@@ -158,8 +158,8 @@ export interface RepoReport {
 	path: string;
 	items: ScannedItem[];
 	/**
-	 * The TASKABLE-PRD pool for this repo (the `prds[]` companion of `items[]`):
-	 * every prd in `work/prds/ready/` not already in `work/prds/tasked/`, each tagged with
+	 * The TASKABLE-SPEC pool for this repo (the `specs[]` companion of `items[]`):
+	 * every spec in `work/prds/ready/` not already in `work/prds/tasked/`, each tagged with
 	 * `eligibility.eligible` from {@link taskableSpecs} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
 	 * what makes the propose-mode CI matrix enumerate `prd:<slug>` legs for ready
@@ -169,7 +169,7 @@ export interface RepoReport {
 	 * The `autoTask` gate still BINDS — a repo with `autoTask` off yields an
 	 * all-`eligible:false` pool (so no `prd:` legs).
 	 */
-	prds: ScannedSpec[];
+	specs: ScannedSpec[];
 	/**
 	 * The per-repo LIFECYCLE pool (the `triage`/`surface`/`apply` companion of
 	 * `items[]`/`prds[]`): untriaged observations + `needsAnswers` tasks/prds split
@@ -255,7 +255,7 @@ export function scoreSpecs(
 ): ScannedSpec[] {
 	const taskable = new Set(
 		taskableSpecs({
-			candidates: pool.prds.map((p) => ({
+			candidates: pool.specs.map((p) => ({
 				repoPath,
 				slug: p.slug,
 				humanOnly: p.humanOnly,
@@ -266,7 +266,7 @@ export function scoreSpecs(
 			autoTask,
 		}).map((p) => p.slug),
 	);
-	return pool.prds.map((p) => ({
+	return pool.specs.map((p) => ({
 		slug: p.slug,
 		eligibility: {eligible: taskable.has(p.slug)},
 	}));
@@ -469,11 +469,11 @@ export async function scan(
 					`resolving autoTask from global + default. ${reason}`,
 			);
 		}
-		const prdPool = await ledgerRead.resolveMirrorSpecPool({
+		const specPool = await ledgerRead.resolveMirrorSpecPool({
 			mirrorPath: mirror.path,
 			env: options.env,
 		});
-		const prds = scoreSpecs(mirror.path, prdPool, repoAutoTask);
+		const specs = scoreSpecs(mirror.path, specPool, repoAutoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this mirror's question-surfacing config (resolved from its committed
 		// `.dorfl.json`, with the same non-fatal global fall-back as `autoTask`
@@ -515,7 +515,7 @@ export async function scan(
 		repos.push({
 			path: mirror.path,
 			items: scoreItems(state, autoBuild, counts, heldSlugs),
-			prds,
+			specs,
 			lifecycle,
 			ledgerDuplicates,
 			lockHeld,
@@ -575,8 +575,8 @@ export function scanRepoPaths(
 		// predicate the autopick paths run) decides what is taskable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
-		const prdPool = ledgerRead.resolveSpecPool({repoPath: path});
-		const prds = scoreSpecs(path, prdPool, resolved.autoTask);
+		const specPool = ledgerRead.resolveSpecPool({repoPath: path});
+		const specs = scoreSpecs(path, specPool, resolved.autoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
 		// the same way as `autoBuild`/`autoTask`) and computed by REUSING
@@ -597,7 +597,7 @@ export function scanRepoPaths(
 		repos.push({
 			path,
 			items: scoreItems(state, resolved.autoBuild, counts, heldSlugs),
-			prds,
+			specs,
 			lifecycle,
 			ledgerDuplicates,
 		});

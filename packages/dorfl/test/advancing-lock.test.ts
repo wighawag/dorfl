@@ -103,7 +103,7 @@ describe('acquireAdvancingLock — tree-less rung (the unified lock)', () => {
 
 	it('keys a PRD to prd-<slug> and an observation to observation-<slug>', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
-			prds: ['beta'],
+			specs: ['beta'],
 		});
 		const prd = await acquireAdvancingLock({
 			item: 'prd:beta',

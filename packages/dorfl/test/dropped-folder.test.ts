@@ -71,7 +71,7 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['live']);
+		expect(pool.specs.map((p) => p.slug)).toEqual(['live']);
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 
@@ -121,10 +121,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 		expect(report.repos[0].ledgerDuplicates).toEqual([]);
 		// Neither is in any pool (both are terminal residences).
 		expect(report.repos[0].items).toEqual([]);
-		const prdPool = currentLedgerRead.resolveSpecPool({
+		const specPool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(prdPool.prds).toEqual([]);
+		expect(specPool.specs).toEqual([]);
 	});
 
 	it('the `reason:` is preserved in the item BODY (status is the folder; no frontmatter status field is read)', () => {
@@ -143,10 +143,10 @@ describe('per-regime wont-proceed terminals — residence excludes from every po
 
 		// Sanity: still excluded from every pool (residence rule), and the body
 		// reason text was not coerced into frontmatter.
-		const prdPool = currentLedgerRead.resolveSpecPool({
+		const specPool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(prdPool.prds).toEqual([]);
+		expect(specPool.specs).toEqual([]);
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoBuild: true}),

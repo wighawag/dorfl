@@ -173,8 +173,8 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 	});
 });
 
-describe('buildTaskingPrd \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
-	// `buildTaskingPrd` is module-private; read its assembled output for
+describe('buildTaskingSpec \u2014 in-band reference + no re-inlined discipline prose + current vocabulary', () => {
+	// `buildTaskingSpec` is module-private; read its assembled output for
 	// `slug: 'example-prd'` from the source file so this test is hermetic and
 	// does not require exporting the builder. (The same indirect-read pattern
 	// the surface task's prompt assertions use.)
@@ -184,7 +184,7 @@ describe('buildTaskingPrd \u2014 in-band reference + no re-inlined discipline pr
 	// interpolation).
 	const builderBody = (() => {
 		const match =
-			/function buildTaskingPrd\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
+			/function buildTaskingSpec\([^]*?return \[([^]*?)\]\.join\('\\n'\);/m.exec(
 				TASKING,
 			);
 		expect(match).toBeTruthy();

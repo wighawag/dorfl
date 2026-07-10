@@ -1090,7 +1090,7 @@ export async function listPromotable(
 		cwd,
 		env,
 	);
-	const prds = await listMarkdownSlugsInTree(
+	const specs = await listMarkdownSlugsInTree(
 		`${arbiter}/main:${workFolderRel('specs-proposed')}`,
 		cwd,
 		env,
@@ -1098,7 +1098,7 @@ export async function listPromotable(
 	return {
 		items: [
 			...tasks.map((slug) => ({namespace: 'task' as const, slug})),
-			...prds.map((slug) => ({namespace: 'spec' as const, slug})),
+			...specs.map((slug) => ({namespace: 'spec' as const, slug})),
 		],
 	};
 }

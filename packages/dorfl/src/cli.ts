@@ -789,8 +789,8 @@ interface IntakeFlags {
 	propose?: boolean;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
-	mergePrd?: boolean;
-	proposePrd?: boolean;
+	mergeSpec?: boolean;
+	proposeSpec?: boolean;
 	mergeTask?: boolean;
 	proposeTask?: boolean;
 	/**
@@ -3661,7 +3661,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-prd/--propose-prd and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-spec/--propose-spec and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
 		)
 		.argument(
 			'<number>',
@@ -3674,23 +3674,23 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--merge',
-			'integrate BOTH outcomes (task AND prd) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
+			'integrate BOTH outcomes (task AND spec) in merge mode (aggregate; overridden per type by --merge-*/--propose-*; mutually exclusive with --propose)',
 		)
 		.option(
 			'--propose',
-			'integrate BOTH outcomes (task AND prd) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
+			'integrate BOTH outcomes (task AND spec) in propose mode (aggregate; default; overridden per type; mutually exclusive with --merge)',
 		)
 		.option(
 			'--no-pr',
 			'propose without opening a PR for intake emissions: push the branch but deliberately skip the review request (the explicit suppress-PR intent). Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
-			'--merge-prd',
-			'integrate a prd outcome in merge mode (granular; overrides --merge/--propose for a prd; mutually exclusive with --propose-prd)',
+			'--merge-spec',
+			'integrate a spec outcome in merge mode (granular; overrides --merge/--propose for a spec; mutually exclusive with --propose-spec)',
 		)
 		.option(
-			'--propose-prd',
-			'integrate a prd outcome in propose mode (granular; overrides --merge/--propose for a prd; mutually exclusive with --merge-prd)',
+			'--propose-spec',
+			'integrate a spec outcome in propose mode (granular; overrides --merge/--propose for a spec; mutually exclusive with --merge-spec)',
 		)
 		.option(
 			'--merge-task',

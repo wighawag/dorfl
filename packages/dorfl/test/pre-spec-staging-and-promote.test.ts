@@ -255,7 +255,7 @@ describe('STEP A (PRD) \u2014 work/specs/ready/ STILL means the auto-slice POOL 
 		// THE POOL READER (`createLocalLedgerReadStrategy().resolveSpecPool`) reads
 		// `work/specs/ready/` BYTE-FOR-BYTE UNCHANGED: a staged PRD is NOT in the pool.
 		const pool = ledgerRead.resolveSpecPool({repoPath: repo});
-		expect(pool.prds.map((p) => p.slug)).not.toContain('shiny-new-vision');
+		expect(pool.specs.map((p) => p.slug)).not.toContain('shiny-new-vision');
 
 		// AND the tasking-eligibility gate refuses an autonomous task of a staged
 		// PRD (by RESIDENCE \u2014 it is not in the pool to begin with).
@@ -322,7 +322,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		// AND the pool reader now sees it (the auto-slice candidate pool).
 		gitIn(['pull', '--ff-only', '-q', ARBITER, 'main'], repo);
 		const pool = ledgerRead.resolveSpecPool({repoPath: repo});
-		expect(pool.prds.map((p) => p.slug)).toContain('shiny-new-vision');
+		expect(pool.specs.map((p) => p.slug)).toContain('shiny-new-vision');
 	});
 
 	it('promote on a slug not in pre-prd/ refuses cleanly (no main move)', async () => {

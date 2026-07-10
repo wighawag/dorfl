@@ -84,9 +84,9 @@ function blockedItemsInPlace(
 		}
 	}
 	const pool = read.resolveSpecPool({repoPath});
-	for (const prd of pool.prds) {
-		if (prd.needsAnswers === true) {
-			out.push({namespace: 'spec', slug: prd.slug});
+	for (const spec of pool.specs) {
+		if (spec.needsAnswers === true) {
+			out.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
 	// TASKED resting prds (`prds/tasked/`) — enumerated UNCONDITIONALLY (NOT behind
@@ -99,9 +99,9 @@ function blockedItemsInPlace(
 	// tasked prd -> SURFACE, still gated by `surfaceBlockers`). Without this, a
 	// tasked prd's answered sidecar is enumerated by no pool and apply never runs
 	// on it (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
-	for (const prd of read.resolveLocalSpecTasked({repoPath})) {
-		if (prd.needsAnswers === true) {
-			out.push({namespace: 'spec', slug: prd.slug});
+	for (const spec of read.resolveLocalSpecTasked({repoPath})) {
+		if (spec.needsAnswers === true) {
+			out.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (prd
@@ -117,9 +117,9 @@ function blockedItemsInPlace(
 				out.push({namespace: 'task', slug: item.slug});
 			}
 		}
-		for (const prd of read.resolveLocalSpecStaging({repoPath})) {
-			if (prd.needsAnswers === true) {
-				out.push({namespace: 'spec', slug: prd.slug});
+		for (const spec of read.resolveLocalSpecStaging({repoPath})) {
+			if (spec.needsAnswers === true) {
+				out.push({namespace: 'spec', slug: spec.slug});
 			}
 		}
 	}
@@ -212,9 +212,9 @@ export async function gatherLifecycleMirror(input: {
 	const env = input.env;
 
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
-	const prdPool = await read.resolveMirrorSpecPool({mirrorPath, ref, env});
+	const specPool = await read.resolveMirrorSpecPool({mirrorPath, ref, env});
 	const surfaceStaging = input.gates?.surfaceStaging === true;
-	const [taskStaging, prdStaging] = surfaceStaging
+	const [taskStaging, specStaging] = surfaceStaging
 		? await Promise.all([
 				read.resolveMirrorTaskStaging({mirrorPath, ref, env}),
 				read.resolveMirrorSpecStaging({mirrorPath, ref, env}),
@@ -227,19 +227,19 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const prd of prdPool.prds) {
-		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'spec', slug: prd.slug});
+	for (const spec of specPool.specs) {
+		if (spec.needsAnswers === true) {
+			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
 	// TASKED resting prds (`<ref>:work/prds/tasked/`) — enumerated UNCONDITIONALLY,
 	// the mirror-side counterpart of the in-place tasked-prd enumeration above
 	// (so a `needsAnswers` tasked prd's answered sidecar is never stranded on the
 	// mirror/CI advance path either). Routing still respects the gates.
-	const prdTasked = await read.resolveMirrorSpecTasked({mirrorPath, ref, env});
-	for (const prd of prdTasked) {
-		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'spec', slug: prd.slug});
+	const specTasked = await read.resolveMirrorSpecTasked({mirrorPath, ref, env});
+	for (const spec of specTasked) {
+		if (spec.needsAnswers === true) {
+			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
 	// SURFACE-on-STAGING widening (prd
@@ -254,9 +254,9 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'task', slug: item.slug});
 		}
 	}
-	for (const prd of prdStaging) {
-		if (prd.needsAnswers === true) {
-			blocked.push({namespace: 'spec', slug: prd.slug});
+	for (const spec of specStaging) {
+		if (spec.needsAnswers === true) {
+			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
 

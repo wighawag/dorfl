@@ -287,7 +287,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 		// `autoBuild`. The agent RUNS (the policy no longer gate-refuses the explicit
 		// form); no job worktree is cut for a prd: arg (tasking is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
-			prds: ['someprd'],
+			specs: ['someprd'],
 		});
 		const ws = workspacesDir();
 

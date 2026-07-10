@@ -110,11 +110,11 @@ export interface TaskableSpecsInput {
  */
 export function taskableSpecs(input: TaskableSpecsInput): SpecCandidate[] {
 	return input.candidates.filter(
-		(prd) =>
+		(spec) =>
 			resolveTaskingEligibility({
-				humanOnly: prd.humanOnly,
-				needsAnswers: prd.needsAnswers,
-				taskedAfter: prd.taskedAfter,
+				humanOnly: spec.humanOnly,
+				needsAnswers: spec.needsAnswers,
+				taskedAfter: spec.taskedAfter,
 				taskedSlugs: input.taskedSlugs,
 				autoTask: input.autoTask,
 			}).taskable,
@@ -133,10 +133,10 @@ export interface SelectPrioritisedInput {
 	/** Caps for the task-pool selection (round-robin/per-repo/total). */
 	caps: SelectCaps;
 	/**
-	 * The ALREADY-FILTERED taskable prd pool (run {@link taskableSpecs} first).
+	 * The ALREADY-FILTERED taskable spec pool (run {@link taskableSpecs} first).
 	 * In declaration order; this helper does not re-gate them.
 	 */
-	prds: SpecCandidate[];
+	specs: SpecCandidate[];
 	/**
 	 * The configurable selection ORDER across the four ORDERABLE pools (`build` /
 	 * `task` / `surface` / `triage`), as a PRESET keyword or an explicit pool-name
@@ -225,9 +225,9 @@ export function selectPrioritised(
 			namespace: 'task' as const,
 		}));
 
-	const taskItems: SelectedItem[] = input.prds.map((prd) => ({
-		repoPath: prd.repoPath,
-		slug: prd.slug,
+	const taskItems: SelectedItem[] = input.specs.map((spec) => ({
+		repoPath: spec.repoPath,
+		slug: spec.slug,
 		namespace: 'spec' as const,
 	}));
 
