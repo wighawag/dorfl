@@ -57,9 +57,9 @@ describe('decide — the injected seam drives one canned verdict per outcome', (
 	it('returns a `spec` verdict verbatim', async () => {
 		const verdict: DecisionVerdict = {
 			outcome: 'spec',
-			prdSlug: 'big-feature',
-			prdTitle: 'A big coherent feature',
-			prdBody: '## Problem Statement\n\nIt is big.',
+			specSlug: 'big-feature',
+			specTitle: 'A big coherent feature',
+			specBody: '## Problem Statement\n\nIt is big.',
 		};
 		const out = await decide({}, cannedDecider(verdict), SUPERSET);
 		expect(out).toEqual(verdict);
@@ -128,7 +128,7 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 		// The engine is outcome-AGNOSTIC: it hard-codes no caller's outcomes, so an
 		// intake-shaped subset works exactly as the keystone's wider one does.
 		const allowed: DecisionOutcome[] = ['task', 'spec', 'ask'];
-		const verdict: DecisionVerdict = {outcome: 'spec', prdTitle: 'ok'};
+		const verdict: DecisionVerdict = {outcome: 'spec', specTitle: 'ok'};
 		const out = await decide({}, cannedDecider(verdict), allowed);
 		expect(out).toEqual(verdict);
 	});
@@ -197,11 +197,11 @@ describe('parseDecisionVerdict — the parse table', () => {
 
 	it('parses a `spec` verdict', () => {
 		const v = parseDecisionVerdict(
-			'```json\n{"outcome":"spec","prdTitle":"Big","prdBody":"## Problem Statement\\n\\nbig"}\n```',
+			'```json\n{"outcome":"spec","specTitle":"Big","specBody":"## Problem Statement\\n\\nbig"}\n```',
 		);
 		expect(v.outcome).toBe('spec');
-		expect(v.prdTitle).toBe('Big');
-		expect(v.prdBody).toBe('## Problem Statement\n\nbig');
+		expect(v.specTitle).toBe('Big');
+		expect(v.specBody).toBe('## Problem Statement\n\nbig');
 	});
 
 	it('parses an `adr` verdict', () => {

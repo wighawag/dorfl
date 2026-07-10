@@ -102,9 +102,9 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 export type IntakeOutcome = 'ask' | 'task' | 'spec' | 'prd' | 'bounce';
 
 /**
- * The VERDICT the decision prompt returns — `{ask,task,prd,bounce}` + the drafted
+ * The VERDICT the decision prompt returns — `{ask,task,spec,bounce}` + the drafted
  * content for the chosen outcome. THIS code path consumes only the `task` branch's
- * fields (`taskSlug` / `taskTitle` / `taskBody`); the `ask`/`prd`/`bounce`
+ * fields (`taskSlug` / `taskTitle` / `taskBody`); the `ask`/`spec`/`bounce`
  * fields are carried on the shape (so the type is stable for the next task) but
  * not dispatched here.
  */
@@ -135,30 +135,30 @@ export interface IntakeVerdict {
 	 */
 	question?: string;
 	/**
-	 * The drafted prd's content-derived slug (`prd` outcome). The dispatcher
-	 * SANITISES it through `paramCase` (never a counter) before writing the prd
-	 * file (`work/prds/ready/<slug>.md`). Falls back to a slug derived from {@link prdTitle} when
+	 * The drafted spec's content-derived slug (`spec` outcome). The dispatcher
+	 * SANITISES it through `paramCase` (never a counter) before writing the spec
+	 * file (`work/specs/ready/<slug>.md`). Falls back to a slug derived from {@link specTitle} when
 	 * absent/empty.
 	 */
-	prdSlug?: string;
-	/** The drafted prd's `title:` (`prd` outcome). */
-	prdTitle?: string;
+	specSlug?: string;
+	/** The drafted spec's `title:` (`spec` outcome). */
+	specTitle?: string;
 	/**
-	 * The drafted prd BODY (`prd` outcome) — the markdown AFTER the frontmatter
+	 * The drafted spec BODY (`spec` outcome) — the markdown AFTER the frontmatter
 	 * (`## Problem Statement` / `## Solution` / `## User Stories` / …). The dispatcher
 	 * writes the frontmatter (title/slug/`issue: N` + the gate axes) itself; the
 	 * agent never writes git-visible files.
 	 */
-	prdBody?: string;
+	specBody?: string;
 	/**
-	 * The prd's gate axes (`prd` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
-	 * the emitted prd frontmatter (prd `issue-intake` US #8: "the emitted artifact
+	 * The spec's gate axes (`spec` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
+	 * the emitted spec frontmatter (prd `issue-intake` US #8: "the emitted artifact
 	 * carries … its own gate axes"). Both omitted (undeclared) by default; the prompt
-	 * sets `prdHumanOnly: true` when a human should drive the TASKING and/or
-	 * `prdNeedsAnswers: true` when open questions remain.
+	 * sets `specHumanOnly: true` when a human should drive the TASKING and/or
+	 * `specNeedsAnswers: true` when open questions remain.
 	 */
-	prdHumanOnly?: boolean;
-	prdNeedsAnswers?: boolean;
+	specHumanOnly?: boolean;
+	specNeedsAnswers?: boolean;
 	/**
 	 * The drafted bounce message (`bounce` outcome) — the dispatcher carries it as
 	 * the CLOSING COMMENT on the atomic `closeIssue` ("please file separate issues")
@@ -1271,7 +1271,7 @@ async function dispatchSpec(params: {
 	} = params;
 
 	// A content-derived slug — NEVER a counter (prd `issue-intake` US #8). Prefer the drafted
-	// `prdSlug`, else derive from the drafted title.
+	// `specSlug`, else derive from the drafted title.
 	const slug = resolveSpecSlug(verdict);
 	if (slug === '') {
 		const message =
@@ -1307,11 +1307,11 @@ async function dispatchSpec(params: {
 
 	const specContent = renderSpec({
 		slug,
-		title: verdict.prdTitle ?? slug,
-		body: verdict.prdBody,
+		title: verdict.specTitle ?? slug,
+		body: verdict.specBody,
 		issueNumber,
-		humanOnly: verdict.prdHumanOnly,
-		needsAnswers: verdict.prdNeedsAnswers,
+		humanOnly: verdict.specHumanOnly,
+		needsAnswers: verdict.specNeedsAnswers,
 		originTrust,
 	});
 
@@ -1333,7 +1333,7 @@ async function dispatchSpec(params: {
 			// race as the task path: `stage()` writes the prd file AFTER the title
 			// read). `titlePath` stays set but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
-			title: verdict.prdTitle ?? slug,
+			title: verdict.specTitle ?? slug,
 			commitTag: 'intake',
 			stage: () =>
 				stageIntakeContent({cwd, relPath, content: specContent, env}),
@@ -1577,15 +1577,15 @@ function resolveSlug(verdict: IntakeVerdict): string {
 }
 
 /**
- * Resolve a content-derived slug for the prd outcome — NEVER a counter (prd `issue-intake` US #8).
- * Prefer the drafted `prdSlug`, else derive from the drafted prd title; both go
+ * Resolve a content-derived slug for the spec outcome — NEVER a counter (prd `issue-intake` US #8).
+ * Prefer the drafted `specSlug`, else derive from the drafted spec title; both go
  * through `paramCase`. An empty result signals the caller to refuse.
  */
 function resolveSpecSlug(verdict: IntakeVerdict): string {
 	const candidate =
-		verdict.prdSlug && verdict.prdSlug.trim() !== ''
-			? verdict.prdSlug
-			: (verdict.prdTitle ?? '');
+		verdict.specSlug && verdict.specSlug.trim() !== ''
+			? verdict.specSlug
+			: (verdict.specTitle ?? '');
 	return paramCase(candidate);
 }
 
@@ -1824,11 +1824,11 @@ async function runDecision(
  * {@link extractJsonObjectSpan} (NOT a forked second "first JSON object in agent
  * prose" extractor — the review gates anchor on `"verdict"`, intake on
  * `"outcome"`; same need, one implementation — coherence), `JSON.parse`s it, and
- * validates the shape: `outcome ∈ {ask,task,prd,bounce}`.
+ * validates the shape: `outcome ∈ {ask,task,spec,bounce}`.
  *
  * The per-outcome fields map 1:1 onto {@link IntakeVerdict} (`task` →
- * taskSlug?/taskTitle/taskBody, `prd` →
- * prdSlug?/prdTitle/prdBody/prdHumanOnly?/prdNeedsAnswers?, `ask` → question,
+ * taskSlug?/taskTitle/taskBody, `spec` →
+ * specSlug?/specTitle/specBody/specHumanOnly?/specNeedsAnswers?, `ask` → question,
  * `bounce` → bounceMessage). Missing OPTIONALS are tolerated — the dispatcher
  * already has fallbacks (slug-from-title, the thin comment/scaffold defaults).
  *
@@ -1861,22 +1861,22 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 		outcome !== 'ask' &&
 		outcome !== 'task' &&
 		outcome !== 'spec' &&
-		outcome !== 'prd' &&
 		outcome !== 'bounce'
 	) {
-		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-		// the new `spec` outcome is ACCEPTED beside the legacy `prd` outcome (both
-		// name the parent-spec classification). Additive — `prd` stays valid; the
-		// contract task removes it.
+		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`,
+		// batch 4g): the prompt now teaches the LLM to emit `spec`, so the accepted
+		// outcome set is `ask|task|spec|bounce` — the legacy `prd` outcome token is
+		// dropped (the `case 'prd':` dispatch + the `'prd'` TYPE MEMBER stay for the
+		// contract task; routing survives on them, but no fresh verdict names `prd`).
 		throw new Error(
-			`intake verdict 'outcome' was not one of ask|task|spec|prd|bounce (got ` +
+			`intake verdict 'outcome' was not one of ask|task|spec|bounce (got ` +
 				`${JSON.stringify(outcome)}).`,
 		);
 	}
 	// Map the per-outcome fields onto the verdict shape, keeping ONLY the strings/
 	// booleans the dispatcher consumes (a missing optional stays absent — the
 	// dispatcher's fallbacks cover it). Every field is optional on the type, so the
-	// `task`/`prd` content + the `ask`/`bounce` text are carried verbatim when present.
+	// `task`/`spec` content + the `ask`/`bounce` text are carried verbatim when present.
 	const str = (v: unknown): string | undefined =>
 		typeof v === 'string' ? v : undefined;
 	const bool = (v: unknown): boolean | undefined =>
@@ -1889,14 +1889,16 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 			: {}),
 		...(str(obj.taskBody) !== undefined ? {taskBody: str(obj.taskBody)} : {}),
 		...(str(obj.question) !== undefined ? {question: str(obj.question)} : {}),
-		...(str(obj.prdSlug) !== undefined ? {prdSlug: str(obj.prdSlug)} : {}),
-		...(str(obj.prdTitle) !== undefined ? {prdTitle: str(obj.prdTitle)} : {}),
-		...(str(obj.prdBody) !== undefined ? {prdBody: str(obj.prdBody)} : {}),
-		...(bool(obj.prdHumanOnly) !== undefined
-			? {prdHumanOnly: bool(obj.prdHumanOnly)}
+		...(str(obj.specSlug) !== undefined ? {specSlug: str(obj.specSlug)} : {}),
+		...(str(obj.specTitle) !== undefined
+			? {specTitle: str(obj.specTitle)}
 			: {}),
-		...(bool(obj.prdNeedsAnswers) !== undefined
-			? {prdNeedsAnswers: bool(obj.prdNeedsAnswers)}
+		...(str(obj.specBody) !== undefined ? {specBody: str(obj.specBody)} : {}),
+		...(bool(obj.specHumanOnly) !== undefined
+			? {specHumanOnly: bool(obj.specHumanOnly)}
+			: {}),
+		...(bool(obj.specNeedsAnswers) !== undefined
+			? {specNeedsAnswers: bool(obj.specNeedsAnswers)}
 			: {}),
 		...(str(obj.bounceMessage) !== undefined
 			? {bounceMessage: str(obj.bounceMessage)}
@@ -2432,15 +2434,15 @@ export function buildIntakeDecisionSpec(
 		'  criteria` / `## Prompt` markdown — NOT the frontmatter; the runner writes the',
 		'  frontmatter + the `issue: N` link) and an optional `taskSlug` (the runner',
 		'  derives one from the title if you omit it — never a counter).',
-		'- **prd** → `prdTitle` + `prdBody` (the `## Problem Statement` / `## Solution` / …',
+		'- **spec** → `specTitle` + `specBody` (the `## Problem Statement` / `## Solution` / …',
 		'  markdown AFTER the frontmatter; the runner writes the frontmatter + `issue: N`),',
-		'  an optional `prdSlug`, and the gate axes `prdHumanOnly` / `prdNeedsAnswers`',
+		'  an optional `specSlug`, and the gate axes `specHumanOnly` / `specNeedsAnswers`',
 		'  (booleans — set `true` when a human should drive the TASKING and/or open',
 		'  questions remain; omit otherwise).',
 		'- **ask** → `question` (the single next clarifying question).',
 		'- **bounce** → `bounceMessage` (the “file separate issues” message).',
 		'',
-		'`outcome` MUST be exactly one of `ask` | `task` | `prd` | `bounce`. Strings are',
+		'`outcome` MUST be exactly one of `ask` | `task` | `spec` | `bounce`. Strings are',
 		'plain text inside the JSON (escape newlines as \\n). Do not wrap the JSON in any',
 		'other structure — the runner pulls the first `{"outcome": …}` object out and',
 		'dispatches on it.',

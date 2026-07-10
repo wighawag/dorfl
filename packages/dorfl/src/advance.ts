@@ -1216,9 +1216,9 @@ async function applyAgenticDecision(
 		// open-question scoping). The artifact type is the agent's VERDICT.
 		const promote = context.promote ?? promoteObservation;
 		const draftedBody =
-			verdict.outcome === 'task' ? verdict.taskBody : verdict.prdBody;
+			verdict.outcome === 'task' ? verdict.taskBody : verdict.specBody;
 		const draftedSlug =
-			verdict.outcome === 'task' ? verdict.taskSlug : verdict.prdSlug;
+			verdict.outcome === 'task' ? verdict.taskSlug : verdict.specSlug;
 		try {
 			const result = await promote({
 				cwd,

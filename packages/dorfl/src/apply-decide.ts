@@ -34,7 +34,7 @@ import {
  * ADR-mint path existed yet) and is now WIRED by the follow-on task
  * `agentic-apply-mint-adr-route`, which added the {@link
  * import('./mint-adr.js').mintAdr} route and widened this set. Intake's set is
- * UNCHANGED (`{task | prd | ask | bounce}`) \u2014 the engine stays outcome-AGNOSTIC
+ * UNCHANGED (`{task | spec | ask | bounce}`) \u2014 the engine stays outcome-AGNOSTIC
  * (PRD decision 14), so widening this caller's subset does NOT touch intake or the
  * engine's superset union.
  *
@@ -173,7 +173,7 @@ export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
 		`    build refuses it. Emit {"outcome":"task","taskSlug":"\u2026",`,
 		`    "taskTitle":"\u2026","taskBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
 		`  - "spec": mint a SPEC from this signal (a larger, coherent piece of work).`,
-		`    Emit {"outcome":"spec","prdSlug":"\u2026","prdTitle":"\u2026","prdBody":"\u2026"}.`,
+		`    Emit {"outcome":"spec","specSlug":"\u2026","specTitle":"\u2026","specBody":"\u2026"}.`,
 		`  - "adr": the answer SETTLES an architectural decision worth recording. Mint`,
 		`    a self-contained ADR (docs/adr/, the context/decision/why shape) carrying`,
 		`    the WHY from the answer(s). Emit {"outcome":"adr","adrSlug":"\u2026",`,

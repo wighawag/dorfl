@@ -705,21 +705,21 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 
 		// The minted PRD body is self-contained: it carries the observation's REAL
 		// mechanism/fix signal (not a back-pointer) under the PRD lead heading.
-		const prdBody = gitIn(['show', `arbiter/main:${prdPath}`], seeded.repo);
-		expect(prdBody).toContain(MECHANISM_SIGNAL);
-		expect(prdBody).toContain('## Problem Statement');
-		expect(prdBody).not.toMatch(/Promoted from observation/i);
+		const specBody = gitIn(['show', `arbiter/main:${prdPath}`], seeded.repo);
+		expect(specBody).toContain(MECHANISM_SIGNAL);
+		expect(specBody).toContain('## Problem Statement');
+		expect(specBody).not.toMatch(/Promoted from observation/i);
 		// FENCE SPACING (byte-for-byte): one blank line between the frontmatter fence
 		// and the PRD lead heading (`---\n\n## Problem Statement`), same as the task path.
-		expect(prdBody).toContain('---\n\n## Problem Statement');
-		expect(prdBody).not.toMatch(/---\n## Problem Statement/);
+		expect(specBody).toContain('---\n\n## Problem Statement');
+		expect(specBody).not.toMatch(/---\n## Problem Statement/);
 		// Open questions transcribed + needsAnswers reflects them.
-		expect(prdBody).toContain('## Open questions');
-		expect(prdBody).toContain(OPEN_QUESTION_SIGNAL);
-		expect(parseFrontmatter(prdBody).needsAnswers).toBe(true);
+		expect(specBody).toContain('## Open questions');
+		expect(specBody).toContain(OPEN_QUESTION_SIGNAL);
+		expect(parseFrontmatter(specBody).needsAnswers).toBe(true);
 		// A PRD is NOT dispatched by `do`/`run`, so it carries NO `## Prompt` (that
 		// section is the task-only dispatchability schema).
-		expect(prdBody).not.toContain('## Prompt');
+		expect(specBody).not.toContain('## Prompt');
 
 		// The observation + its sidecar are DELETED on the arbiter (discharge by
 		// deletion), riding the SAME atomic commit as the PRD create.
@@ -811,12 +811,12 @@ describe('promoteObservation — the PRD route (artifact: prd → prds/proposed)
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('promoted');
-		const prdBody = gitIn(
+		const specBody = gitIn(
 			['show', 'arbiter/main:work/specs/proposed/prdnoq.md'],
 			seeded.repo,
 		);
-		expect(prdBody).toContain(MECHANISM_SIGNAL);
-		expect(prdBody).not.toContain('## Open questions');
-		expect(parseFrontmatter(prdBody).needsAnswers).toBe(false);
+		expect(specBody).toContain(MECHANISM_SIGNAL);
+		expect(specBody).not.toContain('## Open questions');
+		expect(parseFrontmatter(specBody).needsAnswers).toBe(false);
 	});
 });

@@ -72,26 +72,26 @@ describe('parseIntakeVerdict — the parse table', () => {
 		expect(v.taskBody).toBe('## What to build\n\nA --quiet flag.');
 	});
 
-	it('parses a `prd` verdict including the gate axes', () => {
+	it('parses a `spec` verdict including the gate axes', () => {
 		const output = [
 			'```json',
 			JSON.stringify({
-				outcome: 'prd',
-				prdSlug: 'big-feature',
-				prdTitle: 'A big coherent feature',
-				prdBody: '## Problem Statement\n\nIt is big.',
-				prdHumanOnly: true,
-				prdNeedsAnswers: true,
+				outcome: 'spec',
+				specSlug: 'big-feature',
+				specTitle: 'A big coherent feature',
+				specBody: '## Problem Statement\n\nIt is big.',
+				specHumanOnly: true,
+				specNeedsAnswers: true,
 			}),
 			'```',
 		].join('\n');
 		const v = parseIntakeVerdict(output);
-		expect(v.outcome).toBe('prd');
-		expect(v.prdSlug).toBe('big-feature');
-		expect(v.prdTitle).toBe('A big coherent feature');
-		expect(v.prdBody).toBe('## Problem Statement\n\nIt is big.');
-		expect(v.prdHumanOnly).toBe(true);
-		expect(v.prdNeedsAnswers).toBe(true);
+		expect(v.outcome).toBe('spec');
+		expect(v.specSlug).toBe('big-feature');
+		expect(v.specTitle).toBe('A big coherent feature');
+		expect(v.specBody).toBe('## Problem Statement\n\nIt is big.');
+		expect(v.specHumanOnly).toBe(true);
+		expect(v.specNeedsAnswers).toBe(true);
 	});
 
 	it('parses an `ask` verdict (question only)', () => {
@@ -135,30 +135,19 @@ describe('parseIntakeVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in {ask,task,spec,prd,bounce}', () => {
+	it('THROWS on an outcome not in {ask,task,spec,bounce}', () => {
 		expect(() => parseIntakeVerdict('{"outcome":"merge"}')).toThrow(
-			/ask\|task\|spec\|prd\|bounce/,
+			/ask\|task\|spec\|bounce/,
 		);
 	});
 
-	// EXPAND (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the new
-	// `spec` outcome is ACCEPTED beside the legacy `prd` outcome (both name the
-	// parent-spec classification). `prd` still parses (covered above).
-	it('parses a `spec` verdict beside the legacy `prd` outcome', () => {
-		const output = [
-			'```json',
-			JSON.stringify({
-				outcome: 'spec',
-				prdSlug: 'big-feature',
-				prdTitle: 'A big coherent feature',
-				prdBody: '## Problem Statement\n\nIt is big.',
-			}),
-			'```',
-		].join('\n');
-		const v = parseIntakeVerdict(output);
-		expect(v.outcome).toBe('spec');
-		expect(v.prdSlug).toBe('big-feature');
-		expect(v.prdTitle).toBe('A big coherent feature');
+	// MIGRATE (prd `prd-to-spec-vocabulary-cutover-and-migration-command`, batch
+	// 4g): the prompt now teaches `spec`, so the legacy `prd` outcome token is
+	// REJECTED (dropped from the accepted set). A verdict emitting `prd` throws.
+	it('THROWS on the retired `prd` outcome token', () => {
+		expect(() => parseIntakeVerdict('{"outcome":"prd"}')).toThrow(
+			/ask\|task\|spec\|bounce/,
+		);
 	});
 });
 
