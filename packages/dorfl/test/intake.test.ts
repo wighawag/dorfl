@@ -342,8 +342,8 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose output modes',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose output modes',
 			}),
 			originTrust: 'untrusted',
 			env: gitEnv(),
@@ -642,8 +642,8 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			issueProvider,
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose output modes',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose output modes',
 			}),
 			providerInstance: new GitHubProvider({ghBin: gh.bin}),
 			env: {...gitEnv(), PATH: `${gh.binDir}:${process.env.PATH ?? ''}`},
@@ -819,8 +819,8 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			issueProvider: prdProvider,
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose modes',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});
@@ -871,11 +871,11 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			issueProvider,
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose output modes for the CLI',
-				prdHumanOnly: true,
-				prdNeedsAnswers: true,
-				prdBody: [
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose output modes for the CLI',
+				specHumanOnly: true,
+				specNeedsAnswers: true,
+				specBody: [
 					'## Problem Statement',
 					'',
 					'The CLI has no output-verbosity control.',
@@ -954,8 +954,8 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			issueProvider,
 			decide: async () => ({
 				outcome: 'prd',
-				prdSlug: 'legacy-prd-alias-still-routes',
-				prdTitle: 'Legacy prd alias still routes',
+				specSlug: 'legacy-prd-alias-still-routes',
+				specTitle: 'Legacy prd alias still routes',
 			}),
 			env: gitEnv(),
 		});
@@ -975,7 +975,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			issueProvider: stubIssueProvider({issue: {number: 5}}),
 			decide: async () => ({
 				outcome: 'spec',
-				prdTitle: 'A Coupled But Small Pair',
+				specTitle: 'A Coupled But Small Pair',
 			}),
 			env: gitEnv(),
 		});
@@ -1333,8 +1333,8 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 			issueProvider: stubIssueProvider(),
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose output modes',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose output modes',
 			}),
 			// The PRD mode resolves to merge; the TASK mode must NOT route the PRD.
 			integration: {task: 'propose', spec: 'merge'},
@@ -2271,8 +2271,8 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			issueProvider,
 			decide: async () => ({
 				outcome: 'spec',
-				prdSlug: 'quiet-and-verbose-modes',
-				prdTitle: 'Quiet and verbose modes',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose modes',
 			}),
 			env: gitEnv(),
 		});

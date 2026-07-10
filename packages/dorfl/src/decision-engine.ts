@@ -80,12 +80,12 @@ export interface DecisionVerdict {
 	 * git-visible files (the in-band boundary intake already follows).
 	 */
 	taskBody?: string;
-	/** The drafted prd's content-derived slug (`prd` outcome). */
-	prdSlug?: string;
-	/** The drafted prd's `title:` (`prd` outcome). */
-	prdTitle?: string;
-	/** The drafted prd BODY (`prd` outcome) — the markdown AFTER the frontmatter. */
-	prdBody?: string;
+	/** The drafted spec's content-derived slug (`spec` outcome). */
+	specSlug?: string;
+	/** The drafted spec's `title:` (`spec` outcome). */
+	specTitle?: string;
+	/** The drafted spec BODY (`spec` outcome) — the markdown AFTER the frontmatter. */
+	specBody?: string;
 	/** The drafted adr's content-derived slug (`adr` outcome). */
 	adrSlug?: string;
 	/** The drafted adr's `title:` (`adr` outcome). */
@@ -200,7 +200,7 @@ export async function decide<TInput>(
  * object carrying an `"outcome"` field via the SHARED {@link extractJsonObjectSpan}
  * (the same extractor every prompt→verdict→dispatch seam in this package uses —
  * NOT a forked copy), `JSON.parse`s it, and validates the shape:
- * `outcome ∈ {task,prd,adr,delete,ask}`.
+ * `outcome ∈ {task,spec,adr,delete,ask}`.
  *
  * This validates the verdict is a WELL-FORMED member of the SUPERSET; the
  * caller-specific allowed-outcome guard ({@link decide}) then rejects one outside
@@ -256,9 +256,11 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 			? {taskTitle: str(obj.taskTitle)}
 			: {}),
 		...(str(obj.taskBody) !== undefined ? {taskBody: str(obj.taskBody)} : {}),
-		...(str(obj.prdSlug) !== undefined ? {prdSlug: str(obj.prdSlug)} : {}),
-		...(str(obj.prdTitle) !== undefined ? {prdTitle: str(obj.prdTitle)} : {}),
-		...(str(obj.prdBody) !== undefined ? {prdBody: str(obj.prdBody)} : {}),
+		...(str(obj.specSlug) !== undefined ? {specSlug: str(obj.specSlug)} : {}),
+		...(str(obj.specTitle) !== undefined
+			? {specTitle: str(obj.specTitle)}
+			: {}),
+		...(str(obj.specBody) !== undefined ? {specBody: str(obj.specBody)} : {}),
 		...(str(obj.adrSlug) !== undefined ? {adrSlug: str(obj.adrSlug)} : {}),
 		...(str(obj.adrTitle) !== undefined ? {adrTitle: str(obj.adrTitle)} : {}),
 		...(str(obj.adrBody) !== undefined ? {adrBody: str(obj.adrBody)} : {}),

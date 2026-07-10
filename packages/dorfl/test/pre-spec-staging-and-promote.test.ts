@@ -122,9 +122,9 @@ function stubIssueProvider(
 
 const PRD_VERDICT = {
 	outcome: 'spec' as const,
-	prdSlug: 'shiny-new-vision',
-	prdTitle: 'Shiny new vision',
-	prdBody: [
+	specSlug: 'shiny-new-vision',
+	specTitle: 'Shiny new vision',
+	specBody: [
 		'## Problem Statement',
 		'',
 		'A coupled small pair worth a PRD.',
