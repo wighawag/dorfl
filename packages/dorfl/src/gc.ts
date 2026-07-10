@@ -8,7 +8,9 @@ import {
 	removeJobRecord,
 	type JobRecord,
 } from './workspace.js';
-import {workBranchRef} from './slug-namespace.js';
+import {parseWorkBranchRef, workBranchRef} from './slug-namespace.js';
+import {terminalMainPaths} from './item-lock.js';
+import type {SidecarType} from './sidecar.js';
 
 /**
  * The **reaper** for job worktrees, governed by the **provably-safe deletion
@@ -140,8 +142,23 @@ export function evaluateDeletionSafety(
 
 	const localTip = revParse(input.dir, 'HEAD', env);
 
-	// 2a. Merged: the tip is an ancestor of <arbiter>/main.
-	if (isAncestor(input.dir, localTip, `refs/remotes/${arbiter}/main`, env)) {
+	// 2a. Merged: the tip is provably on <arbiter>/main — either a plain
+	//     ancestor (fast path) OR squash-aware-equivalent (the durable done/
+	//     dropped record is on main AND the branch carries nothing main lacks).
+	const arbiterMainRef = `refs/remotes/${arbiter}/main`;
+	const reapIdentity = reapIdentityFromBranch(input.branch);
+	if (
+		reapIdentity !== undefined
+			? isProvablyMergedForReap({
+					cwd: input.dir,
+					tip: localTip,
+					arbiterMain: arbiterMainRef,
+					namespace: reapIdentity.namespace,
+					slug: reapIdentity.slug,
+					env,
+				})
+			: isAncestor(input.dir, localTip, arbiterMainRef, env)
+	) {
 		return {safe: true, reachableVia: 'merged'};
 	}
 
@@ -433,13 +450,159 @@ function fetchTracking(
 }
 
 /**
+ * Extract the `{namespace, slug}` identity a reap decision needs from a work
+ * branch ref (`work/[<producer>-]<type>-<slug>`). Returns `undefined` for a
+ * non-namespaced branch — the caller then falls back to the ancestry-only
+ * fast-path (the squash-aware fallback has no anchor without an identity to
+ * look up on `<arbiter>/main`, so the safe direction is the strict old rule).
+ */
+function reapIdentityFromBranch(
+	branch: string,
+): {namespace: SidecarType; slug: string} | undefined {
+	const parsed = parseWorkBranchRef(branch);
+	if (parsed === undefined) {
+		return undefined;
+	}
+	// `SlugNamespace` and `SidecarType` share the same three members
+	// (`'task' | 'spec' | 'observation'`); the cast is structural.
+	return {namespace: parsed.namespace as SidecarType, slug: parsed.slug};
+}
+
+/** Input for {@link isProvablyMergedForReap}. */
+export interface ProvablyMergedForReapInput {
+	/** The local repo the git predicates run in. */
+	cwd: string;
+	/** The candidate branch tip (a 40-hex sha or a resolvable ref). */
+	tip: string;
+	/**
+	 * The arbiter's main as a ref RESOLVABLE INSIDE `cwd` — a fetched
+	 * remote-tracking ref (`refs/remotes/<arbiter>/main`) or short-form
+	 * (`<arbiter>/main`). Callers are responsible for the fetch (best-effort;
+	 * an unresolvable ref reads as not-provable ⇒ false).
+	 */
+	arbiterMain: string;
+	/**
+	 * The item's type (task/spec/observation) — used to look up the durable
+	 * terminal records on `<arbiter>/main`. Reap decisions on a
+	 * `work/<type>-<slug>` branch pass the parsed type from
+	 * {@link parseWorkBranchRef}.
+	 */
+	namespace: SidecarType;
+	/** The item's bare slug — the anchor for the squash-aware fallback. */
+	slug: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The **squash-aware, provably-merged predicate** used to decide reap-safety
+ * across the workspace: `gc.ts`'s worktree reaper, `reap-branches.ts`'s remote
+ * `work/*` sweep, `integrator.ts`'s post-merge remote-head reap, and
+ * `complete.ts`'s local-branch reap. ONE decision point so the two rules can
+ * never drift apart, and NEVER `--force` — a merged-for-reap ref needs none.
+ *
+ * A remote/local `work/<slug>` branch is reapable iff EITHER:
+ *
+ *   1. **Fast path (unchanged).** `git merge-base --is-ancestor <tip>
+ *      <arbiter>/main` succeeds — the fast-forward / true-merge land case.
+ *   2. **Squash-aware fallback (new).** BOTH of the following hold:
+ *      - the item is TERMINAL on `<arbiter>/main` — i.e. the matching
+ *        {@link terminalMainPaths} (`work/tasks/done/<slug>.md` or
+ *        `work/tasks/cancelled/<slug>.md` for a task; `work/specs/tasked/…`
+ *        or `work/specs/dropped/…` for a spec) exists in the fetched main
+ *        tree; AND
+ *      - the branch carries NOTHING main lacks — either `git diff --quiet
+ *        <arbiter>/main <tip>` reads clean (content-equal / content-subset)
+ *        OR `git cherry <arbiter>/main <tip>` reports every commit as
+ *        already applied by patch-id (`-` on every line, catching
+ *        rebase-lands the tree check misses).
+ *
+ * Grounding: the durable `<arbiter>/main` record is authoritative. It is what
+ * `complete` writes FIRST, so if the terminal record is there the item's work
+ * is at rest, and a branch that carries nothing main lacks has no in-flight
+ * work to protect. The safety floor is unchanged: NEVER reap an in-flight /
+ * unmerged branch (no terminal record ⇒ retain), NEVER reap a branch carrying
+ * commits main lacks (content check fails ⇒ retain), NEVER `--force`.
+ *
+ * This is the branch-side twin of the lock-side terminal-on-main recovery
+ * (`isTerminalOnMain` in `item-lock.ts`): same anchor, different subject.
+ */
+export function isProvablyMergedForReap(
+	input: ProvablyMergedForReapInput,
+): boolean {
+	const {cwd, tip, arbiterMain, namespace, slug, env} = input;
+
+	// 1. Fast path — the fast-forward / true-merge land case. Cheap: one
+	//    `git merge-base --is-ancestor`.
+	if (isAncestor(cwd, tip, arbiterMain, env)) {
+		return true;
+	}
+
+	// 2. Squash-aware fallback. Anchor: the durable terminal record on
+	//    `<arbiter>/main`. No terminal record ⇒ the item is still in-flight (or
+	//    an observation, which has no terminal folder) ⇒ retain (never reap
+	//    in-flight work).
+	if (!terminalRecordOnMain(cwd, arbiterMain, namespace, slug, env)) {
+		return false;
+	}
+
+	// 2a. Content-subset: `git diff --quiet <arbiterMain> <tip>` clean ⇒ the
+	//     two trees are identical, so the branch carries nothing main lacks
+	//     (the incident shape: the branch is a since-lagged snapshot of a
+	//     squash-landed item, no new content on it).
+	const diff = run('git', ['diff', '--quiet', arbiterMain, tip], cwd, {env});
+	if (diff.status === 0) {
+		return true;
+	}
+
+	// 2b. Patch-id equivalence via `git cherry <upstream> <head>`: every commit
+	//     reachable from `<tip>` but not `<arbiterMain>` is reported as `-`
+	//     (already applied upstream by patch-id). This catches rebase-lands
+	//     where the tree diff is non-empty but every commit is already on main
+	//     under a different sha.
+	const cherry = run('git', ['cherry', arbiterMain, tip], cwd, {env});
+	if (cherry.status === 0) {
+		const lines = cherry.stdout
+			.split('\n')
+			.map((l) => l.trim())
+			.filter((l) => l !== '');
+		if (lines.length > 0 && lines.every((l) => l.startsWith('- '))) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/** True iff `<arbiterMain>` carries ANY of the item's durable terminal records
+ * ({@link terminalMainPaths}). Best-effort: `cat-file -e` is a cheap tree
+ * probe; an unresolvable `<arbiterMain>` reads as no-record ⇒ retain (the safe
+ * direction). Observations have no terminal folder ⇒ always false. */
+function terminalRecordOnMain(
+	cwd: string,
+	arbiterMain: string,
+	namespace: SidecarType,
+	slug: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	for (const path of terminalMainPaths(namespace, slug)) {
+		const res = run('git', ['cat-file', '-e', `${arbiterMain}:${path}`], cwd, {
+			env,
+		});
+		if (res.status === 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * True iff `ancestor` is an ancestor of (or equal to) `descendant`, both
- * resolved IN the local repo `dir` (`git merge-base --is-ancestor`). This is the
- * ONE provably-merged reachability predicate in the system: the worktree reaper
- * above uses it for `<tip> --is-ancestor <arbiter>/main`, and the remote
- * merged-branch sweep (`reap-branches.ts`) REUSES it (not a second predicate) to
- * decide a remote `work/<slug>` branch is provably merged before deleting it.
- * EXPORTED so that single source of truth is shared, never forked.
+ * resolved IN the local repo `dir` (`git merge-base --is-ancestor`). The
+ * low-level fast-path building block for {@link isProvablyMergedForReap} —
+ * reap-safety decisions across the workspace go through the squash-aware
+ * wrapper, never this raw predicate. EXPORTED so callers that legitimately
+ * need pure ancestry (non-reap idempotency checks, claim-reachability guards)
+ * keep the one shared implementation.
  */
 export function isAncestor(
 	dir: string,

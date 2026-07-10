@@ -1,6 +1,7 @@
 import {run} from './git.js';
-import {isAncestor} from './gc.js';
+import {isProvablyMergedForReap} from './gc.js';
 import {parseWorkBranchRef} from './slug-namespace.js';
+import type {SidecarType} from './sidecar.js';
 
 /**
  * The **remote merged-work-branch reaper** — the cross-machine COUNTERPART of the
@@ -9,13 +10,15 @@ import {parseWorkBranchRef} from './slug-namespace.js';
  * the arbiter after their propose-mode PR has MERGED.
  *
  * The safety lynchpin is the SAME provably-merged predicate the worktree reaper
- * uses (`gc.ts` `isAncestor`, REUSED here, never a second one): a remote
- * `work/<slug>` branch is reapable **iff** its tip is
- * `git merge-base --is-ancestor <tip> <arbiter>/main` — provably on `main`. A
- * merely-pushed-but-unmerged branch (an in-flight, kept-for-continue recovery
- * point) is NOT an ancestor of `main`, so the predicate AUTOMATICALLY excludes it
- * — the never-delete-the-in-flight-branch invariant (ADR §4 deletion-safety)
- * stays absolute. Deletion of a fully-merged ref needs NO force, so this NEVER
+ * uses (`gc.ts` `isProvablyMergedForReap`, REUSED here, never a second one): a
+ * remote `work/<slug>` branch is reapable **iff** it is provably on
+ * `<arbiter>/main` — EITHER `git merge-base --is-ancestor <tip> <arbiter>/main`
+ * (fast path) OR the squash-aware fallback (durable done/dropped record on main
+ * AND branch carries nothing main lacks). A merely-pushed-but-unmerged branch
+ * (an in-flight, kept-for-continue recovery point) has no terminal record on
+ * main AND is not an ancestor, so the predicate AUTOMATICALLY excludes it — the
+ * never-delete-the-in-flight-branch invariant (ADR §4 deletion-safety) stays
+ * absolute. Deletion of a fully-merged ref needs NO force, so this NEVER
  * `--force`s.
  *
  * It is provider-AGNOSTIC plain git (`git ls-remote` to enumerate, `git push
@@ -101,8 +104,9 @@ export interface SweepRemoteBranchesResult {
  *   2. Fetch `<arbiter>/main` into a local tracking ref so the ancestor check
  *      resolves the descendant LOCALLY; fetch each candidate tip object too (so
  *      `merge-base` can read it) — best-effort, into a scratch ref.
- *   3. For each branch whose tip `--is-ancestor` of the fetched main ⇒ delete via
- *      `git push <arbiter> --delete <branch>`; else retain with a reason.
+ *   3. For each branch that is provably merged for reap (fast-path ancestor
+ *      OR squash-aware fallback — {@link isProvablyMergedForReap}) ⇒ delete
+ *      via `git push <arbiter> --delete <branch>`; else retain with a reason.
  */
 export function sweepRemoteMergedBranches(
 	input: SweepRemoteBranchesInput,
@@ -126,12 +130,32 @@ export function sweepRemoteMergedBranches(
 			retain(retained, note, branch, tip, 'main-unresolved');
 			continue;
 		}
-		// Make the candidate tip OBJECT readable locally so `merge-base` can use it
-		// (ls-remote gave us the sha, but the object may not be in the local repo).
+		// Make the candidate tip OBJECT readable locally so `merge-base` /
+		// `diff` / `cherry` can read it (ls-remote gave us the sha, but the
+		// object may not be in the local repo).
 		fetchScratch(input.cwd, input.arbiter, branch, env);
 
-		if (!isAncestor(input.cwd, tip, mainRef, env)) {
-			// NOT an ancestor of main ⇒ still in-flight ⇒ NEVER delete (the invariant).
+		const parsed = parseWorkBranchRef(branch);
+		if (parsed === undefined) {
+			// Guarded above by `listRemoteWorkBranches` (which only enumerates
+			// parseable heads), but keep a defensive belt: without a slug the
+			// squash-aware fallback has no anchor ⇒ retain.
+			retain(retained, note, branch, tip, 'not-merged');
+			continue;
+		}
+
+		if (
+			!isProvablyMergedForReap({
+				cwd: input.cwd,
+				tip,
+				arbiterMain: mainRef,
+				namespace: parsed.namespace as SidecarType,
+				slug: parsed.slug,
+				env,
+			})
+		) {
+			// NOT provably merged (neither ancestor nor squash-aware equivalent)
+			// ⇒ still in-flight ⇒ NEVER delete (the invariant).
 			retain(retained, note, branch, tip, 'not-merged');
 			continue;
 		}
