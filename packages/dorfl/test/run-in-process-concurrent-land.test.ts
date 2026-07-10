@@ -117,7 +117,11 @@ describe('runOnce — in-process concurrent merge land via `integrateLock` (Stor
 		// tree" arm of the loser-disjunction). The OTHER arm (stuck with a real
 		// cause) is covered by sibling tests; here the disjoint scenario fixes the
 		// expectation so a regression to "loser bounced for lock contention" is
-		// observable as a status flip.
+		// observable as a status flip. This is a DELIBERATE tightening of the
+		// broader allowed-set check above for the disjoint + green scenario
+		// specifically — recorded as an explicit design choice in the
+		// `## Decisions` block of `work/tasks/done/test-in-process-concurrent-land.md`
+		// (see follow-up `harden-test-in-process-concurrent-land-review-nits`).
 		expect(result.claimedAndDone).toBe(2);
 		expect(result.items.every((i) => i.status === 'claimed-done')).toBe(true);
 
@@ -168,6 +172,16 @@ describe('runOnce — in-process concurrent merge land via `integrateLock` (Stor
 			// this assertion guards.
 			if (lock !== undefined) {
 				expect(lock.state).not.toBe('stuck');
+				// Belt-and-braces (per follow-up task nit #3): even if the state
+				// check somehow drifts, a `reason` naming lock contention would be
+				// the fingerprint of the exact regression this test guards. The
+				// `reason` field is present iff `state === 'stuck'` (see
+				// `item-lock.ts`), so in a passing run this is a vacuous guard;
+				// under a regression it turns a status flip into a specific,
+				// self-explaining failure.
+				if (lock.reason !== undefined) {
+					expect(lock.reason).not.toMatch(/lock|contention/i);
+				}
 			}
 		}
 
@@ -178,23 +192,24 @@ describe('runOnce — in-process concurrent merge land via `integrateLock` (Stor
 		expect(existsOnArbiterMain(seeded.repo, 'done', 'pa')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', 'pb')).toBe(true);
 
-		// (3b) `<arbiter>/main` never contains a tree that fails `verify`. The
-		// engine's contract is that every commit it lands came from a green
-		// freshly-rebased-tip `verify`; we externally re-confirm the property by
-		// running the SAME `verify` command against the final main tip. (With
-		// `verify: exit 0` this is trivially green, by design — the brief asks for
-		// the MINIMAL scenario where the only contention is the land slot. The
-		// clean-rebase-but-broken-merge case is a SEPARATE test, story #12.)
+		// (3b) The post-land main tip actually CONTAINS both workers' content
+		// markers — the per-item file `<slug>.txt` written by
+		// `disjointEditingAgent` with a body unique to that slug. This is the
+		// non-trivial "the tree on main is not broken and carries both landed
+		// changes" check: if the loser had raced its push against a stale base
+		// (the lock's failure mode), or if the merge had dropped one worker's
+		// content, one of these `git show` reads would miss the marker. Replaces
+		// a former `sh -c 'exit 0'` re-verify against the tip that was trivially
+		// green by construction (see follow-up task nit #2). Re-running the
+		// configured `verify` itself would be circular — the engine's fresh-
+		// worktree gate already ran that against the rebased tip on the LAND
+		// path (behaviour (1)/(2) above pin it externally); what this check adds
+		// is that the merged TREE composed both workers' disjoint edits.
 		const fresh = seeded.clone('verify-check');
 		gitIn(['switch', '-q', '-c', 'verify-tip', 'arbiter/main'], fresh);
-		// Use Node's child_process via the test harness only for this assertion
-		// — re-running the configured `verify` against the final tip would be
-		// circular if it routed through the engine, so we shell out directly.
-		const {spawnSync} = await import('node:child_process');
-		const verifyRun = spawnSync('sh', ['-c', PASS], {
-			cwd: fresh,
-			env: gitEnv(),
-		});
-		expect(verifyRun.status).toBe(0);
+		for (const slug of ['pa', 'pb']) {
+			const marker = gitIn(['show', `arbiter/main:${slug}.txt`], fresh);
+			expect(marker).toBe(`work done for ${slug}\n`);
+		}
 	});
 });
