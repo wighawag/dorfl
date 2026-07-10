@@ -1,5 +1,5 @@
 /**
- * Tier-1 GitHub branch-protection STEP for `install-ci` (prd
+ * Tier-1 GitHub branch-protection STEP for `install-ci` (spec
  * `land-time-reverify-and-parallel-merge-ceiling`, task
  * `install-ci-tier1-branch-protection`; Story 11). Closes the propose-mode
  * PR-merge-time drift window on a GitHub arbiter: a required `verify` check + a

@@ -2,7 +2,7 @@ import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **question/answer SIDECAR contract** (prd `advance-loop`, task
+ * The **question/answer SIDECAR contract** (spec `advance-loop`, task
  * `advance-sidecar-contract`) — the one genuinely-new piece of the `advance`
  * family. A strict, tooling-OWNED per-item file `work/questions/<type>-<slug>.md`
  * carrying per-entry answered-state, so the tooling fully owns the Q&A artifact
@@ -267,7 +267,7 @@ export function sidecarPathFor(identity: string): string {
  * canonical {@link sidecarPathFor} path FIRST, then any legacy-data fallback that
  * may still be on disk before the migration command converts it.
  *
- * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
  * producer side now emits `spec:<slug>`, so {@link sidecarPathFor} resolves
  * `work/questions/spec-<slug>.md`. But the ON-DISK sidecar is still the legacy
  * `work/questions/prd-<slug>.md` until `dorfl prd-to-spec` renames the DATA. So a

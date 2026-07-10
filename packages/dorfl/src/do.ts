@@ -130,14 +130,14 @@ export type DoOutcome =
 	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'tasked' // `do prd:<slug>` — the prd was tasked into work/backlog/ (runner-owned)
+	| 'tasked' // `do prd:<slug>` — the spec was tasked into work/backlog/ (runner-owned)
 	| 'gate-refused' // `do prd:<slug>` — the tasking gate refused (honest skip)
-	| 'stale'; // `do prd:<slug>` — the held prd was edited under the lock (stale tasking)
+	| 'stale'; // `do prd:<slug>` — the held spec was edited under the lock (stale tasking)
 
 export interface DoResult {
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: DoOutcome;
-	/** The resolved bare slug acted on (task or prd), when one was resolved. */
+	/** The resolved bare slug acted on (task or spec), when one was resolved. */
 	slug?: string;
 	/** The work branch the run operated on, when one was created/switched-to. */
 	branch?: string;
@@ -187,10 +187,10 @@ export interface DoOptions {
 	/**
 	 * Per-repo `autoTask` policy (resolved by `autoslice-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
-	 * (`do-autopick.ts`'s taskable-prd pool): "may an agent auto-task an
-	 * UNDECLARED prd in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
+	 * (`do-autopick.ts`'s taskable-spec pool): "may an agent auto-task an
+	 * UNDECLARED spec in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
-	 * `performTask` — naming the prd IS the authorization, exactly as `do <task>`
+	 * `performTask` — naming the spec IS the authorization, exactly as `do <task>`
 	 * builds regardless of `autoBuild`). Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
@@ -244,7 +244,7 @@ export interface DoOptions {
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (prd
+	 * **The per-repo TASK-PLACEMENT default** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
 	 * the `do prd:<slug>` tasking path: the value is fed as the
@@ -274,7 +274,7 @@ export interface DoOptions {
 	 */
 	ignoreDivergedMain?: boolean;
 	/**
-	 * **`--allow-backlog`** (prd
+	 * **`--allow-backlog`** (spec
 	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): let this `do task:`
 	 * invocation FIND, CLAIM, and COMPLETE a task that lives in `tasks/backlog/`
 	 * (staging) IN PLACE, WITHOUT first promoting it to the pool — so no `advance`
@@ -300,7 +300,7 @@ export interface DoOptions {
 	 */
 	freshWorktreeGate?: boolean;
 	/**
-	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
 	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
 	 * (a)). Threaded VERBATIM into `performComplete` → `performIntegration` so a
 	 * wide-matrix CI's raised cap actually reaches the cross-job land queue (the
@@ -335,7 +335,7 @@ export interface DoOptions {
 	 */
 	providerInstance?: ReviewProvider;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`):
+	 * **Gate 2 — the PR/code review gate** (GATES spec `work/specs/tasked/review.md`):
 	 * threaded VERBATIM into `performComplete` (the gate rides inside the shared
 	 * `do`/`complete` pipeline, so CI inherits it for free). When `review` is on,
 	 * the `review` SKILL runs as a fresh-context agent AFTER the green `verify` and
@@ -502,7 +502,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (prd
+	 * **The per-repo TASK-PLACEMENT default** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
 	 * prd:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
@@ -526,7 +526,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	freshWorktreeGate?: boolean;
 	/**
-	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
 	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
 	 * (a)). Threaded VERBATIM into `performComplete` → `performIntegration` so the
 	 * resolved cap reaches the cross-job land queue (the CAS loop IS the queue
@@ -620,7 +620,7 @@ function taskResultToDoResult(tasked: TaskResult): DoResult {
 			break;
 		case 'needs-attention':
 			// The tasker review→edit loop found the decomposition unclear and routed the
-			// prd to needs-attention (no guessed tasks). Same exit class as a stuck
+			// spec to needs-attention (no guessed tasks). Same exit class as a stuck
 			// build (1).
 			outcome = 'needs-attention';
 			exitCode = 1;
@@ -684,7 +684,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	}
 
 	// 1. Resolve the slug across BOTH namespaces — `do` is the ONE command that
-	//    spans them (ADR §3a): bare → task (after a no-prd-collision check;
+	//    spans them (ADR §3a): bare → task (after a no-spec-collision check;
 	//    ERROR on collision), `task:`/`prd:` explicit. A collision / resolution
 	//    failure is a loud usage error (exit 1).
 	let resolved;
@@ -720,7 +720,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
 			// it, or the auto-pick POOL already filtered it on `autoTask` before
 			// dispatching here — the single policy-enforcement point). So the tasking gate
-			// drops the `autoTask` policy term and binds only the prd's own readiness
+			// drops the `autoTask` policy term and binds only the spec's own readiness
 			// (`humanOnly`/`needsAnswers`) + `taskedAfter`, EXACTLY as `do <task>` builds a
 			// named task regardless of `autoBuild` (the pool gates the policy, not the
 			// explicit claim).
@@ -746,7 +746,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// precedence`). The tasker reads them as the configured-default + the
 			// top rung of the runner-deterministic placement resolver; the
 			// `originTrust: untrusted` force is read inside the tasker from the
-			// prd's stamped frontmatter.
+			// spec's stamped frontmatter.
 			tasksLandIn: options.tasksLandIn,
 			explicitTasksLandIn: options.explicitTasksLandIn,
 			noPR: options.noPR,
@@ -1008,7 +1008,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	// 5. Run the agent autonomously in the checkout, ON the work branch — the
 	//    SAME prompt assembly `dorfl prompt` emits (canonical wrapper +
-	//    source prd + the task's ## Prompt). The agent only edits code (it does
+	//    source spec + the task's ## Prompt). The agent only edits code (it does
 	//    no git). This is the one NEW middle step `ar-run.sh` shelled out for
 	//    (`prompt | pi`).
 	//    The post-claim pipeline reads the uniform `IsolatedTree` handle (`tree.dir`)
@@ -1047,7 +1047,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
-		// Per-item override layer: a task or prd may pin `promptGuidance.testFirst`
+		// Per-item override layer: a task or spec may pin `promptGuidance.testFirst`
 		// in its frontmatter, superseding the resolved repo policy for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd: tree.dir,
@@ -1175,7 +1175,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		verify: options.verify,
 		freshWorktreeGate: options.freshWorktreeGate,
 		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
-		// git-alone FLOOR of the cross-job land queue (prd `land-time-reverify-and-
+		// git-alone FLOOR of the cross-job land queue (spec `land-time-reverify-and-
 		// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). Threaded so a
 		// wide-matrix CI's raised cap actually reaches the merge loop.
 		mergeRetries: options.mergeRetries,
@@ -1907,7 +1907,7 @@ export async function performDoRemote(
 				autoTask: options.autoTask,
 				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
-				// tasking gate drops the policy term — only the prd's own readiness +
+				// tasking gate drops the policy term — only the spec's own readiness +
 				// `taskedAfter` bind, mirroring the build path vs `autoBuild`.
 				explicit: true,
 				dorfl: options.dorfl,
@@ -2238,7 +2238,7 @@ async function runRemotePipeline(
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
-		// Per-item override layer (mirrors in-place `do`): the task/prd frontmatter
+		// Per-item override layer (mirrors in-place `do`): the task/spec frontmatter
 		// may override the resolved repo `promptGuidance.testFirst` for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
 			cwd,

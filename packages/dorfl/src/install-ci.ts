@@ -1,5 +1,5 @@
 /**
- * The `install-ci` orchestrator (prd `runner-in-ci`, task
+ * The `install-ci` orchestrator (spec `runner-in-ci`, task
  * `install-ci-core-and-github-adapter`): ties the provider-agnostic core
  * (`install-ci-core.ts`) to a CI-provider adapter (the first being GitHub,
  * `install-ci-github.ts`) through the {@link CIProviderContext} seam. It drives
@@ -252,7 +252,7 @@ export async function installCI(
 	}
 
 	// 5. Assemble + write the artifacts (composite setup action + auth). The
-	// project-setup escape hatch (prd `install-ci-project-provisioning`) lives
+	// project-setup escape hatch (spec `install-ci-project-provisioning`) lives
 	// on `config.projectSetup` as a PROVIDER-NAMESPACED, OPAQUE map; we look up
 	// THIS provider's payload via the seam (`ctx.providerId`) and ask the
 	// adapter to render it to the FIRST-steps fragment (`ctx.renderProjectSetup`).
@@ -275,7 +275,7 @@ export async function installCI(
 		log(`  wrote ${path}`);
 	}
 
-	// 5b. Tier-1 GitHub branch protection (prd land-time-reverify-and-parallel-
+	// 5b. Tier-1 GitHub branch protection (spec land-time-reverify-and-parallel-
 	// merge-ceiling, Story 11). Auto-configures when the credential is admin-
 	// scoped (one `gh api` PUT on the protection endpoint, required check
 	// `verify` + strict: true); prints the exact ready-to-run `gh api` command
@@ -313,7 +313,7 @@ export async function installCI(
 			"      DORFL_AUTO_TASK: 'true'",
 	);
 	// Project-toolchain boundary (task install-ci-document-toolchain-boundary,
-	// PRD install-ci-project-provisioning axis (A)). dorfl declares
+	// SPEC install-ci-project-provisioning axis (A)). dorfl declares
 	// engines.node '>=18' and the generated composite action pins Node 22 only
 	// for dorfl's own runtime — it does NOT provision the project's toolchain.
 	// State that boundary explicitly so a maintainer whose project pins a

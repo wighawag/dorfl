@@ -1,7 +1,7 @@
 import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
- * **The SHARED decision engine** (prd
+ * **The SHARED decision engine** (spec
  * `agentic-question-resolution-retire-disposition-vocabulary` US #9, decision 3 +
  * 13/14; task `decision-engine-shared-decide-seam`): the GENERALISED
  * `decide(input, allowedOutcomes) → verdict` core every question-resolution
@@ -20,7 +20,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *   "the INPUT adapter differs per front door and is NOT forced to be shared").
  * - **the ALLOWED-OUTCOME SET** ({@link decide}'s `allowedOutcomes`): each caller
  *   passes the SUBSET of {@link DecisionOutcome} it permits — advance-apply allows
- *   `{task | prd | adr | delete | ask}`, intake keeps its own `{task | prd | ask |
+ *   `{task | prd | adr | delete | ask}`, intake keeps its own `{task | spec | ask |
  *   bounce}` (intake is NOT refactored onto this engine here — decision 13). The
  *   engine never hard-codes which outcomes a caller permits; it only VALIDATES the
  *   returned verdict against the set and rejects (loudly) one outside it
@@ -51,7 +51,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * No caller is forced to allow ALL of these: each passes its own SUBSET to
  * {@link decide}. The engine is agnostic to which subset a caller permits.
  */
-// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+// MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
 // parent-spec verdict outcome is `'spec'` (renamed from `'prd'`); the decider
 // prompt emits it and the parser accepts it. This is a fresh per-call LLM verdict
 // (nothing `'prd'`-valued is persisted), so the rename needs no on-disk alias.

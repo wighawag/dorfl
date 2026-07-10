@@ -17,7 +17,7 @@ import {
 } from './item-path.js';
 
 /**
- * The engine-owned APPLY PERSIST (prd `advance-loop`, task `advance-rung-apply`;
+ * The engine-owned APPLY PERSIST (spec `advance-loop`, task `advance-rung-apply`;
  * AGENTIC apply, task `agentic-apply-retire-disposition-vocabulary`) — the half of
  * the APPLY rung the ENGINE owns. On `classify=apply` (ALL sidecar entries
  * answered), it applies the HUMAN's answers to the item ATOMICALLY (item body +
@@ -45,9 +45,9 @@ import {
  * `promoteObservation` for a mint). A signal is still-open, acted-on, or deleted
  * — there is no \"retain as resolved\" state.
  *
- * The work-item (task/prd) terminal MOVES (`tasks/cancelled`, `prds/dropped`) and
+ * The work-item (task/spec) terminal MOVES (`tasks/cancelled`, `specs/dropped`) and
  * the `needs-attention/` LIFECYCLE state are a SEPARATE lifecycle concern (a
- * task/prd is dropped by its own lifecycle, not by a question answer) — they are
+ * task/spec is dropped by its own lifecycle, not by a question answer) — they are
  * NOT routed from here any more (they were the removed disposition vocabulary).
  *
  * It is the SIBLING of {@link import('./surface-persist.js').persistSurfacedQuestions}:
@@ -87,7 +87,7 @@ const APPLIED_HEADING = '## Applied answers';
  * resolved (no leftover "these are still open" prose above `## Applied answers`).
  *
  * The strip is STRUCTURAL (marker-pair based), NOT a heading-text regex — the
- * prd's D1 decision: a `## Open questions` heading match would be fragile to
+ * spec's D1 decision: a `## Open questions` heading match would be fragile to
  * author wording (`## Open questions (clear needsAnswers when resolved)` vs.
  * `## Open questions`). Items authored WITHOUT the markers are left untouched
  * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
@@ -274,7 +274,7 @@ function withAppliedAnswers(body: string, entries: SidecarEntry[]): string {
 
 /**
  * Strip ALL marker-fenced open-questions blocks from an item body — the FULL
- * RESOLUTION reconcile step (prd `apply-reconciles-stale-open-questions`,
+ * RESOLUTION reconcile step (spec `apply-reconciles-stale-open-questions`,
  * decisions D1 / D3). Removes each `<!-- open-questions -->` … `<!--
  * /open-questions -->` pair (markers included) plus the blank lines that
  * flanked it, so the answers in `## Applied answers` no longer sit beneath a
@@ -342,11 +342,11 @@ export function applyAnsweredQuestions(
 
 	const {model, path: sidecarPath} = readSidecar(cwd, item);
 
-	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, prd
+	// FOLDER-AGNOSTIC at WRITE-TIME (F3a, spec
 	// `staging-surface-and-apply-promote-safety`): re-resolve the item's CURRENT
 	// path by IDENTITY, mirroring the sidecar's already-folder-agnostic
 	// resolution. The captured `itemPath` is ADVISORY — a concurrent `promote`
-	// (`tasks/backlog → tasks/ready`, `prds/proposed → prds/ready`) may have
+	// (`tasks/backlog → tasks/ready`, `specs/proposed → specs/ready`) may have
 	// moved the item between capture and now, and we MUST write the post-move
 	// path, never the stale one. If the item has vanished entirely, exit CLEAN
 	// (no commit, no ghost file) — the matching benign skip the surface/triage

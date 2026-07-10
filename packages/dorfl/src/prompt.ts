@@ -1,6 +1,6 @@
 /**
  * Builds the prompt the runner hands to `agentCmd`: a small CONSTANT wrapper
- * (only the `<slug>` / source-prd path vary) around the claimed task's own
+ * (only the `<slug>` / source-spec path vary) around the claimed task's own
  * `## Prompt` section. This is dual-use — the SAME assembly the autonomous
  * runner feeds `agentCmd` and the human `dorfl prompt [<slug>]` command.
  *
@@ -416,7 +416,7 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
 }
 
 /**
- * Build the full prompt: the canonical wrapper for `slug` (with its source prd
+ * Build the full prompt: the canonical wrapper for `slug` (with its source spec
  * substituted) followed by the task's own `## Prompt` body, appended verbatim.
  *
  * In CONTINUE-mode (a {@link ContinueContext} is supplied), a CONTINUE block is
@@ -493,7 +493,7 @@ export class PromptError extends Error {}
 /**
  * The CONTINUE-only gate that lets {@link resolveTask} reach a task that has
  * already been done-moved into `work/done/` — story 5 of the `ledger-integrity`
- * prd (defect 3). A continue/re-claim can legitimately land on a branch whose
+ * spec (defect 3). A continue/re-claim can legitimately land on a branch whose
  * task was ALREADY moved to `done/` (the green-but-unpushed STRAND state), and
  * onboard must find it; but a `done/` task is folder-indistinguishable between
  * two states and re-onboarding a genuinely-finished one would RE-RUN it. So
@@ -533,7 +533,7 @@ export interface ContinueResolutionGate {
 
 /**
  * Extra knobs for {@link resolveTask} beyond the continue gate. Today the only
- * member is `allowBacklog` (prd
+ * member is `allowBacklog` (spec
  * `do-allow-backlog-drive-staged-tasks-without-promotion`): the operator's
  * EXPLICIT `do … --allow-backlog`, which widens resolution to also search
  * `tasks-backlog` (staging) at LOWEST priority. Default off (omitted) \u21d2 the
@@ -574,7 +574,7 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
 
 /**
  * Resolve a task's file: prefer `work/in-progress/<slug>.md`, fall back to
- * `work/tasks/ready/<slug>.md` (the pool). Returns the parsed prd + extracted
+ * `work/tasks/ready/<slug>.md` (the pool). Returns the parsed spec + extracted
  * `## Prompt` body. Throws {@link PromptError} when neither file exists or it has
  * no prompt body.
  *
@@ -588,11 +588,11 @@ function isStrandedDoneTip(gate: ContinueResolutionGate): boolean {
  * the only addition, and it is gated. With no gate (a fresh claim) the behaviour
  * is byte-identical to the original `['in-progress','tasks-ready']`-only resolution.
  *
- * `--allow-backlog` (prd `do-allow-backlog-drive-staged-tasks-without-promotion`):
+ * `--allow-backlog` (spec `do-allow-backlog-drive-staged-tasks-without-promotion`):
  * when {@link ResolveTaskOptions.allowBacklog} is set, `tasks-backlog` (the staging
  * folder) is appended at the LOWEST priority — after `tasks-ready`, so a slug
  * present in BOTH the pool and staging resolves to the READY copy (the same-slug
- * precedence the prd's decision 5 fixes). Default off ⇒ byte-identical to today
+ * precedence the spec's decision 5 fixes). Default off ⇒ byte-identical to today
  * (no autonomous path sets it; staging stays unreachable to `run`/auto-pick).
  */
 export function resolveTask(
@@ -665,7 +665,7 @@ export function inferSlugFromBranch(
  */
 /**
  * Resolve the EFFECTIVE `promptGuidance` for an item by walking the precedence
- * chain (highest → lowest): the per-task frontmatter override, the per-prd
+ * chain (highest → lowest): the per-task frontmatter override, the per-spec
  * frontmatter override (only when the task carries a `prd:`), then the
  * already-resolved repo policy. Each nudge member resolves independently — a
  * task's `promptGuidance.testFirst` override never bleeds into a sibling
@@ -688,11 +688,11 @@ export function resolveItemPromptGuidance(
 }
 
 /**
- * Locate a prd's file on disk: prefer `work/prds/ready/<slug>.md` (the
- * auto-slice pool), then fall back to `work/prds/tasked/<slug>.md` (tasked,
+ * Locate a spec's file on disk: prefer `work/specs/ready/<slug>.md` (the
+ * auto-slice pool), then fall back to `work/specs/tasked/<slug>.md` (tasked,
  * resting). Returns `undefined` when neither exists — the caller treats that
- * as "no prd-level override available" and the precedence chain falls
- * through to the repo policy (a missing prd is NOT an error at this seam;
+ * as "no spec-level override available" and the precedence chain falls
+ * through to the repo policy (a missing spec is NOT an error at this seam;
  * the per-item override is OPTIONAL by design).
  */
 export function findSpecPath(
@@ -714,7 +714,7 @@ export function findSpecPath(
 /**
  * The convenience seam every caller of {@link buildAgentPrompt} reuses to
  * resolve the per-item override: load the task frontmatter from its file +
- * (when the task carries `prd:`) the prd frontmatter, then walk
+ * (when the task carries `prd:`) the spec frontmatter, then walk
  * {@link resolveItemPromptGuidance}. Pure-ish (reads at most two files);
  * returns the repo policy verbatim when neither item layer overrides anything.
  */
@@ -745,7 +745,7 @@ export function renderPrompt(options: PromptOptions): string {
 		);
 	}
 	const task = resolveTask(options.cwd, slug);
-	// Per-item override layer: a task or prd may pin `promptGuidance.testFirst`
+	// Per-item override layer: a task or spec may pin `promptGuidance.testFirst`
 	// in its frontmatter, superseding the resolved repo policy for THIS item.
 	// We ALWAYS walk the resolver (even when no repo policy was threaded), so a
 	// task can opt IN to the strengthened nudge even on a repo whose default is

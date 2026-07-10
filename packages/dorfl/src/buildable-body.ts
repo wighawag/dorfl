@@ -1,7 +1,7 @@
 /**
- * The SINGLE owner of the buildable-task (and PRD-body) markdown SECTION SCHEMA
- * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion`, US
- * #1/#4/#7). dorfl has TWO independent producers of a buildable task/PRD body —
+ * The SINGLE owner of the buildable-task (and SPEC-body) markdown SECTION SCHEMA
+ * (spec `centralize-buildable-task-renderer-shared-by-intake-and-promotion`, US
+ * #1/#4/#7). dorfl has TWO independent producers of a buildable task/SPEC body —
  * `intake.ts` (`renderBacklogTask`/`renderSpec`, a wrapper+fallback) and
  * `triage-persist.ts` (`buildPromotedBody`, a structured renderer) — and until
  * this module they each HAND-ROLLED the `## What to build` / `## Acceptance
@@ -28,14 +28,14 @@
  *     mechanism prose, and NO `## Acceptance criteria`. Reproduced by omitting
  *     `acceptanceCriteria` and passing the open-questions block + the seed prose.
  *
- * Symmetrically, {@link renderSpecBody} owns the FULL PRD section schema both PRD
- * producers need: intake's default PRD scaffold is `## Problem Statement` +
+ * Symmetrically, {@link renderSpecBody} owns the FULL SPEC section schema both SPEC
+ * producers need: intake's default SPEC scaffold is `## Problem Statement` +
  * `## Solution` + `## User Stories` (reproduced by passing all three), while
- * promotion's structured PRD body is `## Problem Statement` + optional
+ * promotion's structured SPEC body is `## Problem Statement` + optional
  * `## Open questions` (reproduced by omitting `solution`/`userStories`). Each
  * optional section is emitted only when its input is non-empty.
  *
- * `## Prompt` is TASK-ONLY: a PRD is not dispatched by `do`/`run`, so a PRD body
+ * `## Prompt` is TASK-ONLY: a SPEC is not dispatched by `do`/`run`, so a SPEC body
  * carries none (the symmetric reason the task body MUST carry one — the consumer
  * `extractPromptSection`/`resolveTask` in `prompt.ts` throws "has no '## Prompt'
  * section" at dispatch time without it). {@link renderTaskBody} always emits a
@@ -136,28 +136,28 @@ export interface RenderSpecBodyInput {
 	problemStatement: string;
 	/**
 	 * The `## Solution` prose (markdown). OMIT it (or pass empty) to drop the
-	 * section — promotion's structured PRD body carries no Solution section, intake's
-	 * default PRD scaffold does.
+	 * section — promotion's structured SPEC body carries no Solution section, intake's
+	 * default SPEC scaffold does.
 	 */
 	solution?: string;
 	/**
 	 * The `## User Stories` block (markdown, e.g. a numbered list). OMIT it (or pass
-	 * empty) to drop the section — promotion's structured PRD body carries no User
-	 * Stories section, intake's default PRD scaffold does.
+	 * empty) to drop the section — promotion's structured SPEC body carries no User
+	 * Stories section, intake's default SPEC scaffold does.
 	 */
 	userStories?: string;
 	/**
 	 * The `## Open questions` block (markdown). OMIT it (or pass empty) to drop the
-	 * section. A PRD carries NO `## Prompt` (it is not dispatched).
+	 * section. A SPEC carries NO `## Prompt` (it is not dispatched).
 	 */
 	openQuestions?: string;
 }
 
 /**
- * Render a PRD body (the markdown AFTER the frontmatter fence). Emits, in the
+ * Render a SPEC body (the markdown AFTER the frontmatter fence). Emits, in the
  * canonical order, `## Problem Statement`, then `## Solution`, `## User Stories`,
  * and `## Open questions` (each only when its input is given), and NEVER a
- * `## Prompt` — a PRD is a north-star doc, not a dispatchable task. The symmetric twin of
+ * `## Prompt` — a SPEC is a north-star doc, not a dispatchable task. The symmetric twin of
  * {@link renderTaskBody}, owning the FULL SPEC section schema both producers need
  * (intake's default scaffold supplies Problem Statement + Solution + User Stories;
  * promotion's structured body supplies Problem Statement + optional Open

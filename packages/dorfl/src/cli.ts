@@ -353,10 +353,10 @@ function buildRegistrySetAdvanceTick(options: {
 		lifecycleGates: {
 			triage: config.observationTriage !== 'off',
 			surface: config.surfaceBlockers,
-			// `surfaceStaging` widens the SURFACE candidate set into STAGING (prd
+			// `surfaceStaging` widens the SURFACE candidate set into STAGING (spec
 			// `staging-surface-and-apply-promote-safety` F2). Default `true` — a
-			// tasked `needsAnswers` task in `tasks/backlog/` (or prd in
-			// `prds/proposed/`) surfaces its questions BEFORE promotion. BUILD/claim
+			// tasked `needsAnswers` task in `tasks/backlog/` (or spec in
+			// `specs/proposed/`) surfaces its questions BEFORE promotion. BUILD/claim
 			// stays pool-only either way.
 			surfaceStaging: config.surfaceStaging,
 		},
@@ -400,7 +400,7 @@ function buildRegistrySetAdvanceTick(options: {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
-				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// Cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-
 				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — resolved per-repo
 				// and threaded so the registry-driven advance path's `do` inherits it.
 				mergeRetries: config.mergeRetries,
@@ -439,7 +439,7 @@ function buildRegistrySetAdvanceTick(options: {
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.model,
 				// The ANSWERED-MERGE LAND DISPATCH context (task
-				// `apply-rung-merge-disposition`, prd `land-time-reverify-and-parallel-
+				// `apply-rung-merge-disposition`, spec `land-time-reverify-and-parallel-
 				// merge-ceiling`): the dispatcher cuts a per-job worktree via
 				// `workspace.ts` `createJob` off the hub mirror (so we thread the resolved
 				// `workspacesDir` + the real arbiter URL — the per-mirror tree-less
@@ -544,7 +544,7 @@ interface RunFlags extends ScanFlags {
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
-	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
 	mergeRetries?: string;
 }
 
@@ -583,7 +583,7 @@ function runFlagOverrides(flags: RunFlags, command?: Commander): PartialConfig {
 	// fleet conditional lives in `runOnce`, not in this flag mapping).
 	Object.assign(overrides, freshWorktreeGateFlagOverrides(flags));
 	// `--merge-retries <n>` rides the SAME chain: the cross-job merge-serialiser
-	// CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 /
+	// CAS-retry cap (spec `land-time-reverify-and-parallel-merge-ceiling` Story 5 /
 	// Applied Answer q1 (a)). The `run` fleet inherits the resolved cap through
 	// the converged `performIntegration` core (config.mergeRetries threads into
 	// the merge loop, replacing the bare `DEFAULT_MERGE_RETRIES` fallback).
@@ -661,7 +661,7 @@ interface CompleteFlags {
 	reviewMaxRounds?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
-	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
 	mergeRetries?: string;
 	/** `--isolated`: finish the slug's retained job worktree (the stranded-branch recover). */
 	isolated?: boolean;
@@ -766,7 +766,7 @@ interface DoFlags {
 	taskerLoopModel?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
-	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
+	/** `--merge-retries <n>` — the cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). */
 	mergeRetries?: string;
 }
 
@@ -886,7 +886,7 @@ function printPrdToSpecReport(result: PrdToSpecResult): void {
 		return;
 	}
 	if (result.leaks.length === 0) {
-		console.log('Leak scan: GREEN (no surviving prd data ref).');
+		console.log('Leak scan: GREEN (no surviving spec data ref).');
 	} else {
 		console.error(`Leak scan: FAILED (${result.leaks.length} leak(s)):`);
 		for (const leak of result.leaks) {
@@ -1788,7 +1788,7 @@ export function buildProgram(): Command {
 		.command('prompt')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			"Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source prd substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
+			"Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source spec substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
 		)
 		.argument(
 			'[slug]',
@@ -1966,7 +1966,7 @@ export function buildProgram(): Command {
 					// `--fresh-worktree-gate`/`--no-fresh-worktree-gate` rides the SAME chain.
 					...freshWorktreeGateFlagOverrides(flags),
 					// `--merge-retries <n>` rides the SAME chain: the cross-job merge-serialiser
-					// CAS-retry cap (prd `land-time-reverify-and-parallel-merge-ceiling` Story 5
+					// CAS-retry cap (spec `land-time-reverify-and-parallel-merge-ceiling` Story 5
 					// / Applied Answer q1 (a)).
 					...mergeRetriesFlagOverrides(flags),
 					// `--no-pr` (the PR-INTENT axis) rides the SAME chain.
@@ -2006,7 +2006,7 @@ export function buildProgram(): Command {
 				// a single-job path, so the resolved flag is passed UNCONDITIONALLY (no
 				// fleet downgrade).
 				freshWorktreeGate: config.freshWorktreeGate,
-				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// Cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-
 				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — the resolved
 				// per-repo value reaches the merge loop via `performComplete`→
 				// `performIntegration`.
@@ -2142,7 +2142,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasker-loop-max <n>',
-			'cap the tasker improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the prd to needs-attention (default 3)',
+			'cap the tasker improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the spec to needs-attention (default 3)',
 		)
 		.option(
 			'--tasker-loop-model <id>',
@@ -2330,7 +2330,7 @@ export function buildProgram(): Command {
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
 					freshWorktreeGate: remoteConfig.freshWorktreeGate,
 					// Cross-job merge-serialiser CAS-retry cap (resolved through the per-repo
-					// chain on the arbiter-side `.dorfl.json` too) — prd
+					// chain on the arbiter-side `.dorfl.json` too) — spec
 					// `land-time-reverify-and-parallel-merge-ceiling` Story 5.
 					mergeRetries: remoteConfig.mergeRetries,
 					noPR: remoteConfig.noPR,
@@ -2502,7 +2502,7 @@ export function buildProgram(): Command {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
-				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// Cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-
 				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)) — resolved per-repo
 				// and threaded to `performComplete`→`performIntegration`.
 				mergeRetries: config.mergeRetries,
@@ -2554,7 +2554,7 @@ export function buildProgram(): Command {
 				noteBlock: (message) => console.error(message),
 			};
 
-			// `--allow-backlog` is EXPLICIT-SINGLE-TASK-ONLY (prd
+			// `--allow-backlog` is EXPLICIT-SINGLE-TASK-ONLY (spec
 			// `do-allow-backlog-drive-staged-tasks-without-promotion`, decision 4): it
 			// drives ONE named staged task in place. It must NOT combine with the
 			// AUTO-PICK (zero-args / -n) or MULTI-ITEM forms — those select FROM the
@@ -2615,7 +2615,7 @@ export function buildProgram(): Command {
 		});
 
 	// `advance` — the SIBLING top-level verb (NOT a `do` subcommand; `do`
-	// subcommands + a standalone `task` verb are REJECTED in prd `advance-loop`).
+	// subcommands + a standalone `task` verb are REJECTED in spec `advance-loop`).
 	// It reuses the SAME shared `prefix:arg` resolver `do` uses, EXTENDED with the
 	// `obs:` namespace, and wires the classify → lock → execute SKELETON: classify
 	// the rung (read-only, no model, no lock), take the `advancing` CAS borrow, then
@@ -2627,7 +2627,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung; the legacy prd:<slug> is still accepted) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (SPEC advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung; the legacy prd:<slug> is still accepted) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
@@ -2656,15 +2656,15 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--surface-blockers',
-			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/prd carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
+			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/spec carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
 		)
 		.option(
 			'--no-surface-blockers',
-			'leave a needsAnswers:true task/prd silently blocked (default; the blocked pool is dropped from auto-pick)',
+			'leave a needsAnswers:true task/spec silently blocked (default; the blocked pool is dropped from auto-pick)',
 		)
 		.option(
 			'--strict-merge-approval',
-			'opt in to the host-agnostic "dismiss stale approvals on base change" discipline (prd `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6): when the merge-base CHANGED between the human’s merge-answer and the apply step, RE-SURFACE the merge-question (clear the answer back to no-answer; re-author the question on main/runner under the advancing lock) instead of auto-landing on a green re-verify. Default OFF (a green re-verify is trusted as sufficient; honour the prior answer). Story #16’s RED-re-verify refusal is UNCHANGED and independent of this flag. Resolved flag > env > per-repo > global > default off.',
+			'opt in to the host-agnostic "dismiss stale approvals on base change" discipline (spec `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6): when the merge-base CHANGED between the human’s merge-answer and the apply step, RE-SURFACE the merge-question (clear the answer back to no-answer; re-author the question on main/runner under the advancing lock) instead of auto-landing on a green re-verify. Default OFF (a green re-verify is trusted as sufficient; honour the prior answer). Story #16’s RED-re-verify refusal is UNCHANGED and independent of this flag. Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
 			'--no-strict-merge-approval',
@@ -2830,7 +2830,7 @@ export function buildProgram(): Command {
 					verify: remoteConfig.verify,
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
 					freshWorktreeGate: remoteConfig.freshWorktreeGate,
-					// Cross-job merge-serialiser CAS-retry cap — prd
+					// Cross-job merge-serialiser CAS-retry cap — spec
 					// `land-time-reverify-and-parallel-merge-ceiling` Story 5.
 					mergeRetries: remoteConfig.mergeRetries,
 					noPR: remoteConfig.noPR,
@@ -2973,7 +2973,7 @@ export function buildProgram(): Command {
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
-				// Cross-job merge-serialiser CAS-retry cap (prd `land-time-reverify-and-
+				// Cross-job merge-serialiser CAS-retry cap (spec `land-time-reverify-and-
 				// parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)).
 				mergeRetries: config.mergeRetries,
 				noPR: config.noPR,
@@ -3137,7 +3137,7 @@ export function buildProgram(): Command {
 			const config = resolveGlobalConfig(loadConfig(flags.config), {});
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 
-			// The `gc`-STYLE ledger SWEEP (prd `ledger-integrity` story 3): a SEPARATE
+			// The `gc`-STYLE ledger SWEEP (spec `ledger-integrity` story 3): a SEPARATE
 			// surface from the worktree reaper below — it REPORTS one-slug-one-folder
 			// violations in a repo's `work/` lifecycle ledger and NEVER deletes (a human
 			// resolves each). Distinct `work/`: the ledger, not the execution substrate.
@@ -3146,7 +3146,7 @@ export function buildProgram(): Command {
 					typeof flags.ledger === 'string' ? flags.ledger : process.cwd();
 				const result = sweepLedgerDuplicates(repoPath);
 				// The UNIFIED-LOCK stuck/orphaned-lock REPORT (task
-				// `release-lock-verb-and-gc-stuck-report`, prd
+				// `release-lock-verb-and-gc-stuck-report`, spec
 				// `ledger-status-per-item-lock-refs` US #12/#13/#14): generalises the
 				// advancing-marker report from advancing-only to the unified per-item
 				// lock. The locks live on the ARBITER ref (`refs/dorfl/lock/*`),
@@ -3231,7 +3231,7 @@ export function buildProgram(): Command {
 				// ALL are REPORTED here (never auto-deleted — no automatic sweep exists; a
 				// human clears a NAMED unified lock via `release-lock`).
 				//
-				// SCOPED to the ATTENTION verdicts only (prd US#14/#21, ADR
+				// SCOPED to the ATTENTION verdicts only (spec US#14/#21, ADR
 				// `ledger-status-on-per-item-lock-refs`: this surface is the STUCK /
 				// crash-orphaned lock, NOT every held one): a `kept-stuck` (terminal +
 				// stuck) or a `cleared-stale`-eligible (terminal + stale active = orphaned)
@@ -3261,7 +3261,7 @@ export function buildProgram(): Command {
 					dryRun: flags.dryRun === true,
 					note: (message) => console.error(`>> ${message}`),
 				});
-				// The ORPHAN-SIDECAR sweep (prd
+				// The ORPHAN-SIDECAR sweep (spec
 				// `agentic-question-resolution-retire-disposition-vocabulary`, US #10) rides
 				// the SAME `--remote-branches` invocation the SCHEDULED CI lifecycle workflow
 				// runs (`dorfl gc --remote-branches --arbiter origin`) — so the reap of a
@@ -3554,12 +3554,12 @@ export function buildProgram(): Command {
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
 
-	// `promote [item]` (prd `staging-pool-position-gate-and-trust-model`, tasks
+	// `promote [item]` (spec `staging-pool-position-gate-and-trust-model`, tasks
 	// `pre-backlog-staging-folder-and-promote-step-a` /
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the HUMAN/runner-
 	// owned verb that moves a STAGED item into its agent-eligible POOL — a task
-	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a prd
-	// `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md` — as a tree-less CAS on the
+	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a spec
+	// `work/specs/proposed/<slug>.md → work/specs/ready/<slug>.md` — as a tree-less CAS on the
 	// arbiter, the SAME trust model + mechanism as `requeue`. The agent emits STAGED;
 	// only this verb (a human, or the runner) admits it to the pool. With NO argument
 	// it LISTS what is promotable (the "what is staged waiting for me?" discovery), so
@@ -3568,7 +3568,7 @@ export function buildProgram(): Command {
 		.command('promote [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a prd `work/prds/proposed/<slug>.md → work/prds/ready/<slug>.md`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts `task:<slug>` / `prd:<slug>` / a bare `<slug>` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the prds in prds/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.',
+			`Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task \`work/pre-backlog/<slug>.md → work/backlog/<slug>.md\`, a spec \`${workFolderPrefix('specs-proposed')}<slug>.md → ${workFolderPrefix('specs-ready')}<slug>.md\`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts \`task:<slug>\` / \`spec:<slug>\` (the legacy \`prd:<slug>\` is still accepted) / a bare \`<slug>\` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the specs in specs/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.`,
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3596,7 +3596,7 @@ export function buildProgram(): Command {
 				}
 				if (listed.items.length === 0) {
 					console.log(
-						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and work/prds/proposed/ are empty).`,
+						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and ${workFolderPrefix('specs-proposed')} are empty).`,
 					);
 					return;
 				}
@@ -3648,7 +3648,7 @@ export function buildProgram(): Command {
 	// `action: advance` on the UNIFIED per-item lock, so `release-lock <item>` (below)
 	// is the SOLE named human release for ALL holds (implement/task/advance).
 
-	// `release-lock <item>` (task `release-lock-verb-and-gc-stuck-report`, prd
+	// `release-lock <item>` (task `release-lock-verb-and-gc-stuck-report`, spec
 	// `ledger-status-per-item-lock-refs` US #14): the HUMAN-invoked named release of
 	// a stuck/orphaned UNIFIED per-item lock (`refs/dorfl/lock/<entry>`) —
 	// the GENERALISATION of `release-advancing` from the advancing-only marker to
@@ -3706,7 +3706,7 @@ export function buildProgram(): Command {
 			process.exit(1);
 		});
 
-	// `drop <slug>` (prd `agentic-question-resolution-retire-disposition-vocabulary`,
+	// `drop <slug>` (spec `agentic-question-resolution-retire-disposition-vocabulary`,
 	// US #5/#11; task `direct-delete-question-cli-helper`): the DIRECT "throw it
 	// away" verb — `git rm` a source item AND its question sidecar (when present) in
 	// ONE revertible commit, the reason in the commit MESSAGE (git history is the
@@ -3859,7 +3859,7 @@ export function buildProgram(): Command {
 				console.error(`>> ${resolved.message}`);
 			}
 			const config = resolved.config;
-			// Resolve the PER-OUTCOME integration modes (prd US #9): `intake` decides
+			// Resolve the PER-OUTCOME integration modes (spec US #9): `intake` decides
 			// the artifact TYPE at runtime, so a single --merge/--propose can't express
 			// a type-conditional policy. The granular flags override the aggregate; an
 			// UNSET type falls back to the per-repo/global `integration` (the SAME chain
@@ -3941,10 +3941,10 @@ export function buildProgram(): Command {
 			process.exit(result.exitCode);
 		});
 
-	// The CI CLOSE-JOB driver (prd `runner-in-ci`, capability E; task
+	// The CI CLOSE-JOB driver (spec `runner-in-ci`, capability E; task
 	// `install-ci-close-job-workflow`). The thin JOB the emitted close-job workflow
 	// invokes on a merge to main: resolve which source issue(s) the landed work
-	// closes (resolveClosingIssue), run the "prd complete?" query for the prd case
+	// closes (resolveClosingIssue), run the "spec complete?" query for the spec case
 	// (prd-complete-query, done), and close via the IssueProvider seam — all
 	// UNCHANGED engine pieces, CONSUMED not re-built (the Out-of-Scope fence). CI
 	// owns ONLY the job + trigger. Local-runnable too (a manual catch-up close).
@@ -3952,7 +3952,7 @@ export function buildProgram(): Command {
 		.command('close-merged-issues')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Close source issues whose work has landed on main (CI capability E, prd runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.prd: → prd issue:`), runs the existing "prd complete?" query for the prd case (closes ONLY when ALL its prd:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
+			'Close source issues whose work has landed on main (CI capability E, spec runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.prd: → prd issue:`), runs the existing "spec complete?" query for the spec case (closes ONLY when ALL its prd:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
 		)
 		.option(
 			'--cwd <dir>',

@@ -8,12 +8,12 @@ import {workFolderPath, workFolderRel} from './work-layout.js';
 /**
  * The **orphan-sidecar reaper** — the WORKING-TREE counterpart of the job-worktree
  * and remote-branch reapers (`gc.ts` / `reap-branches.ts`), folded into `dorfl gc`
- * (prd `agentic-question-resolution-retire-disposition-vocabulary`, US #10).
+ * (spec `agentic-question-resolution-retire-disposition-vocabulary`, US #10).
  *
  * A question sidecar is a tooling-owned file `work/questions/<type>-<slug>.md`
  * keyed on its source item's `(type, slug)` identity (`sidecarPathFor`). The
  * contract is that notes/sidecars leave by DELETION (git history is the archive),
- * so when a human deletes the source observation (or task/prd) out-of-band, its
+ * so when a human deletes the source observation (or task/spec) out-of-band, its
  * sidecar is ORPHANED.
  *
  * WHY THIS IS A SWEEP, NOT AN APPLY STEP. An orphan's source item is GONE, so it

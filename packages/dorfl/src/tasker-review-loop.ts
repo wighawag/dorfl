@@ -29,7 +29,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
 
 /**
  * **The tasker review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
- * GATES prd `work/prds/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
+ * GATES spec `work/specs/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
  *
  * On the `do prd:<slug>` tasking path (`tasking.ts`/`performTask`), AFTER the
  * agent produces a candidate set of `work/tasks/backlog/<slug>.md` tasks and BEFORE the
@@ -47,7 +47,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  *     N so the loop can never run forever.
  *
  *     ⚠️ ASPIRATION-VS-BUILT (2026-06-10): the "single context" wording above is the
- *     prd's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
+ *     spec's ASPIRATION, NOT what this module does at runtime. The ACTUAL N loop is
  *     RUNNER-DRIVEN and PER-PASS: `runOneExecution` does `for (pass …) { gate(…);
  *     applyEdits(…to disk…) }` — ONE agent LAUNCH per pass, the runner writing the
  *     agent's edits to the candidate task FILES (`work/tasks/backlog/`) between passes, the
@@ -75,7 +75,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  *   - **a specific uncertain task** → emit it `needsAnswers: true` with the
  *     questions in its body (created, not agent-buildable until a human answers).
  *   - **the whole decomposition unclear / `taskerLoopMax` exhausted with blockers** →
- *     route the prd to `work/needs-attention/<slug>.md` with the questions as the
+ *     route the spec to `work/needs-attention/<slug>.md` with the questions as the
  *     reason, emitting NO guessed tasks.
  *
  * The verdict sink itself (the git transitions for those three outcomes) is the
@@ -101,7 +101,7 @@ export type TaskReviewVerdict = ReviewVerdict;
 
 /** What the review gate needs to launch a fresh-context review+edit pass. */
 export interface TaskReviewGateInput {
-	/** The prd slug whose candidate tasks are under review. */
+	/** The spec slug whose candidate tasks are under review. */
 	slug: string;
 	/** The working clone/checkout the loop runs in (candidate tasks live here). */
 	cwd: string;
@@ -141,7 +141,7 @@ export type LoopOutcome =
 	| 'converged'
 	/** `taskerLoopMax` hit with blockers → specific uncertain task(s) → needsAnswers. */
 	| 'uncertain-tasks'
-	/** `taskerLoopMax` hit / decomposition unclear → route the prd to needs-attention. */
+	/** `taskerLoopMax` hit / decomposition unclear → route the spec to needs-attention. */
 	| 'decomposition-unclear';
 
 /** The result of running the loop — the disposition the caller's sink routes. */
@@ -174,7 +174,7 @@ export interface RunTaskReviewLoopResult {
 }
 
 export interface RunTaskReviewLoopOptions {
-	/** The prd slug whose candidate tasks are being improved. */
+	/** The spec slug whose candidate tasks are being improved. */
 	slug: string;
 	/** The working clone/checkout the loop runs in. */
 	cwd: string;
@@ -226,7 +226,7 @@ export interface RunTaskReviewLoopOptions {
  * to the candidate task files, then re-review — until `verdict === 'approve'` (no
  * NEW blocking issue → converged) or the pass count reaches `taskerLoopMax`. On the cap
  * with a still-`block` verdict, ROUTE per the verdict's channels:
- *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (prd → needs-attention,
+ *   - `decompositionUnclear` set ⇒ `decomposition-unclear` (spec → needs-attention,
  *     no guessed tasks);
  *   - else `uncertainTasks` (or, as a floor, every candidate task) ⇒
  *     `uncertain-tasks` (those tasks emitted `needsAnswers: true` + questions).
@@ -296,7 +296,7 @@ export async function runTaskReviewLoop(
 		note(
 			`Tasker review loop did not converge within taskerLoopMax=${taskerLoopMax} ` +
 				`across ${executions} fresh context(s); the whole decomposition is ` +
-				'unclear — routing the prd to needs-attention (no guessed tasks).',
+				'unclear — routing the spec to needs-attention (no guessed tasks).',
 		);
 		return {
 			outcome: 'decomposition-unclear',
@@ -308,7 +308,7 @@ export async function runTaskReviewLoop(
 			message:
 				`The decomposition of '${options.slug}' is still unclear after ` +
 				`taskerLoopMax=${taskerLoopMax} review pass(es) across ${executions} fresh ` +
-				'context(s); routing the prd to needs-attention with the open ' +
+				'context(s); routing the spec to needs-attention with the open ' +
 				'questions, emitting no guessed tasks.',
 		};
 	}
@@ -617,18 +617,18 @@ export function buildTaskReviewPrompt(input: TaskReviewGateInput): string {
 	const list = input.candidateTasks.map((p) => `  - ${p}`).join('\n');
 	return [
 		`You are a FRESH-CONTEXT reviewer in the TASKER review→edit→converge LOOP`,
-		`(insertion point A). Review the CANDIDATE TASKS just produced for the prd`,
+		`(insertion point A). Review the CANDIDATE TASKS just produced for the spec`,
 		`"${input.slug}":`,
 		list || '  (no candidate tasks found)',
 		``,
 		reviewDisciplinePrompt(),
 		``,
-		`Read the source prd (work/prds/ready/${input.slug}.md) and review the candidate`,
+		`Read the source spec (${workItemRel('specs-ready', `${input.slug}.md`)}) and review the candidate`,
 		`decomposition ADVERSARIALLY. Review the WHOLE SET — graph coherence / gaps /`,
 		`overlap / goal-composition (dependency-graph coherence, set-level gaps,`,
-		`overlapping/duplicated tasks, and "does the set compose into the prd goal")`,
+		`overlapping/duplicated tasks, and "does the set compose into the spec goal")`,
 		`— not just per-task well-formedness. The DESTINATION CHECK ("if every task`,
-		`is built exactly as written, do we end up with the system the prd describes?")`,
+		`is built exactly as written, do we end up with the system the spec describes?")`,
 		`is PART OF this pass and may ITSELF trigger edits — that is why this is a`,
 		`loop, not a one-shot gate.`,
 		``,
@@ -645,7 +645,7 @@ export function buildTaskReviewPrompt(input: TaskReviewGateInput): string {
 		`    can FIX a finding by editing (the natural improver step).`,
 		`  - "uncertainTasks" — specific tasks you cannot make buildable (each gets`,
 		`    \`needsAnswers: true\` with the questions in its body).`,
-		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the prd is`,
+		`  - "decompositionUnclear" — the WHOLE decomposition is unsound (the spec is`,
 		`    routed to needs-attention; emit no guessed tasks).`,
 		`Do NOT fill "review" / "edit" / "questions" — those are other callers'`,
 		`channels. Flag, do not guess: a flagged question costs one human glance; a`,

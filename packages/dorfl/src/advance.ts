@@ -70,9 +70,9 @@ import type {VerifyConfig} from './verify.js';
 import type {NewQuestion} from './sidecar.js';
 
 /**
- * The **`advance` verb SKELETON** (prd `advance-loop`, task
+ * The **`advance` verb SKELETON** (spec `advance-loop`, task
  * `advance-verb-resolver`, US #1/5/6/18). `advance` is the SIBLING top-level verb
- * (NOT a `do` subcommand — `do` subcommands are REJECTED in the prd) that drives
+ * (NOT a `do` subcommand — `do` subcommands are REJECTED in the spec) that drives
  * a `work/` item ONE lifecycle rung toward "ready/built", reusing the SAME shared
  * `prefix:arg` resolver `do` uses (extended with the `obs:` namespace, see
  * {@link resolveAdvanceArg}).
@@ -250,14 +250,14 @@ export interface AdvanceContext {
 	 * The AGENTIC apply DECISION seam (task
 	 * `agentic-apply-retire-disposition-vocabulary`): the fresh-context decision
 	 * agent the apply rung runs on a fully-answered OBSERVATION to choose what to DO
-	 * with the signal (`mint-task | mint-prd | mint-adr | delete-source |
+	 * with the signal (`mint-task | mint-spec | mint-adr | delete-source |
 	 * ask-follow-up`),
 	 * grounded in the source's full context. It is the injected
 	 * {@link ApplyDecider} the shared `decide(input, allowedOutcomes)` engine runs;
 	 * tests inject a CANNED verdict (no model). `undefined` ⇒ the apply rung defaults
 	 * to {@link harnessApplyDecider} (a NullHarness, no real model) so the seam is
 	 * never a crash — but the CLI threads the real harness-backed decider. The
-	 * verdict's type SELECTION (task vs prd vs adr) replaces the retired `promote-*`
+	 * verdict's type SELECTION (task vs spec vs adr) replaces the retired `promote-*`
 	 * disposition token; `adr` is now WIRED (task `agentic-apply-mint-adr-route`).
 	 */
 	applyDecide?: ApplyDecider;
@@ -325,7 +325,7 @@ export interface AdvanceContext {
 	 * to the dispatcher, so an answered `kind: merge` entry is REFUSED (clean
 	 * surfacing); the answer stays for a follow-up. The registry-set advance
 	 * driver threads the resolved `workspacesDir` here.
-	 * (prd `land-time-reverify-and-parallel-merge-ceiling`, task
+	 * (spec `land-time-reverify-and-parallel-merge-ceiling`, task
 	 * `apply-rung-merge-disposition`)
 	 */
 	workspacesDir?: string;
@@ -353,7 +353,7 @@ export interface AdvanceContext {
 	/**
 	 * Resolved `strictMergeApproval` boolean (sibling task
 	 * `strict-merge-approval-gate`). Default OFF ⇒ honour the prior approval +
-	 * land on a green re-verify (cheap, the PRD-applied OQ6 default). ON ⇒
+	 * land on a green re-verify (cheap, the SPEC-applied OQ6 default). ON ⇒
 	 * re-surface the merge-question when the merge-base moved between the
 	 * surfacer's question and this apply (the host-agnostic analogue of
 	 * GitHub's "dismiss stale approvals when the base changes").
@@ -420,7 +420,7 @@ export interface ItemSignals {
 export interface ReadSignalsInput {
 	/** The repo working-tree root. */
 	repoPath: string;
-	/** The item type (task / prd / observation). */
+	/** The item type (task / spec / observation). */
 	type: SidecarType;
 	/** The bare slug. */
 	slug: string;
@@ -469,9 +469,9 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  * The lifecycle folders each item type may rest in (frontmatter source). After
  * the capstone cut-over (task
  * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`) the transient
- * `tasking/` folder is GONE — a prd rests in `prds/ready` (source) or
- * `prds/tasked` (tasked); while it is being tasked the body STAYS in
- * `prds/ready` (the lock no longer moves it), so `tasking/` is never a
+ * `tasking/` folder is GONE — a spec rests in `specs/ready` (source) or
+ * `specs/tasked` (tasked); while it is being tasked the body STAYS in
+ * `specs/ready` (the lock no longer moves it), so `tasking/` is never a
  * frontmatter source.
  *
  * STAGING IS INCLUDED (`tasks-backlog` / `prds-proposed`): with `surfaceStaging`
@@ -516,7 +516,7 @@ function readNeedsAnswers(
  * `triage-observation` rung bodies are filled by their own tasks
  * ({@link surfaceRung} / {@link applyRung} / {@link triageRung}). It NEVER
  * re-implements the build/task path — it hands the resolved arg to `performDo`,
- * which spans both namespaces (the task path is the `do prd:` rung the prd's
+ * which spans both namespaces (the task path is the `do prd:` rung the spec's
  * 2026-06-09 UPDATE confirms routes through `performIntegration`).
  */
 export const defaultRungExecutor: RungExecutor = {
@@ -807,7 +807,7 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
  * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
  * type/context)` via the injected {@link ApplyDecider}, allowing the set
- * `{task | prd | adr | delete | ask}` (= `{mint-task | mint-prd | mint-adr |
+ * `{task | prd | adr | delete | ask}` (= `{mint-task | mint-spec | mint-adr |
  * delete-source | ask-follow-up}`; `adr` is now WIRED by task
  * `agentic-apply-mint-adr-route`, which added the {@link mintAdr} route). The
  * verdict ROUTES:
@@ -823,9 +823,9 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  *   - `delete` → {@link applyAnsweredQuestions} discharge-by-deletion (`git rm`
  *     source + sidecar in one revertible commit, the reason in the commit message).
  *
- * For a TASK/PRD (answering its OWN open questions) or a caller-supplied follow-up
+ * For a TASK/SPEC (answering its OWN open questions) or a caller-supplied follow-up
  * batch, it delegates straight to {@link applyAnsweredQuestions} (resolve fully /
- * re-pause) — the lifecycle path is untouched (a task/prd is dropped by its own
+ * re-pause) — the lifecycle path is untouched (a task/spec is dropped by its own
  * lifecycle, not by a question answer).
  *
  * Under the `advancing` CAS lock (held by {@link performAdvance} BEFORE this runs
@@ -844,7 +844,7 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 		return vanishedSkip({rung: 'apply', item});
 	}
 
-	// RUNNER-ACTION KIND-CHECK (task `apply-rung-merge-disposition`, prd
+	// RUNNER-ACTION KIND-CHECK (task `apply-rung-merge-disposition`, spec
 	// `land-time-reverify-and-parallel-merge-ceiling`): an answered `kind: merge`
 	// sidecar entry is a DETERMINISTIC land action, NOT a content decision. It
 	// dispatches HERE (a sibling of the agentic `decide()`), keyed off the
@@ -862,7 +862,7 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 	// AGENTIC APPLY for an answered OBSERVATION (the subsumed triage rung): run the
 	// shared decision engine over the answer(s) + source, route the verdict. A
 	// caller-supplied follow-up batch (`applyFollowups`) bypasses the decision and
-	// re-pauses directly (a test/driver hook). TASK/PRD items resolve in place
+	// re-pauses directly (a test/driver hook). TASK/SPEC items resolve in place
 	// (their own lifecycle), so they skip the decision and fall through to the
 	// persist below.
 	const runAgenticDecision =
@@ -910,7 +910,7 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
  * the merge-question surfacer) through the EXISTING land primitive
  * (`performIntegration` with `committedRecovery: true` + `freshWorktreeGate:
  * true`) via the EXISTING per-job worktree seam (`workspace.ts` `createJob`).
- * The deterministic SIBLING of the agentic `decide()` content-decision (PRD
+ * The deterministic SIBLING of the agentic `decide()` content-decision (SPEC
  * `land-time-reverify-and-parallel-merge-ceiling`, task
  * `apply-rung-merge-disposition`; Stories #15, #16): a merge-acceptance has no
  * judgement content (the human's plain `merge | hold | drop` answer IS the
@@ -919,7 +919,7 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
  *
  * Returns `undefined` when there is no answered `kind: merge` entry to dispatch
  * (the apply rung then proceeds to the existing path — agentic for
- * observations, normal `applyAnsweredQuestions` for task/prd content questions).
+ * observations, normal `applyAnsweredQuestions` for task/spec content questions).
  * Returns a {@link RungExecResult} when the dispatcher handled the rung:
  *
  *   - `landed` / `already-integrated` ⇒ the kept commit landed on `main` (or
@@ -1113,7 +1113,7 @@ function findItemPath(
  * The AGENTIC apply DECISION for a fully-answered OBSERVATION (task
  * `agentic-apply-retire-disposition-vocabulary`): run the shared
  * `decide(input, allowedOutcomes)` engine over the answer(s) + source, then ROUTE
- * the verdict. The artifact-type selection (task vs prd) comes from the agent's
+ * the verdict. The artifact-type selection (task vs spec) comes from the agent's
  * VERDICT, NOT a human `promote-*` field (which is retired). Replaces the old
  * `answeredPromoteArtifact` + disposition picker.
  *
@@ -1359,7 +1359,7 @@ export async function performAdvance(
 	}
 
 	// 1. RESOLVE the arg via the SHARED resolver (extended with `obs:`). `advance`
-	//    spans task / prd / observation; a collision / bad arg is a loud usage error.
+	//    spans task / spec / observation; a collision / bad arg is a loud usage error.
 	let resolved;
 	try {
 		resolved = resolveAdvanceArg({
@@ -1419,7 +1419,7 @@ export async function performAdvance(
 	// 3. LOCK — take the `advancing` CAS borrow for the classified rung, keyed on
 	//    the item's `<type>-<slug>` identity. The expensive phase is POST-lock.
 	//
-	//    UNIFIED PER-ITEM LOCK, TREE-LESS RUNGS ONLY (prd
+	//    UNIFIED PER-ITEM LOCK, TREE-LESS RUNGS ONLY (spec
 	//    `ledger-status-per-item-lock-refs` US #1/#3/#18; ADR
 	//    `ledger-status-on-per-item-lock-refs`). The rung kind is KNOWN here
 	//    (`classification.kind`, classified pre-lock), so the tree-less-only policy
@@ -1428,7 +1428,7 @@ export async function performAdvance(
 	//    TREE-LESS rung (`surface`/`apply`/`triage-observation`) the advancing acquire
 	//    ALSO takes the item's unified lock (`action: advance`) — these rungs have NO
 	//    inner `do`, so the unified hold is what realises advance∥claim / advance∥task
-	//    exclusion. For a BUILD-TASK / TASK-PRD rung we do NOT take the unified lock
+	//    exclusion. For a BUILD-TASK / TASK-SPEC rung we do NOT take the unified lock
 	//    at the advance layer: `performAdvance` ORCHESTRATES an inner `performDo` that
 	//    ITSELF acquires the SAME `task-<slug>`/`prd-<slug>` ref (the create-only CAS
 	//    with NO re-entrancy/auto-steal, per the ADR), so taking it here too would

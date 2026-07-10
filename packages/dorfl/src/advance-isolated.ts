@@ -21,7 +21,7 @@ import type {Config} from './config.js';
 import type {AdvanceTickRunner, AdvanceMultiResult} from './advance-drivers.js';
 
 /**
- * The **ISOLATED advance-tick RUNNER** + its sequential drivers (prd
+ * The **ISOLATED advance-tick RUNNER** + its sequential drivers (spec
  * `advance-loop`, task `advance-isolated-one-shot`, US #25/26) — the "isolated
  * one-shot" cell `advance` was missing. It gives `advance` the SAME isolation
  * ergonomic `do --isolated` has: run the advance TICK ({@link performAdvance}) in

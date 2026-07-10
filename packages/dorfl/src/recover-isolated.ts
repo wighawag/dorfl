@@ -11,7 +11,7 @@ import type {ReviewProvider} from './integrator.js';
 
 /**
  * **`complete --isolated <slug>` — FINISH an already-committed, already-done-moved
- * STRANDED isolated worktree** (prd `ledger-integrity` story 6, the
+ * STRANDED isolated worktree** (spec `ledger-integrity` story 6, the
  * `finish-already-committed-branch` task). The LOCATE-EXISTING inverse of
  * `do --isolated` (which CREATES a worktree): it resolves the slug's RETAINED job
  * worktree via the existing arbiter-URL-keyed naming

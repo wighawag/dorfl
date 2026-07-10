@@ -6,7 +6,7 @@ import {selectPrioritised, type SelectedItem} from './select-priority.js';
 import type {Config} from './config.js';
 
 /**
- * The MIRROR-SIDE auto-pick / `-n` caller for `do --remote` (prd `advance-loop`,
+ * The MIRROR-SIDE auto-pick / `-n` caller for `do --remote` (spec `advance-loop`,
  * task `advance-drivers-and-gates`, US #25) — the THIN caller the mirror-side
  * eligible-pool scan (`mirror-side-eligible-pool-scan`) makes possible, the
  * isolated counterpart of `do-autopick`'s in-place {@link performDoAuto}.

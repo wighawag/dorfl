@@ -1,5 +1,5 @@
 /**
- * The `install-ci` ADVANCE-LIFECYCLE capability (prd `runner-in-ci`, task
+ * The `install-ci` ADVANCE-LIFECYCLE capability (spec `runner-in-ci`, task
  * `install-ci-advance-lifecycle-workflow`; capability C: auto-triage observations
  * + surface declared blockers + apply committed answers). This module GENERATES
  * the advance-lifecycle workflow by ABSORBING and PARAMETERISING the existing seed
@@ -43,7 +43,7 @@
  *     each leg carries `--propose` so it can NEVER merge to `main`); `merge` ⇒ ALSO
  *     a MATRIX (one leg per item; build/gate/review fan out, the LAND tail is
  *     serialised by the engine's `mergeRetries` CAS-retry loop — the git-alone
- *     floor — NOT by the workflow shape; PRD
+ *     floor — NOT by the workflow shape; SPEC
  *     `land-time-reverify-and-parallel-merge-ceiling`). This is integration-mode
  *     behaviour, IDENTICAL to the build tick (integration mode is
  *     verb-independent).
@@ -101,7 +101,7 @@ export function generateAdvanceLifecycleWorkflow(
 	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # dorfl — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
-# observations + surface declared blockers + apply committed answers, prd
+# observations + surface declared blockers + apply committed answers, spec
 # runner-in-ci). EMITTED by \`dorfl install-ci\` by PARAMETERISING the seed
 # \`docs/ci/advance-loop.yml.template\` (the advance-loop capability's output) — the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the
@@ -127,7 +127,7 @@ export function generateAdvanceLifecycleWorkflow(
 #   * merge   ⇒ ALSO a MATRIX (one leg per item; build/gate/review fan out, the
 #               LAND tail — rebase + CAS push to \`main\` — is serialised by the
 #               engine's \`mergeRetries\` CAS-retry loop, NOT by the workflow shape.
-#               PRD \`land-time-reverify-and-parallel-merge-ceiling\`: a
+#               SPEC \`land-time-reverify-and-parallel-merge-ceiling\`: a
 #               non-fast-forward push triggers re-rebase + re-gate + retry, never
 #               a \`--force\`. The cross-job serialiser is the CAS-retry FLOOR;
 #               there is NO host-specific \`concurrency:\` group on the merge job).
@@ -389,7 +389,7 @@ jobs:
         run: dorfl advance "\${{ matrix.item }}" --propose --watch --arbiter origin
 
   # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
-  # PRD \`land-time-reverify-and-parallel-merge-ceiling\` (stories 4 + 6): each item
+  # SPEC \`land-time-reverify-and-parallel-merge-ceiling\` (stories 4 + 6): each item
   # gets its own leg; build/gate/review run concurrently across siblings; the LAND
   # TAIL is serialised by the engine's \`mergeRetries\` CAS-retry loop — the
   # git-alone floor — NOT by the workflow shape. A non-fast-forward push triggers
@@ -573,7 +573,7 @@ export function validateAdvanceLifecycleWorkflow(
 		'dispatch mode).');
 
 	// --- merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land) -
-	// PRD `land-time-reverify-and-parallel-merge-ceiling` stories 4 + 6: build/
+	// SPEC `land-time-reverify-and-parallel-merge-ceiling` stories 4 + 6: build/
 	// gate/review fan out; the LAND tail is serialised by the engine's
 	// `mergeRetries` CAS-retry loop (the git-alone floor), NOT the workflow.
 	require('merge-matrix', /advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
@@ -690,7 +690,7 @@ export function validateAdvanceLifecycleWorkflow(
 		text,
 	), 'the `sweepMergedBranches` dispatch input (capability F, opt-out) must be ' +
 		'preserved.');
-	// The ORPHAN-SIDECAR reap (prd
+	// The ORPHAN-SIDECAR reap (spec
 	// `agentic-question-resolution-retire-disposition-vocabulary`, US #10) rides
 	// the SAME scheduled `dorfl gc --remote-branches` invocation, so it provably
 	// FIRES on the cron tick (not behind an un-passed flag). The reap step that
@@ -745,7 +745,7 @@ export function validateAdvanceLifecycleWorkflow(
 	// --- The propose `enumerate` matrix must UNION taskable prds --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `DORFL_AUTO_TASK: 'true'` dead on the
-	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
+	// hourly cron — a ready ungated SPEC would never become a matrix leg. The `jq`
 	// must enumerate `spec:<slug>` ids from `scan --json`'s taskable-SPEC pool
 	// (`repos[].specs[]` + `cwd.repo.specs[]`) alongside the eligible-task legs.
 	require('propose-enumerates-taskable-specs', /"spec:" \+ \.slug/.test(text) &&
@@ -760,7 +760,7 @@ export function validateAdvanceLifecycleWorkflow(
 	// --- The propose `enumerate` matrix must UNION the LIFECYCLE pools ----------
 	// (`ci-propose-matrix-enumerates-lifecycle-items`): a build/task-only `jq`
 	// runs the answer-loop ONLY in merge mode — a `needsAnswers` item is
-	// `eligible:false` and untriaged observations are not in the task/prd pools at
+	// `eligible:false` and untriaged observations are not in the task/spec pools at
 	// all, so NO lifecycle rung (triage/surface/apply) ever gets a propose leg. The
 	// `jq` must enumerate the three lifecycle sub-pools from `scan --json`
 	// (`repos[].lifecycle.*` + `cwd.repo.lifecycle.*`): `triage[]` → `obs:<slug>`,

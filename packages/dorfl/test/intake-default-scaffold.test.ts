@@ -200,7 +200,7 @@ describe('intake renderSpec — PRD body', () => {
 				'\n' +
 				'## Solution\n' +
 				'\n' +
-				'(to be detailed; this prd needs tasking via `do prd:`).\n' +
+				'(to be detailed; this spec needs tasking via `do spec:`).\n' +
 				'\n' +
 				'## User Stories\n' +
 				'\n' +
@@ -232,7 +232,7 @@ describe('intake renderSpec — PRD body', () => {
 				'\n' +
 				'## Solution\n' +
 				'\n' +
-				'(to be detailed; this prd needs tasking via `do prd:`).\n' +
+				'(to be detailed; this spec needs tasking via `do spec:`).\n' +
 				'\n' +
 				'## User Stories\n' +
 				'\n' +

@@ -765,7 +765,7 @@ async function runOneItem(
 		}
 
 		// 3. Build the prompt — the SAME dual-use assembly `dorfl prompt`
-		//    emits: the canonical wrapper (+ source prd) + the task's ## Prompt.
+		//    emits: the canonical wrapper (+ source spec) + the task's ## Prompt.
 		let prompt: string;
 		try {
 			// CONTINUE-aware resolution: only on a continue (the job continued a kept
@@ -801,7 +801,7 @@ async function runOneItem(
 					})
 				: undefined;
 			// Thread the resolved per-repo nudge through the per-item override layer
-			// (a task or prd may pin `promptGuidance.testFirst` in its frontmatter,
+			// (a task or spec may pin `promptGuidance.testFirst` in its frontmatter,
 			// superseding the repo policy for THIS item) before the wrapper is built.
 			const itemGuidance = resolvePromptGuidanceForItem({
 				cwd: tree.dir,
@@ -879,7 +879,7 @@ async function runOneItem(
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
 		// integrate band — plus the needs-attention routing on any failure — now runs
 		// through the SHARED `performIntegration` core (`integration-core.ts`, the
-		// run/do convergence prd). `run` no longer forks its own gate / done-move /
+		// run/do convergence spec). `run` no longer forks its own gate / done-move /
 		// completion commit / `Integrator`+`integrateWithRebase`: that closed all
 		// three drift instances at once (the fleet now gets the review gate, the PR
 		// title/body, AND the per-repo language-agnostic `verify` gate instead of the
@@ -954,7 +954,7 @@ async function runOneItem(
 				// (`do`/`--isolated`/`--remote`/`complete`) already pass it unconditionally.
 				freshWorktreeGate: config.freshWorktreeGate,
 				// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
-				// the git-alone FLOOR of the cross-job land queue (prd `land-time-reverify-
+				// the git-alone FLOOR of the cross-job land queue (spec `land-time-reverify-
 				// and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a)). Threaded
 				// from the per-repo resolved config so a wide-matrix CI's raised cap actually
 				// reaches the merge loop — across separate `run` fleet jobs the CAS loop IS
@@ -1262,7 +1262,7 @@ export function defaultRunWorkspace(): string {
  * One supervised TICK over the registry, as a swappable unit. Today the tick IS
  * `runOnce` (claim+build+integrate a concurrent batch of eligible TASKS). The
  * loop ({@link runLoop}) is deliberately written against this signature — NOT
- * against `runOnce` directly — so the advance-loop prd can later swap the tick
+ * against `runOnce` directly — so the advance-loop spec can later swap the tick
  * (build / task / triage / surface / apply) WITHOUT re-architecting the loop
  * (the forward-pointer: the loop owns concurrency/scheduling, the tick owns one
  * item's work). The loop never reaches inside a tick.

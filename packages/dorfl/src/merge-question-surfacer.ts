@@ -16,7 +16,7 @@ import {
 import {workItemRel, type WorkFolderKey} from './work-layout.js';
 
 /**
- * The **MERGE-QUESTION SURFACER** (prd `land-time-reverify-and-parallel-merge-ceiling`,
+ * The **MERGE-QUESTION SURFACER** (spec `land-time-reverify-and-parallel-merge-ceiling`,
  * task `merge-question-surfacer`, US #14) — the SECOND, STATE-sourced surfacer
  * in the advance loop. It is a clean SIBLING to the existing
  * `surface-questions` JUDGEMENT surfacer (`surface-gate.ts` +
@@ -41,7 +41,7 @@ import {workItemRel, type WorkFolderKey} from './work-layout.js';
  * layered on top when a GitHub host is configured; the surfacer functions
  * identically without it.
  *
- * OUT OF SCOPE for this task (covered by sibling tasks of the same prd):
+ * OUT OF SCOPE for this task (covered by sibling tasks of the same spec):
  *
  *   - The APPLY rung dispatch that lands an answered `kind: merge` through the
  *     land primitive (rebase → re-verify → advance). Task
@@ -185,7 +185,7 @@ const TASK_FOLDERS: readonly WorkFolderKey[] = [
  * Idempotency: a branch whose sidecar ALREADY carries a PENDING `kind: merge`
  * entry is SKIPPED (with `already-pending-merge-question`). A branch with no
  * item body on `main` is SKIPPED (with `no-item-body`) — the cross-cutting
- * branch-keyed sidecar identity (PRD sidecar Q5-i) is OOS for this task; an
+ * branch-keyed sidecar identity (SPEC sidecar Q5-i) is OOS for this task; an
  * unmerged-branch-with-no-body lands on the same skip path until that
  * generalisation arrives.
  */
@@ -248,7 +248,7 @@ export function surfaceMergeQuestions(
 
 		const itemPath = findTaskItemPath(cwd, branch.slug);
 		if (itemPath === undefined) {
-			// The `branch:`/`ref:`-keyed sidecar identity (PRD sidecar Q5-i, the
+			// The `branch:`/`ref:`-keyed sidecar identity (SPEC sidecar Q5-i, the
 			// cross-cutting open question SHARED with the stuck-lock surfacer) is
 			// OUT OF SCOPE for this task — without a body to flip `needsAnswers`
 			// on, persist would tear the invariant. Skip with the reason so the

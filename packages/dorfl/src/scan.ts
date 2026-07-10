@@ -53,7 +53,7 @@ export function lifecycleGatesFrom(config: {
 	surfaceBlockers: boolean;
 	/**
 	 * Spec `staging-surface-and-apply-promote-safety` F2 — the gate that widens
-	 * the SURFACE candidate set into STAGING (`tasks/backlog/` + `prds/proposed/`).
+	 * the SURFACE candidate set into STAGING (`tasks/backlog/` + `specs/proposed/`).
 	 * Threaded here so the `scan --json` `lifecycle.surface[]` reflects the
 	 * expanded pool and the CI matrix enumerates staging surface legs. BUILD/claim
 	 * stays pool-only — only this lifecycle path widens.
@@ -78,7 +78,7 @@ export interface ScannedTriageItem {
 }
 /**
  * A surface/apply lifecycle item, with its namespace. SURFACE only ever carries
- * `needsAnswers` task/prd items (an observation with no sidecar goes to `triage`,
+ * `needsAnswers` task/spec items (an observation with no sidecar goes to `triage`,
  * not `surface`). APPLY, however, ALSO carries an ANSWERED OBSERVATION: since the
  * classifier (`buildLifecyclePools`) routes an observation whose sidecar is
  * all-answered to `apply` (CONSUME, always-on), the projection MUST keep it here
@@ -108,7 +108,7 @@ export interface ScannedBlockedItem {
 export interface ScannedLifecycle {
 	/** Untriaged observations → `obs:<slug>` legs (gated by `observationTriage`). */
 	triage: ScannedTriageItem[];
-	/** `needsAnswers` task/prd items with no answered sidecar → surface legs (gated by `surfaceBlockers`). */
+	/** `needsAnswers` task/spec items with no answered sidecar → surface legs (gated by `surfaceBlockers`). */
 	surface: ScannedBlockedItem[];
 	/**
 	 * Items WITH an all-answered sidecar → apply legs (CONSUME, always-on). Carries
@@ -132,7 +132,7 @@ export interface ScannedItem extends ReadyItem {
 }
 
 /**
- * A PRD entry in `scan --json`'s taskable-prd pool — the SAME shape an eligible
+ * A SPEC entry in `scan --json`'s taskable-spec pool — the SAME shape an eligible
  * task carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
  * | "spec:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
@@ -159,7 +159,7 @@ export interface RepoReport {
 	items: ScannedItem[];
 	/**
 	 * The TASKABLE-SPEC pool for this repo (the `specs[]` companion of `items[]`):
-	 * every spec in `work/prds/ready/` not already in `work/prds/tasked/`, each tagged with
+	 * every spec in `work/specs/ready/` not already in `work/specs/tasked/`, each tagged with
 	 * `eligibility.eligible` from {@link taskableSpecs} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
 	 * what makes the propose-mode CI matrix enumerate `spec:<slug>` legs for ready
@@ -183,7 +183,7 @@ export interface RepoReport {
 	 */
 	lifecycle: ScannedLifecycle;
 	/**
-	 * The one-slug-one-folder LINT result (prd `ledger-integrity` story 3): any
+	 * The one-slug-one-folder LINT result (spec `ledger-integrity` story 3): any
 	 * slug present in MORE THAN ONE `work/` status folder in THIS repo's ledger.
 	 * Empty ⇒ a clean ledger. Non-empty ⇒ a corrupt ledger the formatter WARNS
 	 * about loudly and a human must resolve (never auto-fixed). Derived by listing
@@ -191,7 +191,7 @@ export interface RepoReport {
 	 */
 	ledgerDuplicates: DuplicateSlug[];
 	/**
-	 * The PER-ITEM LOCK in-flight view for this repo (prd
+	 * The PER-ITEM LOCK in-flight view for this repo (spec
 	 * `ledger-status-per-item-lock-refs` US #8; task
 	 * `needs-attention-as-stuck-lock-state`): the held lock entries read from the
 	 * repo's `refs/dorfl/lock/*` refs — `active` holds (in-progress) and
@@ -240,7 +240,7 @@ export function readReadyItems(repoPath: string): ReadyItem[] {
  * through the EXACT same eligibility path as in-place (`do-autopick`), not a fork.
  */
 /**
- * Score a prd pool down to its TASKABLE subset, then label every prd with
+ * Score a spec pool down to its TASKABLE subset, then label every spec with
  * `eligibility.eligible` (true ⇔ taskable). REUSES {@link taskableSpecs} —
  * the SAME `autoslice-gate` predicate the mirror-side `scanMirrorPool` + the
  * in-place `do-autopick` pool already run — so what is taskable does not
@@ -281,7 +281,7 @@ export function scoreSpecs(
  *
  * The pool items' `namespace` is the wider {@link SelectedNamespace}. SURFACE by
  * construction only carries `'task'`/`'prd'` (an observation with no sidecar is a
- * `triage` candidate, never `surface`), so it narrows + drops any non-task/prd
+ * `triage` candidate, never `surface`), so it narrows + drops any non-task/spec
  * defensively. APPLY additionally admits `'observation'` (an answered observation
  * sidecar → apply), and it MUST be kept so the matrix `jq` emits its
  * `observation:<slug>` apply leg — narrowing it away here is exactly what stranded
@@ -324,7 +324,7 @@ export function scoreItems(
 	counts: {totalItems: number; totalEligible: number},
 	heldSlugs: Set<string> = new Set(),
 ): ScannedItem[] {
-	// HELD-SLUG SUBTRACTION (prd `ledger-status-per-item-lock-refs` US #15; task
+	// HELD-SLUG SUBTRACTION (spec `ledger-status-per-item-lock-refs` US #15; task
 	// `claim-acquires-unified-lock-no-body-move`): exclude any pool slug whose
 	// per-item lock is currently held — the eligible pool is "in `tasks/ready/` on
 	// `main` AND no lock held".
@@ -435,7 +435,7 @@ export async function scan(
 		// the lock refs from the mirror's origin; non-fatal (empty set on any fault),
 		// so the read-only scan degrades gracefully exactly as its config reads do.
 		const heldSlugs = await heldTaskSlugs(mirror.path, 'origin', options.env);
-		// The PER-ITEM LOCK in-flight view (prd US #8; task
+		// The PER-ITEM LOCK in-flight view (spec US #8; task
 		// `needs-attention-as-stuck-lock-state`): ADDITIONALLY read the full held
 		// lock entries (action × state + reason) from the mirror's lock refs, so the
 		// scan surfaces held (in-progress) + stuck (needs-attention) items. Read from
@@ -448,7 +448,7 @@ export async function scan(
 			'origin',
 			options.env,
 		);
-		// Spec pool — the TASKABLE-PRD companion of the task pool above
+		// Spec pool — the TASKABLE-SPEC companion of the task pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
 		// `autoTask` PER REPO from the mirror's COMMITTED `.dorfl.json`
 		// (exactly as the mirror-side pool scan does — NOT forked); a read fault is
@@ -508,7 +508,7 @@ export async function scan(
 				env: options.env,
 			}),
 		);
-		// The one-slug-one-folder LINT (prd story 3): derive any slug residing in >1
+		// The one-slug-one-folder LINT (spec story 3): derive any slug residing in >1
 		// status folder from the mirror's committed `main` tree (the SAME `ls-tree`
 		// read the seam uses), so a corrupt ledger is surfaced LOUDLY by the formatter.
 		const ledgerDuplicates = lintRefLedger('main', mirror.path, options.env);
@@ -543,7 +543,7 @@ export function scanRepoPaths(
 	repoPaths: string[],
 	config: Config,
 	/**
-	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/ready/`) (prd
+	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/ready/`) (spec
 	 * `ledger-status-per-item-lock-refs` US #15). This is a WORKING-TREE, OFFLINE
 	 * scan (it has no arbiter handle to fetch the lock refs from — that is the
 	 * registry `scan`'s job), so the held set is supplied by the in-place CALLER
@@ -569,7 +569,7 @@ export function scanRepoPaths(
 			global: config,
 			override,
 		}).config;
-		// Spec pool — the TASKABLE-PRD companion of the task pool. Resolve
+		// Spec pool — the TASKABLE-SPEC companion of the task pool. Resolve
 		// `autoTask` PER REPO from the working-tree `.dorfl.json` (the same
 		// way `autoBuild` is resolved); `taskableSpecs` (the SAME `autoslice-gate`
 		// predicate the autopick paths run) decides what is taskable — no forked

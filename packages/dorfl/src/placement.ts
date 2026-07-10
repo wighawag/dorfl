@@ -1,5 +1,5 @@
 /**
- * **The shared STAGING/POOL placement resolver** (prd
+ * **The shared STAGING/POOL placement resolver** (spec
  * `staging-pool-position-gate-and-trust-model`, task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`).
@@ -32,18 +32,18 @@
  * onto the lifecycle's concrete folder name via {@link PlacementSlots}.
  *
  * - `'staging'` — land in the staging area (tasks: `pre-backlog/`; prds:
- *   `prds/proposed/`). Not in the agent pool; a human/runner promotion is needed to make
+ *   `specs/proposed/`). Not in the agent pool; a human/runner promotion is needed to make
  *   the item eligible. Review-without-PR review surface.
  * - `'pool'` — land directly in the agent-eligible pool (tasks: `tasks/ready/`;
- *   prds: `prds/ready/`). The trusted-fast-path landing.
+ *   prds: `specs/ready/`). The trusted-fast-path landing.
  */
 export type PlacementSide = 'staging' | 'pool';
 
 /**
  * The two folder names a lifecycle uses for its staging/pool split. Supplied by
  * the caller so this resolver stays lifecycle-generic (the TASK caller passes
- * `{staging: 'pre-backlog', pool: 'tasks/ready'}`; the PRD-placement caller passes
- * `{staging: 'prds/proposed', pool: 'prds/ready'}`).
+ * `{staging: 'pre-backlog', pool: 'tasks/ready'}`; the SPEC-placement caller passes
+ * `{staging: 'specs/proposed', pool: 'specs/ready'}`).
  */
 export interface PlacementSlots {
 	staging: string;
@@ -100,7 +100,7 @@ const BUILT_IN_FLOOR: PlacementSide = 'staging';
  *   explicit  >  untrusted-origin ⇒ staging  >  configured default  >  built-in
  *
  * Pure: no I/O, no env reads — the caller resolves config + reads the
- * frontmatter and passes both in. Reused by every lifecycle (task + prd
+ * frontmatter and passes both in. Reused by every lifecycle (task + spec
  * placement + future intake variants) so a precedence change touches ONE place.
  */
 export function resolvePlacement(

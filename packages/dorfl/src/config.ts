@@ -17,7 +17,7 @@ import {
 export type IntegrationMode = 'propose' | 'merge';
 
 /**
- * **Per-repo TASK-PLACEMENT default** (prd
+ * **Per-repo TASK-PLACEMENT default** (spec
  * `staging-pool-position-gate-and-trust-model`, task
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
@@ -38,24 +38,24 @@ export type IntegrationMode = 'propose' | 'merge';
 export type TasksLandIn = 'pre-backlog' | 'ready';
 
 /**
- * **Per-repo PRD-PLACEMENT default** (prd
+ * **Per-repo SPEC-PLACEMENT default** (spec
  * `staging-pool-position-gate-and-trust-model`, task
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
- * folder the runner lands `intake`-authored prd files in BY DEFAULT —
+ * folder the runner lands `intake`-authored spec files in BY DEFAULT —
  * `'pre-proposed'` (staging — durable + readable but NOT in the auto-tasking
- * POOL; a runner/human promotion is needed to make the prd auto-taskable; the
- * on-disk folder for this value is `work/prds/proposed/`) or `'ready'` (the
+ * POOL; a runner/human promotion is needed to make the spec auto-taskable; the
+ * on-disk folder for this value is `work/specs/proposed/`) or `'ready'` (the
  * auto-tasking POOL — the trusted fast-path landing, on-disk
- * `work/prds/ready/`). The same runner-deterministic placement RESOLVER
+ * `work/specs/ready/`). The same runner-deterministic placement RESOLVER
  * (`src/placement.ts`) layers on top:
  * `explicit operator flag > untrusted-origin ⇒ pre-proposed > specsLandIn
  * default > built-in (pre-proposed)`. An untrusted-origin intake spec is FORCED
  * to staging even in a `'ready'` repo (the positional analogue of the existing
- * `untrusted-origin-forces-build-propose` rule). The PRD twin of
+ * `untrusted-origin-forces-build-propose` rule). The SPEC twin of
  * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
- * spellings mirror the live prd folders (`prds/proposed/` staging,
- * `prds/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
+ * spellings mirror the live spec folders (`specs/proposed/` staging,
+ * `specs/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
 export type SpecsLandIn = 'pre-proposed' | 'ready';
 
@@ -79,7 +79,7 @@ export type ObservationTriage = 'off' | 'ask' | 'auto';
 
 /**
  * **The `mergeQuestions` gate axis** — the 3-state member of the question-
- * surfacing gate family that governs the MERGE-QUESTION surfacer (prd
+ * surfacing gate family that governs the MERGE-QUESTION surfacer (spec
  * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
  * `merge-questions-gate-axis`). MIRRORS `observationTriage`'s shape
  * (`off | ask | auto`) but is a SEPARATE axis — "should this built work merge?"
@@ -99,7 +99,7 @@ export type ObservationTriage = 'off' | 'ask' | 'auto';
  *     invoke the agentic decider — a merge-land is never an agent decision.
  * Resolved through the SAME precedence chain as the other gates (flag > env >
  * per-repo > global > default `ask`). The exact name + default + shape were
- * answered in this task's Applied answers 2026-06-26 (q1/q2/q3) + PRD sidecar
+ * answered in this task's Applied answers 2026-06-26 (q1/q2/q3) + SPEC sidecar
  * Q3.
  */
 export type MergeQuestions = 'off' | 'ask' | 'auto';
@@ -201,10 +201,10 @@ export interface Config {
 	/**
 	 * Per-repo policy: may an agent auto-task *undeclared* (not `humanOnly`,
 	 * no open questions) prds in this repo? `false` (default, strict, human-first)
-	 * ⇒ a human must drive every prd's tasking; `true` ⇒ an agent may auto-task
-	 * any prd that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
+	 * ⇒ a human must drive every spec's tasking; `true` ⇒ an agent may auto-task
+	 * any spec that is not `humanOnly: true` and has no `needsAnswers`. Resolved like
 	 * `autoBuild`: flag > `DORFL_AUTO_TASK` env > per-repo > global >
-	 * default. The two-axis tasking gate (`work/prds/auto-task.md`), one level up
+	 * default. The two-axis tasking gate (`work/specs/auto-task.md`), one level up
 	 * from the build gate's `autoBuild`.
 	 */
 	autoTask: boolean;
@@ -227,7 +227,7 @@ export interface Config {
 	observationTriage: ObservationTriage;
 	/**
 	 * Per-repo policy governing the MERGE-QUESTION SURFACER — the 3-state member
-	 * of the question-surfacing gate family (prd
+	 * of the question-surfacing gate family (spec
 	 * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
 	 * `merge-questions-gate-axis`). MIRRORS `observationTriage`'s SHAPE
 	 * (`off | ask | auto`) but is a SEPARATE axis with a DIFFERENT default —
@@ -251,7 +251,7 @@ export interface Config {
 	 * Per-repo policy governing DECLARED blocked work — the BOOLEAN member of the
 	 * question-surfacing gate family (its orthogonal PEER is `observationTriage`,
 	 * which governs the raw observation INBOX; ADR `ci-config-policy-and-gate-family`
-	 * §2). It gates whether a task/prd carrying `needsAnswers: true` is rendered
+	 * §2). It gates whether a task/spec carrying `needsAnswers: true` is rendered
 	 * into an answerable question sidecar (`on`) or left silently blocked in the
 	 * backlog (`off`). `false` (default, calm) ⇒ the `needsAnswers`-blocked pool is
 	 * dropped from the auto-pick SELECTION, so a bare `advance` does NOT proactively
@@ -271,11 +271,11 @@ export interface Config {
 	/**
 	 * Per-repo policy governing whether SURFACING (the question-minting polarity)
 	 * inspects STAGING in addition to the agent pool — the BOOLEAN gate-family
-	 * member added by prd `staging-surface-and-apply-promote-safety` (F2). The
+	 * member added by spec `staging-surface-and-apply-promote-safety` (F2). The
 	 * BUILD polarity is UNCHANGED in either mode: staging items stay non-claimable,
 	 * the trust model is untouched. `true` (default) ⇒ the SURFACE candidate set
-	 * draws from STAGING (`tasks/backlog/`, `prds/proposed/`) PLUS the pool, so
-	 * a `needsAnswers` task/prd in staging surfaces its questions BEFORE a human
+	 * draws from STAGING (`tasks/backlog/`, `specs/proposed/`) PLUS the pool, so
+	 * a `needsAnswers` task/spec in staging surfaces its questions BEFORE a human
 	 * promotes it (you promote an already-clarified item, not blind and then get
 	 * asked after); `false` ⇒ the legacy POOL-ONLY behaviour (staging is not
 	 * inspected for questions). Resolved like `surfaceBlockers`/`autoBuild`:
@@ -340,14 +340,14 @@ export interface Config {
 	/** Integration mode for completed items: `propose` (default) or `merge`. */
 	integration: IntegrationMode;
 	/**
-	 * **Per-TRANSITION override for the prd→tasks (TASKING) transition only.** When
+	 * **Per-TRANSITION override for the spec→tasks (TASKING) transition only.** When
 	 * set, the tasking transition (a `do prd:<slug>` run: emit `work/tasks/backlog/*.md` +
-	 * the `work/prds/ready/ → work/prds/tasked/` lifecycle move) integrates with THIS
+	 * the `work/specs/ready/ → work/specs/tasked/` lifecycle move) integrates with THIS
 	 * mode instead of the flat {@link integration}; the task-BUILD transition is
 	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ tasking
 	 * falls back to {@link integration} — byte-for-byte today's behaviour for any repo
 	 * that does not set it. The maintainer's target is `integration: 'propose'` +
-	 * `taskingIntegration: 'merge'`: task a prd straight onto `main` (the task FILES
+	 * `taskingIntegration: 'merge'`: task a spec straight onto `main` (the task FILES
 	 * land, no PR) but build each task as a reviewable PR. Resolved per-repo like
 	 * {@link integration}: flag (`--merge`/`--propose`) > env
 	 * (`DORFL_TASKING_INTEGRATION`) > per-repo > global > (fall back to)
@@ -357,7 +357,7 @@ export interface Config {
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
-	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (prd
+	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
 	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--tasks-land-in`
@@ -366,7 +366,7 @@ export interface Config {
 	 * CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
-	 * tasker NEVER sets placement itself. Prd US #6 / the governing ADR: the
+	 * tasker NEVER sets placement itself. Spec US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it.
 	 */
@@ -385,7 +385,7 @@ export interface Config {
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
 	 *
-	 * The sole spec-placement key after the prd → spec HARD CUTOVER (spec
+	 * The sole spec-placement key after the `prd` → `spec` HARD CUTOVER (spec
 	 * `prd-to-spec-vocabulary-cutover-and-migration-command`): the legacy
 	 * `prdsLandIn` config key + `--prds-land-in` flag are GONE (clean break).
 	 */
@@ -483,7 +483,7 @@ export interface Config {
 	 */
 	verify?: VerifyConfig;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`): run the
+	 * **Gate 2 — the PR/code review gate** (GATES spec `work/specs/tasked/review.md`): run the
 	 * `review` SKILL as a fresh-context judgement gate ON TOP of the deterministic
 	 * `verify` floor, AFTER `verify` passes and BEFORE the done-move, on the
 	 * `do`/`complete` path. Default **OFF** (it puts a model on the merge path —
@@ -529,7 +529,7 @@ export interface Config {
 	taskerLoop: boolean;
 	/**
 	 * **The tasker IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
-	 * GATES prd `work/prds/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
+	 * GATES spec `work/specs/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
 	 * A). On the `do prd:<slug>` tasking path, AFTER the agent produces candidate
 	 * tasks the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
 	 * until a pass finds no NEW blocking issue (the natural terminator).
@@ -583,7 +583,7 @@ export interface Config {
 	freshWorktreeGate: boolean;
 	/**
 	 * **The cross-job merge serialiser's CAS-retry cap** — the git-alone FLOOR of the
-	 * land-time cross-job queue (prd `land-time-reverify-and-parallel-merge-ceiling`,
+	 * land-time cross-job queue (spec `land-time-reverify-and-parallel-merge-ceiling`,
 	 * Story 5 + Applied Answer q1 (a)). The merge-mode `${branch}:main` push retries
 	 * a non-fast-forward rejection by re-rebasing onto the moved `<arbiter>/main` and
 	 * pushing again, up to this cap; only after exhaustion does a loser bounce to
@@ -605,7 +605,7 @@ export interface Config {
 	mergeRetries: number;
 	/**
 	 * **Per-repo OPT-IN strictness layered on the OQ6 stale-approval default**
-	 * (prd `land-time-reverify-and-parallel-merge-ceiling`, sidecar OQ6 / task
+	 * (spec `land-time-reverify-and-parallel-merge-ceiling`, sidecar OQ6 / task
 	 * `strict-merge-approval-gate`). Controls how the apply rung treats a prior
 	 * merge-answer when the merge-base CHANGED between the human's answer and
 	 * the apply step. The default (`false`) honours the prior answer and lands
@@ -711,7 +711,7 @@ export const DEFAULT_CONFIG: Config = {
 	// auto-dispose the no-question cases). ADR `ci-config-policy-and-gate-family` §3.
 	observationTriage: 'off',
 	// The merge-question SURFACER defaults to `ask` — the conservative default
-	// (prd `land-time-reverify-and-parallel-merge-ceiling` Applied answer q2 /
+	// (spec `land-time-reverify-and-parallel-merge-ceiling` Applied answer q2 /
 	// task `merge-questions-gate-axis` Applied answer q2). NEVER `off` by default:
 	// a silently-dropped merge-question means finished, pushed work never lands —
 	// strictly more consequential than a dropped observation-promote prompt, so
@@ -728,9 +728,9 @@ export const DEFAULT_CONFIG: Config = {
 	// (a stuck build) is separate + always-on. ADR `ci-config-policy-and-gate-family` §3.
 	surfaceBlockers: false,
 	// SURFACING widens to STAGING by default (`true`) — a `needsAnswers` task in
-	// `tasks/backlog/` or a `needsAnswers` prd in `prds/proposed/` surfaces
+	// `tasks/backlog/` or a `needsAnswers` spec in `specs/proposed/` surfaces
 	// its questions BEFORE promotion, so a human promotes an already-clarified
-	// item. Prd `staging-surface-and-apply-promote-safety` (F2). BUILD/claim
+	// item. Spec `staging-surface-and-apply-promote-safety` (F2). BUILD/claim
 	// stays pool-only + trust-gated regardless: this widens ONLY the surface
 	// polarity, not the build polarity. Set `false` to restore the legacy
 	// pool-only surface behaviour.
@@ -791,7 +791,7 @@ export const DEFAULT_CONFIG: Config = {
 	// (positive name, default-on).
 	freshWorktreeGate: true,
 	// The cross-job merge serialiser's CAS-retry cap — the git-alone FLOOR of the
-	// land-time cross-job queue (prd `land-time-reverify-and-parallel-merge-ceiling`,
+	// land-time cross-job queue (spec `land-time-reverify-and-parallel-merge-ceiling`,
 	// Story 5 + Applied Answer q1 (a)). Matches `integration-core.ts`'s built-in
 	// `DEFAULT_MERGE_RETRIES` fallback (1000 — the C2 large liveness ceiling, NOT a
 	// small Race-1 budget) so resolving it through this layer is byte-for-byte
@@ -800,7 +800,7 @@ export const DEFAULT_CONFIG: Config = {
 	mergeRetries: 1000,
 	// The strict-merge-approval gate defaults OFF (sidecar OQ6 / task
 	// `strict-merge-approval-gate`): the cheap "green re-verify is enough" path
-	// is the default; the OQ6 PRD answer pins this. A repo opts in to the
+	// is the default; the OQ6 SPEC answer pins this. A repo opts in to the
 	// host-agnostic "dismiss stale approvals on base change" discipline with
 	// `strictMergeApproval: true` (or `--strict-merge-approval` /
 	// `DORFL_STRICT_MERGE_APPROVAL=true`). The re-surface vs. land branch is

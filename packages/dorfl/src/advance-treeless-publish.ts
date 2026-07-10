@@ -34,7 +34,7 @@ import {runAsync} from './git.js';
  *
  * **C2 rebase-until-real-conflict (task `c2-rebase-until-real-on-durable-main-
  * promotions`).** This same `HEAD:main` push carries the won't-proceed terminal
- * `tasks/ready → tasks/cancelled` / `prds/ready → prds/dropped` (slug-RELOCATION
+ * `tasks/ready → tasks/cancelled` / `specs/ready → specs/dropped` (slug-RELOCATION
  * family) when `apply-persist.ts` resolves a `dropped` disposition; under sustained
  * parallel load on the shared `main` ref two DIFFERENT items' concurrent promotions
  * can falsely-contend even though nothing tree-conflicts, exhausting a small fixed

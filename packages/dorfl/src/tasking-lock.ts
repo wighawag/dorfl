@@ -7,19 +7,19 @@ import {
 import {workItemRel} from './work-layout.js';
 
 /**
- * The **tasking concurrency lock** (prd `auto-slice`, task `autoslice-lock`).
+ * The **tasking concurrency lock** (spec `auto-slice`, task `autoslice-lock`).
  *
- * Serialises *concurrent* taskers (two CI runs, or human + CI) so a prd is never
+ * Serialises *concurrent* taskers (two CI runs, or human + CI) so a spec is never
  * double-tasked. As of the capstone cut-over (task
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, prd
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, spec
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
- * the legacy `git mv work/prds/ready/<slug>.md → work/tasking/<slug>.md` MARKER on `main`
+ * the legacy `git mv work/specs/ready/<slug>.md → work/tasking/<slug>.md` MARKER on `main`
  * is GONE: the body NEVER relocates until the durable promotion, exactly as claim
  * no longer moves the task body (task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`). The tasking lock
  * is now ONLY the UNIFIED per-item lock (`refs/dorfl/lock/<entry>`,
  * `action: task`, keyed `prd:<slug>`) — the SAME ref claim and advance use for
- * the same item, so tasking a prd is mutually exclusive with claiming/advancing
+ * the same item, so tasking a spec is mutually exclusive with claiming/advancing
  * the SAME item BY CONSTRUCTION (the second acquirer loses the SAME create-only
  * ref CAS, with NO retry budget and NO false contention). There is no transient
  * status in `main`'s tree anymore, so a work branch cut from `main` inherits no
@@ -29,9 +29,9 @@ import {workItemRel} from './work-layout.js';
  *   A `lost` (the item is already held for implement/task/advance) makes the
  *   tasking acquire lose DEFINITIVELY (exit 2, no retry). On a successful acquire
  *   it returns {@link AcquireTaskingLockResult.lockedBlob}: the git blob sha of the
- *   prd body the lock TOOK, read from `work/prds/ready/<slug>.md` on the arbiter — the
+ *   spec body the lock TOOK, read from `work/specs/ready/<slug>.md` on the arbiter — the
  *   snapshot the tasker reads + tasks from, handed back so the integrate
- *   transition can fail loud if the held prd was edited concurrently (the
+ *   transition can fail loud if the held spec was edited concurrently (the
  *   read-stability backstop). A dry-run takes no lock (it mutates nothing).
  *
  * - **Release** ({@link releaseTaskingLock}) DELETES the unified lock ref. It
@@ -51,7 +51,7 @@ import {workItemRel} from './work-layout.js';
  * The READ-STABILITY backstop (the content-identity stale check that used to live
  * in the release, comparing the held `work/tasking/<slug>.md` blob against the
  * acquire-time snapshot) now lives at the integrate seam (`tasking.ts`
- * `heldSpecIsStale`, comparing `work/prds/ready/<slug>.md`) — relocated because the
+ * `heldSpecIsStale`, comparing `work/specs/ready/<slug>.md`) — relocated because the
  * completing transition, not the release, owns the commit. See
  * `work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`.
  *
@@ -74,7 +74,7 @@ export type AcquireTaskingLockOutcome =
 export type AcquireTaskingLockExitCode = 0 | 1 | 2 | 3;
 
 export interface AcquireTaskingLockOptions {
-	/** The prd slug to lock (`work/prds/ready/<slug>.md`). */
+	/** The spec slug to lock (`work/specs/ready/<slug>.md`). */
 	slug: string;
 	/** Working clone/worktree the lock acquire runs in. */
 	cwd: string;
@@ -98,10 +98,10 @@ export interface AcquireTaskingLockResult {
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 	/**
-	 * On a successful acquire (`acquired`), the git BLOB sha of the prd body that
-	 * the lock TOOK (`work/prds/ready/<slug>.md` on the arbiter). This IS the snapshot the
+	 * On a successful acquire (`acquired`), the git BLOB sha of the spec body that
+	 * the lock TOOK (`work/specs/ready/<slug>.md` on the arbiter). This IS the snapshot the
 	 * tasker reads + tasks from; the integrate transition compares the current
-	 * `work/prds/ready/<slug>.md` blob against it to fail loud on a concurrent edit (the
+	 * `work/specs/ready/<slug>.md` blob against it to fail loud on a concurrent edit (the
 	 * read-stability backstop). `undefined` unless `outcome === 'acquired'` (and on
 	 * dry-run, where nothing was published).
 	 */
@@ -157,7 +157,7 @@ async function runAcquire(
 	}
 	const by = options.by || (await resolveBy(cwd, env));
 
-	// Is the prd still lockable (present in work/prds/ready/ on the arbiter's main)?
+	// Is the spec still lockable (present in work/specs/ready/ on the arbiter's main)?
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	const spec = workItemRel('specs-ready', `${slug}.md`);
 	const specBlob = await gitSoft(
@@ -166,7 +166,7 @@ async function runAcquire(
 		env,
 	);
 	if (specBlob.status !== 0) {
-		const message = `'${spec}' not found on ${arbiter}/main (no such prd, or it was already moved/tasked).`;
+		const message = `'${spec}' not found on ${arbiter}/main (no such spec, or it was already moved/tasked).`;
 		note(message);
 		return {exitCode: 2, outcome: 'lost', message};
 	}
@@ -186,7 +186,7 @@ async function runAcquire(
 	// budget). No auto-steal of an orphaned lock, consistent with claim/advance and
 	// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts
 	// a lock is dead via `release-lock` + `gc --ledger`).
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`):
 	// EMIT the parent-spec item identity as `spec:<slug>` so the unified per-item
 	// lock ref is `refs/dorfl/lock/spec-<slug>` (the expand-lock task made
 	// `spec:<slug>` resolve to a `spec-<slug>` entry). The resolver still ACCEPTS
@@ -228,7 +228,7 @@ export type ReleaseTaskingLockOutcome =
 export type ReleaseTaskingLockExitCode = 0 | 1 | 2 | 3 | 4;
 
 export interface ReleaseTaskingLockOptions {
-	/** The prd slug whose lock to release. */
+	/** The spec slug whose lock to release. */
 	slug: string;
 	/** Working clone/worktree the release runs in. */
 	cwd: string;
@@ -249,9 +249,9 @@ export interface ReleaseTaskingLockOptions {
 	/**
 	 * The tasker review→edit LOOP's **decomposition-unclear** verdict
 	 * (`slicer-review-edit-loop`), or the task-SET acceptance gate's `block`:
-	 * instead of DELETING the lock (returning the prd to the claimable/taskable
+	 * instead of DELETING the lock (returning the spec to the claimable/taskable
 	 * pool), amend it `active → stuck` with this reason recorded on the entry,
-	 * emitting NO guessed tasks. The prd body stays in `work/prds/ready/` (it never moved
+	 * emitting NO guessed tasks. The spec body stays in `work/specs/ready/` (it never moved
 	 * under the lock); the stuck lock IS the tasking needs-attention surface (no
 	 * `work/needs-attention/` folder write), so it is NOT re-taskable until a human
 	 * resolves it via `release-lock`/`resume`. Omitted ⇒ the normal release DELETES
@@ -275,7 +275,7 @@ export interface ReleaseTaskingLockResult {
  * Release the tasking lock for `slug`: DELETE the unified `action: task` lock ref
  * (idempotent — an already-absent ref is a clean `released`). It moves NO lifecycle
  * file: the durable `prd → prd-tasked` success move is owned by the integrate band,
- * and the prd body never left `work/prds/ready/` under the lock, so there is no
+ * and the spec body never left `work/specs/ready/` under the lock, so there is no
  * `tasking/ → prd/` restore.
  *
  * When `routeToNeedsAttention` is set (the tasker decomposition-unclear verdict /
@@ -328,7 +328,7 @@ async function runRelease(
 
 	// DECOMPOSITION-UNCLEAR / TASK-GATE BLOCK: amend the lock `active → stuck` with
 	// the reason on the entry (the tasking needs-attention surface), NOT delete it.
-	// The prd body stays in `work/prds/ready/`; the stuck lock keeps it out of the
+	// The spec body stays in `work/specs/ready/`; the stuck lock keeps it out of the
 	// taskable pool until a human resolves it (`release-lock`/`resume`).
 	if (options.routeToNeedsAttention !== undefined) {
 		// MIGRATE: EMIT `spec:<slug>` (keyed to the `spec-<slug>` lock entry).

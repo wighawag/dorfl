@@ -1,5 +1,5 @@
 /**
- * The provider-agnostic CORE of the `install-ci` scaffolder (prd `runner-in-ci`,
+ * The provider-agnostic CORE of the `install-ci` scaffolder (spec `runner-in-ci`,
  * task `install-ci-core-and-github-adapter`; US #7/#10). `install-ci` is a
  * human-run, one-time SCAFFOLDER (mirrors whitesmith's `src/providers/github-ci.ts`):
  * it writes `.github/**` + a composite setup action + secrets so autonomous work
@@ -106,7 +106,7 @@ export interface CIConfigFile {
 	/** API key values keyed by env var name. Only present with `--include-secrets`. */
 	secrets?: Record<string, string>;
 	/**
-	 * The project-setup escape hatch (prd `install-ci-project-provisioning`,
+	 * The project-setup escape hatch (spec `install-ci-project-provisioning`,
 	 * task `install-ci-project-setup-hook`): a PROVIDER-NAMESPACED, OPAQUE,
 	 * NATIVE-SYNTAX pass-through map. The key is a provider id (today only
 	 * `github`); the value is the user's own project-toolchain snippet in that
@@ -197,7 +197,7 @@ export interface CIProviderContext {
 	/**
 	 * OPTIONALLY report whether the configured credential has REPO-ADMIN scope
 	 * on the provider (→ can set branch protection / rulesets). Used by the
-	 * Tier-1 branch-protection step (prd `land-time-reverify-and-parallel-
+	 * Tier-1 branch-protection step (spec `land-time-reverify-and-parallel-
 	 * merge-ceiling`, Story 11) to pick `auto-configure` vs `print fallback`.
 	 * `true` ⇒ admin, `false` ⇒ explicitly NOT admin, `undefined` ⇒ unknown
 	 * (treated as non-admin: never silently attempt a call that would 403).
@@ -809,7 +809,7 @@ ${indent(modelsJsonStr, 8)}
 	}
 
 	// PREFER-LOCAL RESOLVER (task install-ci-prefer-project-local-dorfl,
-	// PRD install-ci-project-provisioning axis C1+C3): emit a `dorfl` SHIM
+	// SPEC install-ci-project-provisioning axis C1+C3): emit a `dorfl` SHIM
 	// that resolves a project-local `node_modules/.bin/dorfl` FIRST (the repo's
 	// devDep pin, populated by the project-setup hook's `pnpm install` — C3),
 	// and falls back to the global bootstrap dorfl this composite action just

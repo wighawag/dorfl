@@ -26,7 +26,7 @@ import type {
 } from './run.js';
 
 /**
- * The **`advance` LOOP DRIVER** (prd `advance-loop`, task
+ * The **`advance` LOOP DRIVER** (spec `advance-loop`, task
  * `advance-drivers-and-gates`, US #7/22/26/31) — the second of the two drivers
  * over the substrate-agnostic advance TICK. Where the one-shot driver
  * (`advance-drivers.ts`) runs the tick over named item(s) SEQUENTIALLY, this
@@ -549,7 +549,7 @@ export interface AdvanceRunTickDeps extends Omit<
  * Adapt the {@link advanceOnce} LOOP DRIVER to the {@link RunTick} swap SEAM so
  * `run` (≡ CI, US #7) drives the ADVANCE tick over the mirror-side eligible pool
  * instead of the build tick. `run.ts` deliberately writes {@link runLoop} against
- * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop prd can
+ * {@link RunTick} (NOT against `runOnce`) precisely so the advance-loop spec can
  * swap the tick WITHOUT re-architecting the loop — this is that swap.
  *
  * The seam is `(RunOnceOptions) => Promise<RunOnceResult>`; one advance batch is

@@ -1,12 +1,12 @@
 /**
- * The `install-ci` CLOSE-JOB capability (prd `runner-in-ci`, task
+ * The `install-ci` CLOSE-JOB capability (spec `runner-in-ci`, task
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). This module GENERATES the one fixed workflow file for the close-job and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
  * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
  * NO YAML lib, so the checks are presence/shape assertions over the raw text).
  *
- * The discipline (from the prd capability-E row + the Out-of-Scope fence):
+ * The discipline (from the spec capability-E row + the Out-of-Scope fence):
  *
  *   - TRIGGER: a MERGE to `main`. There is no native "PR merged" event, so the
  *     workflow uses `push: {branches: [main]}` (NOT `pull_request: closed`): it
@@ -16,7 +16,7 @@
  *     cannot close. (See the `## Decisions` block in the task.)
  *   - The job INVOKES the close machinery via `dorfl close-merged-issues`,
  *     which CONSUMES the UNCHANGED engine pieces: the resolution
- *     (`resolveClosingIssue`), the "prd complete?" query (`prd-complete-query`,
+ *     (`resolveClosingIssue`), the "spec complete?" query (`prd-complete-query`,
  *     done), and `IssueProvider.closeIssue`. CI owns ONLY the job + trigger; it
  *     re-implements NONE of those (the Out-of-Scope fence).
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
@@ -54,7 +54,7 @@ export const CLOSE_JOB_WORKFLOW_PATH = 'workflows/close-job.yml';
  */
 export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 	return `\
-# dorfl — the ISSUE CLOSE-JOB in CI (capability E, prd runner-in-ci).
+# dorfl — the ISSUE CLOSE-JOB in CI (capability E, spec runner-in-ci).
 # EMITTED by \`dorfl install-ci\`; the human commits it. DO NOT hand-edit a
 # copy — re-run install-ci to upgrade the shell.
 #
@@ -117,7 +117,7 @@ jobs:
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs
-        # the "prd complete?" query for the prd case, and closes via the provider
+        # the "spec complete?" query for the spec case, and closes via the provider
         # seam — all UNCHANGED engine pieces, consumed not re-built.
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}

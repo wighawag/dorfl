@@ -13,7 +13,7 @@ import {
 } from './sidecar.js';
 
 /**
- * The engine-owned SURFACE PERSIST (prd `advance-loop`, task
+ * The engine-owned SURFACE PERSIST (spec `advance-loop`, task
  * `advance-rung-surface`, US #15/33) — the half of the surface rung the ENGINE
  * owns (the skill JUDGES, the engine PERSISTS). Given the questions the
  * `surface-questions` skill EMITTED (gathered by `surface-gate.ts`'s spawn), the

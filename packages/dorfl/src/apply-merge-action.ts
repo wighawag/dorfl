@@ -17,7 +17,7 @@ import {
 import type {VerifyConfig} from './verify.js';
 
 /**
- * The **answered MERGE-QUESTION ACTION DISPATCH** (prd
+ * The **answered MERGE-QUESTION ACTION DISPATCH** (spec
  * `land-time-reverify-and-parallel-merge-ceiling`, task
  * `apply-rung-merge-disposition`; Stories #15, #16) — the deterministic,
  * answer-driven RUNNER-ACTION layer that turns an answered
@@ -29,7 +29,7 @@ import type {VerifyConfig} from './verify.js';
  * `apply-decide.ts`, NOT a route through it: a merge-acceptance has no
  * judgement content (the human's plain `merge | hold | drop` answer IS the
  * decision; the apply-time fresh-worktree re-verify on the rebased tip is the
- * real correctness gate). Per the PRD's resolved mechanism, routing this
+ * real correctness gate). Per the SPEC's resolved mechanism, routing this
  * through an LLM only adds cost and non-determinism, so the apply rung
  * KIND-CHECKS the sidecar BEFORE calling the agentic decider: a sidecar entry
  * carrying `kind: merge` (the typed dispatch field from `sidecar-kind-field`,
@@ -54,7 +54,7 @@ import type {VerifyConfig} from './verify.js';
  *     branch itself is out of this task's scope — the question is recorded as
  *     "drop" and the human / a later surfacer handles the artifact.)
  *
- * The STALE-APPROVAL POLICY (PRD OQ6, applied answer q1): default is the cheap
+ * The STALE-APPROVAL POLICY (SPEC OQ6, applied answer q1): default is the cheap
  * "HONOUR the prior approval + land on a green re-verify" path; opt-in
  * `strictMergeApproval` (resolved per-repo via the gate-family precedence chain
  * by the sibling task `strict-merge-approval-gate`, default OFF) RE-SURFACES
@@ -120,7 +120,7 @@ export function parseMergeAnswer(text: string): MergeActionVerb | undefined {
  * a fully-answered sidecar (the apply rung's pre-decider kind-check). Returns
  * `undefined` when the sidecar carries no answered `kind: merge` entry (the
  * apply rung then proceeds to the existing path — agentic for observations,
- * normal apply for task/prd content questions).
+ * normal apply for task/spec content questions).
  *
  * The sidecar is read OFF DISK keyed off the namespaced item identity; the
  * model is parsed via the SAME `parseSidecar` the rest of the engine uses.
@@ -266,7 +266,7 @@ function resolveArbiterUrl(input: MergeActionInput): string | undefined {
 }
 
 /**
- * The `strictMergeApproval` re-stale check (PRD OQ6 opt-in): did `<arbiter>/
+ * The `strictMergeApproval` re-stale check (SPEC OQ6 opt-in): did `<arbiter>/
  * main` move past the merge-base of the work branch since the surfacer
  * authored the question? The git-alone analogue of GitHub's "dismiss stale
  * approvals when the base changes" — host-agnostic by reachability.

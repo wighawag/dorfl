@@ -70,7 +70,7 @@ export interface LifecyclePoolGates {
 	surface?: boolean;
 	/**
 	 * Does the SURFACE candidate set widen to include STAGING (`tasks/backlog/` +
-	 * `prds/proposed/`), or stay POOL-ONLY? This field is CONSUMED BY THE
+	 * `specs/proposed/`), or stay POOL-ONLY? This field is CONSUMED BY THE
 	 * GATHER (`lifecycle-gather.ts`), NOT by {@link buildLifecyclePools} — the
 	 * builder is pure and only routes already-resolved candidates between surface
 	 * / apply by sidecar-answered-state. The gather decides WHICH items become
@@ -112,7 +112,7 @@ export interface NeedsAnswersCandidate {
  * to the always-on APPLY pool (a CONSUME act — the human's answer is never
  * stranded), while a NO/PENDING sidecar UNTRIAGED observation stays a TRIAGE
  * candidate (gated) as today. PURE: the caller resolves the active sidecar (via
- * {@link sidecarPathFor} — the SAME resolver the task/prd `needsAnswers`
+ * {@link sidecarPathFor} — the SAME resolver the task/spec `needsAnswers`
  * candidates use); this unit only routes.
  */
 export interface ObservationCandidate {
@@ -142,7 +142,7 @@ export interface LifecyclePoolsInput {
 	 */
 	observations: ObservationCandidate[];
 	/**
-	 * Every `needsAnswers:true` task/prd (the create-side blocked items), each
+	 * Every `needsAnswers:true` task/spec (the create-side blocked items), each
 	 * with its resolved active sidecar. This unit routes each to SURFACE or APPLY.
 	 */
 	needsAnswers: NeedsAnswersCandidate[];
@@ -172,7 +172,7 @@ export interface LifecyclePools {
  * Build the three lifecycle sub-pools from the raw candidates + the gates, PURE.
  * Each selected item carries the lifecycle `namespace` discriminator so the
  * driver's per-item dispatch can map it to the right TICK arg (observation \u2192
- * `obs:<slug>`; a blocked task/prd \u2192 `task:`/`prd:<slug>`, which the tick then
+ * `obs:<slug>`; a blocked task/spec \u2192 `task:`/`prd:<slug>`, which the tick then
  * classifies into surface/apply/no-op). This unit decides WHICH sub-pool each item
  * belongs to (and whether its gate lets it through); the TICK re-classifies and
  * runs the actual rung (the classifier + rung bodies are unchanged).

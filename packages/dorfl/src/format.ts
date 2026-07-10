@@ -202,7 +202,7 @@ export function formatCwdSection(section: CwdSection): string[] {
 		}
 	}
 
-	// The PER-ITEM LOCK in-flight SURFACE for the cwd (prd
+	// The PER-ITEM LOCK in-flight SURFACE for the cwd (spec
 	// `ledger-status-per-item-lock-refs` US #8): held (`active` = in-progress) and
 	// `stuck` (= needs-attention) lock entries + their reasons. This is what keeps a
 	// held/stuck cwd item from vanishing: the held-slug subtraction removes it from
@@ -263,7 +263,7 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 			lines.push('No participating repos found.');
 			lines.push(
 				'(A repo participates iff its work/ tree has lifecycle content in any ' +
-					'pool: tasks/ready, tasks/backlog, prds/proposed, prds/ready, ' +
+					'pool: tasks/ready, tasks/backlog, specs/proposed, specs/ready, ' +
 					'notes/observations, or questions.)',
 			);
 		} else {
@@ -281,7 +281,7 @@ export function formatReport(report: ScanReport, cwd?: CwdSection): string {
 		const groups = categoriseItems(repo.items);
 		allGroups.push(groups);
 		lines.push(...formatRepo(repo.path, groups));
-		// The one-slug-one-folder LINT (prd `ledger-integrity` story 3): WARN LOUDLY
+		// The one-slug-one-folder LINT (spec `ledger-integrity` story 3): WARN LOUDLY
 		// when any slug in this repo's ledger resides in >1 status folder (a corrupt
 		// ledger — never a silent pass). Clean ledgers add no lines.
 		const warnings = formatDuplicateWarnings(repo.ledgerDuplicates ?? []);

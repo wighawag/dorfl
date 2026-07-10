@@ -11,7 +11,7 @@ import {
 } from './decision-engine.js';
 
 /**
- * The **AGENTIC apply DECIDER** (prd
+ * The **AGENTIC apply DECIDER** (spec
  * `agentic-question-resolution-retire-disposition-vocabulary` US #1/#2/#3, task
  * `agentic-apply-retire-disposition-vocabulary`) — the input-ADAPTER + prompt +
  * production decider for the apply rung's call into the SHARED
@@ -35,7 +35,7 @@ import {
  * `agentic-apply-mint-adr-route`, which added the {@link
  * import('./mint-adr.js').mintAdr} route and widened this set. Intake's set is
  * UNCHANGED (`{task | spec | ask | bounce}`) \u2014 the engine stays outcome-AGNOSTIC
- * (PRD decision 14), so widening this caller's subset does NOT touch intake or the
+ * (SPEC decision 14), so widening this caller's subset does NOT touch intake or the
  * engine's superset union.
  *
  * The INPUT adapter ({@link buildApplyDecisionInput}) sits HERE in the caller, not

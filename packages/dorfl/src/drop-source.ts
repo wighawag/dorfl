@@ -5,7 +5,7 @@ import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import {resolveItemPathByIdentity} from './item-path.js';
 
 /**
- * The DIRECT-DELETE helper (prd
+ * The DIRECT-DELETE helper (spec
  * `agentic-question-resolution-retire-disposition-vocabulary`, US #5/#11; task
  * `direct-delete-question-cli-helper`) — the "I just want to throw this away"
  * path that `git rm`s a source item AND its question sidecar (when present) in

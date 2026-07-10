@@ -30,16 +30,16 @@ import {
  * land). Build it standalone; do not assume `run` already calls it.
  *
  * **Up to FIVE pools.** The `scan`/`selectCandidates`/eligibility model is
- * TASK-ONLY (there is no prd candidate). So this helper composes:
+ * TASK-ONLY (there is no spec candidate). So this helper composes:
  *
  *   - the **`build` pool** (eligible TASKS) — the EXISTING {@link selectCandidates}
  *     path (round-robin across repos, capped). This is the EXACT task-selection
  *     primitive `run` uses, so `run` and this helper SHARE it (they share
  *     `selectCandidates`, the task-pool core).
- *   - the **`task` pool** (prd-to-task) — a pool the caller builds from the prd reader
+ *   - the **`task` pool** (spec-to-task) — a pool the caller builds from the spec reader
  *     (`ledgerRead.resolveSpecPool`) filtered by `autoslice-gate`'s pure predicate
  *     ({@link resolveTaskingEligibility}); see {@link taskableSpecs}. The helper
- *     does NOT reinvent prd eligibility.
+ *     does NOT reinvent spec eligibility.
  *
  * `do` is STRICTLY SEQUENTIAL (parallelism is `run`'s job, ADR §3) — this helper
  * only ORDERS + COUNTS the items; the caller runs the existing `do` pipeline per
@@ -82,7 +82,7 @@ export interface SelectedItem {
  */
 export type LifecycleSelectedItem = SelectedItem;
 
-/** A prd candidate for the tasking pool, before the eligibility gate runs. */
+/** A spec candidate for the tasking pool, before the eligibility gate runs. */
 export interface SpecCandidate {
 	repoPath: string;
 	slug: string;
@@ -91,21 +91,21 @@ export interface SpecCandidate {
 	taskedAfter: string[];
 }
 
-/** Inputs to {@link taskableSpecs}: the raw prd pool + the gate context. */
+/** Inputs to {@link taskableSpecs}: the raw spec pool + the gate context. */
 export interface TaskableSpecsInput {
-	/** Every prd enumerated from `work/prds/ready/` (the auto-task candidate source). */
+	/** Every spec enumerated from `work/specs/ready/` (the auto-task candidate source). */
 	candidates: SpecCandidate[];
-	/** Slugs whose prd resides in `work/prds/tasked/` (resolves `taskedAfter`). */
+	/** Slugs whose spec resides in `work/specs/tasked/` (resolves `taskedAfter`). */
 	taskedSlugs: Set<string>;
 	/** The repo's resolved `autoTask` policy (`autoslice-gate`'s per-repo key). */
 	autoTask: boolean;
 }
 
 /**
- * Filter a raw prd pool down to the TASKABLE prds, in declaration order, using
+ * Filter a raw spec pool down to the TASKABLE prds, in declaration order, using
  * `autoslice-gate`'s pure predicate ({@link resolveTaskingEligibility}) — NOT a
- * reinvented eligibility model. A prd is taskable iff `needsAnswers !== true &&
- * humanOnly !== true && autoTask` AND every `taskedAfter` prd is already tasked.
+ * reinvented eligibility model. A spec is taskable iff `needsAnswers !== true &&
+ * humanOnly !== true && autoTask` AND every `taskedAfter` spec is already tasked.
  * Pure: no I/O (the caller reads the pool through `ledgerRead.resolveSpecPool`).
  */
 export function taskableSpecs(input: TaskableSpecsInput): SpecCandidate[] {
@@ -171,7 +171,7 @@ export interface SelectPrioritisedInput {
 	 */
 	lifecycle?: SelectedLifecyclePools;
 	/**
-	 * The HELD-SLUG set to SUBTRACT from the `build` pool (eligible TASKS) — prd
+	 * The HELD-SLUG set to SUBTRACT from the `build` pool (eligible TASKS) — spec
 	 * `ledger-status-per-item-lock-refs` US #15, task
 	 * `claim-acquires-unified-lock-no-body-move`. A task whose per-item lock is
 	 * currently held is dropped from selection, so the eligible pool is "in
@@ -198,7 +198,7 @@ export interface SelectedLifecyclePools {
  * Build the ordered, counted list of items to do across the (up to) FIVE pools,
  * applying the configurable {@link selectionOrder} with `apply` PINNED FIRST and
  * the count bound. The task pool is selected via the EXISTING
- * {@link selectCandidates} (the shared primitive `run` uses); the prd pool is the
+ * {@link selectCandidates} (the shared primitive `run` uses); the spec pool is the
  * pre-filtered {@link taskableSpecs} output; the lifecycle pools (`apply` /
  * `surface` / `triage`) are caller-built (none for `do`).
  *
@@ -235,7 +235,7 @@ export function selectPrioritised(
 
 	// The per-pool item lists, keyed by the orderable pool name. NOTE the
 	// vocabulary bridge: `build` = the eligible-TASK pool (namespace `task`),
-	// `task` = the taskable-prd pool (namespace `prd`) — the action names, not the
+	// `task` = the taskable-spec pool (namespace `prd`) — the action names, not the
 	// item namespaces (task `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,

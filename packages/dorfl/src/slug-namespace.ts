@@ -263,7 +263,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 	const parsed = parseSlugArg(input.arg);
 
 	if (parsed.explicit === 'observation') {
-		// `do` spans the task/prd namespaces ONLY (build a task OR task a prd).
+		// `do` spans the task/spec namespaces ONLY (build a task OR task a spec).
 		// The `observation` namespace is `advance`'s alone (triage). Reject it here
 		// rather than let a `do obs:<slug>` resolve into a namespace `do` cannot act
 		// on — point the human at the verb that owns it.
@@ -289,7 +289,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 }
 
 /**
- * Resolve a slug argument for the `advance` verb (prd `advance-loop`, task
+ * Resolve a slug argument for the `advance` verb (spec `advance-loop`, task
  * `advance-verb-resolver`). `advance` is the SIBLING top-level verb (NOT a `do`
  * subcommand) that reuses this SAME shared `prefix:arg` resolver, EXTENDED with
  * the `observation` namespace `do` does not span:
@@ -362,6 +362,6 @@ export function resolveTaskOnlyArg(arg: string): string {
 		);
 	}
 	// Bare or `task:` → the task slug. (A bare slug on a task-only command is
-	// unambiguously the task; the prd namespace is unreachable here.)
+	// unambiguously the task; the spec namespace is unreachable here.)
 	return parsed.slug;
 }

@@ -12,7 +12,7 @@ import {
 } from './work-layout.js';
 
 /**
- * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (prd
+ * The **one-slug-one-folder LINT** over the `work/` lifecycle ledger (spec
  * `ledger-integrity`, story 3 — the READ-side belt-and-suspenders for defect 1).
  *
  * `work/` IS the ledger: a task's STATUS is the FOLDER its single `.md` lives in
@@ -40,14 +40,14 @@ import {
  * The `work/` STATUS folders a task's ledger file can rest in — the
  * one-slug-one-folder set this lint is asserted over (WORK-CONTRACT.md
  * "status = the folder"). After the capstone cut-over (task
- * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, prd
+ * `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, spec
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the ONLY `work/` moves on `main` are the DURABLE RESTING transitions, so a
  * task's ledger file can rest only in the DURABLE set: the pool `backlog/`, the
  * terminal `done/`, and the task regime's PER-REGIME "won't-proceed" terminal
- * `tasks/cancelled/` (the per-regime split of the previous shared `dropped/`, prd
+ * `tasks/cancelled/` (the per-regime split of the previous shared `dropped/`, spec
  * `folder-taxonomy-reorg-and-rename` US #10; the specific REASON lives in the item
- * BODY as a `reason:` value). The prd regime's terminal `prds/dropped/` is a
+ * BODY as a `reason:` value). The spec regime's terminal `specs/dropped/` is a
  * SEPARATE namespace and is NOT a task-status folder. The transient
  * `in-progress`/`needs-attention`/`tasking`/
  * `advancing` are GONE from `main`'s tree — they are per-item lock-ref state
@@ -58,11 +58,11 @@ import {
  * `cancelled`). A read-side lint surfaces a slug that ends up in `tasks/cancelled/`
  * AND another status folder, so the lint covers all three.
  *
- * The capture buckets (`ideas`/`observations`/`findings`) and the prd-flow folders
- * (`prds/ready`/`prds/tasked`) are NOT task-status folders (WORK-CONTRACT.md: the buckets
- * are "exempt from status = folder"; the prd folders carry prds, a separate
+ * The capture buckets (`ideas`/`observations`/`findings`) and the spec-flow folders
+ * (`specs/ready`/`specs/tasked`) are NOT task-status folders (WORK-CONTRACT.md: the buckets
+ * are "exempt from status = folder"; the spec folders carry prds, a separate
  * namespace) — they are deliberately EXCLUDED so a slug that legitimately has both
- * a task and a same-named note/prd is never a false positive.
+ * a task and a same-named note/spec is never a false positive.
  */
 export {LEDGER_STATUS_FOLDERS, type LedgerStatusFolder} from './work-layout.js';
 
@@ -279,7 +279,7 @@ export interface LedgerSweepResult {
 }
 
 /**
- * The `gc`-STYLE ledger SWEEP (prd story 3's belt-and-suspenders): on demand,
+ * The `gc`-STYLE ledger SWEEP (spec story 3's belt-and-suspenders): on demand,
  * REPORT every slug present in more than one status folder of a LOCAL `work/`
  * ledger, naming the folders and the CANDIDATE canonical folder — and NEVER
  * auto-delete. A human confirms the cleanup (keep the canonical copy, delete the

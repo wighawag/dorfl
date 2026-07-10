@@ -5,7 +5,7 @@ import {join} from 'node:path';
  * folder-name union/array, the item-scan predicate, and the prefix-task helpers
  * used across `src/`.
  *
- * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` prd — the de-risking
+ * This is Phase 0 of the `folder-taxonomy-reorg-and-rename` spec — the de-risking
  * checkpoint. EVERY raw work-path literal (`join(cwd, 'work', ...)`, `'work/<folder>'`,
  * `'work/<folder>/'.length` prefix-tasks) and EVERY folder-name union/array that
  * used to be scattered across ~70 files now routes through here. The NAMES are
@@ -16,7 +16,7 @@ import {join} from 'node:path';
  * {@link WORK_FOLDER_NAME} (and `git mv` the on-disk folders) and NOTHING ELSE.
  * Call sites reference folders by their SYMBOLIC key (`'tasks-ready'`,
  * `'specs-ready'`, …), never by a raw string, so a folder-VALUE flip never
- * re-touches a single call site (a KEY rename, e.g. the prd→spec cutover below,
+ * re-touches a single call site (a KEY rename, e.g. the spec→spec cutover below,
  * is a mechanical relabel of the key literal at each site — behaviour-preserving).
  *
  * Domain note (crown-jewel invariant): a `work/` tree is a set of governance
@@ -65,12 +65,12 @@ export const WORK_ROOT = 'work' as const;
  *     and `needs-attention` (both are really lock-ref state, NOT durable folders;
  *     routed here only so no reader hand-writes the literal).
  *
- * NOTE on the prd→spec vocabulary cutover
+ * NOTE on the spec→spec vocabulary cutover
  * (`rename-spec-work-layout-and-folders`, migrate-batch 1 of
  * `prd-to-spec-vocabulary-cutover-and-migration-command`): the spec-regime KEYS
  * below now read in the `spec` vocabulary (`specs-proposed`/`specs-ready`/
  * `specs-tasked`/`specs-dropped`) AND their VALUES flip to `work/specs/*` in
- * lockstep with the on-disk `git mv work/prds/* → work/specs/*`. Unlike the earlier
+ * lockstep with the on-disk `git mv work/specs/* → work/specs/*`. Unlike the earlier
  * key-only relabel, this batch moves the folders too, so the KEY and VALUE change
  * together and the self-renaming-folder guard stays green. The KEY rename is a
  * mechanical relabel of the key literal at each call site (behaviour-preserving);
@@ -193,7 +193,7 @@ export function isWorkItemFile(name: string): boolean {
  * order: `in-progress` over `tasks-ready`, with `done` appended only behind the
  * stranded-continue gate. Order is load-bearing — kept exactly as the original
  * union/array. (`tasks-backlog` is NOT in this DEFAULT order: it is appended at
- * the LOWEST priority ONLY behind the explicit `--allow-backlog` flag, prd
+ * the LOWEST priority ONLY behind the explicit `--allow-backlog` flag, spec
  * `do-allow-backlog-drive-staged-tasks-without-promotion` — see
  * {@link TaskResolutionFolder}.)
  */

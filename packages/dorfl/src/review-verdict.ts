@@ -4,7 +4,7 @@
  * (`work/protocol/REVIEW-PROTOCOL.md`, source-of-truth
  * `skills/setup/protocol/REVIEW-PROTOCOL.md`).
  *
- * This is the keystone of the `runner-invoked-disciplines-into-protocol` prd
+ * This is the keystone of the `runner-invoked-disciplines-into-protocol` spec
  * (task 1, D4): every runner-invoked review prompt builder
  * ({@link buildReviewPrompt}, {@link buildTaskAcceptancePrompt} in
  * `review-gate.ts`; {@link buildLoneTaskReviewPrompt} in `intake.ts`;
@@ -84,7 +84,7 @@ export interface ReviewVerdict {
 	questions?: string[];
 	/** For the tasker improver loop: specific tasks to emit `needsAnswers: true`. */
 	uncertainTasks?: UncertainTask[];
-	/** For the tasker improver loop: route the WHOLE prd to needs-attention. */
+	/** For the tasker improver loop: route the WHOLE spec to needs-attention. */
 	decompositionUnclear?: {questions: string[]};
 }
 

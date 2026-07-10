@@ -3,7 +3,7 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
- * The CI-integration deliverable for the `advance` loop (prd `advance-loop`,
+ * The CI-integration deliverable for the `advance` loop (spec `advance-loop`,
  * task `advance-install-ci`, US #27/28): the advance-loop CAPABILITY as a
  * DOCUMENTED workflow TEMPLATE (not a CLI subcommand; see the task's `##
  * Decisions`). The template at `docs/ci/advance-loop.yml.template` wires "on cron
@@ -11,8 +11,8 @@ import {fileURLToPath} from 'node:url';
  * `advance` driver; it is NOT entangled with the tick.
  *
  * The unified, per-capability `install-ci` CLI (auth/secrets wizard + GitHub
- * adapter) is owned by the separate `runner-in-ci` prd
- * (`work/prds/tasked/runner-in-ci.md`); when built it EMITS this template as its
+ * adapter) is owned by the separate `runner-in-ci` spec
+ * (`work/specs/tasked/runner-in-ci.md`); when built it EMITS this template as its
  * advance-loop capability. This module's job is unchanged either way: locate +
  * STRUCTURALLY VALIDATE the template, so its shape is a contract the CLI can
  * safely emit (see `docs/ci/README.md` "Relationship to the `install-ci` CLI").
@@ -136,7 +136,7 @@ export function validateAdvanceCiTemplate(
 	// The `enumerate` `jq` must UNION taskable prds into the matrix
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `DORFL_AUTO_TASK` dead on the hourly
-	// cron — a ready ungated PRD would never become a matrix leg. The `jq` must
+	// cron — a ready ungated SPEC would never become a matrix leg. The `jq` must
 	// read `scan --json`'s taskable-SPEC pool (`repos[].specs[]` + `cwd.repo.specs[]`)
 	// and emit `spec:<slug>` legs alongside the `task:<slug>` legs.
 	require('propose-enumerates-taskable-specs', /"spec:" \+ \.slug/.test(text) &&

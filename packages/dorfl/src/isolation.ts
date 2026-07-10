@@ -112,10 +112,10 @@ export interface PrepareInput {
 	slug: string;
 	/**
 	 * The item TYPE — `'task'` for a build (intake/`do task:`), `'prd'` for a
-	 * prd-tasking run (`do prd:`). It NAMESPACES the work branch via
-	 * {@link workBranchRef} so a same-slug task and prd never collide on the
+	 * spec-tasking run (`do prd:`). It NAMESPACES the work branch via
+	 * {@link workBranchRef} so a same-slug task and spec never collide on the
 	 * arbiter branch. Defaults to `'task'` (the overwhelmingly-common build
-	 * path); the prd-tasking path passes `'prd'` explicitly.
+	 * path); the spec-tasking path passes `'prd'` explicitly.
 	 */
 	type?: SlugNamespace;
 	/**

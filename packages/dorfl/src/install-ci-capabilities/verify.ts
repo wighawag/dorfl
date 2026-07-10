@@ -1,5 +1,5 @@
 /**
- * The VERIFY capability emitter (prd
+ * The VERIFY capability emitter (spec
  * `land-time-reverify-and-parallel-merge-ceiling`, task
  * `install-ci-tier1-branch-protection`; Story 11 — Tier-1 GitHub ceiling).
  * A SELF-REGISTERING module: it calls {@link registerCapability} at import

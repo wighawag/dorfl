@@ -89,7 +89,7 @@ export type LedgerTransitionKind =
 	| 'tasking'
 	| 'advancing'
 	/**
-	 * The **promote** transition (prd `staging-pool-position-gate-and-trust-model`,
+	 * The **promote** transition (spec `staging-pool-position-gate-and-trust-model`,
 	 * task `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED task
 	 * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` to enter the
 	 * agent-eligible pool. A durable `main` move, the same category as `requeue`
@@ -174,7 +174,7 @@ export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
  * move result the folder-native mechanism produces. The RECOVERABLE branch push
  * outcome rides on `branchPush` (the caller reads it rather than assuming
  * "pushed" off the local move). The OBSERVABLE half is now the per-item lock
- * `state: stuck` amend (prd `ledger-status-per-item-lock-refs`); there is no
+ * `state: stuck` amend (spec `ledger-status-per-item-lock-refs`); there is no
  * separate on-`main` surface outcome to report.
  */
 export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
@@ -773,7 +773,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
  * The SOLE stuck-state RECORD: amend the item's HELD per-item lock
  * `active → stuck` + the FULL reason prose + any agent-surfaced questions, via the
  * state machine's mark-stuck CAS amend ({@link markStuckItemLock}) — task
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; prd
+ * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; spec
  * `ledger-status-per-item-lock-refs` US #5/#8; ADR
  * `ledger-status-on-per-item-lock-refs`). This REPLACES the `git mv →
  * needs-attention/` folder bounce + its on-`main` surface + branch push: the
