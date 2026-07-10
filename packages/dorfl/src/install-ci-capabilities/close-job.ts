@@ -1,5 +1,5 @@
 /**
- * The CLOSE-JOB capability emitter (PRD `runner-in-ci`, task
+ * The CLOSE-JOB capability emitter (SPEC `runner-in-ci`, task
  * `install-ci-close-job-workflow`; capability E: close issues when their work
  * lands). A SELF-REGISTERING module: it calls {@link registerCapability} at import
  * time, so {@link loadCapabilityRegistry} picks it up WITHOUT any edit to a shared

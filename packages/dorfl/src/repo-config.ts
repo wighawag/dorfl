@@ -61,16 +61,16 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
  */
 export const REPO_ALLOWED_KEYS = [
 	'integration',
-	// `taskingIntegration` (the per-TRANSITION override for the prd→tasks TASKING
+	// `taskingIntegration` (the per-TRANSITION override for the spec→tasks TASKING
 	// transition ONLY) is a genuine repo property exactly like `integration`: whether
-	// THIS repo tasks a prd straight onto `main` (task FILES land, no PR) while it
+	// THIS repo tasks a spec straight onto `main` (task FILES land, no PR) while it
 	// still BUILDS each task as a reviewable PR is agreed by all collaborators +
 	// travels with the repo. Resolved per-repo through the SAME chain as
 	// `integration`, then falls back to `integration` when unset. DISTINCT from
 	// intake's per-EMITTED-TYPE `{task, prd}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'taskingIntegration',
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, prd
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, spec
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
 	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
@@ -91,7 +91,7 @@ export const REPO_ALLOWED_KEYS = [
 	// through the SAME chain as `tasksLandIn` (flag `--specs-land-in` > env
 	// `DORFL_SPECS_LAND_IN` > per-repo > global > built-in). Fed into the shared
 	// placement resolver as the configured-default rung for the spec lifecycle
-	// (`src/placement.ts`). The sole spec-placement key after the prd → spec HARD
+	// (`src/placement.ts`). The sole spec-placement key after the `prd` → `spec` HARD
 	// CUTOVER (the legacy `prdsLandIn` key is GONE — clean break, no accepted alias).
 	'specsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
@@ -116,7 +116,7 @@ export const REPO_ALLOWED_KEYS = [
 	'autoBuild',
 	// `autoTask` (may an agent auto-task undeclared prds in this repo?) is a
 	// genuine repo property — the tasking-autonomy mirror of `autoBuild`
-	// (`work/prds/auto-task.md`), resolved per-repo through the same chain.
+	// (`work/specs/auto-task.md`), resolved per-repo through the same chain.
 	'autoTask',
 	// `observationTriage` (the 3-state `off|ask|auto` gate over the observation
 	// INBOX) is a genuine repo property — the observation-side question-surfacing
@@ -125,7 +125,7 @@ export const REPO_ALLOWED_KEYS = [
 	// boolean (no alias; no external users owed a migration window, 2026-06-12).
 	'observationTriage',
 	// `mergeQuestions` (the 3-state `off|ask|auto` gate over the MERGE-QUESTION
-	// SURFACER — prd `land-time-reverify-and-parallel-merge-ceiling` Story 17 /
+	// SURFACER — spec `land-time-reverify-and-parallel-merge-ceiling` Story 17 /
 	// task `merge-questions-gate-axis`) is a genuine repo property exactly like
 	// `observationTriage`: whether THIS repo's unmerged `work/*` branches surface
 	// as merge-questions (and whether they auto-land) is agreed by all
@@ -136,13 +136,13 @@ export const REPO_ALLOWED_KEYS = [
 	// (flag > env > per-repo > global > default `ask`).
 	'mergeQuestions',
 	// `surfaceBlockers` (the BOOLEAN gate over DECLARED blocked work — whether a
-	// task/prd carrying `needsAnswers:true` is rendered into a question sidecar) is a
+	// task/spec carrying `needsAnswers:true` is rendered into a question sidecar) is a
 	// genuine repo property — the blocked-work side of the question-surfacing gate
 	// family (ADR `ci-config-policy-and-gate-family`), the orthogonal peer of
 	// `observationTriage`, resolved per-repo through the same chain as `autoBuild`.
 	'surfaceBlockers',
 	// `surfaceStaging` (the BOOLEAN gate-family member that widens SURFACE into
-	// STAGING — prd `staging-surface-and-apply-promote-safety` F2) is a genuine
+	// STAGING — spec `staging-surface-and-apply-promote-safety` F2) is a genuine
 	// repo property exactly like its siblings (`surfaceBlockers`/`autoBuild`):
 	// whether THIS repo inspects staging for questions is agreed by all
 	// collaborators + travels with the repo. Default `true`; resolved per-repo
@@ -161,8 +161,8 @@ export const REPO_ALLOWED_KEYS = [
 	// (machine paths/commands), so they are rejected below.
 	'model',
 	'harness',
-	// Gate 2 (PR/code review) policy is a genuine repo property (GATES prd
-	// `work/prds/tasked/review.md`), resolved per-repo like `integration`/`autoBuild`:
+	// Gate 2 (PR/code review) policy is a genuine repo property (GATES spec
+	// `work/specs/tasked/review.md`), resolved per-repo like `integration`/`autoBuild`:
 	// whether this repo runs Gate 2 (`review`), which model the review agent runs
 	// on (`reviewModel`), and the revise↔review loop bound (`reviewMaxRounds`).
 	// `reviewModel` is routing intent (not auth), so — like `model` — it is
@@ -185,7 +185,7 @@ export const REPO_ALLOWED_KEYS = [
 	// artifact (and pays the per-gate install cost) is agreed by all collaborators
 	// + travels with the repo. Resolved per-repo through the SAME chain.
 	'freshWorktreeGate',
-	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — prd
+	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — spec
 	// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a))
 	// is a genuine repo property exactly like `freshWorktreeGate`: "how many
 	// re-rebase-and-retry attempts before a contender bounces to needs-attention"
@@ -195,7 +195,7 @@ export const REPO_ALLOWED_KEYS = [
 	// CAS still costs only a re-rebase + re-gate retry, never a `--force`.
 	'mergeRetries',
 	// `strictMergeApproval` (the OPT-IN strictness layered on the OQ6
-	// stale-approval default — prd `land-time-reverify-and-parallel-merge-ceiling`
+	// stale-approval default — spec `land-time-reverify-and-parallel-merge-ceiling`
 	// sidecar OQ6 / task `strict-merge-approval-gate`) is a genuine repo property
 	// exactly like `mergeQuestions`/`mergeRetries`: whether THIS repo re-surfaces
 	// the merge-question on a merge-base change (the host-agnostic analogue of

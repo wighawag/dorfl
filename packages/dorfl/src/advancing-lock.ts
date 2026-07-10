@@ -7,11 +7,11 @@ import {acquireItemLock, releaseItemLock} from './item-lock.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 
 /**
- * The **advancing-lock BORROW** (prd `advance-loop`, task
+ * The **advancing-lock BORROW** (spec `advance-loop`, task
  * `advancing-lock-borrow`, US #19–24).
  *
  * The surface/apply/triage phase's SHORT borrow. As of the capstone cut-over
- * (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, prd
+ * (task `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`, spec
  * `ledger-status-per-item-lock-refs`; ADR `ledger-status-on-per-item-lock-refs`)
  * the legacy `work/advancing/<entry>.md` presence-MARKER on `main` is GONE. The
  * advancing borrow now rides ONLY the UNIFIED per-item lock
@@ -21,7 +21,7 @@ import {realSleep, type Sleep} from './retry-backoff.js';
  *
  * The borrow is keyed by item IDENTITY (`<type>-<slug>`, via
  * {@link resolveSidecarIdentity} — the single source of truth the unified lock,
- * the sidecar, and the work branch all share), so a task, a prd, and an
+ * the sidecar, and the work branch all share), so a task, a spec, and an
  * observation that share a slug NEVER collide, and the SAME `<entry>` ref means an
  * `advance` hold is MUTUALLY EXCLUSIVE with a claim/task hold of the SAME item BY
  * CONSTRUCTION (the second acquirer loses the SAME create-only ref CAS).
@@ -29,7 +29,7 @@ import {realSleep, type Sleep} from './retry-backoff.js';
  * It is file-ORTHOGONAL to the item it locks: the item's own lifecycle file NEVER
  * moves (the borrow is a LOCK, not a lifecycle transition), which is exactly why
  * it can lock items resting in DIFFERENT source folders (a backlog task, a `prds/`
- * prd, an `observations/` note) with one uniform mechanism.
+ * spec, an `observations/` note) with one uniform mechanism.
  *
  * **TREE-LESS vs BUILD/TASK RUNGS (`acquireUnified`).** The advance tick sets
  * `acquireUnified` PER RUNG (the policy lives in `advance.ts`, where the rung is
@@ -40,7 +40,7 @@ import {realSleep, type Sleep} from './retry-backoff.js';
  *     IS the advance∥claim / advance∥task exclusion. Acquire/release delegate to
  *     {@link acquireItemLock} / {@link releaseItemLock} (a parentless ref CAS, no
  *     working-tree write, no retry budget).
- *   - **BUILD-TASK / TASK-PRD rungs** never take the unified lock at the advance
+ *   - **BUILD-TASK / TASK-SPEC rungs** never take the unified lock at the advance
  *     layer (`acquireUnified` false): `performAdvance` orchestrates an inner
  *     `performDo` that ITSELF acquires the SAME `task-<slug>`/`prd-<slug>` ref
  *     (the create-only CAS with NO re-entrancy/auto-steal), so taking it again here

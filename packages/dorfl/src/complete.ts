@@ -160,7 +160,7 @@ export interface CompleteOptions {
 	 */
 	freshWorktreeGate?: boolean;
 	/**
-	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, prd
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
 	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
 	 * (a)). Threaded verbatim into {@link performIntegration} as `mergeRetries` so
 	 * the resolved per-repo value controls how many re-rebase-and-retry attempts
@@ -172,7 +172,7 @@ export interface CompleteOptions {
 	/** Skip the acceptance gate (human-only escape hatch; never used unattended). */
 	skipVerify?: boolean;
 	/**
-	 * **`--allow-backlog`** (prd
+	 * **`--allow-backlog`** (spec
 	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): TREAT a
 	 * `tasks/backlog/`-resident body (staging) as a VALID build source, so a
 	 * staged task driven in place done-moves `tasks/backlog/ → tasks/done/`
@@ -185,7 +185,7 @@ export interface CompleteOptions {
 	 */
 	allowBacklog?: boolean;
 	/**
-	 * **Gate 2 — the PR/code review gate** (GATES prd `work/prds/tasked/review.md`). When
+	 * **Gate 2 — the PR/code review gate** (GATES spec `work/specs/tasked/review.md`). When
 	 * `true`, after the green `verify` and BEFORE the done-move, run the `review`
 	 * SKILL as a FRESH-CONTEXT agent (its own harness launch) and route its verdict:
 	 * `approve` → proceed to done-move/commit/integrate; `block` → route to
@@ -417,7 +417,7 @@ export async function performComplete(
 		return await runComplete(options, note);
 	} catch (err) {
 		// AUTONOMOUS-STRAND SURFACE (task
-		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, prd
+		// `autonomous-integration-refusal-surfaces-not-strands-in-progress`, spec
 		// `ledger-integrity` story 7). On the AUTONOMOUS path (`surfaceArbiter` set
 		// — the human-vs-autonomous gate the core's other failures use), a SOURCE-
 		// STRAND `CompleteRefusal` (the slug-is-stuck `nothing to complete`) and the
@@ -676,7 +676,7 @@ async function runComplete(
 	const inProgress = workItemPath(cwd, 'in-progress', slug);
 	const done = workItemPath(cwd, 'done', slug);
 	const onBacklog = existsSync(backlog);
-	// `--allow-backlog` drive (prd
+	// `--allow-backlog` drive (spec
 	// `do-allow-backlog-drive-staged-tasks-without-promotion`): a staged task driven
 	// in place RESTS in `tasks/backlog/` (claim never moved it). Detect it as a build
 	// source so the done-move goes `tasks/backlog/ → tasks/done/` DIRECTLY (the
@@ -699,7 +699,7 @@ async function runComplete(
 			!onPreBacklog &&
 			!onInProgress &&
 			recordAtRenamedDonePosition(cwd, slug));
-	// STRANDED-DONE AUTO-RECOVER (prd `ledger-integrity` story 6, the autonomous
+	// STRANDED-DONE AUTO-RECOVER (spec `ledger-integrity` story 6, the autonomous
 	// half of `finish-already-committed-branch`). When neither in-progress/ nor
 	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
 	// branch was already built + done-moved + committed by a prior run that never
@@ -892,7 +892,7 @@ async function runComplete(
 		freshWorktreeGate: options.freshWorktreeGate,
 		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
 		// git-alone FLOOR of the cross-job land-queue, resolved through the gate-family
-		// precedence chain (prd `land-time-reverify-and-parallel-merge-ceiling` Story
+		// precedence chain (spec `land-time-reverify-and-parallel-merge-ceiling` Story
 		// 5). Threaded so a wide-matrix CI's raised cap actually reaches the merge loop.
 		mergeRetries: options.mergeRetries,
 		skipVerify: options.skipVerify,
@@ -983,7 +983,7 @@ async function runComplete(
 		// because the work is already integrated and the branch may or may not
 		// still exist locally.
 		//
-		// CROSS-SUBSTRATE RELEASE (prd `ledger-status-per-item-lock-refs` US #9/#10;
+		// CROSS-SUBSTRATE RELEASE (spec `ledger-status-per-item-lock-refs` US #9/#10;
 		// task `complete-lock-then-durable-main-move-crash-safe`): the durable
 		// `main` record is already terminal (the kept tip is provably on
 		// `<arbiter>/main`), so the per-item lock claim took is now stale: release it
@@ -1021,7 +1021,7 @@ async function runComplete(
 	const commitMessage = core.commitMessage;
 	const mode = result.mode;
 
-	// CROSS-SUBSTRATE RELEASE, gated on the work being DURABLY ON `main` (prd
+	// CROSS-SUBSTRATE RELEASE, gated on the work being DURABLY ON `main` (spec
 	// `ledger-status-per-item-lock-refs` US #9/#10; ADR
 	// `ledger-status-on-per-item-lock-refs`; the trail's Amendment 6; task
 	// `complete-lock-then-durable-main-move-crash-safe`). ORDER MATTERS: the
@@ -1158,7 +1158,7 @@ async function runComplete(
 /**
  * Release the per-item lock `claim` ALSO acquired (`action: implement`, keyed
  * `task:<slug>`) AFTER the durable `main` move has landed — the SECOND, lock-
- * release half of complete's cross-substrate ordering (prd
+ * release half of complete's cross-substrate ordering (spec
  * `ledger-status-per-item-lock-refs` US #9/#10; task
  * `complete-lock-then-durable-main-move-crash-safe`).
  *

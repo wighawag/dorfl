@@ -23,7 +23,7 @@ import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
 /**
- * The **`advance` one-shot DRIVER** (prd `advance-loop`, task
+ * The **`advance` one-shot DRIVER** (spec `advance-loop`, task
  * `advance-drivers-and-gates`, US #2/7/23/25/26) — the SEQUENTIAL driver that
  * WRAPS the substrate-agnostic advance TICK ({@link performAdvance}) over named
  * item(s) or the bare eligible-SET form. It is the in-place counterpart of
@@ -49,7 +49,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **The FLAT per-action gate family (US #23)** falls out of the SELECTION layer,
  * exactly as it does for `do`: the eligible-pool scan only SURFACES a build item
- * when `autoBuild` is on and a task-a-prd item when `autoTask` is on (the gate
+ * when `autoBuild` is on and a task-a-spec item when `autoTask` is on (the gate
  * is a policy on the autonomous-SELECTION step, NOT on the explicit verb a human
  * typed — an explicitly-NAMED `advance <slug>` builds regardless, mirroring
  * `do <task>` vs `autoBuild`). SURFACE + APPLY are ALWAYS allowed — they run
@@ -83,7 +83,7 @@ type SharedAdvanceContext = AdvanceContext;
 export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The resolved repo config — provides `autoBuild` (the build gate for the
-	 * task pool), `autoTask` (the task-a-prd gate for the prd pool), and
+	 * task pool), `autoTask` (the task-a-spec gate for the spec pool), and
 	 * `selectionOrder` (the configurable cross-pool order). The per-action gate
 	 * family is APPLIED HERE, at the selection layer (the policy-on-autonomous-
 	 * selection point).
@@ -105,7 +105,7 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	count?: number;
 	/** Override the single-tick runner (tests inject a stub). Defaults to {@link performAdvance}. */
 	run?: AdvanceTickRunner;
-	/** Override the read seam (prd pool); defaults to the active {@link ledgerRead}. */
+	/** Override the read seam (spec pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 	/**
 	 * The LIFECYCLE-POOL create-gates (task `advance-autopick-lifecycle-pools`),
@@ -180,7 +180,7 @@ export async function performAdvanceAuto(
 	);
 
 	// Pool 2 — TASKABLE prds filtered by `autoslice-gate`'s predicate (gated on
-	// `autoTask`). With `autoTask` off NO prd is selected — the task rung is
+	// `autoTask`). With `autoTask` off NO spec is selected — the task rung is
 	// never reached by the bare/`-n` selection.
 	const pool = read.resolveSpecPool({repoPath: cwd});
 	const specCandidates: SpecCandidate[] = pool.specs.map((spec) => ({
@@ -238,7 +238,7 @@ export async function performAdvanceAuto(
  * Run the EXPLICIT multi-arg form (`advance <a> <b> …`): the named items in the
  * GIVEN order (no pool/priority — the operator chose them). Each arg is run
  * through the existing advance tick, which itself resolves bare/`task:`/`prd:`/
- * `obs:` (so a named prd drives the task rung, an `obs:` the triage rung, a
+ * `obs:` (so a named spec drives the task rung, an `obs:` the triage rung, a
  * collision errors), SEQUENTIALLY. A NAMED item is the always-allowed path — its
  * surface/apply rung runs regardless of the per-action gates.
  */
@@ -260,7 +260,7 @@ export async function performAdvanceArgs(
 /**
  * Run a list of selected items through the existing advance tick, SEQUENTIALLY
  * (US #25 — `-n` is always sequential), threading the shared context to each. For
- * the pool path the arg encodes the namespace (`prd:<slug>` for a selected prd,
+ * the pool path the arg encodes the namespace (`prd:<slug>` for a selected spec,
  * bare slug for a task); for the explicit-arg path the caller's raw arg is passed
  * verbatim. Each tick is INDEPENDENTLY `advancing`-lock-guarded inside
  * {@link performAdvance} — sequential here means one item at a time, never a
@@ -363,7 +363,7 @@ export async function runAdvanceTickWithTreelessPublish(
  *     the tick surfaces/applies);
  *   - `task` → bare `<slug>` (an eligible task's build rung, OR a `needsAnswers`
  *     task the tick surfaces/applies).
- * The tick re-classifies each arg, so a `needsAnswers`-blocked task/prd reaches
+ * The tick re-classifies each arg, so a `needsAnswers`-blocked task/spec reaches
  * surface/apply and an untriaged observation reaches triage — the classifier +
  * rung bodies are unchanged; only this selection->arg mapping is new.
  */

@@ -1,7 +1,7 @@
 /**
- * The `install-ci` ISSUE-INTAKE capability (prd `runner-in-ci`, task
+ * The `install-ci` ISSUE-INTAKE capability (spec `runner-in-ci`, task
  * `install-ci-intake-trigger-and-review-surface`; capability D: consider incoming
- * issues → task/prd, AND insertion point E: surface the review verdict back into
+ * issues → task/spec, AND insertion point E: surface the review verdict back into
  * the issue thread). This module GENERATES the one fixed intake workflow file and
  * STRUCTURALLY VALIDATES it, mirroring the snapshot-assertion style of
  * `advance-lifecycle-template.ts` / `advance-ci-template.ts` (the package depends on
@@ -10,13 +10,13 @@
  * ({@link deriveIntakeFlags}) — CI's merge-vs-propose POLICY, the load-bearing
  * testable logic the workflow encodes at runtime.
  *
- * SCOPE FENCE (prd Out-of-Scope): the issue→artifact TRANSFORM engine is
+ * SCOPE FENCE (spec Out-of-Scope): the issue→artifact TRANSFORM engine is
  * `issue-intake`'s (`intake <N>` + its four-outcome dispatch + the per-outcome
  * KNOBS + the lone-task review that posts to the issue thread). CI only
  * WIRES/SCHEDULES/INVOKES it and owns the merge-vs-propose POLICY + the delivery
  * surface. This module emits NO transform; it emits the WORKFLOW that calls it.
  *
- * The discipline (prd capability-D row + the merge-vs-propose POLICY + the two
+ * The discipline (spec capability-D row + the merge-vs-propose POLICY + the two
  * RESOLVED design decisions in the task):
  *
  *   - TRIGGERS: `issues` opened, `issue_comment` created, and a label
@@ -36,7 +36,7 @@
  *     everywhere" path is a LOUD, NON-DEFAULT opt-in — the default is conservative
  *     (propose / human-in-the-loop).
  *   - INSERTION POINT E (the issue-thread review surface): the review verdict over
- *     intake's generated prds/tasks is surfaced into the ISSUE THREAD via the
+ *     intake's generated specs/tasks is surfaced into the ISSUE THREAD via the
  *     `IssueProvider.postIssueComment` seam (issue thread, by NUMBER — NOT the PR
  *     seam `postPRComment`, which is keyed by url). This is REUSED, not new:
  *     `intake <N>` already runs the lone-task review/edit loop and posts its
@@ -65,7 +65,7 @@ export const INTAKE_TRIGGER_CAPABILITY_ID = 'intake';
 
 /** The wizard-facing label for the issue-intake capability. */
 export const INTAKE_TRIGGER_CAPABILITY_LABEL =
-	'Consider incoming issues → task/prd + surface the review verdict into the issue thread (the intake trigger: issues / issue_comment / label)';
+	'Consider incoming issues → task/spec + surface the review verdict into the issue thread (the intake trigger: issues / issue_comment / label)';
 
 /** The repo-relative path (under the output base) of the emitted workflow. */
 export const INTAKE_TRIGGER_WORKFLOW_PATH = 'workflows/intake.yml';
@@ -106,7 +106,7 @@ export interface IntakeIntegrationFlags {
 	task: 'merge' | 'propose';
 	/**
 	 * The ORIGIN-TRUST verdict CI passes to `intake <N>` via `--origin-trust`
-	 * (task `untrusted-origin-forces-build-propose`) so the emitted prd/task is
+	 * (task `untrusted-origin-forces-build-propose`) so the emitted spec/task is
 	 * STAMPED with how it was born. Derived from the SAME `author_association` case
 	 * as the integration flags (it IS `authorTrusted` collapsed to the wire value),
 	 * so the stamp and the integration mode CANNOT desync. `intake.ts` writes it
@@ -134,7 +134,7 @@ export interface IntakeGateState {
 
 /**
  * DERIVE the per-outcome merge-vs-propose flags from the gate state COMPOSED with
- * author-trust — CI's merge-vs-propose POLICY (prd "merge-vs-propose POLICY" +
+ * author-trust — CI's merge-vs-propose POLICY (spec "merge-vs-propose POLICY" +
  * "Composed with AUTHOR-TRUST"; task Decision 1). This is the load-bearing pure
  * logic the workflow encodes at runtime (it reads `author_association` off the
  * event payload and sets the flags accordingly):
@@ -167,9 +167,9 @@ export function deriveIntakeFlags(options: {
 	// ORIGIN-TRUST stamp (task `untrusted-origin-forces-build-propose`): the SAME
 	// author-trust verdict, collapsed to the wire value `intake` stamps onto the
 	// emitted artifact. Derived HERE — next to the integration flags, off the SAME
-	// `authorTrusted` input — so the stamp and the task/prd modes cannot desync.
+	// `authorTrusted` input — so the stamp and the task/spec modes cannot desync.
 	// It is NOT a re-resolution of trust (CI already resolved it); it is the verdict
-	// being CARRIED so it survives the prd/task merge boundary (the becomes-code
+	// being CARRIED so it survives the spec/task merge boundary (the becomes-code
 	// checkpoint is not laundered when the file lands on main).
 	const originTrust: 'trusted' | 'untrusted' = authorTrusted
 		? 'trusted'
@@ -216,12 +216,12 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 	const setupWith = providerSecretsWithBlock(config);
 	return `\
 # dorfl — the ISSUE INTAKE trigger in CI (capability D: consider incoming
-# issues → task/prd, PLUS insertion point E: surface the review verdict into the
-# issue thread, prd runner-in-ci). EMITTED by \`dorfl install-ci\`; the human
+# issues → task/spec, PLUS insertion point E: surface the review verdict into the
+# issue thread, spec runner-in-ci). EMITTED by \`dorfl install-ci\`; the human
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — \`dorfl intake <N>\` reads issue #N + its comment thread,
-# runs a prompt→verdict decision (ask / task / PRD / bounce), and dispatches it.
+# runs a prompt→verdict decision (ask / task / SPEC / bounce), and dispatches it.
 # CI owns ONLY the trigger + the merge-vs-propose POLICY + the delivery surface;
 # the TRANSFORM is the engine's (the Out-of-Scope fence — CI re-implements none of
 # it). The lone-task review/edit loop \`intake\` already runs ALSO surfaces its
@@ -307,7 +307,7 @@ env:
   # permissive merge side; author-trust then forces propose for a task from an
   # untrusted author.
   DORFL_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
-  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted prd next?
+  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted spec next?
 
 jobs:
   intake:
@@ -365,8 +365,8 @@ jobs:
 
           # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
           # derived from the SAME \${trusted} case above (one author-trust read,
-          # two consumers — the task/prd modes AND the stamp — so they cannot
-          # desync). \`intake\` STAMPS this onto the emitted prd/task frontmatter
+          # two consumers — the task/spec modes AND the stamp — so they cannot
+          # desync). \`intake\` STAMPS this onto the emitted spec/task frontmatter
           # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
           # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
           # so a later auto-task/auto-build of an untrusted-origin artifact still
@@ -519,7 +519,7 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 	), 'the policy derivation must be able to emit `--propose-spec` (autoTask on).');
 	// ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
-	// case it uses for the task/PRD modes, and pass it to `intake` so the emitted
+	// case it uses for the task/SPEC modes, and pass it to `intake` so the emitted
 	// artifact is stamped (the stamp + the modes cannot desync).
 	require('derives-origin-trust-untrusted', /--origin-trust=untrusted\b/.test(
 		operative,

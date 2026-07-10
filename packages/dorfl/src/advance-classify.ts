@@ -1,5 +1,5 @@
 /**
- * The pure `advance` TICK classifier (prd `advance-loop`, task
+ * The pure `advance` TICK classifier (spec `advance-loop`, task
  * `advance-tick-classifier`) — the substrate-agnostic, read-only seam BOTH the
  * one-shot driver and the loop (`run`) driver wrap. Mirrors the existing pure
  * `categorise.ts` / `eligibility.ts` seams: NO model, NO lock, NO file mutation
@@ -15,7 +15,7 @@
  *
  *   needsAnswers: true?
  *   ├─ NO  → ANALYSE (state-appropriate rung: build a ready task / task a ready
- *   │        prd / triage an untriaged observation). Analysis MAY advance, OR
+ *   │        spec / triage an untriaged observation). Analysis MAY advance, OR
  *   │        SURFACE questions.
  *   └─ YES → sidecar exists?
  *            ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar)
@@ -39,7 +39,7 @@
  *
  * "ANALYSE" is NOT "always advance" — surface-and-pause is itself a rung, so the
  * ANALYSE branch resolves to the per-TYPE rung the executor will run (the cells
- * of the prd's "Per-item-type transitions" table): `build-task` (task),
+ * of the spec's "Per-item-type transitions" table): `build-task` (task),
  * `task-spec` (spec), `triage-observation` (observation) when there are no open
  * questions; `surface` (first-pass question generation) when `needsAnswers` but
  * no sidecar yet; `apply` when all entries are answered.
@@ -56,7 +56,7 @@ import {allAnswered} from './sidecar.js';
  * never a third state store.
  */
 export interface TickItem {
-	/** The item type — the state machine is per-TYPE (task / prd / observation). */
+	/** The item type — the state machine is per-TYPE (task / spec / observation). */
 	type: SidecarType;
 	/** Autonomy axis 2 (DISCOVERED): `true` ⇒ open questions block autonomous work. */
 	needsAnswers: boolean | undefined;
@@ -128,7 +128,7 @@ const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
  * Classify ONE tick PURELY from the item's two signals + its type — read-only,
  * no model, no lock, no file mutation. Returns the classified rung the executor
  * will later run (or `no-op` / `invariant-violation`). The decision tree is the
- * prd's per-item state machine, with invariant 1 asserted at the boundary:
+ * spec's per-item state machine, with invariant 1 asserted at the boundary:
  *
  *   - `needsAnswers` NOT true:
  *       - a sidecar present ⇒ INVARIANT 1 BROKEN (`sidecar-without-needsAnswers`)

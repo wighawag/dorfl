@@ -1,7 +1,7 @@
 /**
- * The ISSUE-INTAKE capability emitter (PRD `runner-in-ci`, task
+ * The ISSUE-INTAKE capability emitter (SPEC `runner-in-ci`, task
  * `install-ci-intake-trigger-and-review-surface`; capability D: consider incoming
- * issues → task/PRD, PLUS insertion point E: surface the review verdict into the
+ * issues → task/SPEC, PLUS insertion point E: surface the review verdict into the
  * issue thread). A SELF-REGISTERING module: it calls {@link registerCapability} at
  * import time, so {@link loadCapabilityRegistry} picks it up WITHOUT any edit to a
  * shared central list/switch (the file-orthogonality contract — this task and the

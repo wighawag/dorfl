@@ -65,7 +65,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// LOUDLY naming the variable + the valid options.
 	observationTriage: {enum: ['off', 'ask', 'auto']},
 	// The merge-question SURFACER gate is a 3-state ENUM coercion (mirrors
-	// `observationTriage`'s shape; SEPARATE axis with a HIGHER default, prd
+	// `observationTriage`'s shape; SEPARATE axis with a HIGHER default, spec
 	// `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
 	// `merge-questions-gate-axis`), so `DORFL_MERGE_QUESTIONS=off|ask|auto`
 	// works and a typo FAILS LOUDLY naming the variable + the valid options.
@@ -74,8 +74,8 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `DORFL_SURFACE_BLOCKERS=true|false` works and a typo FAILS LOUDLY.
 	surfaceBlockers: 'boolean',
 	// `surfaceStaging` (the BOOLEAN gate-family member that widens the SURFACE
-	// candidate set to include STAGING — `tasks/backlog/` + `prds/proposed/` —
-	// not only the agent pool; prd
+	// candidate set to include STAGING — `tasks/backlog/` + `specs/proposed/` —
+	// not only the agent pool; spec
 	// `staging-surface-and-apply-promote-safety` F2) coerces as a BOOLEAN like
 	// `autoBuild`/`surfaceBlockers`, so `DORFL_SURFACE_STAGING=true|false`
 	// works and a typo FAILS LOUDLY. Resolution chain identical to the other
@@ -98,7 +98,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Unset ⇒ the tasking transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
 	taskingIntegration: {enum: ['propose', 'merge']},
-	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — prd
+	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
 	// `pre-backlog`/`ready` enum, so `DORFL_TASKS_LAND_IN=ready` works and a
 	// typo FAILS LOUDLY. Same
@@ -113,7 +113,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// > global > built-in `pre-proposed`); fed into the shared placement resolver
 	// (`src/placement.ts`) as the configured-default rung for the spec lifecycle.
 	// The legacy `prdsLandIn` key / `DORFL_PRDS_LAND_IN` env are GONE after the
-	// prd → spec hard cutover (clean break).
+	// `prd` → `spec` hard cutover (clean break).
 	specsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
@@ -139,14 +139,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `freshWorktreeGate` is a BOOLEAN coercion (like `taskerLoop`), so
 	// `DORFL_FRESH_WORKTREE_GATE=true|false` works and a typo FAILS LOUDLY.
 	freshWorktreeGate: 'boolean',
-	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — prd
+	// `mergeRetries` (the cross-job merge serialiser's CAS-retry cap — spec
 	// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1 (a))
 	// coerces as a NUMBER (like `reviewMaxRounds`), so `DORFL_MERGE_RETRIES=20`
 	// works and a typo FAILS LOUDLY. A wide-matrix CI raises it; the default
 	// (1000 — the C2 large liveness ceiling) stays in place when unset.
 	mergeRetries: 'number',
 	// `strictMergeApproval` (the OPT-IN strictness layered on the OQ6
-	// stale-approval default — prd `land-time-reverify-and-parallel-merge-ceiling`
+	// stale-approval default — spec `land-time-reverify-and-parallel-merge-ceiling`
 	// sidecar OQ6 / task `strict-merge-approval-gate`) coerces as a BOOLEAN
 	// (like `freshWorktreeGate`), so `DORFL_STRICT_MERGE_APPROVAL=true|false`
 	// works and a typo FAILS LOUDLY. Default OFF; ON re-surfaces the
@@ -163,7 +163,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 /**
  * The env vars for the nested members of the `promptGuidance` namespace. The
  * key is the env var name (`DORFL_PROMPT_GUIDANCE_<MEMBER>`, the nested
- * naming the prd specifies); the value is the (boolean) coercion. Each member
+ * naming the spec specifies); the value is the (boolean) coercion. Each member
  * present in env contributes `{<member>: bool}` into a single
  * `promptGuidance` partial — mergeConfig replaces the whole namespace per the
  * layered precedence, which is correct because EVERY member is included (env

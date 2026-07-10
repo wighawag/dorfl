@@ -12,7 +12,7 @@ import type {TriageAutoKind} from './triage-gate.js';
 import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 /**
- * The engine-owned TRIAGE PERSIST (prd `advance-loop`, task `advance-rung-triage`,
+ * The engine-owned TRIAGE PERSIST (spec `advance-loop`, task `advance-rung-triage`,
  * US #16/17/24/30) — the half of the observation-triage rung the ENGINE owns (the
  * triage gate JUDGES, the engine ACTS). It is the SIBLING of `surface-persist.ts`
  * (the surface rung's persist) and `apply-persist.ts` (the apply rung's persist),
@@ -232,7 +232,7 @@ export interface PromoteObservationOptions {
 	 * triage-local {@link createItemThroughCas} writer (one local commit through the
 	 * CAS) — NOT intake's branch+integrate band — so the CAS-loser-backs-off
 	 * guarantee and the same-commit note deletion are uniform across the two routes.
-	 * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+	 * MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
 	 * produced VALUE is `'spec'` (the verdict outcome renamed from `'prd'`).
 	 */
 	artifact?: 'task' | 'spec';
@@ -287,22 +287,22 @@ export interface PromoteObservationResult {
 
 /**
  * Promote an ANSWERED observation to a NEW, SELF-CONTAINED artifact (US #1/#3/#8
- * for the task route; US #4/#9 for the PRD route): CAS-create the new item keyed
+ * for the task route; US #4/#9 for the SPEC route): CAS-create the new item keyed
  * on the NEW item's identity (its target path), with the observation note + its
  * answered sidecar `git rm`-ed IN THE SAME atomic commit. Promote is ONE commit
  * (create + delete).
  *
  * The artifact TYPE (`options.artifact`) selects the target + body shape: `'task'`
  * (default) mints `work/tasks/ready/<slug>.md`; `'prd'` mints
- * `work/prds/proposed/<slug>.md` (PRD staging — a human later promotes it to
+ * `work/specs/proposed/<slug>.md` (SPEC staging — a human later promotes it to
  * `ready/`). BOTH routes use the SAME triage-local {@link createItemThroughCas}
  * writer (NOT intake's `switchToWorkBranch`/`performIntegration` branch+integrate
  * band, which is intake's standalone front door): one create/integrate surface for
- * triage, the CAS-loser-backs-off guarantee uniform across task and PRD promotion.
+ * triage, the CAS-loser-backs-off guarantee uniform across task and SPEC promotion.
  *
  * The minted body is built FROM the observation (see {@link buildPromotedBody}):
  * its mechanism + fix prose is carried into the artifact's lead section (`## What
- * to build` for a task, `## Problem Statement` for a PRD), and its
+ * to build` for a task, `## Problem Statement` for a SPEC), and its
  * `## Open questions` scoping is transcribed into the new item's own
  * `## Open questions` block with `needsAnswers` set when questions remain (cleared
  * when none do) — so an agent can build from the artifact ALONE and no decision
@@ -398,10 +398,10 @@ export async function promoteObservation(
  *
  * The artifact TYPE selects the frontmatter + lead heading: a `task` gets
  * `## What to build` + `blockedBy: []` + a `## Prompt` (the buildable-task shape);
- * a `prd` gets `## Problem Statement` (the PRD document shape, with no `blockedBy` —
- * a PRD is not a blockable task — and no `## Prompt`, since a PRD is not
+ * a `prd` gets `## Problem Statement` (the SPEC document shape, with no `blockedBy` —
+ * a SPEC is not a blockable task — and no `## Prompt`, since a SPEC is not
  * dispatched by `do`/`run`). BOTH carry the SAME transcribed mechanism prose +
- * open-question block, so a PRD minted into `proposed/` is just as self-contained
+ * open-question block, so a SPEC minted into `proposed/` is just as self-contained
  * as a task.
  *
  * The `## Prompt` (task only) is the STRUCTURAL dispatchability the validator
@@ -409,9 +409,9 @@ export async function promoteObservation(
  * dispatched build throws "has no '## Prompt' section". The body BELOW the
  * frontmatter (lead section + mechanism prose + optional `## Open questions` +
  * the task-only `## Prompt`) is rendered by the SHARED owner of the
- * buildable-task/PRD schema, {@link renderTaskBody} / {@link renderSpecBody}
+ * buildable-task/SPEC schema, {@link renderTaskBody} / {@link renderSpecBody}
  * (`buildable-body.ts`), so the producer and the consumer cannot drift apart
- * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion`,
+ * (spec `centralize-buildable-task-renderer-shared-by-intake-and-promotion`,
  * US #3/#5/#6). This function owns only the FRONTMATTER writer; the section
  * skeleton lives in the one renderer. The empty-mechanism `## Prompt` seed is
  * passed EXPLICITLY (`Build the task '<slug>', described above.`) so promotion's
@@ -434,8 +434,8 @@ export async function promoteObservation(
  * fails with `has no '## Prompt' section` (the `extractPromptSection`/`resolveTask`
  * guard in `prompt.ts`). This is the robust backstop that closes that hole
  * regardless of agent compliance: for a TASK, if the body has no `## Prompt`
- * heading, append a seeded one (blockquoted, matching the renderer's shape). A PRD
- * is left UNTOUCHED — a PRD is a north-star doc, not dispatched by `do`/`run`, and carries no
+ * heading, append a seeded one (blockquoted, matching the renderer's shape). A SPEC
+ * is left UNTOUCHED — a SPEC is a north-star doc, not dispatched by `do`/`run`, and carries no
  * `## Prompt` by design.
  */
 function ensureTaskDispatchable(
@@ -472,7 +472,7 @@ function buildPromotedBody(
 		`title: ${slug}`,
 		`slug: ${slug}`,
 		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
-		// A PRD is a north-star doc, not a blockable task — only the task shape carries
+		// A SPEC is a north-star doc, not a blockable task — only the task shape carries
 		// `blockedBy`.
 		...(artifact === 'spec' ? [] : ['blockedBy: []']),
 		'---',
@@ -488,8 +488,8 @@ function buildPromotedBody(
 	// no leading blank. Do NOT move the separator into the renderer.
 	const fenceToBody = frontmatter.join('\n') + '\n\n';
 	// The body BELOW the frontmatter is rendered by the SHARED schema owner so the
-	// section skeleton has one home, not two (prd
-	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A PRD
+	// section skeleton has one home, not two (spec
+	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A SPEC
 	// goes through `renderSpecBody` (no `## Prompt`); a task through
 	// `renderTaskBody` (always a `## Prompt`).
 	if (artifact === 'spec') {

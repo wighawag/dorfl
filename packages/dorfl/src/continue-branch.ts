@@ -156,7 +156,7 @@ export interface ContinueRebaseResult {
  * (ADR §10: rebase, NOT merge — linear history; the prior attempt's commits were
  * based on an OLD main that moved while the item sat in backlog).
  *
- * This is a PLAIN rebase. After the per-item-lock cut-over (prd
+ * This is a PLAIN rebase. After the per-item-lock cut-over (spec
  * `ledger-status-per-item-lock-refs`, tasks 9a–9d) NO transient status lands on
  * a work branch: claim does not move the body (it rests in `backlog/`),
  * needs-attention is the lock `state: stuck` (not a `git mv`), and the

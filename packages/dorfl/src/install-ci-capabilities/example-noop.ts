@@ -1,5 +1,5 @@
 /**
- * REFERENCE capability registration (PRD `runner-in-ci`, task
+ * REFERENCE capability registration (SPEC `runner-in-ci`, task
  * `install-ci-core-and-github-adapter`). This file proves the capability-emitter
  * REGISTRY seam works as a DIRECTORY of self-registering modules: a new capability
  * is a NEW file in `install-ci-capabilities/` that calls {@link registerCapability}

@@ -90,7 +90,7 @@ export function doFlagOverrides(
 		...surfaceBlockersFlagOverrides(flags),
 		// `--merge-questions <off|ask|auto>` rides the SAME flag-override chain
 		// (flag > env > per-repo > global > default `ask`): the 3-state gate over
-		// the merge-question SURFACER (prd `land-time-reverify-and-parallel-
+		// the merge-question SURFACER (spec `land-time-reverify-and-parallel-
 		// merge-ceiling` Story 17 / task `merge-questions-gate-axis`). SEPARATE
 		// axis from `--observation-triage` with a HIGHER default — NEVER rides
 		// `--observation-triage`.
@@ -122,7 +122,7 @@ export function doFlagOverrides(
 		// `--no-pr` (the PR-INTENT axis): suppress the PR even on an authed GitHub
 		// arbiter. Rides the SAME flag > env > per-repo > global > default chain.
 		...noPRFlagOverrides(flags),
-		// `--merge-retries <n>` (the cross-job merge serialiser's CAS-retry cap — prd
+		// `--merge-retries <n>` (the cross-job merge serialiser's CAS-retry cap — spec
 		// `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer
 		// q1 (a)) rides the SAME chain (flag > env > per-repo > global > default).
 		...mergeRetriesFlagOverrides(flags),
@@ -346,7 +346,7 @@ export function observationTriageFlagOverrides(
 /**
  * The surface-blockers CLI flag (`advance`): `--surface-blockers` /
  * `--no-surface-blockers`, the BOOLEAN gate over DECLARED blocked work (whether a
- * `needsAnswers:true` task/prd is rendered into a question sidecar; ADR
+ * `needsAnswers:true` task/spec is rendered into a question sidecar; ADR
  * `ci-config-policy-and-gate-family`). The orthogonal PEER of
  * `--observation-triage`. Resolved through the SAME
  * `flag > env > per-repo > global > default` chain as the other gate flags.
@@ -414,7 +414,7 @@ export function mergeRetriesFlagOverrides(
 
 /**
  * The merge-questions CLI flag (`advance`): `--merge-questions <off|ask|auto>`,
- * the 3-state gate over the MERGE-QUESTION SURFACER (prd
+ * the 3-state gate over the MERGE-QUESTION SURFACER (spec
  * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
  * `merge-questions-gate-axis`). MIRRORS `--observation-triage`'s SHAPE but is a
  * SEPARATE axis with a HIGHER default (`ask`, never `off` — a dropped merge-
@@ -459,7 +459,7 @@ export function mergeQuestionsFlagOverrides(
 
 /**
  * **The strict-merge-approval CLI flag** (`--strict-merge-approval` /
- * `--no-strict-merge-approval`) — prd
+ * `--no-strict-merge-approval`) — spec
  * `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6 / task
  * `strict-merge-approval-gate`. The OPT-IN strictness layered on the OQ6
  * stale-approval default: ON re-surfaces the merge-question on a merge-base

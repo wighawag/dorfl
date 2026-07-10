@@ -10,7 +10,7 @@ import {workItemRel} from './work-layout.js';
  * `scripts/CLAIM-PROTOCOL.md`. This is the first-class `dorfl claim`
  * command (ADR §9: dorfl is the PRIMARY implementation of the claim
  * protocol; `scripts/claim.sh` is retained as the portable, zero-dependency
- * bootstrap / reference). The lock-substrate cut-over (prd
+ * bootstrap / reference). The lock-substrate cut-over (spec
  * `ledger-status-per-item-lock-refs`) has since diverged it from `claim.sh`'s
  * body-move semantics — see the lock note below — but the exit codes are the same.
  *
@@ -26,7 +26,7 @@ import {workItemRel} from './work-layout.js';
  *   3  (legacy) push contention — no longer reachable: the per-item lock never
  *      falsely contends, so there is no retry budget to exhaust
  *
- * UNIFIED PER-ITEM LOCK (prd `ledger-status-per-item-lock-refs` US #1/#15/#16,
+ * UNIFIED PER-ITEM LOCK (spec `ledger-status-per-item-lock-refs` US #1/#15/#16,
  * ADR `ledger-status-on-per-item-lock-refs`): a claim ACQUIRES the item's
  * per-item lock (`action: implement`) via the lock module and writes NOTHING to
  * `main` — the body STAYS at `work/backlog/<slug>.md`. The claimable predicate is
@@ -86,7 +86,7 @@ export interface ClaimCasOptions {
 	 */
 	override?: boolean;
 	/**
-	 * `--allow-backlog` (prd
+	 * `--allow-backlog` (spec
 	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): WIDEN the claimable
 	 * predicate to ALSO accept a `tasks/backlog/`-resident body (staging), so a
 	 * human can drive a staged task in place WITHOUT promoting it to the pool. The
@@ -336,7 +336,7 @@ async function runClaim(
 		}
 	}
 
-	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (prd
+	// UNIFIED PER-ITEM LOCK — the WHOLE of the claim now (spec
 	// `ledger-status-per-item-lock-refs` US #1/#15/#16; ADR
 	// `ledger-status-on-per-item-lock-refs`). The interim dual-write is GONE: claim
 	// acquires the item's per-item lock (`action: implement`) and writes NOTHING to

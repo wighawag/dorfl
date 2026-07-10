@@ -9,7 +9,7 @@ import {
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 
 /**
- * The **ADR-MINT route** (prd
+ * The **ADR-MINT route** (spec
  * `agentic-question-resolution-retire-disposition-vocabulary` US #2, task
  * `agentic-apply-mint-adr-route`) — the SIBLING of {@link
  * import('./triage-persist.js').promoteObservation}, for the agentic apply
@@ -17,8 +17,8 @@ import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
  *
  * Why a SIBLING and not an `adr` artifact type on `promoteObservation`
  * (recorded `## Decisions`): `promoteObservation` is `work/`-folder-SHAPED — it
- * targets `work/tasks/ready` / `work/prds/proposed` via `workItemRel`, and builds
- * a task/prd body (a `## What to build` / `## Problem Statement` lead + an
+ * targets `work/tasks/ready` / `work/specs/proposed` via `workItemRel`, and builds
+ * a task/spec body (a `## What to build` / `## Problem Statement` lead + an
  * `## Open questions` block, with `needsAnswers` carried). An ADR is DIFFERENT in
  * EVERY one of those: it lives in `docs/adr/` (OUTSIDE the work board, so the
  * `work/`-layout path builder does not fit), it carries NO `needsAnswers`/open-
@@ -331,7 +331,7 @@ function renderAdrFile(slug: string, title: string, body: string): string {
  * The observation's mechanism PROSE: everything before its first
  * `## Open questions` heading, with the frontmatter fence dropped. An ADR records
  * a SETTLED decision, so an observation's open-questions scoping is deliberately
- * NOT carried into the ADR body (unlike a promoted task/prd, which keeps the
+ * NOT carried into the ADR body (unlike a promoted task/spec, which keeps the
  * open questions live) — the answered question(s) ARE the decision.
  */
 function mechanismOf(observation: string): string {

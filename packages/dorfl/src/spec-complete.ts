@@ -10,7 +10,7 @@ import {
 } from './work-layout.js';
 
 /**
- * The read-only **"is this spec complete?"** core query (prd `issue-intake`, US #8 —
+ * The read-only **"is this spec complete?"** core query (spec `issue-intake`, US #8 —
  * the closure-linkage half). Given a spec slug + a `work/` tree, a spec is COMPLETE
  * iff there is **≥1 task carrying `spec:<slug>`** AND **all such tasks reside in
  * `work/done/`**. Pure `work/`-folder logic — no seam, no git, no `gh`, no mutation.

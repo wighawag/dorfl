@@ -24,7 +24,7 @@ import {heldTaskSlugs} from './item-lock.js';
  * SAME two pools (eligible TASKS + taskable PRDS) but reads a BARE hub mirror's
  * committed `main` ref (`git ls-tree`/`git show`), NOT a working checkout.
  *
- * This is the ONE reusable enumeration unit the prd's FOLD-IN note demands: BOTH
+ * This is the ONE reusable enumeration unit the spec's FOLD-IN note demands: BOTH
  * the `run` loop driver's isolated+parallel auto-pick AND the one-shot/CI
  * `advance --remote -n` / the CI matrix consume it, so the `-n`/auto-pick rungs
  * (both `do` and `advance`, both `run`-loop and one-shot) all call the SAME scan.
@@ -44,7 +44,7 @@ import {heldTaskSlugs} from './item-lock.js';
  *     `scanRepoPaths`/registry `scan` use) over the mirror's `work/backlog` +
  *     `work/done` read via {@link LedgerReadStrategy.resolveMirrorState}.
  *   - **taskable prds** — {@link taskableSpecs} (`autoslice-gate`'s predicate)
- *     over the mirror's `work/prds/ready` + `work/prds/tasked` read via the mirror-ref
+ *     over the mirror's `work/specs/ready` + `work/specs/tasked` read via the mirror-ref
  *     {@link LedgerReadStrategy.resolveMirrorSpecPool}.
  *
  * Per-repo policy parity: a bare mirror has no checked-out `.dorfl.json`,
@@ -170,7 +170,7 @@ export async function scanMirrorPool(
 	// scored through the EXACT same `scoreItems` the in-place/registry scans use.
 	const state = await read.resolveMirrorState({mirrorPath, ref, env});
 	const counts = {totalItems: 0, totalEligible: 0};
-	// HELD-SLUG SUBTRACTION (prd `ledger-status-per-item-lock-refs` US #15): a bare
+	// HELD-SLUG SUBTRACTION (spec `ledger-status-per-item-lock-refs` US #15): a bare
 	// hub mirror's arbiter is its `origin`; read the held lock refs from there and
 	// exclude those slugs from the enumerated `backlog/` pool. Non-fatal (empty set
 	// on any fault) and redundant-but-harmless while the body still moves — wired now
@@ -179,7 +179,7 @@ export async function scanMirrorPool(
 	// its own lock-ref fetch.
 	const heldSlugs = await heldTaskSlugs(mirrorPath, 'origin', env);
 	const items = scoreItems(state, repoConfig.autoBuild, counts, heldSlugs);
-	// Pool 2 — TASKABLE PRDS from the bare mirror's `work/prds/ready`+`work/prds/tasked`,
+	// Pool 2 — TASKABLE PRDS from the bare mirror's `work/specs/ready`+`work/specs/tasked`,
 	// filtered through `autoslice-gate`'s predicate (NOT reinvented). Read FIRST so
 	// we can populate the `specs[]` companion of `items[]` on the RepoReport below.
 	const pool = await read.resolveMirrorSpecPool({mirrorPath, ref, env});
@@ -195,7 +195,7 @@ export async function scanMirrorPool(
 		autoTask: repoConfig.autoTask,
 	});
 	// The one-slug-one-folder LINT is a HUMAN-FACING surface (`scan`/`status`); this
-	// mirror-side pool scan exists only to SCORE the task/prd candidate pools for
+	// mirror-side pool scan exists only to SCORE the task/spec candidate pools for
 	// autonomous selection, never to render a dashboard, so it carries an empty lint
 	// (the duplicate surface is the user-facing `scan`/`status`, per the task). The
 	// `specs[]` companion of `items[]` is filled via the SAME `scoreSpecs` helper

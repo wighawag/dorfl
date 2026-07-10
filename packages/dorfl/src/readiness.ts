@@ -16,7 +16,7 @@ import {ledgerRead} from './ledger-read.js';
  * the shared {@link resolveBlockedBy} (no reimplemented dep resolution).
  *
  * The two axes are deliberately treated differently (see WORK-CONTRACT and the
- * task prd):
+ * task spec):
  *
  *   - `blockedBy` unmet is a FACTUAL prerequisite (the dep work does not exist
  *     yet) → REFUSE by default. An override flag is the human escape hatch.

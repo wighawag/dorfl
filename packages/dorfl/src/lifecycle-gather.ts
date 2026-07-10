@@ -65,8 +65,8 @@ function readSidecarInPlace(
 }
 
 /**
- * Collect every `needsAnswers:true` task (from `work/backlog`) + prd (from
- * `work/prds`) for the in-place repo, through the read seam (the SAME readers the
+ * Collect every `needsAnswers:true` task (from `work/backlog`) + spec (from
+ * `work/specs`) for the in-place repo, through the read seam (the SAME readers the
  * build-pool scan uses). These are the SURFACE/APPLY candidates this task draws
  * into the selection (today they are build/task-INELIGIBLE, so nothing else
  * surfaces them).
@@ -89,25 +89,25 @@ function blockedItemsInPlace(
 			out.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
-	// TASKED resting prds (`prds/tasked/`) — enumerated UNCONDITIONALLY (NOT behind
-	// `surfaceStaging`), because a prd may legitimately carry `needsAnswers:true`
-	// while resting in `prds/tasked/` (WORK-CONTRACT "A PRD that has drifted AFTER
-	// it was TASKED"). This is NOT a staging widening: a tasked prd is a durable
+	// TASKED resting prds (`specs/tasked/`) — enumerated UNCONDITIONALLY (NOT behind
+	// `surfaceStaging`), because a spec may legitimately carry `needsAnswers:true`
+	// while resting in `specs/tasked/` (WORK-CONTRACT "A SPEC that has drifted AFTER
+	// it was TASKED"). This is NOT a staging widening: a tasked spec is a durable
 	// resting state, like the pool, so it is enumerated like the pool. Routing
 	// still respects the gates in `buildLifecyclePools` (an ANSWERED sidecar -> the
 	// always-on APPLY pool so the human's answer is never STRANDED; a NO-sidecar
-	// tasked prd -> SURFACE, still gated by `surfaceBlockers`). Without this, a
-	// tasked prd's answered sidecar is enumerated by no pool and apply never runs
+	// tasked spec -> SURFACE, still gated by `surfaceBlockers`). Without this, a
+	// tasked spec's answered sidecar is enumerated by no pool and apply never runs
 	// on it (observation `tasked-prd-needsanswers-sidecar-stranded-no-apply-pool`).
 	for (const spec of read.resolveLocalSpecTasked({repoPath})) {
 		if (spec.needsAnswers === true) {
 			out.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
-	// SURFACE-on-STAGING widening (prd
+	// SURFACE-on-STAGING widening (spec
 	// `staging-surface-and-apply-promote-safety` F2): when `surfaceStaging` is
 	// ON, the candidate set ADDITIONALLY enumerates `needsAnswers` items resting
-	// in STAGING (`tasks/backlog/` + `prds/proposed/`), so a tasked item
+	// in STAGING (`tasks/backlog/` + `specs/proposed/`), so a tasked item
 	// surfaces its questions BEFORE the human promotes it. BUILD/claim still
 	// reads POOL-only (`scoreItems` over `state.ready`); only the surface polarity
 	// widens here.
@@ -195,7 +195,7 @@ async function readSidecarMirror(
  * Gather + build the lifecycle pools for a MIRROR-SIDE bare hub mirror (async).
  * Reads the SAME logical inputs as {@link gatherLifecycleInPlace} \u2014 observations +
  * the `needsAnswers` pool from the mirror's committed `main` (via
- * `resolveMirrorState`), the prd pool via `resolveMirrorSpecPool`, and each item's
+ * `resolveMirrorState`), the spec pool via `resolveMirrorSpecPool`, and each item's
  * sidecar via `git show` \u2014 then hands them to the SAME shared
  * {@link buildLifecyclePools}, so the in-place + mirror enumerations AGREE.
  */
@@ -232,9 +232,9 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
-	// TASKED resting prds (`<ref>:work/prds/tasked/`) — enumerated UNCONDITIONALLY,
-	// the mirror-side counterpart of the in-place tasked-prd enumeration above
-	// (so a `needsAnswers` tasked prd's answered sidecar is never stranded on the
+	// TASKED resting prds (`<ref>:work/specs/tasked/`) — enumerated UNCONDITIONALLY,
+	// the mirror-side counterpart of the in-place tasked-spec enumeration above
+	// (so a `needsAnswers` tasked spec's answered sidecar is never stranded on the
 	// mirror/CI advance path either). Routing still respects the gates.
 	const specTasked = await read.resolveMirrorSpecTasked({mirrorPath, ref, env});
 	for (const spec of specTasked) {
@@ -242,10 +242,10 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
-	// SURFACE-on-STAGING widening (prd
+	// SURFACE-on-STAGING widening (spec
 	// `staging-surface-and-apply-promote-safety` F2): mirror-side counterpart of
 	// the in-place widening above — enumerate `needsAnswers` items in
-	// STAGING (`tasks/backlog/` + `prds/proposed/`) from the bare mirror's
+	// STAGING (`tasks/backlog/` + `specs/proposed/`) from the bare mirror's
 	// committed `<ref>` tree, so the in-place + mirror surfaces AGREE. The
 	// staging reads are skipped entirely when the gate is OFF (no extra git
 	// ls-tree work in the legacy mode).

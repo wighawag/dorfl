@@ -49,7 +49,7 @@ export interface RunConcurrentOptions<I, T> {
 /**
  * A per-key async serialiser: `withKeyedLock(key, fn)` runs `fn` to completion
  * before the next caller for the SAME key starts; different keys never block each
- * other. Used to serialise the prd, shared-working-tree CLAIM step PER REPO
+ * other. Used to serialise the spec, shared-working-tree CLAIM step PER REPO
  * inside the otherwise-concurrent tick.
  *
  * Two concurrent claims in ONE repo would prepare their claim micro-commit in the

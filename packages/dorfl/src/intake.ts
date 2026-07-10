@@ -1,7 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
-import {workFolderRel, workItemRel} from './work-layout.js';
+import {workFolderRel, workFolderPrefix, workItemRel} from './work-layout.js';
 import {paramCase} from './brand.js';
 import {
 	performIntegration,
@@ -48,7 +48,7 @@ import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
 import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 /**
- * **`intake <N>`** (prd `issue-intake`, task `intake-tracer-slice-outcome`): the
+ * **`intake <N>`** (spec `issue-intake`, task `intake-tracer-slice-outcome`): the
  * KEYSTONE of the issue front-door. A new, GATE-FREE command — explicit invocation
  * IS the authorization (precedent: `explicit-do-prd-not-gated-by-autoslice`), so
  * `autoTask`/`autoBuild` config does NOT apply — that reads a GitHub issue + its
@@ -62,7 +62,7 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
  * dispatch is.
  *
- * The dispatcher implements the FULL four-outcome decision table (prd
+ * The dispatcher implements the FULL four-outcome decision table (spec
  * `issue-intake` — the source of truth):
  * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
  *   question; emit NOTHING; STOP.
@@ -70,8 +70,8 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
  *   lone-task closure link, NOT `Fixes #N`), integrate via {@link
  *   performIntegration} (default `propose`).
- * - **PRD** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
- *   which is NEVER bounced): write the prd file (`work/prds/ready/<slug>.md`) with `issue: N` (+ the gate
+ * - **SPEC** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
+ *   which is NEVER bounced): write the spec file (`work/specs/ready/<slug>.md`) with `issue: N` (+ the gate
  *   axes the verdict carried), integrate, STOP (tasking is the separate `do prd:`
  *   step).
  * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): the bounce is
@@ -79,7 +79,7 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  *   issue ATOMICALLY — the "file separate issues" text as the closing comment +
  *   `reason: not planned` (the honest GitHub-native signal) in ONE `closeIssue`
  *   call; emit NOTHING. Intake closes on BOUNCE (as not planned); NEVER on
- *   task/prd (CI's close-job closes those via the `issue:` field) / ask.
+ *   task/spec (CI's close-job closes those via the `issue:` field) / ask.
  *
  * The per-outcome integration KNOBS, the processing LOCK, and event-classification
  * are LATER tasks and are NOT built here (default `propose` is fine here).
@@ -92,7 +92,7 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 /**
  * The four outcomes the decision prompt classifies an issue into (the decision
- * table). EXPAND step (prd
+ * table). EXPAND step (spec
  * `prd-to-spec-vocabulary-cutover-and-migration-command`): the `spec` outcome
  * names the "clear + coherent but >1 task" classification (a parent SPEC). HARD
  * CUTOVER (contract step): the legacy `prd` outcome token is GONE — the prompt
@@ -151,7 +151,7 @@ export interface IntakeVerdict {
 	specBody?: string;
 	/**
 	 * The spec's gate axes (`spec` outcome) AS THE PROMPT JUDGED THEM — surfaced onto
-	 * the emitted spec frontmatter (prd `issue-intake` US #8: "the emitted artifact
+	 * the emitted spec frontmatter (spec `issue-intake` US #8: "the emitted artifact
 	 * carries … its own gate axes"). Both omitted (undeclared) by default; the prompt
 	 * sets `specHumanOnly: true` when a human should drive the TASKING and/or
 	 * `specNeedsAnswers: true` when open questions remain.
@@ -186,16 +186,16 @@ export interface IntakeResult {
 	outcome: IntakeRunOutcome;
 	/** The issue number acted on. */
 	issueNumber: number;
-	/** The slug of the emitted artifact (task OR prd outcome). */
+	/** The slug of the emitted artifact (task OR spec outcome). */
 	emittedSlug?: string;
-	/** Repo-relative path of the emitted artifact (task OR prd outcome). */
+	/** Repo-relative path of the emitted artifact (task OR spec outcome). */
 	emitted?: string;
 	/** True iff a comment was posted on the issue (ask / bounce outcomes). */
 	commented?: boolean;
 	/**
 	 * True iff the ISSUE was closed (the BOUNCE outcome — a terminal bounce closes
 	 * the issue atomically as `not planned`). Additive (mirrors {@link commented}),
-	 * so CI / callers can observe the close. Never set on ask/task/prd.
+	 * so CI / callers can observe the close. Never set on ask/task/spec.
 	 */
 	closed?: boolean;
 	/** Human-readable summary of the terminal condition. */
@@ -253,10 +253,10 @@ export interface PerformIntakeOptions {
 	/** The HOST-ONLY sessions root for the pi session file. */
 	sessionsDir?: string;
 	/**
-	 * The PER-OUTCOME integration modes (prd `issue-intake` US #9) the emitted artifact integrates
+	 * The PER-OUTCOME integration modes (spec `issue-intake` US #9) the emitted artifact integrates
 	 * THROUGH the shared core with. Because `intake` decides the artifact TYPE at
 	 * RUNTIME, the mode is keyed per type: an emitted task integrates with
-	 * `integration.task`, an emitted prd with `integration.prd` (`propose` =
+	 * `integration.task`, an emitted spec with `integration.prd` (`propose` =
 	 * push the `work/<slug>` branch + open a PR, NO `main` touch; `merge` = land on
 	 * `main`). The CLI resolves this from the granular + aggregate flags via
 	 * {@link resolveIntakeIntegrationModes}; ask/bounce emit nothing, so the modes
@@ -266,7 +266,7 @@ export interface PerformIntakeOptions {
 	/**
 	 * **The ORIGIN-TRUST verdict, passed IN** (task
 	 * `untrusted-origin-forces-build-propose`; the `--origin-trust <trusted|untrusted>`
-	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every prd/
+	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every spec/
 	 * task it emits, so the author-trust signal SURVIVES the prd/task merge
 	 * boundary (a landed-on-main artifact otherwise erases how it was born, the
 	 * laundering gap). `intake` does NOT resolve trust itself: the verdict is CI's
@@ -285,7 +285,7 @@ export interface PerformIntakeOptions {
 	 */
 	noPR?: boolean;
 	/**
-	 * **The per-repo PRD-PLACEMENT default, passed IN** (prd
+	 * **The per-repo SPEC-PLACEMENT default, passed IN** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5, task
 	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The resolved
 	 * per-repo default landing for `intake`-authored prds (`pre-proposed` =
@@ -293,8 +293,8 @@ export interface PerformIntakeOptions {
 	 * into the shared placement resolver (`src/placement.ts`). The resolver
 	 * overlays an EXPLICIT operator flag ({@link explicitSpecsLandIn}, top) and
 	 * the UNTRUSTED-ORIGIN force (`originTrust: untrusted` ⇒ staging) on top.
-	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `prds/proposed/`,
-	 * the conservative landing). The PRD TWIN of `tasksLandIn` on the tasker
+	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `specs/proposed/`,
+	 * the conservative landing). The SPEC TWIN of `tasksLandIn` on the tasker
 	 * path — one resolver, two lifecycles.
 	 */
 	specsLandIn?: SpecsLandIn;
@@ -334,15 +334,15 @@ export interface PerformIntakeOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * **The STAGED-prds dir** (prd `staging-pool-position-gate-and-trust-model`,
+ * **The STAGED-prds dir** (spec `staging-pool-position-gate-and-trust-model`,
  * task `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing
  * ADR `placement-is-runner-deterministic-humanonly-is-agent-judgement`). When
  * the runner-deterministic placement resolver picks the staging side for an
- * `intake`-authored prd, the runner writes the prd file HERE instead of in
- * `work/prds/ready/`. An item born in `prds/proposed/` is durable + readable but NOT in
- * the tasking candidate POOL (`work/prds/ready/` is the pool). A runner/human-owned promotion
- * ({@link promoteFromPreSpec} in `needs-attention.ts`) moves an approved prd
- * `prds/proposed/ → prds/ready/` to make it taskable.
+ * `intake`-authored spec, the runner writes the spec file HERE instead of in
+ * `work/specs/ready/`. An item born in `specs/proposed/` is durable + readable but NOT in
+ * the tasking candidate POOL (`work/specs/ready/` is the pool). A runner/human-owned promotion
+ * ({@link promoteFromPreSpec} in `needs-attention.ts`) moves an approved spec
+ * `specs/proposed/ → specs/ready/` to make it taskable.
  */
 export const STAGED_SPECS_DIR = workFolderRel('specs-proposed');
 
@@ -377,19 +377,19 @@ function specLandingToSide(
 
 /**
  * The emitted artifact TYPE `intake` decides at RUNTIME — a `task` verdict emits
- * `work/backlog/<slug>.md`, a `prd` verdict emits the prd file (`work/prds/ready/<slug>.md`). The two
+ * `work/backlog/<slug>.md`, a `prd` verdict emits the spec file (`work/specs/ready/<slug>.md`). The two
  * granular flag axes (`--merge-task`/`--propose-task` vs `--merge-spec`/
  * `--propose-spec`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
 export type IntakeArtifactType = 'task' | 'spec';
-// prd → spec cutover (MIGRATE batch): `'spec'` is the CANONICAL artifact type;
+// `prd` → `spec` cutover (MIGRATE batch): `'spec'` is the CANONICAL artifact type;
 // `'prd'` stays as an accepted ALIAS until the contract task removes it.
 
 /**
- * The PER-OUTCOME integration mode FLAG SET (prd `issue-intake` US #9). Because
+ * The PER-OUTCOME integration mode FLAG SET (spec `issue-intake` US #9). Because
  * `intake` decides the artifact TYPE at runtime, a single `--merge`/`--propose`
- * cannot express a type-conditional policy ("merge a prd but propose a task") —
+ * cannot express a type-conditional policy ("merge a spec but propose a task") —
  * hence the four GRANULAR per-type flags layered over the two AGGREGATES:
  *
  * - **granular:** `--merge-spec`/`--propose-spec` apply iff the outcome is a spec;
@@ -400,9 +400,9 @@ export type IntakeArtifactType = 'task' | 'spec';
  * author-trust) is CI's POLICY, authored in `runner-in-ci` — NOT here.
  */
 export interface IntakeIntegrationFlags {
-	/** Aggregate: merge BOTH a task and a prd (the broad knob, overridden per type). */
+	/** Aggregate: merge BOTH a task and a spec (the broad knob, overridden per type). */
 	merge?: boolean;
-	/** Aggregate: propose BOTH a task and a prd. */
+	/** Aggregate: propose BOTH a task and a spec. */
 	propose?: boolean;
 	/** Granular: merge a spec (overrides the aggregate for the spec outcome). */
 	mergeSpec?: boolean;
@@ -419,7 +419,7 @@ export interface IntakeIntegrationModes {
 	/** The mode an EMITTED task integrates with. */
 	task: IntegrationMode;
 	/**
-	 * The mode an EMITTED spec integrates with. `spec` is the CANONICAL key (prd →
+	 * The mode an EMITTED spec integrates with. `spec` is the CANONICAL key (spec →
 	 * spec cutover); the user-facing `--merge-spec`/`--propose-spec` flags that FEED
 	 * it carry the same `spec` spelling (the cli-flag rename landed in batch 4f).
 	 */
@@ -453,7 +453,7 @@ function granularFromFlags(
 }
 
 /**
- * The PURE per-outcome integration mode resolution (prd `issue-intake` US #9 —
+ * The PURE per-outcome integration mode resolution (spec `issue-intake` US #9 —
  * the canonical table). Given ONLY the flag set, resolve BOTH per-type modes in
  * one eager pass (so a usage error is caught before the runtime verdict is even
  * known). The rules, all decided in the prd:
@@ -574,7 +574,7 @@ export async function performIntake(
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
 
-	// 2. ACQUIRE the `processing` LOCK (prd `issue-intake` US #10): a TRANSIENT concurrency mutex
+	// 2. ACQUIRE the `processing` LOCK (spec `issue-intake` US #10): a TRANSIENT concurrency mutex
 	//    that serialises two concurrent runs on the SAME issue. Read the labels; if
 	//    the lock is ALREADY present, BACK OFF (do nothing — another run owns it). The
 	//    winner ADDS the label and proceeds; the label is REMOVED on finish (success
@@ -815,12 +815,12 @@ async function decideAndDispatch(
 		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
 	}
 
-	// DISPATCH on the verdict — the FULL four-outcome decision table (prd
+	// DISPATCH on the verdict — the FULL four-outcome decision table (spec
 	// `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
 	// git/seam side-effect below (the in-band boundary): the write + integrate
-	// (task/prd) and the `postIssueComment` (ask/bounce).
+	// (task/spec) and the `postIssueComment` (ask/bounce).
 	//
-	// PER-OUTCOME integration (prd `issue-intake` US #9): the resolved mode is keyed on the runtime
+	// PER-OUTCOME integration (spec `issue-intake` US #9): the resolved mode is keyed on the runtime
 	// artifact TYPE — a `task` verdict integrates with the task mode, a `spec`
 	// verdict with the spec mode. Unset ⇒ propose for both. ask/bounce never
 	// integrate, so the modes are no-ops for them.
@@ -863,7 +863,7 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.spec,
-				// Same origin-trust stamp on the prd outcome (propagated onto its tasks
+				// Same origin-trust stamp on the spec outcome (propagated onto its tasks
 				// later by the tasker). Passed IN; not resolved here.
 				originTrust: options.originTrust,
 				noPR: options.noPR,
@@ -871,7 +871,7 @@ async function decideAndDispatch(
 				// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the
 				// configured-default + explicit-flag rungs, fed into the SHARED placement
 				// resolver alongside the `originTrust` stamp above. The resolver decides
-				// `prds/proposed/` (staging) vs `prds/ready/` (the tasking pool); `intake` never
+				// `specs/proposed/` (staging) vs `specs/ready/` (the tasking pool); `intake` never
 				// places itself.
 				specsLandIn: options.specsLandIn,
 				explicitSpecsLandIn: options.explicitSpecsLandIn,
@@ -931,7 +931,7 @@ async function decideAndDispatch(
  *
  * - **ask** (non-terminal): `postIssueComment` the drafted question, emit NOTHING,
  *   and LEAVE THE ISSUE OPEN — it waits for the thread to be answered (a later run
- *   resumes from it). The task/prd path also never closes (CI's close-job does,
+ *   resumes from it). The task/spec path also never closes (CI's close-job does,
  *   via the `issue:` field). Intake closes ONLY on BOUNCE.
  * - **bounce** (TERMINAL): the asks are unrelated and must be re-filed, so an OPEN
  *   issue is a dishonest "still in play" signal. Intake CLOSES the issue
@@ -1074,7 +1074,7 @@ async function dispatchTask(params: {
 		note,
 	} = params;
 
-	// A content-derived slug — NEVER a counter (prd `issue-intake` US #8). Prefer the drafted
+	// A content-derived slug — NEVER a counter (spec `issue-intake` US #8). Prefer the drafted
 	// `taskSlug`, else derive from the drafted title; sanitise either through
 	// `paramCase` so the filename + frontmatter slug are well-formed.
 	const slug = resolveSlug(verdict);
@@ -1266,7 +1266,7 @@ async function dispatchSpec(params: {
 		note,
 	} = params;
 
-	// A content-derived slug — NEVER a counter (prd `issue-intake` US #8). Prefer the drafted
+	// A content-derived slug — NEVER a counter (spec `issue-intake` US #8). Prefer the drafted
 	// `specSlug`, else derive from the drafted title.
 	const slug = resolveSpecSlug(verdict);
 	if (slug === '') {
@@ -1279,7 +1279,7 @@ async function dispatchSpec(params: {
 	// RUNNER-DETERMINISTIC PLACEMENT (task
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
-	// which folder the runner writes the intake-authored prd into BEFORE handing
+	// which folder the runner writes the intake-authored spec into BEFORE handing
 	// it to the shared integrate band: the SAME precedence chain the tasker uses
 	// (`explicit > untrusted-origin ⇒ staging > specsLandIn > built-in (staging)`),
 	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
@@ -1317,7 +1317,7 @@ async function dispatchSpec(params: {
 		slug,
 		source: 'in-progress',
 		recovering: false,
-		// An intake-emitted prd has no `verify` floor of its own (it is a new spec,
+		// An intake-emitted spec has no `verify` floor of its own (it is a new spec,
 		// not a build), exactly as the task branch + the tasking transition skip it.
 		skipVerify: true,
 		mode: integration,
@@ -1325,8 +1325,8 @@ async function dispatchSpec(params: {
 		providerInstance,
 		type: 'feat',
 		lifecycle: {
-			// The emitted prd IS the title source. Pass the DRAFTED title EXPLICITLY (same
-			// race as the task path: `stage()` writes the prd file AFTER the title
+			// The emitted spec IS the title source. Pass the DRAFTED title EXPLICITLY (same
+			// race as the task path: `stage()` writes the spec file AFTER the title
 			// read). `titlePath` stays set but is IGNORED while `title` is present.
 			titlePath: join(cwd, relPath),
 			title: verdict.specTitle ?? slug,
@@ -1384,9 +1384,9 @@ async function integrationToIntakeResult(
 			core.integration?.mode === 'merge'
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
-		// Both a lone task and a prd carry `issue: N` as their closure link (the task
-		// closes its own issue; a prd is reached via `task.prd: → prd issue:`). On the
-		// task/prd path `intake` never closes the issue (CI's close-job does, via the
+		// Both a lone task and a spec carry `issue: N` as their closure link (the task
+		// closes its own issue; a spec is reached via `task.prd: → prd issue:`). On the
+		// task/spec path `intake` never closes the issue (CI's close-job does, via the
 		// `issue:` field; intake closes ONLY on BOUNCE) and emits no `Fixes #N` (a
 		// deferred GitHub-only optimisation).
 		const link = `issue: ${issueNumber}`;
@@ -1456,7 +1456,7 @@ async function integrationToIntakeResult(
  *   `commit` (the additive {@link IntegrateResult.commit}) in merge. A degraded
  *   propose (no `url`) or a failed merge-tip read (no `commit`) simply OMITS the
  *   link — the comment still confirms what was created (the artifact is safe on the
- *   branch/main regardless). No prd link beyond the slug.
+ *   branch/main regardless). No spec link beyond the slug.
  * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
  *   (`kind=created slug=<slug> seen=<id>,…`) so the triage's `already-terminal`
  *   branch consumes it — the comment cannot re-trigger intake.
@@ -1497,7 +1497,7 @@ export function composeIntakeCompletionComment(params: {
  *   does, via the `issue:` field); this comment changes NO issue state.
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
  *   `commit` (the additive {@link IntegrateResult.commit} this task surfaces) in
- *   merge. No prd link beyond the slug.
+ *   merge. No spec link beyond the slug.
  * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
  *   (`kind=created slug=<slug> seen=<id>,…`). `kind=created` is TERMINAL, so the
  *   triage's `already-terminal` branch then treats the issue as already-transformed
@@ -1558,7 +1558,7 @@ async function postCompletionComment(params: {
 }
 
 /**
- * Resolve a content-derived slug from the verdict — NEVER a counter (prd `issue-intake` US #8).
+ * Resolve a content-derived slug from the verdict — NEVER a counter (spec `issue-intake` US #8).
  * Prefer the drafted `taskSlug`, else derive from the drafted title; both go
  * through `paramCase` (the brand case-transform) so the result is a clean
  * lowercase-`-`-joined slug. An empty result (no slug AND no title) signals the
@@ -1573,7 +1573,7 @@ function resolveSlug(verdict: IntakeVerdict): string {
 }
 
 /**
- * Resolve a content-derived slug for the spec outcome — NEVER a counter (prd `issue-intake` US #8).
+ * Resolve a content-derived slug for the spec outcome — NEVER a counter (spec `issue-intake` US #8).
  * Prefer the drafted `specSlug`, else derive from the drafted spec title; both go
  * through `paramCase`. An empty result signals the caller to refuse.
  */
@@ -1587,13 +1587,13 @@ function resolveSpecSlug(verdict: IntakeVerdict): string {
 
 /**
  * Render the backlog task file: the frontmatter (`title`/`slug`/`covers: []`, NO
- * `prd:` — its own source of truth, prd `issue-intake` decision table) carrying the lone-task
+ * `prd:` — its own source of truth, spec `issue-intake` decision table) carrying the lone-task
  * `issue: N` closure link + the drafted body. The task closes its source issue
  * via its `issue:` field (the provider-agnostic link a FUTURE CI close-job reads
  * from folder + field state); it carries NO `Fixes #N` (a deferred GitHub-only
  * optimisation, structurally unplaceable on the `--merge` path). The number is
  * the task's own closure path — `issue:` XOR `prd:`; a lone task never carries a
- * `prd:` (prd `issue-intake` decision table). When the agent drafted no body, a thin default
+ * `prd:` (spec `issue-intake` decision table). When the agent drafted no body, a thin default
  * scaffold keeps the file a valid task.
  */
 export function renderBacklogTask(params: {
@@ -1623,7 +1623,7 @@ export function renderBacklogTask(params: {
 	const frontmatter = lines.join('\n');
 	// The drafted body (agent-authored, headings and all) is wrapped VERBATIM.
 	// Only the empty-body DEFAULT SCAFFOLD is sourced from the shared section
-	// skeleton owner (`renderTaskBody`, prd
+	// skeleton owner (`renderTaskBody`, spec
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US #2),
 	// so intake's fallback and promotion's body cannot drift on section
 	// names/order. The shared renderer ends its body with a trailing newline (its
@@ -1642,16 +1642,16 @@ export function renderBacklogTask(params: {
 }
 
 /**
- * Render the emitted prd file: the frontmatter (`title`/`slug` + the loop-closure
- * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted prd body.
- * For a FANNED prd the `issue: N` lives ONLY on the prd — never duplicated across
+ * Render the emitted spec file: the frontmatter (`title`/`slug` + the loop-closure
+ * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted spec body.
+ * For a FANNED spec the `issue: N` lives ONLY on the spec — never duplicated across
  * the N fanned tasks, which reach it via `task.prd: → prd issue:` (a fanned
  * task carries `prd:`, NOT its own `issue:`; the lone-task outcome is the only
- * one that puts `issue:` on a task). The close JOB reaches the prd's number via
+ * one that puts `issue:` on a task). The close JOB reaches the spec's number via
  * `task.prd: → prd issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
  * verdict declared them `true` — an omitted axis is `undefined` (undeclared), the
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
- * default scaffold keeps the file a valid prd that `do prd:` can later task.
+ * default scaffold keeps the file a valid spec that `do prd:` can later task.
  */
 export function renderSpec(params: {
 	slug: string;
@@ -1682,7 +1682,7 @@ export function renderSpec(params: {
 	if (originTrust !== undefined) {
 		lines.push('origin: issue', `originTrust: ${originTrust}`);
 	}
-	// Surface the gate axes AS THE PROMPT JUDGED THEM (prd `issue-intake` US #8). Only emit a `true`
+	// Surface the gate axes AS THE PROMPT JUDGED THEM (spec `issue-intake` US #8). Only emit a `true`
 	// axis — an undeclared axis stays absent (parsed as `undefined`).
 	if (humanOnly === true) {
 		lines.push('humanOnly: true');
@@ -1692,11 +1692,11 @@ export function renderSpec(params: {
 	}
 	lines.push('---');
 	const frontmatter = lines.join('\n');
-	// As with `renderBacklogTask`: the drafted PRD body is wrapped VERBATIM; only
+	// As with `renderBacklogTask`: the drafted SPEC body is wrapped VERBATIM; only
 	// the empty-body DEFAULT SCAFFOLD is sourced from the shared section skeleton
-	// owner (`renderSpecBody` with `solution` + `userStories`, prd
+	// owner (`renderSpecBody` with `solution` + `userStories`, spec
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US #2),
-	// so intake's PRD fallback and promotion's PRD body cannot drift. `trimEnd()`
+	// so intake's SPEC fallback and promotion's SPEC body cannot drift. `trimEnd()`
 	// drops the renderer's trailing blank line so intake's single trailing `\n`
 	// (owned by the join below) keeps the bytes identical to the pre-rewire literal.
 	const drafted =
@@ -1704,7 +1704,7 @@ export function renderSpec(params: {
 			? body.trim()
 			: renderSpecBody({
 					problemStatement: `Transformed from issue #${issueNumber}: ${title}`,
-					solution: '(to be detailed; this prd needs tasking via `do prd:`).',
+					solution: '(to be detailed; this spec needs tasking via `do spec:`).',
 					userStories: `1. As a user, I want issue #${issueNumber} addressed.`,
 				}).trimEnd();
 	return `${frontmatter}\n\n${drafted}\n`;
@@ -1737,7 +1737,7 @@ async function stageIntakeContent(params: {
  * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
  * DISTINCT from the later build branch (`work/task-<slug>`) for the same slug
  * — the firing `intake` × `do task:` collision the observation traced. The
- * task-emit path passes `'task'`, the prd-emit path `'prd'`. A pre-existing
+ * task-emit path passes `'task'`, the spec-emit path `'prd'`. A pre-existing
  * local branch (a re-run) is force-recreated off fresh main.
  */
 async function switchToWorkBranch(
@@ -1782,7 +1782,7 @@ async function runDecision(
 	if (options.decide) {
 		return options.decide({cwd, issue, comments, prompt, env: options.env});
 	}
-	// PRODUCTION: launch the harness with the decision prd, then PARSE the verdict
+	// PRODUCTION: launch the harness with the decision spec, then PARSE the verdict
 	// the agent emitted out of its ANSWER channel (`launched.output`) — the SAME wire
 	// the review gate runs (launch → `parseReviewVerdict(readOutput(launched.output))`;
 	// `harnessReviewGate`). The agent emits a single fenced ```json block (the OUTPUT
@@ -2293,20 +2293,20 @@ export function buildLoneTaskReviewPrompt(
 export const parseLoneTaskReviewVerdict = parseReviewVerdict;
 
 /**
- * Build the intake decision PRD (an inline prompt builder, like `buildTaskingPrd`
+ * Build the intake decision SPEC (an inline prompt builder, like `buildTaskingPrd`
  * in `tasking.ts` / the reviewer prompts in `review-gate.ts` — NOT a standalone
  * asset/`.md` file; no such convention exists in this package). It encodes the FULL
- * four-outcome decision table (prd `issue-intake` — the source of truth) and the
+ * four-outcome decision table (spec `issue-intake` — the source of truth) and the
  * three DECISION AIDS stated once there:
  *
  * 1. the **"clear?" bar** = `to-task`/`needsAnswers`' "would I build the wrong
  *    thing if I guessed?" — if a material requirement/scope/acceptance question is
  *    unanswered, ASK (never guess a spec from a vague issue);
  * 2. the **"one task?" bar** = `to-task`' tracer-bullet test (one thin end-to-end
- *    path, demoable on its own) — fits → TASK, needs splitting → PRD;
- * 3. **PRD vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → PRD;
+ *    path, demoable on its own) — fits → TASK, needs splitting → SPEC;
+ * 3. **SPEC vs BOUNCE** turns on a **SHARED VISION**: coupled (even if small) → SPEC;
  *    genuinely unrelated → BOUNCE. Size NEVER forces a bounce — only unrelatedness
- *    (the over-bounce guard: a coupled-but-small pair gets a light PRD, never a
+ *    (the over-bounce guard: a coupled-but-small pair gets a light SPEC, never a
  *    bounce).
  *
  * The prompt anchors to `to-task`/`to-spec` for the task/spec SHAPES it drafts. Its
@@ -2328,7 +2328,7 @@ export function buildIntakeDecisionSpec(
 							`#${i + 1} ${c.author ? `@${c.author}` : '(unknown)'}: ${c.body}`,
 					)
 					.join('\n\n');
-	// TRIAGE ENRICHMENT (prd `issue-intake`): on the raced PROCEED path the prompt is
+	// TRIAGE ENRICHMENT (spec `issue-intake`): on the raced PROCEED path the prompt is
 	// told which comment(s) PRE-DATE intake's last turn (context for a prior state,
 	// not necessarily a fresh answer) and — only then — how many previously-SEEN
 	// comments were DELETED (a flag + count; the bodies are gone, so do not name them).
@@ -2381,39 +2381,39 @@ export function buildIntakeDecisionSpec(
 		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the',
 		'  lone-task closure link, NOT `Fixes #N`) and integrates it.',
 		'',
-		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE task (it',
+		'- **SPEC** — the issue is CLEAR *and* coherent but needs MORE THAN ONE task (it',
 		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 task',
 		'  ⟺ a shared vision worth recording ⟺ a spec. Draft a spec in the `to-spec` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
-		'  The runner writes the prd file (`work/prds/ready/<slug>.md`) with `issue: N` and integrates it;',
-		'  TASKING the prd is a SEPARATE later step (`do prd:`) — do not task it here.',
+		`  The runner writes the spec file (\`${workFolderPrefix('specs-ready')}<slug>.md\`) with \`issue: N\` and integrates it;`,
+		'  TASKING the spec is a SEPARATE later step (`do spec:`) — do not task it here.',
 		'  **INCLUDES a coupled-but-SMALL pair: if two asks share a vision they get a',
-		'  (light) prd — they are NEVER bounced.**',
+		'  (light) spec — they are NEVER bounced.**',
 		'',
 		'- **BOUNCE** — the issue is really MULTIPLE UNRELATED concerns wearing one issue:',
 		'  you cannot articulate a SINGLE shared vision tying them together. Draft a short',
 		'  message asking the author to file separate issues. A bounce is TERMINAL, so the',
 		'  runner CLOSES the issue ATOMICALLY — your message as the closing comment +',
 		'  reason "not planned" (the honest signal that the asks must be re-filed). Intake',
-		'  closes on BOUNCE only; never on task/prd (CI’s close-job) / ask.',
+		'  closes on BOUNCE only; never on task/spec (CI’s close-job) / ask.',
 		'',
 		'## The three decision aids (apply them in order)',
 		'',
 		'1. **"clear?"** (ASK vs the rest): the `needsAnswers` bar — would acting now risk',
 		'   building the wrong thing? If yes → ASK. Otherwise it is clear; continue.',
-		'2. **"one task?"** (TASK vs PRD): the `to-task` tracer-bullet test — one thin',
-		'   end-to-end path, demoable alone? Fits → TASK; needs splitting → PRD.',
-		'3. **"shared vision?"** (PRD vs BOUNCE): coupled (even if small) → PRD; genuinely',
+		'2. **"one task?"** (TASK vs SPEC): the `to-task` tracer-bullet test — one thin',
+		'   end-to-end path, demoable alone? Fits → TASK; needs splitting → SPEC.',
+		'3. **"shared vision?"** (SPEC vs BOUNCE): coupled (even if small) → SPEC; genuinely',
 		'   unrelated → BOUNCE. SIZE NEVER forces a bounce — only UNRELATEDNESS does. Do',
-		'   not over-bounce a small coupled pair: it is a light prd.',
+		'   not over-bounce a small coupled pair: it is a light spec.',
 		'',
 		'## Boundary',
 		'',
-		'You only DRAFT the verdict + its content (the task/prd body, or the comment',
+		'You only DRAFT the verdict + its content (the task/spec body, or the comment',
 		'text). You do NOT perform ANY git operation and you do NOT post any comment — the',
-		'runner owns every git/seam side-effect (write, integrate, postComment). For a prd',
+		'runner owns every git/seam side-effect (write, integrate, postComment). For a spec',
 		'verdict, also judge its gate axes (humanOnly / needsAnswers) so the runner can',
-		'surface them on the emitted prd.',
+		'surface them on the emitted spec.',
 		'',
 		'## Output — hand the verdict back as ONE fenced JSON block',
 		'',

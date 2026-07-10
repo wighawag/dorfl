@@ -1,5 +1,5 @@
 /**
- * The `install-ci` VERIFY-WORKFLOW capability (prd
+ * The `install-ci` VERIFY-WORKFLOW capability (spec
  * `land-time-reverify-and-parallel-merge-ceiling`, task
  * `install-ci-tier1-branch-protection`; Story 11 — the Tier-1 GitHub ceiling).
  * Emits a small `verify.yml` workflow whose ONLY job is `verify` and runs on
@@ -49,7 +49,7 @@ export const VERIFY_WORKFLOW_PATH = 'workflows/verify.yml';
  */
 export function generateVerifyWorkflow(_config: ResolvedCIConfig): string {
 	return `\
-# dorfl — the VERIFY workflow (Tier-1 GitHub ceiling; prd
+# dorfl — the VERIFY workflow (Tier-1 GitHub ceiling; spec
 # land-time-reverify-and-parallel-merge-ceiling, task
 # install-ci-tier1-branch-protection). EMITTED by \`dorfl install-ci\`; the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade.

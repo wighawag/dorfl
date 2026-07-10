@@ -78,7 +78,7 @@ export interface StartOptions {
 	 */
 	override?: boolean;
 	/**
-	 * `--allow-backlog` (prd
+	 * `--allow-backlog` (spec
 	 * `do-allow-backlog-drive-staged-tasks-without-promotion`): recognise a
 	 * `tasks/backlog/`-resident body (staging) as a valid start/onboard residence,
 	 * so the no-checkout `do --remote/--isolated … --allow-backlog` flow (which
@@ -236,7 +236,7 @@ async function runStart(
  *     resume the lock `stuck → active`, onboard).
  * Everything else dispatches by folder unchanged.
  *
- * Under `--allow-backlog` (prd
+ * Under `--allow-backlog` (spec
  * `do-allow-backlog-drive-staged-tasks-without-promotion`) a body resting in
  * `tasks/backlog/` (staging) is treated EXACTLY like the pool for this re-key
  * (held active ⇒ in-progress; held stuck ⇒ needs-attention; else the backlog
@@ -620,7 +620,7 @@ async function switchToWorkBranch(params: {
 }): Promise<SwitchResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 	// `start` is a TASK-only command: the branch is the task-namespaced
-	// `work/task-<slug>` (distinct from a same-slug prd-tasking branch).
+	// `work/task-<slug>` (distinct from a same-slug spec-tasking branch).
 	const branch = workBranchRef('task', slug);
 
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
@@ -909,7 +909,7 @@ async function inferSlugFromBranch(
 
 /**
  * Which work/ folder the slug currently lives in on `<arbiter>/main`. Under
- * `--allow-backlog` (prd `do-allow-backlog-drive-staged-tasks-without-promotion`)
+ * `--allow-backlog` (spec `do-allow-backlog-drive-staged-tasks-without-promotion`)
  * it ALSO recognises `tasks/backlog/` (staging) at LOWEST priority — after the
  * pool — so a same-slug pool copy still wins; otherwise staging is invisible.
  */

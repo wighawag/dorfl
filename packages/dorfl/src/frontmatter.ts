@@ -105,19 +105,19 @@ export interface Frontmatter {
 	/** Slugs this item is blocked by; `[]` when omitted or empty. */
 	blockedBy: string[];
 	/**
-	 * Prd-only: slugs of prds that must already be TASKED before this prd may be
-	 * tasked (resolved against `work/prds/tasked/` residence, NOT `done/`). `[]` when
+	 * Spec-only: slugs of prds that must already be TASKED before this spec may be
+	 * tasked (resolved against `work/specs/tasked/` residence, NOT `done/`). `[]` when
 	 * omitted or empty. Parsed here so the auto-tasker can read it; enforcement
 	 * lives in the `auto-slice` capability, not in eligibility.
 	 */
 	taskedAfter: string[];
 	/**
 	 * The per-item override layer for the `promptGuidance` NUDGE namespace
-	 * (task `prompt-guidance-testfirst-item-override`, prd US #5). A task or
-	 * prd may carry one or more `promptGuidance.<member>: true | false`
+	 * (task `prompt-guidance-testfirst-item-override`, spec US #5). A task or
+	 * spec may carry one or more `promptGuidance.<member>: true | false`
 	 * frontmatter lines to OVERRIDE the resolved repo policy for THAT ITEM only.
 	 * Each member is `undefined` when omitted (⇒ inherit the next layer down in
-	 * the precedence chain: per-task > per-prd > repo-resolved). The override
+	 * the precedence chain: per-task > per-spec > repo-resolved). The override
 	 * is honoured at the prompt-assembly seam (`prompt.ts`); it never affects
 	 * the `verify` gate.
 	 *
@@ -293,12 +293,12 @@ export function setFrontmatterMarker(
 
 /**
  * PROPAGATE the origin-trust PROVENANCE (`origin` + `originTrust`) from a SOURCE
- * artifact (a prd) onto a TARGET artifact's content (an emitted task), returning
+ * artifact (a spec) onto a TARGET artifact's content (an emitted task), returning
  * the new content (task `untrusted-origin-forces-build-propose`). The tasker
- * calls this so a task born from an untrusted-origin prd carries the stamp the
+ * calls this so a task born from an untrusted-origin spec carries the stamp the
  * BUILD transition reads. IDEMPOTENT: each present source field is written via
  * {@link setFrontmatterMarker} (replace-or-append). When the source has NO `origin`
- * (a human/local-authored prd ⇒ trusted), the target is returned UNCHANGED — the
+ * (a human/local-authored spec ⇒ trusted), the target is returned UNCHANGED — the
  * normal path is never stamped (zero behaviour change). When a stamp IS applied to
  * a fence-less target, {@link setFrontmatterMarker} now prepends a fence to carry
  * it (tasks the tasker emits always have a fence, so this is the defensive path).
@@ -390,7 +390,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 				result.spec = value;
 			}
 		} else if (key === 'issue') {
-			// Integer issue link (`intake`'s prd-emit OR a lone-task emit). A
+			// Integer issue link (`intake`'s spec-emit OR a lone-task emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather
 			// than malformed).
 			const n = Number(unquote(rawValue));

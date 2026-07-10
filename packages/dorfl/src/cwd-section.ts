@@ -268,7 +268,7 @@ export async function resolveCwdSection(
 	const localReport = scanRepoPaths([cwd], config, heldSlugs, options.override);
 	const repo = localReport.repos[0];
 
-	// 3b. The PER-ITEM LOCK in-flight SURFACE for the cwd (prd
+	// 3b. The PER-ITEM LOCK in-flight SURFACE for the cwd (spec
 	//     `ledger-status-per-item-lock-refs` US #8). The subtraction above removes a
 	//     held slug from the eligible `items[]` pool; on its OWN that leaves a
 	//     held/stuck cwd item in a BLIND SPOT — gone from every bucket with nothing

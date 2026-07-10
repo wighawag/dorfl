@@ -1,5 +1,5 @@
 /**
- * The ADVANCE-LIFECYCLE capability emitter (PRD `runner-in-ci`, task
+ * The ADVANCE-LIFECYCLE capability emitter (SPEC `runner-in-ci`, task
  * `install-ci-advance-lifecycle-workflow`; capability C: auto-triage observations
  * + surface declared blockers + apply committed answers). A SELF-REGISTERING
  * module: it calls {@link registerCapability} at import time, so

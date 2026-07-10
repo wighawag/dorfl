@@ -25,7 +25,7 @@ import type {WorkFolderKey} from './work-layout.js';
  * (`tasks-backlog`, `prds-proposed`) on purpose: a concurrent `promote` may have
  * just `git mv`'d the item from staging into the pool between an apply's CAPTURE
  * and WRITE, and the apply must resolve to the post-move path — the whole point of
- * folder-agnostic apply (F3a of prd `staging-surface-and-apply-promote-safety`).
+ * folder-agnostic apply (F3a of spec `staging-surface-and-apply-promote-safety`).
  * Terminal-only folders (`cancelled`, `prds-dropped`, `needs-attention`) are NOT
  * here — once an item has reached a terminal, the apply is OVER, and a re-resolve
  * into a terminal would mean the item has effectively vanished from the active
@@ -55,7 +55,7 @@ export const APPLY_LIFECYCLE_FOLDERS: Record<
  * move) — the apply rung then exits CLEAN (no commit, no ghost file), routed as the
  * `vanished` outcome.
  *
- * This is the F3a fix from prd `staging-surface-and-apply-promote-safety`: the
+ * This is the F3a fix from spec `staging-surface-and-apply-promote-safety`: the
  * sidecar is already identity-keyed and folder-agnostic; the item path is now the
  * same. A concurrent `promote` that `git mv`'d the item out from under a captured
  * path can no longer cause a stale-path write.

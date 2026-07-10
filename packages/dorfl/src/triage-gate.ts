@@ -3,7 +3,7 @@ import {launchWithOptionalWatch} from './agent-launch.js';
 import {extractJsonObjectSpan} from './verdict-json.js';
 
 /**
- * The **TRIAGE auto-disposition GATE** (prd `advance-loop`, task
+ * The **TRIAGE auto-disposition GATE** (spec `advance-loop`, task
  * `advance-rung-triage`, US #17) — the CONSERVATIVE, `observationTriage: 'auto'`-
  * gated exception to the question-gated default. On `classify=triage-observation`
  * AND `observationTriage` resolved to `'auto'`, the engine asks this gate whether

@@ -1,5 +1,5 @@
 /**
- * The CI CLOSE-JOB driver (prd `runner-in-ci`, capability E; task
+ * The CI CLOSE-JOB driver (spec `runner-in-ci`, capability E; task
  * `install-ci-close-job-workflow`). When work lands on `main`, this resolves which
  * source issue(s) the landed work closes and closes them — but it OWNS none of the
  * machinery it relies on. It is the thin JOB that WIRES three UNCHANGED engine
@@ -7,7 +7,7 @@
  *
  *   - the RESOLUTION — {@link resolveClosingIssue} (`frontmatter.ts`): an artifact
  *     uses `issue:` XOR `prd:`; a lone task closes its own `issue:` directly, a
- *     fanned task reaches the number via `task.prd: → work/prds/<prd>.md prd
+ *     fanned task reaches the number via `task.prd: → work/specs/<spec>.md spec
  *     issue:`, and `prd:` WINS on a (hand-edited) conflict;
  *   - the QUERY — {@link isSpecComplete} (`spec-complete.ts`, task
  *     `prd-complete-query`, done): a spec is COMPLETE iff ≥1 `spec:<slug>` task AND
@@ -21,10 +21,10 @@
  *
  *   - a **lone task** (`issue:`, no `prd:`) that resides in `work/done/` — its PR
  *     merged, so its own issue closes (reason `completed`);
- *   - a **prd** (`issue:`) — closes ONLY when {@link isSpecComplete} says ALL its
+ *   - a **spec** (`issue:`) — closes ONLY when {@link isSpecComplete} says ALL its
  *     `spec:<slug>` tasks are in `work/done/` (reason `completed`).
  *
- * A prd whose query is NOT yet complete is left OPEN (the final fanned task's
+ * A spec whose query is NOT yet complete is left OPEN (the final fanned task's
  * merge tick closes it). A lone task still outside `work/done/` is skipped. The
  * close DEGRADES (never throws) on a missing/unauthenticated provider, exactly
  * like intake's bounce close — the run reports the real cause and stays exit-0.
@@ -62,7 +62,7 @@ const SPEC_LIFECYCLE_FOLDERS = SPEC_FOLDERS;
 /** Why the close-job acted (or did not act) on a candidate issue. */
 export type CloseDecision =
 	| 'closed' // the issue was closed via the provider seam
-	| 'not-complete' // a prd whose query says it is not yet complete → left open
+	| 'not-complete' // a spec whose query says it is not yet complete → left open
 	| 'not-landed' // a lone task not yet in work/done/ → left open
 	| 'close-failed'; // closure condition held but the provider close degraded
 
@@ -111,8 +111,8 @@ function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
 }
 
 /**
- * Read a prd's `issue:` number by slug, scanning the prd folders. Returns
- * `undefined` when no prd with that slug carries an `issue:` (a prd with no source
+ * Read a spec's `issue:` number by slug, scanning the spec folders. Returns
+ * `undefined` when no spec with that slug carries an `issue:` (a spec with no source
  * issue, or a typo'd `prd:` hop — degrades to "no issue to close", never crashes).
  */
 function specIssueNumber(
@@ -137,14 +137,14 @@ function specIssueNumber(
  * Resolve the DEDUPLICATED set of closure candidates from the `work/` tree, each
  * via the UNCHANGED {@link resolveClosingIssue}:
  *
- *   - every prd carrying `issue:` (in `work/prds/ready/` or `work/prds/tasked/`) is a
- *     prd-kind candidate keyed on its own `prd:` query;
+ *   - every spec carrying `issue:` (in `work/specs/ready/` or `work/specs/tasked/`) is a
+ *     spec-kind candidate keyed on its own `prd:` query;
  *   - every LONE task (`issue:` and NO `prd:`) is an `issue`-kind candidate.
  *
  * A fanned task carries `prd:` (NOT its own `issue:`), so it reaches the number
- * through its prd's candidate, never as its own — the issue number lives ONLY on
- * the prd. Deduplicated by issue number: a prd enumerated once even though many
- * tasks point at it. Prd candidates are listed before lone-task candidates, each
+ * through its spec's candidate, never as its own — the issue number lives ONLY on
+ * the spec. Deduplicated by issue number: a spec enumerated once even though many
+ * tasks point at it. Spec candidates are listed before lone-task candidates, each
  * group slug-sorted, for a deterministic log.
  */
 function resolveCandidates(repoPath: string): {
@@ -165,9 +165,9 @@ function resolveCandidates(repoPath: string): {
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
-			// A prd's own closing link is its `issue:` (a prd has no `prd:`); on the
+			// A spec's own closing link is its `issue:` (a spec has no `prd:`); on the
 			// hand-edit conflict `prd:` wins via resolveClosingIssue, so only a true
-			// `issue:`-bearing prd becomes a candidate here.
+			// `issue:`-bearing spec becomes a candidate here.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
 				specCandidates.push({issueNumber: closing.issue, via: 'spec', slug});
@@ -185,8 +185,8 @@ function resolveCandidates(repoPath: string): {
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
 			// `resolveClosingIssue` returns `via: 'issue'` ONLY when there is no `prd:`
-			// (prd wins on conflict), so a fanned task never lands here — it reaches
-			// its issue through the prd candidate above.
+			// (spec wins on conflict), so a fanned task never lands here — it reaches
+			// its issue through the spec candidate above.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
 				taskCandidates.push({issueNumber: closing.issue, via: 'issue', slug});
@@ -222,7 +222,7 @@ function closeComment(via: 'issue' | 'spec', slug: string): string {
 
 /**
  * Run the close-job over a repo's `work/` tree: resolve the closure candidates,
- * apply the per-kind closure condition (a landed lone task; a prd whose
+ * apply the per-kind closure condition (a landed lone task; a spec whose
  * {@link isSpecComplete} query holds), and close the qualifying issues through the
  * {@link IssueProvider.closeIssue} seam (reason `completed`, an informational
  * comment riding the SAME atomic close). REUSES the unchanged resolution + query +

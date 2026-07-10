@@ -179,6 +179,28 @@ function scannedFiles(): string[] {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// PROVENANCE FILES: task/observation bodies whose OWN SUBJECT is the retired
+// `prd` vocabulary sweep. Such a body legitimately QUOTES the retired word +
+// the migrated-away `work/prds/…` folder path in prose to describe what it
+// converts FROM (the SLUG-based `PRESERVE_SLUGS` mechanism cannot reach these
+// content lines when the slug itself carries no `prd` substring). File-scoped
+// analogue of `PRESERVE_SLUGS`; a concrete, enumerated basename list (asserted
+// non-vacuous below), so it cannot silently swallow a real re-drift elsewhere.
+// See work/notes/observations/word-scan-exempts-prd-cutover-task-bodies-2026-
+// 07-10.md for the decision record.
+// ───────────────────────────────────────────────────────────────────────────
+
+const PROVENANCE_FILE_BASENAMES: readonly string[] = [
+	'sweep-prd-artifact-word-in-src-prose-and-runtime-strings.md',
+	'word-scan-exempts-prd-cutover-task-bodies-2026-07-10.md',
+	'advance-lifecycle-template-src-prose-still-says-prd-2026-07-10.md',
+];
+
+function isProvenanceFile(rel: string): boolean {
+	return PROVENANCE_FILE_BASENAMES.some((b) => rel.endsWith(b));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // The leak lens (WORD + folder path, minus the PRESERVE allow-list).
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -257,6 +279,7 @@ function stripInlineCode(line: string): string {
 }
 
 function fileLeaks(rel: string, text: string): Leak[] {
+	if (isProvenanceFile(rel)) return []; // a prd-cutover doc quoting the retired word
 	const leaks: Leak[] = [];
 	const lines = text.split('\n');
 	let inFence = false;
@@ -410,5 +433,16 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 			return PRESERVE_SLUGS.some((s) => text.includes(s));
 		});
 		expect(anyPresent).toBe(true);
+		// The PROVENANCE-FILE exemption is non-vacuous too: each named basename is a
+		// real file in the tree that WOULD flag without the exemption (it quotes the
+		// retired word in prose).
+		const files = scannedFiles();
+		for (const base of PROVENANCE_FILE_BASENAMES) {
+			const hit = files.find((f) => relTo(f).endsWith(base));
+			expect(hit, `provenance file missing: ${base}`).toBeTruthy();
+			if (hit) {
+				expect(/prd/i.test(readFileSync(hit, 'utf8')), base).toBe(true);
+			}
+		}
 	});
 });

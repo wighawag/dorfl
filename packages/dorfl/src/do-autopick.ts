@@ -24,9 +24,9 @@ import type {ConfigOverrideMap} from './config-override.js';
  * Auto-pick / `-n` draw from TWO POOLS ordered by the configurable
  * `selectionOrder` (the shared, pure {@link selectPrioritised} helper): eligible
  * TASKS (the `build` pool — the existing `scan`/`selectCandidates`/eligibility
- * path) and TASKABLE prds (the `task` pool — built from the prd reader +
+ * path) and TASKABLE prds (the `task` pool — built from the spec reader +
  * `autoslice-gate`'s predicate), in the per-repo `selectionOrder` (default `drain`
- * = tasks-first). A selected prd dispatches to the `do prd:<slug>` path (tasking
+ * = tasks-first). A selected spec dispatches to the `do prd:<slug>` path (tasking
  * itself is `autoslice-command`, not built here).
  *
  * Explicit multi-arg (`do <a> <b>`) bypasses the pools/priority entirely — the
@@ -41,7 +41,7 @@ type SharedDoOptions = Omit<DoOptions, 'arg'>;
 
 export interface PerformDoMultiOptions extends SharedDoOptions {
 	/**
-	 * The resolved repo config (provides `autoTask` for the prd gate,
+	 * The resolved repo config (provides `autoTask` for the spec gate,
 	 * `selectionOrder` for the pool order, and the task-pool selection caps). The
 	 * per-item runs still receive `autoTask`/`integration`/etc. via the spread
 	 * `SharedDoOptions`.
@@ -62,7 +62,7 @@ export interface PerformDoMultiOptions extends SharedDoOptions {
 	count?: number;
 	/** Override the single-`do` runner (tests inject a stub). Defaults to {@link performDo}. */
 	run?: DoRunner;
-	/** Override the read seam (prd pool); defaults to the active {@link ledgerRead}. */
+	/** Override the read seam (spec pool); defaults to the active {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
 }
 
@@ -85,7 +85,7 @@ export interface DoMultiResult {
  * The task-pool caps for an in-place `do` selection. `do` is per-repo +
  * sequential, so the REAL bound is the requested `count` (handled by the
  * priority helper); the task-pool selection should not truncate BEFORE the
- * count + the prd pool are combined. We therefore cap the task pool at "all
+ * count + the spec pool are combined. We therefore cap the task pool at "all
  * eligible" (a large bound) and let {@link selectPrioritised}'s `count` do the
  * trimming across both pools.
  */
@@ -116,7 +116,7 @@ export async function performDoAuto(
 		options.override,
 	);
 
-	// Pool 2 — TASKABLE prds: the NEW pool from the shared prd read path
+	// Pool 2 — TASKABLE prds: the NEW pool from the shared spec read path
 	// (`resolveSpecPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
 	const pool = read.resolveSpecPool({repoPath: cwd});
 	const specCandidates: SpecCandidate[] = pool.specs.map((spec) => ({
@@ -156,7 +156,7 @@ export async function performDoAuto(
  * Run the EXPLICIT multi-arg form (`do <a> <b> …`): the named items in the GIVEN
  * order (no pool/priority — the operator chose them). Each arg is run through the
  * existing `do` pipeline, which itself resolves bare/`task:`/`prd:` (so a named
- * prd dispatches to the tasking path and a collision errors), SEQUENTIALLY.
+ * spec dispatches to the tasking path and a collision errors), SEQUENTIALLY.
  */
 export async function performDoArgs(
 	args: string[],
@@ -176,7 +176,7 @@ export async function performDoArgs(
 /**
  * Run a list of selected items through the existing `do` pipeline, SEQUENTIALLY,
  * threading the shared options to each. For the pool path the `do` arg encodes
- * the namespace (`prd:<slug>` for a selected prd, bare slug for a task); for the
+ * the namespace (`prd:<slug>` for a selected spec, bare slug for a task); for the
  * explicit-arg path the caller's raw arg is passed verbatim.
  */
 async function runSelectedInSequence(
