@@ -44,3 +44,7 @@ The CONTRACT phase of the wide refactor (`TASKING-PROTOCOL.md` §3a): now that e
 > Done means: dead token rejected, both scans exhaustive + green, no dead compat reader, full gate green. This task is the trust signal that the source-part cutover is complete.
 >
 > FIRST check drift: confirm batches 1–5 all landed (this asserts "no caller uses the old form" — if any batch is missing, the forward scan will rightly fail and you should route the missing batch, not weaken the scan).
+
+## Requeue 2026-07-10
+
+STOPPED (agent, verified-correct): the migrate step left ~50 live 'prd' EMIT-site + local-union-DEFINITION identifiers un-migrated across ~14 modules (4a/b/c widened CONSUMER === checks only). Removing the alias would silently misroute prd:<slug> sidecar/lock identity to task (compiles clean). Re-scoping option A: inserting a migrate batch (rename-spec-namespace-emit-sites-and-local-unions) before this, and keeping the sidecar-FILE-path prd-<slug>.md reader as an alias the migration command removes. Requeued.
