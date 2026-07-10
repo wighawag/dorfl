@@ -2,7 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {performIntake} from '../src/intake.js';
-import {promoteFromPrePrd} from '../src/needs-attention.js';
+import {promoteFromPreSpec} from '../src/needs-attention.js';
 import {ledgerRead} from '../src/ledger-read.js';
 import {resolveTaskingEligibility} from '../src/tasking-eligibility.js';
 import {resolveEligibility} from '../src/eligibility.js';
@@ -41,7 +41,7 @@ import type {
  *       (`createLocalLedgerReadStrategy().resolveSpecPool`) reads `work/specs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
  *       tasking-eligibility gate refuses a staged slug;
- *   (c) the runner-owned promotion (`promoteFromPrePrd`) moves the staged
+ *   (c) the runner-owned promotion (`promoteFromPreSpec`) moves the staged
  *       PRD `pre-prd/ \u2192 prd/` on the arbiter and the same slug becomes
  *       auto-sliceable. There is no agent-facing path that performs the
  *       promotion (asserted structurally: no agent surface imports it);
@@ -184,7 +184,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 		);
 	});
 
-	it('originTrust: untrusted FORCES staging even when prdsLandIn: ready (the untrusted-origin force)', async () => {
+	it('originTrust: untrusted FORCES staging even when specsLandIn: ready (the untrusted-origin force)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 7,
@@ -194,7 +194,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			decide: async () => PRD_VERDICT,
 			// The repo says "land PRDs in the pool" \u2014 but the trust signal
 			// overrides it (PRD US #12).
-			prdsLandIn: 'ready',
+			specsLandIn: 'ready',
 			originTrust: 'untrusted',
 			env: gitEnv(),
 		});
@@ -214,14 +214,14 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			// override beats it (mirrors `explicitMerge` overriding the
 			// untrusted-origin build-propose rule).
 			originTrust: 'untrusted',
-			explicitPrdsLandIn: 'ready',
+			explicitSpecsLandIn: 'ready',
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('spec-written');
 		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
 	});
 
-	it('prdsLandIn: ready (configured default, trusted origin) lands the PRD in the pool', async () => {
+	it('specsLandIn: ready (configured default, trusted origin) lands the PRD in the pool', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 9,
@@ -229,7 +229,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 9}}),
 			decide: async () => PRD_VERDICT,
-			prdsLandIn: 'ready',
+			specsLandIn: 'ready',
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
@@ -278,7 +278,7 @@ describe('STEP A (PRD) \u2014 work/specs/ready/ STILL means the auto-slice POOL 
 });
 
 describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto-sliceable', () => {
-	it('promoteFromPrePrd moves pre-prd/<slug>.md \u2192 prd/<slug>.md on the arbiter; afterwards the pool reader sees it', async () => {
+	it('promoteFromPreSpec moves pre-prd/<slug>.md \u2192 prd/<slug>.md on the arbiter; afterwards the pool reader sees it', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 42,
@@ -300,7 +300,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		);
 
 		// PROMOTE (runner-owned).
-		const promoted = await promoteFromPrePrd({
+		const promoted = await promoteFromPreSpec({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -327,7 +327,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 
 	it('promote on a slug not in pre-prd/ refuses cleanly (no main move)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreSpec({
 			slug: 'nope',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -349,7 +349,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		});
 		expect(result.outcome).toBe('spec-written');
 		landIntakeBranchOnMain(repo, 'shiny-new-vision');
-		const first = await promoteFromPrePrd({
+		const first = await promoteFromPreSpec({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -359,7 +359,7 @@ describe('STEP A (PRD) \u2014 the runner-owned promotion makes a staged PRD auto
 		// A second promote call (the source is gone; the dest is there) does not
 		// CRASH; it returns a clean refusal/no-op (the dest-already-in-pool branch
 		// of the `plan` resolver).
-		const second = await promoteFromPrePrd({
+		const second = await promoteFromPreSpec({
 			slug: 'shiny-new-vision',
 			cwd: repo,
 			arbiter: ARBITER,

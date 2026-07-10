@@ -57,17 +57,17 @@ export type TasksLandIn = 'pre-backlog' | 'ready';
  * spellings mirror the live prd folders (`prds/proposed/` staging,
  * `prds/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
-export type PrdsLandIn = 'pre-proposed' | 'ready';
+export type SpecsLandIn = 'pre-proposed' | 'ready';
 
 /**
- * The `spec` vocabulary ALIAS for {@link PrdsLandIn} (prd
- * `prd-to-spec-vocabulary-cutover-and-migration-command`). The EXPAND step adds
- * the canonical `spec`-named type beside the legacy `PrdsLandIn`; the two are the
- * SAME value spelling (`'pre-proposed' | 'ready'`) so every existing `PrdsLandIn`
- * annotation keeps compiling. The migrate batches move annotations onto
- * `SpecsLandIn`; the contract task removes `PrdsLandIn`.
+ * The legacy `prd` vocabulary ALIAS for {@link SpecsLandIn} (prd
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`). The MIGRATE step made
+ * `SpecsLandIn` the canonical own type and left `PrdsLandIn` as a readable alias
+ * so any not-yet-migrated `PrdsLandIn` annotation keeps compiling; the two are the
+ * SAME value spelling (`'pre-proposed' | 'ready'`). The contract task removes
+ * `PrdsLandIn`.
  */
-export type SpecsLandIn = PrdsLandIn;
+export type PrdsLandIn = SpecsLandIn;
 
 /**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
@@ -395,21 +395,25 @@ export interface Config {
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
-	 */
-	prdsLandIn: PrdsLandIn;
-	/**
+	 *
 	 * **The `spec` vocabulary CANONICAL key for the spec-placement default** (prd
-	 * `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND step). Added
-	 * BESIDE {@link prdsLandIn} so intake's spec-placement default can migrate onto
-	 * the `spec` name one batch at a time. The resolver reads EITHER key with
-	 * `specsLandIn` WINNING when both are present (`config.specsLandIn ??
+	 * `prd-to-spec-vocabulary-cutover-and-migration-command`, MIGRATE step). The
+	 * primary internal spelling is now `specsLandIn`; the resolver reads EITHER key
+	 * with `specsLandIn` WINNING when both are present (`config.specsLandIn ??
 	 * config.prdsLandIn`); the `--specs-land-in` flag / `DORFL_SPECS_LAND_IN` env sit
-	 * beside `--prds-land-in` / `DORFL_PRDS_LAND_IN`. `undefined`/unset here means
-	 * "no `spec`-named override", so the legacy `prdsLandIn` value applies unchanged
-	 * — the additive, zero-behaviour-change default. The contract task removes
+	 * beside `--prds-land-in` / `DORFL_PRDS_LAND_IN`. The contract task removes
 	 * `prdsLandIn` and makes this the sole key.
 	 */
-	specsLandIn?: SpecsLandIn;
+	specsLandIn: SpecsLandIn;
+	/**
+	 * **The legacy `prd` vocabulary READABLE ALIAS for {@link specsLandIn}** (prd
+	 * `prd-to-spec-vocabulary-cutover-and-migration-command`). Left OPTIONAL beside
+	 * the primary `specsLandIn` so an existing `prdsLandIn`-only config still
+	 * resolves via the resolver's `config.specsLandIn ?? config.prdsLandIn` fallback.
+	 * `undefined`/unset means "no legacy override". The contract task removes this
+	 * key and the fallback.
+	 */
+	prdsLandIn?: PrdsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -783,11 +787,11 @@ export const DEFAULT_CONFIG: Config = {
 	// `intake`-authored prds land STAGED (`pre-proposed/`) by default — the
 	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a prd is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner
-	// promotes it. A repo opts into the trusted fast-path with `prdsLandIn: 'ready'`
+	// promotes it. A repo opts into the trusted fast-path with `specsLandIn: 'ready'`
 	// (or `--prds-land-in ready` / `DORFL_PRDS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	prdsLandIn: 'pre-proposed',
+	specsLandIn: 'pre-proposed',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically

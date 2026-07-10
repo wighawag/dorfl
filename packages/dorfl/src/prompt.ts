@@ -692,7 +692,7 @@ export function resolveItemPromptGuidance(
  * through to the repo policy (a missing prd is NOT an error at this seam;
  * the per-item override is OPTIONAL by design).
  */
-export function findPrdPath(cwd: string, prdSlug: string): string | undefined {
+export function findSpecPath(cwd: string, prdSlug: string): string | undefined {
 	const candidates = [
 		workItemPath(cwd, 'specs-ready', prdSlug),
 		workItemPath(cwd, 'specs-tasked', prdSlug),
@@ -722,7 +722,7 @@ export function resolvePromptGuidanceForItem(options: {
 	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 	// read the parent-spec pointer off `fm.spec` (populated beside `fm.prd`).
 	if (taskFm.spec !== undefined) {
-		const prdPath = findPrdPath(options.cwd, taskFm.spec);
+		const prdPath = findSpecPath(options.cwd, taskFm.spec);
 		if (prdPath !== undefined) {
 			prdFm = parseFrontmatter(readFileSync(prdPath, 'utf8'));
 		}

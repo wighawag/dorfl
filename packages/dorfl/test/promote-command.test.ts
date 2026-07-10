@@ -18,7 +18,7 @@ import {run} from '../src/git.js';
  * `pre-backlog-staging-folder-and-promote-step-a` /
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the runner/human
  * side of the staging gate that admits a STAGED item into its agent-eligible
- * pool. The underlying moves (`promoteFromPreBacklog` / `promoteFromPrePrd`) are
+ * pool. The underlying moves (`promoteFromPreBacklog` / `promoteFromPreSpec`) are
  * tested directly in the two staging test files; THIS file covers the new
  * surface:
  *

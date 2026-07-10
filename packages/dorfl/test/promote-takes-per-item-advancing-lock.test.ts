@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {
 	promoteFromPreBacklog,
-	promoteFromPrePrd,
+	promoteFromPreSpec,
 } from '../src/needs-attention.js';
 import {
 	acquireItemLock,
@@ -33,7 +33,7 @@ import {run} from '../src/git.js';
  *   (a) when an apply-style `advance` hold is already held on the item, a
  *       concurrent `promoteFromPreBacklog` LOSES CLEAN — no commit on `main`,
  *       the staged file is untouched, and the holder's lock is unmoved.
- *   (b) the prd-symmetric case (`promoteFromPrePrd` against a held
+ *   (b) the prd-symmetric case (`promoteFromPreSpec` against a held
  *       `prd:<slug>` advance lock) behaves the same — the prd promote path
  *       is covered too per PRD q4 (the prds/proposed → prds/ready promote
  *       is symmetric with tasks/backlog → tasks/ready).
@@ -154,7 +154,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 
 		// Apply-style advance hold on `spec:prd-race` (the spec lock entry is
 		// distinct from a task with the same slug, via `lockEntryFor`'s
-		// `<type>-<slug>` encoding). MIGRATE step: `promoteFromPrePrd` now takes the
+		// `<type>-<slug>` encoding). MIGRATE step: `promoteFromPreSpec` now takes the
 		// `spec:<slug>` lock, so the competing hold must key the same `spec:` identity
 		// for the apply×promote mutual exclusion to bite.
 		const holder = raceClone(seeded, 'apply');
@@ -168,7 +168,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		expect(held.outcome).toBe('acquired');
 
 		const promoter = raceClone(seeded, 'promote');
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreSpec({
 			slug: 'prd-race',
 			cwd: promoter,
 			arbiter: ARBITER,
@@ -225,7 +225,7 @@ describe('promote takes the per-item advancing lock — apply × promote mutual 
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		seedStagedPrd(seeded.repo, 'happy-prd');
 
-		const result = await promoteFromPrePrd({
+		const result = await promoteFromPreSpec({
 			slug: 'happy-prd',
 			cwd: seeded.repo,
 			arbiter: ARBITER,

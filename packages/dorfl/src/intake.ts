@@ -9,7 +9,7 @@ import {
 } from './integration-core.js';
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
-import type {IntegrationMode, PrdsLandIn} from './config.js';
+import type {IntegrationMode, SpecsLandIn} from './config.js';
 import type {OriginTrust} from './frontmatter.js';
 import {
 	placementFolder,
@@ -56,7 +56,7 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  * **prompt → VERDICT**, and DISPATCHES on the verdict.
  *
  * The engine shape MIRRORS the review gate (prompt → `approve|block` → dispatch):
- * the decision prompt is an INLINE builder ({@link buildIntakeDecisionPrd}, like
+ * the decision prompt is an INLINE builder ({@link buildIntakeDecisionSpec}, like
  * `buildTaskingPrd`); the **dispatcher is the testable seam** — a STUBBED verdict
  * (injected, no model/network) drives it, exactly as `ReviewGate` is injected. The
  * prompt's JUDGEMENT is NOT unit-tested (like the review prompt's is not); only the
@@ -292,23 +292,23 @@ export interface PerformIntakeOptions {
 	 * per-repo default landing for `intake`-authored prds (`pre-proposed` =
 	 * staging; `ready` = the auto-tasking pool), fed as the CONFIGURED-DEFAULT rung
 	 * into the shared placement resolver (`src/placement.ts`). The resolver
-	 * overlays an EXPLICIT operator flag ({@link explicitPrdsLandIn}, top) and
+	 * overlays an EXPLICIT operator flag ({@link explicitSpecsLandIn}, top) and
 	 * the UNTRUSTED-ORIGIN force (`originTrust: untrusted` ⇒ staging) on top.
 	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `prds/proposed/`,
 	 * the conservative landing). The PRD TWIN of `tasksLandIn` on the tasker
 	 * path — one resolver, two lifecycles.
 	 */
-	prdsLandIn?: PrdsLandIn;
+	specsLandIn?: SpecsLandIn;
 	/**
-	 * **The OPERATOR's EXPLICIT prd-placement override** (the TOP precedence
-	 * rung). When set, the runner-deterministic resolver lands the prd HERE
-	 * regardless of `originTrust` or {@link prdsLandIn} — the positional
+	 * **The OPERATOR's EXPLICIT spec-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the spec HERE
+	 * regardless of `originTrust` or {@link specsLandIn} — the positional
 	 * analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no
 	 * special force-key"). Set ONLY when the operator typed
 	 * `--prds-land-in <where>`; never when the value came from config.
 	 */
-	explicitPrdsLandIn?: PrdsLandIn;
+	explicitSpecsLandIn?: SpecsLandIn;
 	/**
 	 * Optional FULLY-FORMED review provider INSTANCE used VERBATIM (the SAME seam
 	 * `run`/`do` expose; forwarded to `performIntegration` as `providerInstance`).
@@ -342,7 +342,7 @@ const DEFAULT_ARBITER = 'origin';
  * `intake`-authored prd, the runner writes the prd file HERE instead of in
  * `work/prds/ready/`. An item born in `prds/proposed/` is durable + readable but NOT in
  * the tasking candidate POOL (`work/prds/ready/` is the pool). A runner/human-owned promotion
- * ({@link promoteFromPrePrd} in `needs-attention.ts`) moves an approved prd
+ * ({@link promoteFromPreSpec} in `needs-attention.ts`) moves an approved prd
  * `prds/proposed/ → prds/ready/` to make it taskable.
  */
 export const STAGED_PRDS_DIR = workFolderRel('specs-proposed');
@@ -362,14 +362,14 @@ const PRD_PLACEMENT_SLOTS: PlacementSlots = {
 };
 
 /**
- * Map the `prdsLandIn` value spelling (`pre-proposed` | `ready`) onto the
+ * Map the `specsLandIn` value spelling (`pre-proposed` | `ready`) onto the
  * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
  * `undefined` when no value is set, so the resolver's next precedence rung
- * applies (the built-in floor). The prd twin of `landingToSide` on the
+ * applies (the built-in floor). The spec twin of `landingToSide` on the
  * tasker path — same shape, different slots.
  */
-function prdLandingToSide(
-	landing: PrdsLandIn | undefined,
+function specLandingToSide(
+	landing: SpecsLandIn | undefined,
 ): 'staging' | 'pool' | undefined {
 	if (landing === 'pre-proposed') return 'staging';
 	if (landing === 'ready') return 'pool';
@@ -805,7 +805,7 @@ async function decideAndDispatch(
 	// DECIDE: prompt → VERDICT. The agent DRAFTS only (no git, no seam ops). Tests
 	// inject a canned verdict (the dispatcher's testable seam); production wires the
 	// harness. The prompt's judgement is not unit-tested — only the dispatch.
-	const prompt = buildIntakeDecisionPrd(issue, comments, triage);
+	const prompt = buildIntakeDecisionSpec(issue, comments, triage);
 	let verdict: IntakeVerdict;
 	try {
 		verdict = await runDecision(options, cwd, issue, comments, prompt);
@@ -877,8 +877,8 @@ async function decideAndDispatch(
 				// resolver alongside the `originTrust` stamp above. The resolver decides
 				// `prds/proposed/` (staging) vs `prds/ready/` (the tasking pool); `intake` never
 				// places itself.
-				prdsLandIn: options.prdsLandIn,
-				explicitPrdsLandIn: options.explicitPrdsLandIn,
+				specsLandIn: options.specsLandIn,
+				explicitSpecsLandIn: options.explicitSpecsLandIn,
 				providerInstance: options.providerInstance,
 				issueProvider,
 				seen: seenDelta,
@@ -1241,10 +1241,10 @@ async function dispatchSpec(params: {
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
-	/** The per-repo PRD-PLACEMENT default (configured-default rung of the placement chain). */
-	prdsLandIn: PrdsLandIn | undefined;
-	/** The OPERATOR's EXPLICIT prd-placement override (the TOP rung). */
-	explicitPrdsLandIn: PrdsLandIn | undefined;
+	/** The per-repo SPEC-PLACEMENT default (configured-default rung of the placement chain). */
+	specsLandIn: SpecsLandIn | undefined;
+	/** The OPERATOR's EXPLICIT spec-placement override (the TOP rung). */
+	explicitSpecsLandIn: SpecsLandIn | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
@@ -1261,8 +1261,8 @@ async function dispatchSpec(params: {
 		integration,
 		originTrust,
 		noPR,
-		prdsLandIn,
-		explicitPrdsLandIn,
+		specsLandIn,
+		explicitSpecsLandIn,
 		providerInstance,
 		issueProvider,
 		seen,
@@ -1285,14 +1285,14 @@ async function dispatchSpec(params: {
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
 	// which folder the runner writes the intake-authored prd into BEFORE handing
 	// it to the shared integrate band: the SAME precedence chain the tasker uses
-	// (`explicit > untrusted-origin ⇒ staging > prdsLandIn > built-in (staging)`),
+	// (`explicit > untrusted-origin ⇒ staging > specsLandIn > built-in (staging)`),
 	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
 	// (the intake decider) never influences placement; it returns the verdict and
 	// the runner computes the destination from unforgeable inputs.
 	const placementDecision = resolvePlacement({
-		explicit: prdLandingToSide(explicitPrdsLandIn),
+		explicit: specLandingToSide(explicitSpecsLandIn),
 		originTrust,
-		configuredDefault: prdLandingToSide(prdsLandIn),
+		configuredDefault: specLandingToSide(specsLandIn),
 	});
 	const placementDir = placementFolder(
 		PRD_PLACEMENT_SLOTS,
@@ -1305,7 +1305,7 @@ async function dispatchSpec(params: {
 	// producer prefix keeps it distinct from a `do prd:<slug>` tasking branch.
 	await switchToWorkBranch(cwd, arbiter, 'prd', slug, env);
 
-	const prdContent = renderPrd({
+	const prdContent = renderSpec({
 		slug,
 		title: verdict.prdTitle ?? slug,
 		body: verdict.prdBody,
@@ -1656,7 +1656,7 @@ export function renderBacklogTask(params: {
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
  * default scaffold keeps the file a valid prd that `do prd:` can later task.
  */
-export function renderPrd(params: {
+export function renderSpec(params: {
 	slug: string;
 	title: string;
 	body: string | undefined;
@@ -1789,7 +1789,7 @@ async function runDecision(
 	// the agent emitted out of its ANSWER channel (`launched.output`) — the SAME wire
 	// the review gate runs (launch → `parseReviewVerdict(readOutput(launched.output))`;
 	// `harnessReviewGate`). The agent emits a single fenced ```json block (the OUTPUT
-	// CONTRACT {@link buildIntakeDecisionPrd} appends); {@link parseIntakeVerdict}
+	// CONTRACT {@link buildIntakeDecisionSpec} appends); {@link parseIntakeVerdict}
 	// extracts + validates it. The model's JUDGEMENT is not unit-tested — only the
 	// parse + dispatch — exactly as the review prompt's judgement is not.
 	const harness = options.harness ?? new NullHarness();
@@ -2316,7 +2316,7 @@ export const parseLoneTaskReviewVerdict = parseReviewVerdict;
  * dispatch is. The agent only DRAFTS the verdict + its content; it does NO git/seam
  * ops (the runner owns every postComment / write / integrate — the in-band boundary).
  */
-export function buildIntakeDecisionPrd(
+export function buildIntakeDecisionSpec(
 	issue: Issue,
 	comments: IssueComment[],
 	triage?: IntakeTriageDecision,

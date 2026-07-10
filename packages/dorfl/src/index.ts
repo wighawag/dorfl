@@ -405,7 +405,7 @@ export type {
 	IntakeDecider,
 	PerformIntakeOptions,
 } from './intake.js';
-export {performIntake, buildIntakeDecisionPrd} from './intake.js';
+export {performIntake, buildIntakeDecisionSpec} from './intake.js';
 
 export type {
 	DecisionOutcome,

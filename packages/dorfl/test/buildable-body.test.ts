@@ -9,7 +9,7 @@ import {makeScratch, type Scratch} from './helpers/gitRepo.js';
 /**
  * The SINGLE GOLDEN-SHAPE test for the shared buildable-task / PRD-body renderer
  * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US
- * #7) — the test the two future producers (intake's `renderBacklogTask`/`renderPrd`
+ * #7) — the test the two future producers (intake's `renderBacklogTask`/`renderSpec`
  * and `triage-persist.buildPromotedBody`) will SHARE, so a schema change cannot
  * silently apply to only one of them.
  *

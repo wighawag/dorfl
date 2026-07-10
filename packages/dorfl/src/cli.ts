@@ -125,7 +125,7 @@ import {
 } from './item-lock.js';
 import {
 	promoteFromPreBacklog,
-	promoteFromPrePrd,
+	promoteFromPreSpec,
 	listPromotable,
 } from './needs-attention.js';
 import {parseSlugArg} from './slug-namespace.js';
@@ -3519,7 +3519,7 @@ export function buildProgram(): Command {
 			const slug = parsed.slug;
 			const result =
 				namespace === 'spec'
-					? await promoteFromPrePrd({cwd, slug, arbiter, env, note})
+					? await promoteFromPreSpec({cwd, slug, arbiter, env, note})
 					: await promoteFromPreBacklog({cwd, slug, arbiter, env, note});
 			if (!result.moved) {
 				console.error(`error: ${result.reasonNotMoved}`);
@@ -3803,9 +3803,9 @@ export function buildProgram(): Command {
 			// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 			// accept EITHER `--specs-land-in` (canonical) or `--prds-land-in` (legacy),
 			// specs winning when both are given. Both feed the same placement rung.
-			let explicitPrdsLandIn: 'pre-proposed' | 'ready' | undefined;
+			let explicitSpecsLandIn: 'pre-proposed' | 'ready' | undefined;
 			try {
-				explicitPrdsLandIn = explicitSpecsLandInFromFlags(
+				explicitSpecsLandIn = explicitSpecsLandInFromFlags(
 					flags.specsLandIn,
 					flags.prdsLandIn,
 				);
@@ -3826,10 +3826,10 @@ export function buildProgram(): Command {
 				// PRD-PLACEMENT: the configured-default rung + the EXPLICIT
 				// `--prds-land-in` override (top of the precedence). The shared placement
 				// resolver in `intake.ts` overlays the untrusted-origin staging force.
-				// EXPAND step: the configured-default rung reads EITHER config key,
+				// The configured-default rung reads EITHER config key,
 				// `specsLandIn` (canonical) winning over the legacy `prdsLandIn`.
-				prdsLandIn: config.specsLandIn ?? config.prdsLandIn,
-				explicitPrdsLandIn,
+				specsLandIn: config.specsLandIn ?? config.prdsLandIn,
+				explicitSpecsLandIn,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,
