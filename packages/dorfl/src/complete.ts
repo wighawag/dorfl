@@ -633,7 +633,7 @@ async function runComplete(
 		);
 	}
 	// The branch HEAD is on when it IS a work branch for this slug (so an explicit
-	// `prd:`-style recovery still completes the branch it is standing on); else
+	// `spec:`-style recovery still completes the branch it is standing on); else
 	// synthesise the task branch.
 	const branch =
 		headParsed && headParsed.slug === slug

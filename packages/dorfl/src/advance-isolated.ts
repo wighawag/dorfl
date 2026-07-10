@@ -83,7 +83,7 @@ export interface IsolatedAdvanceContext extends Omit<AdvanceContext, 'cwd'> {
 
 /** Options for {@link performAdvanceIsolated} — the per-item isolated tick. */
 export interface PerformAdvanceIsolatedOptions extends IsolatedAdvanceContext {
-	/** The raw advance arg: bare (= task), `prd:<slug>`, or `obs:<slug>`. */
+	/** The raw advance arg: bare (= task), `spec:<slug>`, or `obs:<slug>`. */
 	arg: string;
 	/** The read seam (slug resolution / pool); defaults to {@link ledgerRead}. */
 	read?: LedgerReadStrategy;
@@ -373,7 +373,7 @@ export async function performAdvanceIsolatedAuto(
  * Run the EXPLICIT multi-arg form (`advance --isolated <a> <b> …`): the NAMED items
  * in the GIVEN order (no pool/priority — the operator chose them), each through the
  * ISOLATED advance-tick runner, SEQUENTIALLY. No mirror scan is needed (the args
- * are explicit); the per-item tick resolves each bare/`prd:`/`obs:` arg itself.
+ * are explicit); the per-item tick resolves each bare/`spec:`/`obs:` arg itself.
  */
 export async function performAdvanceIsolatedArgs(
 	args: string[],

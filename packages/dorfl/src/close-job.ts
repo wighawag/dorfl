@@ -6,9 +6,9 @@
  * pieces together (the Out-of-Scope fence: do NOT re-build them):
  *
  *   - the RESOLUTION — {@link resolveClosingIssue} (`frontmatter.ts`): an artifact
- *     uses `issue:` XOR `prd:`; a lone task closes its own `issue:` directly, a
- *     fanned task reaches the number via `task.prd: → work/specs/<spec>.md spec
- *     issue:`, and `prd:` WINS on a (hand-edited) conflict;
+ *     uses `issue:` XOR `spec:`; a lone task closes its own `issue:` directly, a
+ *     fanned task reaches the number via `task.spec: → work/specs/<spec>.md spec
+ *     issue:`, and `spec:` WINS on a (hand-edited) conflict;
  *   - the QUERY — {@link isSpecComplete} (`spec-complete.ts`, task
  *     `prd-complete-query`, done): a spec is COMPLETE iff ≥1 `spec:<slug>` task AND
  *     all such tasks are in `work/done/`;
@@ -19,7 +19,7 @@
  *
  * The closure conditions, per artifact kind:
  *
- *   - a **lone task** (`issue:`, no `prd:`) that resides in `work/done/` — its PR
+ *   - a **lone task** (`issue:`, no `spec:`) that resides in `work/done/` — its PR
  *     merged, so its own issue closes (reason `completed`);
  *   - a **spec** (`issue:`) — closes ONLY when {@link isSpecComplete} says ALL its
  *     `spec:<slug>` tasks are in `work/done/` (reason `completed`).
@@ -113,7 +113,7 @@ function listMarkdown(repoPath: string, folder: WorkFolderKey): string[] {
 /**
  * Read a spec's `issue:` number by slug, scanning the spec folders. Returns
  * `undefined` when no spec with that slug carries an `issue:` (a spec with no source
- * issue, or a typo'd `prd:` hop — degrades to "no issue to close", never crashes).
+ * issue, or a typo'd `spec:` hop — degrades to "no issue to close", never crashes).
  */
 function specIssueNumber(
 	repoPath: string,
@@ -138,10 +138,10 @@ function specIssueNumber(
  * via the UNCHANGED {@link resolveClosingIssue}:
  *
  *   - every spec carrying `issue:` (in `work/specs/ready/` or `work/specs/tasked/`) is a
- *     spec-kind candidate keyed on its own `prd:` query;
- *   - every LONE task (`issue:` and NO `prd:`) is an `issue`-kind candidate.
+ *     spec-kind candidate keyed on its own `spec:` query;
+ *   - every LONE task (`issue:` and NO `spec:`) is an `issue`-kind candidate.
  *
- * A fanned task carries `prd:` (NOT its own `issue:`), so it reaches the number
+ * A fanned task carries `spec:` (NOT its own `issue:`), so it reaches the number
  * through its spec's candidate, never as its own — the issue number lives ONLY on
  * the spec. Deduplicated by issue number: a spec enumerated once even though many
  * tasks point at it. Spec candidates are listed before lone-task candidates, each
@@ -165,8 +165,8 @@ function resolveCandidates(repoPath: string): {
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
-			// A spec's own closing link is its `issue:` (a spec has no `prd:`); on the
-			// hand-edit conflict `prd:` wins via resolveClosingIssue, so only a true
+			// A spec's own closing link is its `issue:` (a spec has no `spec:`); on the
+			// hand-edit conflict `spec:` wins via resolveClosingIssue, so only a true
 			// `issue:`-bearing spec becomes a candidate here.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {
 				seen.add(closing.issue);
@@ -175,7 +175,7 @@ function resolveCandidates(repoPath: string): {
 		}
 	}
 
-	// Lone-task candidates: a task with `issue:` and NO `prd:` closes its OWN
+	// Lone-task candidates: a task with `issue:` and NO `spec:` closes its OWN
 	// issue directly when it lands in work/done/.
 	for (const folder of TASK_FOLDERS) {
 		for (const file of listMarkdown(repoPath, folder)) {
@@ -184,7 +184,7 @@ function resolveCandidates(repoPath: string): {
 			);
 			const slug = fm.slug ?? basename(file, '.md');
 			const closing = resolveClosingIssue(fm);
-			// `resolveClosingIssue` returns `via: 'issue'` ONLY when there is no `prd:`
+			// `resolveClosingIssue` returns `via: 'issue'` ONLY when there is no `spec:`
 			// (spec wins on conflict), so a fanned task never lands here — it reaches
 			// its issue through the spec candidate above.
 			if (closing?.via === 'issue' && !seen.has(closing.issue)) {

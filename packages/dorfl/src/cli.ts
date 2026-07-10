@@ -388,10 +388,10 @@ function buildRegistrySetAdvanceTick(options: {
 				identity: config.identity,
 				autoTask: config.autoTask,
 				integration: config.integration,
-				// The per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// The per-TRANSITION TASKING override: the `do spec:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
-				// The TASK-PLACEMENT configured default (`do prd:` tasking output:
+				// The TASK-PLACEMENT configured default (`do spec:` tasking output:
 				// `pre-backlog` staged vs `ready` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
@@ -670,7 +670,7 @@ interface CompleteFlags {
 
 /**
  * Resolve the EXPLICIT operator placement override from `--tasks-land-in <where>`
- * (the top of the `do prd:` tasking-placement precedence — task
+ * (the top of the `do spec:` tasking-placement precedence — task
  * `runner-deterministic-slice-placement-policy-and-precedence`). Mirrors the
  * `flagMode === 'merge'` ⇒ `explicitMerge: true` shape: it contributes
  * `explicitTasksLandIn` ONLY when the operator actually typed the flag, so an
@@ -742,7 +742,7 @@ interface DoFlags {
 	strictMergeApproval?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do prd:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
+	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do spec:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
 	tasksLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -758,11 +758,11 @@ interface DoFlags {
 	review?: boolean;
 	reviewModel?: string;
 	reviewMaxRounds?: string;
-	/** `--tasker-loop` / `--no-tasker-loop` — the tasker improver loop on/off toggle (`do prd:` path). Resolves into the `taskerLoop` config key. */
+	/** `--tasker-loop` / `--no-tasker-loop` — the tasker improver loop on/off toggle (`do spec:` path). Resolves into the `taskerLoop` config key. */
 	taskerLoop?: boolean;
-	/** `--tasker-loop-max <n>` — the tasker improver loop's in-context convergence cap (`do prd:` path). Resolves into the `taskerLoopMax` config key. */
+	/** `--tasker-loop-max <n>` — the tasker improver loop's in-context convergence cap (`do spec:` path). Resolves into the `taskerLoopMax` config key. */
 	taskerLoopMax?: string;
-	/** `--tasker-loop-model <id>` — the tasker improver loop reviewer's de-correlated model (`do prd:` path). Resolves into the `taskerLoopModel` config key. */
+	/** `--tasker-loop-model <id>` — the tasker improver loop reviewer's de-correlated model (`do spec:` path). Resolves into the `taskerLoopModel` config key. */
 	taskerLoopModel?: string;
 	/** `--fresh-worktree-gate` / `--no-fresh-worktree-gate` — gate the REBASED tip in a clean throwaway worktree (ON by default). */
 	freshWorktreeGate?: boolean;
@@ -979,11 +979,12 @@ interface CloseMergedIssuesFlags {
 /**
  * Resolve a task-only command's slug argument through the §3a namespace guard
  * (`resolveTaskOnlyArg`): accept bare (= task) + `task:` (explicit alias),
- * REJECT `spec:` with a clear "operates on tasks, not specs" error (and the
- * legacy `prd:` with "operates on tasks, not prds", still accepted through the
- * cutover). On rejection it prints the error to stderr and exits 1 (the task-only
- * commands never act on a spec). An OMITTED slug (`start`/`complete`/`prompt`
- * infer it from the branch) passes through untouched.
+ * REJECT `spec:` with a clear "operates on tasks, not specs" error. On rejection
+ * it prints the error to stderr and exits 1 (the task-only commands never act on
+ * a spec). An OMITTED slug (`start`/`complete`/`prompt` infer it from the branch)
+ * passes through untouched. (The legacy `prd:` prefix is a DEAD namespace token
+ * after the hard cutover — it is neither special-cased nor rejected here; a
+ * `prd:<slug>` arg resolves as a bare literal task slug.)
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
@@ -1067,14 +1068,14 @@ function buildInteractiveLauncher(
  * switching to its `work/<slug>` branch WITHOUT claiming). The runtime
  * difference is exactly the `resume` flag — `resume` forces it on (its only mode
  * is to re-engage), while `start` honours the (now hidden) `--resume` alias.
- * Both are task-only (§3a: accept bare + `task:`, reject `prd:`).
+ * Both are task-only (§3a: accept bare + `task:`, reject `spec:`).
  */
 async function runStartAction(
 	rawSlug: string | undefined,
 	flags: StartFlags,
 	resume: boolean,
 ): Promise<void> {
-	// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+	// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 	const slug = resolveTaskOnlySlug(rawSlug);
 	const cwd = process.cwd();
 
@@ -1530,7 +1531,7 @@ export function buildProgram(): Command {
 			'override the readiness guard: claim despite an unmet blockedBy, and silence the needsAnswers warning (loud, never default)',
 		)
 		.action(async (rawSlug: string, flags: ClaimFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			// Wrap ONLY this CLI surface's `performClaim` call with the spinner
 			// helper (task `claim-cas-spinner`): the push can take seconds, so the
@@ -1736,7 +1737,7 @@ export function buildProgram(): Command {
 				flags.remote !== undefined && flags.remote.trim() !== ''
 					? flags.remote
 					: undefined;
-			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 			const theSlug = resolveTaskOnlySlug(rawSlug) as string;
 
 			const configPath = flags.config ?? defaultConfigPath();
@@ -1795,7 +1796,7 @@ export function buildProgram(): Command {
 			'the slug to render (inferred from a work/<slug> branch if omitted)',
 		)
 		.action((rawSlug: string | undefined) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 			const slug = resolveTaskOnlySlug(rawSlug);
 			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
 			// gate family uses (env > per-repo > global > default), so e.g. a
@@ -1902,7 +1903,7 @@ export function buildProgram(): Command {
 			'cross-job merge-serialiser CAS-retry cap (see `run --help`); resolved flag > env > per-repo > global > default 1000.',
 		)
 		.action(async (rawSlug: string | undefined, flags: CompleteFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 			const slug = resolveTaskOnlySlug(rawSlug);
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
@@ -2039,7 +2040,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do spec:<slug> (the tasking path; the legacy prd:<slug> is still accepted) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then SPECS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do spec:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then SPECS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* tasks grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -2048,7 +2049,7 @@ export function buildProgram(): Command {
 		// for the auto-pick form. `do` stays SEQUENTIAL (parallelism is `run`).
 		.argument(
 			'[slugs...]',
-			'the item(s) to do: bare (= the task), task:<slug>, or spec:<slug> (task the spec; the legacy prd:<slug> is still accepted). Zero args = auto-pick; multiple = do them in sequence.',
+			'the item(s) to do: bare (= the task), task:<slug>, or spec:<slug> (task the spec). Zero args = auto-pick; multiple = do them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2081,7 +2082,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `do prd:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `do spec:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -2134,15 +2135,15 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasker-loop',
-			'run the tasker IMPROVER loop on `do prd:<slug>` (review→edit→converge over the produced task set). ON by default; --no-tasker-loop skips it. DISTINCT from the acceptance gate (--review).',
+			'run the tasker IMPROVER loop on `do spec:<slug>` (review→edit→converge over the produced task set). ON by default; --no-tasker-loop skips it. DISTINCT from the acceptance gate (--review).',
 		)
 		.option(
 			'--no-tasker-loop',
-			'skip the tasker improver loop on `do prd:<slug>`',
+			'skip the tasker improver loop on `do spec:<slug>`',
 		)
 		.option(
 			'--tasker-loop-max <n>',
-			'cap the tasker improver loop on `do prd:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the spec to needs-attention (default 3)',
+			'cap the tasker improver loop on `do spec:<slug>` (in-context review passes); on exhaustion with blockers, reject via needsAnswers / route the spec to needs-attention (default 3)',
 		)
 		.option(
 			'--tasker-loop-model <id>',
@@ -2310,7 +2311,7 @@ export function buildProgram(): Command {
 					// Host-only runner IDENTITY — scopes git/provider ops only (not the
 					// agent launch); absent ⇒ ambient.
 					identity: remoteConfig.identity,
-					// `do --remote prd:<slug>` tasking-gate policy (task-build path ignores it).
+					// `do --remote spec:<slug>` tasking-gate policy (task-build path ignores it).
 					autoTask: remoteConfig.autoTask,
 					// The resolved `promptGuidance` nudge — threaded into the remote worker
 					// prompt (runRemotePipeline → buildAgentPrompt), mirroring in-place `do`.
@@ -2318,7 +2319,7 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the `do --remote prd:` tasking path).
+					// Per-TRANSITION TASKING override (the `do --remote spec:` tasking path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: the configured default + the EXPLICIT operator override
 					// (`--tasks-land-in`), the top of the placement precedence — mirrors
@@ -2347,7 +2348,7 @@ export function buildProgram(): Command {
 								agentCmd: remoteConfig.agentCmd,
 							})
 						: undefined,
-					// The tasker IMPROVER loop on the `do --remote prd:` path is ON by default
+					// The tasker IMPROVER loop on the `do --remote spec:` path is ON by default
 					// (auto-tasking has no `verify` floor, so the loop is the task path's
 					// quality engine). `--tasker-loop`/`--no-tasker-loop` gates wiring the seam;
 					// `taskerLoopMax`/`taskerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2360,7 +2361,7 @@ export function buildProgram(): Command {
 						: undefined,
 					taskerLoopMax: remoteConfig.taskerLoopMax,
 					taskerLoopModel: remoteConfig.taskerLoopModel,
-					// The task-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+					// The task-SET ACCEPTANCE GATE on the `do --remote spec:` path too.
 					taskReviewGate: remoteConfig.review
 						? harnessTaskAcceptanceGate({
 								harness: remoteHarness,
@@ -2472,7 +2473,7 @@ export function buildProgram(): Command {
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
 				// ambient (today's behaviour). Mapped Config → DoOptions like model/agentCmd.
 				identity: config.identity,
-				// `do prd:<slug>` tasking-gate policy (the task-build path ignores it).
+				// `do spec:<slug>` tasking-gate policy (the task-build path ignores it).
 				autoTask: config.autoTask,
 				// The resolved `promptGuidance` NUDGE namespace (e.g. `testFirst`),
 				// threaded into the worker prompt by performDo → buildAgentPrompt so a
@@ -2485,11 +2486,11 @@ export function buildProgram(): Command {
 				// typed `--merge` (`flagMode`), never when `merge` came from config — so an
 				// untrusted-origin task still forces propose under a config `merge`.
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override: the `do prd:` tasking path threads
+				// Per-TRANSITION TASKING override: the `do spec:` tasking path threads
 				// `taskingIntegration ?? integration`; the task-build path stays on
 				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
 				taskingIntegration: config.taskingIntegration,
-				// TASK-PLACEMENT (`do prd:` tasking output): the configured default rung +
+				// TASK-PLACEMENT (`do spec:` tasking output): the configured default rung +
 				// the EXPLICIT operator override `--tasks-land-in` (top of the precedence).
 				// `explicitTasksLandIn` is set ONLY when the flag was typed (mirrors
 				// `explicitMerge`), so an untrusted-origin staging force still wins under a
@@ -2526,7 +2527,7 @@ export function buildProgram(): Command {
 				reviewGate: config.review
 					? harnessReviewGate({harness, agentCmd: config.agentCmd})
 					: undefined,
-				// The tasker IMPROVER loop on the `do prd:` tasking path is ON by default
+				// The tasker IMPROVER loop on the `do spec:` tasking path is ON by default
 				// (auto-tasking has no `verify` floor — the loop is the task path's quality
 				// engine). `--tasker-loop`/`--no-tasker-loop` gates wiring the seam;
 				// `taskerLoopMax`/`taskerLoopModel` resolve per-repo (flag > env > per-repo
@@ -2619,7 +2620,7 @@ export function buildProgram(): Command {
 	// It reuses the SAME shared `prefix:arg` resolver `do` uses, EXTENDED with the
 	// `obs:` namespace, and wires the classify → lock → execute SKELETON: classify
 	// the rung (read-only, no model, no lock), take the `advancing` CAS borrow, then
-	// dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do prd:` (never a
+	// dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:` (never a
 	// duplicate), surface/apply/triage dispatch to a named executor seam later
 	// tasks fill. The DRIVERS (one-shot/loop) + `-n` + per-action gates and the
 	// rung BODIES are LATER tasks; the bare eligible-SET form errors clearly here.
@@ -2627,11 +2628,11 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (SPEC advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung; the legacy prd:<slug> is still accepted) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (SPEC advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
-			'the item(s) to advance: bare (= the task), task:<slug>, spec:<slug> (the legacy prd:<slug> is still accepted), or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
+			'the item(s) to advance: bare (= the task), task:<slug>, spec:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2656,7 +2657,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--surface-blockers',
-			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/spec carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance prd:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
+			'the declared-blocked-work gate (the orthogonal peer of --observation-triage): render a task/spec carrying needsAnswers:true into an answerable question sidecar (the needsAnswers-blocked pool is enumerated into auto-pick). Resolved flag > env > per-repo > global > default off. An explicit `advance <slug>`/`advance spec:<slug>` bypasses this selection gate and surfaces regardless. Does NOT gate apply (an answered sidecar still applies) or needs-attention (always on).',
 		)
 		.option(
 			'--no-surface-blockers',
@@ -2684,7 +2685,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `advance prd:<slug>` tasking output lands: `pre-backlog` (staged) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `advance spec:<slug>` tasking output lands: `pre-backlog` (staged) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -2820,7 +2821,7 @@ export function buildProgram(): Command {
 					integration: remoteConfig.integration,
 					// EXPLICIT `--merge` override for the untrusted-origin build-propose rule.
 					explicitMerge: flagMode === 'merge',
-					// Per-TRANSITION TASKING override (the isolated `do --remote prd:` path).
+					// Per-TRANSITION TASKING override (the isolated `do --remote spec:` path).
 					taskingIntegration: remoteConfig.taskingIntegration,
 					// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
 					// (set only when typed, mirroring `explicitMerge`).
@@ -2962,7 +2963,7 @@ export function buildProgram(): Command {
 				// EXPLICIT `--merge` override for the untrusted-origin build-propose rule (a
 				// bare `advance` auto-pick passes no flag ⇒ unset ⇒ untrusted forces propose).
 				explicitMerge: flagMode === 'merge',
-				// Per-TRANSITION TASKING override (the `do prd:` tasking path threads
+				// Per-TRANSITION TASKING override (the `do spec:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`).
 				taskingIntegration: config.taskingIntegration,
 				// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
@@ -3517,7 +3518,7 @@ export function buildProgram(): Command {
 			'append a dated handoff note to the item body for the next agent (append-only; applies to both default and --reset)',
 		)
 		.action(async (rawSlug: string, flags: RequeueFlags) => {
-			// Task-only command (§3a): accept bare + `task:`, reject `prd:`.
+			// Task-only command (§3a): accept bare + `task:`, reject `spec:`.
 			const slug = resolveTaskOnlySlug(rawSlug) as string;
 			const cwd = flags.cwd ?? process.cwd();
 			// Route the requeue (default keep+continue / --reset discard / -m handoff)
@@ -3568,7 +3569,7 @@ export function buildProgram(): Command {
 		.command('promote [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			`Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task \`work/pre-backlog/<slug>.md → work/backlog/<slug>.md\`, a spec \`${workFolderPrefix('specs-proposed')}<slug>.md → ${workFolderPrefix('specs-ready')}<slug>.md\`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts \`task:<slug>\` / \`spec:<slug>\` (the legacy \`prd:<slug>\` is still accepted) / a bare \`<slug>\` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the specs in specs/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.`,
+			`Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task \`work/pre-backlog/<slug>.md → work/backlog/<slug>.md\`, a spec \`${workFolderPrefix('specs-proposed')}<slug>.md → ${workFolderPrefix('specs-ready')}<slug>.md\`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts \`task:<slug>\` / \`spec:<slug>\` / a bare \`<slug>\` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the specs in specs/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.`,
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3607,11 +3608,10 @@ export function buildProgram(): Command {
 				return;
 			}
 
-			// AN ITEM → promote it. `task:`/`spec:` are explicit (the legacy `prd:`
-			// prefix is still ACCEPTED as an input alias through the cutover — the
-			// contract task drops it); a bare slug defaults to a task (mirrors
-			// `requeue`). An `obs:`/`observation:` prefix is rejected (observations have
-			// no pool).
+			// AN ITEM → promote it. `task:`/`spec:` are explicit; a bare slug defaults to
+			// a task (mirrors `requeue`). An `obs:`/`observation:` prefix is rejected
+			// (observations have no pool). A legacy `prd:` prefix is a DEAD namespace token
+			// after the hard cutover — it resolves as a bare literal task slug, not a spec.
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
 				console.error(
@@ -3665,7 +3665,7 @@ export function buildProgram(): Command {
 		.command('release-lock <item>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/dorfl/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
+			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/dorfl/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `spec:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3721,7 +3721,7 @@ export function buildProgram(): Command {
 		.command('drop <slug>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'DIRECTLY delete a source item + its question sidecar (when present) in ONE revertible commit — the "I just want to throw this away" path that does NOT round-trip through the decision engine or any agent. Resolves the source by its namespaced identity (`task:<slug>` / `prd:<slug>` / `obs:<slug>` / a bare `<slug>` = task), `git rm`s the source AND its sidecar together, and records your --reason in the commit MESSAGE (git history is the archive). A single revertible commit, so a wrong delete is recoverable via `git revert`. DISTINCT from `remote rm` (the hub-mirror deleter). A LOCAL working-tree commit (like the apply rung); it does not touch the arbiter — push/integrate it as you normally would. If the named source is already gone it is a clean no-op (nothing to throw away).',
+			'DIRECTLY delete a source item + its question sidecar (when present) in ONE revertible commit — the "I just want to throw this away" path that does NOT round-trip through the decision engine or any agent. Resolves the source by its namespaced identity (`task:<slug>` / `spec:<slug>` / `obs:<slug>` / a bare `<slug>` = task), `git rm`s the source AND its sidecar together, and records your --reason in the commit MESSAGE (git history is the archive). A single revertible commit, so a wrong delete is recoverable via `git revert`. DISTINCT from `remote rm` (the hub-mirror deleter). A LOCAL working-tree commit (like the apply rung); it does not touch the arbiter — push/integrate it as you normally would. If the named source is already gone it is a clean no-op (nothing to throw away).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3952,7 +3952,7 @@ export function buildProgram(): Command {
 		.command('close-merged-issues')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Close source issues whose work has landed on main (CI capability E, spec runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.prd: → prd issue:`), runs the existing "spec complete?" query for the spec case (closes ONLY when ALL its prd:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
+			'Close source issues whose work has landed on main (CI capability E, spec runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.spec: → spec issue:`), runs the existing "spec complete?" query for the spec case (closes ONLY when ALL its spec:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
 		)
 		.option(
 			'--cwd <dir>',

@@ -24,14 +24,14 @@ import type {
 /**
  * `install-ci-close-job-workflow` — the CI CLOSE-JOB driver (capability E). The
  * driver WIRES three UNCHANGED engine pieces (the resolution `resolveClosingIssue`,
- * the "prd complete?" query `prd-complete-query`, and `IssueProvider.closeIssue`)
+ * the "spec complete?" query `prd-complete-query`, and `IssueProvider.closeIssue`)
  * and re-implements NONE of them.
  *
  * SEAM: the `IssueProvider` is a STUB that records every `closeIssue` call IN
  * MEMORY — NO network, NO real `gh`, NO real GitHub issue touched (this test's
  * shared-write isolation: the stubbed close seam records calls in-memory without
  * touching a real issue). The query/resolution behaviour itself is already covered
- * by `prd-complete-query` / `frontmatter` tests and is NOT re-tested here; these
+ * by the spec-complete query / `frontmatter` tests and is NOT re-tested here; these
  * tests cover the DRIVER's wiring + closure conditions only.
  */
 
@@ -111,11 +111,11 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-describe('runCloseJob — the prd case (consumes the "prd complete?" query)', () => {
-	it("closes the prd's issue when ALL its tasks are in work/tasks/done/", async () => {
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
+describe('runCloseJob — the spec case (consumes the "spec complete?" query)', () => {
+	it("closes the spec's issue when ALL its tasks are in work/tasks/done/", async () => {
+		write('specs-ready', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('done', 'b.md', {slug: 'b', spec: 'my-spec'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -131,16 +131,16 @@ describe('runCloseJob — the prd case (consumes the "prd complete?" query)', ()
 			issueNumber: 42,
 			reason: 'completed',
 		});
-		expect(provider.closeCalls[0].comment).toContain('my-prd');
+		expect(provider.closeCalls[0].comment).toContain('my-spec');
 		expect(result.candidates.find((c) => c.issueNumber === 42)?.decision).toBe(
 			'closed',
 		);
 	});
 
-	it("leaves the prd's issue OPEN when one of its tasks is NOT yet in work/tasks/done/", async () => {
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('backlog', 'b.md', {slug: 'b', prd: 'my-prd'}); // not landed
+	it("leaves the spec's issue OPEN when one of its tasks is NOT yet in work/tasks/done/", async () => {
+		write('specs-ready', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('backlog', 'b.md', {slug: 'b', spec: 'my-spec'}); // not landed
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -155,9 +155,9 @@ describe('runCloseJob — the prd case (consumes the "prd complete?" query)', ()
 		);
 	});
 
-	it('finds the prd issue from work/prds/tasked/ too (a prd that has been tasked)', async () => {
-		write('prd-tasked', 'my-prd.md', {slug: 'my-prd', issue: '7'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+	it('finds the spec issue from work/specs/tasked/ too (a spec that has been tasked)', async () => {
+		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '7'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -170,7 +170,7 @@ describe('runCloseJob — the prd case (consumes the "prd complete?" query)', ()
 });
 
 describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
-	it('closes a lone task (issue:, no prd:) once it lands in work/tasks/done/', async () => {
+	it('closes a lone task (issue:, no spec:) once it lands in work/tasks/done/', async () => {
 		write('done', 'lone.md', {slug: 'lone', issue: '13'});
 
 		const provider = new MemoryIssueProvider();
@@ -205,10 +205,10 @@ describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
 });
 
 describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)', () => {
-	it('a fanned task carries prd: (NOT issue:) and reaches the number via the prd only', async () => {
-		// The prd carries the issue number; the fanned task carries `prd:` only.
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
+	it('a fanned task carries spec: (NOT issue:) and reaches the number via the spec only', async () => {
+		// The spec carries the issue number; the fanned task carries `spec:` only.
+		write('specs-ready', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -216,8 +216,8 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 			issueProvider: provider,
 		});
 
-		// Closed exactly ONCE, via the prd candidate — the task never resolves its
-		// own issue (it has none); the number lives only on the prd.
+		// Closed exactly ONCE, via the spec candidate — the task never resolves its
+		// own issue (it has none); the number lives only on the spec.
 		expect(result.closed).toEqual([42]);
 		expect(result.candidates.filter((c) => c.issueNumber === 42)).toHaveLength(
 			1,
@@ -227,11 +227,11 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 		);
 	});
 
-	it('on a hand-edited task carrying BOTH prd: and issue:, prd: WINS (issue: ignored)', async () => {
+	it('on a hand-edited task carrying BOTH spec: and issue:, spec: WINS (issue: ignored)', async () => {
 		// A contradiction only a human hand-edit could produce; resolveClosingIssue
-		// makes `prd:` win, so the task is NOT a lone-task candidate for issue 99.
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd', issue: '99'});
+		// makes `spec:` win, so the task is NOT a lone-task candidate for issue 99.
+		write('specs-ready', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec', issue: '99'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -239,16 +239,16 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 			issueProvider: provider,
 		});
 
-		// Only the prd's issue 42 is closed; the task's stray `issue: 99` is ignored.
+		// Only the spec's issue 42 is closed; the task's stray `issue: 99` is ignored.
 		expect(result.closed).toEqual([42]);
 		expect(result.candidates.some((c) => c.issueNumber === 99)).toBe(false);
 	});
 
-	it('considers each prd issue ONCE even with many tasks pointing at it (dedup)', async () => {
-		write('prd', 'my-prd.md', {slug: 'my-prd', issue: '42'});
-		write('done', 'a.md', {slug: 'a', prd: 'my-prd'});
-		write('done', 'b.md', {slug: 'b', prd: 'my-prd'});
-		write('done', 'c.md', {slug: 'c', prd: 'my-prd'});
+	it('considers each spec issue ONCE even with many tasks pointing at it (dedup)', async () => {
+		write('specs-ready', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('done', 'b.md', {slug: 'b', spec: 'my-spec'});
+		write('done', 'c.md', {slug: 'c', spec: 'my-spec'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({
@@ -260,9 +260,9 @@ describe('runCloseJob — resolution precedence + linkage (resolveClosingIssue)'
 		expect(result.closed).toEqual([42]);
 	});
 
-	it('ignores artifacts with NO closure link (no issue:, no prd:)', async () => {
+	it('ignores artifacts with NO closure link (no issue:, no spec:)', async () => {
 		write('done', 'plain.md', {slug: 'plain'});
-		write('prd', 'no-issue-prd.md', {slug: 'no-issue-prd'});
+		write('specs-ready', 'no-issue-spec.md', {slug: 'no-issue-spec'});
 
 		const provider = new MemoryIssueProvider();
 		const result = await runCloseJob({

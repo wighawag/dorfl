@@ -70,7 +70,7 @@ export interface SurfaceEmit {
 
 /** What the surface gate needs to launch a fresh-context surface of one item. */
 export interface SurfaceGateInput {
-	/** The namespaced identity the surface is for (`task:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced identity the surface is for (`task:foo` / `spec:bar` / `observation:baz`). */
 	item: string;
 	/** The working clone/checkout the gate runs in. */
 	cwd: string;

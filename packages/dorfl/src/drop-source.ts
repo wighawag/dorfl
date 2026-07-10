@@ -33,7 +33,7 @@ export interface DropSourceOptions {
 	/** Working clone/worktree the deletion commits in. */
 	cwd: string;
 	/**
-	 * The namespaced item identity to delete (`task:foo` / `prd:bar` /
+	 * The namespaced item identity to delete (`task:foo` / `spec:bar` /
 	 * `observation:baz` / `obs:baz` / a bare `<slug>` = task). Resolved to its
 	 * on-disk path by identity, folder-agnostic.
 	 */

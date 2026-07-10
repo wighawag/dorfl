@@ -61,7 +61,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  *
  * **Isolation + chaining FALL OUT (US #26):** this driver builds NO new isolation
  * or chaining machinery — it threads the SAME `AdvanceContext` the tick already
- * consumes (which orchestrates `do`/`do prd:` through the isolation-strategy seam
+ * consumes (which orchestrates `do`/`do spec:` through the isolation-strategy seam
  * and rebase-before-integrate); a chain conflict routes to needs-attention as
  * today, inside the orchestrated `do`.
  */
@@ -237,7 +237,7 @@ export async function performAdvanceAuto(
 /**
  * Run the EXPLICIT multi-arg form (`advance <a> <b> …`): the named items in the
  * GIVEN order (no pool/priority — the operator chose them). Each arg is run
- * through the existing advance tick, which itself resolves bare/`task:`/`prd:`/
+ * through the existing advance tick, which itself resolves bare/`task:`/`spec:`/
  * `obs:` (so a named spec drives the task rung, an `obs:` the triage rung, a
  * collision errors), SEQUENTIALLY. A NAMED item is the always-allowed path — its
  * surface/apply rung runs regardless of the per-action gates.
@@ -260,7 +260,7 @@ export async function performAdvanceArgs(
 /**
  * Run a list of selected items through the existing advance tick, SEQUENTIALLY
  * (US #25 — `-n` is always sequential), threading the shared context to each. For
- * the pool path the arg encodes the namespace (`prd:<slug>` for a selected spec,
+ * the pool path the arg encodes the namespace (`spec:<slug>` for a selected spec,
  * bare slug for a task); for the explicit-arg path the caller's raw arg is passed
  * verbatim. Each tick is INDEPENDENTLY `advancing`-lock-guarded inside
  * {@link performAdvance} — sequential here means one item at a time, never a

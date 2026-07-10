@@ -35,7 +35,7 @@ export interface TaskingEligibilityInput {
 	/** Per-repo policy: may an agent auto-task *undeclared* prds in this repo? */
 	autoTask: boolean;
 	/**
-	 * The target was named EXPLICITLY by the operator (`do prd:<slug>`), so the
+	 * The target was named EXPLICITLY by the operator (`do spec:<slug>`), so the
 	 * `autoTask` POLICY is already satisfied — naming the spec IS the authorization,
 	 * exactly as `do <task>` builds a named task regardless of `autoBuild` (the
 	 * `autoBuild` precedent: the pool/scan gates the policy, the explicit claim path
@@ -61,7 +61,7 @@ export interface TaskingEligibilityResult {
  * `true` AND `humanOnly` is not `true` AND the repo's `autoTask` POLICY is
  * satisfied — where the policy is satisfied either by the repo's `autoTask`
  * toggle being on (the AUTO-PICK pool path) OR by the target being named
- * EXPLICITLY (`explicit: true` — `do prd:<slug>`, where naming IS the
+ * EXPLICITLY (`explicit: true` — `do spec:<slug>`, where naming IS the
  * authorization, mirroring `do <task>` vs `autoBuild`). Both readiness axes
  * block orthogonally and are never agent-taskable regardless of policy; a human
  * is never bound by either. The exact mirror of `resolveGate` (the build gate),

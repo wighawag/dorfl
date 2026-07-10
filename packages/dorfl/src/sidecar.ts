@@ -208,7 +208,7 @@ function typeForNamespace(
 	if (explicit === 'task') {
 		return 'task';
 	}
-	// `parseSlugArg` only knows `task:`/`prd:`; the sidecar adds the
+	// `parseSlugArg` only knows `task:`/`spec:`; the sidecar adds the
 	// `observation:` namespace (`obs:` is the CLI alias the verb resolves; the
 	// sidecar stores the canonical `observation`). A bare slug (no prefix)
 	// defaults to the task namespace, matching the resolver's "bare = task".

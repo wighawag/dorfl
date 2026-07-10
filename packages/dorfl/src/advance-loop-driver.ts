@@ -113,7 +113,7 @@ export interface AdvanceOnceOptions {
 
 /** One advanced item's result + the identity it was for (input order preserved). */
 export interface AdvanceBatchItem {
-	/** The namespaced arg the tick was run on (`prd:<slug>` / bare slug). */
+	/** The namespaced arg the tick was run on (`spec:<slug>` / bare slug). */
 	arg: string;
 	/** The tick's result, or a captured throw mapped to a usage-error result. */
 	result: AdvanceResult;

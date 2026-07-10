@@ -130,9 +130,9 @@ export type DoOutcome =
 	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
-	| 'tasked' // `do prd:<slug>` — the spec was tasked into work/backlog/ (runner-owned)
-	| 'gate-refused' // `do prd:<slug>` — the tasking gate refused (honest skip)
-	| 'stale'; // `do prd:<slug>` — the held spec was edited under the lock (stale tasking)
+	| 'tasked' // `do spec:<slug>` — the spec was tasked into work/backlog/ (runner-owned)
+	| 'gate-refused' // `do spec:<slug>` — the tasking gate refused (honest skip)
+	| 'stale'; // `do spec:<slug>` — the held spec was edited under the lock (stale tasking)
 
 export interface DoResult {
 	exitCode: 0 | 1 | 2 | 3;
@@ -171,7 +171,7 @@ export type DoDorfl = (input: {
 };
 
 export interface DoOptions {
-	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `prd:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `spec:<slug>`. */
 	arg: string;
 	/** The working clone/checkout to run in-place in. */
 	cwd: string;
@@ -188,7 +188,7 @@ export interface DoOptions {
 	 * Per-repo `autoTask` policy (resolved by `autoslice-gate`: flag > env >
 	 * per-repo > global > default false). It gates the AUTO-PICK / pool path only
 	 * (`do-autopick.ts`'s taskable-spec pool): "may an agent auto-task an
-	 * UNDECLARED spec in this repo?". An EXPLICITLY-named `do prd:<slug>` tasks
+	 * UNDECLARED spec in this repo?". An EXPLICITLY-named `do spec:<slug>` tasks
 	 * REGARDLESS of this policy (the dispatch passes `explicit: true` to
 	 * `performTask` — naming the spec IS the authorization, exactly as `do <task>`
 	 * builds regardless of `autoBuild`). Ignored by the task-build path.
@@ -205,7 +205,7 @@ export interface DoOptions {
 	promptGuidance?: PromptGuidance;
 	/**
 	 * **The tasker review→edit→converge LOOP seam** (`slicer-review-edit-loop`):
-	 * consumed ONLY by the `do prd:<slug>` tasking path — after the agent produces
+	 * consumed ONLY by the `do spec:<slug>` tasking path — after the agent produces
 	 * candidate tasks, run the `review` SKILL as a review→edit→re-review loop that
 	 * improves them, routing the verdict through the needsAnswers / needs-attention
 	 * sink. Ignored by the task-build path. Omitted ⇒ no loop (candidate tasks land
@@ -234,20 +234,20 @@ export interface DoOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`). Consumed ONLY by the `do prd:<slug>` tasking path: the
+	 * `taskingIntegration`). Consumed ONLY by the `do spec:<slug>` tasking path: the
 	 * value threaded into {@link performTask} is `taskingIntegration ?? integration`,
 	 * so an unset override is byte-for-byte today's behaviour (tasking uses
 	 * `integration`). The task-BUILD path ALWAYS threads `integration` (never this
 	 * key). An explicit `--merge`/`--propose` flag wins over BOTH (the flag-override
 	 * layer sets `integration` AND `taskingIntegration` to the typed mode — see
-	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, prd}` resolver.
+	 * `do-config.ts`). DISTINCT from intake's per-EMITTED-TYPE `{task, spec}` resolver.
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
 	 * **The per-repo TASK-PLACEMENT default** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Consumed by
-	 * the `do prd:<slug>` tasking path: the value is fed as the
+	 * the `do spec:<slug>` tasking path: the value is fed as the
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
 	 * `taskingIntegration` (flag > env > per-repo > global > built-in
@@ -284,7 +284,7 @@ export interface DoOptions {
 	 * build/gate are identical, and the done-move goes `tasks/backlog/ → tasks/done/`
 	 * directly (the explicit drive IS the promotion). EXPLICIT-INVOCATION-ONLY:
 	 * default off, never set by `run`/auto-pick/`advance` (the leak-fence). The
-	 * task-build path only; the `do prd:` path is unaffected.
+	 * task-build path only; the `do spec:` path is unaffected.
 	 */
 	allowBacklog?: boolean;
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
@@ -349,7 +349,7 @@ export interface DoOptions {
 	reviewGate?: ReviewGate;
 	/**
 	 * **The task-SET ACCEPTANCE GATE seam** (task `slice-acceptance-gate`):
-	 * consumed ONLY by the `do prd:<slug>` tasking path. When `review` resolves on,
+	 * consumed ONLY by the `do spec:<slug>` tasking path. When `review` resolves on,
 	 * a fresh-context review of the produced task SET runs BEFORE the tasks
 	 * integrate (riding `performIntegration`'s review block); `block` routes the set
 	 * to needs-attention, `approve` lets it integrate. It rides the SAME BUILD
@@ -453,7 +453,7 @@ interface DoAgentLaunchOptions {
  * there is no checkout, so the worktree is materialised under `workspacesDir`.
  */
 export interface DoRemoteOptions extends DoAgentLaunchOptions {
-	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `prd:<slug>`. */
+	/** The raw CLI slug argument: bare (= task), `task:<slug>`, or `spec:<slug>`. */
 	arg: string;
 	/**
 	 * The registered remote spec/URL to run against (`do --remote <r>`). Resolved
@@ -473,12 +473,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	arbiter?: string;
 	/**
 	 * Per-repo `autoTask` policy — gates the AUTO-PICK / pool path only. An
-	 * EXPLICITLY-named `do --remote prd:<slug>` tasks regardless of it (the
+	 * EXPLICITLY-named `do --remote spec:<slug>` tasks regardless of it (the
 	 * dispatch passes `explicit: true`), mirroring `do <task>` vs `autoBuild`.
 	 * Ignored by the task-build path.
 	 */
 	autoTask?: boolean;
-	/** The tasker review→edit→converge loop seam — `do --remote prd:<slug>` path only (see {@link DoOptions.reviewLoop}). */
+	/** The tasker review→edit→converge loop seam — `do --remote spec:<slug>` path only (see {@link DoOptions.reviewLoop}). */
 	reviewLoop?: TaskReviewGate;
 	/** The tasker improver loop's `taskerLoopMax` cap. Loop only. */
 	taskerLoopMax?: number;
@@ -495,7 +495,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	explicitMerge?: boolean;
 	/**
 	 * **Per-TRANSITION override for the TASKING transition only** (config
-	 * `taskingIntegration`) on the `do --remote prd:<slug>` path: threaded into
+	 * `taskingIntegration`) on the `do --remote spec:<slug>` path: threaded into
 	 * {@link performTask} as `taskingIntegration ?? integration`. Unset ⇒ tasking
 	 * uses `integration` (today's behaviour); the task-BUILD path always threads
 	 * `integration`. See {@link DoOptions.taskingIntegration}.
@@ -504,13 +504,13 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	/**
 	 * **The per-repo TASK-PLACEMENT default** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5) on the `do --remote
-	 * prd:<slug>` path: threaded into {@link performTask} as the
+	 * spec:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
 	tasksLandIn?: 'pre-backlog' | 'ready';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
-	 * prd:` path. See {@link DoOptions.explicitTasksLandIn}.
+	 * spec:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
 	explicitTasksLandIn?: 'pre-backlog' | 'ready';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
@@ -564,7 +564,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	reviewModel?: string;
 	reviewMaxRounds?: number;
 	reviewGate?: ReviewGate;
-	/** The task-SET ACCEPTANCE GATE seam — `do --remote prd:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
+	/** The task-SET ACCEPTANCE GATE seam — `do --remote spec:<slug>` path only (see {@link DoOptions.taskReviewGate}). */
 	taskReviewGate?: ReviewGate;
 	/**
 	 * **`--allow-backlog`** on the no-checkout `do --remote`/`--isolated` path (see
@@ -586,7 +586,7 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * Map a `do prd:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
+ * Map a `do spec:<slug>` {@link TaskResult} onto the `do` {@link DoResult}
  * contract: outcomes pass through (tasked / gate-refused / stale / agent-failed /
  * usage-error), the lock-lost outcome splits into `lost` (exit 2) vs `contended`
  * (exit 3) by its exit code, and the tasking-only exit 4 (stale) is reported on
@@ -685,7 +685,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 
 	// 1. Resolve the slug across BOTH namespaces — `do` is the ONE command that
 	//    spans them (ADR §3a): bare → task (after a no-spec-collision check;
-	//    ERROR on collision), `task:`/`prd:` explicit. A collision / resolution
+	//    ERROR on collision), `task:`/`spec:` explicit. A collision / resolution
 	//    failure is a loud usage error (exit 1).
 	let resolved;
 	try {
@@ -717,7 +717,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			arbiter,
 			doer: 'agent',
 			autoTask: options.autoTask,
-			// EXPLICIT dispatch: a `do prd:<slug>` target was NAMED (the operator typed
+			// EXPLICIT dispatch: a `do spec:<slug>` target was NAMED (the operator typed
 			// it, or the auto-pick POOL already filtered it on `autoTask` before
 			// dispatching here — the single policy-enforcement point). So the tasking gate
 			// drops the `autoTask` policy term and binds only the spec's own readiness
@@ -753,7 +753,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			providerInstance: options.providerInstance,
 			// The tasker review→edit→converge loop (slicer-review-edit-loop): improves the
 			// candidate tasks in place + routes the verdict through the needsAnswers /
-			// needs-attention sink. Threaded only on the `do prd:` path; omitted ⇒ no loop.
+			// needs-attention sink. Threaded only on the `do spec:` path; omitted ⇒ no loop.
 			reviewLoop: options.reviewLoop,
 			taskerLoopMax: options.taskerLoopMax,
 			reviewExecutions: options.reviewExecutions,
@@ -1875,7 +1875,7 @@ export async function performDoRemote(
 	try {
 		// 2a. Resolve the slug across BOTH namespaces against the claim clone (it
 		//     carries `work/` from the mirror's main). A collision / resolution
-		//     failure is a loud usage error; a `prd:` arg reaches the not-yet-wired
+		//     failure is a loud usage error; a `spec:` arg reaches the not-yet-wired
 		//     stub — identical behaviour to in-place `do`.
 		let resolved;
 		try {
@@ -1905,7 +1905,7 @@ export async function performDoRemote(
 				arbiter: 'origin',
 				doer: 'agent',
 				autoTask: options.autoTask,
-				// EXPLICIT dispatch (same as the in-place path above): the `prd:<slug>` was
+				// EXPLICIT dispatch (same as the in-place path above): the `spec:<slug>` was
 				// NAMED (typed, or pool-filtered on `autoTask` before reaching here), so the
 				// tasking gate drops the policy term — only the spec's own readiness +
 				// `taskedAfter` bind, mirroring the build path vs `autoBuild`.
@@ -1919,22 +1919,22 @@ export async function performDoRemote(
 				// `provider` is the SAME the task-build path threads (arg parity), but the
 				// MODE is the per-TRANSITION TASKING resolution
 				// (`per-transition-integration-mode-slicing-vs-build`):
-				// `taskingIntegration ?? integration`, so the `--remote prd:` output ALSO
+				// `taskingIntegration ?? integration`, so the `--remote spec:` output ALSO
 				// routes through the shared core with the tasking-resolved mode.
 				integration: options.taskingIntegration ?? options.integration,
 				// The per-repo TASK-PLACEMENT default + the operator's explicit
 				// override (task `runner-deterministic-slice-placement-policy-and-
-				// precedence`). Same threading as the in-place `do prd:` path.
+				// precedence`). Same threading as the in-place `do spec:` path.
 				tasksLandIn: options.tasksLandIn,
 				explicitTasksLandIn: options.explicitTasksLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,
-				// The tasker review→edit→converge loop on the `do --remote prd:` path too.
+				// The tasker review→edit→converge loop on the `do --remote spec:` path too.
 				reviewLoop: options.reviewLoop,
 				taskerLoopMax: options.taskerLoopMax,
 				reviewExecutions: options.reviewExecutions,
 				taskerLoopModel: options.taskerLoopModel,
-				// The task-SET ACCEPTANCE GATE on the `do --remote prd:` path too.
+				// The task-SET ACCEPTANCE GATE on the `do --remote spec:` path too.
 				review: options.review,
 				reviewGate: options.taskReviewGate,
 				acceptanceReviewModel: options.reviewModel,
@@ -2568,7 +2568,7 @@ async function primeWorktreeTrackingRef(
  * identity) ride VERBATIM from the threaded `DoOptions` onto the structurally-
  * matching {@link DoRemoteOptions} fields; `cwd` is DROPPED (the worktree replaces
  * it) and `remote` + `workspacesDir` are supplied from this driver's closure (the
- * mirror's arbiter URL + the agents' execution area). A `prd:` arg flows through
+ * mirror's arbiter URL + the agents' execution area). A `spec:` arg flows through
  * unchanged — `performDoRemote` tasks it against the claim clone with NO build
  * worktree (the tasking/surface/triage/apply rungs are tree-less ledger moves, the
  * substrate the task's criterion 4 preserves).

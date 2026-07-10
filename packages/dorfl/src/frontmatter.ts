@@ -47,11 +47,12 @@ export interface Frontmatter {
 	 * Source SPEC slug: the parent-spec pointer this artifact derives from; the
 	 * spec lives at `work/specs/ready/<spec>.md`. The `spec` vocabulary name (spec
 	 * `prd-to-spec-vocabulary-cutover-and-migration-command`). `parseFrontmatter`
-	 * populates it from EITHER the canonical `spec:` key OR the LEGACY `prd:` key
-	 * (the latter kept as a read-only BACK-COMPAT alias for un-migrated downstream
-	 * repos, whose data still carries `prd:` until `dorfl prd-to-spec` converts it).
-	 * `spec:` wins when both are present. There is no longer a separate `fm.prd`
-	 * FIELD — both keys feed this one field.
+	 * populates it from the canonical `spec:` key ONLY — the HARD CUTOVER (the last
+	 * `prd` back-compat surface removed): the legacy `prd:` KEY read is GONE, so an
+	 * un-migrated `prd:` field no longer silently resolves. A downstream repo
+	 * migrates its data with `dorfl prd-to-spec` (a purely TEXTUAL `prd: → spec:`
+	 * rewrite that does NOT go through this parser), after which the field reads
+	 * canonically. There is no `fm.prd` FIELD.
 	 */
 	spec: string | undefined;
 	/**
@@ -370,25 +371,14 @@ export function parseFrontmatter(content: string): Frontmatter {
 			result.originTrust = v === 'trusted' || v === 'untrusted' ? v : undefined;
 		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
-		} else if (key === 'spec' || key === 'prd') {
-			// The parent-spec pointer, read from EITHER the canonical `spec:` key OR the
-			// LEGACY `prd:` key into the SINGLE `fm.spec` field (spec
-			// `prd-to-spec-vocabulary-cutover-and-migration-command`). The `prd:` key
-			// read is a permanent-for-now BACK-COMPAT alias so an un-migrated downstream
-			// repo (whose data still carries `prd:` until `dorfl prd-to-spec` converts
-			// it) keeps resolving its parent spec. `spec:` WINS when both are present
-			// (the canonical key over the legacy alias); an empty value on one key does
-			// NOT clobber a non-empty value already read from the other.
-			const value = rawValue === '' ? undefined : unquote(rawValue);
-			if (key === 'spec') {
-				// The canonical key wins: overwrite whatever `prd:` may have set.
-				if (value !== undefined) {
-					result.spec = value;
-				}
-			} else if (result.spec === undefined) {
-				// Legacy `prd:` only fills in when `spec:` has not already set it.
-				result.spec = value;
-			}
+		} else if (key === 'spec') {
+			// The parent-spec pointer, read from the canonical `spec:` key ONLY into the
+			// `fm.spec` field (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
+			// HARD CUTOVER). The legacy `prd:` KEY read is GONE — an un-migrated `prd:`
+			// field no longer resolves here; a repo converts its data via the TEXTUAL
+			// `dorfl prd-to-spec` rewrite (which does not use this parser). An empty value
+			// leaves the field undefined.
+			result.spec = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'issue') {
 			// Integer issue link (`intake`'s spec-emit OR a lone-task emit). A
 			// non-integer / empty value reads as undefined (the field is absent rather

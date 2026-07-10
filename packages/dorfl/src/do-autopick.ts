@@ -26,7 +26,7 @@ import type {ConfigOverrideMap} from './config-override.js';
  * TASKS (the `build` pool — the existing `scan`/`selectCandidates`/eligibility
  * path) and TASKABLE prds (the `task` pool — built from the spec reader +
  * `autoslice-gate`'s predicate), in the per-repo `selectionOrder` (default `drain`
- * = tasks-first). A selected spec dispatches to the `do prd:<slug>` path (tasking
+ * = tasks-first). A selected spec dispatches to the `do spec:<slug>` path (tasking
  * itself is `autoslice-command`, not built here).
  *
  * Explicit multi-arg (`do <a> <b>`) bypasses the pools/priority entirely — the
@@ -155,7 +155,7 @@ export async function performDoAuto(
 /**
  * Run the EXPLICIT multi-arg form (`do <a> <b> …`): the named items in the GIVEN
  * order (no pool/priority — the operator chose them). Each arg is run through the
- * existing `do` pipeline, which itself resolves bare/`task:`/`prd:` (so a named
+ * existing `do` pipeline, which itself resolves bare/`task:`/`spec:` (so a named
  * spec dispatches to the tasking path and a collision errors), SEQUENTIALLY.
  */
 export async function performDoArgs(
@@ -176,7 +176,7 @@ export async function performDoArgs(
 /**
  * Run a list of selected items through the existing `do` pipeline, SEQUENTIALLY,
  * threading the shared options to each. For the pool path the `do` arg encodes
- * the namespace (`prd:<slug>` for a selected spec, bare slug for a task); for the
+ * the namespace (`spec:<slug>` for a selected spec, bare slug for a task); for the
  * explicit-arg path the caller's raw arg is passed verbatim.
  */
 async function runSelectedInSequence(
