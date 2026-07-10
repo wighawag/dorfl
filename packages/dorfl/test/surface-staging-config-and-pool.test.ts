@@ -443,8 +443,8 @@ describe('(f) F3 precondition: a concurrent promote during apply does NOT split-
  * (g) MIRROR path — the CI propose-matrix path (`scanMirrorPool` →
  * `gatherLifecycleMirror`) reads the SAME logical `work/` state from a BARE hub
  * mirror's committed `<ref>` tree via `resolveMirrorTaskStaging` /
- * `resolveMirrorPrdStaging` (each a `git ls-tree` + `git show` pair against
- * `<ref>:work/tasks/backlog/` + `<ref>:work/prds/proposed/`). This block
+ * `resolveMirrorSpecStaging` (each a `git ls-tree` + `git show` pair against
+ * `<ref>:work/tasks/backlog/` + `<ref>:work/specs/proposed/`). This block
  * exercises that path end-to-end so the in-place widening (a)/(b) and the
  * mirror-side widening AGREE.
  */
@@ -473,8 +473,8 @@ describe('(g) MIRROR path: gatherLifecycleMirror honours surfaceStaging against 
 		expect(pools.apply).toEqual([]);
 	});
 
-	it('surfaceStaging:true — a needsAnswers prd in prds/proposed/ IS enumerated (mirror-side prd-staging reader)', async () => {
-		seedStagedPrd('mirror-staged-prd', {needsAnswers: true});
+	it('surfaceStaging:true — a needsAnswers spec in specs/proposed/ IS enumerated (mirror-side spec-staging reader)', async () => {
+		seedStagedPrd('mirror-staged-spec', {needsAnswers: true});
 		const {mirror} = commitAndMirror();
 		const pools = await gatherLifecycleMirror({
 			mirrorPath: mirror,
@@ -483,13 +483,13 @@ describe('(g) MIRROR path: gatherLifecycleMirror honours surfaceStaging against 
 			env: gitEnv(),
 		});
 		expect(pools.surface.map((i) => `${i.namespace}:${i.slug}`)).toContain(
-			'prd:mirror-staged-prd',
+			'spec:mirror-staged-spec',
 		);
 	});
 
-	it('surfaceStaging:false — the same staged task + prd are NOT enumerated (mirror-side staging readers are skipped)', async () => {
+	it('surfaceStaging:false — the same staged task + spec are NOT enumerated (mirror-side staging readers are skipped)', async () => {
 		seedStagedTask('mirror-staged-task', {needsAnswers: true});
-		seedStagedPrd('mirror-staged-prd', {needsAnswers: true});
+		seedStagedPrd('mirror-staged-spec', {needsAnswers: true});
 		const {mirror} = commitAndMirror();
 		const pools = await gatherLifecycleMirror({
 			mirrorPath: mirror,
@@ -499,7 +499,7 @@ describe('(g) MIRROR path: gatherLifecycleMirror honours surfaceStaging against 
 		});
 		const surface = pools.surface.map((i) => `${i.namespace}:${i.slug}`);
 		expect(surface).not.toContain('task:mirror-staged-task');
-		expect(surface).not.toContain('prd:mirror-staged-prd');
+		expect(surface).not.toContain('spec:mirror-staged-spec');
 		expect(pools.surface).toEqual([]);
 	});
 });
