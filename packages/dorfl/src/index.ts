@@ -635,6 +635,34 @@ export type {
 } from './orphan-sidecar.js';
 export {sweepOrphanSidecars} from './orphan-sidecar.js';
 
+export type {
+	VocabularyMigration,
+	QuiescenceViolation,
+	ResyncedDoc,
+	ResyncResult,
+	FolderMove,
+	ContentRewrite,
+	ConfigRewrite,
+	RefRename,
+	DataLeak,
+	PrdToSpecOptions,
+	PrdToSpecResult,
+} from './prd-to-spec.js';
+export {
+	MIGRATION,
+	PROTOCOL_DOCS,
+	keepCaseReplace,
+	checkQuiescence,
+	resyncProtocol,
+	migrateFolders,
+	migrateItemContent,
+	migrateAllItemContent,
+	migrateConfig,
+	migrateRefs,
+	scanForLeaks,
+	runPrdToSpec,
+} from './prd-to-spec.js';
+
 export type {JobStatus, StatusReport, StatusOptions} from './status.js';
 export {status, formatStatus} from './status.js';
 

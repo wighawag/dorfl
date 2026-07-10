@@ -144,6 +144,18 @@ function isExemptMarkdownDataToken(value: string): boolean {
 	return false;
 }
 
+/**
+ * A whole string-literal that IS (or contains) an immutable provenance slug /
+ * the migration verb's purpose-name (`prd-to-spec`, `rename-spec-…`, a landed
+ * task/spec slug). The `.command('prd-to-spec')` verb registration is exactly
+ * this shape — the verb is deliberately purpose-named after the cutover it runs
+ * (ADR §7e), so its literal is a permanent survivor, not a dead code token.
+ */
+function isProvenanceSlugLiteral(value: string): boolean {
+	const lower = value.trim().toLowerCase();
+	return PROVENANCE_SLUG_SUBSTRINGS.some((slug) => lower.includes(slug));
+}
+
 /** The sidecar CARVE-OUT #1 legacy fallback literal (DATA the command renames). */
 function isSidecarFallbackLiteral(value: string): boolean {
 	// `work/questions/prd-<slug>.md` (or the bare `prd-${slug}.md`) — the one
@@ -192,6 +204,21 @@ const PROVENANCE_SLUG_SUBSTRINGS: readonly string[] = [
 
 /** Genuine ENGLISH words that legitimately contain `brief` (never the artifact). */
 const ENGLISH_BRIEF_WORDS = /^(debrief|briefly|briefing|briefcase|briefed)$/i;
+
+/**
+ * The MIGRATION COMMAND's own PURPOSE-NAMED identifiers (task
+ * `build-prd-to-spec-migration-command`). The verb is DELIBERATELY named
+ * `prd-to-spec` (ADR §7e: purpose-named verb, NOT a general `migrate <from>
+ * <to>`), so its code identifiers legitimately carry the `prd` word: the
+ * `PrdToSpec*` types (`PrdToSpecOptions`/`PrdToSpecResult`/`PrdToSpecFlags`),
+ * the `runPrdToSpec` orchestrator, and the `printPrdToSpecReport` CLI helper.
+ * These are the immutable NAME of the command that MIGRATES prd→spec — the same
+ * immutable-provenance logic as {@link PROVENANCE_SLUG_SUBSTRINGS}, but the
+ * camelCase form has no hyphens so the slug substring match does not reach it.
+ * Matched as a whole identifier (case-insensitive) carrying the `prdtospec`
+ * purpose-name core.
+ */
+const MIGRATION_COMMAND_IDENTIFIER = /prdtospec/i;
 
 // ───────────────────────────────────────────────────────────────────────────
 // The .ts comment/string tokenizer (mirrors work-layout-guard.test.ts).
@@ -361,6 +388,7 @@ interface Leak {
 function isAllowedIdentifier(id: string): boolean {
 	if (FRONTMATTER_FIELD_IDENTS.has(id)) return true; // CARVE-OUT #2 field chain
 	if (ENGLISH_BRIEF_WORDS.test(id)) return true; // genuine English
+	if (MIGRATION_COMMAND_IDENTIFIER.test(id)) return true; // the purpose-named verb
 	const lower = id.toLowerCase();
 	for (const slug of PROVENANCE_SLUG_SUBSTRINGS) {
 		if (lower.includes(slug)) return true;
@@ -397,6 +425,7 @@ function forwardLeaksTs(rel: string, tokens: Token[]): Leak[] {
 			const v = tok.value.trim();
 			if (isSidecarFallbackLiteral(v)) continue; // CARVE-OUT #1
 			if (isPrdsFolderLiteral(v)) continue; // DATA folder (command's)
+			if (isProvenanceSlugLiteral(v)) continue; // the purpose-named verb / a slug
 			if (DEAD_TOKEN_LITERAL.test(v)) {
 				leaks.push({
 					file: rel,
@@ -592,7 +621,15 @@ describe('prd → spec leak scan — the SOURCE-part cutover acceptance GATE', (
 	it('REVERSE: no genuine English corrupted by the sweep', () => {
 		const leaks: Leak[] = [];
 		for (const file of scannedFiles()) {
-			leaks.push(...reverseLeaks(relTo(file), readFileSync(file, 'utf8')));
+			const rel = relTo(file);
+			// The DATA-side migration engine (`src/prd-to-spec.ts`) DEFINES the same
+			// corrupted-English NEGATIVE patterns as this test's own
+			// {@link CORRUPTED_ENGLISH} (its `scanForLeaks` reverse lens over the
+			// converted tree). Those pattern literals (`esspec`, `speccif`, …) are the
+			// detector, NOT mangled prose — exactly why THIS test's own copy lives in
+			// `test/` (unscanned). Exempt that ONE module for the same reason.
+			if (rel.endsWith(join('src', 'prd-to-spec.ts'))) continue;
+			leaks.push(...reverseLeaks(rel, readFileSync(file, 'utf8')));
 		}
 		expect(
 			leaks,
