@@ -474,9 +474,8 @@ export async function performTask(
 	// final commit must scrub any agent writes there (an attempt to self-place into
 	// the pool, prd US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	// read the parent-spec self-pointer off `prdFm.spec` (populated beside
-	// `prdFm.prd` by the expand task).
+	// Read the parent-spec self-pointer off `specFm.spec` (populated from the
+	// `spec:` key or the legacy `prd:` back-compat alias).
 	const prompt = buildTaskingSpec(slug, specFm.spec);
 	let agent: {ok: boolean; detail?: string};
 	try {

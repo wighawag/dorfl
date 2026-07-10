@@ -44,45 +44,38 @@ export interface Frontmatter {
 	/** Content-derived slug id (frontmatter `slug:`). */
 	slug: string | undefined;
 	/**
-	 * Source SPEC slug (frontmatter `spec:`); the spec lives at
-	 * `work/specs/ready/<spec>.md`. The `spec` vocabulary name for the parent-spec
-	 * pointer (prd `prd-to-spec-vocabulary-cutover-and-migration-command`). This is
-	 * the EXPAND-step ADDITION beside {@link prd}: `parseFrontmatter` populates BOTH
-	 * from EITHER the `spec:` OR the `prd:` key with the SAME value, so a caller
-	 * reading either sees the parent-spec slug. The migrate batches move `fm.prd`
-	 * reads onto `fm.spec` one at a time; the contract task removes `prd`.
+	 * Source SPEC slug: the parent-spec pointer this artifact derives from; the
+	 * spec lives at `work/specs/ready/<spec>.md`. The `spec` vocabulary name (spec
+	 * `prd-to-spec-vocabulary-cutover-and-migration-command`). `parseFrontmatter`
+	 * populates it from EITHER the canonical `spec:` key OR the LEGACY `prd:` key
+	 * (the latter kept as a read-only BACK-COMPAT alias for un-migrated downstream
+	 * repos, whose data still carries `prd:` until `dorfl prd-to-spec` converts it).
+	 * `spec:` wins when both are present. There is no longer a separate `fm.prd`
+	 * FIELD — both keys feed this one field.
 	 */
 	spec: string | undefined;
-	/**
-	 * Source spec slug (frontmatter `prd:`); the spec lives at
-	 * `work/specs/ready/<prd>.md`. The LEGACY vocabulary name for the parent-spec
-	 * pointer, kept BESIDE {@link spec} through the expand→migrate→contract cutover
-	 * (prd `prd-to-spec-vocabulary-cutover-and-migration-command`) so every existing
-	 * `fm.prd` reader keeps working; populated from EITHER the `spec:` or `prd:` key.
-	 */
-	prd: string | undefined;
 	/**
 	 * The GitHub issue number an `intake`-emitted artifact was transformed from
 	 * (frontmatter `issue:`). Parsed so the `issue: N` intake writes is
 	 * MACHINE-READABLE — the close JOB (`runner-in-ci`'s) reaches it to resolve the
 	 * issue from folder + field state. Carried on EITHER:
 	 *
-	 * - a **prd** (`intake`'s prd outcome) — a fanned task reaches it via
-	 *   `task.prd: → work/prds/ready/<prd>.md → prd issue:` (the number lives
-	 *   ONLY on the prd, never duplicated across the N fanned tasks); OR
-	 * - a **lone task** (`intake`'s TASK outcome, no `prd:`) — the provider-agnostic
+	 * - a **spec** (`intake`'s spec outcome) — a fanned task reaches it via
+	 *   `task.spec: → work/specs/ready/<spec>.md → spec issue:` (the number lives
+	 *   ONLY on the spec, never duplicated across the N fanned tasks); OR
+	 * - a **lone task** (`intake`'s TASK outcome, no `spec:`) — the provider-agnostic
 	 *   closure link for a task that closes its own issue directly (replaces the old
 	 *   GitHub-only `Fixes #N` body line, which is now a deferred optimisation).
 	 *
-	 * INVARIANT — one closure path per task: a task uses `issue:` XOR `prd:`, never
+	 * INVARIANT — one closure path per task: a task uses `issue:` XOR `spec:`, never
 	 * both. Either it closes its own issue directly (`issue:`) or it contributes to a
-	 * prd that closes the issue (`prd:` → prd `issue:`). This is NOT enforced by a
+	 * spec that closes the issue (`spec:` → spec `issue:`). This is NOT enforced by a
 	 * throwing validator (there is no frontmatter-validation layer): intake never
-	 * emits both — its task / prd dispatch branches are mutually exclusive — so only
-	 * a human hand-edit could produce both, and the precedence rule (`prd:` wins,
+	 * emits both — its task / spec dispatch branches are mutually exclusive — so only
+	 * a human hand-edit could produce both, and the precedence rule (`spec:` wins,
 	 * `issue:` ignored) is the future close-job's concern (see {@link
-	 * resolveClosingIssue}), degrading a typo to "use the prd's number" rather than
-	 * crashing. `undefined` when omitted (every non-intake prd and most tasks).
+	 * resolveClosingIssue}), degrading a typo to "use the spec's number" rather than
+	 * crashing. `undefined` when omitted (every non-intake spec and most tasks).
 	 */
 	issue: number | undefined;
 	/**
@@ -334,7 +327,6 @@ export function parseFrontmatter(content: string): Frontmatter {
 		originTrust: undefined,
 		slug: undefined,
 		spec: undefined,
-		prd: undefined,
 		issue: undefined,
 		humanOnly: undefined,
 		needsAnswers: undefined,
@@ -379,23 +371,23 @@ export function parseFrontmatter(content: string): Frontmatter {
 		} else if (key === 'slug') {
 			result.slug = rawValue === '' ? undefined : unquote(rawValue);
 		} else if (key === 'spec' || key === 'prd') {
-			// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-			// the parent-spec pointer is written under EITHER the new `spec:` key or the
-			// legacy `prd:` key. Populate BOTH `fm.spec` and `fm.prd` with the same value
-			// so a caller reading either field sees it. `spec:` wins if both are present
-			// (the canonical key takes precedence over the legacy alias); an empty value
-			// on one key does NOT clobber a non-empty value already read from the other.
+			// The parent-spec pointer, read from EITHER the canonical `spec:` key OR the
+			// LEGACY `prd:` key into the SINGLE `fm.spec` field (spec
+			// `prd-to-spec-vocabulary-cutover-and-migration-command`). The `prd:` key
+			// read is a permanent-for-now BACK-COMPAT alias so an un-migrated downstream
+			// repo (whose data still carries `prd:` until `dorfl prd-to-spec` converts
+			// it) keeps resolving its parent spec. `spec:` WINS when both are present
+			// (the canonical key over the legacy alias); an empty value on one key does
+			// NOT clobber a non-empty value already read from the other.
 			const value = rawValue === '' ? undefined : unquote(rawValue);
 			if (key === 'spec') {
 				// The canonical key wins: overwrite whatever `prd:` may have set.
 				if (value !== undefined) {
 					result.spec = value;
-					result.prd = value;
 				}
 			} else if (result.spec === undefined) {
-				// Legacy `prd:` only fills in when `spec:` has not already set the pair.
+				// Legacy `prd:` only fills in when `spec:` has not already set it.
 				result.spec = value;
-				result.prd = value;
 			}
 		} else if (key === 'issue') {
 			// Integer issue link (`intake`'s prd-emit OR a lone-task emit). A
@@ -456,15 +448,15 @@ export function parseFrontmatter(content: string): Frontmatter {
 
 /**
  * Resolve, from a parsed artifact's frontmatter, HOW it closes its source issue:
- * the `prd:` hop or the lone-task `issue:` field. A PURE helper for the FUTURE
+ * the `spec:` hop or the lone-task `issue:` field. A PURE helper for the FUTURE
  * CI close-job (`runner-in-ci`'s) — it is NOT wired into intake or any reader
  * today; it merely pins the one-closure-path PRECEDENCE in one place.
  *
- * Encodes the invariant: a task uses `issue:` XOR `prd:`. When (only a human
- * hand-edit could) BOTH are present, `prd:` WINS — the close-job hops to the prd's
- * `issue:` and IGNORES the task's own `issue:` (the fanned-prd path is the
- * authoritative one; a lone `issue:` on a `prd:`-bearing task is a contradiction
- * that degrades to "use the prd" rather than crashing).
+ * Encodes the invariant: a task uses `issue:` XOR `spec:`. When (only a human
+ * hand-edit could) BOTH are present, `spec:` WINS — the close-job hops to the
+ * spec's `issue:` and IGNORES the task's own `issue:` (the fanned-spec path is
+ * the authoritative one; a lone `issue:` on a `spec:`-bearing task is a
+ * contradiction that degrades to "use the spec" rather than crashing).
  *
  * Returns:
  * - `{via: 'spec', spec}` when a `spec:` is present (hop to the spec's `issue:`; the

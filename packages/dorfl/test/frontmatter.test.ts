@@ -15,7 +15,7 @@ describe('parseFrontmatter', () => {
 			'---',
 			'title: Some Title',
 			'slug: my-task',
-			'prd: my-prd',
+			'spec: my-spec',
 			'humanOnly: true',
 			'needsAnswers: true',
 			'blockedBy: [foo, bar]',
@@ -26,7 +26,7 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.slug).toBe('my-task');
-		expect(fm.prd).toBe('my-prd');
+		expect(fm.spec).toBe('my-spec');
 		expect(fm.humanOnly).toBe(true);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.blockedBy).toEqual(['foo', 'bar']);
@@ -169,8 +169,9 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		// The old keys are inert text now — neither maps to the new fields.
-		// (`prd:`/`taskedAfter:` are the LIVE keys after the brief->prd rename.)
-		expect(fm.prd).toBeUndefined();
+		// (`spec:` (with the legacy `prd:` back-compat alias) / `taskedAfter:` are the
+		// LIVE keys.)
+		expect(fm.spec).toBeUndefined();
 		expect(fm.taskedAfter).toEqual([]);
 	});
 
@@ -272,7 +273,7 @@ describe('parseFrontmatter', () => {
 		].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.issue).toBe(7);
-		expect(fm.prd).toBeUndefined();
+		expect(fm.spec).toBeUndefined();
 	});
 
 	it('treats omitted `issue:` as undefined (every non-intake prd and most tasks)', () => {
@@ -518,30 +519,39 @@ describe('parseFrontmatter — the SHIPPED templates parse coherently (parser �
 	}
 });
 
-describe('parseFrontmatter — spec/prd EXPAND (prd→spec cutover: both forms accepted)', () => {
-	it('populates BOTH fm.spec and fm.prd from the legacy `prd:` key', () => {
+describe('parseFrontmatter — spec field with legacy `prd:` back-compat KEY read', () => {
+	// The FIELD is `spec`-only now (spec
+	// `prd-to-spec-vocabulary-cutover-and-migration-command`, contract step); there
+	// is no `fm.prd` field. The legacy `prd:` KEY read STAYS as read-only
+	// back-compat so an un-migrated downstream repo (whose data still carries `prd:`
+	// until `dorfl prd-to-spec` converts it) keeps resolving its parent spec into
+	// `fm.spec`.
+	it('populates fm.spec from the legacy `prd:` back-compat KEY', () => {
 		const md = ['---', 'slug: t', 'prd: my-spec', '---'].join('\n');
 		const fm = parseFrontmatter(md);
-		expect(fm.prd).toBe('my-spec');
 		expect(fm.spec).toBe('my-spec');
 	});
 
-	it('populates BOTH fm.spec and fm.prd from the new `spec:` key', () => {
+	it('populates fm.spec from the canonical `spec:` key', () => {
 		const md = ['---', 'slug: t', 'spec: my-spec', '---'].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.spec).toBe('my-spec');
-		expect(fm.prd).toBe('my-spec');
 	});
 
-	it('leaves BOTH undefined when neither key is present', () => {
+	it('there is no `prd` FIELD on the parsed frontmatter', () => {
+		const md = ['---', 'slug: t', 'prd: my-spec', '---'].join('\n');
+		const fm = parseFrontmatter(md);
+		expect('prd' in fm).toBe(false);
+	});
+
+	it('leaves fm.spec undefined when neither key is present', () => {
 		const md = ['---', 'slug: t', '---'].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.spec).toBeUndefined();
-		expect(fm.prd).toBeUndefined();
 	});
 
 	it('lets the canonical `spec:` key WIN when both keys are present', () => {
-		// Either ordering: the canonical `spec:` value populates both fields.
+		// Either ordering: the canonical `spec:` value populates fm.spec.
 		const prdFirst = ['---', 'prd: legacy', 'spec: canonical', '---'].join(
 			'\n',
 		);
@@ -551,7 +561,6 @@ describe('parseFrontmatter — spec/prd EXPAND (prd→spec cutover: both forms a
 		for (const md of [prdFirst, specFirst]) {
 			const fm = parseFrontmatter(md);
 			expect(fm.spec).toBe('canonical');
-			expect(fm.prd).toBe('canonical');
 		}
 	});
 
@@ -559,13 +568,11 @@ describe('parseFrontmatter — spec/prd EXPAND (prd→spec cutover: both forms a
 		const md = ['---', 'spec: canonical', 'prd:', '---'].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.spec).toBe('canonical');
-		expect(fm.prd).toBe('canonical');
 	});
 
 	it('an empty `spec:` does NOT clobber a value already read from `prd:`', () => {
 		const md = ['---', 'prd: legacy', 'spec:', '---'].join('\n');
 		const fm = parseFrontmatter(md);
 		expect(fm.spec).toBe('legacy');
-		expect(fm.prd).toBe('legacy');
 	});
 });

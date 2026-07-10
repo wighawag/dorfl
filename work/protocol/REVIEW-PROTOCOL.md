@@ -56,7 +56,7 @@ Do the artifacts COMPOSE, and do they obey the contract?
   - **status = folder**, never a frontmatter field; **one file per item**; **no shared index/manifest**.
   - **content-derived slug**, never a counter; **camelCase** field names (`humanOnly`, `needsAnswers`, `blockedBy`, `taskedAfter`).
   - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its spec; a falsely-complete `needsAnswers:false` is a defect.
-  - **`blockedBy` / `prd` / `covers`** present and correct (`prd` required iff `covers` is set); deps reference real slugs.
+  - **`blockedBy` / `spec` / `covers`** present and correct (`spec` required iff `covers` is set); deps reference real slugs.
   - **bucket polarity** for notes: _observation_ = spotted/unverified (append-only); _finding_ = verified EXTERNAL/domain ground truth; _ADR_ = a decision WE made + why (in `docs/adr/`). A note in the wrong bucket is a finding.
   - **a task's `## Prompt`** is self-contained (an agent could start from the file alone) and includes the drift-check.
 

@@ -7,7 +7,7 @@
  * The wrapper is NOT hardcoded here: it is read VERBATIM from the work-contract
  * (`skills/setup/protocol/CLAIM-PROTOCOL.md` → "The prompt handed to the work agent"),
  * so the emitted text can never silently diverge from the canonical contract.
- * We only substitute the per-task placeholders (`<slug>`, `<prd>`).
+ * We only substitute the per-task placeholders (`<slug>`, `<spec>`).
  *
  * The wrapper draws the git boundary IN-BAND — the spawned agent does NO git ops
  * on the repo (no commit/push, no moving `work/` files); the RUNNER owns every
@@ -137,7 +137,7 @@ export function resolveProtocolDoc(
 /**
  * Pull the canonical wrapper TEMPLATE out of CLAIM-PROTOCOL.md: the first fenced
  * code block following the "The prompt handed to the work agent" heading. The
- * returned text still contains the `<slug>` / `<prd>` placeholders verbatim — it
+ * returned text still contains the `<slug>` / `<spec>` placeholders verbatim — it
  * is the single source of truth for the wrapper.
  */
 export function extractCanonicalWrapperTemplate(protocol: string): string {
@@ -208,7 +208,7 @@ export function extractCanonicalWrapperTemplate(protocol: string): string {
  *
  * Pure string transform; runs AFTER `extractCanonicalWrapperTemplate` (a pure
  * verbatim extractor stays a pure verbatim extractor) and BEFORE the
- * `<slug>`/`<prd>` substitution.
+ * `<slug>`/`<spec>` substitution.
  */
 export function applyPromptGuidance(
 	template: string,
@@ -227,17 +227,17 @@ export function applyPromptGuidance(
 }
 
 /**
- * The constant wrapper, parameterised only by the task slug, its source prd
+ * The constant wrapper, parameterised only by the task slug, its source spec
  * slug, and (optionally) the resolved {@link PromptGuidance} nudges. Read
  * verbatim from the work-contract and substituted — never a divergent hardcoded
- * copy. `prd` may be `undefined` when the task has no `prd:` field. When
+ * copy. `spec` may be `undefined` when the task has no `spec:` field. When
  * `promptGuidance` is omitted (or every member resolves false) the output is
  * BYTE-IDENTICAL to today's wrapper (the ELSE-branch of every conditional is
  * the historic text).
  */
 export function wrapper(
 	slug: string,
-	prd: string | undefined,
+	spec: string | undefined,
 	options: {
 		protocolPath?: string;
 		cwd?: string;
@@ -252,7 +252,7 @@ export function wrapper(
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
 	const resolved = applyPromptGuidance(template, options.promptGuidance);
-	return resolved.replace(/<slug>/g, slug).replace(/<prd>/g, prd ?? '<prd>');
+	return resolved.replace(/<slug>/g, slug).replace(/<spec>/g, spec ?? '<spec>');
 }
 
 /**
@@ -427,7 +427,7 @@ export function buildContinueBlock(slug: string, ctx: ContinueContext): string {
  */
 export function buildAgentPrompt(
 	slug: string,
-	prd: string | undefined,
+	spec: string | undefined,
 	taskPrompt: string,
 	options: {
 		protocolPath?: string;
@@ -436,7 +436,7 @@ export function buildAgentPrompt(
 		promptGuidance?: {testFirst?: boolean};
 	} = {},
 ): string {
-	const head = wrapper(slug, prd, options);
+	const head = wrapper(slug, spec, options);
 	if (options.continueContext) {
 		const block = buildContinueBlock(slug, options.continueContext);
 		return `${head}\n\n${block}\n\n${taskPrompt}\n`;
@@ -459,8 +459,11 @@ export interface ResolvedTask {
 	path: string;
 	/** The folder the task was resolved from (in-progress wins over tasks-ready). */
 	folder: TaskFolder;
-	/** The task's source prd slug (frontmatter `prd:`), if any. */
-	prd: string | undefined;
+	/**
+	 * The task's source SPEC slug (frontmatter `spec:`, or the legacy `prd:` key
+	 * as read-only back-compat), if any.
+	 */
+	spec: string | undefined;
 	/** The extracted `## Prompt` body. */
 	taskPrompt: string;
 }
@@ -624,11 +627,11 @@ export function resolveTask(
 			);
 		}
 		const fm = parseFrontmatter(content);
-		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-		// read the parent-spec pointer off the new `fm.spec` field (populated beside
-		// `fm.prd` by the expand task). The `ResolvedTask.prd` field name is left
-		// unchanged (a struct-field rename is out of this batch's scope).
-		return {slug, path, folder, prd: fm.spec, taskPrompt};
+		// Read the parent-spec pointer off `fm.spec` (populated from EITHER the
+		// canonical `spec:` key or the legacy `prd:` back-compat alias) into the
+		// `spec`-only `ResolvedTask` (spec
+		// `prd-to-spec-vocabulary-cutover-and-migration-command`).
+		return {slug, path, folder, spec: fm.spec, taskPrompt};
 	}
 	const searched = order.map((f) => `${workFolderRel(f)}/`).join(', ');
 	throw new PromptError(`no task '${slug}' found in ${searched}`);
@@ -722,8 +725,8 @@ export function resolvePromptGuidanceForItem(options: {
 }): PromptGuidance {
 	const taskFm = parseFrontmatter(options.taskContent);
 	let specFm: Frontmatter | undefined;
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	// read the parent-spec pointer off `fm.spec` (populated beside `fm.prd`).
+	// Read the parent-spec pointer off `fm.spec` (populated from the `spec:` key or
+	// the legacy `prd:` back-compat alias).
 	if (taskFm.spec !== undefined) {
 		const specPath = findSpecPath(options.cwd, taskFm.spec);
 		if (specPath !== undefined) {
@@ -752,7 +755,7 @@ export function renderPrompt(options: PromptOptions): string {
 		repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 		taskContent: readFileSync(task.path, 'utf8'),
 	});
-	return buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
+	return buildAgentPrompt(task.slug, task.spec, task.taskPrompt, {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
 		promptGuidance: resolvedGuidance,

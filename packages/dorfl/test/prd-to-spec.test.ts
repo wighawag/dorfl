@@ -17,6 +17,7 @@ import {
 	migrateConfig,
 	keepCaseReplace,
 	scanForLeaks,
+	resyncProtocol,
 } from '../src/prd-to-spec.js';
 
 /**
@@ -160,6 +161,57 @@ describe('keepCaseReplace — the bespoke keep-case sweep', () => {
 		expect(keepCaseReplace('prd-foo prd:bar', 'prd', 'spec')).toBe(
 			'spec-foo spec:bar',
 		);
+	});
+});
+
+describe('resyncProtocol — a missing SOURCE doc does NOT bump VERSION + is surfaced', () => {
+	it('an UNRESOLVABLE source doc is reported skipped, copies nothing, and (alone) leaves VERSION unwritten', () => {
+		const repo = mkdtempSync(join(scratch, 'resync-'));
+		// A fresh repo with NO work/protocol/ yet + no VERSION.
+		const versionAbs = join(repo, 'work/protocol/VERSION');
+
+		// Force EVERY source doc to a path that does NOT exist: nothing can be
+		// copied, so nothing is VERSION-bump-worthy. The latent bug bumped VERSION
+		// anyway (default-false `unchanged` → `anyDocChanged` true); the fix must not.
+		const result = resyncProtocol(repo, {
+			resolveDoc: (name) => join(repo, 'no-such-source', name),
+		});
+
+		// Every doc is surfaced as skipped (source unresolvable, not copied).
+		expect(result.docs.length).toBeGreaterThan(0);
+		for (const doc of result.docs) {
+			expect(doc.skipped).toBe(true);
+			expect(doc.unchanged).toBe(false);
+			// Nothing was written to the destination.
+			expect(existsSync(join(repo, doc.dest))).toBe(false);
+		}
+		// The bug guard: VERSION is NOT written when the only "changes" are skips.
+		expect(existsSync(versionAbs)).toBe(false);
+	});
+
+	it('a resolvable source DOES copy + bump VERSION (the skip path is not over-broad)', () => {
+		const repo = mkdtempSync(join(scratch, 'resync-ok-'));
+		const srcDir = join(repo, 'fake-source');
+		mkdirSync(srcDir, {recursive: true});
+		// Provide a real source for one doc; leave the rest unresolvable.
+		const realDoc = 'WORK-CONTRACT.md';
+		writeFileSync(join(srcDir, realDoc), 'the new contract\n');
+
+		const result = resyncProtocol(repo, {
+			resolveDoc: (name) =>
+				name === realDoc
+					? join(srcDir, name)
+					: join(repo, 'no-such-source', name),
+		});
+
+		const copied = result.docs.find((d) => d.name === realDoc);
+		expect(copied?.skipped).toBe(false);
+		expect(copied?.unchanged).toBe(false);
+		expect(read(repo, copied!.dest)).toBe('the new contract\n');
+		// A real copy happened → VERSION IS bumped.
+		expect(existsSync(join(repo, 'work/protocol/VERSION'))).toBe(true);
+		// The unresolvable docs are still surfaced as skips (not silently dropped).
+		expect(result.docs.some((d) => d.skipped)).toBe(true);
 	});
 });
 

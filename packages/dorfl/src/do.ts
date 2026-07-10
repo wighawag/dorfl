@@ -1054,7 +1054,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
+		prompt = buildAgentPrompt(task.slug, task.spec, task.taskPrompt, {
 			cwd: tree.dir,
 			continueContext,
 			promptGuidance: itemGuidance,
@@ -2245,7 +2245,7 @@ async function runRemotePipeline(
 			repoResolved: {testFirst: options.promptGuidance?.testFirst === true},
 			taskContent: readFileSync(task.path, 'utf8'),
 		});
-		prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
+		prompt = buildAgentPrompt(task.slug, task.spec, task.taskPrompt, {
 			cwd,
 			continueContext,
 			promptGuidance: itemGuidance,
