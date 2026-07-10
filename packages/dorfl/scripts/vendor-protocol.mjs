@@ -2,13 +2,14 @@
  * Vendor the SET of runtime-read protocol docs INTO the published package.
  *
  * `resolveProtocolDoc` reads these docs at runtime to assemble spawned-agent
- * prompts (the work-agent prompt + the runner-invoked discipline prompts). The
- * docs are OWNED by the `setup` skill at the monorepo root
- * (`skills/setup/protocol/`) and `setup` copies them into every target repo's
- * `work/protocol/`. But an installed npm CLI has NO sibling `skills/` tree and
- * may run against a not-yet-set-up repo (no `work/protocol/`), so the package
- * must ship its OWN fallback copies — a published package cannot reference
- * files outside itself.
+ * prompts (the work-agent prompt + the runner-invoked discipline prompts), AND
+ * `dorfl prd-to-spec` re-syncs them into a target repo's `work/protocol/` (the
+ * deterministic slice of `setup`). The docs are OWNED by the `setup` skill at
+ * the monorepo root (`skills/setup/protocol/`) and `setup` copies them into
+ * every target repo's `work/protocol/`. But an installed npm CLI has NO sibling
+ * `skills/` tree and may run against a not-yet-set-up repo (no `work/protocol/`),
+ * so the package must ship its OWN fallback copies — a published package cannot
+ * reference files outside itself.
  *
  * This step (part of `pnpm build`) copies each doc in {@link DOCS} from the
  * monorepo-root source into `dist/protocol/<name>`, the published-CLI fallback
@@ -26,15 +27,24 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
- * The SET of runtime-read protocol docs the runner resolves via
- * `resolveProtocolDoc`. Data-driven on purpose — adding a new runner-invoked
- * discipline appends its doc here (no per-doc copy step).
+ * The SET of protocol docs the package vendors. This is the FULL `setup`
+ * contract set (kept in lockstep with `PROTOCOL_DOCS` in `src/prd-to-spec.ts`),
+ * NOT just the runtime-read subset: `dorfl prd-to-spec` re-syncs ALL of them
+ * into a target repo, and the published CLI has no sibling `skills/` tree to
+ * read the non-runtime docs (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, the
+ * templates) from — so it must ship its own copies of each. The runtime
+ * resolver (`resolveProtocolDoc`) reads whichever subset it needs from the same
+ * `dist/protocol/` dir. Adding a new protocol doc appends its BASENAME here.
  */
 const DOCS = [
+	'WORK-CONTRACT.md',
 	'CLAIM-PROTOCOL.md',
 	'REVIEW-PROTOCOL.md',
 	'SURFACE-PROTOCOL.md',
 	'TASKING-PROTOCOL.md',
+	'ADR-FORMAT.md',
+	'task-template.md',
+	'spec-template.md',
 ];
 
 const here = dirname(fileURLToPath(import.meta.url));

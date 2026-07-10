@@ -109,6 +109,11 @@ import {runVerify} from './verify.js';
 import {renderPrompt} from './prompt.js';
 import {resolvePromptGuidance} from './config.js';
 import {gc, RETAIN_REASON_TEXT} from './gc.js';
+import {
+	runPrdToSpec,
+	type PrdToSpecResult,
+	type DataLeak,
+} from './prd-to-spec.js';
 import {sweepRemoteMergedBranches} from './reap-branches.js';
 import {sweepOrphanSidecars} from './orphan-sidecar.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
@@ -805,6 +810,85 @@ interface GcFlags {
 	cwd?: string;
 	dryRun?: boolean;
 	reapStaleLocks?: boolean;
+}
+
+interface PrdToSpecFlags {
+	repo?: string;
+	dryRun?: boolean;
+	json?: boolean;
+}
+
+/** Human-readable report for the `prd-to-spec` migration result. */
+function printPrdToSpecReport(result: PrdToSpecResult): void {
+	if (result.refused) {
+		const v = result.refused;
+		const label =
+			v.kind === 'dirty-tree'
+				? 'dirty working tree'
+				: v.kind === 'held-lock'
+					? 'a held per-item lock'
+					: 'an in-progress work-branch carrying unlanded work';
+		console.error(
+			`REFUSED: the repo is not quiescent (${label}): ${v.offender}. ` +
+				'Land or discard the in-flight work, then re-run. (prd-to-spec ' +
+				'never migrates over uncommitted/in-flight state.)',
+		);
+		return;
+	}
+
+	const verb = result.dryRun ? 'WOULD' : 'DID';
+	console.log(
+		result.dryRun
+			? '=== prd-to-spec (DRY RUN — nothing written) ==='
+			: '=== prd-to-spec ===',
+	);
+
+	if (result.resync) {
+		const changed = result.resync.docs.filter((d) => !d.unchanged).length;
+		console.log(
+			`Contract re-sync: ${verb} sync ${result.resync.docs.length} protocol ` +
+				`doc(s) (${changed} changed) + bump ${result.resync.versionPath}.`,
+		);
+	}
+	console.log(`Folders: ${verb} move ${result.folderMoves.length} folder(s).`);
+	for (const m of result.folderMoves) {
+		console.log(`  ${m.from} -> ${m.to}`);
+	}
+	console.log(
+		`Item content: ${verb} rewrite ${result.contentRewrites.length} item(s).`,
+	);
+	console.log(
+		`Config: ${verb} rename ${result.configRewrites.length} key(s)` +
+			(result.configRewrites.length > 0
+				? ` (${result.configRewrites.map((c) => `${c.from}->${c.to}`).join(', ')})`
+				: '') +
+			'.',
+	);
+	console.log(`Refs: ${verb} rename ${result.refRenames.length} inert ref(s).`);
+	for (const r of result.refRenames) {
+		console.log(`  ${r.from} -> ${r.to}`);
+	}
+
+	if (result.dryRun) {
+		console.log(
+			'(Re-run without --dry-run to apply; the leak scan gates the output.)',
+		);
+		return;
+	}
+	if (result.leaks.length === 0) {
+		console.log('Leak scan: GREEN (no surviving prd data ref).');
+	} else {
+		console.error(`Leak scan: FAILED (${result.leaks.length} leak(s)):`);
+		for (const leak of result.leaks) {
+			printLeak(leak);
+		}
+	}
+}
+
+function printLeak(leak: DataLeak): void {
+	console.error(
+		`  [${leak.lens}] ${leak.where}: '${leak.token}' — ${leak.why}`,
+	);
 }
 
 interface StatusFlags {
@@ -3260,6 +3344,42 @@ export function buildProgram(): Command {
 			console.log(
 				`Summary: ${result.reaped.length} reaped, ${result.retained.length} retained.`,
 			);
+		});
+
+	program
+		.command('prd-to-spec')
+		.helpGroup(ADVANCED_GROUP)
+		.description(
+			"Migrate THIS repo's work/ DATA + config + inert git refs from the legacy `prd` vocabulary to `spec`, after upgrading the dorfl package (whose code/contract already speak `spec`). Self-contained: (1) REFUSES unless the repo is quiescent (clean tree AND no held per-item lock AND no in-progress work/prd-* branch), naming the offender; (2) re-syncs work/protocol/* to the new `spec` contract; (3) mechanically converts all four data layers (folders work/prds/* -> work/specs/* via git mv, `prd:` frontmatter + inert refs across ALL items incl. tasks/done + specs/tasked, `prdsLandIn` config key, inert lock-refs/work-branches). Idempotent; --dry-run previews every layer without writing; the forward+reverse leak scan over the converted tree is the acceptance gate. Runs IN-PLACE on the current repo (does no git commit/push -- the human commits the result).",
+		)
+		.option(
+			'--repo <dir>',
+			'the repo working-tree root to migrate (default: cwd)',
+		)
+		.option(
+			'--dry-run',
+			'REPORT exactly what each layer WOULD change, touching nothing (no writes, no ref renames, no leak-scan)',
+		)
+		.option('--json', 'output the raw result as JSON')
+		.action((flags: PrdToSpecFlags) => {
+			const repoPath = flags.repo ?? process.cwd();
+			const result = runPrdToSpec({
+				repoPath,
+				dryRun: flags.dryRun === true,
+			});
+
+			if (flags.json) {
+				console.log(JSON.stringify(result, null, 2));
+			} else {
+				printPrdToSpecReport(result);
+			}
+
+			// Exit non-zero on a REFUSAL (quiescence gate) or a non-green leak scan
+			// (a converted tree that still carries a dangling `prd` ref). A clean
+			// dry-run or a green migration exits 0.
+			if (result.refused || result.leaks.length > 0) {
+				process.exit(1);
+			}
 		});
 
 	program
