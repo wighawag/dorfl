@@ -57,3 +57,7 @@ STOPPED (agent, verified-correct, 2nd contract-phase gap): ~7 live EXPORTED Prd*
 ## Requeue 2026-07-10
 
 STOPPED (agent, verified-correct, 3rd contract-phase gap): the intake integration-mode CLI-flag family (--merge-prd/--propose-prd, mergePrd/proposePrd, trigger-template prd_flag) was a DOCUMENTED deferral (intake.ts:425 + observation note) that no batch owned; plus exported STAGED_PRDS_DIR + internal prd identifiers. Human decided: CLEAN BREAK on flags + FULLY PURGE internal identifiers. Inserting batch 4f; requeued.
+
+## Requeue 2026-07-10
+
+STOPPED (agent, verified-correct): the task's AC 'parseFrontmatter reads only spec:' CONTRADICTS its own option-A exemption + ADR §7e — dorfl's ledger has 199 prd: fields / 0 spec:, so the prd: frontmatter-KEY read is DATA-territory the COMMAND removes (like the sidecar prd-<slug>.md fallback), not this source-part task. Fixing the task: prd: key-read joins the command-removed alias carve-out + leak-scan allow-list. Requeued.
