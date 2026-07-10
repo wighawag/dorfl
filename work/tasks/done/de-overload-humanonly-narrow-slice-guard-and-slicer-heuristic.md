@@ -12,7 +12,7 @@ De-overload `humanOnly` now that the folder takes the position/review job:
 
 - **Narrow slice `humanOnly`** to the rare "never-for-agents BY NATURE" guard
   (secrets/release/security) that survives EVEN in the pool — the predicate still
-  excludes a `humanOnly` slice when it is in the pool. PRD `humanOnly` is UNCHANGED
+  excludes a `humanOnly` slice when it is in the pool. SPEC `humanOnly` is UNCHANGED
   (it gates auto-slicing; no folder substitute). `needsAnswers` unchanged. The
   result is three orthogonal axes each meaning ONE thing.
 - **Shift the slicer heuristic** from "stamp `humanOnly: true` for REVIEW"
@@ -24,7 +24,7 @@ De-overload `humanOnly` now that the folder takes the position/review job:
   **VERIFIED 2026-06-18: this sub-task is a NO-OP.** The ONLY live (`backlog/`/
   `in-progress/`/`needs-attention/`) slice carrying `humanOnly: true` was THIS slice
   itself; every other `humanOnly: true` slice is in `work/done/` (historical, never
-  re-homed) and every `humanOnly` PRD is out of scope (PRD `humanOnly` is unchanged).
+  re-homed) and every `humanOnly` SPEC is out of scope (SPEC `humanOnly` is unchanged).
   So there is NO live slice to classify, and this slice's own gate was dropped on
   that finding (the human judgement that made it `humanOnly` had an empty surface).
   Do NOT go hunting for slices to re-home or guess a classification — confirm the
@@ -38,12 +38,12 @@ De-overload `humanOnly` now that the folder takes the position/review job:
   the PR-free review path; `--merge` + land-in-pool = the trusted no-review fast
   path. CODE/implementation review STILL uses a branch/PR (a diff cannot be
   folder-gated) — the position gate is scoped to LEDGER-FILE output (slicing) and
-  the existing branch-based build review is unchanged (PRD US #9).
+  the existing branch-based build review is unchanged (SPEC US #9).
 
 ## Acceptance criteria
 
 - [ ] A slice with `humanOnly: true` is NOT agent-eligible even when it resides in
-      the pool (`backlog/`); PRD `humanOnly` still blocks auto-slicing;
+      the pool (`backlog/`); SPEC `humanOnly` still blocks auto-slicing;
       `needsAnswers` semantics unchanged — the three axes are orthogonal and each
       means one thing.
 - [ ] The slicer's review-first heuristic produces STAGING-birth (not a
@@ -56,7 +56,7 @@ De-overload `humanOnly` now that the folder takes the position/review job:
       explicit and behave as specified; implementation/code review still uses the
       branch/PR path, unchanged.
 - [ ] Tests cover the de-overloaded predicate (humanOnly slice not eligible in the
-      pool; PRD humanOnly still blocks slicing) and the slicer heuristic shift, on
+      pool; SPEC humanOnly still blocks slicing) and the slicer heuristic shift, on
       the `--bare file://` arbiter house pattern. Acceptance gate green:
       `pnpm -r build && pnpm -r test && pnpm format:check`.
 
@@ -85,7 +85,7 @@ De-overload `humanOnly` now that the folder takes the position/review job:
 > VERIFIED NO-OP — see `## Decisions` + the `## What to build` migration bullet; do
 > not reclassify any existing slice unsupervised. Decide only the de-overloaded
 > model's wording. Read
-> `work/prd/staging-pool-position-gate-and-trust-model.md` (US #8, #9, #10, #11) and
+> `work/spec/staging-pool-position-gate-and-trust-model.md` (US #8, #9, #10, #11) and
 > the governing ADR
 > `docs/adr/placement-is-runner-deterministic-humanonly-is-agent-judgement.md`.
 > First check for drift: the placement-precedence slice
@@ -102,11 +102,11 @@ De-overload `humanOnly` now that the folder takes the position/review job:
 >
 > THE (NO-OP) MIGRATION: confirm the live migration surface is still empty
 > (`grep -rl 'humanOnly: true' work/backlog/ work/in-progress/ work/needs-attention/`
-> — a `done/` slice is NEVER re-homed; a `humanOnly` PRD is out of scope). If it is
+> — a `done/` slice is NEVER re-homed; a `humanOnly` SPEC is out of scope). If it is
 > empty (the verified state), there is nothing to migrate — do not invent a
 > reclassification. If a NEW live `humanOnly` slice has appeared, do NOT reclassify
 > it yourself (that is a human security judgement) — route this slice to
-> needs-attention noting the new item. Keep PRD `humanOnly` and `needsAnswers`
+> needs-attention noting the new item. Keep SPEC `humanOnly` and `needsAnswers`
 > exactly as they are. Update WORK-CONTRACT.md (and mirror into both `protocol/`
 > copies — see this
 > repo's AGENTS.md: `skills/setup/protocol/` is the source of truth, `work/protocol/`

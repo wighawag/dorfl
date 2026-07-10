@@ -26,12 +26,12 @@ Mapping for THIS slice:
 
 `questions/` STAYS top-level (NOT folded under `notes/`). `protocol/` is untouched
 here (the protocol-doc mirror is its own later slice). The brief regime
-(`pre-prd`/`prd`/`prd-sliced`) and the per-regime terminals are NOT in this slice
+(`pre-spec`/`spec`/`spec-sliced`) and the per-regime terminals are NOT in this slice
 (they are the sibling brief-rename + dropped-migration slice).
 
 Two on-disk realities to handle cleanly:
 
-- There is NO `pre-backlog/` or `pre-prd/` directory on disk today (they are
+- There is NO `pre-backlog/` or `pre-spec/` directory on disk today (they are
   created lazily); the rename is therefore a `work-layout` value change plus a
   `git mv` of whatever live files exist (today `backlog/` and `done/` have content,
   the capture buckets have content).
@@ -90,7 +90,7 @@ flipped constants) must be internally consistent and green.
 ## Prompt
 
 > Build the notes-regroup + task-board-rename flip of the
-> `folder-taxonomy-reorg-and-rename` PRD: regroup the capture regime under `notes/`
+> `folder-taxonomy-reorg-and-rename` SPEC: regroup the capture regime under `notes/`
 > and rename the build board into `tasks/` (`pre-backlog -> tasks/backlog`,
 > `backlog -> tasks/todo`, `done -> tasks/done`; `observations/ideas/findings ->
 > notes/{...}`), by changing the VALUES in the `work-layout` module and `git mv`-ing

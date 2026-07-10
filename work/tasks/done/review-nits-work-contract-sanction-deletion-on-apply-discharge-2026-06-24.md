@@ -24,8 +24,8 @@ Fix the doc-coherence nits on the deletion-on-apply bullet at
    it") and the bucket table. Anchor the reference to the actual L72 wording so a
    reader searching for the quoted phrase finds it.
 
-(Nit #2 from the original review — the `promote-prd` forward-reference — is now
-STALE: `promote-prd` has since landed in the disposition set, so the contract no
+(Nit #2 from the original review — the `promote-spec` forward-reference — is now
+STALE: `promote-spec` has since landed in the disposition set, so the contract no
 longer forward-references a non-existent disposition. Verify this is consistent
 and drop the nit.)
 
@@ -38,7 +38,7 @@ BYTE-IDENTICALLY into `work/protocol/` (AGENTS.md).
       reason under `dropped`).
 - [ ] The self-quoted "never auto-delete" clause is anchored to the real L72
       wording (or rephrased to it).
-- [ ] The `promote-prd` reference is verified consistent with the now-landed
+- [ ] The `promote-spec` reference is verified consistent with the now-landed
       disposition set.
 - [ ] SOURCE and MIRROR copies of WORK-CONTRACT.md are byte-identical
       (`diff -r skills/setup/protocol work/protocol` clean for this file).
@@ -57,13 +57,13 @@ BYTE-IDENTICALLY into `work/protocol/` (AGENTS.md).
 > apply bullet) vs `SURFACE-PROTOCOL.md:58` (the disposition set) and
 > WORK-CONTRACT L31/L67/L72. (1) `duplicate` is a REASON under `dropped`, not a
 > disposition — rephrase. (2) anchor the self-quoted "never auto-delete a signal;
-> a human deletes" clause to the real L72 wording. (3) verify the `promote-prd`
+> a human deletes" clause to the real L72 wording. (3) verify the `promote-spec`
 > reference is now consistent (it has since landed) and drop the stale
 > forward-reference nit.
 >
 > CRITICAL (AGENTS.md): edit the SOURCE `skills/setup/protocol/WORK-CONTRACT.md`
 > and mirror the identical change into `work/protocol/WORK-CONTRACT.md`; the two
 > must stay byte-identical (`diff -r` clean). FIRST read current reality — the
-> disposition vocabulary is changing (an agentic-resolution PRD is retiring much
+> disposition vocabulary is changing (an agentic-resolution SPEC is retiring much
 > of it), so confirm the surrounding text before editing and keep the fix
 > consistent with what actually landed. Keep the gate green.

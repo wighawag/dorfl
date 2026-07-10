@@ -4,7 +4,7 @@ slug: do-lost-on-in-progress-resume-hint
 covers: []
 ---
 
-> Self-contained UX/message slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/do-lost-on-in-progress-drops-resume-hint.md`. The ratified `lost`/exit-2 contract it sits on is recorded in `work/observations/review-nits-do-run-share-isolation-seam-2026-06-08.md` (`## Decisions`). This is a MESSAGE-ONLY change \u2014 no behaviour/exit-code change.
+> Self-contained UX/message slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/do-lost-on-in-progress-drops-resume-hint.md`. The ratified `lost`/exit-2 contract it sits on is recorded in `work/observations/review-nits-do-run-share-isolation-seam-2026-06-08.md` (`## Decisions`). This is a MESSAGE-ONLY change \u2014 no behaviour/exit-code change.
 
 ## What to build
 

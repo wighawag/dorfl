@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained bug fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted in live use: `dorfl do --watch <slug> --harness pi` errored `no agentCmd configured` despite `--harness pi`.
+> Self-contained bug fix \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted in live use: `dorfl do --watch <slug> --harness pi` errored `no agentCmd configured` despite `--harness pi`.
 
 The `do` command **declares** `--harness`, `--agent-cmd`, `--pi-bin`, and `--model` options (and `DoFlags` captures them), but its action **never threads them into the resolved config** \u2014 it passes only `{integration}` to `resolveRepoConfig`:
 

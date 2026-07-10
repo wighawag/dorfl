@@ -9,7 +9,7 @@ covers: []
 
 Finish the post-migration vocabulary cutover where it stopped: the SIDECAR
 disposition enum and its docs. The `folder-taxonomy-reorg-and-rename` migration
-cut `slice`→`task` / `prd`→`brief` over at the identity/CLI seam, and split the
+cut `slice`→`task` / `spec`→`brief` over at the identity/CLI seam, and split the
 shared top-level `work/dropped/` terminal into per-regime terminals
 (`tasks/cancelled/` for tasks, `briefs/dropped/` for briefs — a slug-collision
 fix). But the sidecar disposition CONSTANTS + their doc-comments were OUT of that
@@ -106,7 +106,7 @@ sidecar invariants stay green.
 > landing the two constants it left out of scope (it scoped to the identity/CLI
 > seam, not the sidecar disposition constants).
 >
-> Domain vocabulary: the migration renamed `slice`→`task` and `prd`→`brief`, and
+> Domain vocabulary: the migration renamed `slice`→`task` and `spec`→`brief`, and
 > split the shared top-level `work/dropped/` terminal into per-regime terminals
 > (`tasks/cancelled/` for tasks, `briefs/dropped/` for briefs — a slug-collision
 > fix). The `dropped` sidecar disposition is the generic "won't-proceed" terminal;

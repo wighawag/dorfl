@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained ROBUSTNESS slice. It derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
+> Self-contained ROBUSTNESS slice. It derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
 >
 > Source signal: `work/observations/review-nits-provider-arbiter-derived-and-nopr-intent-2026-06-14.md` (nit 1). The up-front PR-intent failure guard is wired ONLY into the in-place `performDo` path (do.ts step 3c). The autonomous build paths (`performDoRemote`/`runRemotePipeline` for `do --remote`/`--isolated`, and the `run` daemon) do NOT run the probe, so a propose build against a GitHub arbiter with `gh` genuinely unauthed runs the full build and then silently degrades to manual-PR instructions at integration: the exact "wanted a PR, silently didn't get one" failure the `noPR` axis exists to prevent. `--isolated` is the PRIMARY autonomous path (drive-backlog mandates it), so the honest failure is needed MOST there.
 

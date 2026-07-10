@@ -66,7 +66,7 @@ slice, so the two rebase trivially.
 
 ## Prompt
 
-> Add a structural guard test for the `folder-taxonomy-reorg-and-rename` PRD: no
+> Add a structural guard test for the `folder-taxonomy-reorg-and-rename` SPEC: no
 > `.ts` outside the `work-layout` module may contain a raw `work/<folder>` path
 > literal. This locks in the Phase-0 centralisation so it cannot silently regress.
 >

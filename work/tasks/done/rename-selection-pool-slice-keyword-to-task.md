@@ -6,7 +6,7 @@ blockedBy: []
 covers: []
 ---
 
-> **AUTHORED 2026-06-23 (conductor + human, post-rename cleanup follow-up).** A live `slice` CURRENT-CONCEPT identifier the main rename drive missed: the auto-pick `SelectionPool` keyword `'slice'` (the brief-tasking pool). Verified-live; flagged by observation `cli-autopick-pool-keyword-still-slice.md` (captured during `complete-intake-slice-prd-to-task-brief-cutover`). User-facing wire keyword (config `selectionOrder`, the `--selection-order` CLI flag/help, the `DORFL_SELECTION_ORDER` env, the `drain`/`groom` presets). Clean break, no alias — matches the namespace/token precedents (`build-slice`->`build-task`, `autoSlice`->`autoTask`, intake `{slice,prd}`->`{task,brief}`).
+> **AUTHORED 2026-06-23 (conductor + human, post-rename cleanup follow-up).** A live `slice` CURRENT-CONCEPT identifier the main rename drive missed: the auto-pick `SelectionPool` keyword `'slice'` (the brief-tasking pool). Verified-live; flagged by observation `cli-autopick-pool-keyword-still-slice.md` (captured during `complete-intake-slice-prd-to-task-brief-cutover`). User-facing wire keyword (config `selectionOrder`, the `--selection-order` CLI flag/help, the `DORFL_SELECTION_ORDER` env, the `drain`/`groom` presets). Clean break, no alias — matches the namespace/token precedents (`build-slice`->`build-task`, `autoSlice`->`autoTask`, intake `{slice,spec}`->`{task,brief}`).
 
 ## What to build
 

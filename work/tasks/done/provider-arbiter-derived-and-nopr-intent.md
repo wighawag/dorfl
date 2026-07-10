@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained SIMPLIFICATION slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/provider-should-stay-arbiter-derived.md` (2026-06-06; maintainer: "the provider is dependent on the arbiter, so we should never have it as an independent choice").
+> Self-contained SIMPLIFICATION slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/provider-should-stay-arbiter-derived.md` (2026-06-06; maintainer: "the provider is dependent on the arbiter, so we should never have it as an independent choice").
 >
 > MAINTAINER DECISIONS (settled 2026-06-12 — implement, do not re-open):
 > - Remove the `provider` axis ENTIRELY (both the config field and the `--provider` flag), not just the `github`-force value. With IDENTITY + ARBITER now first-class, the provider is fully determined: the ARBITER URL says WHICH provider (GitHub URL ⇒ GitHubProvider, else NoneProvider), and the identity's `providers.github` says whether `gh` is AUTHED to actually open PRs (absent ⇒ `gh` degrades). A separate `provider` config can only CONTRADICT those, so it goes.

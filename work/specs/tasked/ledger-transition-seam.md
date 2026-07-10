@@ -53,13 +53,13 @@ The seam signatures stay at the **semantic** level ("apply this transition" / "r
 
 - **Any protected-`main` strategy.** No second strategy is built. The seam has exactly one strategy (current behaviour). The protected-`main` analysis is recorded in the ADR's "future protected-`main` strategy" section ONLY.
 - **`ledgerMode` / any mode or config.** Explicitly not introduced.
-- **needs-attention cherry-pick-to-main surfacing.** That is the separate `needs-attention-cherry-pick` PRD, sliced AFTER this one (it builds against this seam). See `work/ideas/needs-attention-surfacing.md`.
+- **needs-attention cherry-pick-to-main surfacing.** That is the separate `needs-attention-cherry-pick` SPEC, sliced AFTER this one (it builds against this seam). See `work/ideas/needs-attention-surfacing.md`.
 - **Any network read / new ref / `scan` behaviour change.** None of these are part of the refactor; they would only ever arrive with a future strategy.
 - **Changing `claim.sh`** or the `work/` contract / WORK-CONTRACT.md.
 
 ## Further Notes
 
-- Source ADR: `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted) — the seam is "option 4" there; its "future protected-`main` strategy" section is the analysis a later session would build on, NOT part of this PRD.
+- Source ADR: `docs/adr/claim-ledger-vs-protected-main.md` (status: accepted) — the seam is "option 4" there; its "future protected-`main` strategy" section is the analysis a later session would build on, NOT part of this SPEC.
 - Touch points to seam: `claim-cas.ts` (write/claim), `complete.ts` + `integrator.ts` (write/complete), `needs-attention.ts` (write/needs-attention), and `scan.ts` / `eligibility.ts` / `readiness.ts` / `gc.ts` (read).
 - Companion observation `work/observations/docs-assume-single-main-ledger.md` lists the doc cross-references to add when this refactor lands (and should be deleted once they are added).
-- The follow-on `needs-attention-cherry-pick` PRD carries `sliceAfter: [ledger-transition-seam]` so it is sliced only after this seam's slices exist (so its slices can `blockedBy` the real seam slugs). This ordering is itself a deliberate test of the `sliceAfter` mechanism.
+- The follow-on `needs-attention-cherry-pick` SPEC carries `sliceAfter: [ledger-transition-seam]` so it is sliced only after this seam's slices exist (so its slices can `blockedBy` the real seam slugs). This ordering is itself a deliberate test of the `sliceAfter` mechanism.

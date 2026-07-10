@@ -3,7 +3,7 @@
 Gate-2 review of `direct-delete-question-cli-helper` (approved, ac36f4b) surfaced two non-blocking nits that were triaged by the human as address-now (the third nit — ratifying four in-scope self-made decisions — was ratified as-is and needs no code change):
 
 1. **Dead CLI surface on `drop`.** The `drop` command declares `-c, --config <path>` (and `DropFlags.config`) but its `.action(...)` body never reads `flags.config` — only `flags.cwd` and `flags.reason` are used. The verb is a pure working-tree primitive (resolves by identity, `git rm`s, never loads config), so the flag is dead surface that misleads a user into thinking config influences a drop.
-2. **Coherence — `drop` vs `dropped`.** The new verb is named `drop` (direct delete: `git rm`, reason in the commit message, no resting state), but `dropped` already has a load-bearing DIFFERENT meaning: `specs/dropped/` is the PRD won't-proceed TERMINAL that RETAINS the file with the reason in the body (WORK-CONTRACT.md:44/63/67), and `dropped` is also a triage disposition value in SURFACE-PROTOCOL.md:47/58. No live collision today (the commit subject reads `drop: <item> → deleted`, which says 'deleted' not 'dropped'), but the shared English word now carries two meanings across the surface. A CONTEXT.md glossary line is cheap insurance against a future author conflating them.
+2. **Coherence — `drop` vs `dropped`.** The new verb is named `drop` (direct delete: `git rm`, reason in the commit message, no resting state), but `dropped` already has a load-bearing DIFFERENT meaning: `specs/dropped/` is the SPEC won't-proceed TERMINAL that RETAINS the file with the reason in the body (WORK-CONTRACT.md:44/63/67), and `dropped` is also a triage disposition value in SURFACE-PROTOCOL.md:47/58. No live collision today (the commit subject reads `drop: <item> → deleted`, which says 'deleted' not 'dropped'), but the shared English word now carries two meanings across the surface. A CONTEXT.md glossary line is cheap insurance against a future author conflating them.
 
 ## Scope (do exactly this)
 
@@ -14,7 +14,7 @@ Gate-2 review of `direct-delete-question-cli-helper` (approved, ac36f4b) surface
    - Do NOT wire config in; the verb is intentionally a pure working-tree primitive that resolves paths by identity and `git rm`s. Ratified.
 2. In `CONTEXT.md`, add a one-line glossary entry (in whatever glossary/terminology section exists, or a new short one if none) pinning:
    - **`drop`** — the direct-delete CLI verb (`dorfl drop <slug>`): `git rm`s the source file(s), reason rides in the commit message, git history is the archive. No resting state.
-   - **`dropped`** — the PRD won't-proceed TERMINAL (`specs/dropped/`, per WORK-CONTRACT.md) and the triage disposition value (per SURFACE-PROTOCOL.md): the file is RETAINED with the reason in the body.
+   - **`dropped`** — the SPEC won't-proceed TERMINAL (`specs/dropped/`, per WORK-CONTRACT.md) and the triage disposition value (per SURFACE-PROTOCOL.md): the file is RETAINED with the reason in the body.
    Keep it tight (two bullets or one sentence each); the point is to make the distinction searchable, not to re-explain either mechanism.
 
 ## Out of scope

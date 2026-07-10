@@ -1,5 +1,5 @@
 ---
-title: the auto-slice gate conflates THREE separate concerns — the VERB (do prd: = slice), the AUTONOMY policy (may an unsupervised agent PICK a PRD to slice), and the REVIEW→EDIT loop (a quality pass) — corrected model from a 2026-06-08 grilling
+title: the auto-slice gate conflates THREE separate concerns — the VERB (do prd: = slice), the AUTONOMY policy (may an unsupervised agent PICK a SPEC to slice), and the REVIEW→EDIT loop (a quality pass) — corrected model from a 2026-06-08 grilling
 date: 2026-06-08
 status: open
 ---
@@ -19,27 +19,27 @@ A maintainer grilling pass (2026-06-08, prompted by "why is enabling auto-slice 
 
 ## The conflation (the bug)
 
-The gate gates the **VERB** (the act of slicing) even when a human EXPLICITLY typed `do prd:<named-slug>`. But the gate's ORIGINAL purpose (auto-slice PRD, lines 34-36: "human-first by default... an agent only auto-slices when the repo opts in") was to gate the **AUTONOMOUS SELECTION** — `run`/`do`'s auto-pick drawing a PRD NOBODY NAMED into the work pool. Gating the explicit, named invocation is wrong: **naming the PRD IS the request.** Refusing "please slice foo" because a policy flag is off is absurd.
+The gate gates the **VERB** (the act of slicing) even when a human EXPLICITLY typed `do prd:<named-slug>`. But the gate's ORIGINAL purpose (auto-slice SPEC, lines 34-36: "human-first by default... an agent only auto-slices when the repo opts in") was to gate the **AUTONOMOUS SELECTION** — `run`/`do`'s auto-pick drawing a SPEC NOBODY NAMED into the work pool. Gating the explicit, named invocation is wrong: **naming the SPEC IS the request.** Refusing "please slice foo" because a policy flag is off is absurd.
 
 The review→edit loop is ALSO mis-coupled: it is fenced behind `doer === 'agent'`, implying it is an autonomy concern — but it is an ORTHOGONAL QUALITY pass that has nothing to do with WHO asked or WHETHER selection was autonomous.
 
 ## The corrected model (THREE independent concerns)
 
-> **Key constraint (the maintainer's decisive point): the runner CANNOT distinguish a human from an agent at the `do prd:` call site** — both are "someone invoked the command". So consent / override can NEVER be inferred from WHO; it can only come from an EXPLICIT SIGNAL in the invocation (naming the PRD, or a loud flag).
+> **Key constraint (the maintainer's decisive point): the runner CANNOT distinguish a human from an agent at the `do prd:` call site** — both are "someone invoked the command". So consent / override can NEVER be inferred from WHO; it can only come from an EXPLICIT SIGNAL in the invocation (naming the SPEC, or a loud flag).
 
 | concern | gate | named `do prd:<slug>` | autonomous pick / `run` tick / CI-workflow generation |
 | --- | --- | --- | --- |
-| **AUTONOMY** — may an UNSUPERVISED agent PICK a PRD nobody named? | `autoSlice` (config/env; the autonomous-path policy) | **NOT checked** — naming the PRD is consent | **checked** |
-| **CORRECTNESS** — `humanOnly` / `needsAnswers` / `sliceAfter`-unsatisfied (PRD-intrinsic "this would produce bad slices / is a judgement call") | PRD frontmatter | **checked, but OVERRIDABLE by an explicit loud flag** (`--force` / `--ignore-not-ready`, the existing precedent) — because we can't tell human from agent, the flag is the only "yes I really mean it" signal | checked (an autonomous picker NEVER overrides) |
+| **AUTONOMY** — may an UNSUPERVISED agent PICK a SPEC nobody named? | `autoSlice` (config/env; the autonomous-path policy) | **NOT checked** — naming the SPEC is consent | **checked** |
+| **CORRECTNESS** — `humanOnly` / `needsAnswers` / `sliceAfter`-unsatisfied (SPEC-intrinsic "this would produce bad slices / is a judgement call") | SPEC frontmatter | **checked, but OVERRIDABLE by an explicit loud flag** (`--force` / `--ignore-not-ready`, the existing precedent) — because we can't tell human from agent, the flag is the only "yes I really mean it" signal | checked (an autonomous picker NEVER overrides) |
 | **QUALITY** — the review→edit→converge loop over the produced slices | `--review` / `--no-review` | **ON by default, SAME for human and agent** | on by default |
 
 ### Concern 1 — AUTONOMY (`autoSlice`): keep the name, FIX the meaning + check-site
 
-- **KEEP the name `autoSlice`** (maintainer decision B) — it sits symmetrically beside **`autoBuild`** (currently `allowAgents`; the autonomous pick-a-SLICE-to- build gate, rename already planned in `work/prd/advance-loop.md` US #36). The name "auto-slice" is CORRECT for "autonomously pick-and-slice"; it was only ever WRONG because it was checked on the explicit VERB. No byte churn to config/env keys.
-- **MOVE the check** from `performSlicing`'s agent path to the AUTO-PICK / selection step (the helper that decides whether a PRD enters the unsupervised pool — sibling to `do-autopick`'s pool scan). The explicit named `do prd:<slug>` path stops consulting `autoSlice` entirely.
-- The config/env layers STAY — they are exactly for the autonomous paths: `do` auto-pick (bare / `-n`), `run`'s tick, and what an **`install-ci` workflow generator** consults to decide whether to EMIT PRD-slicing steps. (CI itself, once generated, drives slicing by NAMING the PRD — `do prd:<slug>`, explicit, never bare — so the running CI job is on the consent path, not the gate.)
+- **KEEP the name `autoSlice`** (maintainer decision B) — it sits symmetrically beside **`autoBuild`** (currently `allowAgents`; the autonomous pick-a-SLICE-to- build gate, rename already planned in `work/spec/advance-loop.md` US #36). The name "auto-slice" is CORRECT for "autonomously pick-and-slice"; it was only ever WRONG because it was checked on the explicit VERB. No byte churn to config/env keys.
+- **MOVE the check** from `performSlicing`'s agent path to the AUTO-PICK / selection step (the helper that decides whether a SPEC enters the unsupervised pool — sibling to `do-autopick`'s pool scan). The explicit named `do prd:<slug>` path stops consulting `autoSlice` entirely.
+- The config/env layers STAY — they are exactly for the autonomous paths: `do` auto-pick (bare / `-n`), `run`'s tick, and what an **`install-ci` workflow generator** consults to decide whether to EMIT SPEC-slicing steps. (CI itself, once generated, drives slicing by NAMING the SPEC — `do prd:<slug>`, explicit, never bare — so the running CI job is on the consent path, not the gate.)
 
-### Concern 2 — CORRECTNESS (PRD-intrinsic refusals): stay on the named path, loud-overridable
+### Concern 2 — CORRECTNESS (SPEC-intrinsic refusals): stay on the named path, loud-overridable
 
 - `humanOnly`, `needsAnswers`, `sliceAfter`-unsatisfied are NOT autonomy policy — they are "slicing this now produces wrong/half-baked slices" or "a human must judge this". They MUST still fire on the explicit named path (maintainer decision A: **even `humanOnly` blocks the named path** — because there's no way to tell a human invoker from an agent invoker, so the frontmatter intent must hold unless explicitly overridden).
 - **Overridable by a loud explicit flag** — reuse the EXISTING `--ignore-not-ready` precedent (`cli.ts:738`: "override the readiness guard... silence the needsAnswers warning (loud, never default)"), extended to cover the slicing-path refusals (incl. `humanOnly`). The flag is the explicit "yes, I — whoever I am — really mean it" signal the call-site otherwise can't carry. An autonomous picker NEVER passes it.
@@ -62,8 +62,8 @@ Same three-layer shape (verb / autonomy-selection / quality), same names, same o
 ## What this reconciles (the spread that must move together)
 
 - **CODE:** move the `autoSlice` check from `performSlicing` (verb) to the auto-pick selection step; drop it from the named `do prd:` path; keep `humanOnly`/ `needsAnswers`/`sliceAfter` as named-path correctness guards with an `--ignore-not-ready`-style loud override (now also covering `humanOnly`); unfence the review loop from `doer === 'agent'` and give it `--review`/`--no-review` (default on). (The dead `doer: 'human'` branch in `slicing.ts` likely collapses — there is no longer a human/agent distinction at this seam.)
-- **`work/prd/auto-slice.md`** (sliced, mostly done): its "Autonomy gate (the two axes, at the PRD level)" section describes the OLD conflation (gate fires on the verb). Update its framing to the three-concern model (autonomy = selection only).
-- **`work/prd/advance-loop.md`** per-action gate table: keeps `autoSlice` (good) but should note it gates SELECTION (the advance tick's "pick a ready PRD" rung), not the `do prd:` verb — already consistent with the tick design; just make the scoping explicit so the slicer doesn't re-encode the verb-gate.
+- **`work/spec/auto-slice.md`** (sliced, mostly done): its "Autonomy gate (the two axes, at the SPEC level)" section describes the OLD conflation (gate fires on the verb). Update its framing to the three-concern model (autonomy = selection only).
+- **`work/spec/advance-loop.md`** per-action gate table: keeps `autoSlice` (good) but should note it gates SELECTION (the advance tick's "pick a ready SPEC" rung), not the `do prd:` verb — already consistent with the tick design; just make the scoping explicit so the slicer doesn't re-encode the verb-gate.
 - **`docs/adr/command-surface-and-journeys.md`:** the slicing-gate framing (and the `autoslice-confidence` slice, still in backlog?) should reflect verb-vs-selection. Maintainer-owned ADR edit.
 
 ## Open micro-questions for the eventual slice
@@ -74,4 +74,4 @@ Same three-layer shape (verb / autonomy-selection / quality), same names, same o
 
 ## Disposition
 
-Finding-first (maintainer decision C(i)). When the maintainer is ready, slice this as a command-surface correction: likely ONE slice (it is internally coherent — move the gate, unfence+flag the loop, extend the override), possibly with the ADR/PRD note edits as the human's reconciliation. Do NOT slice before the auto-slice PRD's gate section + the ADR are reconciled to this model (or the slicer will re-derive the old conflation from the stale spec).
+Finding-first (maintainer decision C(i)). When the maintainer is ready, slice this as a command-surface correction: likely ONE slice (it is internally coherent — move the gate, unfence+flag the loop, extend the override), possibly with the ADR/SPEC note edits as the human's reconciliation. Do NOT slice before the auto-slice SPEC's gate section + the ADR are reconciled to this model (or the slicer will re-derive the old conflation from the stale spec).

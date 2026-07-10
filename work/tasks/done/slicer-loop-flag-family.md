@@ -8,7 +8,7 @@ covers: [4]
 
 ## What to build
 
-Give the slicer IMPROVER loop (`slicer-review-loop.ts`) its OWN, distinct flag family so it can never be confused with the acceptance GATE's `--review*` family. Today the loop is controlled by `--max-review`/`maxReview` and shares the `reviewModel` name with the gate — both are name-collisions the PRD wants gone.
+Give the slicer IMPROVER loop (`slicer-review-loop.ts`) its OWN, distinct flag family so it can never be confused with the acceptance GATE's `--review*` family. Today the loop is controlled by `--max-review`/`maxReview` and shares the `reviewModel` name with the gate — both are name-collisions the SPEC wants gone.
 
 Rename across flag + config key + env var + internal fields (mirror the `reviewPr → review` clean-rename precedent in `work/done/rename-reviewpr-to-review.md` — a clean isolated rename, no back-compat alias unless the maintainer asks):
 

@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live on `do-in-place`'s first `--merge` run: `work/observations/in-place-do-complete-needs-main-divergence- guard.md` (delete that note once this lands).
+> Self-contained fix \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live on `do-in-place`'s first `--merge` run: `work/observations/in-place-do-complete-needs-main-divergence- guard.md` (delete that note once this lands).
 
 A **two-part fix** for the in-place `do` / human `complete --merge` path, both needed:
 

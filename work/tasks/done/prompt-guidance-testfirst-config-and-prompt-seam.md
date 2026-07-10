@@ -23,7 +23,7 @@ Out of scope for this slice (covered by sibling tasks): per-item frontmatter ove
 
 ## Open question (needsAnswers)
 
-The PRD explicitly defers one slicing-time choice and the answer shapes this slice's seam:
+The SPEC explicitly defers one slicing-time choice and the answer shapes this slice's seam:
 
 > "Confirm the cleanest seam: a conditional fragment in CLAIM-PROTOCOL, or a flag-gated wrapper variant. Pick the option that keeps the canonical text in the protocol doc, not in TS."
 
@@ -34,7 +34,7 @@ Both candidates keep the text in the protocol doc, so the constraint alone does 
 
 Decide WHICH and update this slice (or split if needed) before building. Bias: pick whichever change is smaller to the existing CLAIM-PROTOCOL extraction code in `packages/dorfl/src/prompt.ts` (search for the "prompt handed to the work agent" heading scan) AND keeps a single source of truth for the wrapper. If a third, cleaner option emerges (e.g. an append-only line the wrapper appends iff the flag is on), record it as Option C and choose explicitly.
 
-A secondary question that may need the same decision: does the strengthened text REPLACE the existing soft "TDD where the task asks for it" line, or APPEND/follow it? The PRD says "strengthened", which reads as REPLACE, but a reviewer should confirm.
+A secondary question that may need the same decision: does the strengthened text REPLACE the existing soft "TDD where the task asks for it" line, or APPEND/follow it? The SPEC says "strengthened", which reads as REPLACE, but a reviewer should confirm.
 
 ## Acceptance criteria
 
@@ -45,7 +45,7 @@ A secondary question that may need the same decision: does the strengthened text
 - [ ] The strengthened text is sourced from `CLAIM-PROTOCOL.md`, not a TS literal (verify by editing only the markdown and watching the prompt change in a test).
 - [ ] `skills/setup/protocol/CLAIM-PROTOCOL.md` and `work/protocol/CLAIM-PROTOCOL.md` remain byte-identical after the change (a `diff` between them in CI / a doc-mirror check is clean).
 - [ ] No change to `verify` semantics — no acceptance bar moves; tests around `verify` still pass unchanged.
-- [ ] AGENTS.md is not written or modified by this slice (setup invariant — see PRD Out of Scope).
+- [ ] AGENTS.md is not written or modified by this slice (setup invariant — see SPEC Out of Scope).
 - [ ] No test in this slice writes to a shared / global location; all fixtures stay in temp dirs.
 
 ## Blocked by
@@ -62,7 +62,7 @@ A secondary question that may need the same decision: does the strengthened text
 >
 > WHERE TO LOOK (by concept, not brittle paths): the config schema and resolver in `packages/dorfl/src/config.ts` (find `autoBuild` and mirror its precedence chain — flag > env > per-repo > global > default `false`); the prompt assembly in `packages/dorfl/src/prompt.ts` (the section that locates `CLAIM-PROTOCOL.md` and the "prompt handed to the work agent" heading); the canonical wrapper text in `skills/setup/protocol/CLAIM-PROTOCOL.md` (SOURCE OF TRUTH) and its mirror `work/protocol/CLAIM-PROTOCOL.md` (propagated COPY — see this repo's `AGENTS.md` "Protocol docs — edit the SOURCE" rule; the two MUST stay byte-identical).
 >
-> SEAMS TO TEST AT: the config-resolution seam (precedence test, mirroring `packages/dorfl/test/config.test.ts` for `autoBuild`/`autoSlice`); the prompt-assembly seam (assemble the prompt with the nudge off/on and assert the wrapper text, mirroring `packages/dorfl/test/prompt.test.ts`). Do NOT try to test "the worker actually wrote tests first" — unobservable by design; that non-enforceability is exactly why this is a nudge (PRD Out of Scope §1).
+> SEAMS TO TEST AT: the config-resolution seam (precedence test, mirroring `packages/dorfl/test/config.test.ts` for `autoBuild`/`autoSlice`); the prompt-assembly seam (assemble the prompt with the nudge off/on and assert the wrapper text, mirroring `packages/dorfl/test/prompt.test.ts`). Do NOT try to test "the worker actually wrote tests first" — unobservable by design; that non-enforceability is exactly why this is a nudge (SPEC Out of Scope §1).
 >
 > CONSTRAINTS: the strengthened text MUST live in `CLAIM-PROTOCOL.md`, not as a TS literal. AGENTS.md MUST NOT be touched by this feature. The `verify` gate's semantics MUST NOT change.
 >
@@ -88,7 +88,7 @@ Rejecting the suggested default (C) on the evidence in `prompt.ts`. The relevant
 
 Implementation guardrails (so A does not regress the off-path byte-identity acceptance criterion):
 
-1. The marker-stripping pass must run AFTER the block is extracted and BEFORE the `<slug>`/`<prd>` substitution, as a pure string transform keyed on the resolved boolean. Keep it a small named helper (e.g. `applyPromptGuidance(blockText, {testFirst})`) so it is unit-testable in isolation and the existing `extractCanonicalWrapperTemplate` stays a pure verbatim extractor.
+1. The marker-stripping pass must run AFTER the block is extracted and BEFORE the `<slug>`/`<spec>` substitution, as a pure string transform keyed on the resolved boolean. Keep it a small named helper (e.g. `applyPromptGuidance(blockText, {testFirst})`) so it is unit-testable in isolation and the existing `extractCanonicalWrapperTemplate` stays a pure verbatim extractor.
 2. With the flag OFF the transform MUST reproduce today's bytes exactly — the markers + the strengthened fragment vanish and ONLY the existing soft line remains, no stray blank lines. The existing byte-identity prompt test is the guard; add an explicit off-path case asserting equality with the pre-change snapshot.
 3. The HTML-comment markers are invisible in rendered markdown, so the protocol doc still reads cleanly to a human (an advantage A has over B's visible duplicate sub-headings).
 4. Mirror byte-identically into `work/protocol/CLAIM-PROTOCOL.md`; keep `diff -r skills/setup/protocol work/protocol` clean.
@@ -101,7 +101,7 @@ Implementation guardrails (so A does not regress the off-path byte-identity acce
 
 Reasons:
 
-- Matches the PRD's verb ("the existing soft line is STRENGTHENED"), and the brief frames it as upgrading the SAME line, not adding a second one.
+- Matches the SPEC's verb ("the existing soft line is STRENGTHENED"), and the brief frames it as upgrading the SAME line, not adding a second one.
 - Two co-existing TDD lines with different strengths in one prompt is incoherent: the worker reads "TDD where the task asks for it" (optional, conditional) immediately followed by "write the failing test BEFORE the production code" (unconditional) and cannot tell which governs. A nudge whose whole job is to send a CLEARER signal must not also send the weaker one.
 - This makes the prompt-assembly test crisp and asserts BOTH halves: with the flag ON, the strengthened string is PRESENT and the original soft phrasing (`"TDD where the task asks for it"`) is ABSENT — closing the acceptance criterion's "gone (or supplemented)" as **gone**.
 - Note the `match the repo's house style` clause: fold its intent into the strengthened text (the test-first wording should not drop the house-style cue entirely — e.g. "…at the agreed seam, write the failing test BEFORE the production code, matching the repo's house style; this is guidance, not a gate — the `verify` step still decides pass/fail."). Replacing the SENTENCE is right; silently losing the house-style instruction is not.

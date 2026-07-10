@@ -12,7 +12,7 @@ Teach the onboard find-slice (`resolveSlice` in `prompt.ts`) to find a slice tha
 
 Today `resolveSlice`'s resolution order is `['in-progress', 'backlog']`, blind to `done/`. When a continue/re-claim lands on a branch whose slice was already done-moved (the green-but-unpushed strand state), onboard fails to find the slice. The conductor hand-moved the slice `done/ -> in-progress/` on the branch to work around it this drive.
 
-The SAFETY CRUX (the PRD's hard constraint): a `done/` slice is folder-indistinguishable between two states — genuinely COMPLETE (work integrated) vs STRANDED (committed-but-unpushed strand). The disambiguation MUST be by TIP-vs-ARBITER state, NOT folder name:
+The SAFETY CRUX (the SPEC's hard constraint): a `done/` slice is folder-indistinguishable between two states — genuinely COMPLETE (work integrated) vs STRANDED (committed-but-unpushed strand). The disambiguation MUST be by TIP-vs-ARBITER state, NOT folder name:
 
 - work-branch tip REACHABLE on `<arbiter>/main` => COMPLETE => do NOT re-onboard (a careless `done/`-accepting onboard could re-run a finished slice — the hazard story 6's slice fenced this out to avoid).
 - work-branch tip committed-but-NOT-on-the-arbiter => STRANDED => re-onboardable (the continue is legitimate).
@@ -37,7 +37,7 @@ This is the SEPARATE, hazardous slice that `finish-already-committed-branch` (st
 
 ## Prompt
 
-> Teach dorfl's onboard find-slice (`resolveSlice` in `packages/dorfl/src/prompt.ts`) to find a slice in `done/` on a CONTINUE — safely (story 5 of the ledger-integrity PRD, `work/spec-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 3). Today `resolveSlice`'s order is `['in-progress','backlog']`, blind to `done/`, so a continue onto an already-done-moved branch fails with "no slice '<slug>' found in work/in-progress/ or work/backlog/" (the conductor hand-moved the slice `done/ -> in-progress/` on the branch to work around it).
+> Teach dorfl's onboard find-slice (`resolveSlice` in `packages/dorfl/src/prompt.ts`) to find a slice in `done/` on a CONTINUE — safely (story 5 of the ledger-integrity SPEC, `work/spec-sliced/ledger-integrity.md`, possibly in `work/slicing/` until this slicing lands; defect 3). Today `resolveSlice`'s order is `['in-progress','backlog']`, blind to `done/`, so a continue onto an already-done-moved branch fails with "no slice '<slug>' found in work/in-progress/ or work/backlog/" (the conductor hand-moved the slice `done/ -> in-progress/` on the branch to work around it).
 >
 > FIRST, check this slice against current reality (launch snapshot — WORK-CONTRACT.md "Drift is a needs-attention signal"). Confirm `resolveSlice` is still `['in-progress','backlog']`-only, and that `packages/dorfl/src/gc.ts` still exposes the reachability check (`isAncestor` / `git merge-base --is-ancestor <tip> refs/remotes/<arbiter>/main`). If a dependency landed differently, reconcile or route to `needs-attention/`.
 >

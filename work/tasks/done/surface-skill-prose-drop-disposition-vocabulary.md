@@ -13,7 +13,7 @@ docs/skills match the shipped binary-entry engine. A thin vertical path through 
 doc layer + the byte-identical protocol copies:
 
 - **SURFACE-PROTOCOL.md.** Remove the `disposition` field from the emitted-question
-  shape and the `promote-task | promote-prd | promote-adr | keep | delete | dropped
+  shape and the `promote-task | promote-spec | promote-adr | keep | delete | dropped
   | needs-attention` value list. A surfaced question is no longer a "pick a
   disposition" instruction — a sidecar entry is binary (no-answer | answered). Edit
   BOTH the SOURCE (`skills/setup/protocol/SURFACE-PROTOCOL.md`) AND the propagated
@@ -25,7 +25,7 @@ doc layer + the byte-identical protocol copies:
   path (the human/skill/CLI just deletes) where the prose currently describes a
   `delete`/`dropped` disposition.
 - **WORK-CONTRACT.md (the now-stale discharge paragraph).** The contract describes
-  deletion-on-apply USING the retired tokens (`promote-task`/`promote-prd`/
+  deletion-on-apply USING the retired tokens (`promote-task`/`promote-spec`/
   `promote-adr`, `dropped`/`duplicate` — around the "Deletion-on-apply is the
   SANCTIONED discharge" paragraph). With the vocabulary retired and apply now
   agent-verdict-driven, rewrite that paragraph so it describes the discharge in
@@ -88,7 +88,7 @@ promise a binary entry while the code still parses dispositions).
 >
 > What to edit:
 > - `SURFACE-PROTOCOL.md`: drop the `disposition` field from the emitted-question
->   shape and remove the `promote-task | promote-prd | promote-adr | keep | delete |
+>   shape and remove the `promote-task | promote-spec | promote-adr | keep | delete |
 >   dropped | needs-attention` value list. A surfaced question is no longer "pick a
 >   disposition". CRUCIAL (this repo's AGENTS.md rule): the protocol doc exists in
 >   TWO places — the SOURCE OF TRUTH `skills/setup/protocol/SURFACE-PROTOCOL.md` and
@@ -106,7 +106,7 @@ promise a binary entry while the code still parses dispositions).
 > - `WORK-CONTRACT.md` (BOTH `skills/setup/protocol/` source AND `work/protocol/`
 >   copy, byte-identical): the "Deletion-on-apply is the SANCTIONED discharge"
 >   paragraph describes the discharge using the retired tokens
->   (`promote-task`/`promote-prd`/`promote-adr`, `dropped`/`duplicate`). Rewrite it
+>   (`promote-task`/`promote-spec`/`promote-adr`, `dropped`/`duplicate`). Rewrite it
 >   to describe the discharge via the human's ANSWER + the agent's VERDICT (mint /
 >   delete-source), NOT the tokens — while PRESERVING the rule it states
 >   (deletion-on-apply is human-authored, not a unilateral agent destroy; work

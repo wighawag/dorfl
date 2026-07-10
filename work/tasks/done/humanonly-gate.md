@@ -18,7 +18,7 @@ Replace the autonomy gate model. OLD: a three-state slice field `afk: true|false
 
 End-to-end:
 
-- **Contract:** update `skills/to-slices/WORK-CONTRACT.md` + `slice-template.md` (the `afk` section → `humanOnly`), and the `to-slices`/`to-prd` skills' gate wording, so the field name + semantics are consistent.
+- **Contract:** update `skills/to-slices/WORK-CONTRACT.md` + `slice-template.md` (the `afk` section → `humanOnly`), and the `to-slices`/`to-spec` skills' gate wording, so the field name + semantics are consistent.
 - **Config:** rename `allowUnspecifiedGate` → `allowAgents` (default `false`), wired through the same precedence as `integration` (flag > per-repo > global > default). CLI flag `--allow-unspecified-gate` → `--allow-agents` (+ `--no-allow-agents`).
 - **Code:** update `scan` + eligibility resolution and the `scan-human-dashboard` grouping/labels to the new model (groups become e.g. "Agent-claimable now" / "Human-only" / "Blocked"), and any `run-once` references.
 - **Migrate existing slices:** translate current frontmatter — `afk: false` → `humanOnly: true`; `afk: true` / omitted → drop the field (undeclared). Update this repo's slices accordingly.
@@ -42,6 +42,6 @@ End-to-end:
 
 > Implement the autonomy-gate rename in `packages/dorfl/` and the contract. READ FIRST: `docs/adr/methodology-and-skills.md` §4 (authoritative), the existing `afk`/`allowUnspecifiedGate` handling in `config.ts`/`scan`/eligibility/ `scan-human-dashboard`, and `skills/to-slices/WORK-CONTRACT.md`. Follow `AGENTS.md`.
 >
-> Replace the three-state `afk` slice field with binary **`humanOnly: true` | undefined** (authoritative; most slices omit it). Replace runner policy `allowUnspecifiedGate` with per-repo **`allowAgents`** (default false), resolved exactly like `integration`: CLI flag `--allow-agents`/`--no-allow-agents` > per-repo config > global > default. Eligibility: agent-claimable iff `humanOnly` !== true AND `allowAgents`; `humanOnly: true` never claimable. Update the contract + slice-template + the `to-slices`/`to-prd` gate wording; update `scan`, eligibility, and the `scan-human-dashboard` grouping/labels; migrate this repo's existing slices (afk:false → humanOnly:true; afk:true/omitted → drop the field).
+> Replace the three-state `afk` slice field with binary **`humanOnly: true` | undefined** (authoritative; most slices omit it). Replace runner policy `allowUnspecifiedGate` with per-repo **`allowAgents`** (default false), resolved exactly like `integration`: CLI flag `--allow-agents`/`--no-allow-agents` > per-repo config > global > default. Eligibility: agent-claimable iff `humanOnly` !== true AND `allowAgents`; `humanOnly: true` never claimable. Update the contract + slice-template + the `to-slices`/`to-spec` gate wording; update `scan`, eligibility, and the `scan-human-dashboard` grouping/labels; migrate this repo's existing slices (afk:false → humanOnly:true; afk:true/omitted → drop the field).
 >
 > TDD with vitest: the full claimable matrix (humanOnly × allowAgents × deps), the precedence chain, dashboard rendering, and that all migrated slices still parse. "Done" = acceptance criteria met and `pnpm -r build && pnpm -r test && pnpm -r format:check` green.

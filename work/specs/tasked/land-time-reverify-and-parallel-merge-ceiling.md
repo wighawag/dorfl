@@ -7,7 +7,7 @@ needsAnswers: false
 ## RESOLVED 2026-06-26 (drift reconciled in place; the merge-question mechanism re-decided)
 
 The drift below (the retired disposition vocabulary) has been RECONCILED IN PLACE
-(no reopen needed): the PRD goal is unchanged and the three merge-question tasks
+(no reopen needed): the SPEC goal is unchanged and the three merge-question tasks
 were amended in place against the new model. `needsAnswers` is now cleared. The
 open questions (original OQ1/3/5/6/7 + the post-retirement mechanism) were
 answered on the human path via the surfaced question sidecars; the answers (now
@@ -42,7 +42,7 @@ self-contained here):
   field by overloading `default` + string-sniffing; this extraction is the fix.) Kind-based SUBFOLDERS (`questions/merge/`, ...) are the intended
   later direction (safe: kinds are temporally exclusive per item), tracked by
   `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` —
-  NOT folded into this PRD. LOAD-BEARING: sidecar authorship stays on
+  NOT folded into this SPEC. LOAD-BEARING: sidecar authorship stays on
   `main`/runner under the `advancing` lock, never on a work branch.
 - **Gate (OQ7).** New gate `mergeQuestions`, 3-state `off | ask | auto` (mirrors
   `observationTriage`), default `ask`, resolved via the gate-family precedence
@@ -83,32 +83,32 @@ self-contained here):
   mirror, driving `performIntegration` with `committedRecovery: true` +
   `freshWorktreeGate: true`) + the verify-on-rebased-tip refusal.
 
-> NOTE (process gap observed THEN FIXED): this PRD's OWN answered sidecar could
-> not be applied by the engine at the time — a `needsAnswers` PRD resting in
+> NOTE (process gap observed THEN FIXED): this SPEC's OWN answered sidecar could
+> not be applied by the engine at the time — a `needsAnswers` SPEC resting in
 > `specs/tasked/` was enumerated by neither the surface nor the apply lifecycle
 > pool (the gather read `specs/ready` + staging `specs/proposed`, not `specs/tasked`),
 > so its human answer was stranded and a human applied it directly (cleared the
 > flag + deleted the sidecar here). That gap is now FIXED: the lifecycle gather
 > enumerates `specs/tasked/` unconditionally (`resolveLocalPrdTasked` /
 > `resolveMirrorPrdTasked` in `ledger-read.ts`, consumed by `lifecycle-gather.ts`;
-> an answered tasked-prd sidecar now routes to the always-on apply pool), proven
-> by `test/tasked-prd-needsanswers-lifecycle.test.ts`. So a future tasked-prd
+> an answered tasked-spec sidecar now routes to the always-on apply pool), proven
+> by `test/tasked-spec-needsanswers-lifecycle.test.ts`. So a future tasked-spec
 > drift will close its answer loop in-band, no manual apply needed.
 
 ## DRIFTED-WHILE-TASKED 2026-06-26 (the merge-question tasks are premised on the retired disposition vocabulary)
 
-This prd STAYS in `specs/tasked/` with `needsAnswers: true` (it WAS tasked; that
+This spec STAYS in `specs/tasked/` with `needsAnswers: true` (it WAS tasked; that
 is truthful and must not be rewound). Per WORK-CONTRACT "Drift is a needs-attention
-signal" -> "A PRD that has drifted AFTER it was TASKED": do NOT move a tasked prd
+signal" -> "A SPEC that has drifted AFTER it was TASKED": do NOT move a tasked spec
 back to `specs/proposed/` (that is the untrusted-admission staging position and
-would orphan the tasks this prd already emitted). The GOAL is still valid, but the
+would orphan the tasks this spec already emitted). The GOAL is still valid, but the
 MECHANISM three of its tasks assume was retired, so those three tasks carry
 `needsAnswers: true` and must be re-decomposed before they are built; the
 non-drifted tasks (the land primitive ADR + protocol, the parallel-merge CI shape,
 the tests, `mergeRetries` precedence, the install-ci Tier-1 work) are UNAFFECTED
 and promotable now.
 
-> History: this prd was briefly moved `specs/tasked/ -> specs/proposed/` on
+> History: this spec was briefly moved `specs/tasked/ -> specs/proposed/` on
 > 2026-06-25 to signal the drift. That move was reverted on 2026-06-26: it
 > invented an unsanctioned transition and falsely un-recorded a real tasking. The
 > correct in-place mechanism (this annotation + per-task `needsAnswers`) is now
@@ -116,14 +116,14 @@ and promotable now.
 > path `specs/tasked/ -> specs/ready/`, re-task, and supersede the stale
 > merge-question tasks into `tasks/cancelled/`.
 
-What drifted (verified on `main` 2026-06-25): the merged PRD
+What drifted (verified on `main` 2026-06-25): the merged SPEC
 `agentic-question-resolution-retire-disposition-vocabulary` RETIRED the sidecar
 disposition vocabulary. There is no longer a `disposition=` field, no
 `promote-* | keep | delete | dropped | needs-attention` token set, and no
 most-decisive-disposition picker; a sidecar entry is now BINARY
 (`no-answer | answered`), and apply is the agentic
-`decide(input, allowedOutcomes) -> {mint-task | mint-prd | delete-source | ask-follow-up}`.
-Three tasks of THIS prd were premised on the old `merge | hold | drop` merge-question
+`decide(input, allowedOutcomes) -> {mint-task | mint-spec | delete-source | ask-follow-up}`.
+Three tasks of THIS spec were premised on the old `merge | hold | drop` merge-question
 disposition mechanism that no longer exists (all three now carry `needsAnswers: true`):
 
 - `merge-question-surfacer` (`tasks/backlog/`, covers 14): its What-to-build, a
@@ -146,7 +146,7 @@ disposition mechanism that no longer exists (all three now carry `needsAnswers: 
 
 What is still valid: the GOAL (surface unmerged `work/*` branches -> human answers
 -> apply lands them via the land primitive: rebase -> re-verify -> advance). Only
-the disposition-token MECHANISM is gone. The non-merge-question parts of this PRD
+the disposition-token MECHANISM is gone. The non-merge-question parts of this SPEC
 (the land-time re-verify primitive, the parallel-merge CI shape, propose
 merge-time safety) are unaffected by this drift.
 
@@ -156,7 +156,7 @@ merge-question tasks):
    agentic-`decide` model: a merge-question is a binary `no-answer | answered`
    entry. Resolved DIRECTION (per the observation below + the surface agent's
    sketch): "land this merge" is NOT a `decide()` content outcome (the union is
-   `task | prd | adr | delete | ask`); answer-driven runner ACTIONS (merge/land,
+   `task | spec | adr | delete | ask`); answer-driven runner ACTIONS (merge/land,
    and the sibling stuck-lock requeue) are a DISTINCT dispatch layer keyed off the
    surfaced question's IDENTITY + the human's plain answer. The three task bodies
    have been amended IN PLACE to this direction (they keep their
@@ -224,7 +224,7 @@ From the user's perspective: the safety property is now a stated, testable contr
 
 ### Autonomy notes (the two gate axes)
 
-- **`humanOnly` (tasking):** NOT set. This prd is agent-taskable once its open questions are answered — it is a design + docs + CI-template + test effort, not a secrets/release/security decision.
+- **`humanOnly` (tasking):** NOT set. This spec is agent-taskable once its open questions are answered — it is a design + docs + CI-template + test effort, not a secrets/release/security decision.
 - **`needsAnswers`: TRUE.** There are genuine unresolved design decisions (below) that must NOT be guessed — wrong guesses here ship a stale-base merge or spurious needs-attention bounces. The auto-tasker must refuse until these are answered and the flag cleared.
 
 Open questions (resolve before tasking):
@@ -270,9 +270,9 @@ Decisions already fixed at launch (the engine exists; these constrain the tasks)
 
 - **Re-architecting the integration engine.** The land primitive, `freshWorktreeGate`, `integrateLock`, and `mergeRetries` already exist; this brief documents, extends to CI, closes the propose tier, and tests them — it does not rebuild them.
 - **A bespoke cross-host merge-queue implementation.** Beyond the git-alone CAS-loop floor and the GitHub merge-queue ceiling, building a provider-agnostic speculative-merge queue from scratch is out (revisit if a non-GitHub host with such a primitive becomes a target).
-- **Changing `blockedBy` / `taskedAfter` semantics.** Dependency resolution is unchanged; this prd is about the LAND step, not eligibility.
+- **Changing `blockedBy` / `taskedAfter` semantics.** Dependency resolution is unchanged; this spec is about the LAND step, not eligibility.
 - **The human-path lower-assurance reconcile**, unless OPEN QUESTION 5 pulls it in — the runner path is the assured path; the human-as-participant path is explicitly allowed to be lighter.
-- **The `runner-in-ci` `install-ci` CLI surface itself**, owned by `work/prd/runner-in-ci.md`; this brief may DEFINE what that setup must provision for the GitHub ceiling (branch protection / required check / merge queue) but does not build the wizard.
+- **The `runner-in-ci` `install-ci` CLI surface itself**, owned by `work/spec/runner-in-ci.md`; this brief may DEFINE what that setup must provision for the GitHub ceiling (branch protection / required check / merge queue) but does not build the wizard.
 
 ## Further Notes
 

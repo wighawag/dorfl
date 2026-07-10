@@ -21,8 +21,8 @@ CI machinery has two concrete gaps:
 
 1. **Propose mode never enumerates lifecycle items.** The propose matrix is built
    from `dorfl scan --json` filtered on `eligibility.eligible == true`. A
-   `needsAnswers:true` slice/PRD has `eligible:false` by construction, and
-   untriaged observations are not in the scan's slice/PRD pools at all. So the
+   `needsAnswers:true` slice/SPEC has `eligible:false` by construction, and
+   untriaged observations are not in the scan's slice/SPEC pools at all. So the
    surface/triage rungs never get a matrix leg — only fully-ready ungated items do
    (which build/slice and never ask). This is the SAME class of bug the merged
    `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` work fixed for
@@ -64,7 +64,7 @@ Two orthogonal capabilities, mapped to two slices:
   (and apply) pool on `scan --json`, reusing `buildLifecyclePools`' predicates and
   the config gates (NOT a forked predicate), and extend the `enumerate` step's `jq`
   + the workflow's structural validator to emit `slice:`/`prd:`/`obs:` legs for
-  those items alongside the existing eligible-slice / sliceable-PRD legs. Each
+  those items alongside the existing eligible-slice / sliceable-SPEC legs. Each
   becomes its own propose leg. Combined with the foundation slice, a propose leg
   surfaces a sidecar that actually lands on `main`.
 
@@ -119,7 +119,7 @@ ledger. This keeps "one word, one meaning" honest.
 
 ### Autonomy notes (gate axes)
 
-- `humanOnly`: OMITTED. Slicing this PRD is mechanical — the design and slice
+- `humanOnly`: OMITTED. Slicing this SPEC is mechanical — the design and slice
   boundaries are settled; an agent may auto-slice it.
 - `needsAnswers`: OMITTED. The one genuine design fork (does a tree-less rung in
   propose mode open a PR or push straight to `main`?) is RESOLVED by precedent
@@ -141,7 +141,7 @@ ledger. This keeps "one word, one meaning" honest.
 - Opening a PR per question sidecar in propose mode — explicitly rejected
   (tree-less ledger writes go to `main`; see Implementation Decisions).
 - Re-architecting `pushTreelessResult` or the lifecycle-pool enumeration — both are
-  reused verbatim; this PRD only WIRES them into the in-place + propose CI paths.
+  reused verbatim; this SPEC only WIRES them into the in-place + propose CI paths.
 - Changing the cron cadence / triggers — the existing `schedule` + `push:
   work/questions/**` + `workflow_dispatch` triggers are correct; surfacing +
   on-answer re-run already compose once enumeration + publish work.
@@ -150,14 +150,14 @@ ledger. This keeps "one word, one meaning" honest.
 
 - Provenance: `work/observations/ci-advance-matrix-excludes-needsanswers-so-questions-never-surface.md`
   (the spotted signal) and `work/findings/ci-advance-surfacing-gap-analysis.md`
-  (the full driver coverage map + ordering analysis backing this PRD).
+  (the full driver coverage map + ordering analysis backing this SPEC).
 - Ordering / matrix interaction (settled in the finding): the propose matrix is
   parallel (one PR/leg per item) and `selectionOrder` is a SEQUENTIAL-driver concern
   that does not apply to it; lifecycle progression (surface → human answer → build,
-  and PRD-slice → slice-build) is CROSS-TICK (the cron cadence + the on-answer
+  and SPEC-slice → slice-build) is CROSS-TICK (the cron cadence + the on-answer
   trigger are the ordering), so there is no intra-tick ordering dependency to model
   in the matrix.
 - Prior art to mirror exactly: the merged
   `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` (the `jq`
-  PRD-enumeration fix) for Slice A; `advance-isolated.ts` /
+  SPEC-enumeration fix) for Slice A; `advance-isolated.ts` /
   `advance-loop-driver.ts`'s `pushTreelessResult` call sites for Slice B.

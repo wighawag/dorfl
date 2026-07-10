@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained ROBUSTNESS / CORRECTNESS slice. It derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
+> Self-contained ROBUSTNESS / CORRECTNESS slice. It derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
 >
 > Source signal: `work/observations/review-nits-treeless-surface-for-after-commit-push-failure-2026-06-14.md` (nit 2). The after-commit continue-sites IGNORE the `{moved}` result of the tree-less needs-attention surface, so a contention-exhausted `moved:false` (5 attempts) on a busy arbiter, or a no-arbiter `moved:false`, can leave the item silently in-progress on main while the run reports needs-attention. This was flagged as PRE-EXISTING (the old cwd-bound `applyNeedsAttentionTransition` callsites at these same spots also ignored the result), so it is a FIX, not a regression repair introduced by the tree-less slice.
 

@@ -1,5 +1,5 @@
 ---
-title: Pre-build slice-review gate (review PRD insertion point B) — an independent reviewer pass on a claimed slice BEFORE the agent builds it, to catch a slice that drifted between slicing and build
+title: Pre-build slice-review gate (review SPEC insertion point B) — an independent reviewer pass on a claimed slice BEFORE the agent builds it, to catch a slice that drifted between slicing and build
 slug: pre-build-slice-review-gate
 type: idea
 status: incubating
@@ -7,11 +7,11 @@ status: incubating
 
 # Pre-build slice-review gate (insertion point B)
 
-> Carried 2026-06-12 from `work/prd/review.md`'s deferred follow-up list (insertion point **B**) as that PRD comes to rest in `prd-sliced/`. It is a SPECULATIVE-but-real future insertion point, parked here (alongside the other deferred review insertion-point ideas: `single-context-review-edit-loop.md`, `lone-slice-review-fresh-context-m-layer.md`) rather than left to evaporate with the PRD. NOT a defect; NOT slice-ready until the overlap below is judged worth paying for.
+> Carried 2026-06-12 from `work/spec/review.md`'s deferred follow-up list (insertion point **B**) as that SPEC comes to rest in `spec-sliced/`. It is a SPECULATIVE-but-real future insertion point, parked here (alongside the other deferred review insertion-point ideas: `single-context-review-edit-loop.md`, `lone-slice-review-fresh-context-m-layer.md`) rather than left to evaporate with the SPEC. NOT a defect; NOT slice-ready until the overlap below is judged worth paying for.
 
 ## The idea
 
-The `review` PRD defines ONE review/edit mechanism plugged in at several lifecycle **insertion points**. Two bracket the build and are already built:
+The `review` SPEC defines ONE review/edit mechanism plugged in at several lifecycle **insertion points**. Two bracket the build and are already built:
 
 - **A — slice-generation review** (`do prd:<slug>`): a review→edit loop critiques + improves slices AS they are created (`work/done/slicer-review-edit-loop.md`).
 - **C — post-build review / Gate 2** (`do <slug>` after the agent builds): review critiques the DIFF before integrate (`work/done/review-gate-pr.md`).
@@ -41,6 +41,6 @@ Promote B to a slice the moment a drifted slice is observed to get BUILT WRONG d
 
 ## Refs
 
-- `work/prd/review.md` (the originating PRD — RESOLVED DESIGN section, insertion points A–E; this is B).
+- `work/spec/review.md` (the originating SPEC — RESOLVED DESIGN section, insertion points A–E; this is B).
 - Built siblings: `work/done/slicer-review-edit-loop.md` (A), `work/done/review-gate-pr.md` (C), `work/done/run-through-integration-core.md` (D).
 - Parked siblings: `work/ideas/single-context-review-edit-loop.md`, `work/ideas/lone-slice-review-fresh-context-m-layer.md`.

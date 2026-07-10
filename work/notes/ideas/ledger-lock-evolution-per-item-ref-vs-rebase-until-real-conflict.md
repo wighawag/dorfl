@@ -10,8 +10,8 @@ status: incubating
 > D4; the rebase-until-real-conflict CAS) plus ones derived here, against the core tension (in-tree
 > visibility vs freedom-from-whole-ref-contention-and-branch-inheritance) and the must-preserve
 > invariants. Ends in a recommendation, the cross-action-exclusion answer, a migration story, and an
-> explicit statement of what it supersedes. Becomes a PRD only on maintainer confirmation (it proposes
-> RETIRING a decided PRD decision, see `## Supersedes`). The recommendation was adversarially
+> explicit statement of what it supersedes. Becomes a SPEC only on maintainer confirmation (it proposes
+> RETIRING a decided SPEC decision, see `## Supersedes`). The recommendation was adversarially
 > stress-tested (an oracle pass) and the write-up below already folds in the three honesty corrections
 > that pass produced, they are flagged inline as "(corrected after adversarial review)".
 >
@@ -19,8 +19,8 @@ status: incubating
 > (`advancing-lock-cas-false-conflicts-on-shared-main-ref-under-high-parallelism`,
 > `ledger-cas-leases-on-whole-main-ref-so-nonconflicting-claims-falsely-contend-rebase-until-real-conflict-may-fix-in-tree`,
 > `work-branch-carries-stale-advancing-marker-and-on-branch-needs-attention-move-not-dropped-on-continue`),
-> `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`, `work/prd/folder-taxonomy-reorg-and-rename.md`,
-> `work/prd/branch-carries-code-not-ledger-status-main-owns-status.md`, and the code: `ledger-write.ts`
+> `work/ideas/folder-taxonomy-and-prd-edit-handshake.md`, `work/spec/folder-taxonomy-reorg-and-rename.md`,
+> `work/spec/branch-carries-code-not-ledger-status-main-owns-status.md`, and the code: `ledger-write.ts`
 > (`currentLedgerWrite.applyTransition`, the whole-ref lease, `stampNonce`, `publishSurfaceCommit`),
 > `advancing-lock.ts`, `claim-cas.ts`, `slicing-lock.ts`, `retry-backoff.ts`, `drop-bookkeeping-rebase.ts`,
 > `docs/adr/claim-ledger-vs-protected-main.md`.
@@ -33,7 +33,7 @@ status: incubating
 >   fork is the only open call. Detailed below as the original analysis.
 > - **Set 2 (E dropped, maintainer-requested exploration 2026-06-17):** `C2 + C8` (the BREAKTHROUGH).
 >   CONTENT always stays checked out on `main` (the full readable `work/` tree). The ONLY moves ever
->   made on `main` are the two REFERENCEABLE promotions `backlog→done` and `prd→prd-sliced` (exactly the
+>   made on `main` are the two REFERENCEABLE promotions `backlog→done` and `spec→spec-sliced` (exactly the
 >   dependency-resolving transitions, verified). Everything transient, claim/in-progress,
 >   needs-attention, slicing, advancing, becomes ONE lock per item on a dedicated lock ref, so the three
 >   actions are MUTUALLY EXCLUSIVE BY CONSTRUCTION. This solves all THREE issues by construction (1 via
@@ -61,7 +61,7 @@ the maintainer is weighing them:
   moves off main; ALL visibility kept; smallest surface.
 - **C6 (structural, maintainer-raised 2026-06-17):** move the TRANSIENT STATUS files (in-progress,
   needs-attention, slicing, advancing markers) to a DEDICATED ledger ref where the CAS happens, keeping
-  the REFERENCEABLE files (backlog, done, prd, prd-sliced) on `main` so dependency reads stay offline
+  the REFERENCEABLE files (backlog, done, spec, spec-sliced) on `main` so dependency reads stay offline
   and human-glanceable. This DELETES the whole branch-inheritance class (nothing on main to inherit, so
   C5 becomes unnecessary) and decouples status-CAS from code-integration churn, at the price of
   transient-status visibility moving off the working tree (recovered via a `status` view) plus a
@@ -79,7 +79,7 @@ closes the common case; the advance∥claim simultaneous-acquire race is a docum
 residual (truly-atomic exclusion there WOULD need a narrow shared per-item key, the one place the
 rejected unification has a real argument, but is deferred as rare + recoverable, not free).
 
-**This RETIRES the decided co-located `<slug>.lock.md` relocation** (taxonomy PRD US #10–14, the
+**This RETIRES the decided co-located `<slug>.lock.md` relocation** (taxonomy SPEC US #10–14, the
 `LEADING RESOLUTION` in the taxonomy idea) as a *contention/inheritance* fix, because it fixes
 neither (it is still a tree file on main, arguably MORE exposed to inheritance). It MAY survive purely
 as an *ergonomics* choice if the maintainer still wants it, decoupled from this concurrency work. See
@@ -116,7 +116,7 @@ Three interacting issues, all verified:
    marker committed onto main while the lock was held at claim time. `drop-bookkeeping-rebase.ts`
    strips the on-branch `route-to-needs-attention` move by trailer but has **NO** advancing-marker
    handling, so a continue/rebase hits a rename/rename ledger conflict. (CONFIRMED gap: the
-   `branch-carries-code...` PRD removes the on-branch needs-attention move but does not mention the
+   `branch-carries-code...` SPEC removes the on-branch needs-attention move but does not mention the
    advancing marker.)
 
 3. **NO CROSS-ACTION EXCLUSION.** claim / slicing / advancing are independent markers/moves on
@@ -171,13 +171,13 @@ FOR THIS SET.
 
 > Maintainer decision 2026-06-17: explore the set where HUMAN WORKING-TREE VISIBILITY is NOT a
 > requirement. Humans use `dorfl status` (a generated view); they do NOT need to read raw
-> `work/` status folders. The referenceable files (backlog/done/prd/prd-sliced) MAY still be glanceable
+> `work/` status folders. The referenceable files (backlog/done/spec/spec-sliced) MAY still be glanceable
 > as a convenience, but it is no longer a CONSTRAINT, so the design is free to put status anywhere the
 > code can read it cheaply on a bare arbiter.
 
 With E gone, the reason transient STATUS lived in a human-`ls`-able tree collapses, and the rejections
 that leaned on visibility (D4, C3, the ADR's P-opt-1) are REOPENED on their merits. IMPORTANT: dropping
-E does NOT move CONTENT (backlog/prd/observations/findings/ideas) anywhere, agents still read/write
+E does NOT move CONTENT (backlog/spec/observations/findings/ideas) anywhere, agents still read/write
 those as a readable tree; it only frees where STATUS lives. The dominant force becomes G (elegance) +
 A,D,F, and the winner moves transient STATUS off `main` to a dedicated ledger ref while CONTENT stays
 readable, see `## Best design under Requirement Set 2` below.
@@ -226,7 +226,7 @@ Keep all markers/moves as files on main (full visibility). Change the caller-sid
 ACQUIRE/CREATE PATHS from "optimistic whole-ref lease, give up after N" to: on a `rejected` push,
 **re-fetch the new main and REPLAY the prepared move/marker onto it; only give up if the replay hits a
 GENUINE same-path conflict** (the slug you are claiming was claimed by someone else; the marker you
-are adding already exists; the PRD you are locking left `prd/`). A clean replay is NOT counted against
+are adding already exists; the SPEC you are locking left `spec/`). A clean replay is NOT counted against
 the genuine-conflict budget, you loop until you land, hit a real conflict, or hit the liveness ceiling.
 
 Crucially, the "real conflict" is **already detectable without git's 3-way merge**, by the existing
@@ -236,7 +236,7 @@ pre-CAS claimability checks every acquire path already does:
   distinguishes "main moved, my file still claimable" (false conflict, retry) from "my file is taken"
   (real conflict, stop).
 - `advancing-lock.ts` `acquireAttempt()` re-checks marker absence; `createItemThroughCas` re-checks
-  path absence; `slicing-lock.ts` `acquireAttempt()` re-checks the PRD still in `prd/`. Same shape.
+  path absence; `slicing-lock.ts` `acquireAttempt()` re-checks the SPEC still in `spec/`. Same shape.
 
 So the change is SMALL and LOCAL: in each of the four acquire loops, a `rejected` push whose next
 claimability re-check still shows the target FREE should LOOP (not count against a tiny budget); a
@@ -305,7 +305,7 @@ for claim/slicing (kills E). C2 fixes issue-1 contention for ALL of them WITHOUT
 and C5 gives advancing's issue-2 closure for free. So C3 is **dominated by C2+C5** for the in-tree
 things and only worth keeping as a fallback if C5's drop-set proves harder than expected.
 
-### C4, DECIDED CO-LOCATED `<slug>.lock.md` (taxonomy PRD US #10–14).
+### C4, DECIDED CO-LOCATED `<slug>.lock.md` (taxonomy SPEC US #10–14).
 
 The marker moves from flat `work/advancing/<entry>.md` to a companion `<item-dir>/<slug>.lock.md`
 beside the item. Item never moves.
@@ -334,10 +334,10 @@ as fixing issues 1, 2. See `## Supersedes`.
 **The split, drawn on the property that actually matters (referenceable vs transient):**
 
 - **Stays on `main` (referenceable, human-glanceable, dependency-resolving, useful as agent work-input):**
-  `work/backlog/`, `work/done/`, `work/prd/`, `work/spec-sliced/`. VERIFIED these are exactly the files the
+  `work/backlog/`, `work/done/`, `work/spec/`, `work/spec-sliced/`. VERIFIED these are exactly the files the
   dependency/eligibility reads target: `blockedBy` resolves against `work/done/` (`readiness.ts`,
   `eligibility.ts`); `sliceAfter` against `work/spec-sliced/` (`select-priority.ts`, `ledger-read.ts`);
-  backlog enumeration against `work/backlog/`; PRD source `work/prd/`. So the things a claim/slice must
+  backlog enumeration against `work/backlog/`; SPEC source `work/spec/`. So the things a claim/slice must
   READ to decide eligibility ALL stay on `main`: the partial split does NOT force those reads onto the
   network. This is the key advantage over the ADR's all-in-one P-opt-2.
 - **Moves to a dedicated ledger ref (transient status + locks, where the CAS happens):** `work/in-progress/`,
@@ -358,9 +358,9 @@ KEEPING the referenceable files visible on main):**
   easier).
 - **Issue 2 (branch-inheritance): GONE, structurally.** A work branch is cut from `main`. If in-progress
   / needs-attention / advancing markers are NOT on `main`, a branch cut from `main` CANNOT inherit them:
-  there is nothing in main's tree to carry. Same win C3 gives, but C6 keeps backlog/done/prd/prd-sliced
+  there is nothing in main's tree to carry. Same win C3 gives, but C6 keeps backlog/done/spec/spec-sliced
   visible on main. **C6 makes C5 unnecessary** (no advancing marker on main means nothing to drop from a
-  kept branch's tree), and it makes the branch-carries PRD's needs-attention-move removal moot for the
+  kept branch's tree), and it makes the branch-carries SPEC's needs-attention-move removal moot for the
   SAME reason. C6 is a STRUCTURAL closure of the whole "branch carries ledger status" class, not a
   per-marker patch.
 
@@ -373,8 +373,8 @@ KEEPING the referenceable files visible on main):**
   exactly as `main` does. Passes the kill criterion.
 - **E visibility: LOST for the moved state (the cost YOU named).** A human reading the working tree on
   `main` no longer sees in-progress / needs-attention / advancing: they must look at the ledger ref (`git
-  show <ledger-ref>:work/in-progress/`, or a generated `status`/`scan` VIEW). Backlog / done / prd /
-  prd-sliced STAY glanceable on main. So the visibility loss is SCOPED to exactly the transient status,
+  show <ledger-ref>:work/in-progress/`, or a generated `status`/`scan` VIEW). Backlog / done / spec /
+  spec-sliced STAY glanceable on main. So the visibility loss is SCOPED to exactly the transient status,
   which is the negotiable half (the maintainer already said advancing-visibility is most negotiable;
   in-progress/needs-attention visibility is more valued but recoverable as a view). This is the central
   trade C6 asks you to accept: transient-status visibility moves from "ls the working tree" to "run a
@@ -397,7 +397,7 @@ KEEPING the referenceable files visible on main):**
 2. **`scan` and the autonomous selection loop go (partly) NETWORK-BOUND for status.** Today `scan` reads
    `main` offline. Reading in-progress/needs-attention from a dedicated ref means fetching that ref
    (network) or keeping a local tracking copy. The ADR flagged exactly this. For C6 it is PARTIAL:
-   backlog/done/prd stay offline-on-main; only status needs the ref. Still, the offline-scan property the
+   backlog/done/spec stay offline-on-main; only status needs the ref. Still, the offline-scan property the
    ADR prized is weakened for the status half.
 3. **The `start --resume` cross-ref read (VERIFIED wrinkle).** `readSliceOnArbiter` (`ledger-read.ts`)
    reads the slice BODY from `work/backlog/` OR `work/in-progress/` on `<arbiter>/main`, because a resume
@@ -427,7 +427,7 @@ contention among status writers. So the real comparison is **"C2 + C5 (one ref, 
 
 `branch-carries-code-not-ledger-status-main-owns-status` already establishes: **the work branch carries
 CODE plus only the atomic `→done` move; main owns ALL ledger status, transitioned tree-lessly.** The
-advancing marker is ledger status. The CONFIRMED gap: the PRD enumerates the needs-attention move but
+advancing marker is ledger status. The CONFIRMED gap: the SPEC enumerates the needs-attention move but
 not the advancing marker, and `drop-bookkeeping-rebase.ts` only knows the needs-attention trailer.
 
 The closure (pick one form when slicing):
@@ -435,7 +435,7 @@ The closure (pick one form when slicing):
   marker from the kept branch tree** on continue/rebase, keyed STRUCTURALLY (path under the advancing
   namespace), not by a fragile trailer. A stale advancing marker in an inherited tree is, by
   definition, not code, so under the branch-carries principle it belongs in the drop-set. This is the
-  SHORT-TERM fix the observation already suggests, made principled by the PRD.
+  SHORT-TERM fix the observation already suggests, made principled by the SPEC.
 - **C5b (root): main owns the advancing marker tree-lessly; never written through a worktree a branch
   could inherit.** The acquire/release ALREADY use a THROWAWAY scratch branch cut from `<arbiter>/main`
   (confirmed: `acquireAttempt` detaches onto `arbiter/main`, makes a fresh `advancing/<entry>` branch,
@@ -459,7 +459,7 @@ main's working tree worth keeping?**
 | issue 1 false contention | fixed in-tree (rebase-until-real) | fixed AND reduced (status ref has fewer writers; still wants rebase-until-real) |
 | issue 2 branch-inheritance | fixed by a per-marker drop-set (C5) | fixed STRUCTURALLY (nothing on main to inherit; C5 unnecessary) |
 | transient-status visibility (in-progress/needs-attention/advancing) | KEPT (ls the working tree) | LOST from working tree, recovered via a status view (git show the ledger ref) |
-| referenceable visibility (backlog/done/prd/prd-sliced) | KEPT | KEPT (the point of the PARTIAL split) |
+| referenceable visibility (backlog/done/spec/spec-sliced) | KEPT | KEPT (the point of the PARTIAL split) |
 | reader/writer surface | small (retry semantics + one drop-set) | LARGE (every status reader/writer learns a second ref) |
 | offline `scan` | fully offline (reads main) | partial: status half network-bound |
 | cross-ref reconciliation | none (one ref) | NEW failure mode (claim/complete span main + ledger-ref) |
@@ -522,8 +522,8 @@ close the one genuinely-unsafe pair with an ADVISORY precedence rule + the exist
 
 Why not collapse into one lock:
 - The three holds are SEMANTICALLY different and key DIFFERENTLY. claim and slicing ARE lifecycle moves
-  (the file moves `backlog→in-progress`, `prd→slicing`); advancing is a file-ORTHOGONAL marker (item
-  never moves) precisely so it can lock items resting in MANY folders (a backlog slice, a `prd/` PRD,
+  (the file moves `backlog→in-progress`, `spec→slicing`); advancing is a file-ORTHOGONAL marker (item
+  never moves) precisely so it can lock items resting in MANY folders (a backlog slice, a `spec/` SPEC,
   an `observations/` note) with one mechanism. Collapsing re-introduces the "which folder does the
   move encode" problem the taxonomy idea's `OPEN FORK` rejected (return-destination ambiguity,
   position-shadowing, the observations-don't-flow blocker). One move-based lock cannot represent "this
@@ -532,7 +532,7 @@ Why not collapse into one lock:
   Unifying them onto one ref would make them falsely contend with EACH OTHER, issue 1 at finer grain.
 
 Which overlaps are dangerous, and the minimal closure:
-- **claim ∥ slicing on the same slug**: a slice and a PRD can share a slug but are DIFFERENT items
+- **claim ∥ slicing on the same slug**: a slice and a SPEC can share a slug but are DIFFERENT items
   (`slice:<slug>` vs `prd:<slug>`), disambiguated by the namespace resolver (`slug-namespace.ts`). Not
   a dangerous overlap. ✔ already safe.
 - **advance ∥ claim on the SAME item** (the real risk): an item is being answered/triaged (advance
@@ -588,11 +588,11 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 
 ## Supersedes / relationship to existing artifacts
 
-- **RETIRES the co-located `<slug>.lock.md` relocation as a contention/inheritance fix** (taxonomy PRD
+- **RETIRES the co-located `<slug>.lock.md` relocation as a contention/inheritance fix** (taxonomy SPEC
   `folder-taxonomy-reorg-and-rename` US #10–14; the `LEADING RESOLUTION 2026-06-16` and marker-format
   decision in `folder-taxonomy-and-prd-edit-handshake.md`). It fixes neither issue 1 nor issue 2 (still
   a tree file on main, by its own admission, and arguably MORE inheritance-exposed). RECOMMENDATION:
-  drop US #10–14 from the taxonomy PRD's concurrency justification. The co-location MAY remain as a pure
+  drop US #10–14 from the taxonomy SPEC's concurrency justification. The co-location MAY remain as a pure
   *ergonomics* item IF the maintainer still values it, then a cosmetic sibling of the folder reorg, NOT
   part of this concurrency work, NOT required by it. Decision left to the maintainer; this idea's stance
   is "decouple it; it was solving the wrong axis."
@@ -609,13 +609,13 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
     against C5 for issue 2. The decision is the visibility/surface trade, not "is off-main viable" (it
     is, on `--bare` too).
 - **EXTENDS `branch-carries-code-not-ledger-status-main-owns-status`**: adds the advancing marker to
-  that PRD's "main owns ALL ledger status, branch carries code" scope (C5). When that PRD is sliced,
+  that SPEC's "main owns ALL ledger status, branch carries code" scope (C5). When that SPEC is sliced,
   its drop-rebase removal/replacement should account for the advancing marker too. Coherent, not
   contradictory.
 - **Composes with the taxonomy reorg's Phase-0 `work-layout` centralization**: C2/C5 do not depend on
   the reorg, but if its single-source path module lands, the drop-set's "under the advancing namespace"
   predicate reads cleaner from it. No ordering dependency either way.
-- **Self-contained vs the crash-safety PRD**: that PRD has LANDED (`advancing-lock-release-crash-safe`,
+- **Self-contained vs the crash-safety SPEC**: that SPEC has LANDED (`advancing-lock-release-crash-safe`,
   `advancing-lock-human-release-verb-and-surface`, `advancing-lock-borrow` in `work/done/`), so the
   `advancingMarkerPath`/`listAdvancingMarkers` seam C5 leans on already exists.
 
@@ -647,8 +647,8 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 
 > **CORRECTION 2026-06-17 (maintainer caught a conflation).** An earlier draft of this section said
 > "`main` holds CODE only; the ENTIRE `work/` tree moves to the ledger ref." That OVERSHOT. Dropping
-> HUMAN visibility (E) does NOT mean agents stop having a readable backlog / prd / observations /
-> findings / ideas to work from, OF COURSE they still need those, agents read backlog+prd+findings as
+> HUMAN visibility (E) does NOT mean agents stop having a readable backlog / spec / observations /
+> findings / ideas to work from, OF COURSE they still need those, agents read backlog+spec+findings as
 > work INPUT and write observations/ideas as work OUTPUT. The corrected design below draws the line at
 > the right place: **CONTENT vs STATUS**, not "code vs everything."
 
@@ -656,9 +656,9 @@ CAS key for that one pair, a targeted unification, not a collapse of all three.
 
 `work/` holds two DIFFERENT kinds of thing, and only ONE of them is what E ever governed:
 
-- **CONTENT, the files agents read/write as work input and output.** Backlog slice BODIES, prd,
-  prd-sliced, done records, AND the capture buckets observations / findings / ideas. An agent building
-  a slice reads the slice body + the PRD + referenced findings; an agent advancing writes a new
+- **CONTENT, the files agents read/write as work input and output.** Backlog slice BODIES, spec,
+  spec-sliced, done records, AND the capture buckets observations / findings / ideas. An agent building
+  a slice reads the slice body + the SPEC + referenced findings; an agent advancing writes a new
   observation. These must stay REAL, READABLE, EDITABLE files in a normal tree. Dropping HUMAN
   visibility says NOTHING about these, they are not "status," they are the work itself.
 - **STATUS, the serialization/lock state.** WHICH folder a slug currently sits in (backlog vs
@@ -676,7 +676,7 @@ currently one file. Two coherent ways:
 
 ### C7 (corrected): CONTENT on a readable tree; STATUS as a pointer/position on the ledger ref
 
-- **CONTENT ref (readable, agent + optionally human):** keep backlog, prd, prd-sliced, done,
+- **CONTENT ref (readable, agent + optionally human):** keep backlog, spec, spec-sliced, done,
   observations, findings, ideas as a normal `work/` file tree, on `main` (simplest) OR on a dedicated
   content branch (a convenience choice now E is dropped, NOT load-bearing). An item's BODY lives here
   ONCE, at a status-NEUTRAL path (e.g. `work/items/<slug>.md` or its bucket), and does NOT move when
@@ -706,7 +706,7 @@ compromise is unnecessary, the split goes fully clean.
 
 The other coherent Set-2 shape, and the one the earlier draft wrongly described as "C7": move the
 ENTIRE `work/` tree (content files AND the status folders) onto one dedicated ledger ref, and make
-`main` hold ONLY code. Agents read backlog/prd/findings and write observations FROM/TO the ledger ref
+`main` hold ONLY code. Agents read backlog/spec/findings and write observations FROM/TO the ledger ref
 (via `ls-tree`/`show`/CAS, exactly as the code already reads `<mirror>/main:work/...` today, just
 retargeted). Humans use `status`/`scan`.
 
@@ -744,8 +744,8 @@ Why this is STRICTLY cleaner than C5/C6 on issue 2 (true for BOTH C7 variants):
 - **Issue 2 (branch-inheritance): DELETED by construction.** A work branch is cut from `main`, and
   `main` now holds NO `work/` STATUS at all, so a branch CANNOT inherit any status file (advancing
   markers, needs-attention moves, done moves). The `drop-bookkeeping-rebase` machinery, the
-  branch-carries PRD's needs-attention-move removal, AND C5 all become UNNECESSARY in one move.
-- **The atomic `→done` exception DISSOLVES.** The branch-carries PRD kept `→done` on-branch BECAUSE
+  branch-carries SPEC's needs-attention-move removal, AND C5 all become UNNECESSARY in one move.
+- **The atomic `→done` exception DISSOLVES.** The branch-carries SPEC kept `→done` on-branch BECAUSE
   `main` had to show `done/` atomically with the code. With status off `main`, `done` is a ledger-ref
   transition like any other, the code-vs-done atomicity becomes the cross-ref story (a cost, below).
 - **Issue 1 (false contention): integration-churn source GONE.** The ledger/status ref is advanced
@@ -799,7 +799,7 @@ Why this is STRICTLY cleaner than C5/C6 on issue 2 (true for BOTH C7 variants):
 
 **C2 (on the status/ledger ref) + the STATUS-off-`main` move.** Drop E and ALL transient status leaves
 `main`, deleting issue 2 + the `→done` exception + the drop-rebase machinery, and incidentally
-unblocking protected-main. AGENTS KEEP a readable content tree (backlog/prd/observations/findings/ideas)
+unblocking protected-main. AGENTS KEEP a readable content tree (backlog/spec/observations/findings/ideas)
 throughout, that is the correction this section makes, dropping E touches HUMAN glanceability of status
 ONLY, never agent work-input. The remaining Set-2 choice is the body/position question:
 - **C7 (content tree + status pointers):** content stays a plain readable tree (on `main` or a content
@@ -813,7 +813,7 @@ ONLY, never agent work-input. The remaining Set-2 choice is the body/position qu
 Neither is unambiguously best; the tiebreaker is a SECOND, not-yet-pinned requirement (must content,
 especially capture buckets, stay on a non-CAS plain-file tree?), a good next requirement-set to explore.
 
-**Relationship to the Set-1 answer:** EITHER Set-2 shape SUPERSEDES C5, C6, the branch-carries PRD's
+**Relationship to the Set-1 answer:** EITHER Set-2 shape SUPERSEDES C5, C6, the branch-carries SPEC's
 on-branch-move removal, AND the `→done` on-branch exception. C2 is common to both sets. So the only
 genuinely set-dependent decision is C5/C6 (Set 1) vs the status-off-`main` move (Set 2), and that
 decision IS the visibility requirement itself: keep E and you get C5/C6 (status stays where a human can
@@ -821,7 +821,7 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 
 > **C7-alt is REJECTED (maintainer, 2026-06-17): it removes the CONTENT from the checked-out repo.**
 > Putting the whole `work/` tree on the ledger ref means a normal `git clone` of `main` has no
-> backlog/prd/observations/findings/ideas in its working tree at all, agents (and humans) would have to
+> backlog/spec/observations/findings/ideas in its working tree at all, agents (and humans) would have to
 > `git show <ledger-ref>:...` to read their own work-input. That is unacceptable: content must stay
 > checked out on `main`. This rejection, plus the "one lock per item" idea below, produces a STRICTLY
 > better Set-2 design, C8.
@@ -836,7 +836,7 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 > folded in; no objection was fatal. Summary of the corrections (details in `### Pressure-test
 > amendments`):**
 > 1. **out-of-scope** is a FIFTH status folder this design first missed. The rule is NOT "two
->    promotions"; it is "`main` holds CONTENT + all DURABLE RESTING records (`done`, `prd-sliced`,
+>    promotions"; it is "`main` holds CONTENT + all DURABLE RESTING records (`done`, `spec-sliced`,
 >    `out-of-scope`); the lock ref holds only TRANSIENT HOLDS." Three `main` move classes, not two.
 > 2. **Lock schema is TWO axes** (`action: implement|slice|advance` AND `state: active|stuck`+reason),
 >    not "action + optional reason" (else "advanced-and-stuck" is unrepresentable). The maintainer
@@ -856,24 +856,24 @@ decision IS the visibility requirement itself: keep E and you get C5/C6 (status 
 `in-progress/` or `needs-attention/` (a full grep finds only ONE incidental line, reading a slice
 BODY from backlog/ OR in-progress/, never a STATE check). So `in-progress` and `needs-attention` are
 PURELY OPERATIONAL status (consumed by `status`/`scan`/recovery), NOT referenceable lifecycle state.
-The two referenceable resting states are EXACTLY `done` and `prd-sliced`. That is the natural cleave
+The two referenceable resting states are EXACTLY `done` and `spec-sliced`. That is the natural cleave
 line, and it is the one the maintainer drew.
 
 **The design, two independent moves that compose:**
 
 1. **CONTENT always stays checked out on `main`** (kills C7-alt). The full readable `work/` content tree
-   (backlog, prd, prd-sliced, done, observations, findings, ideas) lives on `main` as today, a normal
+   (backlog, spec, spec-sliced, done, observations, findings, ideas) lives on `main` as today, a normal
    `git clone` has it all in the working tree. Agents and humans read/write it directly.
 2. **`main` holds CONTENT + all DURABLE RESTING records; only TRANSIENT HOLDS leave `main`** (amended
    per pressure-test objection 1). The `main` move classes are the THREE durable transitions:
-   `backlog/<slug> , done/<slug>`, `prd/<slug> , prd-sliced/<slug>`, and `backlog/<slug> ,
+   `backlog/<slug> , done/<slug>`, `spec/<slug> , spec-sliced/<slug>`, and `backlog/<slug> ,
    out-of-scope/<slug>` (the permanent "won't do" record, a sibling of `done`, NOT dependency-resolving
    but a durable human-browsable file). These are rare and rest as files humans/agents reference.
    Everything TRANSIENT that is today a `main` folder-move (claim , in-progress, surface ,
    needs-attention, slicing-lock , slicing/) STOPS being a `main` move and becomes lock-ref state. The
    clean rule: **durable resting record , stays a file on `main`; transient hold , the lock ref.**
 3. **ONE lock per item, on a dedicated lock ref (`refs/dorfl/locks`).** Claiming/implementing a
-   slice, slicing a PRD, and advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on
+   slice, slicing a SPEC, and advancing (answering/triaging) an item ALL acquire THE SAME lock, keyed on
    the item identity (`<type>-<slug>`). The lock ref holds one entry per HELD item; the CAS happens
    here. They are the SAME lock, so they are MUTUALLY EXCLUSIVE BY CONSTRUCTION. **The lock entry is a
    TWO-AXIS record** (amended per pressure-test objection 2, the maintainer's "it must say what it is
@@ -896,7 +896,7 @@ line, and it is the one the maintainer drew.
   lock state (locks are on the lock ref, not in main's tree) and no in-progress/needs-attention/slicing
   folder (those are not on `main` anymore). The ONLY `main` `work/` files are content + the two
   promotions, none of which a mid-build branch carries as status. `drop-bookkeeping-rebase`, the
-  branch-carries PRD's needs-attention-move removal, and C5 ALL become unnecessary.
+  branch-carries SPEC's needs-attention-move removal, and C5 ALL become unnecessary.
 - **Issue 3 (cross-action exclusion): DISSOLVED, atomically, not advisorily.** This is the big win over
   the Set-1 answer. Because advance/slice/claim share ONE per-item lock, you CANNOT advance an item
   that is being implemented, or claim one that is being advanced, the second acquirer loses the SAME
@@ -906,8 +906,8 @@ line, and it is the one the maintainer drew.
   the FIRST candidate where issue 3 is solved by construction rather than mitigated.
 - **The `→done` on-branch atomicity exception SURVIVES, cleanly, and is now the ONLY main move class.**
   Unlike C7/C7-alt (which dissolved `→done` into a cross-ref reconciliation), C8 KEEPS `backlog→done`
-  (and `prd→prd-sliced`) as real `main` moves, atomic with the code/slices they assert, exactly as the
-  branch-carries PRD wants for done. So there is NO new cross-ref reconciliation for the referenceable
+  (and `spec→spec-sliced`) as real `main` moves, atomic with the code/slices they assert, exactly as the
+  branch-carries SPEC wants for done. So there is NO new cross-ref reconciliation for the referenceable
   promotions, they stay single-ref on `main`. The cross-ref surface shrinks to just "hold/release a
   lock on the lock ref around a `main` promotion", which is the SAME shape as today's claim-then-build
   -then-complete, only the intermediate hold moved off `main`.
@@ -931,15 +931,15 @@ line, and it is the one the maintainer drew.
 
 1. **`status`/`scan` read the lock ref for operational status** (held/stuck items), so that read is
    ref-based (the code already reads refs, so this is a retarget, not a new mechanism) and, if the lock
-   ref is remote, network-bound for the operational view. The REFERENCEABLE state (backlog/done/prd/
-   prd-sliced) stays offline-on-`main`, so eligibility/selection stay offline, only the
+   ref is remote, network-bound for the operational view. The REFERENCEABLE state (backlog/done/spec/
+   spec-sliced) stays offline-on-`main`, so eligibility/selection stay offline, only the
    "what's-in-flight" view needs the lock ref. Better than C7-alt (all reads off-main) and even C6
    (which moved status folders off main); C8 moves only the LOCKS off main and keeps ALL content +
    both referenceable promotions ON main.
 2. **One lock per item means an item can hold ONLY ONE action at a time, BY DESIGN.** Confirm this is
    desired for every pair. Advance-while-claimed and slice-while-claimed are CORRECTLY excluded (the
    point). The one case to check: does any legitimate workflow need TWO actions on one item
-   concurrently? (e.g. advancing a PRD while it is `prd-sliced`?) The taxonomy idea noted an item has
+   concurrently? (e.g. advancing a SPEC while it is `spec-sliced`?) The taxonomy idea noted an item has
    multiple orthogonal actions OVER ITS LIFE (answer it, later build it), but never SIMULTANEOUSLY, so
    one-lock-at-a-time is right. Record this as the load-bearing assumption: actions over an item are
    SEQUENTIAL, never concurrent, so a single mutex per item is correct.
@@ -963,21 +963,21 @@ line, and it is the one the maintainer drew.
   2 by locks-off-main, 3 by one-lock-per-item-atomic-exclusion), with NO advisory mitigations and NO
   cross-ref reconciliation for the durable promotions.
 - It KEEPS content checked out on `main` (fixes C7-alt's fatal flaw) and keeps the referenceable
-  resting states (`done`, `prd-sliced`) AND the durable terminal record (`out-of-scope`) as real `main`
+  resting states (`done`, `spec-sliced`) AND the durable terminal record (`out-of-scope`) as real `main`
   files, so eligibility/dependency resolution stays offline + on the same ref it is today, ZERO change
   to `blockedBy`/`sliceAfter`.
 - It shrinks `main`'s `work/` churn to the THREE rare durable transitions, the smallest possible `main`
   write surface, which ALSO eases (does NOT fully solve, see amendments) the protected-main story: only
   durable resting records reach `main`, and on a protected `main` those route through the existing
   PR-merge path while claim + intermediates never touch `main` at all.
-- The "status = the folder" invariant is PRESERVED where it is referenceable (`done`/`prd-sliced` ARE
+- The "status = the folder" invariant is PRESERVED where it is referenceable (`done`/`spec-sliced` ARE
   folders on `main`) and DELIBERATELY replaced by "status = the per-item lock state" where it is
   transient (in-progress/needs-attention/slicing/advancing), which is HONEST: those were never
   referenceable states, so encoding them as folders was the overload C8 removes.
 
 The one thing C8 trades away is exactly the dropped requirement, a human can no longer `ls work/` and
 see in-progress/needs-attention (they run `status`, which reads the lock ref). Content, backlog, done,
-prd, prd-sliced all stay `ls`-able on `main`. So C8 is the precise, minimal expression of "drop ONLY
+spec, spec-sliced all stay `ls`-able on `main`. So C8 is the precise, minimal expression of "drop ONLY
 transient-status human-visibility, keep everything else."
 
 **Set-2 recommendation (UPDATED): C2 (on the lock ref) + C8.** C7/C7-alt are superseded by C8
@@ -998,7 +998,7 @@ neither referenceable-resting NOR transient: it is a DURABLE TERMINAL record. It
 `main` (a `backlog , out-of-scope` move), making THREE `main` move classes. NOTE the code today writes
 `out-of-scope` and `needs-attention` through the SAME terminal-move helper, C8 must SPLIT that helper
 (out-of-scope , `main`; needs-attention , a stuck lock on the lock ref). The governing rule replaces
-the "two promotions" framing: **durable resting record (`done`/`prd-sliced`/`out-of-scope`) , `main`;
+the "two promotions" framing: **durable resting record (`done`/`spec-sliced`/`out-of-scope`) , `main`;
 transient hold , lock ref.**
 
 **Amendment 2, the lock entry is a two-axis record (objection 2, the maintainer's question).** Folded
@@ -1018,7 +1018,7 @@ effect on the `main`-write set:
   claim"), and matches the ADR's stated boundary exactly ("claim + in-progress + needs-attention served
   by a substrate that never writes `main`").
 - in-progress / needs-attention / slicing / advancing , lock ref. **Removed from `main`.**
-- BUT `done` / `prd-sliced` / `out-of-scope` STAY `main` writes. On a protected `main` those direct CAS
+- BUT `done` / `spec-sliced` / `out-of-scope` STAY `main` writes. On a protected `main` those direct CAS
   pushes are ALSO rejected.
 So C8 unblocks CLAIMING on a protected `main` (the bulk of the contradiction) but the DURABLE
 PROMOTIONS still need `main`, and on a protected repo they must route through the EXISTING propose/PR
@@ -1095,7 +1095,7 @@ fourth action, it is `state:stuck`. So every (action, state) pair is a legal cel
 | action \ state | active | stuck |
 | --- | --- | --- |
 | implement | building the slice (today: `in-progress/`) | build stuck (today: `needs-attention/` from a build) |
-| slice | slicing the PRD (today: `slicing/`) | slicing stuck / decomposition-unclear (today: `needs-attention/` from slicing) |
+| slice | slicing the SPEC (today: `slicing/`) | slicing stuck / decomposition-unclear (today: `needs-attention/` from slicing) |
 | advance | answering/triaging (today: `advancing/` marker) | advance stuck (a new, today-unrepresentable-cleanly cell) |
 
 **Lifecycle of ONE lock (the state machine):**
@@ -1110,7 +1110,7 @@ fourth action, it is `state:stuck`. So every (action, state) pair is a legal cel
            |        | bounce/stuck            \ success
            |        v                          v
            |  CAS amend entry            (durable promotion on MAIN, e.g. backlog->done
-           |  {state:stuck, reason}       or prd->prd-sliced or backlog->out-of-scope)
+           |  {state:stuck, reason}       or spec->spec-sliced or backlog->out-of-scope)
            |        |                          |
            |        | human resolves           | then release
            |        v                          v
@@ -1139,7 +1139,7 @@ The legal transitions, each a CAS on the lock ref (so two contenders serialise, 
    moved , Amendment 5), so requeue is purely "release the lock", no `needs-attention -> backlog`
    folder move. The kept branch remains for recovery.
 5. **complete (success)** `[action, active] -> (durable MAIN move) -> (absent)`. Land the durable
-   promotion on `main` (`backlog/todo -> done`, `prd -> prd-sliced`, or `-> out-of-scope`), ATOMIC
+   promotion on `main` (`backlog/todo -> done`, `spec -> spec-sliced`, or `-> out-of-scope`), ATOMIC
    with its artifacts (code/slices), THEN remove the lock entry. ORDER MATTERS for crash-safety:
    main-move FIRST (the authoritative durable record), release SECOND. A crash between them leaves
    `done`-on-`main` + a stale held lock , recovery treats the `main` durable record as authoritative
@@ -1153,7 +1153,7 @@ The legal transitions, each a CAS on the lock ref (so two contenders serialise, 
   present entry is exit-2 lost.
 - **`reason` PRESENT iff `state:stuck`.** A `state:active` entry never carries a stuck reason; a
   `state:stuck` entry always does (the WORK-CONTRACT rule-3 "reason in the body" carries over).
-- **`done`/`prd-sliced`/`out-of-scope` on `main` are authoritative over any stale lock** (crash
+- **`done`/`spec-sliced`/`out-of-scope` on `main` are authoritative over any stale lock** (crash
   reconciliation): if `main` shows the item terminal but a lock entry lingers, the lock is stale ,
   clear it. The reverse (lock held, item not terminal on `main`) is the NORMAL in-flight state.
 - **`done` + `state:stuck` can legitimately co-exist** (Amendment 2): a rebase-conflict bounce can mark
@@ -1166,14 +1166,14 @@ The legal transitions, each a CAS on the lock ref (so two contenders serialise, 
 **What this REPLACES from today's folder model:** the `in-progress/`, `needs-attention/`, and
 `slicing/` folders on `main` ALL collapse into this one lock entry's (action, state) cell. The
 five-folder status set on `main` reduces to the durable records only (`done`, `out-of-scope`, plus the
-resting pools `backlog`/`todo` , see the Kanban section) for slices, and (`prd`, `prd-sliced`) for
+resting pools `backlog`/`todo` , see the Kanban section) for slices, and (`spec`, `spec-sliced`) for
 PRDs. The transient three become lock-ref state. That is the whole point: the folders that were never
 referenceable stop being folders.
 
 ## Kanban split: a `staging/pool` position gate for slices AND PRDs (de-overloads `humanOnly`; enables review WITHOUT a PR; RUNNER-enforced)
 
 > Maintainer-raised 2026-06-17 as "somewhat separate but it guides us." It does, and it composes
-> cleanly with C8. Captured here as a SIBLING design (likely its own idea/PRD), with the C8 interaction
+> cleanly with C8. Captured here as a SIBLING design (likely its own idea/SPEC), with the C8 interaction
 > made explicit.
 
 **The proposal.** Adopt the Kanban distinction the current model conflates. In a Kanban board
@@ -1260,28 +1260,28 @@ framing, 2026-06-17). FINAL verdict: YES , PRDs get the position split too, for 
 do. (This subsection records the derivation INCLUDING a wrong intermediate "NO" the maintainer
 corrected, kept so the reasoning is honest.)**
 
-The framing asks: does a PRD have a POSITION axis ("admitted to the auto-slice pool yet?") distinct from
+The framing asks: does a SPEC have a POSITION axis ("admitted to the auto-slice pool yet?") distinct from
 its NATURE axis (`humanOnly` = "never auto-slice by nature")? The deciding test, set by the
 WORK-CONTRACT, is whether a genuine INTAKE-TRIAGE need exists , i.e. whether AGENT/untrusted output
 writes items into the pool that a human must gate. (VERIFIED in WORK-CONTRACT.md: *"a separate pre-pool
 'not ready yet' state is intentionally NOT added , items should not be WRITTEN into the pool until
 ready. Revisit only if a genuine intake-triage need appears."*)
 
-- **WRONG intermediate answer (NO), kept for honesty:** I first reasoned "PRDs are human-born (`to-prd`
+- **WRONG intermediate answer (NO), kept for honesty:** I first reasoned "PRDs are human-born (`to-spec`
   synthesizes a conversation), so there is no agent/untrusted firehose writing PRDs into the auto-slice
-  pool; the `idea/ -> prd/` promotion already serves as the PRD position gate; therefore no split."
+  pool; the `idea/ -> spec/` promotion already serves as the SPEC position gate; therefore no split."
 - **The maintainer CORRECTED this: the firehose EXISTS for PRDs today.** `intake` writes PRDs through a
-  conversation (an agent-mediated authoring flow into `prd/`), and untrusted sources are ALREADY marked
+  conversation (an agent-mediated authoring flow into `spec/`), and untrusted sources are ALREADY marked
   untrusted with a propagating effect (the `untrusted-origin-forces-build-propose` rule, `cli.ts`, forces
-  an untrusted-origin slice to integrate via PROPOSE/PR even in `merge` mode). So agent/untrusted PRD
-  authorship is real NOW, and `intake` writes STRAIGHT to `prd/`, BYPASSING `idea/`, so the `idea/ ->
-  prd/` promotion does NOT gate it. The intake-triage trigger the WORK-CONTRACT names HAS appeared for
+  an untrusted-origin slice to integrate via PROPOSE/PR even in `merge` mode). So agent/untrusted SPEC
+  authorship is real NOW, and `intake` writes STRAIGHT to `spec/`, BYPASSING `idea/`, so the `idea/ ->
+  spec/` promotion does NOT gate it. The intake-triage trigger the WORK-CONTRACT names HAS appeared for
   PRDs.
-- **Therefore the position gate is NEEDED for PRDs, at the `prd/` boundary** (where the agent output
-  lands), mirroring the slice split exactly: an `intake`-authored or untrusted-origin PRD lands STAGED
-  (`prd/` as holding, or a `prd-intake/`) and is PROMOTED by a human into the auto-slice pool
-  (`prd-ready/`), not auto-sliceable the moment an agent writes it.
-- **NATURE/DISCOVERED axes unchanged:** PRD `humanOnly` = "never auto-slice" + `needsAnswers` =
+- **Therefore the position gate is NEEDED for PRDs, at the `spec/` boundary** (where the agent output
+  lands), mirroring the slice split exactly: an `intake`-authored or untrusted-origin SPEC lands STAGED
+  (`spec/` as holding, or a `spec-intake/`) and is PROMOTED by a human into the auto-slice pool
+  (`spec-ready/`), not auto-sliceable the moment an agent writes it.
+- **NATURE/DISCOVERED axes unchanged:** SPEC `humanOnly` = "never auto-slice" + `needsAnswers` =
   "blocked." The position gate is the THIRD axis PRDs were missing once you account for the intake
   firehose. (The earlier "all three already encoded via `idea/`" was the wrong step , `intake` bypasses
   `idea/`.)
@@ -1290,9 +1290,9 @@ ready. Revisit only if a genuine intake-triage need appears."*)
 for the SAME reason , agent/untrusted output (slicing output for slices; `intake`/untrusted PRDs for
 PRDs) must land STAGED and be human-PROMOTED into the pool, not auto-eligible on write. The symmetry is
 now EXACT, both lifecycles get a `staging -> pool` position gate because both have an agent/untrusted
-intake firehose. PRD `humanOnly` (never-auto-slice by nature) + `needsAnswers` (blocked) still stand as
+intake firehose. SPEC `humanOnly` (never-auto-slice by nature) + `needsAnswers` (blocked) still stand as
 the orthogonal NATURE/DISCOVERED axes; the position gate is the THIRD axis PRDs were missing. This
-REVERSES an earlier-committed "PRD split not worth it" call: the trust/intake reality the maintainer
+REVERSES an earlier-committed "SPEC split not worth it" call: the trust/intake reality the maintainer
 surfaced (intake authors PRDs; untrusted-origin already forces propose) is exactly the WORK-CONTRACT
 trigger ("a genuine intake-triage need appears"), and it HAS appeared, for PRDs as much as slices.
 
@@ -1347,9 +1347,9 @@ wrinkle the maintainer flagged (slicing CREATES files, it does not MOVE them):**
    promoting it to the pool is the transition. **Restate the `AGENTS.md`/WORK-CONTRACT rule to cover
    creation explicitly: "the agent may CREATE ledger files ONLY in the staging folder (`backlog/`); the
    runner owns every MOVE and every PROMOTION into a pool."** Same for `intake`/PRDs: the agent drafts
-   the PRD body into `prd/`(staging); the runner promotes to `prd-ready/` per trust , never the agent.
+   the SPEC body into `spec/`(staging); the runner promotes to `spec-ready/` per trust , never the agent.
 2. **Promotion `staging -> pool` is HUMAN-only (or a trusted-runner policy), never agent.** The
-   `backlog -> todo` (and `prd -> prd-ready`) promotion is a privileged transition. An autonomous agent
+   `backlog -> todo` (and `spec -> spec-ready`) promotion is a privileged transition. An autonomous agent
    must not promote its own output into the pool , that would defeat the gate. Enforced by the same
    "runner/human owns transitions" rule: promotion is a ledger move, and agents do not author ledger
    moves.
@@ -1394,7 +1394,7 @@ in `backlog/` must NEVER reach `todo/` for an AGENT (a human still drives it). I
 and encode only position, you cannot tell "awaiting promotion" from "agents must never take this", a
 human could wrongly promote a human-only item into the agent pool.
 
-**Verified the two `humanOnly` verbs are DISJOINT (skills + WORK-CONTRACT):** PRD `humanOnly` gates
+**Verified the two `humanOnly` verbs are DISJOINT (skills + WORK-CONTRACT):** SPEC `humanOnly` gates
 SLICING (an agent may not auto-slice it); slice `humanOnly` gates BUILDING (an agent may not auto-build
 it); there is NO propagation between them (`to-slices` SKILL §3b: "NO inheritance, NO propagation, NOT
 EVEN A HINT"). So the question must be answered SEPARATELY for the two.
@@ -1418,12 +1418,12 @@ EVEN A HINT"). So the question must be answered SEPARATELY for the two.
 - So: you do NOT fully remove slice `humanOnly`, you NARROW it to its true meaning (never-for-agents)
   and let the folder take over the "human gates entry / review-first" job it was being overloaded with.
 
-**Answer for PRDs: `humanOnly` is STILL needed, and the folder does NOT replace it.** PRD `humanOnly`
+**Answer for PRDs: `humanOnly` is STILL needed, and the folder does NOT replace it.** SPEC `humanOnly`
 gates SLICING (a human must drive the decomposition). The Kanban split is being done for SLICES, NOT
-PRDs (decided above, PRD-slicing safety is inherited downstream). So there is no PRD `todo/` pool whose
+PRDs (decided above, SPEC-slicing safety is inherited downstream). So there is no SPEC `todo/` pool whose
 position could carry the "a human must drive slicing" meaning, the only place that fact can live is the
-PRD `humanOnly` flag. AND it is a NEVER (by nature) signal ("this decomposition needs human judgement"),
-not a "not yet", so even if a PRD pool existed, position would be the wrong encoding (same reason as the
+SPEC `humanOnly` flag. AND it is a NEVER (by nature) signal ("this decomposition needs human judgement"),
+not a "not yet", so even if a SPEC pool existed, position would be the wrong encoding (same reason as the
 slice hard case). CONCLUSION: **KEEP `humanOnly` on PRDs unchanged** , it is the auto-slice guard, has
 no folder substitute, and is the right shape (a durable property, not a transient position).
 
@@ -1432,7 +1432,7 @@ no folder substitute, and is the right shape (a durable property, not a transien
   promotion / review-first) vs `todo/` (the agent pool). Carries: review-without-PR, untrusted-author
   gating, agent-output gating, and the COMMON "human should look first" case. SLICES only.
 - **NATURE axis (`humanOnly` flag, durable, rare):** "an agent must NEVER auto-take this" , slice
-  `humanOnly` (never auto-BUILD, survives even in `todo/`) and PRD `humanOnly` (never auto-SLICE).
+  `humanOnly` (never auto-BUILD, survives even in `todo/`) and SPEC `humanOnly` (never auto-SLICE).
   Demoted on slices to the rare hard case; UNCHANGED + still essential on PRDs.
 - **`needsAnswers` (discovered axis) unchanged** on both, orthogonal to both above.
 Net: the folder takes the "human gates ENTRY / review" job (where position is the honest encoding);
@@ -1493,14 +1493,14 @@ maintainer's de-risking sequence avoids touching the pool's meaning on day one:
   "the promote transition." This is the behaviour-changing step, and it is SMALL.
 - **STEP B (cosmetic rename LATER, decoupled, pure value-flip).** Once Step A is stable, rename for
   legibility: `backlog -> todo` and `pre-backlog -> backlog`, a pure constants flip behind the
-  `work-layout` path module (the taxonomy PRD's Phase-0/Phase-1 pattern) + a `git mv`. NO behaviour
+  `work-layout` path module (the taxonomy SPEC's Phase-0/Phase-1 pattern) + a `git mv`. NO behaviour
   change (the gate already works from Step A); this is purely "the pool is now called `todo`, staging is
   now called `backlog`," matching Kanban vocabulary. Gate-verifiable as a no-op refactor.
 
 This is strictly safer than renaming first: the RISKY part (the gate + promotion semantics) lands while
 the pool keeps its well-understood name; the RENAME is a separate, mechanical, reversible step. It also
 means Step A can ship and be evaluated WITHOUT committing to the final vocabulary. (Same two-phase
-shape as `prd-sliced/` STEP-A/STEP-B and `allowAgents -> autoBuild`.)
+shape as `spec-sliced/` STEP-A/STEP-B and `allowAgents -> autoBuild`.)
 
 ### The placement-policy surface (configurable default + per-source exceptions, maintainer, 2026-06-17)
 
@@ -1513,12 +1513,12 @@ config mode > default`). Mirror that exactly for placement:
   env > per-repo config > global > built-in default):
   - slices: `slicesLandIn: todo | backlog` (default-eligible vs default-staged). "Slices always end in
     `todo`" = `slicesLandIn: todo`; "always staged for review" = `slicesLandIn: backlog`.
-  - PRDs: `prdsLandIn: prd-ready | prd` (auto-sliceable vs staged). "PRDs always end in `prd-ready`" =
-    `prdsLandIn: prd-ready`.
+  - PRDs: `prdsLandIn: spec-ready | spec` (auto-sliceable vs staged). "PRDs always end in `spec-ready`" =
+    `prdsLandIn: spec-ready`.
 - **Per-SOURCE EXCEPTIONS that override the default** (the precedence chain, highest wins):
   - explicit operator flag (`--land-staged` / `--land-pool`, the operator-present override, like
     explicit `--merge` today) > UNTRUSTED-origin forces STAGING (the `originTrust: untrusted` stamp
-    forces `pre-backlog`/`prd`, mirroring untrusted-forces-propose) > the configured default >
+    forces `pre-backlog`/`spec`, mirroring untrusted-forces-propose) > the configured default >
     built-in default.
   - So: a trusted-origin repo with `slicesLandIn: todo` auto-pools everything EXCEPT untrusted-intake
     output, which is forced to staging, exactly the "configurable + option for exception like untrusted
@@ -1535,11 +1535,11 @@ config mode > default`). Mirror that exactly for placement:
 - Exact names (`todo` vs `ready` vs `queued`; the `pre-backlog -> backlog -> todo` rename timing per the
   migration above; the policy key spellings). The verb story matters ("promote to todo" reads well).
 - `humanOnly` disposition (RESOLVED above, see "Does the folder gate REPLACE `humanOnly`?"): NARROW
-  slice `humanOnly` to the rare "never-for-agents" guard; KEEP PRD `humanOnly` unchanged. A de-
+  slice `humanOnly` to the rare "never-for-agents" guard; KEEP SPEC `humanOnly` unchanged. A de-
   overloading, not a retirement. Sub-question: migration sequencing of re-homing existing
   slice-`humanOnly` uses into staging-birth vs leaving the genuinely-never ones flagged.
-- Whether this is one idea/PRD or folded into the C8 PRD (it is orthogonal to the lock mechanism, so
-  likely its OWN PRD; sequence by which lands first against C8's pool retarget).
+- Whether this is one idea/SPEC or folded into the C8 SPEC (it is orthogonal to the lock mechanism, so
+  likely its OWN SPEC; sequence by which lands first against C8's pool retarget).
 
 ## Disposition
 
@@ -1550,20 +1550,20 @@ config mode > default`). Mirror that exactly for placement:
 >   lock refs; main = content + durable records) and
 >   `docs/adr/placement-is-runner-deterministic-humanonly-is-agent-judgement.md` (the three-axis
 >   model + the determinism/trust line). Both `status: proposed`.
-> - **PRDs (the specs, both `humanOnly: true`):** `work/prd/ledger-status-per-item-lock-refs.md` (the
->   lock substrate, C8 + per-item refs) and `work/prd/staging-pool-position-gate-and-trust-model.md`
+> - **PRDs (the specs, both `humanOnly: true`):** `work/spec/ledger-status-per-item-lock-refs.md` (the
+>   lock substrate, C8 + per-item refs) and `work/spec/staging-pool-position-gate-and-trust-model.md`
 >   (the position gate / trust / placement / migration).
 > THIS FILE is retained as the full exploration trail, the rejected candidates (C0/C1/C3/C4/C6/C7),
 > the requirement-set analysis, the lock-entry state machine derivation, the pressure-test, and the
-> reasoning that must survive but does not belong in a PRD. The PRDs/ADRs point back here. REFINEMENT
+> reasoning that must survive but does not belong in a SPEC. The PRDs/ADRs point back here. REFINEMENT
 > since this file: per-item lock refs make C2 (rebase-until-real) UNNECESSARY for the lock itself (only
-> the two durable `main` promotions may still want it), captured in the lock PRD.
+> the two durable `main` promotions may still want it), captured in the lock SPEC.
 >
 > Per the discharge rule, this file is dischargeable (deletable) once the PRDs/ADRs are self-contained
 > carriers of its signal, but it is KEPT for now because it holds the rejected-candidate reasoning the
 > PRDs deliberately summarise rather than reproduce.
 
-Incubates as an idea because it proposes RETIRING a decided PRD decision (the co-located `.lock.md`),
+Incubates as an idea because it proposes RETIRING a decided SPEC decision (the co-located `.lock.md`),
 EXTENDING another (branch-carries), and leaves the SET-1-vs-SET-2 visibility decision + (within Set 2)
 the C8 design + the Kanban `todo/` sibling for the maintainer, all maintainer calls. On confirmation,
 the actionable form is C2 first, then the per-set issue-2 choice, then optionally issue 3, with the
@@ -1581,14 +1581,14 @@ Kanban split and the C8 lock state machine as their own sequenced pieces:
 2. **Issue 2 (branch-inheritance), the OPEN FORK, decide C5 vs C6 (do NOT pre-slice both):**
    - **C5 (conservative)**: fold the advancing marker into the branch-carries drop-set (strip
      `work/advancing/*` from a kept branch's tree on continue/rebase) via the existing
-     `advancingMarkerPath`/`listAdvancingMarkers` seam; land WITH or AFTER the branch-carries PRD.
+     `advancingMarkerPath`/`listAdvancingMarkers` seam; land WITH or AFTER the branch-carries SPEC.
      Acceptance: a kept branch carrying a stale advancing marker continues/rebases cleanly (no
      rename/rename ledger conflict). Keeps all visibility, smallest surface.
    - **C6 (structural)**: move transient status (in-progress, needs-attention, slicing, advancing) to a
-     dedicated ledger ref; keep backlog/done/prd/prd-sliced on `main`; build it AS the first consumer of
+     dedicated ledger ref; keep backlog/done/spec/spec-sliced on `main`; build it AS the first consumer of
      the existing read/write ledger seam (`docs/adr/claim-ledger-vs-protected-main.md`); add a generated
      `status` view to recover transient-status visibility; design the cross-ref reconciliation + the
-     `--resume` cross-ref read. This is a larger, own-PRD effort that SUPERSEDES C5 (and most of
+     `--resume` cross-ref read. This is a larger, own-SPEC effort that SUPERSEDES C5 (and most of
      branch-carries' needs-attention-move removal). Acceptance: nothing transient on main, a branch cut
      from main inherits no status, status reads/writes go through the ledger ref on `--bare` too, the
      claim/complete cross-ref lifecycle is crash-safe, and the status view shows in-progress/needs-attention/
@@ -1612,33 +1612,33 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
 4. **C8 (the lock ref + the two-axis lock-entry state machine)**, build `refs/dorfl/locks` as the
    per-item lock substrate; generalise the landed advancing-lock into the unified claim/slice/advance
    lock with the `{action, state, holder, since, reason?}` record + the state machine above; retarget
-   `main` to hold CONTENT + durable resting records only (`done`, `prd-sliced`, `out-of-scope`); split
+   `main` to hold CONTENT + durable resting records only (`done`, `spec-sliced`, `out-of-scope`); split
    the terminal-move helper (out-of-scope , main; needs-attention , lock entry); retarget the claimable
    pool readers (`scan`/`select-priority`/claimability) to subtract lock-held slugs; build C2 ON the
    lock ref. Acceptance: all three issues hold by construction (race tests for the unified lock prove
    atomic exclusion across claim/slice/advance on one item); `done`+stale-lock reconciliation is
    crash-safe; the lock ref is a hidden `refs/dorfl/*` ref; eligibility stays offline on `main`.
    On a PROTECTED `main`, the durable promotions route through the PR-merge path (Amendment 3), design
-   that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries PRD.
-5. **Kanban `staging/pool` position split for BOTH slices and PRDs (its OWN idea/PRD, orthogonal to the
+   that explicitly. This SUPERSEDES C5/C6 and most of the branch-carries SPEC.
+5. **Kanban `staging/pool` position split for BOTH slices and PRDs (its OWN idea/SPEC, orthogonal to the
    lock mechanism, can land under Set 1 OR Set 2)**, SLICES: split `backlog/`(human-gated staging) from
-   `todo/`(eligible pool); PRDs: split `prd/`(staging) from `prd-ready/`(auto-slice pool). Retarget the
-   build pool to read `todo/` and the auto-slice pool to read `prd-ready/`; make the birth folder of
+   `todo/`(eligible pool); PRDs: split `spec/`(staging) from `spec-ready/`(auto-slice pool). Retarget the
+   build pool to read `todo/` and the auto-slice pool to read `spec-ready/`; make the birth folder of
    agent/`--merge`/untrusted OUTPUT (slices and `intake`/untrusted PRDs) a RUNNER-decided per-repo
    policy. RETIRE the COMMON slice-`humanOnly` use into birth-folder; KEEP slice `humanOnly` as the
-   rare never-for-agents guard and PRD `humanOnly` (never-auto-slice) UNCHANGED. THREE consequences, one
+   rare never-for-agents guard and SPEC `humanOnly` (never-auto-slice) UNCHANGED. THREE consequences, one
    mechanism: (a) de-overloads `humanOnly`; (b) trust-gates untrusted-author output; (c) enables REVIEW
    WITHOUT A PR SYSTEM for LEDGER-FILE output (`--merge` slicing into `backlog/` is safe on a
    bare/no-host/protected-`main` repo, review = a ledger position; CODE/implementation review still uses
    a BRANCH/PR, correct, a diff cannot be folder-gated). Acceptance: agents pull only from
-   `todo/`/`prd-ready/`; a human promotes `backlog->todo` / `prd->prd-ready`; an `intake`/untrusted PRD
+   `todo/`/`spec-ready/`; a human promotes `backlog->todo` / `spec->spec-ready`; an `intake`/untrusted SPEC
    is NOT auto-sliceable until promoted; `--merge` slicing can target `backlog/`; `blockedBy`/`sliceAfter`
-   still resolve against `done/`/`prd-sliced/`.
+   still resolve against `done/`/`spec-sliced/`.
 6. **ENFORCEMENT is RUNNER-owned, never agent (a HARD requirement on ALL of the above, see "WHO
    ENFORCES").** The agent produces CONTENT; the RUNNER performs every TRANSITION , birth-folder
    placement, the trust-mode decision, the `staging->pool` promotion, and the C8 lock acquire/release ,
    from inputs the agent CANNOT forge. **The agent may CREATE ledger files ONLY in the staging folder
-   (`backlog/` for slices, `prd/` for PRDs); the runner owns every MOVE and every PROMOTION into a
+   (`backlog/` for slices, `spec/` for PRDs); the runner owns every MOVE and every PROMOTION into a
    pool.** (This RESTATES the `AGENTS.md`/WORK-CONTRACT "agent does not move files" rule to also cover
    CREATION , slicing CREATES files rather than moving them, so the rule must name creation, not just
    moves. The code already enforces it: the slicer agent does NO git and a write outside `work/backlog/`
@@ -1647,7 +1647,7 @@ recommendation is "nice-to-have, not urgent, cheap as a precedence rule, NOT wor
    agent can never self-place in the pool, self-promote, set its own trust, or hold its own lock. The
    gates are only structural (not advisory/bypassable) BECAUSE the runner owns them. Acceptance: a test
    proves (a) the slicer agent's emitted slices ALL land in `backlog/` regardless of where the agent
-   tried to write; (b) the `backlog->todo` (and `prd->prd-ready`) PROMOTION is a runner/human-only
+   tried to write; (b) the `backlog->todo` (and `spec->spec-ready`) PROMOTION is a runner/human-only
    ledger move an agent cannot perform; (c) an untrusted-origin's output stays in `backlog/` (not
    promoted); (d) the C8 lock acquire/release is runner-mediated.
 

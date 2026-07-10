@@ -64,8 +64,8 @@ and a `main` durable record can disagree without corruption.
 > specified in the design trail
 > `work/ideas/ledger-lock-evolution-per-item-ref-vs-rebase-until-real-conflict.md`
 > under "### The C8 lock-entry STATE MACHINE (the two-axis record, in full)", read
-> that section; it lists the six transitions and the invariants verbatim. PRD:
-> `work/prd/ledger-status-per-item-lock-refs.md`; ADR:
+> that section; it lists the six transitions and the invariants verbatim. SPEC:
+> `work/spec/ledger-status-per-item-lock-refs.md`; ADR:
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > SCOPE: the LOCK side of the machine only, acquire / mark-stuck / resume / requeue /
@@ -84,4 +84,4 @@ and a `main` durable record can disagree without corruption.
 > is green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate choice (driven via `drive-backlog`),
-> NOT PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> NOT SPEC propagation. Record non-obvious in-scope decisions per the slice template.

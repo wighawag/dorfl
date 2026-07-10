@@ -20,7 +20,7 @@ End-to-end behaviour (one thin path through every layer):
 - **Resolution.** When the flag is set, `resolveTask` (the seam used at both `do`
   call sites) ALSO searches `tasks-backlog` — at LOWEST priority, after
   `tasks-ready` (so a slug present in both resolves to the ready copy; see the
-  PRD's same-slug decision).
+  SPEC's same-slug decision).
 - **Claim predicate.** The claimable predicate (today keyed on the body resting
   in the pool folder) must ALSO accept a `tasks/backlog/`-resident body when the
   flag is set. Claim STAYS a pure per-item-lock acquire: it writes NOTHING to
@@ -63,7 +63,7 @@ COMPLETE a staged task.
 ## Prompt
 
 > Goal: implement `dorfl do task:<slug> --allow-backlog` so a human can drive a
-> staged (`tasks/backlog/`) task in place without promoting it, per the PRD
+> staged (`tasks/backlog/`) task in place without promoting it, per the SPEC
 > `do-allow-backlog-drive-staged-tasks-without-promotion` (Resolved decisions 1,
 > 2, 4, 5).
 >
@@ -88,7 +88,7 @@ COMPLETE a staged task.
 >   fallback, not the authority). Add `tasks-backlog` so a flag-driven build
 >   done-moves `tasks/backlog/ → tasks/done/` directly.
 >
-> CRITICAL — do NOT move the body to `tasks/ready/` on claim. The PRD explicitly
+> CRITICAL — do NOT move the body to `tasks/ready/` on claim. The SPEC explicitly
 > REJECTED that alternative: it re-couples claim to a `main` write (losing the
 > protected-`main` property the per-item-lock cutover, ADR
 > `ledger-status-on-per-item-lock-refs`, deleted) and buys nothing (the lock

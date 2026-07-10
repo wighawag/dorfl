@@ -25,21 +25,21 @@ File: `packages/dorfl/src/work-layout.ts` around L215–225. Remove `'needs-atte
 Callers that iterate this array and therefore need to be updated:
 
 - `packages/dorfl/src/close-job.ts` L57 + L177 — iterates `TASK_LIFECYCLE_FOLDERS` calling `listMarkdown(repoPath, folder)`.
-- `packages/dorfl/src/prd-complete.ts` L36 + L97 — same shape.
+- `packages/dorfl/src/spec-complete.ts` L36 + L97 — same shape.
 
 If either caller's residence set legitimately diverges from the shared one after the drop, inline a small explicit local array at that call-site rather than reintroducing `'needs-attention'` into the shared constant. Prefer the simplest form: if both callers end up with the same set post-drop, the shared constant just loses one entry.
 
-### 3. Fix stale JSDoc in `prd-complete.ts`
+### 3. Fix stale JSDoc in `spec-complete.ts`
 
-File: `packages/dorfl/src/prd-complete.ts` L29–33. The module JSDoc still describes a task being in `work/needs-attention/` as a legitimate pre-done resting state ("A task that has NOT yet landed in `work/done/` (still in backlog / in-progress / needs-attention) means the prd is not yet complete"). Post-cutover that residence is impossible, so the file's own description contradicts its behaviour. Drop the `needs-attention` mention from the prose.
+File: `packages/dorfl/src/spec-complete.ts` L29–33. The module JSDoc still describes a task being in `work/needs-attention/` as a legitimate pre-done resting state ("A task that has NOT yet landed in `work/done/` (still in backlog / in-progress / needs-attention) means the spec is not yet complete"). Post-cutover that residence is impossible, so the file's own description contradicts its behaviour. Drop the `needs-attention` mention from the prose.
 
 ## Acceptance criteria
 
 - New ADR file exists under `docs/adr/` covering decisions (a), (b), (c) above, each with context / decision / why. The ADR is linked from the done-record of `finish-needs-attention-folder-cutover-remove-legacy-recovery-readers` via a small pointer.
 - `TASK_LIFECYCLE_FOLDERS` in `packages/dorfl/src/work-layout.ts` no longer contains `'needs-attention'`.
-- `close-job.ts` and `prd-complete.ts` compile and behave correctly against the shrunken array (with local inline arrays only if their residence set genuinely diverges).
+- `close-job.ts` and `spec-complete.ts` compile and behave correctly against the shrunken array (with local inline arrays only if their residence set genuinely diverges).
 - No executable folder probe against `work/needs-attention/` remains anywhere in `packages/dorfl/src/` (grep for `'needs-attention'` should show only non-executable references — comments, ADR pointers, tests asserting absence, etc.).
-- The `prd-complete.ts` L29–33 JSDoc no longer lists `needs-attention` as a legitimate pre-done resting state.
+- The `spec-complete.ts` L29–33 JSDoc no longer lists `needs-attention` as a legitimate pre-done resting state.
 - Acceptance gate green: `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check`.
 
 ## Out of scope

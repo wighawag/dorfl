@@ -45,7 +45,7 @@ The capstone CUT-OVER. The four retargets (#3 claim, #4 slicing, #5 advancing, #
 needs-attention) and crash-safe complete (#7) have landed, but #3/#4/#5 still
 DUAL-WRITE their legacy `main` artifacts so the unmodified consumers stayed green.
 This slice removes that legacy half end-to-end so `main`'s ONLY `work/` moves become
-the three durable resting transitions (`backlog → done`, `prd → prd-sliced`,
+the three durable resting transitions (`backlog → done`, `spec → spec-sliced`,
 `backlog → dropped`), and a work branch cut from `main` inherits NO transient status
 at all.
 
@@ -53,7 +53,7 @@ Concretely, in dependency order WITHIN this slice:
 
 1. **Stop the legacy transient WRITES.** Remove claim's `git mv backlog→in-progress`
    (claim now writes NOTHING to `main`, only the lock; this is US #16 protected-main
-   + the original #3 "no body move"); remove slicing's `git mv prd→slicing` marker
+   + the original #3 "no body move"); remove slicing's `git mv spec→slicing` marker
    and its abort bounce; remove advancing's `work/advancing/<entry>.md` marker CAS.
    The lock acquire/release added in #3/#4/#5 becomes the SOLE transient mechanism.
 2. **Retarget the legacy folder CONSUMERS onto the lock / `backlog/`.** `complete.ts`
@@ -70,7 +70,7 @@ Concretely, in dependency order WITHIN this slice:
 3. **Retire the folders + delete drop-rebase.** Remove `in-progress`/
    `needs-attention`/`slicing`/`advancing` from `LEDGER_STATUS_FOLDERS`
    (`ledger-lint.ts`) / `WORK_FOLDERS` (`ledger-write.ts`), keeping the durable set
-   `backlog`/`done`/`dropped` for slices and `prd`/`prd-sliced` for PRDs (note
+   `backlog`/`done`/`dropped` for slices and `spec`/`spec-sliced` for PRDs (note
    `backlog` STAYS the pool until the deferred STEP-B rename); delete
    `drop-bookkeeping-rebase.ts` and its call sites (the integration rebase and the
    onboard continue-rebase); prove a branch continue/rebase is now a PLAIN rebase
@@ -89,10 +89,10 @@ Concretely, in dependency order WITHIN this slice:
       writes the `advancing/` marker. The unified lock is the SOLE transient mechanism.
 - [ ] ADVANCE-TICK exclusion survives the advancing-marker removal: advancing took
       the unified lock only for the TREE-LESS rungs (`surface`/`apply`/`triage`); the
-      `build-slice`/`slice-prd` rungs rely on the INNER `do`'s claim/slice lock (slice
+      `build-slice`/`slice-spec` rungs rely on the INNER `do`'s claim/slice lock (slice
       #5 option a, to avoid the nested-lock self-deadlock). With the advancing marker
       now gone, PROVE (test) that advance∥claim and advance∥slice on a
-      build-slice/slice-prd item remain mutually exclusive through the inner `do`'s
+      build-slice/slice-spec item remain mutually exclusive through the inner `do`'s
       unified lock ALONE, and that the brief advance-layer TOCTOU (two advancers both
       classifying the item as build/slice before the inner `do`) resolves to exactly
       one winner at the inner lock. An advance-driven build/slice in flight is
@@ -105,7 +105,7 @@ Concretely, in dependency order WITHIN this slice:
       legacy on-`main` artifacts now assert the lock-ref state.
 - [ ] `in-progress`, `needs-attention`, `slicing`, `advancing` are removed from the
       status folder sets; the durable set remains (`backlog`/`done`/`dropped`;
-      `prd`/`prd-sliced`).
+      `spec`/`spec-sliced`).
 - [ ] `drop-bookkeeping-rebase.ts` and its call sites are deleted; the integration
       rebase and the onboard continue-rebase no longer reference a drop step.
 - [ ] A work branch cut from `main` carries NO transient status; a continue/rebase is
@@ -127,8 +127,8 @@ Concretely, in dependency order WITHIN this slice:
 > The capstone of the lock substrate. Once the four retargets (claim/slice/advance/
 > needs-attention) and crash-safe complete have landed, nothing writes the transient
 > folders on `main` anymore, so retire them and delete the machinery that only
-> existed to mitigate their branch-inheritance. PRD
-> `work/prd/ledger-status-per-item-lock-refs.md` (US #5, #6, #7); ADR
+> existed to mitigate their branch-inheritance. SPEC
+> `work/spec/ledger-status-per-item-lock-refs.md` (US #5, #6, #7); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > READ the SCOPE EXPANDED banner at the top: #3/#4/#5 landed as INTERIM DUAL-WRITE
@@ -137,7 +137,7 @@ Concretely, in dependency order WITHIN this slice:
 >
 > FIRST, stop the legacy transient writes: remove claim's `git mv backlog→in-progress`
 > (`performClaim` in `claim-cas.ts`) so claim writes nothing to `main`; remove
-> slicing's `git mv prd→slicing` marker + abort bounce (`slicing-lock.ts`); remove
+> slicing's `git mv spec→slicing` marker + abort bounce (`slicing-lock.ts`); remove
 > advancing's `work/advancing/<entry>.md` marker CAS (`advancing-lock.ts`). The lock
 > acquire/release (added in #3/#4/#5) is now the sole transient mechanism.
 >
@@ -154,9 +154,9 @@ Concretely, in dependency order WITHIN this slice:
 > THEN remove `in-progress`/`needs-attention`/`slicing`/`advancing` from the status
 > folder sets (`LEDGER_STATUS_FOLDERS` in `ledger-lint.ts`, `WORK_FOLDERS` in
 > `ledger-write.ts`), keeping the DURABLE set (`backlog`/`done`/`dropped` for slices,
-> `prd`/`prd-sliced` for PRDs). NOTE: `backlog` STAYS the pool here, the
+> `spec`/`spec-sliced` for PRDs). NOTE: `backlog` STAYS the pool here, the
 > `backlog → todo` rename is the DEFERRED STEP-B `folder-taxonomy-reorg-and-rename`
-> PRD, NOT this work (read the PRD's VOCABULARY CORRECTION banner). DELETE
+> SPEC, NOT this work (read the SPEC's VOCABULARY CORRECTION banner). DELETE
 > `drop-bookkeeping-rebase.ts` and its call sites (the integration rebase and the
 > onboard continue-rebase that dropped protocol-bookkeeping commits), they are dead
 > because no transient status lands on a branch to conflict. Prove a continue/rebase
@@ -172,7 +172,7 @@ Concretely, in dependency order WITHIN this slice:
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. This removal is broad; record non-obvious in-scope decisions per
+> SPEC propagation. This removal is broad; record non-obvious in-scope decisions per
 > the slice template.
 
 ## Needs attention
@@ -189,7 +189,7 @@ SPECIFICS (where the premises understate / are unsettled):
 SUGGESTED RE-SCOPE (one consumer-family per slice, build order; each green on `pnpm -r build && pnpm -r test && pnpm format:check` against a `--bare file://` arbiter):
   9a. Stop claim's body move + retarget the build/complete source axis: remove `git mv backlog→in-progress` in `claim-cas.ts` (claim writes nothing to `main`); retarget `complete.ts`/`integration-core.ts` to source `→done` from `backlog/`; `start`/`--resume`/`do`/`run` read held-ness from the lock ref (claimed item rests in `backlog/`); `readSliceOnArbiter`/ledger-read read the body from `backlog/`. Keep `in-progress` in the folder sets until 9c so the diff stays bounded. Update its consumer tests.
   9b. needs-attention → stuck-lock recovery surface (the design-bearing slice; needs a human decision FIRST on where the stuck body/reason/recovery view live without a `needs-attention/<slug>.md`): re-architect `routeToNeedsAttention`/`surfaceToNeedsAttention`/`returnToBacklog`/`resolveFromNeedsAttention`/`extractReason`, `applyNeedsAttentionTransition`, the integration-core bounce, `complete --from-needs-attention`, `start` resolve, `requeue`, `status`/`scan` onto the lock `stuck` state. Decide the reason/body home + recovery read-path before building.
-  9c. Retire `slicing/`/`advancing/` markers + trim the folder sets: remove slicing's `git mv prd→slicing` + abort bounce (`slicing-lock.ts`), advancing's `work/advancing/<entry>.md` marker CAS (`advancing-lock.ts`); remove `in-progress`/`needs-attention`/`slicing`/`advancing` from `LEDGER_STATUS_FOLDERS` (`ledger-lint.ts`) + `WORK_FOLDERS` (`ledger-write.ts`) and the private `integration-core.ts` `LEDGER_STATUS_FOLDERS`, keeping the durable set (`backlog`/`done`/`dropped`; `prd`/`prd-sliced`). Retarget any remaining `slicing/`/`advancing/` reader (`advance.ts`, `slicing.ts`, `review-gate.ts`, `cli.ts`).
+  9c. Retire `slicing/`/`advancing/` markers + trim the folder sets: remove slicing's `git mv spec→slicing` + abort bounce (`slicing-lock.ts`), advancing's `work/advancing/<entry>.md` marker CAS (`advancing-lock.ts`); remove `in-progress`/`needs-attention`/`slicing`/`advancing` from `LEDGER_STATUS_FOLDERS` (`ledger-lint.ts`) + `WORK_FOLDERS` (`ledger-write.ts`) and the private `integration-core.ts` `LEDGER_STATUS_FOLDERS`, keeping the durable set (`backlog`/`done`/`dropped`; `spec`/`spec-sliced`). Retarget any remaining `slicing/`/`advancing/` reader (`advance.ts`, `slicing.ts`, `review-gate.ts`, `cli.ts`).
   9d. Delete `drop-bookkeeping-rebase.ts` + both call sites (`integration-core.ts` integration rebase, `continue-branch.ts` onboard continue-rebase) and prove a continue/rebase is a PLAIN rebase with no drop step and no rename/rename ledger conflict; the old drop-rebase tests go with the module. Depends on 9a/9b/9c (no transient status lands on a branch).
 
 No source was changed; one observation note was added (`work/observations/retire-transient-folders-capstone-larger-than-one-green-pass.md`).

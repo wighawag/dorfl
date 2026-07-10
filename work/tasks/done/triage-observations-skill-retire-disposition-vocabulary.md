@@ -19,7 +19,7 @@ rewrite. A thin doc-only path:
   (`leave | delete | make a task | amend | fold-into-ADR`) and uses "disposition"
   throughout. With the engine's disposition tokens retired and apply now
   agent-driven, bring this skill into line: the human answers/decides in plain terms;
-  promotion mints a self-contained task/prd/ADR; throwing a signal away is the
+  promotion mints a self-contained task/spec/ADR; throwing a signal away is the
   DIRECT delete (the `direct-delete-question-cli-helper` verb / `git rm`), not a
   disposition token round-tripped through an engine. Preserve the skill's actual
   WORKFLOW (investigate → recommend → human decides → execute, the live-only inbox
@@ -74,8 +74,8 @@ rewrite. A thin doc-only path:
 > `surface-skill-prose-drop-disposition-vocabulary`).
 >
 > Context: dorfl retired the sidecar `disposition=` token vocabulary (`promote-task |
-> promote-prd | promote-adr | keep | delete | dropped | needs-attention`); the apply
-> rung is now agent-verdict-driven (mint-task / mint-prd / delete-source /
+> promote-spec | promote-adr | keep | delete | dropped | needs-attention`); the apply
+> rung is now agent-verdict-driven (mint-task / mint-spec / delete-source /
 > ask-follow-up), and throwing a signal away outright is a DIRECT delete (the
 > `direct-delete-question-cli-helper` verb / `git rm`), not a token round-tripped
 > through the engine.
@@ -89,7 +89,7 @@ rewrite. A thin doc-only path:
 >   `disposition=` tokens — it is a human workflow's recommendation set. So you are
 >   NOT mechanically deleting it; you are ensuring nothing in this skill implies the
 >   retired ENGINE token vocabulary is still live, and that promotion (mint a
->   self-contained task/prd/ADR) and throw-away (the direct-delete verb / `git rm`)
+>   self-contained task/spec/ADR) and throw-away (the direct-delete verb / `git rm`)
 >   are described in today's terms. PRESERVE the skill's workflow
 >   (investigate → recommend → human decides → execute), its live-only-inbox goal,
 >   and its hand-off-heavy-work-as-a-fresh-context-prompt rule. Decide explicitly

@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained feature \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Restores, for `do`, the live conversation view `ar-run.sh --watch` gave.
+> Self-contained feature \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Restores, for `do`, the live conversation view `ar-run.sh --watch` gave.
 
 A **`do --watch`** flag that streams the agent's activity live while `do` runs, instead of `do`'s current silent-until-done behaviour. `ar-run.sh --watch` did this by piping `pi -p --mode json | jq` to surface tool calls + assistant text + lifecycle; `do` runs the agent through the harness seam (captured), so the live view was lost. This restores it.
 

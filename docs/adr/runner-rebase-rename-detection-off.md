@@ -19,7 +19,7 @@ and its stale-lease push retry loop) and the integrate-tail rebase
 `packages/dorfl/src/integration-core.ts`). Each work branch typically carries
 ONE durable folder-transition `git mv` (e.g.
 `work/tasks/ready/<slug>.md → work/tasks/done/<slug>.md`,
-`work/prds/ready/<slug>.md → work/prds/tasked/<slug>.md`,
+`work/specs/ready/<slug>.md → work/specs/tasked/<slug>.md`,
 the `cancelled`/`dropped` siblings, …).
 
 When the source folder is SPARSE at branch-time (0–1 items) and the lone item
@@ -33,8 +33,8 @@ conflict is SPURIOUS (byte-identical content, branch never touched the files)
 but indistinguishable from a real conflict without judgement; the runner
 correctly aborts and stuck-locks the branch as needs-attention — a FALSE
 positive. The taxonomy reorg makes this MORE likely, not less: more folders,
-several often holding 0–1 items (`tasks/cancelled/`, `prds/dropped/`,
-`prds/proposed/`).
+several often holding 0–1 items (`tasks/cancelled/`, `specs/dropped/`,
+`specs/proposed/`).
 
 (Empirically verified on git 2.47.3 against this exact scenario:
 `-Xno-renames`, `-c merge.renames=false`, and `-c diff.renames=false` all

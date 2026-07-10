@@ -27,7 +27,7 @@ The action token is PERSISTED in the per-item lock-ref body (`action: slice`). E
 
 ## OUT OF SCOPE (do NOT touch)
 
-- The **intake verdict outcome `'slice'`** (`intake.ts:822` `case 'slice':` → `dispatchSlice`) and the whole intake per-emitted-type `{slice, prd}` wire vocabulary — governed by brief Decision 2, a SEPARATE concern. This task is ONLY the `LockAction` token.
+- The **intake verdict outcome `'slice'`** (`intake.ts:822` `case 'slice':` → `dispatchSlice`) and the whole intake per-emitted-type `{slice, spec}` wire vocabulary — governed by brief Decision 2, a SEPARATE concern. This task is ONLY the `LockAction` token.
 - The `--slices-land-in` comment references in `cli.ts` — owned by `rename-src-comment-prose-slicing-to-tasking`.
 - Any prose in `WORK-CONTRACT.md`/`SURFACE-PROTOCOL.md` — owned by `rename-protocol-prose-workcontract-and-surface-slicing-to-tasking` (which is blockedBy THIS task, so it can write the settled `action: task` spelling).
 
@@ -52,7 +52,7 @@ The action token is PERSISTED in the per-item lock-ref body (`action: slice`). E
 >
 > Where to look: `src/item-lock.ts` (the `LockAction` type + the generic `serialiseLockEntry`), `src/tasking-lock.ts` (the writer), and the persisted lock-ref body. Search the test tree for `action: 'slice'` / `'slice'` lock assertions and rename them in this task. The `gc --ledger` / `release-lock` path already names refs by raw string — verify it can clear an old `action: slice` lock and document the one-shot sweep.
 >
-> EXPLICITLY OUT OF SCOPE: the intake verdict outcome `'slice'` (`intake.ts` `case 'slice'` → `dispatchSlice`) and the intake `{slice,prd}` wire vocabulary (Decision 2 owns those); the `--slices-land-in` comment refs (the prose-sweep task owns those). Do NOT touch them — distinguish the LockAction `'slice'` from the intake-outcome `'slice'` carefully.
+> EXPLICITLY OUT OF SCOPE: the intake verdict outcome `'slice'` (`intake.ts` `case 'slice'` → `dispatchSlice`) and the intake `{slice,spec}` wire vocabulary (Decision 2 owns those); the `--slices-land-in` comment refs (the prose-sweep task owns those). Do NOT touch them — distinguish the LockAction `'slice'` from the intake-outcome `'slice'` carefully.
 >
 > Done = build/test/format:check green, `LockAction` token is `'task'` everywhere live, the intake outcome `'slice'` untouched, the one-shot orphan-lock sweep documented.
 

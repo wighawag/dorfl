@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained fix — derives from NO PRD (`covers: []`), so it omits `prd:` and is its own source of truth. Verified gap, evidenced by two observation notes: `work/observations/needs-attention-seam-drops-arbiter-branch-push.md` (PR #6) and `work/observations/needs-attention-seam-does-not-push-work-branch.md` (PR #8).
+> Self-contained fix — derives from NO SPEC (`covers: []`), so it omits `prd:` and is its own source of truth. Verified gap, evidenced by two observation notes: `work/observations/needs-attention-seam-drops-arbiter-branch-push.md` (PR #6) and `work/observations/needs-attention-seam-does-not-push-work-branch.md` (PR #8).
 
 `agent-fail-saves-work` (PR #8) fixed the AGENT-failure path to push the `work/<slug>` branch to the arbiter (so the partial work is cross-machine recoverable via `requeue`-continue). But the autonomous **GATE-failure** path has the SAME latent gap and was left unfixed:
 

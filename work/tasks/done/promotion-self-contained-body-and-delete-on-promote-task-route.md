@@ -52,7 +52,7 @@ the precondition for deletion).
 ## Prompt
 
 > Goal: make observation→task promotion self-contained and delete-on-promote,
-> per the PRD `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
+> per the SPEC `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
 > and its origin observation
 > `advance-promote-leaves-resolved-note-in-inbox-and-mints-non-self-contained-stub-2026-06-24`
 > (Defects A + B; maintainer ruling: deletion-on-apply is correct because the
@@ -80,5 +80,5 @@ the precondition for deletion).
 > from the observation, how open-questions are matched/copied) in a `## Decisions`
 > block on the done record or an ADR if they meet the ADR gate.
 >
-> Note: the `promote-prd` artifact-type branch and the drop/duplicate
+> Note: the `promote-spec` artifact-type branch and the drop/duplicate
 > delete-on-discharge are SEPARATE tasks; scope this one to the TASK route only.

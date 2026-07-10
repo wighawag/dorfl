@@ -76,8 +76,8 @@ needs-attention rather than silently clean-release.
 > (`packages/dorfl/src/advancing-lock.ts` `listAdvancingMarkers`, the `gc.ts` /
 > ledger-lint report, and slices `advancing-lock-human-release-verb-and-surface` /
 > `advancing-lock-release-crash-safe` in `work/done/`). Add `release-lock <item>`
-> (clears a NAMED unified lock) and a stuck/orphaned-lock report in `gc --ledger`. PRD
-> `work/prd/ledger-status-per-item-lock-refs.md` (US #12, #13, #14); ADR
+> (clears a NAMED unified lock) and a stuck/orphaned-lock report in `gc --ledger`. SPEC
+> `work/spec/ledger-status-per-item-lock-refs.md` (US #12, #13, #14); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`; the trail's Amendment 4.
 >
 > NO liveness heartbeat, NO auto-sweep, `gc --ledger` REPORTS; a human `release-lock`
@@ -93,16 +93,16 @@ needs-attention rather than silently clean-release.
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> SPEC propagation. Record non-obvious in-scope decisions per the slice template.
 
 ## Needs attention
 
 PR/code review (Gate 2) blocked this work:
-- `gc --ledger` now exits non-zero (fail-loud) on ANY held per-item lock, including a normal in-flight `active` lock. Should the fail-loud exit (and arguably the report inclusion) be scoped to the stuck/stale classifications (`kept-stuck` / `cleared-stale`) only, so a healthy concurrent build does not make a routine `gc --ledger` health check exit 1? (cli.ts gc action: `process.exit(result.duplicates.length > 0 || result.advancingMarkers.length > 0 || lockReport.locks.length > 0 ? 1 : 0)`. The same report prints `kept-in-flight — normal; left untouched.` for that lock, then exits 1 — internally contradictory. The advancing-marker precedent it copies is not equivalent: an advancing marker is deleted on clean finish, but the implement/slice/advance lock is held for the whole build by design (ADR L33-34, PRD US#4/#8: active lock = in-progress, read by `status` as healthy). ADR L94-95/L100 + PRD US#14/#21 scope this surface to the STUCK/crash-orphaned lock, not every held one. Trivially reversible (gate the exit on the stuck/stale verdicts) but it makes a routine command misreport normal daemon/drive-backlog operation.)
+- `gc --ledger` now exits non-zero (fail-loud) on ANY held per-item lock, including a normal in-flight `active` lock. Should the fail-loud exit (and arguably the report inclusion) be scoped to the stuck/stale classifications (`kept-stuck` / `cleared-stale`) only, so a healthy concurrent build does not make a routine `gc --ledger` health check exit 1? (cli.ts gc action: `process.exit(result.duplicates.length > 0 || result.advancingMarkers.length > 0 || lockReport.locks.length > 0 ? 1 : 0)`. The same report prints `kept-in-flight — normal; left untouched.` for that lock, then exits 1 — internally contradictory. The advancing-marker precedent it copies is not equivalent: an advancing marker is deleted on clean finish, but the implement/slice/advance lock is held for the whole build by design (ADR L33-34, SPEC US#4/#8: active lock = in-progress, read by `status` as healthy). ADR L94-95/L100 + SPEC US#14/#21 scope this surface to the STUCK/crash-orphaned lock, not every held one. Trivially reversible (gate the exit on the stuck/stale verdicts) but it makes a routine command misreport normal daemon/drive-backlog operation.)
 PR/code review (Gate 2) did not reach an approve verdict within reviewMaxRounds=2 round(s); forcing needs-attention (never silently merged or looped).
 
 ## Requeue 2026-06-18
 
-Gate-2 BLOCKED on a real, narrow defect (everything else is good, KEEP it). The defect: in cli.ts the gc action exits non-zero on ANY held per-item lock (process.exit(... || lockReport.locks.length > 0 ? 1 : 0)), so a NORMAL in-flight 'active' lock (a healthy concurrent build) makes a routine 'gc --ledger' health check exit 1 — and the same report prints 'kept-in-flight — normal; left untouched' for that very lock, then exits 1 (internally contradictory). Per the ADR (ledger-status-on-per-item-lock-refs L94-95/L100) + PRD US#14/#21, this surface is scoped to the STUCK / crash-orphaned lock, NOT every held one (an active lock = in-progress, read by status as HEALTHY).
+Gate-2 BLOCKED on a real, narrow defect (everything else is good, KEEP it). The defect: in cli.ts the gc action exits non-zero on ANY held per-item lock (process.exit(... || lockReport.locks.length > 0 ? 1 : 0)), so a NORMAL in-flight 'active' lock (a healthy concurrent build) makes a routine 'gc --ledger' health check exit 1 — and the same report prints 'kept-in-flight — normal; left untouched' for that very lock, then exits 1 (internally contradictory). Per the ADR (ledger-status-on-per-item-lock-refs L94-95/L100) + SPEC US#14/#21, this surface is scoped to the STUCK / crash-orphaned lock, NOT every held one (an active lock = in-progress, read by status as HEALTHY).
 
 FIX (narrow): scope the fail-loud gc exit to the STUCK/STALE classifications only — i.e. exit 1 when there is a kept-stuck lock OR a cleared-stale/reconcilable-stale lock (the genuine attention cases), but DO NOT exit 1 for a kept-in-flight (active, non-terminal) lock. A 'gc --ledger' run whose only locks are healthy in-flight 'active' holds should exit 0 and report them as normal/in-flight (informational), exactly as status treats an active lock as healthy. Keep the duplicates / advancingMarkers exit conditions unchanged. Keep everything else you built (the release-lock verb, the gc stuck-lock report, the reconcileItemLockAgainstMain wiring, absent-ref = no locks, vanished-own-lock detection) — only the exit-condition scoping is wrong. Add/adjust a test: gc --ledger with ONLY an active in-flight lock exits 0 (reports it as normal); with a stuck or stale-terminal lock exits 1 (reports it for attention).

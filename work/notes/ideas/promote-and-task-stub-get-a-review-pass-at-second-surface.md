@@ -23,7 +23,7 @@ mints a MINIMAL task stub and nothing reviews it:
   1. **Intake's LONE-SLICE review** (`src/intake.ts`, `reviewSlice:
      LoneSliceReviewGate`, `harnessLoneSliceReviewGate`): a 3-round, HARD-CAPPED
      adversarial self-review on a SINGLE drafted slice. (Slice
-     `intake-lone-slice-skips-adversarial-review-the-prd-path-gets`.)
+     `intake-lone-slice-skips-adversarial-review-the-spec-path-gets`.)
   2. **The slicer SET review** (`src/slicing.ts`, `review?` + the slicer
      review→edit loop `slicer-review-loop.ts`): a fresh-context review of the WHOLE
      produced slice SET (coherence / dependency graph), config-gated by `review`.

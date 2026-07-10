@@ -8,18 +8,18 @@ covers: [9]
 
 ## What to build
 
-`intake` decides the artifact TYPE (slice vs PRD) at RUNTIME, so a single `--merge`/`--propose` cannot express a type-conditional policy ("merge a PRD but propose a slice"). This slice adds the **per-outcome integration mode KNOBS** and the pure resolution logic, threading the resolved mode into `performIntegration`.
+`intake` decides the artifact TYPE (slice vs SPEC) at RUNTIME, so a single `--merge`/`--propose` cannot express a type-conditional policy ("merge a SPEC but propose a slice"). This slice adds the **per-outcome integration mode KNOBS** and the pure resolution logic, threading the resolved mode into `performIntegration`.
 
-**Reuse, don't fork:** the canonical aggregate resolver already exists — `resolveIntegrationMode({merge, propose})` in `src/complete.ts` returns the mode (or `undefined`) and THROWS "--merge and --propose are mutually exclusive" on both. The per-outcome resolver is a SUPERSET of it (it adds the slice/prd TYPE axis + granular-overrides-aggregate), so COMPOSE/EXTEND that function for the aggregate axis rather than re-deriving its mutual-exclusion + error message. The granular per-type resolution + the override rule layer on top.
+**Reuse, don't fork:** the canonical aggregate resolver already exists — `resolveIntegrationMode({merge, propose})` in `src/complete.ts` returns the mode (or `undefined`) and THROWS "--merge and --propose are mutually exclusive" on both. The per-outcome resolver is a SUPERSET of it (it adds the slice/spec TYPE axis + granular-overrides-aggregate), so COMPOSE/EXTEND that function for the aggregate axis rather than re-deriving its mutual-exclusion + error message. The granular per-type resolution + the override rule layer on top.
 
 `intake` owns the KNOBS only — it is gate-free. WHICH knobs CI sets (from gate state + author-trust) is CI's POLICY, authored in `runner-in-ci` (NOT here).
 
-The flags + resolution (the canonical rule — see the PRD):
+The flags + resolution (the canonical rule — see the SPEC):
 
-- **granular:** `--merge-prd` / `--propose-prd` (apply if the outcome is a PRD); `--merge-slice` / `--propose-slice` (apply if a slice).
+- **granular:** `--merge-spec` / `--propose-spec` (apply if the outcome is a SPEC); `--merge-slice` / `--propose-slice` (apply if a slice).
 - **aggregates:** `--merge` = both-merge; `--propose` = both-propose.
-- **resolution:** GRANULAR OVERRIDES AGGREGATE (`--merge --propose-slice` ⇒ merge a PRD, propose a slice).
-- **usage error:** same type + both modes (`--merge-prd --propose-prd`) is a usage ERROR.
+- **resolution:** GRANULAR OVERRIDES AGGREGATE (`--merge --propose-slice` ⇒ merge a SPEC, propose a slice).
+- **usage error:** same type + both modes (`--merge-spec --propose-spec`) is a usage ERROR.
 - **default:** unset ⇒ propose for BOTH (conservative; matches `do`).
 - **ask/bounce emit no artifact** ⇒ the flags are no-ops for them.
 
@@ -27,7 +27,7 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 
 ## Acceptance criteria
 
-- [ ] Pure resolution function: given the flag set + the artifact type (`slice`/`prd`), returns the integration mode (`merge`/`propose`). Tested as a table: - unset ⇒ propose for both types; - `--merge` ⇒ merge both; `--propose` ⇒ propose both; - granular routes per type (`--merge-prd` merges a PRD, leaves a slice at default/aggregate); - granular OVERRIDES aggregate (`--merge --propose-slice` ⇒ PRD merge, slice propose); - same-type-both (`--merge-prd --propose-prd`, or `--merge-slice       --propose-slice`) ⇒ usage ERROR (clear message).
+- [ ] Pure resolution function: given the flag set + the artifact type (`slice`/`spec`), returns the integration mode (`merge`/`propose`). Tested as a table: - unset ⇒ propose for both types; - `--merge` ⇒ merge both; `--propose` ⇒ propose both; - granular routes per type (`--merge-spec` merges a SPEC, leaves a slice at default/aggregate); - granular OVERRIDES aggregate (`--merge --propose-slice` ⇒ SPEC merge, slice propose); - same-type-both (`--merge-spec --propose-spec`, or `--merge-slice       --propose-slice`) ⇒ usage ERROR (clear message).
 - [ ] The resolved mode is threaded into `performIntegration` for the emitted artifact (assert via the integration harness: `intake <N> --merge-slice` on a stubbed `slice` verdict LANDS on `main`; default/`--propose-slice` opens a PR / leaves `main` untouched).
 - [ ] ask/bounce verdicts ignore the flags (no-op) — no integrate happens regardless of the flags.
 - [ ] The flags are wired into the `intake` command grammar (`cli.ts`) consistently with the rest of dorfl's flag style.
@@ -36,18 +36,18 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 
 ## Blocked by
 
-- `intake-decision-prompt-and-four-outcome-dispatch` — the full dispatcher must exist (both slice and PRD emit paths) for the per-TYPE resolution to route both. Touches the same dispatch/integrate call site + the `intake` command grammar, so serialise behind it.
+- `intake-decision-prompt-and-four-outcome-dispatch` — the full dispatcher must exist (both slice and SPEC emit paths) for the per-TYPE resolution to route both. Touches the same dispatch/integrate call site + the `intake` command grammar, so serialise behind it.
 
 ## Prompt
 
-> Add `intake`'s PER-OUTCOME integration mode KNOBS + pure resolution, threading the resolved mode into `performIntegration`. `intake` decides the artifact TYPE (slice/PRD) at runtime, so one `--merge`/`--propose` can't express a type-conditional policy — hence per-outcome flags (US #9). `intake` owns the KNOBS only; WHICH knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
+> Add `intake`'s PER-OUTCOME integration mode KNOBS + pure resolution, threading the resolved mode into `performIntegration`. `intake` decides the artifact TYPE (slice/SPEC) at runtime, so one `--merge`/`--propose` can't express a type-conditional policy — hence per-outcome flags (US #9). `intake` owns the KNOBS only; WHICH knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
 >
 > THE CANONICAL RULE (from `work/spec-sliced/issue-intake.md`):
 >
-> - granular: `--merge-prd`/`--propose-prd` (if PRD), `--merge-slice`/`--propose-slice` (if slice).
+> - granular: `--merge-spec`/`--propose-spec` (if SPEC), `--merge-slice`/`--propose-slice` (if slice).
 > - aggregates: `--merge` = both-merge, `--propose` = both-propose.
-> - GRANULAR OVERRIDES AGGREGATE (`--merge --propose-slice` ⇒ merge PRD, propose slice).
-> - same type + both modes (`--merge-prd --propose-prd`) ⇒ usage ERROR.
+> - GRANULAR OVERRIDES AGGREGATE (`--merge --propose-slice` ⇒ merge SPEC, propose slice).
+> - same type + both modes (`--merge-spec --propose-spec`) ⇒ usage ERROR.
 > - unset ⇒ propose for both (default; matches `do`).
 > - ask/bounce emit nothing ⇒ flags are no-ops.
 >
@@ -60,9 +60,9 @@ This is pure logic over the flag set + the runtime-decided artifact type; it sit
 >
 > SEAM TO TEST AT: the PURE resolution function (the table above) + the throwaway-git integration harness for one end-to-end check (`--merge-slice` lands on `main`; default/`--propose-slice` opens a PR / no `main` touch). STUB `gh` via the injectable `ghBin` (the `GitHubProvider` test seam), as the PR-provider tests do.
 >
-> SCOPE FENCE: build ONLY the KNOBS + resolution. Do NOT build the POLICY that decides which knobs to pass (author-trust / gate-state-derived merge-vs-propose) — that is `runner-in-ci`. Do NOT touch the decision prompt, the lock, event-classification, or the "PRD complete?" query. Do NOT add CI/install.
+> SCOPE FENCE: build ONLY the KNOBS + resolution. Do NOT build the POLICY that decides which knobs to pass (author-trust / gate-state-derived merge-vs-propose) — that is `runner-in-ci`. Do NOT touch the decision prompt, the lock, event-classification, or the "SPEC complete?" query. Do NOT add CI/install.
 >
-> FIRST run the drift check: confirm the dispatcher (from `intake-decision-prompt-and-four-outcome-dispatch`) integrates both the slice and PRD emits via `performIntegration` at a default propose. If it landed differently, reconcile (replace the default with the resolved mode at the real call site); if a premise is broken, route to `needs-attention/` with the discrepancy.
+> FIRST run the drift check: confirm the dispatcher (from `intake-decision-prompt-and-four-outcome-dispatch`) integrates both the slice and SPEC emits via `performIntegration` at a default propose. If it landed differently, reconcile (replace the default with the resolved mode at the real call site); if a premise is broken, route to `needs-attention/` with the discrepancy.
 >
 > "Done" = the per-outcome modes resolve per the table (granular-overrides-aggregate, same-type-both errors, unset⇒propose), the resolved mode reaches `performIntegration`, ask/bounce ignore the flags, and `pnpm -r build && pnpm -r test && pnpm -r format:check` is green.
 

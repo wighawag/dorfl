@@ -5,7 +5,7 @@ type: idea
 status: incubating
 ---
 
-# Surfacing needs-attention (pre-PRD / incubating idea)
+# Surfacing needs-attention (pre-SPEC / incubating idea)
 
 > Captures the chosen DIRECTION for making a stuck (`needs-attention`) slice visible beyond its own work branch — and why the "surface it on `main`" alternatives are ruled out by a hard architectural constraint.
 

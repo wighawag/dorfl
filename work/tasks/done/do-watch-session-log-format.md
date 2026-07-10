@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained bug fix \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live: `do --watch` ran but surfaced NOTHING while the agent worked normally.
+> Self-contained bug fix \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live: `do --watch` ran but surfaced NOTHING while the agent worked normally.
 
 `do --watch` is silently a no-op: it shows nothing even though the agent runs and the pi session log grows. **Root cause (verified against a real session `.jsonl`): the watcher (`src/watch-session.ts`) parses the WRONG event vocabulary.** It filters for `tool_start` / `message_end` / `agent_end` \u2014 those are pi's **`--mode json` STREAM** events (what `ar-run.sh --watch` piped). But `do --watch` tails the **`--session-dir` SESSION-PERSISTENCE log**, which is a DIFFERENT format. Every line in the real log is `type:"message"` (or `text`/`session`/`model_change`) \u2014 NONE of which match the watcher's cases \u2192 every line falls through to skip \u2192 silent.
 

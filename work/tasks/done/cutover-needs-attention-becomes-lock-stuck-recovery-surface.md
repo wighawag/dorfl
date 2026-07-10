@@ -35,7 +35,7 @@ move, per decision (i+):
   resume/requeue/complete), so a work branch cut from `main` inherits it and hits the
   rename/rename ledger conflict that `drop-bookkeeping-rebase` exists to paper over.
   Removing it is what lets 9d delete that machinery. (Terminal records
-  `done`/`dropped`/`prd-sliced` are write-once, so they inherit harmlessly and STAY.)
+  `done`/`dropped`/`spec-sliced` are write-once, so they inherit harmlessly and STAY.)
 - **Visibility trade (consciously taken, per the ADR):** a human reads a stuck
   item's reason/questions via `dorfl status` (which renders the lock entry)
   or `git show <lock-ref>:lock.md`, NOT `ls work/needs-attention/`. This is the same
@@ -111,7 +111,7 @@ onto the lock `state: stuck`:
 > (`--from-needs-attention` recovery re-gate), `start.ts` (resolve), the `requeue`
 > path, and `status.ts`/`scan.ts`. The lock state machine + the rich entry are from
 > `lock-entry-state-machine-and-invariants` (`markStuckItemLock` / `resumeItemLock` /
-> `requeueItemLock`, `serialiseLockEntry`/`parseLockEntry`). PRD US #5, #8; ADR
+> `requeueItemLock`, `serialiseLockEntry`/`parseLockEntry`). SPEC US #5, #8; ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > Decision (i+): the bounce is a PURE lock amend (`active → stuck` + full reason +
@@ -134,5 +134,5 @@ onto the lock `state: stuck`:
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. This is load-bearing + design-heavy; record non-obvious in-scope
+> SPEC propagation. This is load-bearing + design-heavy; record non-obvious in-scope
 > decisions per the slice template.

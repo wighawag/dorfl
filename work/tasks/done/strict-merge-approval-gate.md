@@ -21,7 +21,7 @@ resolution chain, CLI plumbing) other tasks/CLI surfaces inherit — it
 mirrors exactly how `merge-questions-gate-axis` carved out
 `mergeQuestions` rather than improvising it inside the surfacer.
 
-The POLICY is already fixed by the PRD (sidecar OQ6) and this task does
+The POLICY is already fixed by the SPEC (sidecar OQ6) and this task does
 NOT reopen it:
 
 - Default (OFF / `strictMergeApproval` not set): apply HONOURS the prior
@@ -51,7 +51,7 @@ this task lands, `apply-rung-merge-disposition` hard-codes the default
       `merge-retries-gate-precedence` / `merge-questions-gate-axis`):
       flag > env > per-repo > global > default.
 - [ ] Default is OFF (the cheap green-re-verify-is-enough path is the
-      default; matches PRD sidecar OQ6).
+      default; matches SPEC sidecar OQ6).
 - [ ] Flag + env names follow the existing gate-family vocabulary
       (`--strict-merge-approval` / the established env-name convention;
       pick consistent with siblings and state the chosen names in the
@@ -73,7 +73,7 @@ this task lands, `apply-rung-merge-disposition` hard-codes the default
 
 ## Prompt
 
-> Read Story 16 + the PRD's Implementation Decision fixing the OQ6
+> Read Story 16 + the SPEC's Implementation Decision fixing the OQ6
 > stale-approval policy (`strictMergeApproval`, per-repo, default OFF).
 > Locate the gate-family precedence helper extended by
 > `merge-questions-gate-axis` / `merge-retries-gate-precedence` and add

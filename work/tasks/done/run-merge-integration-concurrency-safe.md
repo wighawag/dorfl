@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained ROBUSTNESS / CONCURRENCY-CORRECTNESS slice. It derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
+> Self-contained ROBUSTNESS / CONCURRENCY-CORRECTNESS slice. It derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
 >
 > Source signal: the `gate-on-rebased-tip-fresh-worktree` STOP (its `## Needs attention` block, recorded 2026-06-12). That slice's load-bearing premise (the fresh-worktree gate lands in the SHARED gate-to-integrate band and "benefits `run`" default-ON without regression) does NOT hold for `run`'s CONCURRENT merge-mode integration, because `run` serialises only the CLAIM per repo and treats integration as "fully concurrent" with a plain non-retried `${branch}:main` push. The maintainer chose option (a) from that STOP: a per-repo INTEGRATE lock (NOT a rebase-retry), because it is simpler and more deterministic. This slice is that precursor; landing it lets `gate-on-rebased-tip-fresh-worktree` follow as default-ON.
 

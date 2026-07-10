@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained ROBUSTNESS slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/job-worktree-artifact-dorfl-job-json-leaks-into-commits.md` (2026-06-11).
+> Self-contained ROBUSTNESS slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/job-worktree-artifact-dorfl-job-json-leaks-into-commits.md` (2026-06-11).
 >
 > MAINTAINER FRAMING (settled 2026-06-12): a gitignore entry is NOT an acceptable durable fix — a user can delete the directive, and a runtime control file does not belong in the source tree at all. The file MECHANISM is correct (a crash-surviving, scan-discoverable per-job anchor is genuinely needed — primarily the harness PID/session liveness pointer, which is NOT derivable from git or the dir name); the LOCATION (inside the checked-out worktree) was the mistake. Fix = move it OUT of the committed tree, NOT gitignore it.
 

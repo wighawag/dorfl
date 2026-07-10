@@ -5,9 +5,9 @@ type: idea
 status: incubating
 ---
 
-# to-task verifies references + set-coverage at slice time (pre-PRD / incubating idea)
+# to-task verifies references + set-coverage at slice time (pre-SPEC / incubating idea)
 
-> This is a **pre-PRD idea**, not a committed change. It is **deliberately NOT applied to main.** The maintainer's explicit reason: **skill evals must be in place BEFORE making substantive changes to skills**, so a wording change like this can be measured rather than merged on vibes. Park it here until the eval harness exists; then apply the patch below and let the evals judge it.
+> This is a **pre-SPEC idea**, not a committed change. It is **deliberately NOT applied to main.** The maintainer's explicit reason: **skill evals must be in place BEFORE making substantive changes to skills**, so a wording change like this can be measured rather than merged on vibes. Park it here until the eval harness exists; then apply the patch below and let the evals judge it.
 
 ## What it is
 

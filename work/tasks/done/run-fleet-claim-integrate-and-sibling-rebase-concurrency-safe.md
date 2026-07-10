@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained CONCURRENCY-CORRECTNESS slice. It derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
+> Self-contained CONCURRENCY-CORRECTNESS slice. It derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth.
 >
 > Source signal: the re-drive STOP of `gate-on-rebased-tip-fresh-worktree` (2026-06-14), whose claims the maintainer VERIFIED against the code. The fresh-worktree-gate slice landed default-ON for the single-job paths and for `run` at `perRepoMax === 1`, deliberately downgrading `run` to today's gate at `perRepoMax > 1` to AVOID these two races. This slice fixes the races on their own merits so that downgrade can later be removed (the fresh gate then works on the `run` fleet at any `perRepoMax`). These two races are PRE-EXISTING in `run` today (timing-hidden), independent of the gate; they only fire under same-repo fleet concurrency (`perRepoMax > 1`, default 2).
 

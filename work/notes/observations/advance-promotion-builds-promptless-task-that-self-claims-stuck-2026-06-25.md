@@ -113,24 +113,24 @@ throw), `intake.ts:~1617` (renderTask scaffold WITH `## Prompt`). Lock evidence:
 ## Relation to existing plan (cross-references — keep these consistent)
 
 This is the SAME `promoteObservation` / `buildPromotedBody` machinery already targeted by
-the tasked PRD
+the tasked SPEC
 `work/specs/tasked/observation-discharge-by-deletion-self-contained-promotion-and-prd-route.md`
 (origin observation
 `work/notes/observations/advance-promote-leaves-resolved-note-in-inbox-and-mints-non-self-contained-stub-2026-06-24.md`).
-That PRD's Defect B ("non-self-contained promotion") is the closest sibling, and its
+That SPEC's Defect B ("non-self-contained promotion") is the closest sibling, and its
 keystone task `promotion-self-contained-body-and-delete-on-promote-task-route` (now in
 `work/tasks/done/`) reworked `buildPromotedBody` to carry the observation's mechanism
 prose so the note is safely deletable. BUT that landed fix did NOT add `## Prompt`:
 `grep -n Prompt packages/dorfl/src/triage-persist.ts` returns nothing, and the live
 proof `532d894` (created 2026-06-24, AFTER that work) shows a promoted body with an
 empty `## What to build` + `## Non-blocking review findings` and no `## Prompt`. So this
-is a RESIDUAL gap against that PRD's US #1 ("the task is buildable on its own"):
+is a RESIDUAL gap against that SPEC's US #1 ("the task is buildable on its own"):
 self-containment of CONTENT was delivered; structural dispatchability (a `## Prompt`
 that `assembleWorkPrompt` accepts) was not. A future task should treat "buildable on its
 own" as including "passes `assembleWorkPrompt` without throwing".
 
-The intake-centralization angle the maintainer flagged is recorded in that PRD's
-Resolved decision 1: "Sharing the prd-body RENDERING with intake may be extracted later,
+The intake-centralization angle the maintainer flagged is recorded in that SPEC's
+Resolved decision 1: "Sharing the spec-body RENDERING with intake may be extracted later,
 but the WRITER is the CAS one." The `## Prompt`-synthesis fix is a natural fit for that
 extraction: `intake.ts`'s `renderTask` (~L1617) ALREADY emits the full
 `## What to build` + `## Acceptance criteria` + `## Prompt` shape, while
@@ -138,7 +138,7 @@ extraction: `intake.ts`'s `renderTask` (~L1617) ALREADY emits the full
 buildable-task RENDERER (one function both the intake front-door and the triage/advance
 promotion path call) would fix THIS defect and prevent the producer/consumer drift from
 recurring — consistent with that Resolved-decision-1 extraction note. Any task that
-acts on this observation should reference that PRD + its done keystone so the two plans
+acts on this observation should reference that SPEC + its done keystone so the two plans
 stay one plan, and the "validate body before claiming" defence (cause 2 above) is
 orthogonal and can land independently of the renderer centralization.
 
@@ -156,7 +156,7 @@ auto-committed):
   `triage-persist.buildPromotedBody` (the deferred Resolved-decision-1 extraction). It
   SUPERSEDES the interim task's `## Prompt` synthesis while KEEPING its pre-claim guard.
 
-A residual-against-US-#1 pointer was also added to the Further Notes of the tasked PRD
+A residual-against-US-#1 pointer was also added to the Further Notes of the tasked SPEC
 `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` so the plans
 stay linked. This observation should be deleted (discharged) once the interim task lands
 carrying its signal.

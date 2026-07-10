@@ -80,7 +80,7 @@ Every divergence maps to a FIELD VALUE, not an `if (caller === 'run')` branch: i
 
 ## Out of Scope
 
-- The `autoMerge` merge-vs-propose concept reconciliation (separate finding + later PRD/slice).
+- The `autoMerge` merge-vs-propose concept reconciliation (separate finding + later SPEC/slice).
 - `run-daemon-reframe` (concurrency) — sequenced AFTER this convergence; not part of it.
 - Any change to `do`'s observable behaviour (Slice 1 is a pure refactor).
 - The `pnpm` DEFAULT fallback in `verify.ts` (left as-is; the setup-skill note `work/ideas/setup-and-migrate-skills.md` handles making scaffolded `verify` stack-appropriate).
@@ -88,5 +88,5 @@ Every divergence maps to a FIELD VALUE, not an `if (caller === 'run')` branch: i
 ## Further Notes
 
 - Source finding (with the three worked drift instances + the resolved design): `work/findings/run-and-do-have-separate-integrate-paths.md`.
-- Insertion point D in `work/findings/review-gate-vs-slicer-edit-loop.md` ("run coverage — converge on do/performComplete FIRST") is satisfied by this PRD.
+- Insertion point D in `work/findings/review-gate-vs-slicer-edit-loop.md` ("run coverage — converge on do/performComplete FIRST") is satisfied by this SPEC.
 - The observation `work/observations/run-worktree-path-pr-no-title-body.md` is SUPERSEDED (its signal folded into the finding as drift instance #2) and can be retired.

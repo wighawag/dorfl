@@ -9,7 +9,7 @@ covers: [6]
 ## What to build
 
 Add the general principle to `WORK-CONTRACT.md` so the next author reaches for
-drive-in-place, not promote-then-drive — generalising both the PRD-tasking fix
+drive-in-place, not promote-then-drive — generalising both the SPEC-tasking fix
 (instance 1) and the `--allow-backlog` task fix (instance 2).
 
 End-to-end behaviour (protocol-doc only):
@@ -45,7 +45,7 @@ End-to-end behaviour (protocol-doc only):
 ## Prompt
 
 > Goal: generalise the staging-is-also-the-human-control-position principle into
-> WORK-CONTRACT.md, per the PRD
+> WORK-CONTRACT.md, per the SPEC
 > `do-allow-backlog-drive-staged-tasks-without-promotion` (US #6, Resolved
 > decision 7).
 >

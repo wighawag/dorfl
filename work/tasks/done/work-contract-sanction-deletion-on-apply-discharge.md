@@ -50,7 +50,7 @@ End-to-end behaviour:
 ## Prompt
 
 > Goal: amend WORK-CONTRACT.md so deletion-on-apply is the sanctioned discharge
-> for an answered observation, per the PRD
+> for an answered observation, per the SPEC
 > `observation-discharge-by-deletion-self-contained-promotion-and-prd-route`
 > (US #6) and the maintainer ruling (2026-06-24).
 >

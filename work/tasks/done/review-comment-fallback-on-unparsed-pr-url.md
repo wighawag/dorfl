@@ -4,7 +4,7 @@ slug: review-comment-fallback-on-unparsed-pr-url
 covers: []
 ---
 
-> Self-contained correctness fix — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/review-nits-review-gate-pr-comment-2026-06-07.md` (first nit). Delete that observation once this lands (the second nit in it — a test-control-strength suggestion — is benign; fold it in here too, see Scope).
+> Self-contained correctness fix — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/review-nits-review-gate-pr-comment-2026-06-07.md` (first nit). Delete that observation once this lands (the second nit in it — a test-control-strength suggestion — is benign; fold it in here too, see Scope).
 
 ## What to build
 

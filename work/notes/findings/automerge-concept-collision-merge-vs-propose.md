@@ -1,12 +1,12 @@
 ---
-title: autoMerge means TWO different things — the PRD's "auto-merge the --propose PR on approve" vs the code's "let a --merge proceed (else downgrade to propose)" — a concept collision to think through later
+title: autoMerge means TWO different things — the SPEC's "auto-merge the --propose PR on approve" vs the code's "let a --merge proceed (else downgrade to propose)" — a concept collision to think through later
 date: 2026-06-07
 status: resolved
 resolvedBy: remove-automerge-merge-means-auto-on-gate-pass
 resolvedDate: 2026-06-15
 ---
 
-> **RESOLVED 2026-06-15 (slice `remove-automerge-merge-means-auto-on-gate-pass`).** Closed in favour of **Model P**, realised by HARD-DELETING the `autoMerge` knob entirely (config field + `DEFAULT_CONFIG`, the per-repo key list, the `DORFL_AUTO_MERGE` env coercion, the `--auto-merge`/`--no-auto-merge` CLI flags, the `do`/`run`/`complete`/`integration-core` option fields, and the `merge`→`propose` downgrade logic at both `integration-core.ts` application sites). After this: `integration: merge` MEANS "land automatically when the gate passes" (green `verify`, plus a Gate-2 `approve` when `review` is on) and `integration: propose` MEANS "a human merges" (PR / PR-less checkpoint). The old `merge` + `autoMerge: false` "downgrade to propose" combination is gone — it was redundant with `propose`. There is no separate auto-merge sub-knob; auto-land is a property of the chosen integration mode. A stale `autoMerge` config key / env var is silently inert. The four user stories below resolve to: (1) `integration: merge` + `review: on`; (2) `integration: propose` + `review: on`; (3) review off + `merge` is unaffected (the downgrade never gated no-review merge, and now there is no downgrade at all); (4) `--merge` + `autoMerge` off is no longer expressible — `propose` is the canonical "a human merges" form. PRD `work/spec-sliced/review.md` + ADR `docs/adr/ci-config-policy-and-gate-family.md` updated to Model P.
+> **RESOLVED 2026-06-15 (slice `remove-automerge-merge-means-auto-on-gate-pass`).** Closed in favour of **Model P**, realised by HARD-DELETING the `autoMerge` knob entirely (config field + `DEFAULT_CONFIG`, the per-repo key list, the `DORFL_AUTO_MERGE` env coercion, the `--auto-merge`/`--no-auto-merge` CLI flags, the `do`/`run`/`complete`/`integration-core` option fields, and the `merge`→`propose` downgrade logic at both `integration-core.ts` application sites). After this: `integration: merge` MEANS "land automatically when the gate passes" (green `verify`, plus a Gate-2 `approve` when `review` is on) and `integration: propose` MEANS "a human merges" (PR / PR-less checkpoint). The old `merge` + `autoMerge: false` "downgrade to propose" combination is gone — it was redundant with `propose`. There is no separate auto-merge sub-knob; auto-land is a property of the chosen integration mode. A stale `autoMerge` config key / env var is silently inert. The four user stories below resolve to: (1) `integration: merge` + `review: on`; (2) `integration: propose` + `review: on`; (3) review off + `merge` is unaffected (the downgrade never gated no-review merge, and now there is no downgrade at all); (4) `--merge` + `autoMerge` off is no longer expressible — `propose` is the canonical "a human merges" form. SPEC `work/spec-sliced/review.md` + ADR `docs/adr/ci-config-policy-and-gate-family.md` updated to Model P.
 
 ## The signal
 
@@ -14,7 +14,7 @@ While designing the run/do integrate-path convergence (the core owns the effecti
 
 ## The two models (both real, in two places)
 
-### Model P — the PRD (`work/prd/review.md`): autoMerge is a PROPOSE-mode policy
+### Model P — the SPEC (`work/spec/review.md`): autoMerge is a PROPOSE-mode policy
 
 - Gate 2 (PR/code review) is framed as **"the FINAL ARBITER of the `--propose` PR"** (lines 49–52, 167–172). Review lives in the `--propose` journey: a PR is opened, review judges it.
 - `autoMerge`-on-approve (lines 176–184, 204–207, 235–236): **"If (and only if) the repo opts in, an `approve` verdict AUTO-MERGES THE PR; otherwise the review is advisory/blocking and the PR is left for a human."**
@@ -33,7 +33,7 @@ While designing the run/do integrate-path convergence (the core owns the effecti
 
 ## User stories to think through (before deciding)
 
-Frame these explicitly later, then reconcile PRD + code to ONE model:
+Frame these explicitly later, then reconcile SPEC + code to ONE model:
 
 1. Repo wants autonomous landing with a model review as the merge gate: which mode + flag? (Model P: `propose` + `autoMerge` on. Model M: `merge` + `autoMerge` on.)
 2. Repo wants a model review that only ADVISES, human always merges: (Model P: `propose` + `autoMerge` off. Model M: `propose`, or `merge`-downgraded.)
@@ -43,6 +43,6 @@ Frame these explicitly later, then reconcile PRD + code to ONE model:
 ## Disposition — DO NOT fix now
 
 - **Explicitly fenced OFF from the run/do integrate-path convergence** (the `integration-core.ts` extraction + routing `run` through it). The convergence preserves the CURRENT behaviour (Model M) verbatim — the core owns the effective-mode decision AS IT IS TODAY; it does NOT adopt a position on this collision. This finding is the separate, later reconciliation.
-- Reconcile to ONE model (likely Model P per the maintainer's intent), update `work/prd/review.md` + `src/complete.ts` together, and either make the contradictory flag combination unrepresentable or reject it loudly. Its own PRD/slice when prioritised.
+- Reconcile to ONE model (likely Model P per the maintainer's intent), update `work/spec/review.md` + `src/complete.ts` together, and either make the contradictory flag combination unrepresentable or reject it loudly. Its own SPEC/slice when prioritised.
 
-(Captured 2026-06-07 during the convergence grilling pass; flagged by the maintainer as a probable miscommunication between the PRD intent and the implemented logic.)
+(Captured 2026-06-07 during the convergence grilling pass; flagged by the maintainer as a probable miscommunication between the SPEC intent and the implemented logic.)

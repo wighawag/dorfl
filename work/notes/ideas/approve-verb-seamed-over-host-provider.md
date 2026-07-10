@@ -103,7 +103,7 @@ here.
 - `command-prefix-by-actor-type` — the human/agent/assistant actor split this
   verb participates in at the naming layer.
 
-## Open questions before a PRD
+## Open questions before a SPEC
 
 - **Verb name + scope.** `approve` (just records approval/comment) vs `land`
   (approve + merge + delete-branch) vs both. The skill needs approve+merge in one

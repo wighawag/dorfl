@@ -27,7 +27,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 - The sibling keys **stay as-is**: `reviewModel`, `reviewMaxRounds`, `autoMerge`. After the rename the family reads cleanly: **`review`** (the toggle), `reviewModel`, `reviewMaxRounds`, `autoMerge`. (`reviewModel`/`reviewMaxRounds` are already correctly "review"-prefixed; only the toggle carried the bad `-pr`.)
 - **Behaviour is IDENTICAL** — resolution chain (flag > env > per-repo > global > default off), the gate logic, autoMerge-downgrade, routing: all unchanged. This is a rename only.
 - **No back-compat alias** (the flag/key is days old, unreleased — a clean rename, not a deprecation). If an alias is wanted, that is a separate decision; default is no alias (keep it simple).
-- **Update the in-tree docs/specs** that name the old key so the contract stays honest: `work/prd/review.md`, `work/prd/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`. (The slug `review-gate-pr` and this slug keep their names — they are content-derived identifiers, not the flag; only the FLAG/KEY/ENV rename.)
+- **Update the in-tree docs/specs** that name the old key so the contract stays honest: `work/spec/review.md`, `work/spec/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`. (The slug `review-gate-pr` and this slug keep their names — they are content-derived identifiers, not the flag; only the FLAG/KEY/ENV rename.)
 
 ## Acceptance criteria
 
@@ -42,7 +42,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 
 ## Blocked by
 
-- None — a self-contained rename against the just-landed review-gate code (#11/#12, on `main`). `covers: []` / derives from the `review` PRD's gate (so `prd: review` for story-context, though it adds no new story — it tidies an existing one). Independent of `propose-pr-body` / `review-gate-pr-comment` (do this FIRST so they reference the clean name).
+- None — a self-contained rename against the just-landed review-gate code (#11/#12, on `main`). `covers: []` / derives from the `review` SPEC's gate (so `prd: review` for story-context, though it adds no new story — it tidies an existing one). Independent of `propose-pr-body` / `review-gate-pr-comment` (do this FIRST so they reference the clean name).
 
 ## Prompt
 
@@ -50,7 +50,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 >
 > FIRST run the drift check: confirm the current names exist where expected — `cli.ts` (`--review-pr`/`--no-review-pr` on `do` AND `complete`), `config.ts` (`Config.reviewPr` + `DEFAULT_CONFIG`), `repo-config.ts` (`REPO_ALLOWED_KEYS`), `do-config.ts` (`ReviewFlags`/`reviewFlagOverrides`), `env-config.ts` (`reviewPr: 'boolean'`, env `DORFL_REVIEW_PR`), `do.ts`/`complete.ts` (`reviewPr?` option + the `reviewPr` gate-on check), `review-gate.ts` (any reference). ~100 token occurrences across the 8 src + 2 test files (verified 2026-06-06; the count is illustrative — the bar is "grep finds no `reviewPr`"). Route to needs-attention if the shape differs.
 >
-> Rename ALL of them to `review` / `--review` / `DORFL_REVIEW`. Leave `reviewModel`, `reviewMaxRounds`, `autoMerge` UNTOUCHED (they are correctly named). No back-compat alias (unreleased). Keep resolution precedence + default-off + all gate behaviour identical. Update the in-tree specs/docs that name the old key (`work/prd/review.md`, `work/prd/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`). Do NOT rename the SLUGS `review-gate-pr` / `rename-reviewpr-to-review` (content-derived ids, not the flag).
+> Rename ALL of them to `review` / `--review` / `DORFL_REVIEW`. Leave `reviewModel`, `reviewMaxRounds`, `autoMerge` UNTOUCHED (they are correctly named). No back-compat alias (unreleased). Keep resolution precedence + default-off + all gate behaviour identical. Update the in-tree specs/docs that name the old key (`work/spec/review.md`, `work/spec/runner-in-ci.md`, `work/backlog/{harness-agent-output,review-gate-pr-comment}.md`, `work/done/review-gate-pr.md`, `work/observations/reviewmaxrounds-on-wrong-concept.md`, `work/findings/run-and-do-have-separate-integrate-paths.md`). Do NOT rename the SLUGS `review-gate-pr` / `rename-reviewpr-to-review` (content-derived ids, not the flag).
 >
 > READ FIRST: `src/cli.ts` (the two command definitions), `src/config.ts`, `src/repo-config.ts`, `src/do-config.ts`, `src/env-config.ts`, `src/do.ts`, `src/complete.ts`, `src/review-gate.ts`; the tests `test/review-gate-pr.test.ts` + `test/review-gate.test.ts`.
 >

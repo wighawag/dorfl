@@ -27,7 +27,7 @@ committed-recovery shape (the work branch already carries its done-move
 commit, so the build path's `git mv`/`git add -A`/commit would raise
 `IntegrationNothingStaged`) but where `main` may have MOVED since the
 branch's last build, so the rebased tip MUST be re-verified before it
-lands. Without this, the PRD's load-bearing invariant ("main never
+lands. Without this, the SPEC's load-bearing invariant ("main never
 receives a tree that fails verify"; the clean-rebase-but-broken merge
 is refused) cannot hold on the merge path.
 
@@ -83,7 +83,7 @@ stranded-recovery caller that already gated keeps skipping the gate.
 
 > Read the `recoverAlreadyCommitted` function and the build path's
 > `freshWorktreeGate && !input.skipVerify && !lifecycle` branch in
-> `packages/dorfl/src/integration-core.ts`, and the ADR/PRD invariant
+> `packages/dorfl/src/integration-core.ts`, and the ADR/SPEC invariant
 > ("main never receives a tree that fails verify"). Thread
 > `freshWorktreeGate` into `recoverAlreadyCommitted`; when set and not
 > `skipVerify`, run the EXISTING `runFreshWorktreeGate` on the rebased

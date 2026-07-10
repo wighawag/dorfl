@@ -28,7 +28,7 @@ After this slice:
   the body stays at `work/backlog/<slug>.md`. A protected-`main` claim succeeds
   (claim writes nothing to `main`). (US #1, #15, #16 fully delivered.)
 - COMPLETE / the integration core source the durable `→ done` move from `backlog/`
-  (not `in-progress/`); the `→ done` / `→ dropped` / `→ prd-sliced` moves stay atomic
+  (not `in-progress/`); the `→ done` / `→ dropped` / `→ spec-sliced` moves stay atomic
   with the code, and the hold → main-move-FIRST → release-SECOND ordering + recovery
   from `complete-lock-then-durable-main-move-crash-safe` is unchanged in shape, only
   the SOURCE folder changes.
@@ -52,7 +52,7 @@ After this slice:
 - [ ] Claim writes NOTHING to `main` (no `git mv backlog→in-progress`); a
       protected-`main` claim succeeds; the body stays at `work/backlog/<slug>.md`.
 - [ ] `complete` / the integration core source the durable `→ done` (and
-      `→ dropped` / `→ prd-sliced`) move from `backlog/`, atomic with the code; the
+      `→ dropped` / `→ spec-sliced`) move from `backlog/`, atomic with the code; the
       hold → main-move → release ordering + crash recovery are preserved.
 - [ ] `start` / `--resume` / `do` / `run` determine claimed/held-ness from the lock
       ref (not an `in-progress/` body); the item rests in `backlog/` while held.
@@ -79,13 +79,13 @@ After this slice:
 > `backlog/` + the lock. Read `claim-cas.ts` (`performClaim`), `complete.ts` +
 > `integration-core.ts` (the done-move SOURCE axis + the `source` enum threaded
 > through), `start.ts` (the folder-based dispatch), `ledger-read.ts`
-> (`readSliceOnArbiter`), `do.ts`/`run.ts` (onboard). PRD
-> `work/prd/ledger-status-per-item-lock-refs.md` (US #1, #15, #16); ADR
+> (`readSliceOnArbiter`), `do.ts`/`run.ts` (onboard). SPEC
+> `work/spec/ledger-status-per-item-lock-refs.md` (US #1, #15, #16); ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > Remove claim's `git mv backlog→in-progress` (claim now only acquires the lock; body
 > stays in `backlog/`). Retarget `complete`/`integration-core` to source the durable
-> `→ done`/`→ dropped`/`→ prd-sliced` move from `backlog/` (NOT `in-progress/`),
+> `→ done`/`→ dropped`/`→ spec-sliced` move from `backlog/` (NOT `in-progress/`),
 > keeping the hold → main-move-FIRST → release-SECOND ordering + recovery unchanged in
 > shape. Make `start`/`--resume`/`do`/`run` read held-ness from the lock ref (a
 > claimed item rests in `backlog/`, so folder-only dispatch would re-claim it); read
@@ -97,7 +97,7 @@ After this slice:
 > bounce path may still source from `in-progress/`/`needs-attention/` here). Do NOT
 > remove the `slicing/`/`advancing/` markers (9c) or delete `drop-bookkeeping-rebase`
 > (9d). Pool vocabulary: the pool is `backlog/` (the `todo/` rename is the deferred
-> STEP-B PRD; do NOT introduce `todo/`).
+> STEP-B SPEC; do NOT introduce `todo/`).
 >
 > Update the claim/complete/start/do/run consumer tests to the body-stays-in-`backlog/`
 > reality. NEW git-`file://`-CAS race test files must be registered in the
@@ -107,4 +107,4 @@ After this slice:
 > `pnpm -r build && pnpm -r test && pnpm format:check` green.
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> SPEC propagation. Record non-obvious in-scope decisions per the slice template.

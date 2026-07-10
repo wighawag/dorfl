@@ -18,7 +18,7 @@ ONE strategy = current behaviour. The reason-block-in-the-body (never a frontmat
 - [ ] `complete.ts`'s abort paths (gate-failed, rebase-conflict) and the runner's stuck routing (`run.ts`) drive needs-attention via the seam.
 - [ ] Reason recorded as body prose (not frontmatter); the move is ONE atomic commit; surface (`status`) still reads the reason — all unchanged.
 - [ ] The seam signature stays storage-agnostic (no `main` in the public shape).
-- [ ] No `ledgerMode`/mode/config introduced. No cherry-pick-to-main here (that is the separate `needs-attention-cherry-pick` PRD, built later against this).
+- [ ] No `ledgerMode`/mode/config introduced. No cherry-pick-to-main here (that is the separate `needs-attention-cherry-pick` SPEC, built later against this).
 - [ ] Behaviour-identical: existing needs-attention / complete-abort / run tests pass UNCHANGED; a seam-level test asserts dispatch via the seam.
 - [ ] `pnpm -r build && pnpm -r test && pnpm -r format:check` green.
 

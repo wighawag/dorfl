@@ -4,7 +4,7 @@ slug: hub-mirror-strong-replace-guard
 covers: []
 ---
 
-> Self-contained safety-guard slice \u2014 derives from NO PRD (`covers: []`), omits `prd:`. Source signal (with the DECIDED design): `work/observations/hub-mirror-key-ignores-transport.md` (2026-06-05 update). The CHEAP transport-mismatch guard already landed (`registry-remote`, in `done/`); THIS is the stronger project-identity guard.
+> Self-contained safety-guard slice \u2014 derives from NO SPEC (`covers: []`), omits `prd:`. Source signal (with the DECIDED design): `work/observations/hub-mirror-key-ignores-transport.md` (2026-06-05 update). The CHEAP transport-mismatch guard already landed (`registry-remote`, in `done/`); THIS is the stronger project-identity guard.
 
 ## What to build
 

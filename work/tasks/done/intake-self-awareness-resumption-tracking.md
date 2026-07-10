@@ -6,7 +6,7 @@ blockedBy: []
 covers: [2, 10]
 ---
 
-> Derives from the `issue-intake` PRD (the ASK loop "resumes from the updated thread"; US #2 = ask-until-clear via conversation; US #10 = serialise concurrent runs). Surfaced 2026-06-10 while specifying the completion-comment slice: intake has NO concept of its own prior turns, which is a latent loop hazard for the ASK loop TODAY (not just for the new completion comment).
+> Derives from the `issue-intake` SPEC (the ASK loop "resumes from the updated thread"; US #2 = ask-until-clear via conversation; US #10 = serialise concurrent runs). Surfaced 2026-06-10 while specifying the completion-comment slice: intake has NO concept of its own prior turns, which is a latent loop hazard for the ASK loop TODAY (not just for the new completion comment).
 
 ## What to build
 
@@ -18,7 +18,7 @@ The fix is a **deterministic PRE-DECISION TRIAGE GATE** in the runner (inside th
 
 - `kind=ask` — intake asked a clarifying question.
 - `kind=bounced` — intake bounced the issue.
-- `kind=created slug=<slug>` — intake created a slice/PRD.
+- `kind=created slug=<slug>` — intake created a slice/SPEC.
 
 **Whether a kind is TERMINAL is the TRIAGE's interpretation, NOT data in the marker** (decided 2026-06-10). The marker is a neutral record ("intake did X"); the triage maps `ask → non-terminal` and `bounced`/`created → terminal`. Do NOT bake a `terminal=…` field into the marker — if a kind's terminal-ness ever changes (e.g. making `bounced` re-openable later), that is a change to the TRIAGE only, and old markers stay valid.
 
@@ -89,7 +89,7 @@ This stands alone (it fixes the existing ASK/BOUNCE self-loop) and is the founda
 
 ## Prompt
 
-> Give intake a DETERMINISTIC pre-decision TRIAGE GATE built on a MARKER stamped on every comment intake posts, so it skips when it has the last word or the issue is already terminal, and runs the prompt ONLY on genuine new human input. PRD: `work/spec-sliced/issue-intake.md`. This also fixes a PRE-EXISTING hazard: intake's own comments are new thread comments, so a naive re-run reads its OWN comment as a new turn → intake re-triggers itself. The TRIAGE GATE is the COMPLETE fix (do NOT add a `classifyIntakeEvent` self-filter — that classifier is deliberately `{kind}`-only; CI-side scheduling is `runner-in-ci`'s).
+> Give intake a DETERMINISTIC pre-decision TRIAGE GATE built on a MARKER stamped on every comment intake posts, so it skips when it has the last word or the issue is already terminal, and runs the prompt ONLY on genuine new human input. SPEC: `work/spec-sliced/issue-intake.md`. This also fixes a PRE-EXISTING hazard: intake's own comments are new thread comments, so a naive re-run reads its OWN comment as a new turn → intake re-triggers itself. The TRIAGE GATE is the COMPLETE fix (do NOT add a `classifyIntakeEvent` self-filter — that classifier is deliberately `{kind}`-only; CI-side scheduling is `runner-in-ci`'s).
 >
 > DRIFT CHECK FIRST: confirm there is still NO marker / bot-identity / cursor in `src/intake.ts`. If a triage gate / marker already exists, re-scope.
 >
@@ -99,6 +99,6 @@ This stands alone (it fixes the existing ASK/BOUNCE self-loop) and is the founda
 >
 > SCOPE FENCE: no persisted cursor/sidecar (recover from the thread/marker only); MARKER-ONLY self-recognition — resolve NO author identity (no `gh api user` / bot-login); core never imports `gh`. Do NOT touch `classifyIntakeEvent` / `IntakeEvent` (a marker self-filter would break its deliberate `{kind}`-only contract for a non-load-bearing optimisation; CI-side scheduling is `runner-in-ci`'s). Do NOT build the completion comment here (dependent slice) — but make the marker mechanism reusable (a shared stamp/parse helper producing the FULL grammar incl. `seen=`) so that slice just adds a `created` marker, which the `already-terminal` branch then consumes. Do NOT put terminal-ness in the marker — the triage owns it.
 >
-> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` records the marker; `listComments` seeds threads with ids, markers, raced-in and deleted comments) + the triage branches (`no-new-input` / race-proceed / deletion-enrichment / `already-terminal` / proceed) + the `seenSet` union across two markers + marker parse-from-`body`. The prompt JUDGEMENT is not unit-tested (PRD); only the triage + dispatch. Mirror the existing intake tests.
+> SEAM TO TEST AT: the stubbed issue seam (`postIssueComment` records the marker; `listComments` seeds threads with ids, markers, raced-in and deleted comments) + the triage branches (`no-new-input` / race-proceed / deletion-enrichment / `already-terminal` / proceed) + the `seenSet` union across two markers + marker parse-from-`body`. The prompt JUDGEMENT is not unit-tested (SPEC); only the triage + dispatch. Mirror the existing intake tests.
 >
 > "Done" = intake skips (`no-new-input`) when it has the last word, skips (`already-terminal`) when the issue was already transformed, proceeds only on genuine new human input, cannot self-trigger, recovers from the thread marker (no sidecar), and `pnpm -r build && pnpm -r test && pnpm format:check` is green.

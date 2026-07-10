@@ -1,17 +1,17 @@
 ---
-title: surfaceBlockers - a gate for whether a slice/PRD's declared needsAnswers is rendered into an answerable question sidecar, or left silently blocked
+title: surfaceBlockers - a gate for whether a slice/SPEC's declared needsAnswers is rendered into an answerable question sidecar, or left silently blocked
 slug: surface-blockers-gate
 blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate]
 covers: []
 ---
 
-> Self-contained ENGINE slice (`covers: []`, no `prd:`). Source: `work/ideas/surface-blockers-gate.md` + ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES `work/prd/runner-in-ci.md`. `blockedBy`: (1) `advance-autopick-lifecycle-pools` LOGICALLY (it adds the `needsAnswers`-blocked pool to auto-pick, without it there is no auto-surface behaviour to gate); (2) `observation-triage-tri-state-gate` for FILE-SERIALISATION (both edit the same gate-family files config.ts / repo-config.ts / env-config.ts / cli.ts) and so the compose-test references a real sibling gate.
+> Self-contained ENGINE slice (`covers: []`, no `prd:`). Source: `work/ideas/surface-blockers-gate.md` + ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES `work/spec/runner-in-ci.md`. `blockedBy`: (1) `advance-autopick-lifecycle-pools` LOGICALLY (it adds the `needsAnswers`-blocked pool to auto-pick, without it there is no auto-surface behaviour to gate); (2) `observation-triage-tri-state-gate` for FILE-SERIALISATION (both edit the same gate-family files config.ts / repo-config.ts / env-config.ts / cli.ts) and so the compose-test references a real sibling gate.
 
 ## What to build
 
-Add a BOOLEAN gate **`surfaceBlockers`** (default `off`) governing whether `advance`'s SURFACE rung renders a slice/PRD's DECLARED `needsAnswers: true` into an answerable question sidecar, or leaves the item silently blocked in the backlog:
+Add a BOOLEAN gate **`surfaceBlockers`** (default `off`) governing whether `advance`'s SURFACE rung renders a slice/SPEC's DECLARED `needsAnswers: true` into an answerable question sidecar, or leaves the item silently blocked in the backlog:
 
-- **`off`** (default, calm): a slice/PRD with `needsAnswers: true` is left silently blocked, the BLOCKED POOL added by `advance-autopick-lifecycle-pools` is NOT enumerated into auto-pick, so advance does NOT proactively render it into a question sidecar.
+- **`off`** (default, calm): a slice/SPEC with `needsAnswers: true` is left silently blocked, the BLOCKED POOL added by `advance-autopick-lifecycle-pools` is NOT enumerated into auto-pick, so advance does NOT proactively render it into a question sidecar.
 - **`on`**: the blocked pool IS enumerated; advance's surface rung renders the declared `needsAnswers` into a sidecar so the human can answer + unblock it in-repo (the apply rung then consumes the committed answer).
 
 NOTE: there is no auto-surface behaviour to gate UNTIL `advance-autopick-lifecycle-pools` adds the `needsAnswers`-blocked pool to selection, today such items are build-INELIGIBLE and never auto-picked, so surface only fires on EXPLICIT naming. This gate governs the NEW auto-pick pool that the blocker introduces.
@@ -23,7 +23,7 @@ This is the SECOND of the two orthogonal question-surfacing gates (the first is 
 ## Acceptance criteria
 
 - [ ] `surfaceBlockers` is a `Config` boolean field, default `false`, with merge handling, threading the full gate-family chain: `REPO_ALLOWED_KEYS`, `env-config.ts` `KEY_COERCIONS` boolean (`DORFL_SURFACE_BLOCKERS`), and a CLI flag, resolving `flag > env > per-repo > global > default`.
-- [ ] The gate governs the `needsAnswers`-blocked POOL (added by the blocker) at the selection layer: `off` ⇒ the blocked pool is NOT enumerated into auto-pick, so a bare `advance` does NOT surface a `needsAnswers` slice/PRD (a test asserts no sidecar is created and the item stays put); `on` ⇒ the pool is enumerated and an auto-picked `needsAnswers` item is rendered into a sidecar via `surfaceRung`.
+- [ ] The gate governs the `needsAnswers`-blocked POOL (added by the blocker) at the selection layer: `off` ⇒ the blocked pool is NOT enumerated into auto-pick, so a bare `advance` does NOT surface a `needsAnswers` slice/SPEC (a test asserts no sidecar is created and the item stays put); `on` ⇒ the pool is enumerated and an auto-picked `needsAnswers` item is rendered into a sidecar via `surfaceRung`.
 - [ ] `surfaceBlockers: off` does NOT suppress `needs-attention` surfacing (a separate test or assertion confirms a stuck-build still surfaces regardless of this gate).
 - [ ] CREATE-vs-CONSUME invariant, applied PER SUB-STEP (DECIDED): `surfaceBlockers` gates only CREATE acts. The `apply` rung's CONSUME part (write the human's answer + resolve/disposition) is ALWAYS allowed and NOT gated, an already-surfaced+answered blocker sidecar STILL applies under `surfaceBlockers: off`, so a human's committed answer is NEVER stranded. A test asserts an answered sidecar applies regardless of the gate. (Mirrors `needs-attention` always-on: gates govern "don't make noise", never "discard the human's work / hide a failure".)
 - [ ] The apply-FOLLOWUP edge (forward-looking, verify at build time): `apply` has a re-pause sub-step that can APPEND NEW follow-up questions (`applyFollowups`/`appendQuestions`), which is a CREATE act. VERIFIED 2026-06-12 that follow-up generation is NOT wired in production (`applyFollowups` is set only by tests; `cli.ts`/`advance-drivers.ts` never thread it), so apply is pure consume TODAY and this slice need not gate it. Re-confirm at build time; if it is now wired, the bot-minted-followup CREATE sub-step must respect this gate (gate-off ⇒ apply + resolve, do not mint new questions), while a HUMAN-authored followup stays consume. If wiring exists but cannot distinguish human- from bot-authored followups (the `NewQuestion[]` seam carries no provenance), STOP and surface it (`needsAnswers`), do not guess.
@@ -39,7 +39,7 @@ This is the SECOND of the two orthogonal question-surfacing gates (the first is 
 
 ## Prompt
 
-> Add a BOOLEAN `surfaceBlockers` gate (default `off`) governing whether advance's SURFACE rung renders a slice/PRD's declared `needsAnswers: true` into an answerable sidecar (`on`) or leaves it silently blocked (`off`). Source: `work/ideas/surface-blockers-gate.md`; ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES `work/prd/runner-in-ci.md`; orthogonal PEER to `observationTriage` (the sibling slice this is `blockedBy` for file-serialisation).
+> Add a BOOLEAN `surfaceBlockers` gate (default `off`) governing whether advance's SURFACE rung renders a slice/SPEC's declared `needsAnswers: true` into an answerable sidecar (`on`) or leaves it silently blocked (`off`). Source: `work/ideas/surface-blockers-gate.md`; ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES `work/spec/runner-in-ci.md`; orthogonal PEER to `observationTriage` (the sibling slice this is `blockedBy` for file-serialisation).
 >
 > FIRST, confirm the BLOCKERS landed: `advance-autopick-lifecycle-pools` added the `needsAnswers`-blocked POOL to auto-pick (so there is now an auto-surface behaviour to gate), and `observation-triage-tri-state-gate` added the `observationTriage` gate (for the compose-test). Then drift-check: advance's surface rung (`advance.ts` `surfaceRung`) renders declared `needsAnswers` into a sidecar via `persistSurfacedQuestions`; an item with `needsAnswers:true` is build-INELIGIBLE (the auto-eligible predicate) so it was NEVER auto-picked before the blocker. If landed differently, reconcile or route to `needs-attention/`.
 >

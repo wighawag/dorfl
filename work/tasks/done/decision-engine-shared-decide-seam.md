@@ -15,7 +15,7 @@ parameterised by an INPUT-ADAPTER and an ALLOWED-OUTCOME SET, mirroring the
 
 A thin vertical slice through every layer:
 
-- **Verdict shape.** A SUPERSET verdict union `{task | prd | adr | delete | ask}`
+- **Verdict shape.** A SUPERSET verdict union `{task | spec | adr | delete | ask}`
   carrying the drafted content for the chosen outcome (the analogue of intake's
   verdict object). Each caller passes its allowed SUBSET; the engine is
   outcome-AGNOSTIC (it never hard-codes which outcomes a caller permits).
@@ -25,7 +25,7 @@ A thin vertical slice through every layer:
   within the caller's `allowedOutcomes` and rejects (loudly) one that is not.
 - **No wiring yet.** This task ONLY lands the pure engine + its types + its tests.
   It does NOT modify the apply rung, the sidecar, or intake. The keystone
-  apply task consumes it next; intake stays on its own `{task | prd | ask | bounce}`
+  apply task consumes it next; intake stays on its own `{task | spec | ask | bounce}`
   set and is NOT refactored here (decision 13: extract only where natural).
 
 Keep it a NEW module so it is file-orthogonal to the hot files (`sidecar.ts`,
@@ -34,7 +34,7 @@ Keep it a NEW module so it is file-orthogonal to the hot files (`sidecar.ts`,
 ## Acceptance criteria
 
 - [ ] A `decide(input, allowedOutcomes) → verdict` core exists with the superset
-      verdict union `{task | prd | adr | delete | ask}`, parameterised by an
+      verdict union `{task | spec | adr | delete | ask}`, parameterised by an
       input-adapter and an allowed-outcome set.
 - [ ] The decider is an INJECTED seam (tests drive it with a canned verdict, no
       model/network), mirroring intake's stubbable dispatcher.
@@ -55,11 +55,11 @@ Keep it a NEW module so it is file-orthogonal to the hot files (`sidecar.ts`,
 > Build the shared decision engine for dorfl's question-resolution feature: a
 > `decide(input, allowedOutcomes) → verdict` core parameterised by an
 > input-adapter and an allowed-outcome SET. The verdict is the SUPERSET union
-> `{task | prd | adr | delete | ask}`; each caller passes its allowed subset and
+> `{task | spec | adr | delete | ask}`; each caller passes its allowed subset and
 > the engine stays outcome-AGNOSTIC (it never hard-codes a caller's outcomes).
 >
 > Domain vocabulary: a "verdict" is what an agent decides to DO with an input
-> (mint a task / mint a prd / mint an adr / delete the source / ask a follow-up) —
+> (mint a task / mint a spec / mint an adr / delete the source / ask a follow-up) —
 > the same shape intake already has (`prompt → verdict → dispatch`). The decision
 > STEP is a stubbable, injected seam: production wires a harness/agent; tests
 > inject a CANNED verdict (no model, no network). Study how `intake` does this —
@@ -68,8 +68,8 @@ Keep it a NEW module so it is file-orthogonal to the hot files (`sidecar.ts`,
 > a returned verdict against the caller's `allowedOutcomes` and reject one outside
 > the set loudly (never silently coerce).
 >
-> Scope discipline (decision 13/14 of the source PRD): do NOT refactor intake
-> onto this engine and do NOT change intake's verdict set (`{task|prd|ask|bounce}`
+> Scope discipline (decision 13/14 of the source SPEC): do NOT refactor intake
+> onto this engine and do NOT change intake's verdict set (`{task|spec|ask|bounce}`
 > stays exactly as is). This task lands the pure engine + types + tests ONLY — no
 > edits to `sidecar.ts`, `apply-persist.ts`, or `intake.ts`. Keep it in a NEW
 > module so it is file-orthogonal to the sibling tasks that edit the hot files.

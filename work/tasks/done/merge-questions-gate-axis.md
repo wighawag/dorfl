@@ -16,7 +16,7 @@ global > default). Fixed at launch in the prd: must NOT ride
 `observationTriage`; must default HIGHER than `off`, because a dropped
 merge-question means pushed work never lands.
 
-## Open questions (needsAnswers — prd OQ7)
+## Open questions (needsAnswers — spec OQ7)
 
 The SEPARATION + higher-default is fixed. These three sub-decisions are
 not:
@@ -25,12 +25,12 @@ not:
    another option consistent with the existing gate vocabulary. Pick
    one.
 2. **Default value.** `ask` (surface + wait for a human answer) is the
-   prd's likely default; `auto` is allowed only for repos that trust
+   spec's likely default; `auto` is allowed only for repos that trust
    auto-landing of answered/unblocked merges (a merge-mode-like fast
    path); `off` is only correct for a repo that lands by some other
    means. Pick the default.
 3. **Shape.** Three-state `off | ask | auto` mirroring
-   `observationTriage`, or boolean? The prd leans 3-state; confirm or
+   `observationTriage`, or boolean? The spec leans 3-state; confirm or
    override. NOTE the `auto` sub-state was originally defined as
    "auto-land an answered/unblocked MERGE DISPOSITION" — the
    disposition vocabulary was retired (keystone
@@ -44,7 +44,7 @@ not:
 
 Do NOT build until OQ7 is answered.
 
-Cross-cutting note: the prd's "Part of a larger generalization"
+Cross-cutting note: the spec's "Part of a larger generalization"
 section lists two CROSS-CUTTING questions (sidecar-keying to a lock-
 ref/branch identity; questions-folder shape/name) that are SHARED with
 the stuck-lock surfacer sibling and must be resolved ONCE across both,
@@ -75,7 +75,7 @@ sub-decision.
 ## Prompt
 
 > Do NOT build until OQ7 is answered (name, default, shape). Once
-> answered: read Story 17 + the prd's "Implementation Decisions"
+> answered: read Story 17 + the spec's "Implementation Decisions"
 > paragraph that fixes the SEPARATION + higher-default. Locate the gate
 > precedence helper extended by `merge-retries-gate-precedence` (or, if
 > that task hasn't landed yet, the sibling gates' helper) and add the
@@ -85,18 +85,18 @@ sub-decision.
 
 ## Applied answers 2026-06-26
 
-### q1: OQ7(a) — Gate name: what is the exact name for the new merge-question gate axis? Candidates named in the PRD/task: `mergeQuestions`, `surfaceMerge`, or another camelCase name consistent with the existing gate-family vocabulary.
+### q1: OQ7(a) — Gate name: what is the exact name for the new merge-question gate axis? Candidates named in the SPEC/task: `mergeQuestions`, `surfaceMerge`, or another camelCase name consistent with the existing gate-family vocabulary.
 
-`mergeQuestions` (matches PRD sidecar Q3). It names the policy domain the way `observationTriage` does, reads cleanly in the `flag > env > per-repo > global > default` chain, and avoids the verb-flavoured `surfaceMerge`.
+`mergeQuestions` (matches SPEC sidecar Q3). It names the policy domain the way `observationTriage` does, reads cleanly in the `flag > env > per-repo > global > default` chain, and avoids the verb-flavoured `surfaceMerge`.
 
 ### q2: OQ7(b) — Default value: what is the built-in default for the merge-question gate? `ask` (surface + wait for a human answer), `auto` (auto-land an answered/unblocked merge — the merge-mode-like fast path), or `off` (only for a repo that lands by some other means)? The fixed constraint is: it must NOT default to `off`.
 
-`ask` (surface + wait for the human's plain merge|hold|drop answer). It is the conservative default that honours propose semantics and never silently drops pushed work, and it does NOT depend on the retired disposition mechanism. `auto` is restated for the deterministic-action model (Q3 below) and is available as a trusted-repo fast path; `off` only for a repo that lands by some other means. Matches PRD sidecar Q3.
+`ask` (surface + wait for the human's plain merge|hold|drop answer). It is the conservative default that honours propose semantics and never silently drops pushed work, and it does NOT depend on the retired disposition mechanism. `auto` is restated for the deterministic-action model (Q3 below) and is available as a trusted-repo fast path; `off` only for a repo that lands by some other means. Matches SPEC sidecar Q3.
 
-### q3: OQ7(c) — Shape: is the gate a three-state `off | ask | auto` mirroring `observationTriage`'s shape, or a boolean? The PRD leans 3-state; confirm or override.
+### q3: OQ7(c) — Shape: is the gate a three-state `off | ask | auto` mirroring `observationTriage`'s shape, or a boolean? The SPEC leans 3-state; confirm or override.
 
-Three-state `off | ask | auto`, mirroring `observationTriage`, with `auto` restated WITHOUT the retired token: `auto` = the runner self-supplies the `merge` answer without surfacing and lands through the SAME deterministic runner-action dispatch + apply-time re-verify (PRD sidecar Q1/Q3). It does NOT invoke the agentic decider — a merge-land is never an agent decision. The 3-state shape is preserved because the surface-vs-auto-land distinction is real and useful; the middle (`ask`) is the default.
+Three-state `off | ask | auto`, mirroring `observationTriage`, with `auto` restated WITHOUT the retired token: `auto` = the runner self-supplies the `merge` answer without surfacing and lands through the SAME deterministic runner-action dispatch + apply-time re-verify (SPEC sidecar Q1/Q3). It does NOT invoke the agentic decider — a merge-land is never an agent decision. The 3-state shape is preserved because the surface-vs-auto-land distinction is real and useful; the middle (`ask`) is the default.
 
 ### q4: Should this task be HELD (kept out of the build pool) and/or re-scoped until the sibling `merge-question-surfacer` is re-decomposed against the retired-disposition model — and does answering OQ7 require restating `auto` without the `merge|hold|drop` token mechanism?
 
-This task is the LEAST drifted of the three (it only gates invocation), and its FIXED parts (separate axis, default not `off`, same precedence chain) plus its name/default/shape (Q1-Q3) do NOT depend on the retired vocabulary — so DECIDE them here (done above) rather than hold the whole task. The only entanglement was `auto`'s meaning, now restated against the deterministic-action model. KEEP this task in `tasks/backlog/` (not promoted to the pool) and build it together with / after `merge-question-surfacer` + `apply-rung-merge-disposition` so the `merge-question-surfacer is invoked iff this gate says so` wiring lands against the reshaped surfacer. The cross-cutting sidecar-keying + questions-folder questions are answered ONCE in PRD sidecar Q5 (branch/ref key allowed; typed `kind` field now, kind-subfolders later via `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21`); do not preempt the folder restructure here.
+This task is the LEAST drifted of the three (it only gates invocation), and its FIXED parts (separate axis, default not `off`, same precedence chain) plus its name/default/shape (Q1-Q3) do NOT depend on the retired vocabulary — so DECIDE them here (done above) rather than hold the whole task. The only entanglement was `auto`'s meaning, now restated against the deterministic-action model. KEEP this task in `tasks/backlog/` (not promoted to the pool) and build it together with / after `merge-question-surfacer` + `apply-rung-merge-disposition` so the `merge-question-surfacer is invoked iff this gate says so` wiring lands against the reshaped surfacer. The cross-cutting sidecar-keying + questions-folder questions are answered ONCE in SPEC sidecar Q5 (branch/ref key allowed; typed `kind` field now, kind-subfolders later via `task:questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21`); do not preempt the folder restructure here.

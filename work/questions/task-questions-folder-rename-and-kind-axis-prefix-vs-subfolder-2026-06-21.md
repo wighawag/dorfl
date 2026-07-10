@@ -32,7 +32,7 @@ Decision A is separate from B (do not conflate). Decline/defer the folder rename
 
 **Should this decision be recorded as an ADR rather than just built as a slice? The observation says 'likely an ADR (folder structure is load-bearing here, status=folder)' and 'this is exactly the kind of structural call that should be a human/ADR decision, not an agent's.' If yes, what is the deliverable: an ADR doc, a code change, or both?**
 
-> There is already an ADR family for layout/structure decisions, e.g. `docs/adr/question-sidecar-human-readable-format.md`, `work-tree-taxonomy-regime-umbrellas-and-per-regime-terminals.md`, `ledger-status-on-per-item-lock-refs.md`. The task frontmatter has no `covers`/`prd` and the body is a one-line stub, so the intended deliverable shape is unspecified.
+> There is already an ADR family for layout/structure decisions, e.g. `docs/adr/question-sidecar-human-readable-format.md`, `work-tree-taxonomy-regime-umbrellas-and-per-regime-terminals.md`, `ledger-status-on-per-item-lock-refs.md`. The task frontmatter has no `covers`/`spec` and the body is a one-line stub, so the intended deliverable shape is unspecified.
 
 _Suggested default: Record the chosen B (and A, if accepted) as an ADR in `docs/adr/`, then scope the code change (rename `questions/` folder reference and/or add the `kind` field + rendering) as the slice's acceptance, so the load-bearing structural decision is captured before code lands._
 

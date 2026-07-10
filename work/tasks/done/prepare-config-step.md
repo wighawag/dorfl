@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained PROTOCOL-PRIMITIVE slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/protocol-has-no-prepare-step-distinct-from-verify-gate.md` (2026-06-09, `severity: medium`).
+> Self-contained PROTOCOL-PRIMITIVE slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/protocol-has-no-prepare-step-distinct-from-verify-gate.md` (2026-06-09, `severity: medium`).
 >
 > MAINTAINER DECISIONS (settled 2026-06-12 — these are the answers the observation deferred to a human; do NOT re-open them, implement them):
 > - **Option (a)** of the observation: add an explicit `prepare` config field (NOT runner auto-detect, NOT "out of protocol scope").

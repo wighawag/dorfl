@@ -30,7 +30,7 @@ rebase.
   NO drop step and NO rename/rename ledger conflict. The old `drop-bookkeeping-rebase`
   tests are removed WITH the module; add/keep a test that the plain rebase is clean.
 
-This delivers PRD US #6 (the drop-bookkeeping-rebase module + call sites removed for
+This delivers SPEC US #6 (the drop-bookkeeping-rebase module + call sites removed for
 good) and completes defect #2's dissolution (branch inheritance gone).
 
 ## Acceptance criteria
@@ -66,7 +66,7 @@ good) and completes defect #2's dissolution (branch inheritance gone).
 > inherited (it keys on the `Dorfl-Bookkeeping: route-to-needs-attention` git
 > trailer) — is dead. Read `drop-bookkeeping-rebase.ts` and its call sites
 > (`integration-core.ts` integration rebase, `continue-branch.ts` onboard
-> continue-rebase) and the trailer producer in `needs-attention.ts`. PRD US #6; ADR
+> continue-rebase) and the trailer producer in `needs-attention.ts`. SPEC US #6; ADR
 > `docs/adr/ledger-status-on-per-item-lock-refs.md`.
 >
 > Delete the module + both call sites + the trailer producer/consumer. Prove (test) a
@@ -83,4 +83,4 @@ good) and completes defect #2's dissolution (branch inheritance gone).
 > fully gone (no dangling import).
 >
 > NOTE: `humanOnly: true` is a DECIDED review-gate (driven via `drive-backlog`), not
-> PRD propagation. Record non-obvious in-scope decisions per the slice template.
+> SPEC propagation. Record non-obvious in-scope decisions per the slice template.

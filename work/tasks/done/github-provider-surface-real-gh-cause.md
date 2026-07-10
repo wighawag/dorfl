@@ -5,7 +5,7 @@ covers: []
 blockedBy: []
 ---
 
-> Self-contained off-path follow-up — derives from NO PRD (`covers: []`), so per `work/protocol/WORK-CONTRACT.md` it omits `prd:` and is its own source of truth. Source signal: `work/observations/github-provider-hardcoded-gh-unauth-string-in-pr-comment-and-create.md` (surfaced by the Gate-3 review of PR #66). It is the PR/review-surface COUNTERPART of the already-landed issue-surface fix `issue-provider-surface-real-gh-cause` (`work/done/`): the SAME diagnosability defect, the SAME fix shape, a DIFFERENT provider (`GitHubProvider` in `github.ts`, not `issue-provider.ts`). PR #66 correctly did NOT touch this — `github.ts` was out of its scope.
+> Self-contained off-path follow-up — derives from NO SPEC (`covers: []`), so per `work/protocol/WORK-CONTRACT.md` it omits `prd:` and is its own source of truth. Source signal: `work/observations/github-provider-hardcoded-gh-unauth-string-in-pr-comment-and-create.md` (surfaced by the Gate-3 review of PR #66). It is the PR/review-surface COUNTERPART of the already-landed issue-surface fix `issue-provider-surface-real-gh-cause` (`work/done/`): the SAME diagnosability defect, the SAME fix shape, a DIFFERENT provider (`GitHubProvider` in `github.ts`, not `issue-provider.ts`). PR #66 correctly did NOT touch this — `github.ts` was out of its scope.
 
 ## What to build
 

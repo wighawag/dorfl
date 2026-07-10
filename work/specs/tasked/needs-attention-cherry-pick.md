@@ -12,7 +12,7 @@ When a claimed slice gets stuck, the runner `git mv`s it `in-progress → needs-
 
 On an unprotected-`main` repo (the common case dorfl serves today) there is a clean fix: **surface the stuck state on `main` by cherry-picking the needs-attention move commit to `main`.** Then `main` reflects reality (`work/needs-attention/<slug>.md`), `scan`/`status` see it with no new mechanism, and it travels cross-machine for free. This is the "easy add" noted in `work/ideas/needs-attention-surfacing.md`.
 
-This PRD delivers that surfacing, built **against the ledger-transition write seam** (the `ledger-transition-seam` PRD must be sliced first) so it is expressed as a transition strategy concern, not bolted onto the move code.
+This SPEC delivers that surfacing, built **against the ledger-transition write seam** (the `ledger-transition-seam` SPEC must be sliced first) so it is expressed as a transition strategy concern, not bolted onto the move code.
 
 ## Solution
 
@@ -37,17 +37,17 @@ Make the needs-attention transition **also surface on `main`** so the operationa
 ### Autonomy notes (the two gate axes)
 
 - **`humanOnly`:** OMITTED. Mechanical, well-specified git behaviour (cherry-pick a move commit to `main`) on the unprotected-`main` path the system already serves. No product/security judgement. Agent-buildable.
-- **`needsAnswers`:** OMITTED at launch. The mechanism (cherry-pick the move commit to `main` via the write seam; save the work on the branch; clean up on resolve) is decided. The one dependency is structural, handled by `sliceAfter: [ledger-transition-seam]` (this PRD is sliced only after the seam, so its slices can `blockedBy` the real seam slugs).
+- **`needsAnswers`:** OMITTED at launch. The mechanism (cherry-pick the move commit to `main` via the write seam; save the work on the branch; clean up on resolve) is decided. The one dependency is structural, handled by `sliceAfter: [ledger-transition-seam]` (this SPEC is sliced only after the seam, so its slices can `blockedBy` the real seam slugs).
 
 > Implementation & testing detail moved to the slice (what to build) and the ADR `docs/adr/claim-ledger-vs-protected-main.md` (the durable _why_). The resolved design is summarised in Solution above.
 
 ## Out of Scope
 
 - **Protected-`main` surfacing** (reading stuck-state from work-branch tips over the network). That belongs to a future protected-`main` strategy — analysis only in `docs/adr/claim-ledger-vs-protected-main.md`; not built here.
-- **Introducing the seam itself** — that is the `ledger-transition-seam` PRD (prerequisite; this PRD's `sliceAfter` points at it).
+- **Introducing the seam itself** — that is the `ledger-transition-seam` SPEC (prerequisite; this SPEC's `sliceAfter` points at it).
 - **Any `ledgerMode`/mode/config** — none introduced.
 
 ## Further Notes
 
 - Source idea: `work/ideas/needs-attention-surfacing.md` (the "easy add" / `main` cherry-pick path). Source ADR: `docs/adr/claim-ledger-vs-protected-main.md`.
-- `sliceAfter: [ledger-transition-seam]` is intentional: this PRD's slices should reference the seam's real slugs in `blockedBy`, so it must be sliced after the seam. This ordering also serves as a live test of the `sliceAfter` mechanism (per the maintainer: "we will test that this way").
+- `sliceAfter: [ledger-transition-seam]` is intentional: this SPEC's slices should reference the seam's real slugs in `blockedBy`, so it must be sliced after the seam. This ordering also serves as a live test of the `sliceAfter` mechanism (per the maintainer: "we will test that this way").

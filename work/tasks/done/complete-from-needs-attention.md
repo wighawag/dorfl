@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained feature \u2014 derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live (3 dogfood runs in): recovering a good-but-stuck item required raw git. Delete `work/observations/needs-attention-recovery-needs-runner-owned-complete.md` once this lands.
+> Self-contained feature \u2014 derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Spotted live (3 dogfood runs in): recovering a good-but-stuck item required raw git. Delete `work/observations/needs-attention-recovery-needs-runner-owned-complete.md` once this lands.
 
 A **runner-owned `needs-attention → done` path**: when a `do`/`run` gate failure was SPURIOUS (the work is actually fine \u2014 e.g. an env-polluted test, a transient flake, or a cause the human has since fixed), let the runner re-gate the item's branch and, if green, COMPLETE it \u2014 so the human never does git. Pairs with `requeue` (`needs-attention → backlog`, the give-up/redo path); this is the "it's fine, finish it" path.
 

@@ -48,44 +48,44 @@ import {
 import type {ReviewGate} from './review-gate.js';
 
 /**
- * The **`do prd:<slug>` tasking path** (prd `auto-slice`, task
+ * The **`do prd:<slug>` tasking path** (spec `auto-slice`, task
  * `autoslice-command`) — the orchestration that ties the tasking GATE
  * (`tasking-eligibility.ts`) and the tasking LOCK (`tasking-lock.ts`) together to
- * task a prd into `work/tasks/backlog/` STAGED items (task
+ * task a spec into `work/tasks/backlog/` STAGED items (task
  * `pre-backlog-staging-folder-and-promote-step-a` — the runner-owned promotion
  * moves them `pre-backlog/ → backlog/` later), with the RUNNER owning every git-state
- * transition. This is the prd branch of the `do` worker (ADR
+ * transition. This is the spec branch of the `do` worker (ADR
  * `command-surface-and-journeys.md` §3/§3a), NOT a standalone `task` command;
- * `do.ts` dispatches `resolved.namespace === 'prd'` here.
+ * `do.ts` dispatches `resolved.namespace === 'spec'` here.
  *
  * The end-to-end flow (mirroring the `do`/`run` runner-owns-git discipline — the
  * agent only EDITS files, the runner does ALL git):
  *
- *   1. **Resolve the gate** (agent path): refuse to task a prd that is
- *      `humanOnly`/`needsAnswers`, or whose `taskedAfter` prds are not yet tasked.
+ *   1. **Resolve the gate** (agent path): refuse to task a spec that is
+ *      `humanOnly`/`needsAnswers`, or whose `taskedAfter` specs are not yet tasked.
  *      The repo's `autoTask` POLICY also refuses on the AUTO-PICK pool path, but
- *      NOT when the prd was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
+ *      NOT when the spec was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <task>` builds regardless of
  *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
  *      path is unbound by the gate entirely.
  *   2. **Acquire the lock** (agent path) via the unified per-item lock CAS —
  *      serialising concurrent taskers on the `prd:<slug>` ref (the body STAYS in
- *      `work/prds/ready/`; the lock no longer moves it). The HUMAN path with no contention
+ *      `work/specs/ready/`; the lock no longer moves it). The HUMAN path with no contention
  *      may task on `main` directly WITHOUT the lock.
- *   3. **Invoke the agent harness** with the `to-task` prd — the agent runs the
+ *   3. **Invoke the agent harness** with the `to-task` spec — the agent runs the
  *      tasker methodology and produces `work/tasks/backlog/<slug>.md` FILES ONLY; it does
  *      NOT commit/push/move (the same in-band boundary as the build agent).
  *   4. **The runner integrates the COMPLETING transition through the SHARED core**
  *      (`performIntegration`, task `slice-output-through-integration`): the agent's
  *      tasking runs on a `work/<slug>` branch cut from `<arbiter>/main` (whose base
- *      holds the prd in `work/prds/ready/`), and the produced backlog tasks + the durable
- *      prd lifecycle move (`work/prds/ready/ → work/prds/tasked/`)
+ *      holds the spec in `work/specs/ready/`), and the produced backlog tasks + the durable
+ *      spec lifecycle move (`work/specs/ready/ → work/specs/tasked/`)
  *      integrate via the band honoring `--propose` (push the branch + open a
  *      PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
  *      args resolve ONCE in the shared core, EVERY `do task:` integrate arg applies
  *      to `do prd:` by construction. A content-identity STALE CHECK (the lock's
  *      read-stability backstop) fires FIRST against the acquire-time `lockedBlob`,
- *      so a concurrent edit of the held prd still fails loud (`stale`).
+ *      so a concurrent edit of the held spec still fails loud (`stale`).
  *
  * The tasking LOCK (`tasking-lock.ts`, `acquireTaskingLock`/`releaseTaskingLock`)
  * is the UNIFIED per-item lock (`refs/dorfl/lock/<entry>`, `action: task`)
@@ -104,14 +104,14 @@ export type TaskOutcome =
 	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/taskedAfter)
 	| 'lock-lost' // the lock was lost/contended (another tasker holds it)
 	| 'agent-failed' // the agent invocation itself errored
-	| 'stale' // the held prd was edited under the lock → the tasking is stale
-	| 'needs-attention' // the tasker edit loop found the decomposition unclear → prd routed to needs-attention (no tasks)
-	| 'usage-error'; // usage / environment problem (missing prd, bad release, …)
+	| 'stale' // the held spec was edited under the lock → the tasking is stale
+	| 'needs-attention' // the tasker edit loop found the decomposition unclear → spec routed to needs-attention (no tasks)
+	| 'usage-error'; // usage / environment problem (missing spec, bad release, …)
 
 export interface TaskResult {
 	exitCode: 0 | 1 | 2 | 3 | 4;
 	outcome: TaskOutcome;
-	/** The prd slug acted on. */
+	/** The spec slug acted on. */
 	slug: string;
 	/** Repo-relative paths of the backlog tasks the runner committed. */
 	emitted?: string[];
@@ -119,7 +119,7 @@ export interface TaskResult {
 	 * The tasker review→edit LOOP's disposition (`slicer-review-edit-loop`), when
 	 * the loop ran. `converged` = the improved tasks landed; `uncertain-tasks` =
 	 * the cap was hit and specific tasks landed `needsAnswers: true`; absent when
-	 * no loop ran or the prd was routed to needs-attention (`outcome:
+	 * no loop ran or the spec was routed to needs-attention (`outcome:
 	 * 'needs-attention'`).
 	 */
 	loop?: 'converged' | 'uncertain-tasks';
@@ -128,8 +128,8 @@ export interface TaskResult {
 }
 
 /**
- * The agent invocation: runs the `to-task` prd in `cwd`, WRITING
- * `work/tasks/backlog/<slug>.md` task files (and trimming the prd). It does NO git —
+ * The agent invocation: runs the `to-task` spec in `cwd`, WRITING
+ * `work/tasks/backlog/<slug>.md` task files (and trimming the spec). It does NO git —
  * the runner captures the produced files and commits them.
  */
 export type TaskDorfl = (input: {
@@ -155,7 +155,7 @@ const DEFAULT_LOCK_SEAM: TaskingLockSeam = {
 };
 
 export interface PerformTaskOptions {
-	/** The prd slug to task (`work/prds/ready/<slug>.md`). */
+	/** The spec slug to task (`work/specs/ready/<slug>.md`). */
 	slug: string;
 	/** The working clone/checkout the tasking runs in. */
 	cwd: string;
@@ -170,16 +170,16 @@ export interface PerformTaskOptions {
 	/** Per-repo `autoTask` policy (resolved by `autoslice-gate`). Agent path only. */
 	autoTask?: boolean;
 	/**
-	 * The prd was named EXPLICITLY by the operator (`do prd:<slug>`), so the
-	 * `autoTask` POLICY is already satisfied — naming the prd IS the authorization,
+	 * The spec was named EXPLICITLY by the operator (`do prd:<slug>`), so the
+	 * `autoTask` POLICY is already satisfied — naming the spec IS the authorization,
 	 * EXACTLY as `do <task>` builds a named task regardless of `autoBuild` (the
 	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent tasking gate drops the
-	 * `autoTask` policy term and binds ONLY the prd's own readiness axes
+	 * `autoTask` policy term and binds ONLY the spec's own readiness axes
 	 * (`humanOnly`/`needsAnswers`) + `taskedAfter`. Defaults `false`. Both the
 	 * explicit `do prd:` dispatch AND the auto-pick path pass `true` here: the
 	 * auto-pick POOL (`do-autopick.ts`) is the single `autoTask`-enforcement point
-	 * (a pool-ineligible prd is never selected), so once a prd is dispatched its
+	 * (a pool-ineligible spec is never selected), so once a spec is dispatched its
 	 * policy is already settled. Agent path only.
 	 */
 	explicit?: boolean;
@@ -226,7 +226,7 @@ export interface PerformTaskOptions {
 	 * task-path mirror of the build Gate-2, riding {@link performIntegration}'s
 	 * review-before-integrate block. When `review` resolves on, a FRESH-CONTEXT
 	 * agent reviews the WHOLE produced task SET (coherence / dependency graph /
-	 * gaps + overlap / prd-goal correct-if-implemented) BEFORE the tasks integrate;
+	 * gaps + overlap / spec-goal correct-if-implemented) BEFORE the tasks integrate;
 	 * `approve` lands them, `block` routes the set to needs-attention. It is
 	 * controlled by the BUILD `--review`/`--no-review`/`--review-model` family (ONE
 	 * gate-configuration story shared with the build path) and is ONE-SHOT —
@@ -247,7 +247,7 @@ export interface PerformTaskOptions {
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
 	lock?: TaskingLockSeam;
 	/**
-	 * **The per-repo TASK-PLACEMENT default** (prd
+	 * **The per-repo TASK-PLACEMENT default** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). The
 	 * resolved per-repo default landing for the tasker's emitted tasks, fed as
@@ -270,13 +270,13 @@ export interface PerformTaskOptions {
 	 */
 	explicitTasksLandIn?: 'pre-backlog' | 'ready';
 	/**
-	 * **The tasker review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES prd
-	 * `work/prds/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
+	 * **The tasker review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES spec
+	 * `work/specs/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
 	 * provided, AFTER the agent produces candidate tasks (step 3) and BEFORE the
 	 * runner finalises them (step 4), run the `review` SKILL as a review→edit→
 	 * re-review loop that IMPROVES the candidate tasks in place, then routes the
 	 * verdict through the three outcomes (converge→land / uncertain-task→
-	 * needsAnswers / decomposition-unclear→prd-to-needs-attention). The seam is the
+	 * needsAnswers / decomposition-unclear→spec-to-needs-attention). The seam is the
 	 * review+edit gate (tests inject a canned verdict+edits; production:
 	 * {@link harnessTaskReviewGate}). Omitted ⇒ NO loop (the candidate tasks land
 	 * as-is — the pre-loop behaviour). The HUMAN path is unaffected (the loop runs
@@ -318,7 +318,7 @@ export interface PerformTaskOptions {
 const DEFAULT_ARBITER = 'origin';
 
 /**
- * **The STAGED-TASKS dir** (prd `staging-pool-position-gate-and-trust-model`,
+ * **The STAGED-TASKS dir** (spec `staging-pool-position-gate-and-trust-model`,
  * task `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The runner
  * lands the tasker's emitted task files HERE, NOT in `work/tasks/ready/`: an item
@@ -336,7 +336,7 @@ export const STAGED_TASKS_DIR = workFolderRel('tasks-backlog');
  * origin, or an `--tasks-land-in ready` operator override). The agent NEVER
  * writes here — it always writes to {@link STAGED_TASKS_DIR}; the runner
  * redirects the emitted files to the resolved destination at integrate-stage
- * time. prd US #4 / the governing ADR: the agent cannot self-place into the
+ * time. spec US #4 / the governing ADR: the agent cannot self-place into the
  * pool. Task `runner-deterministic-slice-placement-policy-and-precedence`.
  */
 const POOL_TASKS_DIR = workFolderRel('tasks-ready');
@@ -389,11 +389,11 @@ export async function performTask(
 	const doer = options.doer ?? 'agent';
 	const lock = options.lock ?? DEFAULT_LOCK_SEAM;
 
-	// 0. The prd must exist in the checkout (`work/prds/ready/<slug>.md`) — it is the
+	// 0. The spec must exist in the checkout (`work/specs/ready/<slug>.md`) — it is the
 	//    source the agent tasks + the file the lock holds.
 	const specPath = workItemPath(cwd, 'specs-ready', slug);
 	if (!existsSync(specPath)) {
-		const message = `no prd '${slug}' found at ${workFolderRel('specs-ready')}/${slug}.md.`;
+		const message = `no spec '${slug}' found at ${workFolderRel('specs-ready')}/${slug}.md.`;
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', slug, message};
 	}
@@ -401,7 +401,7 @@ export async function performTask(
 	const specFm = parseFrontmatter(specContent);
 
 	// 1. RESOLVE THE GATE (agent path only). The human path is UNBOUND — a human
-	//    decides for themselves whether a prd is taskable.
+	//    decides for themselves whether a spec is taskable.
 	if (doer === 'agent') {
 		const eligibility = resolveAgentGate(
 			cwd,
@@ -452,9 +452,9 @@ export async function performTask(
 
 	// 2b. ONBOARD the agent's tasking work onto a `work/<slug>` BRANCH cut from the
 	//     freshly-fetched `<arbiter>/main` (task `slice-output-through-integration`).
-	//     The prd body rests in `work/prds/ready/<slug>.md` on `<arbiter>/main` (the lock no
-	//     longer moves it), so the branch's base HOLDS the held prd — the lifecycle
-	//     stage below moves it `prd/ → prd-tasked/` ON THIS BRANCH and the shared integrate core (`--propose`
+	//     The spec body rests in `work/specs/ready/<slug>.md` on `<arbiter>/main` (the lock no
+	//     longer moves it), so the branch's base HOLDS the held spec — the lifecycle
+	//     stage below moves it `specs/ready/ → specs/tasked/` ON THIS BRANCH and the shared integrate core (`--propose`
 	//     PR / `--merge` main) lands the whole transition, WITHOUT the lock release
 	//     committing tasks straight to `main`. The agent runs IN-PLACE on this branch
 	//     (branch ≠ worktree; the isolation seam upgrades it). The HUMAN path stays on
@@ -463,7 +463,7 @@ export async function performTask(
 		await switchToWorkBranch(cwd, arbiter, slug, env);
 	}
 
-	// 3. INVOKE THE AGENT with the to-task prd. It WRITES
+	// 3. INVOKE THE AGENT with the to-task spec. It WRITES
 	//    `work/tasks/backlog/*.md` task files (the STAGED area — NOT `work/tasks/ready/`,
 	//    which is the agent-eligible pool the runner owns the promotion into; task
 	//    `pre-backlog-staging-folder-and-promote-step-a`); it does NO git. We
@@ -472,7 +472,7 @@ export async function performTask(
 	const before = snapshotStagedTasks(cwd);
 	// Also snapshot the POOL `work/tasks/ready/` BEFORE the agent runs: the runner's
 	// final commit must scrub any agent writes there (an attempt to self-place into
-	// the pool, prd US #4) before `git add -A` would sweep them in.
+	// the pool, spec US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
 	// Read the parent-spec self-pointer off `specFm.spec` (populated from the
 	// `spec:` key or the legacy `prd:` back-compat alias).
@@ -521,10 +521,10 @@ export async function performTask(
 			env: agentEnv,
 			note,
 		});
-		// DECOMPOSITION UNCLEAR: emit NO guessed tasks — route the held prd to
+		// DECOMPOSITION UNCLEAR: emit NO guessed tasks — route the held spec to
 		// needs-attention with the questions as the reason. The lock release amends the
 		// `prd:<slug>` unified lock `active → stuck` (the tasking needs-attention surface
-		// is the stuck lock now — NO folder write; the prd body stays in `work/prds/ready/`).
+		// is the stuck lock now — NO folder write; the spec body stays in `work/specs/ready/`).
 		if (loopDisposition.outcome === 'decomposition-unclear') {
 			const reason = decompositionUnclearReason(
 				slug,
@@ -563,7 +563,7 @@ export async function performTask(
 	}
 
 	// 4. The RUNNER commits the COMPLETING transition: drop the produced backlog
-	//    tasks IN + move the prd tasking/ -> prd-tasked/ (residence = tasked-ness) — now
+	//    tasks IN + move the spec specs/ready/ -> specs/tasked/ (residence = tasked-ness) — now
 	//    through the SHARED integrate core (`--propose` PR / `--merge` main), NOT a
 	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
 	//    taken AFTER any loop edits, so the runner integrates the IMPROVED tasks,
@@ -574,7 +574,7 @@ export async function performTask(
 	// `runner-deterministic-slice-placement-policy-and-precedence`). Resolve which
 	// folder the runner lands the emitted tasks in BEFORE handing them to the
 	// shared integrate band: precedence `explicit > untrusted-origin ⇒ staging >
-	// tasksLandIn > built-in (staging)`, all from unforgeable inputs (the prd's
+	// tasksLandIn > built-in (staging)`, all from unforgeable inputs (the spec's
 	// stamped `originTrust:` + the resolved per-repo default + the operator's
 	// explicit flag). The agent NEVER influences this; it always writes to
 	// `work/tasks/backlog/`, and the runner redirects at `stage()` time.
@@ -602,11 +602,11 @@ export async function performTask(
 	if (useLock) {
 		// READ-STABILITY BACKSTOP (the lock's content-identity check, now owned at the
 		// integrate seam): the OUTPUT no longer rides the lock release, so the band
-		// below would otherwise rebase a concurrent edit of the held prd body CLEANLY
-		// into prd/ (a rename+edit merge) while the tasks were cut from the OLD body —
+		// below would otherwise rebase a concurrent edit of the held spec body CLEANLY
+		// into spec/ (a rename+edit merge) while the tasks were cut from the OLD body —
 		// the exact silent stale-task drift the lock forbids
-		// (`work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`). So we
-		// compare the CURRENTLY held `work/prds/ready/<slug>.md` blob on the arbiter against
+		// (`work/notes/observations/tasking-lock-does-not-stabilise-spec-content.md`). So we
+		// compare the CURRENTLY held `work/specs/ready/<slug>.md` blob on the arbiter against
 		// the snapshot the lock TOOK (`lockedBlob`); ANY change ⇒ STALE ⇒ fail loud,
 		// touch NOTHING (the lock stays held; a human re-tasks or routes to
 		// needs-attention). It is the SAME content-identity check `releaseTaskingLock`
@@ -616,17 +616,17 @@ export async function performTask(
 		if (stale) {
 			const specRel = workItemRel('specs-ready', `${slug}.md`);
 			const message =
-				`RELEASE CONFLICT for '${slug}': the prd was edited (${specRel} ` +
+				`RELEASE CONFLICT for '${slug}': the spec was edited (${specRel} ` +
 				`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
-				`STALE — re-task from the edited prd or route it to needs-attention. ` +
+				`STALE — re-task from the edited spec or route it to needs-attention. ` +
 				`The arbiter was NOT modified (lock still held).`;
 			note(message);
 			return {exitCode: 4, outcome: 'stale', slug, message};
 		}
 
 		// Route the OUTPUT through the SHARED integrate back-half (task
-		// `slice-output-through-integration`): the produced backlog tasks + the prd
-		// lifecycle move (`work/prds/ready/ -> work/prds/tasked/`, residence = tasked-ness) integrate
+		// `slice-output-through-integration`): the produced backlog tasks + the spec
+		// lifecycle move (`work/specs/ready/ -> work/specs/tasked/`, residence = tasked-ness) integrate
 		// via `performIntegration` honoring `--propose` (push the work branch + open a
 		// PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
 		// args resolve ONCE in the shared core, every `do task:` arg applies here by
@@ -666,13 +666,13 @@ export async function performTask(
 			// path's merge-vs-propose decision is the `integration` mode the user typed;
 			// `merge` IS the auto-land mode, so a resolved `merge` is never downgraded.
 			// The task gate family is `--review`/`--no-review`/`--review-model` only
-			// (prd US #6).
+			// (spec US #6).
 			mode: options.integration ?? 'propose',
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			type: 'tasking',
 			lifecycle: {
-				// Read the PR title / commit summary from the held prd (before it moves).
+				// Read the PR title / commit summary from the held spec (before it moves).
 				titlePath: workItemPath(cwd, 'specs-ready', slug),
 				commitTag: 'tasked',
 				stage: () =>
@@ -701,7 +701,7 @@ export async function performTask(
 		// route the lock release owns for the decomposition-unclear verdict: it amends
 		// the `prd:<slug>` unified lock `active -> stuck` with the block reason (the
 		// tasking needs-attention surface is the stuck lock now — NO folder write; the
-		// prd body stays in `work/prds/ready/`). So on a block we route the held prd to
+		// spec body stays in `work/specs/ready/`). So on a block we route the held spec to
 		// needs-attention THROUGH the lock release — the set never lands.
 		if (core.outcome === 'review-blocked') {
 			const reason = taskGateBlockedReason(slug, core.reviewBlockReason);
@@ -729,7 +729,7 @@ export async function performTask(
 		}
 		if (core.outcome === 'review-unparseable') {
 			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
-			// JSON). Route the held prd to needs-attention through the SAME lock-release
+			// JSON). Route the held spec to needs-attention through the SAME lock-release
 			// seam the block path uses (the tasking needs-attention surface is the stuck
 			// `prd:<slug>` lock; no folder write). It is NOT a block (the gate output was
 			// unreadable) — record it as the transient-infra-class re-run signal so the
@@ -760,8 +760,8 @@ export async function performTask(
 			};
 		}
 		if (core.outcome === 'completed') {
-			// The durable `prd → prd-tasked` `main` move landed through the shared integrate
-			// core (the body moved straight from `work/prds/ready/` — no transient `tasking/`
+			// The durable `specs/ready → specs/tasked` `main` move landed through the shared integrate
+			// core (the body moved straight from `work/specs/ready/` — no transient `tasking/`
 			// marker). The completing commit is owned by the integrate band, NOT
 			// `releaseTaskingLock`, so the unified per-item lock that `acquireTaskingLock`
 			// took is released HERE (delete the ref). A
@@ -779,13 +779,13 @@ export async function performTask(
 	}
 
 	// HUMAN, no-lock path: the human commits on `main` directly (the runner does
-	// not own the human's git). We report the produced tasks; moving the prd into
-	// `work/prds/tasked/` (residence = tasked-ness) and committing is the human's to
+	// not own the human's git). We report the produced tasks; moving the spec into
+	// `work/specs/tasked/` (residence = tasked-ness) and committing is the human's to
 	// do, as with the human `complete`.
 	const message =
 		`Tasked '${slug}' -> ${emitted.length} backlog task` +
 		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
-		`the produced files (and move the prd into work/prds/tasked/) yourself.`;
+		`the produced files (and move the spec into work/specs/tasked/) yourself.`;
 	note(message);
 	return {
 		exitCode: 0,
@@ -827,11 +827,11 @@ function releaseFailureToResult(
  * (propose pushed the work branch + opened a PR / merge landed on `main`) the
  * tasking is `tasked`. The band's FAILURE outcomes are reported on the tasking
  * contract: a `rebase-conflict` against a concurrently-advanced `main` maps to
- * `stale` (exit 4) — the tasking analogue of "the held prd moved under us"; a
+ * `stale` (exit 4) — the tasking analogue of "the held spec moved under us"; a
  * a `gate-failed` cannot occur (the tasking path passes `skipVerify`) but maps to
  * a usage error defensively. A `review-blocked` (the task-SET ACCEPTANCE GATE
  * blocked the set, task `slice-acceptance-gate`) is handled by `performTask`
- * BEFORE this mapper — it routes the held prd to needs-attention via
+ * BEFORE this mapper — it routes the held spec to needs-attention via
  * the lock release (the task-path needs-attention route) — so it never reaches
  * here; it is mapped defensively to a usage error if it ever does.
  */
@@ -852,7 +852,7 @@ function integrationToTaskResult(
 		const message =
 			`Tasked '${slug}' -> ${emitted.length} backlog task` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +
-			`through the shared core (moved work/prds/ready/ -> work/prds/tasked/, the ` +
+			`through the shared core (moved work/specs/ready/ -> work/specs/tasked/, the ` +
 			`tasked resting state) and ${landed}.`;
 		return {exitCode: 0, outcome: 'tasked', slug, emitted, loop, message};
 	}
@@ -864,7 +864,7 @@ function integrationToTaskResult(
 			message:
 				core.reason ??
 				`Integrating the tasking of '${slug}' conflicted against the latest ` +
-					`${slug} main — the tasking is stale; re-task from the current prd.`,
+					`${slug} main — the tasking is stale; re-task from the current spec.`,
 		};
 	}
 	return {
@@ -880,9 +880,9 @@ function integrationToTaskResult(
 /**
  * ONBOARD the tasking work onto a `work/<slug>` branch cut from the freshly-
  * fetched `<arbiter>/main` (task `slice-output-through-integration`). Called
- * AFTER the tasking lock is held, so the branch's base HOLDS the prd in
- * `work/prds/ready/` (the lock no longer moves the body) — the lifecycle stage then moves
- * it `prd/ -> prd-tasked/` ON THIS BRANCH and the shared integrate core lands it. A
+ * AFTER the tasking lock is held, so the branch's base HOLDS the spec in
+ * `work/specs/ready/` (the lock no longer moves the body) — the lifecycle stage then moves
+ * it `specs/ready/ -> specs/tasked/` ON THIS BRANCH and the shared integrate core lands it. A
  * pre-existing local `work/<slug>` (a re-run) is force-recreated off fresh main.
  * The agent runs in-place on this branch (branch ≠ worktree).
  */
@@ -894,7 +894,7 @@ async function switchToWorkBranch(
 ): Promise<void> {
 	// The tasking path is the parent-spec namespace (`do spec:<slug>`): the branch
 	// is `work/spec-<slug>`, distinct from a same-slug task-build's `work/task-<slug>`.
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	// MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`):
 	// MINT the work-branch under the `spec` namespace token (`workBranchRef` still
 	// parses the legacy `work/prd-<slug>` form, so in-flight branches keep resolving).
 	const branch = workBranchRef('spec', slug);
@@ -909,8 +909,8 @@ async function switchToWorkBranch(
 /**
  * The READ-STABILITY content-identity STALE CHECK (the lock's backstop, owned at
  * the integrate seam now that the OUTPUT no longer rides the lock release): true
- * iff the CURRENTLY held `work/prds/ready/<slug>.md` blob on `<arbiter>/main` DIFFERS
- * from the snapshot the lock TOOK (`lockedBlob`, read from `work/prds/ready/<slug>.md` at
+ * iff the CURRENTLY held `work/specs/ready/<slug>.md` blob on `<arbiter>/main` DIFFERS
+ * from the snapshot the lock TOOK (`lockedBlob`, read from `work/specs/ready/<slug>.md` at
  * acquire). ANY change = a concurrent edit under the lock = the tasking is STALE.
  * Stronger than a textual rebase conflict (which a rename+edit merge can apply
  * CLEANLY). When `lockedBlob` is absent (never, in production) it reads as
@@ -932,7 +932,7 @@ async function heldSpecIsStale(
 		cwd,
 		env,
 	);
-	// The prd being absent (already tasked/moved) is NOT this check's concern
+	// The spec being absent (already tasked/moved) is NOT this check's concern
 	// (the integrate's rebase/push surfaces that); only a CHANGED held blob is stale.
 	if (held.status !== 0) {
 		return false;
@@ -942,18 +942,18 @@ async function heldSpecIsStale(
 
 /**
  * STAGE the tasking lifecycle into the index on the `work/<slug>` branch (the
- * {@link performIntegration} lifecycle seam): move the held prd
- * `git mv work/prds/ready/<slug>.md -> work/prds/tasked/<slug>.md` (the TASKED resting
+ * {@link performIntegration} lifecycle seam): move the held spec
+ * `git mv work/specs/ready/<slug>.md -> work/specs/tasked/<slug>.md` (the TASKED resting
  * state — the build-machine `done/` analogue, the SOURCE OF TRUTH for tasked-ness),
  * and write+`git add` the produced `work/tasks/backlog/*.md` files. The band's subsequent
  * `git add -A` + atomic commit folds this AND the agent's uncommitted backlog writes
  * into ONE runner-owned commit (the agent never does git).
  *
- * TASK `prd-sliced-folder-step-a` (prd `slicing-coherence` US #8): the lifecycle
- * destination is `work/prds/tasked/` (NOT back to `work/prds/ready/`) — `prd-tasked/`
+ * TASK `prd-sliced-folder-step-a` (spec `slicing-coherence` US #8): the lifecycle
+ * destination is `work/specs/tasked/` (NOT back to `work/specs/ready/`) — `specs/tasked/`
  * residence IS tasked-ness (like `done/` for tasks, with no `done:` marker). The
  * `tasked:` frontmatter marker was removed entirely in `remove-sliced-marker-step-b`
- * (sequenced last): residence in `work/prds/tasked/` is now the sole signal.
+ * (sequenced last): residence in `work/specs/tasked/` is now the sole signal.
  */
 async function stageTaskingLifecycle(params: {
 	cwd: string;
@@ -964,7 +964,7 @@ async function stageTaskingLifecycle(params: {
 	 * The runner-resolved destination folder (task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Computed
 	 * ONCE in `performTask` via the shared {@link resolvePlacement} from the
-	 * prd's `originTrust:` stamp + the configured `tasksLandIn` default + the
+	 * spec's `originTrust:` stamp + the configured `tasksLandIn` default + the
 	 * operator's explicit override, then passed in here — so the call site sees
 	 * exactly where the emitted tasks landed (the placement decision is not
 	 * buried in the stage closure).
@@ -992,10 +992,10 @@ async function stageTaskingLifecycle(params: {
 	const spec = workItemRel('specs-ready', `${slug}.md`);
 	const specTasked = workItemRel('specs-tasked', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (task
-	// `untrusted-origin-forces-build-propose`): read the held prd's `origin`/
+	// `untrusted-origin-forces-build-propose`): read the held spec's `origin`/
 	// `originTrust` stamp BEFORE the move, so each emitted task can carry it. A
 	// task's risk is its BUILD; the stamp must reach the task so the build
-	// transition can force `propose` for untrusted-origin work. An UNSTAMPED prd (a
+	// transition can force `propose` for untrusted-origin work. An UNSTAMPED spec (a
 	// human/local-authored one ⇒ trusted) propagates nothing — the normal path is
 	// untouched.
 	const specAbs = join(cwd, spec);
@@ -1004,19 +1004,19 @@ async function stageTaskingLifecycle(params: {
 		: {origin: undefined, originTrust: undefined};
 	if (placementReason === 'untrusted-origin') {
 		note(
-			`Untrusted-origin prd '${slug}': forcing the emitted tasks STAGED ` +
+			`Untrusted-origin spec '${slug}': forcing the emitted tasks STAGED ` +
 				`(${placementDir}/) regardless of tasksLandIn (a human promotes ` +
 				'them into work/tasks/ready/). Pass --tasks-land-in <where> to override.',
 		);
 	}
-	// Move the held prd prd/ -> prd-tasked/ (the TASKED resting state — folder =
-	// source of truth, like done/ for tasks). This is the DURABLE `prd → prd-tasked`
+	// Move the held spec specs/ready/ -> specs/tasked/ (the TASKED resting state — folder =
+	// source of truth, like done/ for tasks). This is the DURABLE `specs/ready → specs/tasked`
 	// success move, owned by THIS transition's commit (the lock no longer moved the
-	// body, so the source is `work/prds/ready/`, never `work/tasking/`).
+	// body, so the source is `work/specs/ready/`, never `work/tasking/`).
 	mkdirSync(dirname(join(cwd, specTasked)), {recursive: true});
 	await gitHard(['mv', spec, specTasked], cwd, env);
 	await gitHard(['add', '--', specTasked], cwd, env);
-	// **POOL-PLACEMENT FENCE (prd US #4 / governing ADR
+	// **POOL-PLACEMENT FENCE (spec US #4 / governing ADR
 	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`).** The
 	// agent ALWAYS writes to the STAGING folder (`work/tasks/backlog/`); the POOL
 	// (`work/tasks/ready/`) is the agent-eligible pool the runner owns the promotion
@@ -1054,7 +1054,7 @@ async function stageTaskingLifecycle(params: {
  * Revert any change/addition the agent made to the POOL `work/tasks/ready/` during a
  * tasking run. The agent's STAGING folder is `work/tasks/backlog/`; a write to the
  * pool is an attempt to self-place into the agent-eligible pool the runner owns
- * the promotion into (prd US #4 / governing ADR). Compared to the `poolBefore`
+ * the promotion into (spec US #4 / governing ADR). Compared to the `poolBefore`
  * snapshot (the branch-base state of `work/tasks/ready/`, taken BEFORE the agent
  * ran), any new file is removed from the worktree and any changed file is
  * checked back out to HEAD — so the subsequent `git add -A` cannot land it. The
@@ -1122,7 +1122,7 @@ async function gitHard(
 /**
  * Build the needs-attention REASON for a task-SET ACCEPTANCE GATE block (task
  * `slice-acceptance-gate`): the fresh-context review of the produced set returned
- * `block`, so the prd is routed to `work/needs-attention/` with the review's
+ * `block`, so the spec is routed to `work/needs-attention/` with the review's
  * blocking findings as the body prose and NO tasks landed. Takes the core's
  * structured `reviewBlockReason` (the gate's blocking findings); falls back to a
  * generic line when absent. DISTINCT from the improver loop's
@@ -1134,20 +1134,20 @@ function taskGateBlockedReason(
 ): string {
 	const head =
 		`The task acceptance gate (fresh-context review of the produced SET) blocked ` +
-		`'${slug}'. The prd is routed to needs-attention with no tasks landed; a human ` +
+		`'${slug}'. The spec is routed to needs-attention with no tasks landed; a human ` +
 		`must resolve the blocking findings, then re-task.`;
 	return findingsReason ? `${head}\n\n${findingsReason}` : head;
 }
 
 /**
  * Build the needs-attention REASON for a decomposition-unclear loop verdict (the
- * prd is routed to `work/needs-attention/` with these open questions, no guessed
- * tasks). Prose only — recorded as the prd's needs-attention body block.
+ * spec is routed to `work/needs-attention/` with these open questions, no guessed
+ * tasks). Prose only — recorded as the spec's needs-attention body block.
  */
 function decompositionUnclearReason(slug: string, questions: string[]): string {
 	const head =
 		`The tasker review→edit loop could not converge on a sound decomposition of ` +
-		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The prd is routed ` +
+		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The spec is routed ` +
 		`to needs-attention with no guessed tasks; a human must resolve:`;
 	const body =
 		questions.length > 0
@@ -1209,8 +1209,8 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
 /**
  * Resolve the AGENT tasking gate for `slug`: the pure predicate
  * (`needsAnswers !== true && humanOnly !== true && autoTask`) plus the
- * cross-prd `taskedAfter` ordering, resolved against `work/prds/tasked/` residence of
- * the prds present in the checkout.
+ * cross-spec `taskedAfter` ordering, resolved against `work/specs/tasked/` residence of
+ * the specs present in the checkout.
  */
 function resolveAgentGate(
 	cwd: string,
@@ -1229,7 +1229,7 @@ function resolveAgentGate(
 	});
 }
 
-/** Build an HONEST gate-refusal message naming WHY the agent skipped the prd. */
+/** Build an HONEST gate-refusal message naming WHY the agent skipped the spec. */
 function gateRefusalReason(
 	slug: string,
 	specFm: {humanOnly?: boolean; needsAnswers?: boolean},
@@ -1238,11 +1238,11 @@ function gateRefusalReason(
 ): string {
 	const reasons: string[] = [];
 	if (specFm.humanOnly === true) {
-		reasons.push('the prd is humanOnly (a human must drive its tasking)');
+		reasons.push('the spec is humanOnly (a human must drive its tasking)');
 	}
 	if (specFm.needsAnswers === true) {
 		reasons.push(
-			'the prd has needsAnswers (open questions block auto-tasking)',
+			'the spec has needsAnswers (open questions block auto-tasking)',
 		);
 	}
 	// The autoTask POLICY only refuses on the NON-explicit (auto-pick pool) path:
@@ -1258,7 +1258,7 @@ function gateRefusalReason(
 	}
 	if (!eligibility.taskedAfter.satisfied) {
 		reasons.push(
-			`taskedAfter prd(s) not yet tasked: ${eligibility.taskedAfter.missing.join(', ')}`,
+			`taskedAfter spec(s) not yet tasked: ${eligibility.taskedAfter.missing.join(', ')}`,
 		);
 	}
 	const why =
@@ -1267,12 +1267,12 @@ function gateRefusalReason(
 }
 
 /**
- * Read the set of slugs whose prds are already TASKED in this checkout — RESIDENCE
- * in `work/prds/tasked/` (the tasked resting state, task `prd-sliced-folder-step-a`
- * / prd `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
+ * Read the set of slugs whose specs are already TASKED in this checkout — RESIDENCE
+ * in `work/specs/tasked/` (the tasked resting state, task `prd-sliced-folder-step-a`
+ * / spec `slicing-coherence` US #9), the build-machine `done/` analogue. The FOLDER
  * is the source of truth; the `tasked:` frontmatter marker was removed entirely in
  * `remove-sliced-marker-step-b` and is NOT consulted. So `taskedAfter` resolves
- * against `prd-tasked/` residence
+ * against `specs/tasked/` residence
  * (mirroring `blockedBy` -> `done/`). A missing folder reads as empty. The slug is
  * read from each file's frontmatter `slug:`, falling back to the filename — the same
  * shape the task readers use.
@@ -1291,7 +1291,7 @@ function readTaskedSlugs(cwd: string): Set<string> {
 /**
  * Build the tasking PROMPT: instruct a fresh-context agent to apply the
  * **tasking discipline** (`work/protocol/TASKING-PROTOCOL.md`) to the held
- * prd at `work/prds/ready/<slug>.md` and to EMIT tracer-bullet vertical
+ * spec at `work/specs/ready/<slug>.md` and to EMIT tracer-bullet vertical
  * tasks under `work/tasks/backlog/`. The discipline body (the tracer-bullet
  * rules, the two-axis gate guidance, the confidence check, file-orthogonality,
  * the emitted task shape) lives in `TASKING-PROTOCOL.md` — NOT inlined here
@@ -1300,24 +1300,26 @@ function readTaskedSlugs(cwd: string): Set<string> {
  * task-template.md`); the doc DESCRIBES it (D2).
  *
  * This builder owns ONLY the PER-BUILDER framing: who you are (a fresh-context
- * tasker for ONE prd), where the held prd is, where the emitted task files
+ * tasker for ONE spec), where the held spec is, where the emitted task files
  * MUST land (the staging folder, never the pool), and the runner-owns-git
  * boundary on the agent path. The shared discipline body is NOT duplicated
  * here.
  */
 function buildTaskingSpec(slug: string, _spec: string | undefined): string {
+	const specReady = workFolderRel('specs-ready');
+	const specTasked = workFolderRel('specs-tasked');
 	return [
-		`You are a FRESH-CONTEXT tasker for the prd \`work/prds/ready/${slug}.md\`.`,
+		`You are a FRESH-CONTEXT tasker for the spec \`${specReady}/${slug}.md\`.`,
 		`Apply the tasking discipline defined in \`work/protocol/TASKING-PROTOCOL.md\``,
 		`(the in-band, protocol-native tasking protocol every set-up repo carries; the`,
-		`human-facing pointer is \`skills/to-task/SKILL.md\`) to this ONE prd:`,
+		`human-facing pointer is \`skills/to-task/SKILL.md\`) to this ONE spec:`,
 		`decompose it into independently-grabbable, tracer-bullet vertical tasks.`,
-		`Read the prd fully first.`,
+		`Read the spec fully first.`,
 		``,
 		`The discipline rules — the tracer-bullet test, the two-axis gate guidance`,
 		`(\`humanOnly\` is NARROW; \`needsAnswers\` flags genuine uncertainty), the`,
 		`confidence check that REPLACES the human-quiz step when no human is present,`,
-		`the file-orthogonality preference, the prd-vs-task gate disjointness, and`,
+		`the file-orthogonality preference, the spec-vs-task gate disjointness, and`,
 		`the emitted task shape — ALL live in that doc. Read them there.`,
 		``,
 		`No human is present, so apply the CONFIDENCE CHECK (\`TASKING-PROTOCOL.md\``,
@@ -1325,7 +1327,7 @@ function buildTaskingSpec(slug: string, _spec: string | undefined): string {
 		`granularity, dependency order, a gate, or a seam is genuinely unresolved, set`,
 		`\`needsAnswers: true\` on the specific uncertain task (questions in its body)`,
 		`rather than guessing — or, if the whole decomposition is unclear, stop and`,
-		`route the prd to needs-attention with the questions.`,
+		`route the spec to needs-attention with the questions.`,
 		``,
 		`WRITE EVERY emitted task file under \`${STAGED_TASKS_DIR}/\` (the STAGING folder)`,
 		`— NEVER \`work/tasks/ready/\`. \`work/tasks/ready/\` is the agent-eligible POOL and`,
@@ -1333,12 +1335,12 @@ function buildTaskingSpec(slug: string, _spec: string | undefined): string {
 		`folder is \`work/tasks/backlog/\`. A write outside the staging folder is dropped`,
 		`by the runner-deterministic placement resolver.`,
 		``,
-		`Set each task's \`prd:\` field to the source prd slug (\`${slug}\`) so the`,
-		`link back to the prd survives.`,
+		`Set each task's \`spec:\` field to the source spec slug (\`${slug}\`) so the`,
+		`link back to the spec survives.`,
 		``,
 		`Do NOT perform any git operations — do not stage, commit, push, or move any`,
 		`files. The RUNNER owns every git-state transition (it commits the produced`,
-		`tasks, releases the tasking lock, and moves the prd into \`work/prds/tasked/\`).`,
+		`tasks, releases the tasking lock, and moves the spec into \`${specTasked}/\`).`,
 	].join('\n');
 }
 

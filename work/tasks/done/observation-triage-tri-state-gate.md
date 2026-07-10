@@ -5,7 +5,7 @@ blockedBy: [advance-autopick-lifecycle-pools, remove-deprecated-config-aliases]
 covers: []
 ---
 
-> Self-contained ENGINE slice (`covers: []`, no `prd:`, its own source of truth). Source: `work/ideas/observation-triage-tri-state-gate.md` + decision ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES (does not derive from) `work/prd/runner-in-ci.md`, which depends on this gate existing.
+> Self-contained ENGINE slice (`covers: []`, no `prd:`, its own source of truth). Source: `work/ideas/observation-triage-tri-state-gate.md` + decision ADR `docs/adr/ci-config-policy-and-gate-family.md`. ENABLES (does not derive from) `work/spec/runner-in-ci.md`, which depends on this gate existing.
 
 ## What to build
 
@@ -39,7 +39,7 @@ ALSO (the invariant that resolves the sibling slice's apply question): the two q
 
 ## Prompt
 
-> Replace the `autoTriage` BOOLEAN gate with a 3-state ENUM `observationTriage` = `off | ask | auto`, threading the full gate-family resolution chain and reading it at the advance triage rung. Source: `work/ideas/observation-triage-tri-state-gate.md`; decision: `docs/adr/ci-config-policy-and-gate-family.md`. This ENABLES `work/prd/runner-in-ci.md` (which depends on the gate), but is a self-contained engine change.
+> Replace the `autoTriage` BOOLEAN gate with a 3-state ENUM `observationTriage` = `off | ask | auto`, threading the full gate-family resolution chain and reading it at the advance triage rung. Source: `work/ideas/observation-triage-tri-state-gate.md`; decision: `docs/adr/ci-config-policy-and-gate-family.md`. This ENABLES `work/spec/runner-in-ci.md` (which depends on the gate), but is a self-contained engine change.
 >
 > FIRST, confirm the BLOCKER landed: `advance-autopick-lifecycle-pools` added the OBSERVATION POOL to the advance auto-pick selection (so there IS now a pool to gate). Then drift-check: `config.ts` still has `autoTriage: boolean` (default false, `DEFAULT_CONFIG`); `repo-config.ts` `REPO_ALLOWED_KEYS` lists `autoTriage`; `env-config.ts` `KEY_COERCIONS` has `autoTriage: 'boolean'`; the advance triage rung in `advance.ts` reads `context.autoTriage === true`; and TWO `cli.ts` sites set `autoTriage: config.autoTriage` on the `AdvanceContext` (grep `autoTriage: config.autoTriage`, the single-item path and the auto-pick driver path). There is NO `--auto-triage` CLI flag (only `--auto-build`). If any landed differently, reconcile or route to `needs-attention/`.
 >

@@ -54,4 +54,4 @@ _Suggested default: Sufficient as documented: the three-tier precedence mirrors 
 
 **Your answer** (write below this line):
 
-Sufficient as documented. The per-task > per-prd > repo precedence mirrors the existing humanOnly/autoBuild item-override shape, so the WORK-CONTRACT.md documentation is enough; no separate precedence ADR is owed.
+Sufficient as documented. The per-task > per-spec > repo precedence mirrors the existing humanOnly/autoBuild item-override shape, so the WORK-CONTRACT.md documentation is enough; no separate precedence ADR is owed.

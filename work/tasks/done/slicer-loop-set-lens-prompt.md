@@ -16,9 +16,9 @@ Resolved by the maintainer; the three Open Questions are settled — this slice 
 
 ## What to build
 
-US #3 wants the slicer improver loop to review the WHOLE SET of produced slices (dependency graph coherence, gaps, overlap, "does the set compose into the PRD goal") rather than just per-slice well-formedness.
+US #3 wants the slicer improver loop to review the WHOLE SET of produced slices (dependency graph coherence, gaps, overlap, "does the set compose into the SPEC goal") rather than just per-slice well-formedness.
 
-**DRIFT — read before building:** the improver loop's prompt (`buildSliceReviewPrompt` in `src/slicer-review-loop.ts`, landed via the `slicer-review-edit-loop` slice in `done/`) ALREADY frames the artifact as "the CANDIDATE SLICES just produced" (the whole set), tells the agent to "review the candidate DECOMPOSITION adversarially", "apply the review skill's lenses IN ORDER", and ENDS in the DESTINATION CHECK ("if every slice is built exactly as written, do we end up with the system the PRD describes?"). It also carries the set-level routing channels (`uncertainSlices`, `decompositionUnclear`). So the core of US #3 appears ALREADY SATISFIED. See `work/observations/slicer-prompt-already-uses-set-lens.md`.
+**DRIFT — read before building:** the improver loop's prompt (`buildSliceReviewPrompt` in `src/slicer-review-loop.ts`, landed via the `slicer-review-edit-loop` slice in `done/`) ALREADY frames the artifact as "the CANDIDATE SLICES just produced" (the whole set), tells the agent to "review the candidate DECOMPOSITION adversarially", "apply the review skill's lenses IN ORDER", and ENDS in the DESTINATION CHECK ("if every slice is built exactly as written, do we end up with the system the SPEC describes?"). It also carries the set-level routing channels (`uncertainSlices`, `decompositionUnclear`). So the core of US #3 appears ALREADY SATISFIED. See `work/observations/slicer-prompt-already-uses-set-lens.md`.
 
 This slice is therefore scoped as a VERIFY + minimal TIGHTEN: confirm the prompt (and the `review` skill's set-of-slices mode it invokes) explicitly names graph coherence / gaps / overlap, not only the implied destination check, and add the missing words if any are genuinely absent. It is doc/prompt-shaped where it touches the skill — NOT a from-scratch rewrite of a correct prompt.
 
@@ -35,7 +35,7 @@ This slice is therefore scoped as a VERIFY + minimal TIGHTEN: confirm the prompt
 
 ## Prompt
 
-> Verify and, if genuinely needed, tighten the slicer improver-loop prompt so it explicitly invokes the `review` skill's whole-SET lens (graph coherence / gaps / overlap / "does the set compose into the PRD goal"), per US #3 of `work/prd/slicing-coherence.md`.
+> Verify and, if genuinely needed, tighten the slicer improver-loop prompt so it explicitly invokes the `review` skill's whole-SET lens (graph coherence / gaps / overlap / "does the set compose into the SPEC goal"), per US #3 of `work/spec/slicing-coherence.md`.
 >
 > CONTEXT — the premise had DRIFTED and is now resolved (see the `## Answer` block: needsAnswers is CLEARED, the decision is option (b), a minimal tighten). Read `work/observations/slicer-prompt-already-uses-set-lens.md` and `buildSliceReviewPrompt` in `src/slicer-review-loop.ts` first: the prompt ALREADY reviews the candidate DECOMPOSITION with the review skill's lenses + the destination check, so this is NOT an "add a set lens" rewrite — it is naming the three lenses explicitly.
 >

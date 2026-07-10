@@ -6,7 +6,7 @@ needsAnswers: false
 
 2026-06-26
 
-Split out of the PRD `land-time-reverify-and-parallel-merge-ceiling` (its US #5 /
+Split out of the SPEC `land-time-reverify-and-parallel-merge-ceiling` (its US #5 /
 Applied Answer q1 part (b)). The task `cross-job-ref-based-land-lock` was
 CANCELLED (`tasks/cancelled/`) because no sound, cheap, model-consistent
 stale-lock reclaim story exists for it; this idea preserves the concept for a
@@ -39,13 +39,13 @@ land-lock:
   than the floor's spurious bounce, which self-heals (re-rebase + re-gate +
   retry).
 
-So the accelerator's reclaim story is NOT cheap, which is exactly the PRD's
+So the accelerator's reclaim story is NOT cheap, which is exactly the SPEC's
 stated condition for splitting it out. The `mergeRetries` floor
 (`merge-retries-gate-precedence`) is correctness-sufficient on its own; this is a
 pure throughput optimisation that is not worth a deadlock-prone or
 human-babysat lock today.
 
-## Revisit when (the trigger to turn this into a PRD)
+## Revisit when (the trigger to turn this into a SPEC)
 
 Both must hold:
 
@@ -56,7 +56,7 @@ Both must hold:
    from, rather than a hand-rolled TTL on a ref. That keeps the git-alone floor
    honest (no auto-reclaim there) while letting a capable host raise the ceiling.
 
-## Decisions already made (carry into the follow-on PRD)
+## Decisions already made (carry into the follow-on SPEC)
 
 - Granularity: PER-TARGET-BRANCH (`refs/dorfl/land-lock/<branch>`), not one
   global per-repo lock.

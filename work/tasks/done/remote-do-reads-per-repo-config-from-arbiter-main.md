@@ -4,7 +4,7 @@ slug: remote-do-reads-per-repo-config-from-arbiter-main
 covers: []
 ---
 
-> Self-contained fix slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/remote-do-ignores-per-repo-config.md` (delete it once this lands). Discovered live while driving the backlog with `do --remote` (the conductor hit BOTH symptoms: harness dropped → "no agentCmd"; verify dropped → false gate red). UNBLOCKS making `--remote`/`--isolated` the conductor's default isolation mode (`drive-backlog-skill-assumes-in-place-do-not-remote.md`).
+> Self-contained fix slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal: `work/observations/remote-do-ignores-per-repo-config.md` (delete it once this lands). Discovered live while driving the backlog with `do --remote` (the conductor hit BOTH symptoms: harness dropped → "no agentCmd"; verify dropped → false gate red). UNBLOCKS making `--remote`/`--isolated` the conductor's default isolation mode (`drive-backlog-skill-assumes-in-place-do-not-remote.md`).
 
 ## What to build
 

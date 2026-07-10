@@ -9,7 +9,7 @@ covers: [16, 17, 18]
 ## What to build
 
 A GENERIC terminal "won't-proceed" durable record: a `work/dropped/` folder that
-GENERALISES today's `work/out-of-scope/`. An item (a slice OR a PRD) that will not
+GENERALISES today's `work/out-of-scope/`. An item (a slice OR a SPEC) that will not
 proceed for ANY reason — superseded, out-of-scope, duplicate, abandoned/obsolete —
 rests in `work/dropped/<slug>.md` with the REASON in the body (a `reason:` value
 like `superseded by <x>` / `out-of-scope` / `duplicate` / `abandoned`), instead of
@@ -25,9 +25,9 @@ Residence in `work/dropped/` removes the item from the build / auto-slice pool B
 RESIDENCE — exactly like `work/done/`. This CLOSES the verified gap that the
 slicing-eligibility predicate (`needsAnswers !== true && humanOnly !== true &&
 autoSlice && sliceAfter`) has NO notion of superseded/retired and would auto-slice
-a superseded PRD as if live: a superseded PRD simply is not in `work/prd/`
+a superseded SPEC as if live: a superseded SPEC simply is not in `work/spec/`
 (it is in `work/dropped/`), so no new flag is needed. "Superseded" thus becomes a
-POSITION (a runner/human `git mv prd/<x> → dropped/<x>` + a `reason:` in the body),
+POSITION (a runner/human `git mv spec/<x> → dropped/<x>` + a `reason:` in the body),
 consistent with the position-vs-nature model.
 
 It is a DURABLE record on `main` (the same category as `done/`/`out-of-scope/`),
@@ -40,9 +40,9 @@ NOT a lock-ref transient.
       `dropped/`); `out-of-scope/` is folded in as a `reason:` value (and any
       existing `out-of-scope/` record migrates cleanly — the folder is currently
       empty).
-- [ ] A PRD in `work/dropped/` is NOT in the auto-slice pool (never auto-sliced);
+- [ ] A SPEC in `work/dropped/` is NOT in the auto-slice pool (never auto-sliced);
       a slice in `work/dropped/` is NOT in the build pool — BY RESIDENCE, the same
-      mechanism as `work/done/`. A superseded PRD moved to `dropped/` is provably
+      mechanism as `work/done/`. A superseded SPEC moved to `dropped/` is provably
       skipped by the slicer/build selector.
 - [ ] The `reason:` is read from the item body (not a status field — status is the
       folder, WORK-CONTRACT rule 3).
@@ -50,7 +50,7 @@ NOT a lock-ref transient.
       ledger guard recognise `dropped/` wherever they recognise `out-of-scope/`
       today (the producers + the readers stay consistent — no reader re-implements
       the rule and drifts).
-- [ ] Tests cover: a dropped PRD is out of the auto-slice pool; a dropped slice is
+- [ ] Tests cover: a dropped SPEC is out of the auto-slice pool; a dropped slice is
       out of the build pool; the reason is read from the body; an existing
       `out-of-scope/` record migrates cleanly if folded in. House pattern
       (`--bare file://` arbiter). Acceptance gate green:
@@ -65,7 +65,7 @@ NOT a lock-ref transient.
 
 > Introduce a generic terminal `work/dropped/` folder that GENERALISES
 > `work/out-of-scope/` and removes an item from the pool BY RESIDENCE. Read
-> `work/prd/staging-pool-position-gate-and-trust-model.md` (US #16, #17, #18) and
+> `work/spec/staging-pool-position-gate-and-trust-model.md` (US #16, #17, #18) and
 > the governing ADR. First check for drift against the code
 > (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
@@ -81,8 +81,8 @@ NOT a lock-ref transient.
 > `apply-persist.ts`'s terminal type). The POOL-ELIGIBILITY-BY-RESIDENCE readers
 > are the build selector / claimability (`src/scan.ts`, `src/select-priority.ts`,
 > `src/claim-cas.ts`, `src/ledger-read.ts`) and the slicing-eligibility predicate
-> (`src/slicing-eligibility.ts` / `src/slicing.ts readSlicedSlugs` + the PRD pool).
-> Ensure a `work/dropped/<slug>.md` PRD is excluded from the auto-slice pool and a
+> (`src/slicing-eligibility.ts` / `src/slicing.ts readSlicedSlugs` + the SPEC pool).
+> Ensure a `work/dropped/<slug>.md` SPEC is excluded from the auto-slice pool and a
 > `work/dropped/<slug>.md` slice from the build pool, the SAME way `work/done/`
 > residence excludes — define the rule once where the existing terminal/done
 > residence rule lives; do not re-implement per reader.

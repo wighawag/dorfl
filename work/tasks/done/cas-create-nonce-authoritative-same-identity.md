@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained PRODUCT-FIX slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): the residual "2 winners" CAS-race flake that SURVIVED `triage-cas-race-test-models-real-contention` (PR #90, in `work/done/`).
+> Self-contained PRODUCT-FIX slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): the residual "2 winners" CAS-race flake that SURVIVED `triage-cas-race-test-models-real-contention` (PR #90, in `work/done/`).
 >
 > This SUPERSEDES/EXTENDS `triage-cas-race-test-models-real-contention` (#90) AT THE PRODUCT LAYER. #90 hardened the TEST (distinct racer identities ⇒ distinct shas); this slice fixes the PRODUCT so the CAS is correct even when racers are NOT distinct. Do NOT weaken the one-winner invariant. Do NOT remove `racerEnv`/`raceClone` (keep them; reframe their docstring).
 

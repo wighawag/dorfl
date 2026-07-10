@@ -8,7 +8,7 @@ covers: [3, 5, 6]
 
 ## What to build
 
-Make `triage-persist.ts` `buildPromotedBody` produce its task (and PRD) body via
+Make `triage-persist.ts` `buildPromotedBody` produce its task (and SPEC) body via
 the SHARED renderer from the keystone task, REPLACING the hand-rolled `## Prompt`
 block the interim guard task added. This removes the second copy of the
 `## Prompt` logic so there is one owner, not two. Promotion's behaviour (the body
@@ -19,9 +19,9 @@ End-to-end behaviour:
 - `buildPromotedBody` builds the promoted TASK body through the shared renderer:
   `## What to build` (the mechanism prose) + optional `## Open questions` + a
   `## Prompt` seeded from the mechanism prose. The hand-rolled `## Prompt`
-  assembly currently in `buildPromotedBody` (the `artifact !== 'prd'` block from
+  assembly currently in `buildPromotedBody` (the `artifact !== 'spec'` block from
   the interim task) is DELETED in favour of the shared renderer's `## Prompt`
-  seeding. The promoted PRD body likewise goes through the shared PRD-body
+  seeding. The promoted SPEC body likewise goes through the shared SPEC-body
   renderer (no `## Prompt`).
 - Promotion's WRITER is untouched: the triage-local `createItemThroughCas` /
   `promoteObservation` path, the atomic create+delete commit, and the
@@ -41,11 +41,11 @@ parallel; both depend only on the keystone.
 
 ## Acceptance criteria
 
-- [ ] `buildPromotedBody` renders task + PRD bodies via the shared renderer; the
+- [ ] `buildPromotedBody` renders task + SPEC bodies via the shared renderer; the
       hand-rolled `## Prompt` block from the interim task is removed (one copy of
       the `## Prompt` logic remains, in the shared renderer).
 - [ ] A promoted task still carries a `## Prompt` seeded from the mechanism prose
-      and still passes `extractPromptSection`/`resolveTask`; a promoted PRD carries
+      and still passes `extractPromptSection`/`resolveTask`; a promoted SPEC carries
       none.
 - [ ] Promotion's CAS writer / atomic create+delete / loser-backs-off guarantees
       are untouched (RENDERING only).
@@ -63,14 +63,14 @@ parallel; both depend only on the keystone.
 > Goal: delegate `triage-persist.ts` `buildPromotedBody` to the shared renderer
 > from `shared-buildable-task-and-prd-body-renderer-extract`, replacing the
 > hand-rolled `## Prompt` block the interim task
-> `promoted-task-emits-prompt-and-pre-claim-wellformedness-guard` added, per PRD
+> `promoted-task-emits-prompt-and-pre-claim-wellformedness-guard` added, per SPEC
 > `centralize-buildable-task-renderer-shared-by-intake-and-promotion` (US #3, #5,
 > #6).
 >
 > FIRST check drift: confirm the keystone renderer landed in `tasks/done/` with the
 > assumed shape, and that `buildPromotedBody` (~L393 in `triage-persist.ts`) still
 > contains the interim task's hand-rolled `## Prompt` seeding (the `artifact !==
-> 'prd'` block) and that the pre-claim guard still lives in `claim-cas.ts`. If any
+> 'spec'` block) and that the pre-claim guard still lives in `claim-cas.ts`. If any
 > moved, route to needs-attention.
 >
 > FORWARD-NOTE (from the keystone's Gate-2 review, PR #247): the shared
@@ -81,7 +81,7 @@ parallel; both depend only on the keystone.
 > (do not rely on the renderer's generic default) — otherwise the empty-mechanism
 > case changes. Assert this in a test.
 >
-> Rewire buildPromotedBody (task AND prd artifact paths) to the shared renderer and
+> Rewire buildPromotedBody (task AND spec artifact paths) to the shared renderer and
 > DELETE its hand-rolled `## Prompt` block. Touch RENDERING only: do NOT alter the
 > `promoteObservation` / `createItemThroughCas` writer, the atomic create+delete
 > commit, or the CAS-loser-backs-off behaviour (US #5). LEAVE the pre-claim

@@ -136,7 +136,7 @@ drive the naming + the contract review, not an autonomous claim.
 > currently either lost the new work (pre-blocker) or bounces to needs-attention
 > (post-blocker). This lands it automatically. See
 > `work/observations/recover-already-committed-discards-continue-agent-new-work.md`,
-> the blocker slice's `## Decisions` (option D), and the PRD
+> the blocker slice's `## Decisions` (option D), and the SPEC
 > `recover-autodetect-and-advancing-lock-crash-safety`.
 >
 > FENCE: do NOT regress the other three states (`committedRecovery` clean-strand

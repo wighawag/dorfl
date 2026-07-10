@@ -8,12 +8,12 @@ This task addresses ONLY the second finding: user-visible prose drift in the pro
 
 ## Problem
 
-The promote path in `packages/dorfl/src/needs-attention.ts` still emits `pre-backlog` / `work/backlog/` / `pre-prd` / `work/prd/` nouns in user-visible strings, even though the pool vocabulary has been moving toward a new `todo` noun (via F1). Concretely:
+The promote path in `packages/dorfl/src/needs-attention.ts` still emits `pre-backlog` / `work/backlog/` / `pre-spec` / `work/spec/` nouns in user-visible strings, even though the pool vocabulary has been moving toward a new `todo` noun (via F1). Concretely:
 
 - `packages/dorfl/src/needs-attention.ts` ~lines 818–825: `note()` message `'… is not staged in work/pre-backlog/ on …'` and the commit subject `chore(${slug}): promote work/pre-backlog/ -> work/backlog/`.
 - line ~863: `note()` `Promoted '${slug}' from pre-backlog to backlog`.
 - line ~869: `reasonNotMoved` text `item left in pre-backlog`.
-- The symmetric brief block, ~lines 1034–1050 (same shape, with `pre-prd` / `work/prd/`).
+- The symmetric brief block, ~lines 1034–1050 (same shape, with `pre-spec` / `work/spec/`).
 
 This drift is **pre-existing**: f3b only wrapped these functions in `try/finally` for lock-release; it did not touch the strings. Fixing it inside f3b's scope would have been wrong. A small dedicated task is the right home.
 

@@ -29,7 +29,7 @@ genuinely new, unrelated verb. Pick a name that does not collide.
 
 - [ ] A `dorfl` verb deletes a named source item + its sidecar (when present) in
       ONE commit, with the reason in the commit message.
-- [ ] The source is resolved by its namespaced identity (task / prd / observation /
+- [ ] The source is resolved by its namespaced identity (task / spec / observation /
       bare slug).
 - [ ] The deletion is a single revertible commit (a wrong delete is recoverable via
       git).
@@ -54,7 +54,7 @@ genuinely new, unrelated verb. Pick a name that does not collide.
 
 > Add a small explicit `dorfl` CLI verb that DELETES a source item + its question
 > sidecar directly — the "I just want to throw this away" path that does NOT
-> round-trip through the decision engine. This is US #5/#11 of the source PRD: a
+> round-trip through the decision engine. This is US #5/#11 of the source SPEC: a
 > direct human/skill/CLI delete, git-recoverable.
 >
 > Domain vocabulary + where to look: a question SIDECAR is `work/questions/<type>-<slug>.md`,

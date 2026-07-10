@@ -68,7 +68,7 @@ Scope:
 - [ ] A sequential `-n` batch that integrates a build/slice rung to `main`
       mid-batch and then runs a later tree-less rung lands the tree-less push via
       the rebase-retry (the non-fast-forward-by-construction case).
-- [ ] No tree-less push fires for `build-slice` / `slice-prd` rungs (they integrate
+- [ ] No tree-less push fires for `build-slice` / `slice-spec` rungs (they integrate
       via the existing band) and none fires when no arbiter is configured.
 - [ ] The promote-apply case is covered: an `apply` rung whose answer is a
       `promote-slice` / `promote-adr` (which does its OWN arbiter CAS via
@@ -141,7 +141,7 @@ Scope:
 > non-fatal. Tests use throwaway git repos and assert the observable arbiter state.
 >
 > Constraints: see `work/findings/ci-advance-surfacing-gap-analysis.md` (the driver
-> coverage map + why this is the foundation slice) and the PRD
+> coverage map + why this is the foundation slice) and the SPEC
 > `ci-advance-surfaces-questions-not-only-builds`. RECORD any non-obvious in-scope
 > decision (e.g. exactly where the push hook sits in the driver) per the slice
 > template's decision-recording rule.

@@ -1,5 +1,5 @@
 ---
-title: Dependency-aware auto-pick (`-n`) — schedule a blocker + its dependent together in one run (topo-ordered schedulable set), so a freshly-sliced PRD's chained slices drain in a single tick
+title: Dependency-aware auto-pick (`-n`) — schedule a blocker + its dependent together in one run (topo-ordered schedulable set), so a freshly-sliced SPEC's chained slices drain in a single tick
 slug: dependency-aware-autopick-scheduling
 type: idea
 status: incubating
@@ -7,7 +7,7 @@ status: incubating
 
 # Dependency-aware auto-pick scheduling
 
-> Captured 2026-06-12 as `work/observations/do-autopick-no-dependency-aware-scheduling.md`; promoted to an idea on triage (it is an ENHANCEMENT, not a defect — today's snapshot behaviour is correct, just limited). NOT built. Cross-ref: `work/prd/runner-in-ci.md` slice-readiness notes already flag this as out-of-scope-but-relevant to the CI cron drain.
+> Captured 2026-06-12 as `work/observations/do-autopick-no-dependency-aware-scheduling.md`; promoted to an idea on triage (it is an ENHANCEMENT, not a defect — today's snapshot behaviour is correct, just limited). NOT built. Cross-ref: `work/spec/runner-in-ci.md` slice-readiness notes already flag this as out-of-scope-but-relevant to the CI cron drain.
 
 ## The limitation today
 
@@ -30,7 +30,7 @@ Consequence for A → B (B blocked on A, A not yet done at scan time): B is `eli
 
 Make auto-pick **dependency-aware**: instead of a flat snapshot of currently-eligible items, build the per-repo dependency DAG over backlog slices and select a **schedulable set** — items eligible NOW plus items that become eligible once their (also-selected) blockers land — ordered by a topological sort. Then `do -n <x>` could pick a connected chain A → B → C and run them in sequence, each blocker satisfied by the prior step before it runs.
 
-Most useful **right after a PRD is sliced**: the fresh slices from one PRD frequently chain (`blockedBy` links a tracer slice to the ones that extend it), and today NONE of the downstream ones are auto-pickable until a human/loop lands each blocker first. A dependency-aware `-n` would drain a freshly-created, internally-chained slice set in one go (and would let a single CI cron tick drain a chained set instead of needing multiple ticks — see the `runner-in-ci` cron-drain note).
+Most useful **right after a SPEC is sliced**: the fresh slices from one SPEC frequently chain (`blockedBy` links a tracer slice to the ones that extend it), and today NONE of the downstream ones are auto-pickable until a human/loop lands each blocker first. A dependency-aware `-n` would drain a freshly-created, internally-chained slice set in one go (and would let a single CI cron tick drain a chained set instead of needing multiple ticks — see the `runner-in-ci` cron-drain note).
 
 ## Behaviour to pin down if built (the open design questions)
 
@@ -41,4 +41,4 @@ Most useful **right after a PRD is sliced**: the fresh slices from one PRD frequ
 ## Refs
 
 - `src/do-autopick.ts` (`performDoAuto`, `runSelectedInSequence`), `src/select-priority.ts` (`selectPrioritised`), `src/eligibility.ts` (`resolveBlockedBy`), the readiness guard in `src/claim-cas.ts` / `test/readiness.test.ts`.
-- `work/prd/runner-in-ci.md` (slice-readiness notes — the cron-drain multi-tick consequence).
+- `work/spec/runner-in-ci.md` (slice-readiness notes — the cron-drain multi-tick consequence).

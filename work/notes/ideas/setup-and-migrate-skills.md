@@ -33,9 +33,9 @@ A possible command to CHECK a repo's adoption (deterministic, repeated, no model
 
 **Status: NOT decided — we may not need it.** It was invented to justify a setup command, and `setup`-as-skill removed that need. So:
 
-- **Interim (no `doctor`):** clear DOCS listing the skills a repo needs \u2014 **required:** `to-prd`, `to-slices`, `setup`; **recommended:** `migrate`, Matt Pocock's `grill-me`, etc. If that proves insufficient, THEN consider `doctor`.
+- **Interim (no `doctor`):** clear DOCS listing the skills a repo needs \u2014 **required:** `to-spec`, `to-slices`, `setup`; **recommended:** `migrate`, Matt Pocock's `grill-me`, etc. If that proves insufficient, THEN consider `doctor`.
 - **If built, the boundary (from the ADR §8 corollary):** `doctor` core stays **harness-agnostic** (the contract surface only). **Skill location/discoverability is harness-specific** (pi reads `~/.agents/skills/`; other harnesses read elsewhere) → it MUST be delegated to the harness adapter via the §5 harness seam, never hardcoded. The harness seam is the boundary for ALL harness-specific knowledge, not just agent invocation.
 
 ## Disposition
 
-Each becomes its own PRD when prioritised (`setup` skill; `migrate` skill; `doctor` only if the interim docs prove insufficient). Keep them separate \u2014 they are not part of the command-surface reconciliation.
+Each becomes its own SPEC when prioritised (`setup` skill; `migrate` skill; `doctor` only if the interim docs prove insufficient). Keep them separate \u2014 they are not part of the command-surface reconciliation.

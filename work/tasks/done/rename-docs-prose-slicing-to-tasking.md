@@ -8,9 +8,9 @@ covers: []
 
 ## What to build
 
-Sweep the retired vocabulary out of the durable-docs PROSE under `docs/`, replacing slice/PRD/slicing with task/brief/tasking where the words refer to the live concepts. This covers BOTH `docs/adr/*.md` AND `docs/ci/README.md` (and any other non-generated `docs/*.md` carrying the old vocabulary). ADRs are durable but editable for vocabulary coherence (CONTEXT.md "Coherence").
+Sweep the retired vocabulary out of the durable-docs PROSE under `docs/`, replacing slice/SPEC/slicing with task/brief/tasking where the words refer to the live concepts. This covers BOTH `docs/adr/*.md` AND `docs/ci/README.md` (and any other non-generated `docs/*.md` carrying the old vocabulary). ADRs are durable but editable for vocabulary coherence (CONTEXT.md "Coherence").
 
-`docs/ci/README.md` specifically carries `PRD`, `slices`, `work/prd/`, and `do prd:` prose describing the advance/CI flow; bring it in line with the task/brief/tasking vocabulary and the current folder names. NOTE (correction — see the Gate-2 handoff below): a brief's CURRENT folder depends on its lifecycle state — `work/briefs/ready/` is the auto-tasking POOL, but a tasked/resting brief lives in `work/briefs/tasked/`. The `runner-in-ci` brief referenced in this file is TASKED, so every reference to it must point at `work/briefs/tasked/runner-in-ci.md` (NOT `briefs/ready/`). Verify each brief path against where the file actually lives before writing it. (`do brief:` is the current verb.)
+`docs/ci/README.md` specifically carries `SPEC`, `slices`, `work/spec/`, and `do prd:` prose describing the advance/CI flow; bring it in line with the task/brief/tasking vocabulary and the current folder names. NOTE (correction — see the Gate-2 handoff below): a brief's CURRENT folder depends on its lifecycle state — `work/briefs/ready/` is the auto-tasking POOL, but a tasked/resting brief lives in `work/briefs/tasked/`. The `runner-in-ci` brief referenced in this file is TASKED, so every reference to it must point at `work/briefs/tasked/runner-in-ci.md` (NOT `briefs/ready/`). Verify each brief path against where the file actually lives before writing it. (`do brief:` is the current verb.)
 
 Important boundary: an ADR's recorded DECISION and its historical framing must not be falsified. Where a doc genuinely describes a PAST state (e.g. "originally we used a `work/slicing/` folder"), keep the historical term and, if helpful, note the current name in parentheses. Only rename where the word denotes the CURRENT concept. Keep real historical slugs (filenames like `*-slicing-vs-build`, decision names, brief slugs such as `advance-loop`/`runner-in-ci`) verbatim.
 
@@ -31,11 +31,11 @@ This task is file-orthogonal (only `docs/` markdown), so it can run any time.
 
 ## Prompt
 
-> Goal: a vocabulary-coherence sweep of `docs/` prose (ADRs + `docs/ci/README.md`), slice/PRD/slicing → task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. Docs-only, fully orthogonal.
+> Goal: a vocabulary-coherence sweep of `docs/` prose (ADRs + `docs/ci/README.md`), slice/SPEC/slicing → task/brief/tasking, per brief `code-identifier-slice-prd-to-task-brief-rename`. Docs-only, fully orthogonal.
 >
 > FIRST check reality: read each doc before editing — distinguish a word denoting the CURRENT concept (rename it) from one describing a PAST state the doc is recording (keep it, optionally note the current name). Do not falsify a recorded decision or its history. Keep real historical slugs verbatim. Note the `tasks/todo`→`tasks/ready` pool rename is NOT yet implemented, so the live task pool is `todo`; the brief pool is already `ready`.
 >
-> Where to look: `docs/adr/*.md` and `docs/ci/README.md`. Grep for `slic`/`prd`/`PRD`/`work/prd/`/`do prd:`. Do NOT edit generated workflow files. Run `pnpm format` after editing so the prettier gate passes.
+> Where to look: `docs/adr/*.md` and `docs/ci/README.md`. Grep for `slic`/`spec`/`SPEC`/`work/spec/`/`do prd:`. Do NOT edit generated workflow files. Run `pnpm format` after editing so the prettier gate passes.
 >
 > Done = format:check green, docs prose coherent with the live task/brief/tasking vocabulary, history intact, no generated file touched.
 

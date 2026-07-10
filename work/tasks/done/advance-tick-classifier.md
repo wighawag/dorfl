@@ -14,7 +14,7 @@ The substrate-agnostic **TICK** classifier: given an item (`needsAnswers` + the 
 
 ```
 needsAnswers: true?
-├─ NO  → ANALYSE (state-appropriate rung: build a ready slice / slice a ready PRD /
+├─ NO  → ANALYSE (state-appropriate rung: build a ready slice / slice a ready SPEC /
 │        triage an untriaged observation). Analysis MAY advance, OR SURFACE questions.
 └─ YES → sidecar exists?
          ├─ NO  → ANALYSE (first pass: generate questions → write the sidecar)
@@ -36,17 +36,17 @@ Two invariants the classifier + downstream must preserve:
 
 A discriminated union naming the classified rung WITHOUT executing it:
 
-- `build-slice` (ready slice) / `slice-prd` (ready PRD) / `triage-observation` (untriaged observation) — the ANALYSE rungs;
+- `build-slice` (ready slice) / `slice-spec` (ready SPEC) / `triage-observation` (untriaged observation) — the ANALYSE rungs;
 - `surface` (first-pass question generation when `needsAnswers` but no sidecar) — transitional;
 - `apply` (all answered → apply + advance);
 - `no-op` (pending sidecar, or nothing eligible).
 
-The state machine is per-item-TYPE (slice / PRD / observation) — encode the per-type transition table from the PRD's "Per-item-type transitions" section as the source of the cells, but the EXECUTION of each cell is a later slice; this slice asserts the CLASSIFICATION of each cell.
+The state machine is per-item-TYPE (slice / SPEC / observation) — encode the per-type transition table from the SPEC's "Per-item-type transitions" section as the source of the cells, but the EXECUTION of each cell is a later slice; this slice asserts the CLASSIFICATION of each cell.
 
 ## Acceptance criteria
 
 - [ ] A pure `classifyTick(item)` returns the classified rung from EXACTLY two signals (`needsAnswers` + sidecar answered-state) plus the item type — no model, no lock, no file mutation (read-only).
-- [ ] Table tests drive every cell of the per-type (slice / PRD / observation) transition tables: surface / pending-NO-OP / subset-SKIP / all-answered → apply / append-re-pause / clear+delete / terminal-cleanup.
+- [ ] Table tests drive every cell of the per-type (slice / SPEC / observation) transition tables: surface / pending-NO-OP / subset-SKIP / all-answered → apply / append-re-pause / clear+delete / terminal-cleanup.
 - [ ] The two invariants are asserted: `needsAnswers:false ⟺ no active sidecar`, and a pending sidecar ⇒ NO-OP.
 - [ ] A pending-sidecar pool classifies as STABLE/NO-OP (no thrash) and the candidate pool shrinks monotonically as answers arrive (convergence test, at the classifier level — read-only).
 - [ ] Tests mirror the existing `categorise.ts`/`eligibility.ts` pure-function table-test style; no shared/global location touched.
@@ -58,9 +58,9 @@ The state machine is per-item-TYPE (slice / PRD / observation) — encode the pe
 
 ## Prompt
 
-> Build the pure `advance` TICK classifier + the deterministic per-type state machine. Read the PRD `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/prd/`) ("The advance TICK", "The per-item state machine — two signals only", "Per-item-type transitions"). The classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
+> Build the pure `advance` TICK classifier + the deterministic per-type state machine. Read the SPEC `advance-loop` (in `work/spec-sliced/advance-loop.md` or `work/slicing/advance-loop.md` while being sliced — NOT `work/spec/`) ("The advance TICK", "The per-item state machine — two signals only", "Per-item-type transitions"). The classifier is `classify (cheap, read-only, NO model, no lock)` — it returns WHICH rung on WHICH item; it does NOT take the lock or execute (later slices). Mirror the existing pure-function seams `categorise.ts` and `eligibility.ts` (same test style).
 >
-> Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon must never spin hot). A subset of answered entries → SKIP. The state machine is per-item-TYPE (slice / PRD / observation); encode the transition-table CELLS, but only CLASSIFY them here — execution is later.
+> Two signals only: the `needsAnswers` flag + the sidecar's answered-state (from `advance-sidecar-contract`). Two invariants: (1) `needsAnswers:false ⟺ no active sidecar`; (2) a pending (not-all-answered) sidecar ⇒ clean NO-OP (a `run` daemon must never spin hot). A subset of answered entries → SKIP. The state machine is per-item-TYPE (slice / SPEC / observation); encode the transition-table CELLS, but only CLASSIFY them here — execution is later.
 >
 > READ FIRST: `packages/dorfl/src/categorise.ts` and `packages/dorfl/src/eligibility.ts` (the pure classify + table-test pattern to mirror); the sidecar model from `advance-sidecar-contract` (its `allAnswered`/`pendingEntries`); `packages/dorfl/src/frontmatter.ts` (reading `needsAnswers`).
 >

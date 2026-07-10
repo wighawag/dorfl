@@ -77,7 +77,7 @@ the unspoofable `isAncestor` already-integrated no-op.
   axis they belong to: the move/reconcile are conditioned on `source !==
   'done'` exactly where they live. New concept count: ZERO.
 - **Option B — reuse the `IntegrationLifecycle` seam.** Rejected. `lifecycle`
-  means NON-TASK throughout the core (prd tasking / intake emit — a file
+  means NON-TASK throughout the core (spec tasking / intake emit — a file
   landing on `main` is inert); a continue-build IS a task build (it runs the
   gate, integrates code, can be `merge`d on the operator's flag). Riding the
   non-task seam to carry task-build state would silently re-mean the

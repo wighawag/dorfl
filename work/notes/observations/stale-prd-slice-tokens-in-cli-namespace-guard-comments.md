@@ -37,7 +37,7 @@ in the RETIRED tokens. The actual code (`resolveSliceOnlyArg` in
 tasks, not briefs" message, so these comments directly contradict the code they
 annotate. The same applies to the broad `do prd:`/`prd:<slug>`/`slice:<slug>`
 doc-comment wording across `do.ts`, `slicing.ts`, `advance.ts`, `intake.ts`,
-`config.ts`, `prd-complete.ts`, etc.
+`config.ts`, `spec-complete.ts`, etc.
 
 Left untouched here: this is doc-comment prose, owned by
 `rename-slicing-modules-and-symbols-to-tasking` ("doc comments in the touched

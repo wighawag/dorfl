@@ -111,7 +111,7 @@ already fine; the `assistant` identity's real value is the UNATTENDED / pinned
 case (give the in-conversation/conductor actions a stable, named, non-bot
 identity instead of whatever the shell happens to be).
 
-## Open questions before a PRD
+## Open questions before a SPEC
 
 - **Which axes does `assistant` need?** Full three-axis (label + transport auth +
   provider token) or a subset? An assistant that mostly commits + comments needs

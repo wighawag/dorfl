@@ -22,14 +22,14 @@ Concretely, `work-layout` owns:
 - The **(umbrella, lifecycle) → repo-relative path** mapping for every work
   folder. Today's umbrella is flat (there is no `notes/`/`tasks/`/`briefs/`
   nesting yet), so the module's CURRENT values are the EXACT names live today:
-  `pre-backlog`, `backlog`, `done`, `dropped`, `pre-prd`, `prd`, `prd-sliced`,
+  `pre-backlog`, `backlog`, `done`, `dropped`, `pre-spec`, `spec`, `spec-sliced`,
   `observations`, `ideas`, `findings`, `questions`, `protocol` (+ the stray
   `in-progress` still referenced by some readers). Names stay byte-identical to
   today; only the SOURCE of the string moves into this module.
 - The **folder-name unions and arrays** that are currently scattered: e.g.
   `SliceFolder` (`prompt.ts`), `WORK_FOLDERS` (`ledger-write.ts`), `PRD_FOLDERS`
   (`close-job.ts`), `LEDGER_STATUS_FOLDERS` (`ledger-lint.ts` /
-  `integration-core.ts`), `SLICE_FOLDERS` (`prd-complete.ts`). They re-export
+  `integration-core.ts`), `SLICE_FOLDERS` (`spec-complete.ts`). They re-export
   from / are derived in `work-layout` so there is one definition.
 - The **item-scan predicate** (which `*.md` files under a work folder count as
   work items), defined once here so no reader re-implements it.
@@ -58,7 +58,7 @@ even if the rename never ships.
 - [ ] The item-scan predicate is defined ONCE in `work-layout`; no reader
       re-derives it.
 - [ ] Folder NAMES are byte-identical to today (no rename): `pre-backlog`,
-      `backlog`, `done`, `dropped`, `pre-prd`, `prd`, `prd-sliced`,
+      `backlog`, `done`, `dropped`, `pre-spec`, `spec`, `spec-sliced`,
       `observations`, `ideas`, `findings`, `questions`, `protocol`.
 - [ ] NO behaviour change: `pnpm -r build && pnpm -r test && pnpm format:check`
       is green with no test edited for behaviour (tests may be edited only where
@@ -73,7 +73,7 @@ even if the rename never ships.
 
 ## Prompt
 
-> Build Phase 0 of the `folder-taxonomy-reorg-and-rename` PRD: centralise EVERY
+> Build Phase 0 of the `folder-taxonomy-reorg-and-rename` SPEC: centralise EVERY
 > `work/...` path behind one new `work-layout` module, with ZERO behaviour change
 > and ZERO rename. This is the de-risking spine, all the risk of the later
 > migration lives here, and it is gate-verifiable.
@@ -91,7 +91,7 @@ even if the rename never ships.
 > folder" is the crown-jewel invariant (a CAS `git mv` between durable folders is
 > the conflict-safe state machine). The live folder names today are `pre-backlog`
 > (slice staging) / `backlog` (the agent pool) / `done` / `dropped` (generic
-> terminal), and `pre-prd` (PRD staging) / `prd` (auto-slice pool) / `prd-sliced`
+> terminal), and `pre-spec` (SPEC staging) / `spec` (auto-slice pool) / `spec-sliced`
 > (sliced, resting), plus the capture buckets `observations` / `ideas` /
 > `findings`, `questions` (top-level), and `protocol`. The transient states
 > (`in-progress`/`needs-attention`/`slicing`/`advancing`) are NOT folders, they
@@ -103,7 +103,7 @@ even if the rename never ships.
 > (about 70 files). The folder unions/arrays are in `prompt.ts` (`SliceFolder`),
 > `ledger-write.ts` (`WORK_FOLDERS`), `close-job.ts` (`PRD_FOLDERS`),
 > `ledger-lint.ts` + `integration-core.ts` (`LEDGER_STATUS_FOLDERS`),
-> `prd-complete.ts` (`SLICE_FOLDERS`). The item-scan filter and prefix-slices live
+> `spec-complete.ts` (`SLICE_FOLDERS`). The item-scan filter and prefix-slices live
 > in readers like `slicer-review-loop.ts`, `ledger-read.ts`, `scan.ts`,
 > `slicing.ts`, `intake.ts`, `placement.ts`.
 >

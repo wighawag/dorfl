@@ -4,11 +4,11 @@ Surfaced by the 2026-06-25 sidecar rebuild sweep (see
 `work/notes/observations/sidecar-rebuild-sweep-findings-2026-06-25.md`,
 group B — the ONLY finding flagged "highest-value non-cosmetic" in the sweep).
 The rebuilt sidecar for
-`observation:close-job-via-prd-code-literal-vs-renamed-brief-field` reports
-that the supposedly-done `prd` -> `brief` rename of the close-job `via`
+`observation:close-job-via-spec-code-literal-vs-renamed-brief-field` reports
+that the supposedly-done `spec` -> `brief` rename of the close-job `via`
 discriminator is ABSENT in code, while a green unit test is masking the gap:
-`close-job.test.ts:225-226` asserts `toBe('prd')` and passes precisely because
-the code still emits `'prd'`.
+`close-job.test.ts:225-226` asserts `toBe('spec')` and passes precisely because
+the code still emits `'spec'`.
 
 The parent rename brief is
 `code-identifier-slice-prd-to-task-brief-rename` — this task is a small
@@ -26,33 +26,33 @@ same commit so the test is never green against the wrong literal.
 Production code (verify each site against current `main` before editing):
 
 - `packages/dorfl/src/close-job.ts` — the `via` field `type` / literals, the
-  `cand.via === 'prd'` branch, and `closeComment` wording that embeds the
+  `cand.via === 'spec'` branch, and `closeComment` wording that embeds the
   token.
 - `packages/dorfl/src/frontmatter.ts` `resolveClosingIssue` — the upstream
-  producer of the `via: 'prd'` value (the full `via` / `prd:` lineage the
+  producer of the `via: 'spec'` value (the full `via` / `prd:` lineage the
   sidecar calls out).
 - Any other call site the two above touch — grep for the string literal
-  `'prd'` in the `via` context and for `prd:` frontmatter keys tied to close.
+  `'spec'` in the `via` context and for `prd:` frontmatter keys tied to close.
 
 Tests:
 
-- `packages/dorfl/test/close-job.test.ts:225-226` — flip `toBe('prd')` to
+- `packages/dorfl/test/close-job.test.ts:225-226` — flip `toBe('spec')` to
   `toBe('brief')` in the SAME commit as the code rename. This is the
   load-bearing part: the test is currently masking the gap, so the flip is
   what makes the rename actually verified.
 - Sweep the rest of `close-job.test.ts` (and any sibling test) for the same
   literal / fixture text.
 
-Out of scope: any wider `prd` -> `brief` / `task` vocabulary rename beyond the
+Out of scope: any wider `spec` -> `brief` / `task` vocabulary rename beyond the
 close-job `via` lineage. Groups A, C, D, E, F from the sweep-findings note are
 tracked separately by the human.
 
 ## Acceptance
 
-- `rg "via.*'prd'" packages/dorfl/src` and `rg "'prd'" packages/dorfl/src/close-job.ts packages/dorfl/src/frontmatter.ts` return no `via`-context hits.
+- `rg "via.*'spec'" packages/dorfl/src` and `rg "'spec'" packages/dorfl/src/close-job.ts packages/dorfl/src/frontmatter.ts` return no `via`-context hits.
 - `close-job.test.ts` asserts `toBe('brief')` (or the agreed replacement token) on the discriminator, and the suite is green.
 - `pnpm -r build && pnpm -r test && pnpm format:check` passes.
-- The commit message notes this closes the `close-job-via-prd-code-literal-vs-renamed-brief-field` observation and cross-references the sidecar-rebuild-sweep note as the source.
+- The commit message notes this closes the `close-job-via-spec-code-literal-vs-renamed-brief-field` observation and cross-references the sidecar-rebuild-sweep note as the source.
 
 ## Notes
 

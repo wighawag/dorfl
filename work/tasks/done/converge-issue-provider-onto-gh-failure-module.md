@@ -5,7 +5,7 @@ blockedBy: []
 covers: []
 ---
 
-> Self-contained COHERENCE/DEDUP slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/review-nits-github-provider-surface-real-gh-cause-2026-06-11.md` (nit #2 — the residual-duplication follow-up the gate flagged on an approved PR).
+> Self-contained COHERENCE/DEDUP slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signal (discharged into this slice on authoring): `work/observations/review-nits-github-provider-surface-real-gh-cause-2026-06-11.md` (nit #2 — the residual-duplication follow-up the gate flagged on an approved PR).
 
 ## The drift (verify against current code)
 

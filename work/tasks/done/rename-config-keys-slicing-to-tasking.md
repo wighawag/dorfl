@@ -1,5 +1,5 @@
 ---
-title: Rename config keys (slicingIntegration/slicesLandIn/prdsLandIn/autoSlice/intake {slice,prd}) to tasking vocabulary
+title: Rename config keys (slicingIntegration/slicesLandIn/prdsLandIn/autoSlice/intake {slice,spec}) to tasking vocabulary
 slug: rename-config-keys-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []
@@ -11,10 +11,10 @@ covers: []
 Rename the `.dorfl.json` config keys carrying the retired vocabulary, as a CLEAN BREAK with NO read-old alias (Decision 2). NOTE the two land-in surfaces are DISTINCT (verified against `cli.ts`) — do not conflate them:
 
 - `slicingIntegration` → `taskingIntegration`
-- `slicesLandIn` (the TASK-side placement; current values `pre-backlog`/`todo`) → `tasksLandIn`, KEEPING its current values `pre-backlog`/`todo` (the pool value was already migrated `backlog`→`todo` by task `f1-pool-noun-todo-in-surface-and-apply-readers`; do NOT reintroduce `prd` values here).
-- the BRIEF-side placement config (the `prdsLandIn` sibling of `slicesLandIn`, whose `--prds-land-in` flag takes `pre-prd`/`prd`) → `briefsLandIn` with values `pre-ready`/`ready`... BUT see the pool-name caveat below.
+- `slicesLandIn` (the TASK-side placement; current values `pre-backlog`/`todo`) → `tasksLandIn`, KEEPING its current values `pre-backlog`/`todo` (the pool value was already migrated `backlog`→`todo` by task `f1-pool-noun-todo-in-surface-and-apply-readers`; do NOT reintroduce `spec` values here).
+- the BRIEF-side placement config (the `prdsLandIn` sibling of `slicesLandIn`, whose `--specs-land-in` flag takes `pre-spec`/`spec`) → `briefsLandIn` with values `pre-ready`/`ready`... BUT see the pool-name caveat below.
 - `autoSlice` → `autoTask`
-- intake's per-emitted-type `{slice, prd}` (`intake.ts`) → `{task, brief}`
+- intake's per-emitted-type `{slice, spec}` (`intake.ts`) → `{task, brief}`
 
 **Pool-name caveat (load-bearing):** the brief pool folder on disk is `work/briefs/ready/` (the `tasks/todo/`→`tasks/ready/` rename is DESIRED but NOT yet implemented — the task pool is still `todo`). So the brief-side value spelling should reflect the LIVE brief folders (`proposed`/`ready`), and the task-side value spelling the LIVE task folders (`backlog`/`todo`). Match the values to whatever the folders actually are AT TASK TIME; record the exact spellings you chose.
 
@@ -26,7 +26,7 @@ Update the config parser/resolver, every reader, the env-var layer if any siblin
 
 ## Acceptance criteria
 
-- [ ] No live code reads or writes `slicingIntegration` / `slicesLandIn` / the brief-side `prdsLandIn` / `autoSlice` / intake `{slice, prd}`; the live keys are the tasking-vocabulary names above, with the TWO land-in surfaces kept distinct.
+- [ ] No live code reads or writes `slicingIntegration` / `slicesLandIn` / the brief-side `prdsLandIn` / `autoSlice` / intake `{slice, spec}`; the live keys are the tasking-vocabulary names above, with the TWO land-in surfaces kept distinct.
 - [ ] The land-in VALUES match the live folder names (task-side `pre-backlog`/`todo`; brief-side `proposed`/`ready` spelling), NOT a not-yet-implemented pool name; the chosen spellings are recorded.
 - [ ] The existing `--slices-land-in 'backlog'` deprecation shim is removed (with its test), per the clean-break decision.
 - [ ] This repo's `.dorfl.json` is migrated (`autoSlice` → `autoTask`); auto-tasking still resolves on for this repo.
@@ -44,7 +44,7 @@ Update the config parser/resolver, every reader, the env-var layer if any siblin
 >
 > FIRST verify the current config shape against reality (launch snapshot): confirm these keys still exist with these meanings and resolution precedence before renaming. If the config model drifted, route to needs-attention.
 >
-> Where to look: the config schema/parser + resolver (`config.ts`), `do-config`, the env-config layer, the intake per-emitted-type integration resolver (`intake.ts` `{slice, prd}`), the per-transition `taskingIntegration ?? integration` threading site, the TWO land-in resolvers in `cli.ts` (`--slices-land-in` task-side with `pre-backlog`/`todo` + the `backlog` shim; `--prds-land-in` brief-side with `pre-prd`/`prd`), and this repo's `.dorfl.json`. Search for each literal key string.
+> Where to look: the config schema/parser + resolver (`config.ts`), `do-config`, the env-config layer, the intake per-emitted-type integration resolver (`intake.ts` `{slice, spec}`), the per-transition `taskingIntegration ?? integration` threading site, the TWO land-in resolvers in `cli.ts` (`--slices-land-in` task-side with `pre-backlog`/`todo` + the `backlog` shim; `--specs-land-in` brief-side with `pre-spec`/`spec`), and this repo's `.dorfl.json`. Search for each literal key string.
 >
 > CRITICAL: the task-side (`slicesLandIn`) and brief-side (`prdsLandIn`) placement surfaces are DISTINCT with DIFFERENT value sets — do not merge them. Match each one's VALUES to the LIVE folder names (the `todo`→`ready` task-pool rename is not yet implemented, so task pool is still `todo`; the brief pool is already `ready`). Remove the existing `backlog`-alias shim per the clean break. Migrate THIS repo's `.dorfl.json` (`autoSlice`→`autoTask`) in the same change.
 >

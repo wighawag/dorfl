@@ -36,7 +36,7 @@ DELETION SWEEP (VERIFIED — the template is NOT isolated; a bare `rm` breaks th
 
 ## Blocked by
 
-- None. (Independent of the `branch-carries-code-not-ledger-status` PRD and of the trailer fix — this is purely the CI workflow emitter. It touches `src/install-ci-capabilities/*` + `src/build-slice-tick-template.ts` + any capability registry/docs, NOT the runtime engine.)
+- None. (Independent of the `branch-carries-code-not-ledger-status` SPEC and of the trailer fix — this is purely the CI workflow emitter. It touches `src/install-ci-capabilities/*` + `src/build-slice-tick-template.ts` + any capability registry/docs, NOT the runtime engine.)
 
 ## Prompt
 

@@ -14,7 +14,7 @@ The concrete **pi** adapter for the harness seam introduced by `agent-workspaces
 End-to-end:
 
 - **Invocation**: launch a pi agent against a job's prompt (the constant wrapper
-  - the slice's `## Prompt`, per the PRD's agentCmd-prompt decision and CLAIM-PROTOCOL's "prompt handed to the work agent"), in the job's worktree.
+  - the slice's `## Prompt`, per the SPEC's agentCmd-prompt decision and CLAIM-PROTOCOL's "prompt handed to the work agent"), in the job's worktree.
 - **Liveness**: report whether the job's agent is alive and what it's doing, using pi-native signals — PID (process alive?) plus a pointer to the pi **session dir/log** (real activity + an audit trail). NOT filesystem mtime.
 - **Wire into the harness seam** so `run-once` / `agent-workspaces` `status` show pi job liveness, and so `watch`'s timeout/failure rails can act on a hung pi agent.
 
@@ -35,7 +35,7 @@ Keep pi specifics behind the adapter interface; the core stays harness-agnostic.
 
 ## Prompt
 
-> Implement the **pi** harness adapter for `dorfl`, fulfilling the harness seam created by the `agent-workspaces` slice. READ FIRST: ADR §5 in `docs/adr/execution-substrate-decisions.md`, the harness-seam code from `agent-workspaces`, and the PRD's decisions on the agentCmd prompt (constant wrapper + slice `## Prompt`) plus CLAIM-PROTOCOL's "prompt handed to the work agent".
+> Implement the **pi** harness adapter for `dorfl`, fulfilling the harness seam created by the `agent-workspaces` slice. READ FIRST: ADR §5 in `docs/adr/execution-substrate-decisions.md`, the harness-seam code from `agent-workspaces`, and the SPEC's decisions on the agentCmd prompt (constant wrapper + slice `## Prompt`) plus CLAIM-PROTOCOL's "prompt handed to the work agent".
 >
 > The adapter must: launch a pi agent in a job's worktree with the standard work-agent prompt; report liveness from pi-native signals (PID alive + a pointer to the pi session dir/log — NOT mtime); and integrate with `status` and with `watch`'s timeout/failure rails. Keep all pi specifics behind the seam interface.
 >

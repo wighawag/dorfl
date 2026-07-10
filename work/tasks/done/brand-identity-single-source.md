@@ -7,7 +7,7 @@ covers: []
 
 ## What to build
 
-> Self-contained chore/refactor — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md's `prd` rule it omits `prd:` and is its own source of truth.
+> Self-contained chore/refactor — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md's `spec` rule it omits `prd:` and is its own source of truth.
 
 Make the **load-bearing protocol identity** of dorfl derive from a SINGLE source-of-truth module, so that renaming the project later changes one base string instead of risking a missed, silently-breaking occurrence (a missed env var fails silently — the worst kind). The name is very likely to change; this de-risks that.
 
@@ -39,7 +39,7 @@ A new identity module exposes the base name + its derived forms (e.g. `BRAND` / 
 
 > Centralize dorfl's **protocol/brand identity** behind a single source-of-truth module so a future rename is one change, not a scattered (and silently-breakable) find/replace. PURE REFACTOR — observable behaviour must be byte-identical (the derived strings equal today's literals).
 >
-> READ FIRST: `src/env-config.ts` + `src/repo-config.ts` (the `DORFL_*` env prefix + `REPO_CONFIG_FILENAME = '.dorfl.json'`), `src/workspace.ts` / `src/work-on.ts` / `src/gc.ts` (the `~/.dorfl` workspaces-dir default), `src/harness.ts` (an `DORFL_MODEL` mention), and `packages/dorfl/ package.json` (`name`/`bin` = `dorfl`). Also `skills/to-slices/WORK- CONTRACT.md` (this is a contract-sanctioned PRD-less chore slice).
+> READ FIRST: `src/env-config.ts` + `src/repo-config.ts` (the `DORFL_*` env prefix + `REPO_CONFIG_FILENAME = '.dorfl.json'`), `src/workspace.ts` / `src/work-on.ts` / `src/gc.ts` (the `~/.dorfl` workspaces-dir default), `src/harness.ts` (an `DORFL_MODEL` mention), and `packages/dorfl/ package.json` (`name`/`bin` = `dorfl`). Also `skills/to-slices/WORK- CONTRACT.md` (this is a contract-sanctioned SPEC-less chore slice).
 >
 > Create one identity module exposing a BASE name and its derived protocol forms (env-var prefix = constantCase + `_`; repo-config filename `.{base}.json`; workspaces-dir name `.{base}`; bin/package name) computed from the single base string, using the case conventions the `change-name` tool understands (camelCase/constantCase/paramCase/etc — https://github.com/wighawag/change-name). Replace the scattered literals at the DERIVATION SITES in `src/` with imports from it. Add a test proving that changing only the base string flips every derived surface in lockstep, and that with the current base the derived strings equal today's literals.
 >

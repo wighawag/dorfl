@@ -11,7 +11,7 @@ status: incubating
 
 ## The canonical model (settled)
 
-`work/prd/review.md` §"Shape 2" (resolved Q1) + `work/done/slicer-review-edit-loop.md` define the review-edit loop as an **M×N grid**:
+`work/spec/review.md` §"Shape 2" (resolved Q1) + `work/done/slicer-review-edit-loop.md` define the review-edit loop as an **M×N grid**:
 
 - **N — in-context passes:** ONE agent does review→edit→re-review N times INSIDE a single context, accumulating (each pass sees prior findings + its own edits). This is the cheap default (`M=1, N=…`).
 - **M — fresh-context executions:** run that whole loop again in a SEPARATE, INDEPENDENT launch — a fresh context that did not see the first one's rationalisations. `M=k` = k independent fresh loops. A fresh context catches what the first one talked itself out of (the empirical reason an independent adversarial pass beats a self-check).
@@ -38,10 +38,10 @@ At that point, the template is: take the corrective slice's single-launch in-con
 
 ## Why NOT now (the fence)
 
-Intake's settled rulings (observation `intake-lone-slice-skips-adversarial-review-the-prd-path-gets.md`, rulings A/B): hard-code 3, not configurable, NO M×N knob — because **intake's outer review loop is the human in the issue thread**, so a fresh-context second opinion is lower-value than just bouncing an unresolved blocker to the human (ASK). So M for intake is speculative until proven. This is an INCUBATING idea, not a slice — do not build it without evidence + a ruling that reopens A/B.
+Intake's settled rulings (observation `intake-lone-slice-skips-adversarial-review-the-spec-path-gets.md`, rulings A/B): hard-code 3, not configurable, NO M×N knob — because **intake's outer review loop is the human in the issue thread**, so a fresh-context second opinion is lower-value than just bouncing an unresolved blocker to the human (ASK). So M for intake is speculative until proven. This is an INCUBATING idea, not a slice — do not build it without evidence + a ruling that reopens A/B.
 
 ## Pointers
 
 - Removed-from / reshaped-by: `work/backlog/intake-lone-slice-review-single-context-loop.md` (the corrective slice — N axis).
 - Root-cause diagnosis: `work/observations/intake-lone-slice-review-built-as-per-round-launches-not-in-context-loop.md`.
-- Canonical M×N model + M plumbing precedent: `work/prd/review.md` §"Shape 2" (resolved Q1); `work/done/slicer-review-edit-loop.md` (acceptance criterion "M fresh-context executions").
+- Canonical M×N model + M plumbing precedent: `work/spec/review.md` §"Shape 2" (resolved Q1); `work/done/slicer-review-edit-loop.md` (acceptance criterion "M fresh-context executions").

@@ -10,7 +10,7 @@ covers: [10]
 
 Serialise two concurrent `intake` runs on the SAME issue with a **provider-native `processing` LOCK label** (e.g. `dorfl:processing`): added on start (winner only), removed on finish. This extends the issue seam with label ops and acquires/ releases around the existing `intake` run.
 
-Critical framing (the PRD is emphatic — do not drift):
+Critical framing (the SPEC is emphatic — do not drift):
 
 - This is a transient CONCURRENCY MUTEX carrying NO `work/` state. It is **NOT** a `work/`-file CAS (the contended thing is the ISSUE — a system with its own arbiter — and the output slug is unknown pre-run). It is **NOT** a whitesmith-style label STATE-MACHINE; ADR §12 forbids modelling `work/` lifecycle in labels. ONE transient lock label, that is all.
 - A non-label provider DEGRADES to best-effort (no lock; CI's per-issue concurrency group is then the only serialiser — that group is `runner-in-ci`'s, out of scope here).
@@ -55,7 +55,7 @@ Extends the issue seam with `addLabel` / `removeLabel` / `getLabels`, implemente
 >
 > SEAM TO TEST AT: the stubbed issue seam. Assert: label present during the run / absent after; a second run with the label present backs off; non-label provider degrades (no crash). STUB `gh` via the injectable `ghBin` (the `GitHubProvider` test seam), as the PR-provider tests do.
 >
-> SCOPE FENCE: ONE transient lock label only — no lifecycle state in labels, no state-machine (ADR §12). Do NOT build CI's per-issue concurrency GROUP (that is `runner-in-ci`). Do NOT touch the dispatcher branches, the mode KNOBS, event-classification, or the "PRD complete?" query.
+> SCOPE FENCE: ONE transient lock label only — no lifecycle state in labels, no state-machine (ADR §12). Do NOT build CI's per-issue concurrency GROUP (that is `runner-in-ci`). Do NOT touch the dispatcher branches, the mode KNOBS, event-classification, or the "SPEC complete?" query.
 >
 > FIRST run the drift check: confirm `intake-tracer-slice-outcome` landed the issue seam + the `intake` run entry this wraps. If the seam landed differently, extend it in place; if a premise is broken, route to `needs-attention/` with the discrepancy.
 >

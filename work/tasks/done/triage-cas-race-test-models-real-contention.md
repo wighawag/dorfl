@@ -4,7 +4,7 @@ slug: triage-cas-race-test-models-real-contention
 covers: []
 ---
 
-> Self-contained TEST-HARDENING slice — derives from NO PRD (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signals (all the same flake; discharge/mark-resolved on landing): `work/observations/advance-triage-same-slug-race-flaky-under-full-suite.md`, `work/observations/advance-triage-same-slug-cas-race-2026-06-11.md`, `work/observations/advance-triage-cas-race-flaky.md`, `work/observations/full-test-suite-flakes-under-parallel-load.md`.
+> Self-contained TEST-HARDENING slice — derives from NO SPEC (`covers: []`), so per WORK-CONTRACT.md it omits `prd:` and is its own source of truth. Source signals (all the same flake; discharge/mark-resolved on landing): `work/observations/advance-triage-same-slug-race-flaky-under-full-suite.md`, `work/observations/advance-triage-same-slug-cas-race-2026-06-11.md`, `work/observations/advance-triage-cas-race-flaky.md`, `work/observations/full-test-suite-flakes-under-parallel-load.md`.
 >
 > WHY THIS SLICE EXISTS: it BLOCKS `advance-drivers-and-gates` — that slice's work is green, but its acceptance gate red TWICE on THIS flake (1564/1565 then 1563/1565), routing good work to needs-attention. Fixing the flake unblocks `advance-drivers-and-gates` (rebuild it after this lands) and removes a recurring false-red from EVERY slice's full-suite gate.
 

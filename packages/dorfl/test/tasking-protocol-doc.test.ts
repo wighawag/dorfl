@@ -191,15 +191,32 @@ describe('buildTaskingSpec \u2014 in-band reference + no re-inlined discipline p
 		return match![1];
 	})();
 
+	// The builder resolves its folder paths through `workFolderRel('specs-*')`
+	// (so a folder-VALUE flip never re-drifts the prompt string) and
+	// interpolates them as `${specReady}` / `${specTasked}`. Capture the whole
+	// function (the `workFolderRel(...)` binding lines sit ABOVE the returned
+	// array) so the current-vocabulary assertions can see them.
+	const builderFn = (() => {
+		const match = /function buildTaskingSpec\([^]*?\n}/m.exec(TASKING);
+		expect(match).toBeTruthy();
+		return match![0];
+	})();
+
 	it('REFERENCES `work/protocol/TASKING-PROTOCOL.md` (the in-band discipline)', () => {
 		expect(builderBody).toMatch(/work\/protocol\/TASKING-PROTOCOL\.md/);
 	});
 
-	it('points the agent at the HELD prd in `work/prds/ready/<slug>.md` (current vocabulary)', () => {
-		expect(builderBody).toMatch(/work\/prds\/ready\//);
-		// The prd moves to `work/prds/tasked/` on success \u2014 the prompt
+	it('points the agent at the HELD spec in `work/specs/ready/` via `workFolderRel` (current vocabulary, cannot re-drift)', () => {
+		// The builder binds the two spec folders through the folder-key indirection
+		// (`workFolderRel('specs-ready'/'specs-tasked')`), so the prompt always points
+		// at the EXISTING migrated path \u2014 not a hard-coded `work/prds/*` literal.
+		expect(builderFn).toMatch(/workFolderRel\('specs-ready'\)/);
+		// The spec moves to `work/specs/tasked/` on success \u2014 the prompt
 		// mentions the runner-owned destination so the agent does NOT do it.
-		expect(builderBody).toMatch(/work\/prds\/tasked\//);
+		expect(builderFn).toMatch(/workFolderRel\('specs-tasked'\)/);
+		// And the prose interpolates those bindings (no bare `work/prds/*` literal).
+		expect(builderBody).toMatch(/\$\{specReady\}/);
+		expect(builderBody).toMatch(/\$\{specTasked\}/);
 	});
 
 	it('does NOT re-inline the confidence-check rules / humanOnly NARROW prose (lives in the protocol doc now)', () => {
@@ -215,14 +232,16 @@ describe('buildTaskingSpec \u2014 in-band reference + no re-inlined discipline p
 		expect(builderBody).not.toMatch(/Use the \*\*to-tasks\*\* skill/);
 	});
 
-	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/` remain (the prd\u2019s bonus bug)', () => {
+	it('VOCABULARY REGRESSION: NONE of `to-tasks`, `work/backlog/`, `work/prd/`, `work/prds/` remain (the spec\u2019s bonus bug + the prd\u2192spec word cutover)', () => {
 		expect(builderBody).not.toMatch(/to-tasks/);
 		// `work/backlog/` is the PRE-RENAME pool name (now `work/tasks/ready/`);
 		// guard the bare token without matching the current `work/tasks/backlog/`
 		// staging spelling.
 		expect(builderBody).not.toMatch(/(?<!\/tasks\/)work\/backlog\//);
-		// `work/prd/` is the pre-rename prd folder (now `work/prds/ready/`).
+		// `work/prd/` is the pre-rename spec folder and `work/prds/` is the
+		// pre-cutover plural \u2014 both are GONE (the builder emits `work/specs/*`).
 		expect(builderBody).not.toMatch(/work\/prd\//);
+		expect(builderBody).not.toMatch(/work\/prds\//);
 	});
 
 	it('uses the CURRENT staged + pool vocabulary (`work/tasks/backlog/` + `work/tasks/ready/`)', () => {

@@ -40,7 +40,7 @@ End-to-end behaviour (comments/docs only, no behaviour change):
 ## Prompt
 
 > Goal: de-stale the "backlog"-means-ready doc comments around `resolveTask`, per
-> the PRD `do-allow-backlog-drive-staged-tasks-without-promotion` (US #7). After
+> the SPEC `do-allow-backlog-drive-staged-tasks-without-promotion` (US #7). After
 > the keystone, `resolveTask` genuinely searches `tasks-backlog`, so leaving the
 > old prose that calls the POOL "backlog" creates a two-meanings-one-word hazard.
 >

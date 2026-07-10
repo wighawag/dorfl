@@ -14,8 +14,8 @@ to reuse at launch). A thin vertical path through logic + tests:
 
 - **Allow `adr` in advance-apply.** The shared decision engine already carries
   `adr` in its superset verdict union; this task widens advance-apply's ALLOWED
-  set from `{mint-task | mint-prd | delete-source | ask-follow-up}` to additionally
-  permit `mint-adr`. The engine stays outcome-agnostic (PRD decision 14); only the
+  set from `{mint-task | mint-spec | delete-source | ask-follow-up}` to additionally
+  permit `mint-adr`. The engine stays outcome-agnostic (SPEC decision 14); only the
   caller's allowed subset changes.
 - **The ADR-mint route.** When the verdict is `mint-adr`, create a new ADR in
   `docs/adr/` (NOT in `work/` — ADRs live outside the work board) using the
@@ -23,12 +23,12 @@ to reuse at launch). A thin vertical path through logic + tests:
   naming, one decision per file, the context/decision/why sections), built FROM the
   answered question(s) + the source item (self-contained — the decision's why is
   carried in). The source observation + its sidecar are deleted in the SAME atomic
-  commit as the ADR create (delete-on-promote, mirroring the task/prd mint route).
-- **Self-containment + atomicity preserved.** Same guarantees as the task/prd mint
+  commit as the ADR create (delete-on-promote, mirroring the task/spec mint route).
+- **Self-containment + atomicity preserved.** Same guarantees as the task/spec mint
   route: the ADR is buildable/readable alone; source deletion rides the create
   commit; a CAS-loser backs off without deleting the source.
 
-Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
+Intake does NOT gain `adr` (SPEC decision 14 — out of scope; unchanged here).
 
 ## Acceptance criteria
 
@@ -38,7 +38,7 @@ Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
       `work/protocol/ADR-FORMAT.md`, built from the answer(s) + source item.
 - [ ] The source observation + its sidecar are deleted in the SAME atomic commit as
       the ADR create; a CAS-loser backs off leaving the source intact.
-- [ ] No regression to the `mint-task`/`mint-prd`/`delete-source`/`ask-follow-up`
+- [ ] No regression to the `mint-task`/`mint-spec`/`delete-source`/`ask-follow-up`
       routes the keystone shipped.
 - [ ] Tests cover the `mint-adr` route with a STUBBED verdict (no model): ADR
       written to `docs/adr/`, source + sidecar deleted in the same commit. Mirror
@@ -50,7 +50,7 @@ Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
 
 - `agentic-apply-retire-disposition-vocabulary` — the keystone ships the
   agent-driven apply path with the launch allowed-set (no adr) and the mint-task/
-  mint-prd route this extends. This task widens the allowed-set and adds the adr
+  mint-spec route this extends. This task widens the allowed-set and adds the adr
   route on top, editing the same apply seam (so it is serialized after the
   keystone, not parallel).
 
@@ -58,19 +58,19 @@ Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
 
 > Add the `mint-adr` outcome to dorfl's agentic apply path. The keystone task
 > `agentic-apply-retire-disposition-vocabulary` shipped the agent-driven apply rung
-> with the LAUNCH allowed-outcome set `{mint-task | mint-prd | delete-source |
+> with the LAUNCH allowed-outcome set `{mint-task | mint-spec | delete-source |
 > ask-follow-up}` and deliberately DEFERRED `mint-adr` because no ADR-mint path
 > existed to reuse. This task completes US #2's "mint an ADR" capability.
 >
 > Domain vocabulary + where to look:
 > - The shared decision engine (task `decision-engine-shared-decide-seam`) already
->   carries `adr` in its SUPERSET verdict union; the engine is outcome-AGNOSTIC (PRD
+>   carries `adr` in its SUPERSET verdict union; the engine is outcome-AGNOSTIC (SPEC
 >   decision 14). So this task does NOT touch the engine's union — it widens the
 >   advance-apply CALLER's allowed SUBSET to additionally permit `mint-adr`.
 > - The apply rung (the module exporting `applyAnsweredQuestions`) routes verdicts.
->   The `mint-task`/`mint-prd` routes reuse `promoteObservation` /
->   `createItemThroughCas`, which mint into `work/` (tasks-ready / prds-proposed)
->   with a task/prd body shape and delete the source in the same atomic commit. An
+>   The `mint-task`/`mint-spec` routes reuse `promoteObservation` /
+>   `createItemThroughCas`, which mint into `work/` (tasks-ready / specs-proposed)
+>   with a task/spec body shape and delete the source in the same atomic commit. An
 >   ADR is DIFFERENT: it lives in `docs/adr/` (OUTSIDE the work board), with the
 >   `work/protocol/ADR-FORMAT.md` shape (`NNNN-slug.md` or the repo's existing ADR
 >   naming — inspect `docs/adr/` for the convention; one decision per file; the
@@ -84,7 +84,7 @@ Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
 >   sibling mint helper for the `docs/adr/` target — judge which is cleaner given
 >   that ADRs land outside `work/` (a `work/`-folder-shaped helper may not fit; a
 >   sibling may be clearer). RECORD that choice.
-> - Intake does NOT gain `adr` (PRD decision 14) — do not touch intake.
+> - Intake does NOT gain `adr` (SPEC decision 14) — do not touch intake.
 >
 > "Done": a `mint-adr` verdict writes a self-contained ADR to `docs/adr/` per
 > ADR-FORMAT, source + sidecar deleted in the same commit, advance-apply's allowed
@@ -94,7 +94,7 @@ Intake does NOT gain `adr` (PRD decision 14 — out of scope; unchanged here).
 >
 > FIRST, check this task against current reality (it is a launch snapshot and may
 > have DRIFTED): confirm the keystone landed with the no-adr launch allowed-set and
-> the mint-task/mint-prd route this extends, that the shared engine's union still
+> the mint-task/mint-spec route this extends, that the shared engine's union still
 > includes `adr`, and that `docs/adr/` + `work/protocol/ADR-FORMAT.md` are still the
 > ADR home/shape. If the keystone landed differently than assumed, do NOT build on
 > the stale premise — route the task to needs-attention with the discrepancy as the
