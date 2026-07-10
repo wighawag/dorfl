@@ -81,7 +81,7 @@ function seedTerminalOnArbiter(
 	rmSync(dest, {recursive: true, force: true});
 }
 
-describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only', () => {
+describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes (stale + stuck-terminal), keeps the human-attention case', () => {
 	it('reaps a terminal-on-main + active lock via the shared leased delete', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stale']);
 		await acquireItemLock({
@@ -108,7 +108,7 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 		expect(reapReportNeedsAttention(reap)).toBe(false);
 	});
 
-	it('NEVER reaps a kept-stuck lock (terminal + stuck), even with the flag', async () => {
+	it('REAPS a stuck-terminal crash-orphan lock (contract change: task `reaper-reap-terminal-stuck-lock-orphans`; ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['bounced']);
 		await acquireItemLock({
 			item: 'task:bounced',
@@ -124,17 +124,57 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// done + stuck co-exist (US #10).
+		// done + stuck co-existed during the bounce (US #10); the item then
+		// reached its terminal folder on main by ANY path (human finish, re-drive,
+		// manual fixup+merge), so the remaining stuck lock is a crash-orphan the
+		// durable main record supersedes — auto-reapable.
 		seedTerminalOnArbiter(arbiter, 'done', 'bounced');
 
 		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
 
 		expect(reap.reaped).toBe(0);
+		expect(reap.reapedStuckTerminal).toBe(1);
+		expect(reap.entries).toHaveLength(1);
+		expect(reap.entries[0].outcome).toBe('reaped-stuck-terminal');
+		// SWEPT: the leased delete removed the ref.
+		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(false);
+		// A clean sweep does NOT need attention (exit 0) — the orphan is cleared.
+		expect(reapReportNeedsAttention(reap)).toBe(false);
+		const text = formatReapReport(reap).join('\n');
+		expect(text).toMatch(/\[reaped-stuck-terminal\]/);
+		expect(text).toMatch(/stuck-terminal crash-orphan/);
+	});
+
+	it('NEVER reaps a STUCK + NON-terminal lock (`kept-stuck` — the genuine human-attention case; contract fence for `reaper-reap-terminal-stuck-lock-orphans`)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-live']);
+		await acquireItemLock({
+			item: 'task:stuck-live',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		await markStuckItemLock({
+			item: 'task:stuck-live',
+			reason: 'genuine build failure requiring human attention',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		// NO terminal record on main — the item is genuinely in flight and stuck.
+		// This is the invariant the contract loosening MUST preserve: a stuck
+		// lock that genuinely needs human attention must NEVER be auto-reaped.
+
+		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
+
+		expect(reap.reaped).toBe(0);
+		expect(reap.reapedStuckTerminal).toBe(0);
+		expect(reap.kept).toBe(1);
 		expect(reap.entries).toHaveLength(1);
 		expect(reap.entries[0].outcome).toBe('kept-stuck');
 		// UNTOUCHED — the stuck lock wins the human's attention.
-		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(true);
-		// A stuck lock that survives the sweep still needs attention (exit 1).
+		expect(lockRefOnArbiter(arbiter, 'task-stuck-live')).toBe(true);
+		// A stuck non-terminal lock that survives the sweep still needs attention.
 		expect(reapReportNeedsAttention(reap)).toBe(true);
 	});
 
@@ -160,13 +200,14 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 		expect(reapReportNeedsAttention(reap)).toBe(false);
 	});
 
-	it('sweeps a MIX: reaps the stale, keeps the stuck + the in-flight in one pass', async () => {
+	it('sweeps a MIX: reaps stale + stuck-terminal, keeps stuck-non-terminal + in-flight in one pass', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [
 			'stale',
-			'stuck',
+			'stuck-term',
+			'stuck-live',
 			'flight',
 		]);
-		for (const slug of ['stale', 'stuck', 'flight']) {
+		for (const slug of ['stale', 'stuck-term', 'stuck-live', 'flight']) {
 			await acquireItemLock({
 				item: `task:${slug}`,
 				action: 'implement',
@@ -175,29 +216,42 @@ describe('gc --ledger --reap-stale-locks — clears the cleared-stale class only
 				env: gitEnv(),
 			});
 		}
-		// stale: terminal + active. stuck: terminal + stuck. flight: active, no terminal.
+		// stale: terminal + active. stuck-term: terminal + stuck (crash-orphan).
+		// stuck-live: non-terminal + stuck (genuine human attention). flight:
+		// active, no terminal.
 		seedTerminalOnArbiter(arbiter, 'done', 'stale');
 		await markStuckItemLock({
-			item: 'task:stuck',
+			item: 'task:stuck-term',
+			reason: 'rebase-conflict bounce of a just-completed item',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		seedTerminalOnArbiter(arbiter, 'done', 'stuck-term');
+		await markStuckItemLock({
+			item: 'task:stuck-live',
 			reason: 'human attention please',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'done', 'stuck');
 
 		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
 
 		expect(reap.reaped).toBe(1);
+		expect(reap.reapedStuckTerminal).toBe(1);
 		expect(reap.kept).toBe(2);
-		// Only the stale lock is gone; the stuck + the in-flight survive.
+		// Both terminal orphan classes are gone; the stuck-non-terminal + the
+		// in-flight survive.
 		expect(lockRefOnArbiter(arbiter, 'task-stale')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'task-stuck')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-stuck-term')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-stuck-live')).toBe(true);
 		expect(lockRefOnArbiter(arbiter, 'task-flight')).toBe(true);
-		// The surviving stuck lock means the sweep still needs attention (exit 1).
+		// The surviving stuck-non-terminal lock still needs attention (exit 1).
 		expect(reapReportNeedsAttention(reap)).toBe(true);
 		const text = formatReapReport(reap).join('\n');
-		expect(text).toMatch(/reaped 1/);
+		expect(text).toMatch(/reaped 1 stale/);
+		expect(text).toMatch(/reaped 1 stuck-terminal crash-orphan/);
 	});
 
 	it('covers all four terminals (task done/cancelled, spec tasked/dropped)', async () => {
@@ -347,6 +401,7 @@ describe('gc --ledger --reap-stale-locks — a lost lease is REPORTED, never --f
 				},
 			],
 			reaped: 0,
+			reapedStuckTerminal: 0,
 			alreadyReaped: 0,
 			kept: 0,
 			lost: 1,
@@ -370,6 +425,7 @@ describe('gc --ledger --reap-stale-locks — a lost lease is REPORTED, never --f
 				},
 			],
 			reaped: 0,
+			reapedStuckTerminal: 0,
 			alreadyReaped: 1,
 			kept: 0,
 			lost: 0,

@@ -899,10 +899,16 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
  * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). */
 export type ReconcileOutcome =
 	| 'cleared-stale' // `main` is terminal + the lock was `active` (stranded) → cleared
-	| 'kept-stuck' // `main` is terminal + the lock is `stuck` → kept (co-exists, wins human attention)
-	| 'kept-in-flight' // `main` is NOT terminal + a lock is held → the normal in-flight state, kept
+	| 'cleared-stuck-terminal' // `main` is terminal + the lock was `stuck` (a stuck orphan) → cleared
+	| 'kept-stuck' // `main` is NOT terminal + the lock is `stuck` → kept (genuine human attention)
+	| 'kept-in-flight' // `main` is NOT terminal + a lock is held `active` → the normal in-flight state, kept
 	| 'no-lock' // there is no lock to reconcile (already at rest)
 	| 'error'; // environment/usage problem (best-effort; never throws)
+// The `stuck` axis is split by the `main` durable record (task
+// `reaper-reap-terminal-stuck-lock-orphans`; ADR
+// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): stuck + terminal is a
+// crash-orphan the reaper reaps (`cleared-stuck-terminal`); stuck + non-terminal is
+// the genuine human-attention case that MUST remain human-only (`kept-stuck`).
 
 export interface ReconcileResult {
 	outcome: ReconcileOutcome;
@@ -927,17 +933,23 @@ export interface ReconcileResult {
  * per {@link terminalMainPaths}) with a STILL-HELD lock — a stale lock with no
  * in-flight work behind it. This is the recovery that converges it.
  *
- * THE RECOVERY RULE (the `main` record is authoritative over a stale lock):
- *   - `main` is TERMINAL + the held lock is `active`  → the item is RESTED, the
- *     lock is STALE (the crash was after the move) → CLEAR it (`cleared-stale`).
- *   - `main` is TERMINAL + the held lock is `stuck`   → KEEP it (`kept-stuck`).
- *     `done` + `stuck` may legitimately CO-EXIST (a rebase-conflict bounce of a
- *     just-completed item — US #10). The stuck lock wins the human's attention;
- *     the `main` record wins dependency resolution. NOT corruption, never cleared
- *     here (a human resolves it via `resume`/`requeue`/`release-lock`).
- *   - `main` is NOT terminal + a lock is held         → the NORMAL in-flight
+ * THE RECOVERY RULE (the `main` record is authoritative over an ORPHAN lock,
+ * broadened by task `reaper-reap-terminal-stuck-lock-orphans`; ADR
+ * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10):
+ *   - `main` is TERMINAL + the held lock is `active` → STRANDED (the crash was
+ *     after the durable move, before the release) → CLEAR it (`cleared-stale`).
+ *   - `main` is TERMINAL + the held lock is `stuck`  → CRASH-ORPHAN (`done` +
+ *     `stuck` LEGITIMATELY co-existed during a rebase-conflict bounce, US #10,
+ *     but the item then reached its terminal folder by ANY path — human finish,
+ *     re-drive, manual fixup+merge — leaving the stuck lock as an orphan the
+ *     `main` record supersedes) → CLEAR it (`cleared-stuck-terminal`).
+ *   - `main` is NOT terminal + the held lock is `stuck` → the GENUINE
+ *     human-attention case (`kept-stuck`); NEVER auto-cleared here (a human
+ *     resolves via `resume`/`requeue`/`release-lock`). This is the invariant
+ *     the contract loosening MUST preserve.
+ *   - `main` is NOT terminal + the held lock is `active` → the NORMAL in-flight
  *     state (`kept-in-flight`); the lock is doing its job, leave it.
- *   - no lock at all                                   → `no-lock` (at rest).
+ *   - no lock at all                                     → `no-lock` (at rest).
  *
  * Best-effort + idempotent: it NEVER throws (a fetch/read fault degrades to
  * `error`, leaving the lock untouched — the safe direction), and re-running it
@@ -1019,7 +1031,21 @@ export async function reconcileItemLockAgainstMain(
 			};
 		}
 		if (!terminalOnMain) {
-			// A held lock + a non-terminal `main` is the NORMAL in-flight state.
+			// The `main` record says the item is STILL IN FLIGHT — split on the lock
+			// state (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
+			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10):
+			//   - `stuck` + non-terminal = the GENUINE human-attention case (the build
+			//     asked for a human), NEVER auto-cleared — `kept-stuck`.
+			//   - `active` + non-terminal = the NORMAL in-flight hold — `kept-in-flight`.
+			if (held.lock.state === 'stuck') {
+				return {
+					outcome: 'kept-stuck',
+					entry,
+					ref,
+					terminalOnMain,
+					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
+				};
+			}
 			return {
 				outcome: 'kept-in-flight',
 				entry,
@@ -1028,30 +1054,31 @@ export async function reconcileItemLockAgainstMain(
 				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
 			};
 		}
-		if (held.lock.state === 'stuck') {
-			// a terminal-on-main record + `stuck` co-exist legitimately (US #10) —
-			// NOT corruption. Keep the stuck lock (it wins the human's attention).
-			return {
-				outcome: 'kept-stuck',
-				entry,
-				ref,
-				terminalOnMain,
-				message: `'${entry}' is terminal on ${arbiter}/main but STUCK — kept for human attention (resume/requeue/release-lock)`,
-			};
-		}
-		// Terminal on `main` + an `active` lock = a STALE lock (the crash was after
-		// the durable move, before the release). The `main` record is authoritative:
-		// clear the stale lock with the SHARED leased delete (the SAME one
-		// `release-lock` / requeue / the reaper use).
+		// Terminal on `main` + a held lock (active OR stuck) = an ORPHAN over a
+		// durably-completed item. The `main` record is authoritative (ADR
+		// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10, task
+		// `reaper-reap-terminal-stuck-lock-orphans`): clear both classes via the
+		// SHARED leased delete, and distinguish the two so operators can see which
+		// orphan class was hit (`cleared-stale` = stranded active; new
+		// `cleared-stuck-terminal` = the previously-orphaning stuck-terminal case).
+		const wasStuck = held.lock.state === 'stuck';
 		const cleared = await leasedDeleteLockRef(ref, held.sha, cwd, arbiter, env);
 		if (cleared === 'deleted') {
-			return {
-				outcome: 'cleared-stale',
-				entry,
-				ref,
-				terminalOnMain,
-				message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
-			};
+			return wasStuck
+				? {
+						outcome: 'cleared-stuck-terminal',
+						entry,
+						ref,
+						terminalOnMain,
+						message: `cleared the stuck-terminal orphan lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
+					}
+				: {
+						outcome: 'cleared-stale',
+						entry,
+						ref,
+						terminalOnMain,
+						message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
+					};
 		}
 		// The leased delete was REJECTED. Distinguish two sub-cases at the recovery
 		// boundary so callers (the reaper) can route them differently:
@@ -1159,6 +1186,19 @@ export async function classifyItemLockAgainstMain(
 			};
 		}
 		if (!terminalOnMain) {
+			// Split by state (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
+			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): stuck +
+			// non-terminal is the genuine human-attention case (`kept-stuck`); active
+			// + non-terminal is the normal in-flight hold (`kept-in-flight`).
+			if (held.lock.state === 'stuck') {
+				return {
+					outcome: 'kept-stuck',
+					entry,
+					ref,
+					terminalOnMain,
+					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
+				};
+			}
 			return {
 				outcome: 'kept-in-flight',
 				entry,
@@ -1167,24 +1207,25 @@ export async function classifyItemLockAgainstMain(
 				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
 			};
 		}
+		// Terminal on `main` + a held lock = an ORPHAN over a durably-completed
+		// item. Unlike `reconcileItemLockAgainstMain` we do NOT clear it here —
+		// the report only names it as reconcilable; the reaper (or a human) asserts
+		// the clear (no auto-sweep from the report path).
 		if (held.lock.state === 'stuck') {
 			return {
-				outcome: 'kept-stuck',
+				outcome: 'cleared-stuck-terminal',
 				entry,
 				ref,
 				terminalOnMain,
-				message: `'${entry}' is terminal on ${arbiter}/main but STUCK — kept for human attention (resume/requeue/release-lock)`,
+				message: `'${entry}' is terminal on ${arbiter}/main + STUCK — reconcilable (crash-orphan); auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
 			};
 		}
-		// Terminal on `main` + an `active` lock = a STALE lock. Unlike
-		// `reconcileItemLockAgainstMain` we do NOT clear it here — the report only
-		// names it as reconcilable; the human asserts the clear (no auto-sweep).
 		return {
 			outcome: 'cleared-stale',
 			entry,
 			ref,
 			terminalOnMain,
-			message: `'${entry}' is terminal on ${arbiter}/main but the lock is ACTIVE — reconcilable (stale); clear via 'release-lock' (NOT auto-cleared by the report)`,
+			message: `'${entry}' is terminal on ${arbiter}/main but the lock is ACTIVE — reconcilable (stale); auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
 		};
 	} catch (err) {
 		return {
@@ -1208,15 +1249,31 @@ export interface LockReportEntry {
 	ref: string;
 	/**
 	 * The READ-ONLY {@link classifyItemLockAgainstMain} verdict:
-	 *   - `kept-in-flight` — a normal in-flight hold (not terminal on `main`).
-	 *   - `kept-stuck`     — terminal on `main` + `stuck` (the `done`+`stuck`
-	 *     co-existence; wins the human's attention, never cleared here).
-	 *   - `cleared-stale`  — terminal on `main` + `active` = a STALE lock the report
-	 *     names as reconcilable; a human clears it via `release-lock` (NOT
-	 *     auto-cleared by the report — no auto-sweep).
-	 *   - `error`          — a per-item classification fault (kept verbatim).
+	 *   - `kept-in-flight`          — a normal in-flight hold (active, not terminal on `main`).
+	 *   - `kept-stuck`              — STUCK + NOT terminal on `main` — the genuine
+	 *     human-attention case; NEVER auto-reaped.
+	 *   - `cleared-stale`           — terminal on `main` + `active` = a STRANDED
+	 *     lock the report names as reconcilable; a reaper (or `release-lock`)
+	 *     clears it (NOT auto-cleared by the report — no auto-sweep here).
+	 *   - `cleared-stuck-terminal`  — terminal on `main` + `stuck` = a CRASH-ORPHAN
+	 *     the report names as reconcilable (task
+	 *     `reaper-reap-terminal-stuck-lock-orphans`; ADR
+	 *     `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10);
+	 *     auto-reapable by `--reap-stale-locks`.
+	 *   - `error`                   — a per-item classification fault (kept verbatim).
 	 */
 	reconcile: ReconcileOutcome;
+}
+
+/** True iff a {@link ReconcileOutcome} names a terminal-on-`main` ORPHAN class
+ * the `--reap-stale-locks` sweep can auto-clear via the shared leased delete
+ * (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
+ * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): the stranded
+ * `cleared-stale` (terminal + active) AND the stuck-terminal orphan
+ * (`cleared-stuck-terminal`). A `kept-stuck` (stuck + non-terminal) is NOT in
+ * this set — it is the genuine human-attention case. */
+export function isReapableTerminalOrphan(outcome: ReconcileOutcome): boolean {
+	return outcome === 'cleared-stale' || outcome === 'cleared-stuck-terminal';
 }
 
 /** The `gc --ledger` stuck/orphaned-lock REPORT (spec
@@ -1294,7 +1351,8 @@ export async function reportItemLocks(
  */
 export function itemLockReportNeedsAttention(report: ItemLockReport): boolean {
 	return report.locks.some(
-		(l) => l.reconcile === 'kept-stuck' || l.reconcile === 'cleared-stale',
+		(l) =>
+			l.reconcile === 'kept-stuck' || isReapableTerminalOrphan(l.reconcile),
 	);
 }
 
@@ -1330,9 +1388,11 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 		case 'kept-in-flight':
 			return 'in flight (held, not terminal on main) — normal; left untouched.';
 		case 'kept-stuck':
-			return 'terminal on main + STUCK (done+stuck co-exist) — kept for human attention.';
+			return 'STUCK (not terminal on main) — kept for human attention; NEVER auto-reaped.';
 		case 'cleared-stale':
-			return 'terminal on main + ACTIVE = STALE (reconcilable) — NOT auto-cleared; a human clears it.';
+			return 'terminal on main + ACTIVE = STALE (reconcilable) — auto-reapable by --reap-stale-locks (NOT auto-cleared by the report).';
+		case 'cleared-stuck-terminal':
+			return 'terminal on main + STUCK = crash-orphan (reconcilable) — auto-reapable by --reap-stale-locks (NOT auto-cleared by the report).';
 		case 'no-lock':
 			return 'no lock (already at rest).';
 		case 'error':
@@ -1341,27 +1401,42 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 }
 
 /** Per-lock outcome of the human-invoked {@link reapStaleItemLocks} SWEEP:
- *   - `reaped`         — a `cleared-stale` lock (terminal-on-main + active) cleared
- *                        via the SHARED leased delete.
+ *   - `reaped`                 — a `cleared-stale` lock (terminal-on-main + active)
+ *                                cleared via the SHARED leased delete.
+ *   - `reaped-stuck-terminal`  — a `cleared-stuck-terminal` crash-orphan (terminal-
+ *                                on-main + stuck) cleared via the SAME shared leased
+ *                                delete (task `reaper-reap-terminal-stuck-lock-orphans`;
+ *                                ADR `ledger-status-on-per-item-lock-refs` § Addendum
+ *                                2026-07-10). Kept separate from `reaped` so operators
+ *                                can see which orphan class was hit.
  *   - `already-reaped` — BENIGN: the lock was already gone by the time the sweep
  *                        re-read the ref (`no-lock`) — another reaper / a
  *                        `release-lock` / a `requeue` got there first; the ref is
  *                        at the desired end state. NOT `lost` and does NOT count
  *                        as needs-attention (see the exit-code contract recorded
  *                        in this task's done record).
- *   - `kept-stuck`     — left untouched (terminal + stuck — human attention; US #10).
+ *   - `kept-stuck`     — left untouched (STUCK + NOT terminal on main — genuine
+ *                        human attention; NEVER auto-reaped).
  *   - `kept-in-flight` — left untouched (active, non-terminal — a healthy build).
- *   - `lost`           — a `cleared-stale` candidate whose leased delete was REJECTED
+ *   - `lost`           — a reapable-orphan candidate whose leased delete was REJECTED
  *                        (the ref changed concurrently to a DIFFERENT value);
  *                        REPORTED, never `--force`d.
  *   - `error`          — a per-item classification/clear fault (left untouched). */
 export type ReapOutcome =
 	| 'reaped'
+	| 'reaped-stuck-terminal'
 	| 'already-reaped'
 	| 'kept-stuck'
 	| 'kept-in-flight'
 	| 'lost'
 	| 'error';
+// `reaped-stuck-terminal` is the new orphan class the sweep also clears (task
+// `reaper-reap-terminal-stuck-lock-orphans`; ADR
+// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): a stuck lock
+// whose item is TERMINAL on `main` is a crash-orphan, cleared via the same
+// shared leased delete `cleared-stale` uses. Kept separate from `reaped` so
+// operators can see which orphan class was hit. `kept-stuck` now covers only
+// stuck + NON-terminal (the genuine human-attention case).
 
 /** One lock's disposition in the {@link ReapReport}. */
 export interface ReapEntry {
@@ -1381,7 +1456,14 @@ export interface ReapEntry {
  * race); a `kept-in-flight` is the normal healthy state and does NOT. */
 export interface ReapReport {
 	entries: ReapEntry[];
+	/** Count of the `cleared-stale` class reaped: terminal-on-main + `active`
+	 * (stranded between the durable main move and the release). */
 	reaped: number;
+	/** Count of the `cleared-stuck-terminal` class reaped: terminal-on-main + `stuck`
+	 * crash-orphans (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
+	 * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10). Kept separate
+	 * from `reaped` so summaries name each orphan class distinctly. */
+	reapedStuckTerminal: number;
 	/** BENIGN already-reaped count: the sweep found the ref already gone (`no-lock`)
 	 * — another reaper / release-lock / requeue cleared it first. The desired end
 	 * state; NOT `lost`, does NOT contribute to needs-attention / a non-zero exit. */
@@ -1401,13 +1483,19 @@ export interface ReapReport {
  * {@link reconcileItemLockAgainstMain} (the recovery's clear, re-checked fresh per
  * item) — there is NO parallel clear mechanism.
  *
- * SCOPE FENCE (the trust model the default preserves):
- *   - it clears ONLY `cleared-stale`. A `kept-stuck` (terminal + stuck — human
- *     attention) and a `kept-in-flight` (active + non-terminal — a healthy build)
- *     are NEVER reaped, even here. Because each clear goes through
- *     {@link reconcileItemLockAgainstMain}, which RE-reads + RE-classifies before
- *     deleting, a lock that turned stuck/in-flight between the report and the sweep
- *     is still safe (reconcile returns `kept-*`, not a delete).
+ * SCOPE FENCE (the trust model the default preserves; broadened by task
+ * `reaper-reap-terminal-stuck-lock-orphans`; ADR
+ * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10):
+ *   - it clears the TWO terminal-on-`main` ORPHAN classes ONLY: `cleared-stale`
+ *     (terminal + `active` = stranded between move and release) AND
+ *     `cleared-stuck-terminal` (terminal + `stuck` = crash-orphan the auto-reaper
+ *     used to leave forever). A `kept-stuck` (STUCK + NON-terminal — the
+ *     genuine human-attention case) and a `kept-in-flight` (`active` +
+ *     non-terminal — a healthy build) are NEVER reaped, even here. Because each
+ *     clear goes through {@link reconcileItemLockAgainstMain}, which RE-reads +
+ *     RE-classifies before deleting, a lock whose item was un-completed on
+ *     `main` between the report and the sweep is still safe (reconcile returns
+ *     `kept-*`, not a delete).
  *   - the clear is a LEASED delete: a concurrent change to the ref makes it REJECT
  *     (`lost`), reported — never a blind `--force`.
  *
@@ -1423,15 +1511,24 @@ export async function reapStaleItemLocks(
 	const report = await reportItemLocks(cwd, arbiter, env);
 	const entries: ReapEntry[] = [];
 	let reaped = 0;
+	let reapedStuckTerminal = 0;
 	let alreadyReaped = 0;
 	let kept = 0;
 	let lost = 0;
 	for (const {lock, ref, reconcile} of report.locks) {
 		const item = itemFromLockEntry(lock.entry);
-		if (reconcile === 'cleared-stale') {
+		// The reap fence: BOTH terminal-on-main orphan classes are reapable via the
+		// SAME shared leased delete (task `reaper-reap-terminal-stuck-lock-orphans`;
+		// ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10) — the
+		// stranded `cleared-stale` AND the stuck-terminal crash-orphan
+		// `cleared-stuck-terminal`. A stuck + NON-terminal lock (`kept-stuck`) is
+		// STILL never touched, even with the flag — that is the genuine
+		// human-attention case.
+		if (isReapableTerminalOrphan(reconcile)) {
 			// Re-check + clear through the recovery's SHARED leased delete. Reconcile
-			// re-reads the live ref, so a lock that turned stuck/in-flight since the
-			// report is left alone; a concurrent change to the ref makes the lease lose.
+			// re-reads the live ref, so a lock that turned stuck-non-terminal /
+			// in-flight since the report is left alone; a concurrent change to the
+			// ref makes the lease lose.
 			const rec = await reconcileItemLockAgainstMain({
 				item,
 				cwd,
@@ -1441,11 +1538,19 @@ export async function reapStaleItemLocks(
 			if (rec.outcome === 'cleared-stale') {
 				reaped++;
 				entries.push({lock, ref, outcome: 'reaped', message: rec.message});
+			} else if (rec.outcome === 'cleared-stuck-terminal') {
+				reapedStuckTerminal++;
+				entries.push({
+					lock,
+					ref,
+					outcome: 'reaped-stuck-terminal',
+					message: rec.message,
+				});
 			} else if (rec.outcome === 'no-lock') {
 				// BENIGN: the ref is already gone — the desired end state. The LOSER of
 				// a concurrent double-reap (another reaper deleted the ref between our
 				// report and our re-read), or a `release-lock`/`requeue` that cleared
-				// the same stale lock in the meantime. NOT a lost lease (the lease was
+				// the same orphan lock in the meantime. NOT a lost lease (the lease was
 				// not REJECTED; there was simply nothing left to delete), so this does
 				// NOT count as needs-attention. Kept SEPARATE from `reaped` so the
 				// summary does not lie about who did the deleting.
@@ -1460,7 +1565,9 @@ export async function reapStaleItemLocks(
 				rec.outcome === 'kept-stuck' ||
 				rec.outcome === 'kept-in-flight'
 			) {
-				// The lock changed between the report and the sweep — no longer stale.
+				// The lock changed between the report and the sweep — no longer an
+				// orphan (e.g. the item was un-completed on main between the report
+				// and the sweep).
 				kept++;
 				entries.push({lock, ref, outcome: rec.outcome, message: rec.message});
 			} else {
@@ -1472,8 +1579,8 @@ export async function reapStaleItemLocks(
 			}
 			continue;
 		}
-		// NOT a cleared-stale candidate: a stuck or in-flight lock the reaper must
-		// NEVER touch, even with the flag.
+		// NOT a reapable orphan: a stuck-non-terminal or in-flight lock the reaper
+		// must NEVER touch, even with the flag.
 		if (reconcile === 'kept-stuck' || reconcile === 'kept-in-flight') {
 			kept++;
 			entries.push({
@@ -1493,7 +1600,7 @@ export async function reapStaleItemLocks(
 			});
 		}
 	}
-	return {entries, reaped, alreadyReaped, kept, lost};
+	return {entries, reaped, reapedStuckTerminal, alreadyReaped, kept, lost};
 }
 
 /**
@@ -1514,6 +1621,10 @@ export function reapReportNeedsAttention(report: ReapReport): boolean {
 	// NOT in this set.
 	return report.entries.some(
 		(e) =>
+			// `kept-stuck` now means stuck + NON-terminal (task
+			// `reaper-reap-terminal-stuck-lock-orphans`) — STILL the genuine
+			// human-attention case. A `reaped-stuck-terminal` (crash-orphan) is
+			// CLEARED and does NOT count as needing attention.
 			e.outcome === 'kept-stuck' ||
 			e.outcome === 'lost' ||
 			e.outcome === 'error',
@@ -1532,7 +1643,11 @@ export function formatReapReport(report: ReapReport): string[] {
 	}
 	const lines = [
 		`Per-item lock sweep (--reap-stale-locks): reaped ${report.reaped} stale ` +
-			`terminal lock(s), kept ${report.kept} (stuck/in-flight, never reaped)` +
+			`terminal lock(s)` +
+			(report.reapedStuckTerminal > 0
+				? `, reaped ${report.reapedStuckTerminal} stuck-terminal crash-orphan(s)`
+				: '') +
+			`, kept ${report.kept} (stuck-non-terminal/in-flight, never reaped)` +
 			(report.alreadyReaped > 0
 				? `, ${report.alreadyReaped} already reaped by another sweep (no-lock — benign, the desired end state)`
 				: '') +
@@ -1544,14 +1659,16 @@ export function formatReapReport(report: ReapReport): string[] {
 	for (const {lock, outcome, message} of report.entries) {
 		const tag =
 			outcome === 'reaped'
-				? '[reaped]  '
-				: outcome === 'already-reaped'
-					? '[already] '
-					: outcome === 'lost'
-						? '[lost]    '
-						: outcome === 'error'
-							? '[error]   '
-							: '[kept]    ';
+				? '[reaped]              '
+				: outcome === 'reaped-stuck-terminal'
+					? '[reaped-stuck-terminal]'
+					: outcome === 'already-reaped'
+						? '[already]             '
+						: outcome === 'lost'
+							? '[lost]                '
+							: outcome === 'error'
+								? '[error]               '
+								: '[kept]                ';
 		lines.push(
 			`  ${tag} ${lock.entry}  [${lock.action}/${lock.state}]  ${message}`,
 		);

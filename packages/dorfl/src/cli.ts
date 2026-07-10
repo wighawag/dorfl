@@ -3115,7 +3115,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--reap-stale-locks',
-			'(with --ledger) OPT-IN: also CLEAR every STALE terminal lock the report finds (a held `active` per-item lock whose item is already TERMINAL on <arbiter>/main — the `cleared-stale` class) via the SAME leased delete `release-lock` uses, so one command sweeps all orphaned terminal locks instead of N hand-run release-locks. SCOPED to `cleared-stale` ONLY: a `kept-stuck` (terminal + stuck) or a `kept-in-flight` (active, non-terminal) lock is NEVER reaped, even with this flag. A concurrent change to a lock ref makes its leased delete REJECT (reported), never --force. WITHOUT this flag `gc --ledger` stays report-only (fail-loud, deletes nothing).',
+			'(with --ledger) OPT-IN: also CLEAR every TERMINAL-on-`<arbiter>/main` ORPHAN lock the report finds via the SAME leased delete `release-lock` uses, so one command sweeps all orphaned terminal locks instead of N hand-run release-locks. Reaps BOTH terminal-orphan classes (task `reaper-reap-terminal-stuck-lock-orphans`; ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): `cleared-stale` (terminal + `active` = stranded between move and release) AND `cleared-stuck-terminal` (terminal + `stuck` = crash-orphan the auto-reaper used to leave forever). A `kept-stuck` (STUCK + NON-terminal — the genuine human-attention case) or a `kept-in-flight` (active + non-terminal — a healthy build) is NEVER reaped, even with this flag. A concurrent change to a lock ref makes its leased delete REJECT (reported), never --force. WITHOUT this flag `gc --ledger` stays report-only (fail-loud, deletes nothing).',
 		)
 		.option(
 			'--remote-branches',
@@ -3160,13 +3160,16 @@ export function buildProgram(): Command {
 				// clearing (no auto-sweep; a human asserts a lock is dead via
 				// `release-lock`).
 				// OPT-IN SWEEP (`--reap-stale-locks`): the WRITE twin of the report. A
-				// human asserting "clear the dead TERMINAL locks now": for EXACTLY the
-				// `cleared-stale` class (terminal-on-main + active = stranded) perform the
-				// SAME leased delete `release-lock` / the recovery use, so one command
-				// sweeps every orphaned terminal lock. A `kept-stuck` / `kept-in-flight`
-				// lock is NEVER reaped (scope fence); a concurrent change makes a clear
-				// REJECT (reported `lost`), never --force. WITHOUT the flag the surface
-				// below stays report-only (fail-loud, deletes nothing).
+				// human asserting "clear the dead TERMINAL locks now": for BOTH
+				// terminal-on-main orphan classes (task `reaper-reap-terminal-stuck-lock-orphans`;
+				// ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10) — the
+				// stranded `cleared-stale` AND the stuck-terminal `cleared-stuck-terminal`
+				// crash-orphan — perform the SAME leased delete `release-lock` / the
+				// recovery use, so one command sweeps every orphaned terminal lock. A
+				// `kept-stuck` (STUCK + NON-terminal) / `kept-in-flight` lock is NEVER
+				// reaped (scope fence); a concurrent change makes a clear REJECT (reported
+				// `lost`), never --force. WITHOUT the flag the surface below stays
+				// report-only (fail-loud, deletes nothing).
 				if (flags.reapStaleLocks) {
 					const reap = await reapStaleItemLocks(
 						flags.cwd ?? repoPath,
@@ -3190,10 +3193,11 @@ export function buildProgram(): Command {
 								: formatLedgerSweep(result),
 						);
 					}
-					// Fail-loud AFTER the sweep: a `kept-stuck` (rightly left for a human) or
-					// a `lost`/`error` (a stale lock whose leased delete lost the race) still
-					// needs attention; a clean sweep that reaped every stale lock and left
-					// only healthy in-flight holds exits 0.
+					// Fail-loud AFTER the sweep: a `kept-stuck` (STUCK + non-terminal —
+					// rightly left for a human) or a `lost`/`error` (an orphan lock whose
+					// leased delete lost the race) still needs attention; a clean sweep
+					// that reaped every orphan lock (stale OR stuck-terminal) and left only
+					// healthy in-flight holds exits 0.
 					process.exit(
 						result.duplicates.length > 0 || reapReportNeedsAttention(reap)
 							? 1
@@ -3233,13 +3237,15 @@ export function buildProgram(): Command {
 				// human clears a NAMED unified lock via `release-lock`).
 				//
 				// SCOPED to the ATTENTION verdicts only (spec US#14/#21, ADR
-				// `ledger-status-on-per-item-lock-refs`: this surface is the STUCK /
-				// crash-orphaned lock, NOT every held one): a `kept-stuck` (terminal +
-				// stuck) or a `cleared-stale`-eligible (terminal + stale active = orphaned)
-				// lock fails loud, but a `kept-in-flight` (active, non-terminal) lock is the
-				// NORMAL in-flight state of a healthy concurrent build (read by `status` as
-				// healthy) — it is reported informationally and does NOT make a routine
-				// `gc --ledger` health check exit non-zero.
+				// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10: this surface
+				// is the STUCK / crash-orphaned lock, NOT every held one): a `kept-stuck`
+				// (STUCK + NON-terminal — the genuine human-attention case), a
+				// `cleared-stale`-eligible (terminal + stale active = stranded orphan), or
+				// a `cleared-stuck-terminal`-eligible (terminal + stuck = crash-orphan the
+				// reaper can now auto-clear) fails loud, but a `kept-in-flight` (active,
+				// non-terminal) lock is the NORMAL in-flight state of a healthy concurrent
+				// build (read by `status` as healthy) — it is reported informationally
+				// and does NOT make a routine `gc --ledger` health check exit non-zero.
 				process.exit(
 					result.duplicates.length > 0 ||
 						itemLockReportNeedsAttention(lockReport)

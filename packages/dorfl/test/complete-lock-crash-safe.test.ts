@@ -259,7 +259,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(lockRefOnArbiter(arbiter, 'spec-zeta')).toBe(false);
 	});
 
-	it('KEEPS a STUCK lock that co-exists with a done record (not corruption — US #10)', async () => {
+	it('CLEARS a STUCK lock that has become a crash-orphan over a terminal-on-main item (task `reaper-reap-terminal-stuck-lock-orphans`; ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['eta']);
 		await acquireItemLock({
 			item: 'task:eta',
@@ -268,7 +268,11 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// A rebase-conflict bounce marks a just-completed item stuck.
+		// A rebase-conflict bounce marks a just-completed item stuck (`done` +
+		// `stuck` may LEGITIMATELY co-exist during the bounce, US #10) — but by
+		// the time we reconcile the item has reached its terminal folder on `main`
+		// (by any path: human finish, re-drive, manual fixup+merge), so the
+		// remaining stuck lock is a CRASH-ORPHAN the durable `main` record supersedes.
 		const stuck = await markStuckItemLock({
 			item: 'task:eta',
 			reason: 'rebase-conflict bounce of a just-completed item',
@@ -286,19 +290,55 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			env: gitEnv(),
 		});
 
-		// done + stuck CO-EXIST: the stuck lock wins the human's attention, the
-		// main record wins dependency resolution — NOT flagged as corruption.
-		expect(rec.outcome).toBe('kept-stuck');
+		// The `main` record is authoritative over an ORPHAN lock: reconcile
+		// clears the stuck-terminal orphan via the SAME leased delete
+		// `release-lock` / the recovery use for `cleared-stale`. The narrow
+		// invariant preserved is that stuck + NON-terminal STILL keeps (see the
+		// dedicated pin below).
+		expect(rec.outcome).toBe('cleared-stuck-terminal');
 		expect(rec.terminalOnMain).toBe(true);
-		expect(lockRefOnArbiter(arbiter, 'task-eta')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-eta')).toBe(false);
+	});
+
+	it('KEEPS a STUCK lock over a NON-terminal item — the genuine human-attention case (contract fence for `reaper-reap-terminal-stuck-lock-orphans`)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['eta2']);
+		await acquireItemLock({
+			item: 'task:eta2',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		const stuck = await markStuckItemLock({
+			item: 'task:eta2',
+			reason: 'genuine build failure requiring human attention',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(stuck.outcome).toBe('transitioned');
+		// NO terminal record on main — the item is genuinely in flight and stuck.
+
+		const rec = await reconcileItemLockAgainstMain({
+			item: 'task:eta2',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		// Non-terminal + stuck STILL keeps — the invariant the contract loosening
+		// MUST preserve. Never auto-cleared.
+		expect(rec.outcome).toBe('kept-stuck');
+		expect(rec.terminalOnMain).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'task-eta2')).toBe(true);
 		const entry = await readItemLock({
-			item: 'task:eta',
+			item: 'task:eta2',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toContain('rebase-conflict');
+		expect(entry?.reason).toContain('genuine build failure');
 	});
 
 	it('leaves a held lock untouched when main is NOT terminal (the normal in-flight state)', async () => {
