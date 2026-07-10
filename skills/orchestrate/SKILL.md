@@ -15,7 +15,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 - **`to-task`** (`skills/to-task/`) — to task a ready prd into tasks (the `tasks/backlog` staging slot).
 - **`promote`** (`skills/promote/`) — to judge a STAGED task/prd (`tasks/backlog/` / `prds/proposed/`) against its acceptance + destination before recommending its promotion into the pool.
 - **`answer-questions`** (`skills/answer-questions/`) — to walk the open `work/questions/` sidecars, DRAFT answers to the factual ones for the human to ratify, and DEFER the genuine-judgement ones into the step-3 batch.
-- **`to-prd`** (`skills/to-prd/`) — when an idea/observation has matured enough to become a prd.
+- **`to-spec`** (`skills/to-spec/`) — when an idea/observation has matured enough to become a prd.
 
 ## When to use vs. not
 
@@ -37,7 +37,7 @@ It is a **methodology skill** (prose you follow), like `to-task` / `review` — 
 Read across ALL buckets and build a single picture of state + what each item needs to advance ONE rung:
 
 - **`work/notes/observations/`** — untriaged signals. Each wants: promote to a task/prd/ADR? keep as a note? delete? (a judgement rung — compose `review`).
-- **`work/notes/ideas/`** — incubating. Any matured enough to become a prd (`to-prd`)? Most are left alone (no readiness to force) — note them, don't push.
+- **`work/notes/ideas/`** — incubating. Any matured enough to become a prd (`to-spec`)? Most are left alone (no readiness to force) — note them, don't push.
 - **`work/prds/ready/`** — for each prd: is it already tasked (does it RESIDE in `work/prds/tasked/`)? `humanOnly`/`needsAnswers`? `taskedAfter:` satisfied? → **taskable now**, **blocked on a dep**, or **blocked on a human answer**. (Tasked-ness is folder residence, not a `tasked:` marker.)
 - **STAGING** — `work/tasks/backlog/` (review-first tasks) and `work/prds/proposed/` (review-first prds), the items awaiting human promotion into the pool. NOT built/tasked here; they are a **promotion rung** (step 2, compose `promote`). Either folder may be absent when empty per the contract — treat a missing staging folder as "nothing awaiting promotion", not an error.
 - **`work/tasks/ready/`** — the task dependency graph (READY / BLOCKED / GATED), AND each ready task's **freshness** (drifted vs current `tasks/done/`+code — same check `drive-tasks` step 1 does).
@@ -62,7 +62,7 @@ Do the autonomous rungs that PREPARE work — i.e. everything EXCEPT building re
 
 (Ready tasks are NOT built here — they accumulate for step 4, after the residue is resolved.)
 
-Commit policy (matches the producer skills): **commit your own `work/notes/observations/` notes and small load-bearing forward-notes you plant in a task body** (these are contract-native protocol edits), plus the runner-owned transitions that `do prd:` / `do` / `complete` make themselves (the tasking transition, done-moves, PR merges). Do NOT hand-author-and-commit a full prd or a fresh TASK SET — producing those is `to-prd`/`to-task`' job, and per their convention they are left UNSTAGED for human review (you surface them; the human commits). Never sweep in unrelated source. Report everything you committed in the final summary. (Tasks that get BUILT are committed/merged by `drive-tasks` via the normal PR flow.)
+Commit policy (matches the producer skills): **commit your own `work/notes/observations/` notes and small load-bearing forward-notes you plant in a task body** (these are contract-native protocol edits), plus the runner-owned transitions that `do prd:` / `do` / `complete` make themselves (the tasking transition, done-moves, PR merges). Do NOT hand-author-and-commit a full prd or a fresh TASK SET — producing those is `to-spec`/`to-task`' job, and per their convention they are left UNSTAGED for human review (you surface them; the human commits). Never sweep in unrelated source. Report everything you committed in the final summary. (Tasks that get BUILT are committed/merged by `drive-tasks` via the normal PR flow.)
 
 ### 3. ASK the residue — batched, conversational, never invented
 

@@ -90,13 +90,13 @@ Step 7a's durable `main` move (the LAND) is the mode-agnostic primitive: **fetch
 
 ## The prompt handed to the work agent (the `## Prompt` wrapper)
 
-When a human or an autonomous runner dispatches an agent to do the WORK phase, the agent is given a small, constant **wrapper** around the task's own `## Prompt` section. The wrapper is the same every time except the slug; an autonomous runner emits it deterministically. The task file is the prd; the wrapper just frames it and draws the line around git.
+When a human or an autonomous runner dispatches an agent to do the WORK phase, the agent is given a small, constant **wrapper** around the task's own `## Prompt` section. The wrapper is the same every time except the slug; an autonomous runner emits it deterministically. The task file is the spec; the wrapper just frames it and draws the line around git.
 
 ```
 You are completing one work task in this repo. It has already been claimed for
 you (its per-item lock is held) and lives at work/tasks/ready/<slug>.md — read that
-file fully; it is your complete prd (What to build, Acceptance criteria, Prompt).
-Also read its source prd (the task's `prd:` field, at work/prds/ready/<prd>.md)
+file fully; it is your complete spec (What to build, Acceptance criteria, Prompt).
+Also read its source spec (the task's `prd:` field, at work/prds/ready/<prd>.md)
 for context.
 
 <!-- if promptGuidance.testFirst -->

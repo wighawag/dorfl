@@ -282,16 +282,16 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 	it('builds a prompt from the TARGET repo work/protocol/ copy when present', () => {
 		// Seed a target-repo copy whose canonical wrapper carries a UNIQUE marker so
 		// we can prove THAT copy (not the bundled one) was the source.
-		// 'complete prd' is inside the canonical wrapper template; tagging it in the
+		// 'complete spec' is inside the canonical wrapper template; tagging it in the
 		// target copy proves THAT copy (not the bundled one) was the prompt source.
 		const bundled = readFileSync(
 			resolveProtocolDoc('CLAIM-PROTOCOL.md'),
 			'utf8',
 		);
-		expect(bundled).toContain('complete prd');
+		expect(bundled).toContain('complete spec');
 		const tagged = bundled.replace(
-			'complete prd',
-			'TARGET-MARKER complete prd',
+			'complete spec',
+			'TARGET-MARKER complete spec',
 		);
 		const protoDir = join(scratch.root, 'work', 'protocol');
 		mkdirSync(protoDir, {recursive: true});
@@ -300,7 +300,7 @@ describe('buildAgentPrompt — packaged + target-repo protocol sources', () => {
 		const out = buildAgentPrompt('example', 'my-prd', 'TASK-BODY', {
 			cwd: scratch.root,
 		});
-		expect(out).toContain('TARGET-MARKER complete prd');
+		expect(out).toContain('TARGET-MARKER complete spec');
 	});
 });
 

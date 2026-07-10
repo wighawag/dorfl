@@ -1,17 +1,17 @@
 # TASKING-PROTOCOL
 
-The **tasking discipline** the autonomous runner invokes by name on a prd in `work/prds/ready/` to decompose it into independently-grabbable, file-based work tasks (tracer-bullet vertical tasks). The runner spawns a fresh-context agent and tells it to "run the tasking protocol"; that agent reads THIS doc and applies its standard.
+The **tasking discipline** the autonomous runner invokes by name on a spec in `work/prds/ready/` to decompose it into independently-grabbable, file-based work tasks (tracer-bullet vertical tasks). The runner spawns a fresh-context agent and tells it to "run the tasking protocol"; that agent reads THIS doc and applies its standard.
 
-This is one of the runner-invoked protocol disciplines (alongside `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, and `SURFACE-PROTOCOL.md`): the protocol describes how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the `verify` floor), JUDGED BEFORE LANDING (`REVIEW-PROTOCOL.md`), has its OPEN QUESTIONS SURFACED (`SURFACE-PROTOCOL.md`), and — between prd and buildable task — TASKED (this doc). It is in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/to-task/SKILL.md`; the standard lives here.)
+This is one of the runner-invoked protocol disciplines (alongside `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, and `SURFACE-PROTOCOL.md`): the protocol describes how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the `verify` floor), JUDGED BEFORE LANDING (`REVIEW-PROTOCOL.md`), has its OPEN QUESTIONS SURFACED (`SURFACE-PROTOCOL.md`), and — between spec and buildable task — TASKED (this doc). It is in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/to-task/SKILL.md`; the standard lives here.)
 
 > This doc is **protocol-native**: it assumes the repo uses the `work/` contract. Every bare "WORK-CONTRACT" / "CLAIM-PROTOCOL" mention below refers to `work/protocol/<doc>` in the repo under work.
 
-You **emit task files; you do not act on them** — see [Git protocol](#git-protocol). Committing them, moving the prd, claiming any of them is the caller's job (the runner, on the agent path; a human, on the no-runner path). This discipline is the _decomposition_, not the disposition.
+You **emit task files; you do not act on them** — see [Git protocol](#git-protocol). Committing them, moving the spec, claiming any of them is the caller's job (the runner, on the agent path; a human, on the no-runner path). This discipline is the _decomposition_, not the disposition.
 
 ## When to use vs. not
 
 - **Use** when tasking a `work/prds/ready/<slug>.md`, a design doc, or a plan into grabbable units for solo-with-agents (incl. parallel) work.
-- **Don't** use to _write_ the prd (that's a separate step — `to-prd`) or to _claim/run_ a task (that's the runner: `dorfl claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
+- **Don't** use to _write_ the spec (that's a separate step — `to-spec`) or to _claim/run_ a task (that's the runner: `dorfl claim`/`do`/`complete`, or the `drive-tasks` conductor). Don't introduce a shared index file or a status field — status is the folder (see `WORK-CONTRACT.md`).
 
 ## Process
 
@@ -23,7 +23,7 @@ Work from a `work/prds/ready/<slug>.md`, a design doc, or the conversation conte
 
 Task titles and descriptions use the project's domain glossary. Respect ADRs / findings in the area you're touching.
 
-**Check the prd against reality first (drift = a needs-attention signal).** A prd is a launch snapshot and may have DRIFTED from what has since landed (`tasks/done/`, ADRs, sibling tasks). Before tasking, verify its assumptions still hold. If it has drifted such that tasking it as-is would emit tasks built on a false premise, do NOT task it: set `needsAnswers: true` on the prd with the discrepancy in its body (or fix a small certain factual error first). See WORK-CONTRACT.md "Drift is a needs-attention signal". Never emit tasks from a stale spec.
+**Check the spec against reality first (drift = a needs-attention signal).** A spec is a launch snapshot and may have DRIFTED from what has since landed (`tasks/done/`, ADRs, sibling tasks). Before tasking, verify its assumptions still hold. If it has drifted such that tasking it as-is would emit tasks built on a false premise, do NOT task it: set `needsAnswers: true` on the spec with the discrepancy in its body (or fix a small certain factual error first). See WORK-CONTRACT.md "Drift is a needs-attention signal". Never emit tasks from a stale spec.
 
 ### 3. Draft vertical tasks
 
@@ -33,7 +33,7 @@ Each task is a **tracer bullet** — a thin vertical path through ALL layers end
 - A completed task is demoable/verifiable on its own.
 - Prefer many thin tasks over few thick ones.
 - Set the **two gate axes** ONLY where they apply (both default to OMITTED on most tasks): **`humanOnly: true`** = NEVER-for-agents BY NATURE (the NARROW DECIDED axis — secrets/release/security; survives even in the pool `work/tasks/ready/`); **`needsAnswers: true`** = unresolved questions block autonomous work (the DISCOVERED axis — list the questions in the task body). Omitted on either means "undeclared"; whether an agent may then auto-build is the _repo's_ `autoBuild` policy. Mark `blockedBy` for ordering. See `WORK-CONTRACT.md` for the two-axis semantics, the predicate, and the `autoBuild` precedence.
-  - **A task's `humanOnly` is decided from the nature of BUILDING THAT TASK — never inherited from the prd.** Evaluate each task on its own merits (does _building it_ genuinely need to be done by a human BY NATURE — secrets handling, release pipeline, hard security boundary, an AGENTS.md prohibition?), AS IF the prd's `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
+  - **A task's `humanOnly` is decided from the nature of BUILDING THAT TASK — never inherited from the spec.** Evaluate each task on its own merits (does _building it_ genuinely need to be done by a human BY NATURE — secrets handling, release pipeline, hard security boundary, an AGENTS.md prohibition?), AS IF the spec's `humanOnly` field did not exist. (The two flags are disjoint — see §3b.)
   - **Do NOT stamp `humanOnly` to mean "a human should REVIEW this before the agent builds it"** — that is the POSITION's job, not the flag's. The runner BIRTHS tasks STAGED in `work/tasks/backlog/` (not eligible); a human promotes the approved ones into the pool `work/tasks/ready/`. Review-first is encoded by the staging position; `humanOnly` is reserved for the rare never-by-nature case. (See WORK-CONTRACT.md "Task `humanOnly` is NARROW".)
   - **Do NOT be shy about `needsAnswers` — when genuinely unsure, FLAG, don't guess.** `needsAnswers` is cheap (a human clears it in seconds) and a confidently-underspecified task is expensive (an agent builds the wrong thing, convincingly). Defects concentrate in TASKING far more than in implementation: an ambiguous premise, an unresolved design fork, a "reuse X" where X's shape is unverified, or a seam you _assume_ exists — each is a `needsAnswers` with the open question written in the body, NOT a guess dressed as a spec. The asymmetry is the whole point: a false `needsAnswers` costs one human glance; a false confidence ships wrong-but-compiling work.
 - **Prefer file-orthogonal tasks to minimise merge conflicts.** `blockedBy` encodes logical ordering, but two independent tasks that edit the SAME files will conflict when the second integrates after the first. Parallel agents make this real. So: split along file/module boundaries where you can; and when two tasks are known to touch the same module, add a `blockedBy` to **serialize** them even if there's no strict logical dependency. The runner only rebases-or-surfaces conflicts (it never auto-resolves), so avoiding them at tasking time is the cheap win.
@@ -50,42 +50,42 @@ Most work slices vertically (§3). A **wide refactor** does not, and forcing it 
 
 The test for "is this a wide refactor?" is whether a single mechanical edit breaks the gate across many call sites at once such that no thin vertical path can be green. If yes, use this sequence; if a normal vertical slice CAN be green, it is not a wide refactor — slice it vertically (§3).
 
-### 3b. Prd gate vs task gate are DISJOINT + honour cross-prd `taskedAfter`
+### 3b. Spec gate vs task gate are DISJOINT + honour cross-prd `taskedAfter`
 
-- **`humanOnly` on a prd and `humanOnly` on a task are DISJOINT — they gate different verbs and DO NOT flow into each other.**
-  - **Prd `humanOnly`** gates _tasking_: its ONLY effect is that an agent may not **auto-task** that prd (even where the repo's `autoTask` policy is on); a human must drive the decomposition. That is its entire meaning.
+- **`humanOnly` on a spec and `humanOnly` on a task are DISJOINT — they gate different verbs and DO NOT flow into each other.**
+  - **Spec `humanOnly`** gates _tasking_: its ONLY effect is that an agent may not **auto-task** that spec (even where the repo's `autoTask` policy is on); a human must drive the decomposition. That is its entire meaning.
   - **Task `humanOnly`** gates _building_: it is decided per task from the nature of building that task (see §3), independently.
-  - There is **NO inheritance, NO propagation, and NOT EVEN A HINT** from the prd flag to the task flags. A `humanOnly: true` prd can produce entirely agent-buildable tasks; an un-flagged prd can produce some `humanOnly` tasks. When setting a task's gate, ignore the prd's `humanOnly` entirely.
-  - Likewise **`needsAnswers`**: on a prd it blocks auto-tasking until the questions are answered; on a task it blocks auto-building. Set a task's `needsAnswers` only when _that task_ has unresolved questions (list them in its body) — not because the prd had open questions (a prd with open questions should be resolved BEFORE tasking, not task-inherited).
-  - (A prd's body may still _describe_ which areas are judgement-heavy — use that as ordinary domain input when reasoning about a task's own build-nature, the same as any other prd prose; it is not a flag-setting shortcut.)
+  - There is **NO inheritance, NO propagation, and NOT EVEN A HINT** from the spec flag to the task flags. A `humanOnly: true` spec can produce entirely agent-buildable tasks; an un-flagged spec can produce some `humanOnly` tasks. When setting a task's gate, ignore the spec's `humanOnly` entirely.
+  - Likewise **`needsAnswers`**: on a spec it blocks auto-tasking until the questions are answered; on a task it blocks auto-building. Set a task's `needsAnswers` only when _that task_ has unresolved questions (list them in its body) — not because the spec had open questions (a spec with open questions should be resolved BEFORE tasking, not task-inherited).
+  - (A spec's body may still _describe_ which areas are judgement-heavy — use that as ordinary domain input when reasoning about a task's own build-nature, the same as any other spec prose; it is not a flag-setting shortcut.)
 - **`taskedAfter` (cross-prd order).** If this prd has `taskedAfter: [other-prd]`, those prds must already be TASKED (their tasks exist) before you task this one — so this prd's tasks can reference the real slugs of those prds' tasks in `blockedBy`. (The auto-tasker enforces this; a human may task anyway but must then know the blocker slugs.) If a needed blocker prd is not yet tasked, task it first or record the dependency and stop.
 
 ### 4. Quiz the user — OR (no human present) do a confidence check
 
 **If a human is present** (the normal interactive path): present the breakdown as a numbered list — Title, the two gate axes, Blocked-by, and (if the source has them) which user stories it covers. Ask: granularity right? dependencies right? merge/split any? gates correct? Iterate until approved.
 
-**If NO human is present** (an agent auto-tasking in CI): step 4 is replaced by a **confidence check**, because there is no one to quiz. Do NOT emit guessed tasks. The source prd should already be clear (the auto-tasker only runs on a prd that is not `humanOnly` and not `needsAnswers`). If, while tasking, ANY of {granularity, dependency order, a gate, a seam} is genuinely unresolved by the prd/ADR, do not guess: either set `needsAnswers: true` (with the open questions in the body) on the specific uncertain task, or — if the whole decomposition is unclear — stop and route the prd to needs-attention with the questions, rather than emitting a wrongly-cut task. Only emit tasks you would have gotten the human to approve.
+**If NO human is present** (an agent auto-tasking in CI): step 4 is replaced by a **confidence check**, because there is no one to quiz. Do NOT emit guessed tasks. The source spec should already be clear (the auto-tasker only runs on a spec that is not `humanOnly` and not `needsAnswers`). If, while tasking, ANY of {granularity, dependency order, a gate, a seam} is genuinely unresolved by the spec/ADR, do not guess: either set `needsAnswers: true` (with the open questions in the body) on the specific uncertain task, or — if the whole decomposition is unclear — stop and route the spec to needs-attention with the questions, rather than emitting a wrongly-cut task. Only emit tasks you would have gotten the human to approve.
 
 ### 5. Write the task files
 
 For each approved task, write `work/tasks/backlog/<slug>.md` using `work/protocol/task-template.md`. Create `work/` and `work/tasks/backlog/` lazily if absent. One file per task. Use a content-derived slug, never a counter. Fill `blockedBy` with the slugs of blocking tasks, and set the **required `prd`** field to the slug of the source `work/prds/ready/<slug>.md` (so `covers` story numbers are unambiguous — see `WORK-CONTRACT.md`).
 
-### 6. Trim the prd to its durable framing (one-time)
+### 6. Trim the spec to its durable framing (one-time)
 
-The prd is a launch snapshot (see the `to-prd` skill). Now that the work is tasked, the prd's **technical detail is redundant** (it lives in the tasks) and is the part that would otherwise go stale. Do a ONE-TIME trim:
+The spec is a launch snapshot (see the `to-spec` skill). Now that the work is tasked, the spec's **technical detail is redundant** (it lives in the tasks) and is the part that would otherwise go stale. Do a ONE-TIME trim:
 
-- The tasks now own _what to build_ (Implementation/Testing detail) — remove those sections from the prd.
+- The tasks now own _what to build_ (Implementation/Testing detail) — remove those sections from the spec.
 - Any **durable rationale** worth keeping (the _why_ of a decision) is RELOCATED to an ADR (`docs/adr/<slug>.md`), not deleted.
-- The prd settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to tasks/ADRs.
-- **Move the prd to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/<src>/<slug>.md work/prds/tasked/<slug>.md`, where `<src>` is the prd's CURRENT non-pool resting position — `ready` on the runner/dorfl path, but `proposed` on the human-driven path (a human MAY task a prd straight from `prds/proposed/` without first promoting it to `ready/`; doing so is deliberate — staging keeps it out of the auto-tasking pool so CI cannot race the human, and a forced `proposed → ready` pre-move would re-open exactly that race). The DESTINATION is always `tasked/` regardless of source. Transforming a prd into tasks MUST move it: residence in `work/prds/tasked/` IS tasked-ness (the build-machine `tasks/done/` analogue for prds, the sole signal); a tasked prd left in `proposed/`/`ready/` both lies about its state and stays auto-taskable (CI could re-fan-out). Do NOT add a `tasked:` frontmatter marker; the folder is the source of truth. (On the dorfl path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
+- The spec settles to its durable framing: Problem / Solution / User Stories / Out of Scope (+ its launch-snapshot banner). Leave a one-line pointer that detail moved to tasks/ADRs.
+- **Move the spec to `work/prds/tasked/`** to record that it has been tasked: `git mv work/prds/<src>/<slug>.md work/prds/tasked/<slug>.md`, where `<src>` is the spec's CURRENT non-pool resting position — `ready` on the runner/dorfl path, but `proposed` on the human-driven path (a human MAY task a spec straight from `prds/proposed/` without first promoting it to `ready/`; doing so is deliberate — staging keeps it out of the auto-tasking pool so CI cannot race the human, and a forced `proposed → ready` pre-move would re-open exactly that race). The DESTINATION is always `tasked/` regardless of source. Transforming a spec into tasks MUST move it: residence in `work/prds/tasked/` IS tasked-ness (the build-machine `tasks/done/` analogue for specs, the sole signal); a tasked spec left in `proposed/`/`ready/` both lies about its state and stays auto-taskable (CI could re-fan-out). Do NOT add a `tasked:` frontmatter marker; the folder is the source of truth. (On the dorfl path `do prd:<slug>` performs this move itself as part of its runner-owned integration commit; this manual step is for the human-driven, no-lock tasking path.)
 
-This is a hand-off transition, not ongoing maintenance — after this single trim the prd is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → tasks; rationale → ADR.)
+This is a hand-off transition, not ongoing maintenance — after this single trim the spec is stable because the stale-prone part was relocated, not because it is kept in sync. (Nothing is lost: detail → tasks; rationale → ADR.)
 
 ## Git protocol
 
-Do NOT commit/push — leave the work for the caller to inspect/integrate. The one exception is the prd `prds/<ready|proposed>/ → prds/tasked/` relocation above, which is a `git mv` (so it is staged as a rename); leave every other new/edited file unstaged. Report the exact paths written (and the trimmed + relocated prd).
+Do NOT commit/push — leave the work for the caller to inspect/integrate. The one exception is the spec `prds/<ready|proposed>/ → prds/tasked/` relocation above, which is a `git mv` (so it is staged as a rename); leave every other new/edited file unstaged. Report the exact paths written (and the trimmed + relocated spec).
 
-When the runner spawns you on the agent tasking path, you EDIT files only — write the task files under the STAGING folder, trim the prd — and the RUNNER owns every git-state transition (it commits the produced tasks, releases the tasking lock, and moves the prd into `work/prds/tasked/`). Do not stage, commit, push, or move any files yourself. The runner integrates the tasking transition through the shared band (`--propose` PR / `--merge` main) honouring the caller's flags.
+When the runner spawns you on the agent tasking path, you EDIT files only — write the task files under the STAGING folder, trim the spec — and the RUNNER owns every git-state transition (it commits the produced tasks, releases the tasking lock, and moves the spec into `work/prds/tasked/`). Do not stage, commit, push, or move any files yourself. The runner integrates the tasking transition through the shared band (`--propose` PR / `--merge` main) honouring the caller's flags.
 
 ## The emitted task shape (mirrors `work/protocol/task-template.md`)
 
@@ -103,7 +103,7 @@ Each emitted task file is a markdown document with YAML frontmatter, BORN STAGED
 - **`humanOnly: true`** — gate axis 1 (DECIDED, NARROW): NEVER-for-agents BY NATURE (secrets / release / security / an `AGENTS.md` prohibition). Survives even in the pool `work/tasks/ready/`. OMIT when the task is agent-buildable — "review this before the agent builds" is the POSITION's job (the task is BIRTHED in `work/tasks/backlog/`), NOT `humanOnly`'s.
 - **`needsAnswers: true`** — gate axis 2 (DISCOVERED): open questions block autonomous work. List the questions under an `## Open questions` heading in the body. OMIT when the task launches fully resolved.
 - **`covers:`** — an inline list of user-story numbers within `prd:` this task covers; `[]` (or omitted) means no specific story coverage.
-- **`issue:`** — the GitHub issue number an `intake`-emitted task was transformed from. Carried only when the task is the direct closer for an issue (mutually exclusive with `prd:` carrying the closure via the prd).
+- **`issue:`** — the GitHub issue number an `intake`-emitted task was transformed from. Carried only when the task is the direct closer for an issue (mutually exclusive with `prd:` carrying the closure via the spec).
 
 ### Body sections
 

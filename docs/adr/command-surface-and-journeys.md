@@ -139,7 +139,7 @@ Mirrors sync **lazily, on every operation that fetches** — there is no push-tr
 
 A clean line the whole surface is checked against, and a reinforcement of ADR §9 (the `work/` contract + claim protocol is a **runner-agnostic protocol**; `dorfl` is ONE implementation):
 
-- **Adopting the contract** (set up a repo, migrate from another system, the tasking/prd methodology) is **protocol-layer → a SKILL** (tool-agnostic; anyone can follow it with zero `dorfl` installed). This is why `to-task`, `to-prd`, and `setup` (the single onboarding/migration skill) are SKILLS.
+- **Adopting the contract** (set up a repo, migrate from another system, the tasking/prd methodology) is **protocol-layer → a SKILL** (tool-agnostic; anyone can follow it with zero `dorfl` installed). This is why `to-task`, `to-spec`, and `setup` (the single onboarding/migration skill) are SKILLS.
 - **Executing work** (claim CAS, the `run` loop, `do`, isolation, integration) is **implementation-layer → a COMMAND.**
 
 Corollary for any future _checking/diagnostic_ tooling (e.g. a possible `doctor`): the **core check must stay harness-agnostic** (the contract surface: `work/` folders, `CONTEXT.md`+name, valid config, a registered arbiter, a runnable gate). **Skill _location/discoverability_ is harness-specific** (pi reads `~/.agents/skills/`; another harness reads elsewhere) → it must be **delegated to the harness adapter via the §5 seam**, never hardcoded. The harness seam is the boundary for ALL harness-specific knowledge, not just agent invocation. (A `doctor` command is NOT decided — see the future-items note; until/unless we add it, clear docs listing required vs recommended skills suffice.)
