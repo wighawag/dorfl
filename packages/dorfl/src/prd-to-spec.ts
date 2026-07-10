@@ -802,7 +802,16 @@ export function scanForLeaks(
 			why: `surviving '${WORK_ROOT}/${migration.fromFolder}/' folder path`,
 		},
 		{
-			pattern: new RegExp(`\\b${migration.fromFolder}/`, 'i'),
+			// A bare `prds/` folder ref, but ONLY a real on-disk path shape:
+			// lowercase `prds/` followed by a lifecycle subfolder. Deliberately NO
+			// `'i'` flag + a required lifecycle segment, so a prose acronym-plural
+			// like `slices/PRDs/code` or `PRDs/ADRs` (the artifact word `PRDs` + `/`
+			// + another word) is NOT mis-flagged as a folder ref (the option-A prose
+			// exemption). The `${WORK_ROOT}/${fromFolder}` pattern above still
+			// catches a rooted `work/prds/...` path case-insensitively as the backstop.
+			pattern: new RegExp(
+				`\\b${migration.fromFolder}/(proposed|ready|tasked|dropped)\\b`,
+			),
 			why: `surviving '${migration.fromFolder}/' folder ref`,
 		},
 		{
