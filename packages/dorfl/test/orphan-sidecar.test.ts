@@ -99,10 +99,10 @@ describe('sweepOrphanSidecars — reap a sidecar whose source is gone, keep the 
 		const repo = seedRepo();
 		// live: source present across DIFFERENT lifecycle folders
 		commitSource(repo, 'tasks/ready', 'task-live');
-		commitSource(repo, 'specs/proposed', 'prd-live');
+		commitSource(repo, 'specs/proposed', 'spec-live');
 		commitSource(repo, 'notes/observations', 'obs-live');
 		commitSidecar(repo, 'task:task-live');
-		commitSidecar(repo, 'prd:prd-live');
+		commitSidecar(repo, 'spec:spec-live');
 		commitSidecar(repo, 'observation:obs-live');
 		// orphans: no source anywhere
 		const orphanA = commitSidecar(repo, 'observation:obs-gone');
@@ -114,7 +114,7 @@ describe('sweepOrphanSidecars — reap a sidecar whose source is gone, keep the 
 			new Set(['observation:obs-gone', 'task:task-gone']),
 		);
 		expect(new Set(result.retained.map((r) => r.item))).toEqual(
-			new Set(['task:task-live', 'prd:prd-live', 'observation:obs-live']),
+			new Set(['task:task-live', 'spec:spec-live', 'observation:obs-live']),
 		);
 		expect(existsSync(join(repo, orphanA))).toBe(false);
 		expect(existsSync(join(repo, orphanB))).toBe(false);

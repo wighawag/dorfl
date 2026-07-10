@@ -93,13 +93,12 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 /**
  * The four outcomes the decision prompt classifies an issue into (the decision
  * table). EXPAND step (prd
- * `prd-to-spec-vocabulary-cutover-and-migration-command`): the `spec` outcome is
- * added BESIDE the legacy `prd` outcome — both name the SAME "clear + coherent but
- * >1 task" classification (a parent SPEC), dispatched through the SAME path. Both
- * are valid through the cutover so the intake emit path can produce either until
- * the migrate batch flips the prompt onto `spec`; the contract task removes `prd`.
+ * `prd-to-spec-vocabulary-cutover-and-migration-command`): the `spec` outcome
+ * names the "clear + coherent but >1 task" classification (a parent SPEC). HARD
+ * CUTOVER (contract step): the legacy `prd` outcome token is GONE — the prompt
+ * emits `spec` and the parser rejects any other token.
  */
-export type IntakeOutcome = 'ask' | 'task' | 'spec' | 'prd' | 'bounce';
+export type IntakeOutcome = 'ask' | 'task' | 'spec' | 'bounce';
 
 /**
  * The VERDICT the decision prompt returns — `{ask,task,spec,bounce}` + the drafted
@@ -306,7 +305,7 @@ export interface PerformIntakeOptions {
 	 * analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no
 	 * special force-key"). Set ONLY when the operator typed
-	 * `--prds-land-in <where>`; never when the value came from config.
+	 * `--specs-land-in <where>`; never when the value came from config.
 	 */
 	explicitSpecsLandIn?: SpecsLandIn;
 	/**
@@ -349,8 +348,8 @@ export const STAGED_SPECS_DIR = workFolderRel('specs-proposed');
 
 /**
  * The POOL folder specs land in when the runner-deterministic placement
- * resolver chooses the pool side (`prdsLandIn: 'ready'` + a trusted origin, or
- * an `--prds-land-in ready` operator override). This is `work/prds/ready/`,
+ * resolver chooses the pool side (`specsLandIn: 'ready'` + a trusted origin, or
+ * an `--specs-land-in ready` operator override). This is `work/specs/ready/`,
  * the tasking candidate pool.
  */
 const POOL_SPECS_DIR = workFolderRel('specs-ready');
@@ -383,7 +382,7 @@ function specLandingToSide(
  * `--propose-spec`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
-export type IntakeArtifactType = 'task' | 'spec' | 'prd';
+export type IntakeArtifactType = 'task' | 'spec';
 // prd → spec cutover (MIGRATE batch): `'spec'` is the CANONICAL artifact type;
 // `'prd'` stays as an accepted ALIAS until the contract task removes it.
 
@@ -855,12 +854,9 @@ async function decideAndDispatch(
 				agentEnv: options.env,
 				note,
 			});
-		// The `spec` outcome is the CANONICAL parent-spec verdict (prd → spec cutover,
-		// MIGRATE batch); the legacy `prd` outcome routes through the SAME dispatch
-		// (they name the SAME parent-spec artifact). Both use `modes.spec`; the
-		// contract task drops the `prd` case.
+		// The `spec` outcome is the parent-spec verdict; it dispatches through
+		// `modes.spec`. HARD CUTOVER: the legacy `prd` outcome case is GONE.
 		case 'spec':
-		case 'prd':
 			return dispatchSpec({
 				verdict,
 				issueNumber,
@@ -1300,10 +1296,10 @@ async function dispatchSpec(params: {
 	);
 	const relPath = `${placementDir}/${slug}.md`;
 
-	// ONBOARD onto a `work/intake-prd-<slug>` branch off fresh `<arbiter>/main` —
+	// ONBOARD onto a `work/intake-spec-<slug>` branch off fresh `<arbiter>/main` —
 	// the SAME runner-owns-git discipline the task branch uses; the intake-
-	// producer prefix keeps it distinct from a `do prd:<slug>` tasking branch.
-	await switchToWorkBranch(cwd, arbiter, 'prd', slug, env);
+	// producer prefix keeps it distinct from a `do spec:<slug>` tasking branch.
+	await switchToWorkBranch(cwd, arbiter, 'spec', slug, env);
 
 	const specContent = renderSpec({
 		slug,
@@ -1863,11 +1859,10 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 		outcome !== 'spec' &&
 		outcome !== 'bounce'
 	) {
-		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`,
-		// batch 4g): the prompt now teaches the LLM to emit `spec`, so the accepted
-		// outcome set is `ask|task|spec|bounce` — the legacy `prd` outcome token is
-		// dropped (the `case 'prd':` dispatch + the `'prd'` TYPE MEMBER stay for the
-		// contract task; routing survives on them, but no fresh verdict names `prd`).
+		// The prompt teaches the LLM to emit `spec`, so the accepted outcome set is
+		// `ask|task|spec|bounce`. HARD CUTOVER: the legacy `prd` outcome token is
+		// fully gone (rejected here + removed from the `IntakeOutcome` type + the
+		// dispatch `case`).
 		throw new Error(
 			`intake verdict 'outcome' was not one of ask|task|spec|bounce (got ` +
 				`${JSON.stringify(outcome)}).`,
@@ -2314,7 +2309,7 @@ export const parseLoneTaskReviewVerdict = parseReviewVerdict;
  *    (the over-bounce guard: a coupled-but-small pair gets a light PRD, never a
  *    bounce).
  *
- * The prompt anchors to `to-task`/`to-prd` for the task/prd SHAPES it drafts. Its
+ * The prompt anchors to `to-task`/`to-spec` for the task/spec SHAPES it drafts. Its
  * JUDGEMENT is NOT unit-tested (exactly as the review prompt's is not) — only the
  * dispatch is. The agent only DRAFTS the verdict + its content; it does NO git/seam
  * ops (the runner owns every postComment / write / integrate — the in-band boundary).
@@ -2388,7 +2383,7 @@ export function buildIntakeDecisionSpec(
 		'',
 		'- **PRD** — the issue is CLEAR *and* coherent but needs MORE THAN ONE task (it',
 		'  cannot be one tracer-bullet path — it splits for scope/architecture). >1 task',
-		'  ⟺ a shared vision worth recording ⟺ a prd. Draft a prd in the `to-prd` shape',
+		'  ⟺ a shared vision worth recording ⟺ a spec. Draft a spec in the `to-spec` shape',
 		'  (`## Problem Statement`, `## Solution`, `## User Stories`, `## Out of Scope`).',
 		'  The runner writes the prd file (`work/prds/ready/<slug>.md`) with `issue: N` and integrates it;',
 		'  TASKING the prd is a SEPARATE later step (`do prd:`) — do not task it here.',

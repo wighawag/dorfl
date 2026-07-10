@@ -548,11 +548,11 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 		expect(fm.needsAnswers).toBe(false);
 	});
 
-	it('PRD (symmetric): a concurrent promote `prds/proposed → prds/ready` — apply commits at the POST-MOVE path', () => {
+	it('SPEC (symmetric): a concurrent promote `specs/proposed → specs/ready` — apply commits at the POST-MOVE path', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'bar',
 			folder: 'pre-prd',
-			type: 'prd',
+			type: 'spec',
 			questions: ['scope?'],
 			answers: ['narrow'],
 		});
@@ -567,7 +567,7 @@ describe('applyAnsweredQuestions — resolves the item by IDENTITY at write-time
 
 		const result = applyAnsweredQuestions({
 			cwd: repo,
-			item: 'prd:bar',
+			item: 'spec:bar',
 			itemPath /* STALE */,
 			env: gitEnv(),
 		});

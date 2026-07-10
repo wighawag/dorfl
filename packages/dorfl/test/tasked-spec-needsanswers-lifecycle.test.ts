@@ -4,7 +4,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {gatherLifecycleInPlace} from '../src/lifecycle-gather.js';
-import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
+import {
+	newSidecar,
+	serialiseSidecar,
+	sidecarPathCandidates,
+} from '../src/sidecar.js';
 
 /**
  * A `needsAnswers:true` PRD that drifted AFTER it was tasked rests IN PLACE in
@@ -43,18 +47,22 @@ function seedTaskedPrd(slug: string, fm: {needsAnswers?: boolean} = {}): void {
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-// Writes the LEGACY on-disk sidecar filename `work/questions/prd-<slug>.md`
-// (`sidecarPathFor('prd:<slug>')`). The producer now emits `spec:<slug>`, so this
-// exercises the reader's `spec-<slug>.md` → legacy `prd-<slug>.md` fallback: the
-// answered sidecar must STILL be found for the `spec:`-emitted item (the sidecar
-// FILE-rename is DATA the migration command does, not this batch).
+// Writes the LEGACY on-disk sidecar filename `work/questions/prd-<slug>.md` (the
+// SECOND candidate of `sidecarPathCandidates('spec:<slug>')`). The producer emits
+// `spec:<slug>`, so this exercises CARVE-OUT #1: the reader's `spec-<slug>.md` →
+// legacy `prd-<slug>.md` fallback — the answered sidecar must STILL be found for
+// the `spec:`-emitted item (the sidecar FILE-rename is DATA the migration command
+// does, NOT this contract batch, which removed only the `SidecarType` member).
 function seedSidecar(slug: string, answered: boolean): void {
-	const item = `prd:${slug}`;
+	const item = `spec:${slug}`;
 	const model = newSidecar(item, [{question: 'pick one?'}]);
 	if (answered) {
 		model.entries[0].answer = 'yes';
 	}
-	const abs = join(repo, sidecarPathFor(item));
+	// Write at the LEGACY `prd-<slug>.md` fallback path (the 2nd candidate) so the
+	// carve-out fallback is what makes the sidecar discoverable.
+	const legacyRel = sidecarPathCandidates(item)[1];
+	const abs = join(repo, legacyRel);
 	mkdirSync(join(abs, '..'), {recursive: true});
 	writeFileSync(abs, serialiseSidecar(model));
 }

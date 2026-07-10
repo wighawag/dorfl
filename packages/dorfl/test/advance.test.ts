@@ -95,7 +95,7 @@ afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcommand)', () => {
+describe('advance \u2014 the shared resolver (obs:/spec:/bare, not a do subcommand)', () => {
 	it('resolves a bare slug to the TASK build-task rung', async () => {
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
@@ -113,7 +113,9 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(calls).toEqual(['build-task:task:feature']);
 	});
 
-	it('resolves prd:<slug> to the task-spec rung', async () => {
+	it('the HARD CUTOVER: prd:<slug> is a bare literal task slug (NOT the parent-spec rung)', async () => {
+		// `prd:` is no longer a namespace prefix, so `advance prd:autotask` resolves
+		// to a bare literal TASK slug (the build-task rung), NEVER the task-spec rung.
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'prd:autotask',
@@ -123,16 +125,14 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('task-spec');
-		expect(calls).toEqual(['task-spec:prd:autotask']);
+		expect(result.rung).toBe('build-task');
+		expect(calls).toEqual(['build-task:task:prd:autotask']);
 	});
 
-	it('resolves spec:<slug> (the new canonical prefix) to the task-spec rung', async () => {
-		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	it('resolves spec:<slug> (the canonical parent-spec prefix) to the task-spec rung', async () => {
 		// `resolveAdvanceArg('spec:<slug>')` returns `{namespace:'spec'}`,
 		// `sidecarTypeFor` maps it to the `spec` type, and the classifier ANALYSES a
-		// `spec` through the SAME `task-spec` rung as `prd` — so `advance spec:<slug>`
-		// routes to tasking beside the legacy `prd:` form (which is KEPT).
+		// `spec` through the `task-spec` rung — so `advance spec:<slug>` routes to tasking.
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'spec:autotask',
@@ -160,7 +160,7 @@ describe('advance \u2014 the shared resolver (obs:/prd:/bare, not a do subcomman
 		expect(calls).toEqual(['triage-observation:observation:stray-note']);
 	});
 
-	it('a bare-slug task/PRD COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
+	it('a bare-slug task/SPEC COLLISION is a loud usage error (resolver cross-check preserved)', async () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
 		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
 		const {executor, calls} = spyExecutor();

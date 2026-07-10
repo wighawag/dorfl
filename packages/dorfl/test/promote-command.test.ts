@@ -203,13 +203,13 @@ describe('promote <item> — admits a staged item into its pool', () => {
 		expect(onArbiterMain(repo, 'work/tasks/ready/bare-one.md')).toBe(true);
 	});
 
-	it('promote prd:<slug> (legacy input alias) moves proposed/ -> ready/ on the arbiter (auto-sliceable)', async () => {
+	it('promote spec:<slug> moves proposed/ -> ready/ on the arbiter (auto-sliceable)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		stagePrd(repo, 'vision');
 		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(true);
-		// `prd:` INPUT is still accepted (contract task removes it); the produced
-		// namespace VALUE + message speak `spec`.
-		const {out} = await runPromote(repo, ['prd:vision']);
+		// HARD CUTOVER: `spec:` is the sole parent-spec prefix (the legacy `prd:`
+		// input alias is GONE — it now parses as a bare literal task slug).
+		const {out} = await runPromote(repo, ['spec:vision']);
 		expect(out).toMatch(/Promoted spec 'vision' into the pool/);
 		expect(onArbiterMain(repo, 'work/specs/ready/vision.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/specs/proposed/vision.md')).toBe(false);

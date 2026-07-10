@@ -156,11 +156,12 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 		// The report suggests `release-lock <item>`; the item form must be the SAME
 		// the lock API accepts (the inverse of lockEntryFor for the known namespaces).
 		expect(itemFromLockEntry('task-foo')).toBe('task:foo');
-		expect(itemFromLockEntry('prd-bar')).toBe('prd:bar');
-		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 		// a `spec-<slug>` lock entry round-trips back to its `spec:<slug>` identity.
 		expect(itemFromLockEntry('spec-bar')).toBe('spec:bar');
 		expect(itemFromLockEntry('observation-baz')).toBe('observation:baz');
+		// HARD CUTOVER: the legacy `prd-<slug>` entry prefix is GONE — it is no longer
+		// a known namespace, so it falls back to the raw entry (still copyable).
+		expect(itemFromLockEntry('prd-bar')).toBe('prd-bar');
 	});
 });
 

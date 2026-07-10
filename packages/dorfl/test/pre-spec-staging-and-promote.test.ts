@@ -150,13 +150,13 @@ function onArbiterMain(repo: string, path: string): boolean {
 
 /**
  * Land the staged PRD on `<arbiter>/main` (a propose-mode intake emission lives
- * on a `work/intake-prd-<slug>` branch \u2014 we ff-merge it onto main so the
+ * on a `work/intake-spec-<slug>` branch \u2014 we ff-merge it onto main so the
  * read-strategy/pool/eligibility tests see it on main without changing intake's
  * default propose mode). The fetched ref is the arbiter side post-intake.
  */
 function landIntakeBranchOnMain(repo: string, slug: string): void {
 	gitIn(['fetch', '-q', ARBITER], repo);
-	const branch = `work/intake-prd-${slug}`;
+	const branch = `work/intake-spec-${slug}`;
 	gitIn(['checkout', 'main'], repo);
 	gitIn(['merge', '--ff-only', `${ARBITER}/${branch}`], repo);
 	gitIn(['push', '-q', ARBITER, 'main'], repo);

@@ -50,11 +50,7 @@ describe('parseSlugArg — pure prefix splitting', () => {
 		expect(parseSlugArg('task:foo')).toEqual({explicit: 'task', slug: 'foo'});
 	});
 
-	it('strips an explicit prd: prefix', () => {
-		expect(parseSlugArg('prd:foo')).toEqual({explicit: 'prd', slug: 'foo'});
-	});
-
-	it('strips the new canonical spec: prefix (EXPAND: beside prd:)', () => {
+	it('strips the canonical spec: prefix', () => {
 		expect(parseSlugArg('spec:foo')).toEqual({explicit: 'spec', slug: 'foo'});
 	});
 
@@ -63,7 +59,7 @@ describe('parseSlugArg — pure prefix splitting', () => {
 	});
 
 	it('does NOT treat a slug that merely starts like a prefix as prefixed', () => {
-		// `tasked` is not `task:` — only the exact `task:`/`prd:` tokens count.
+		// `tasked` is not `task:` — only the exact `task:`/`spec:` tokens count.
 		expect(parseSlugArg('tasked')).toEqual({
 			explicit: undefined,
 			slug: 'tasked',
@@ -74,12 +70,12 @@ describe('parseSlugArg — pure prefix splitting', () => {
 		});
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice:/brief: prefix is NOT a namespace prefix anymore (no alias)', () => {
+	it('the HARD CUTOVER: a pre-rename slice:/brief:/prd: prefix is NOT a namespace prefix anymore (no alias)', () => {
 		// After each cutover the previous prefix becomes plain slug text — it carries
 		// no explicit namespace, so it falls through to the bare path (where it
-		// resolves as a literal `slice:foo` / `brief:foo` slug, never as the old
-		// namespace). No migration-window alias. (`prd:` is the LIVE prd prefix
-		// again after the brief->prd rename — see the positive cases above/below.)
+		// resolves as a literal `slice:foo` / `brief:foo` / `prd:foo` slug, never as
+		// the old namespace). No migration-window alias. (`spec:` is the LIVE
+		// parent-spec prefix after the prd->spec cutover — see the positive cases.)
 		expect(parseSlugArg('slice:foo')).toEqual({
 			explicit: undefined,
 			slug: 'slice:foo',
@@ -87,6 +83,10 @@ describe('parseSlugArg — pure prefix splitting', () => {
 		expect(parseSlugArg('brief:foo')).toEqual({
 			explicit: undefined,
 			slug: 'brief:foo',
+		});
+		expect(parseSlugArg('prd:foo')).toEqual({
+			explicit: undefined,
+			slug: 'prd:foo',
 		});
 	});
 });
@@ -108,9 +108,9 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		});
 	});
 
-	it('a bare slug resolves to the task even when the task itself does not exist (no silent prd guess)', () => {
+	it('a bare slug resolves to the task even when the task itself does not exist (no silent spec guess)', () => {
 		// Bare = task ALWAYS (the task machinery downstream reports "absent");
-		// the only thing that diverts a bare slug is a prd COLLISION, below.
+		// the only thing that diverts a bare slug is a spec COLLISION, below.
 		const resolved = resolveSlug({
 			arg: 'ghost',
 			repoPath: repoPath(),
@@ -120,8 +120,8 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		expect(resolved.slug).toBe('ghost');
 	});
 
-	it('a bare slug ERRORS on a task/prd collision (never silently guesses)', () => {
-		// Seed BOTH a task and a prd named `auto-slice` — the ADR's example.
+	it('a bare slug ERRORS on a task/spec collision (never silently guesses)', () => {
+		// Seed BOTH a task and a spec named `auto-slice` — the ADR's example.
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
 		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
 
@@ -142,15 +142,15 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		} catch (err) {
 			expect((err as Error).message).toContain('ambiguous');
 			expect((err as Error).message).toContain('task:auto-slice');
-			expect((err as Error).message).toContain('prd:auto-slice');
+			expect((err as Error).message).toContain('spec:auto-slice');
 		}
 	});
 
-	it('a bare slug ERRORS on collision even when the prd is mid-task (body stays in work/prds/ready/)', () => {
-		// A prd currently being tasked KEEPS its body in work/prds/ready/<slug>.md (the tasking
-		// lock no longer moves it — the `tasking/` folder is retired; the in-flight state
-		// is the per-item lock ref). The prd namespace still claims the slug via its
-		// ready/ residence, so a bare slug is still ambiguous.
+	it('a bare slug ERRORS on collision even when the spec is mid-task (body stays in work/specs/ready/)', () => {
+		// A spec currently being tasked KEEPS its body in work/specs/ready/<slug>.md (the
+		// tasking lock no longer moves it — the `tasking/` folder is retired; the
+		// in-flight state is the per-item lock ref). The spec namespace still claims the
+		// slug via its ready/ residence, so a bare slug is still ambiguous.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
 		writeItem('prd', 'shared.md', {slug: 'shared'});
 
@@ -180,37 +180,37 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		});
 	});
 
-	it('an explicit prd: prefix is ALWAYS unambiguous — resolves to the prd even on a collision, no error', () => {
+	it('an explicit spec: prefix is ALWAYS unambiguous — resolves to the spec even on a collision, no error', () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
 		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
 
 		const resolved = resolveSlug({
-			arg: 'prd:auto-slice',
+			arg: 'spec:auto-slice',
 			repoPath: repoPath(),
 			read: currentLedgerRead,
 		});
 
 		expect(resolved).toEqual({
-			namespace: 'prd',
+			namespace: 'spec',
 			slug: 'auto-slice',
 			explicit: true,
 		});
 	});
 
 	it('an explicit prefix does NOT pay the existence read (unambiguous by construction)', () => {
-		// With NO files seeded, an explicit prd: still resolves (it is collision-
+		// With NO files seeded, an explicit spec: still resolves (it is collision-
 		// proof by construction; the check is the bare path's concern only).
 		const resolved = resolveSlug({
-			arg: 'prd:never-written',
+			arg: 'spec:never-written',
 			repoPath: repoPath(),
 			read: currentLedgerRead,
 		});
-		expect(resolved.namespace).toBe('prd');
+		expect(resolved.namespace).toBe('spec');
 	});
 
-	it('EXPAND: an explicit spec: prefix resolves to the spec namespace (beside prd:)', () => {
-		// The new canonical `spec:` prefix resolves to `{namespace: 'spec'}`
-		// unambiguously by construction — exactly like the legacy `prd:` above.
+	it('an explicit spec: prefix resolves to the spec namespace', () => {
+		// The canonical `spec:` prefix resolves to `{namespace: 'spec'}`
+		// unambiguously by construction.
 		const resolved = resolveSlug({
 			arg: 'spec:my-spec',
 			repoPath: repoPath(),
@@ -223,36 +223,28 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		});
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice:/brief: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
+	it('the HARD CUTOVER: a pre-rename slice:/brief:/prd: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
 		// After each cutover the previous prefix is no longer a namespace prefix — it
-		// parses as a bare slug whose literal text is `slice:foo` / `brief:foo`
-		// (resolved to the TASK namespace because bare = task), NOT the old
-		// namespace. (`prd:foo` IS the live prd prefix again — covered by the
-		// positive brief->prd cases above.)
-		const task = resolveSlug({
-			arg: 'slice:foo',
-			repoPath: repoPath(),
-			read: currentLedgerRead,
-		});
-		expect(task).toEqual({
-			namespace: 'task',
-			slug: 'slice:foo',
-			explicit: false,
-		});
-		const brief = resolveSlug({
-			arg: 'brief:foo',
-			repoPath: repoPath(),
-			read: currentLedgerRead,
-		});
-		expect(brief).toEqual({
-			namespace: 'task',
-			slug: 'brief:foo',
-			explicit: false,
-		});
+		// parses as a bare slug whose literal text is `slice:foo` / `brief:foo` /
+		// `prd:foo` (resolved to the TASK namespace because bare = task), NOT the old
+		// namespace. (`spec:foo` IS the live parent-spec prefix — covered above.)
+		for (const dead of ['slice:foo', 'brief:foo', 'prd:foo']) {
+			expect(
+				resolveSlug({
+					arg: dead,
+					repoPath: repoPath(),
+					read: currentLedgerRead,
+				}),
+			).toEqual({
+				namespace: 'task',
+				slug: dead,
+				explicit: false,
+			});
+		}
 	});
 
-	it('the prd existence check resolves the slug from frontmatter, not just the filename', () => {
-		// A prd file named oddly but whose frontmatter slug matches still collides.
+	it('the spec existence check resolves the slug from frontmatter, not just the filename', () => {
+		// A spec file named oddly but whose frontmatter slug matches still collides.
 		writeItem('backlog', 'feature.md', {slug: 'feature'});
 		writeItem('prd', 'renamed-on-disk.md', {slug: 'feature'});
 
@@ -289,7 +281,7 @@ describe('parseSlugArg — the NEW obs: / observation: namespace', () => {
 	});
 });
 
-describe('resolveAdvanceArg — the advance verb resolver (task/prd/obs, bare = task)', () => {
+describe('resolveAdvanceArg — the advance verb resolver (task/spec/obs, bare = task)', () => {
 	it('resolves an explicit obs: arg to the NEW observation namespace (no existence check)', () => {
 		const resolved = resolveAdvanceArg({
 			arg: 'obs:bar',
@@ -313,17 +305,17 @@ describe('resolveAdvanceArg — the advance verb resolver (task/prd/obs, bare = 
 		).toBe('observation');
 	});
 
-	it('resolves an explicit prd: arg to the prd namespace (unambiguous by construction)', () => {
+	it('resolves an explicit spec: arg to the spec namespace (unambiguous by construction)', () => {
 		expect(
 			resolveAdvanceArg({
-				arg: 'prd:autotask',
+				arg: 'spec:autotask',
 				repoPath: repoPath(),
 				read: currentLedgerRead,
 			}),
-		).toEqual({namespace: 'prd', slug: 'autotask', explicit: true});
+		).toEqual({namespace: 'spec', slug: 'autotask', explicit: true});
 	});
 
-	it('a bare slug resolves to the TASK when no prd shares it (bare = task, as do has it)', () => {
+	it('a bare slug resolves to the TASK when no spec shares it (bare = task, as do has it)', () => {
 		writeItem('backlog', 'feature.md', {slug: 'feature'});
 		expect(
 			resolveAdvanceArg({
@@ -334,7 +326,7 @@ describe('resolveAdvanceArg — the advance verb resolver (task/prd/obs, bare = 
 		).toEqual({namespace: 'task', slug: 'feature', explicit: false});
 	});
 
-	it('keeps the bare-slug cross-check: ERRORS on a task/prd collision (same as do)', () => {
+	it('keeps the bare-slug cross-check: ERRORS on a task/spec collision (same as do)', () => {
 		writeItem('backlog', 'auto-slice.md', {slug: 'auto-slice'});
 		writeItem('prd', 'auto-slice.md', {slug: 'auto-slice'});
 		expect(() =>
@@ -347,7 +339,7 @@ describe('resolveAdvanceArg — the advance verb resolver (task/prd/obs, bare = 
 	});
 
 	it('an observation sharing a slug does NOT make a bare slug ambiguous (bare stays the task)', () => {
-		// Only a task/prd collision diverts a bare slug; an observation must be
+		// Only a task/spec collision diverts a bare slug; an observation must be
 		// named explicitly (obs:<slug>) — the bare path is the task, as everywhere.
 		writeItem('backlog', 'shared.md', {slug: 'shared'});
 		expect(
@@ -390,18 +382,7 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		expect(resolveTaskOnlyArg('task:feature')).toBe('feature');
 	});
 
-	it('REJECTS a prd: argument with an "operates on tasks, not prds" error', () => {
-		expect(() => resolveTaskOnlyArg('prd:feature')).toThrow(
-			SlugResolutionError,
-		);
-		try {
-			resolveTaskOnlyArg('prd:feature');
-		} catch (err) {
-			expect((err as Error).message).toContain('tasks, not prds');
-		}
-	});
-
-	it('EXPAND: REJECTS a spec: argument with an "operates on tasks, not specs" error (beside prd:)', () => {
+	it('REJECTS a spec: argument with an "operates on tasks, not specs" error', () => {
 		expect(() => resolveTaskOnlyArg('spec:feature')).toThrow(
 			SlugResolutionError,
 		);
@@ -410,6 +391,12 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		} catch (err) {
 			expect((err as Error).message).toContain('tasks, not specs');
 		}
+	});
+
+	it('the HARD CUTOVER: a pre-rename prd: argument is NOT rejected as a namespace — it is a bare literal task slug', () => {
+		// `prd:` is no longer a namespace prefix, so a task-only command treats
+		// `prd:feature` as a bare literal slug (passed through verbatim), NOT rejected.
+		expect(resolveTaskOnlyArg('prd:feature')).toBe('prd:feature');
 	});
 
 	it('REJECTS an obs: argument with an "operates on tasks, not observations" error', () => {
@@ -429,9 +416,9 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		expect(resolveTaskOnlyArg('slice:feature')).toBe('slice:feature');
 	});
 
-	it('is PURE — a bare slug on a task-only command never reads files (no prd ambiguity here)', () => {
-		// Even with a colliding prd seeded, the task-only path resolves the bare
-		// slug straight to the task (the prd namespace is unreachable here), so
+	it('is PURE — a bare slug on a task-only command never reads files (no spec ambiguity here)', () => {
+		// Even with a colliding spec seeded, the task-only path resolves the bare
+		// slug straight to the task (the spec namespace is unreachable here), so
 		// there is no cross-namespace check and no error.
 		writeItem('prd', 'feature.md', {slug: 'feature'});
 		expect(resolveTaskOnlyArg('feature')).toBe('feature');
@@ -492,13 +479,13 @@ describe('ledger-read seam — resolveSpecExistence (the prd read path)', () => 
 });
 
 describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivation', () => {
-	it('namespaces the branch by item type (task vs prd) — same slug, DISTINCT refs', () => {
-		// The structural bug: a same-slug task and prd collided on `work/<slug>`.
+	it('namespaces the branch by item type (task vs spec) — same slug, DISTINCT refs', () => {
+		// The structural bug: a same-slug task and spec collided on `work/<slug>`.
 		const task = workBranchRef('task', 'advance-loop');
-		const prd = workBranchRef('prd', 'advance-loop');
+		const spec = workBranchRef('spec', 'advance-loop');
 		expect(task).toBe('work/task-advance-loop');
-		expect(prd).toBe('work/prd-advance-loop');
-		expect(task).not.toBe(prd);
+		expect(spec).toBe('work/spec-advance-loop');
+		expect(task).not.toBe(spec);
 	});
 
 	it('prefixes an intake-produced branch so it never collides with a build/tasking branch for the same slug', () => {
@@ -506,15 +493,15 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 		const intakeTask = workBranchRef('task', 'add-quiet-flag', {
 			producer: 'intake',
 		});
-		const intakePrd = workBranchRef('prd', 'add-quiet-flag', {
+		const intakeSpec = workBranchRef('spec', 'add-quiet-flag', {
 			producer: 'intake',
 		});
 		const build = workBranchRef('task', 'add-quiet-flag');
-		const tasking = workBranchRef('prd', 'add-quiet-flag');
+		const tasking = workBranchRef('spec', 'add-quiet-flag');
 		expect(intakeTask).toBe('work/intake-task-add-quiet-flag');
-		expect(intakePrd).toBe('work/intake-prd-add-quiet-flag');
+		expect(intakeSpec).toBe('work/intake-spec-add-quiet-flag');
 		// All four forms for ONE slug are mutually distinct (the full collision set).
-		const all = [intakeTask, intakePrd, build, tasking];
+		const all = [intakeTask, intakeSpec, build, tasking];
 		expect(new Set(all).size).toBe(4);
 	});
 
@@ -523,8 +510,8 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 			namespace: 'task',
 			slug: 'foo',
 		});
-		expect(parseWorkBranchRef('work/prd-foo')).toEqual({
-			namespace: 'prd',
+		expect(parseWorkBranchRef('work/spec-foo')).toEqual({
+			namespace: 'spec',
 			slug: 'foo',
 		});
 		expect(parseWorkBranchRef('work/intake-task-foo')).toEqual({
@@ -532,24 +519,18 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 			namespace: 'task',
 			slug: 'foo',
 		});
-		expect(parseWorkBranchRef('work/intake-prd-foo')).toEqual({
+		expect(parseWorkBranchRef('work/intake-spec-foo')).toEqual({
 			producer: 'intake',
-			namespace: 'prd',
+			namespace: 'spec',
 			slug: 'foo',
 		});
 	});
 
-	it('EXPAND: builds and parses `work/spec-<slug>` beside `work/prd-<slug>`', () => {
-		// The new canonical `spec` type token round-trips exactly like the legacy
-		// `prd` token, and both forms stay distinct.
+	it('builds and parses `work/spec-<slug>` (the parent-spec type token)', () => {
 		const spec = workBranchRef('spec', 'foo');
 		expect(spec).toBe('work/spec-foo');
 		expect(parseWorkBranchRef('work/spec-foo')).toEqual({
 			namespace: 'spec',
-			slug: 'foo',
-		});
-		expect(parseWorkBranchRef('work/prd-foo')).toEqual({
-			namespace: 'prd',
 			slug: 'foo',
 		});
 		expect(parseWorkBranchRef('work/intake-spec-foo')).toEqual({
@@ -565,25 +546,27 @@ describe('workBranchRef / parseWorkBranchRef — the ONE branch-identity derivat
 			namespace: 'task',
 			slug: 'intake-task-foo',
 		});
-		expect(parseWorkBranchRef('work/intake-prd-task-bar')).toEqual({
+		expect(parseWorkBranchRef('work/intake-spec-task-bar')).toEqual({
 			producer: 'intake',
-			namespace: 'prd',
+			namespace: 'spec',
 			slug: 'task-bar',
 		});
 	});
 
-	it('the HARD CUTOVER: returns undefined for a non-work / pre-rename branch (old slice-/brief- types rejected, no alias)', () => {
+	it('the HARD CUTOVER: returns undefined for a non-work / pre-rename branch (old slice-/brief-/prd- types rejected, no alias)', () => {
 		expect(parseWorkBranchRef('main')).toBeUndefined();
 		expect(parseWorkBranchRef('work/foo')).toBeUndefined(); // pre-rename un-namespaced form
 		expect(parseWorkBranchRef('work/slice-foo')).toBeUndefined(); // pre-rename task type
-		expect(parseWorkBranchRef('work/brief-foo')).toBeUndefined(); // pre-rename prd type (now dead after brief->prd)
+		expect(parseWorkBranchRef('work/brief-foo')).toBeUndefined(); // pre-rename spec type (brief era)
+		expect(parseWorkBranchRef('work/prd-foo')).toBeUndefined(); // pre-rename spec type (now dead after prd->spec)
+		expect(parseWorkBranchRef('work/intake-prd-foo')).toBeUndefined();
 		expect(parseWorkBranchRef('work/intake-slice-foo')).toBeUndefined();
 		expect(parseWorkBranchRef('claim/foo')).toBeUndefined();
 		expect(parseWorkBranchRef('feature/x')).toBeUndefined();
 	});
 
 	it('workBranchRef and parseWorkBranchRef are inverses (no second derivation)', () => {
-		for (const ns of ['task', 'spec', 'prd'] as const) {
+		for (const ns of ['task', 'spec'] as const) {
 			for (const producer of [undefined, 'intake'] as const) {
 				const ref = workBranchRef(ns, 'my-slug', {producer});
 				const parsed = parseWorkBranchRef(ref);

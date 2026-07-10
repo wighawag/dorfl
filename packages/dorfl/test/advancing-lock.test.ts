@@ -101,20 +101,20 @@ describe('acquireAdvancingLock — tree-less rung (the unified lock)', () => {
 		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 	});
 
-	it('keys a PRD to prd-<slug> and an observation to observation-<slug>', async () => {
+	it('keys a SPEC to spec-<slug> and an observation to observation-<slug>', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			specs: ['beta'],
 		});
-		const prd = await acquireAdvancingLock({
-			item: 'prd:beta',
+		const spec = await acquireAdvancingLock({
+			item: 'spec:beta',
 			cwd: repo,
 			arbiter: 'arbiter',
 			acquireUnified: true,
 			env: gitEnv(),
 		});
-		expect(prd.exitCode).toBe(0);
-		expect(prd.entry).toBe('prd-beta');
-		expect(lockRefOnArbiter(arbiter, 'prd-beta')).toBe(true);
+		expect(spec.exitCode).toBe(0);
+		expect(spec.entry).toBe('spec-beta');
+		expect(lockRefOnArbiter(arbiter, 'spec-beta')).toBe(true);
 
 		const obs = await acquireAdvancingLock({
 			item: 'obs:gamma',

@@ -708,11 +708,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    lives in `tasking.ts`; `do` dispatches `spec:` here. The agent only writes
 	//    task files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the task-build pipeline below.
-	//    MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	//    dispatch on the NEW `spec` namespace BESIDE the legacy `prd` — `resolveSlug`
-	//    returns `{namespace:'spec'}` for a `spec:<slug>` arg, so `do spec:<slug>`
-	//    routes here to tasking; the legacy `prd` route is KEPT (contract task drops it).
-	if (resolved.namespace === 'prd' || resolved.namespace === 'spec') {
+	//    `resolveSlug` returns `{namespace:'spec'}` for a `spec:<slug>` arg, so
+	//    `do spec:<slug>` routes here to tasking.
+	if (resolved.namespace === 'spec') {
 		const tasked = await performTask({
 			slug: resolved.slug,
 			cwd,
@@ -1894,10 +1892,8 @@ export async function performDoRemote(
 			return {exitCode: 1, outcome: 'usage-error', message};
 		}
 
-		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-		// dispatch on the NEW `spec` namespace BESIDE the legacy `prd`, so
-		// `do --remote spec:<slug>` routes to tasking; the `prd` route is KEPT.
-		if (resolved.namespace === 'prd' || resolved.namespace === 'spec') {
+		// `do --remote spec:<slug>` routes to tasking (the `spec` namespace).
+		if (resolved.namespace === 'spec') {
 			// `do --remote spec:<slug>`: task the spec as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
 			// mirror's main). No job worktree is needed — the tasking transition is a

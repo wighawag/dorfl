@@ -106,20 +106,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// built-in `pre-backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
 	tasksLandIn: {enum: ['pre-backlog', 'ready']},
-	// `prdsLandIn` (the per-repo PRD-PLACEMENT default — prd
+	// `specsLandIn` (the per-repo SPEC-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
-	// `pre-proposed`/`ready` enum, so `DORFL_PRDS_LAND_IN=ready` works and a typo
+	// `pre-proposed`/`ready` enum, so `DORFL_SPECS_LAND_IN=ready` works and a typo
 	// FAILS LOUDLY. Same precedence chain as `tasksLandIn` (flag > env > per-repo
 	// > global > built-in `pre-proposed`); fed into the shared placement resolver
-	// (`src/placement.ts`) as the configured-default rung for the prd lifecycle.
-	prdsLandIn: {enum: ['pre-proposed', 'ready']},
-	// `specsLandIn` (the `spec` vocabulary CANONICAL key for the spec-placement
-	// default — prd `prd-to-spec-vocabulary-cutover-and-migration-command`, EXPAND
-	// step) coerces as the SAME `pre-proposed`/`ready` enum as `prdsLandIn`, which
-	// it is added beside, so `DORFL_SPECS_LAND_IN=ready` works and a typo FAILS
-	// LOUDLY. Same precedence chain as `prdsLandIn`; the intake resolver reads
-	// EITHER key with `specsLandIn` winning when both are present. The contract
-	// task removes the legacy `prdsLandIn`.
+	// (`src/placement.ts`) as the configured-default rung for the spec lifecycle.
+	// The legacy `prdsLandIn` key / `DORFL_PRDS_LAND_IN` env are GONE after the
+	// prd → spec hard cutover (clean break).
 	specsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed

@@ -50,7 +50,7 @@
  *   - CI runs IN-PLACE (the CI container IS the isolation): no
  *     `--isolated`/`--remote`/registry. A CI concurrency group (per-ref) prevents
  *     overlapping ticks; the claim CAS is the real cross-run serialiser.
- *   - All invocations use explicit slug prefixes (`task:`/`prd:`), never bare
+ *   - All invocations use explicit slug prefixes (`task:`/`spec:`), never bare
  *     (ADR `command-surface-and-journeys` §3a).
  *   - The running CI job NEVER edits `.github/workflows/**` (US #9): it requests
  *     NO `workflows` permission and cannot rewrite its own triggers.
@@ -271,11 +271,11 @@ jobs:
   # \`cwd.repo.specs[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups
   # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
-  # Actions matrix list of explicit \`task:<slug>\` / \`prd:<slug>\` / \`obs:<slug>\`
+  # Actions matrix list of explicit \`task:<slug>\` / \`spec:<slug>\` / \`obs:<slug>\`
   # ids (CI MUST use explicit prefixes). The lifecycle legs run the WHOLE
   # answer-loop in propose mode (not only merge): \`obs:\` (triage untriaged
-  # observations), surface \`task:\`/\`prd:\` (\`needsAnswers\`, no answered sidecar)
-  # AND apply \`task:\`/\`prd:\` (\`needsAnswers\`, answered sidecar — consume the
+  # observations), surface \`task:\`/\`spec:\` (\`needsAnswers\`, no answered sidecar)
+  # AND apply \`task:\`/\`spec:\` (\`needsAnswers\`, answered sidecar — consume the
   # committed answer, closing the on-answer \`push: work/questions/**\` loop). Each
   # becomes one matrix leg → one independent \`advance --propose\`. Skipped in merge
   # mode. Inert with calm-default gates (empty triage/surface pools).
@@ -305,13 +305,13 @@ jobs:
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
-        # uses explicit \`task:\` / \`prd:\` / \`obs:\` prefixes, never bare (ADR
+        # uses explicit \`task:\` / \`spec:\` / \`obs:\` prefixes, never bare (ADR
         # command-surface §3a). Eligible TASKS ⇒ \`task:<slug>\` legs (\`advance\`
-        # builds them); TASKABLE PRDS ⇒ \`prd:<slug>\` legs (\`advance\` auto-tasks
+        # builds them); TASKABLE SPECS ⇒ \`spec:<slug>\` legs (\`advance\` auto-tasks
         # them, capability B — \`DORFL_AUTO_TASK\` above). LIFECYCLE pools:
         # \`lifecycle.triage[]\` ⇒ \`obs:<slug>\` (the \`obs:\` prefix is fixed here),
         # \`lifecycle.surface[]\` + \`lifecycle.apply[]\` ⇒ \`.namespace + ":" + .slug\`
-        # (surface: \`task:\`/\`prd:\` blocker-question legs; apply: \`task:\`/\`prd:\`
+        # (surface: \`task:\`/\`spec:\` blocker-question legs; apply: \`task:\`/\`spec:\`
         # AND \`observation:\` legs — an answered observation sidecar is consumed by
         # the apply rung too, so it MUST carry through here). CI runs IN-PLACE, so we use
         # \`scan --here\`: it reports ONLY the cwd checkout (\`cwd.repo.*\`) and SKIPS
@@ -322,7 +322,7 @@ jobs:
         # leg per item.
         run: |
           items="$(dorfl scan --json --here \\
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].specs[]?, .cwd.repo.specs[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].specs[]?, .cwd.repo.specs[]?) | select(.eligibility.eligible == true) | "spec:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -335,7 +335,7 @@ jobs:
   # parallel shape and \`-n\` is NOT needed. Each leg passes \`--propose\`, tying the
   # integration mode to THIS shape: it sits at the top of the precedence chain, so
   # the workflow mode always wins over the repo config default and a leg can NEVER
-  # merge to main. Explicit \`task:\`/\`prd:\` prefixes only, never bare.
+  # merge to main. Explicit \`task:\`/\`spec:\` prefixes only, never bare.
   advance-propose:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
@@ -739,20 +739,20 @@ export function validateAdvanceLifecycleWorkflow(
 	require('explicit-task-prefix', /"task:" \+ \.slug/.test(text) ||
 		/task:/.test(
 			text,
-		), 'CI must use explicit `task:`/`prd:` slug prefixes, never bare (ADR ' +
+		), 'CI must use explicit `task:`/`spec:` slug prefixes, never bare (ADR ' +
 		'command-surface-and-journeys §3a).');
 
 	// --- The propose `enumerate` matrix must UNION taskable prds --------------
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `DORFL_AUTO_TASK: 'true'` dead on the
 	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
-	// must enumerate `prd:<slug>` ids from `scan --json`'s taskable-SPEC pool
+	// must enumerate `spec:<slug>` ids from `scan --json`'s taskable-SPEC pool
 	// (`repos[].specs[]` + `cwd.repo.specs[]`) alongside the eligible-task legs.
-	require('propose-enumerates-taskable-specs', /"prd:" \+ \.slug/.test(text) &&
+	require('propose-enumerates-taskable-specs', /"spec:" \+ \.slug/.test(text) &&
 		/\.specs\[\]/.test(
 			text,
 		), 'the propose-mode `enumerate` `jq` must union taskable specs into the ' +
-		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].specs[]` " +
+		"matrix as `spec:<slug>` legs (read from `scan --json`'s `repos[].specs[]` " +
 		'+ `cwd.repo.specs[]` pools), so a ready ungated SPEC becomes one auto-task ' +
 		'matrix leg per item alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
@@ -775,7 +775,7 @@ export function validateAdvanceLifecycleWorkflow(
 		), 'the propose-mode `enumerate` `jq` must union the LIFECYCLE pools into the ' +
 		"matrix (read from `scan --json`'s `repos[].lifecycle.*` + " +
 		'`cwd.repo.lifecycle.*`): `triage[]` as `obs:<slug>` legs, and ' +
-		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`prd:`, plus ' +
+		'`surface[]`/`apply[]` as `.namespace + ":" + .slug` (`task:`/`spec:`, plus ' +
 		'`observation:` for an answered-observation apply leg) legs, ' +
 		'so the WHOLE answer-loop (triage + surface + apply) runs in propose mode, ' +
 		'not only in merge mode ' +

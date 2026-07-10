@@ -179,17 +179,17 @@ describe('dropSource — direct delete of a source + its sidecar (logic)', () =>
 		expect(headCommitMessage(repo)).toContain('(no reason given)');
 	});
 
-	it('resolves the source by IDENTITY across namespaces (prd / observation / bare)', () => {
-		// A PRD source in its pool folder, found by the `prd:` identity.
+	it('resolves the source by IDENTITY across namespaces (spec / observation / bare)', () => {
+		// A SPEC source in its pool folder, found by the `spec:` identity.
 		const prd = seed({
 			slug: 'plan',
-			type: 'prd',
+			type: 'spec',
 			folder: 'prd',
-			identity: 'prd:plan',
+			identity: 'spec:plan',
 		});
 		const prdResult = dropSource({
 			cwd: prd.repo,
-			item: 'prd:plan',
+			item: 'spec:plan',
 			env: gitEnv(),
 		});
 		expect(prdResult.outcome).toBe('deleted');

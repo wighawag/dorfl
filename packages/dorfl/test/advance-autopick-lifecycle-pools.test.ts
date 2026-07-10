@@ -10,7 +10,12 @@ import {performDoAuto, type DoRunner} from '../src/do-autopick.js';
 import type {AdvanceResult} from '../src/advance.js';
 import type {DoResult} from '../src/do.js';
 import {mergeConfig, type Config} from '../src/config.js';
-import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
+import {
+	newSidecar,
+	serialiseSidecar,
+	sidecarPathFor,
+	sidecarPathCandidates,
+} from '../src/sidecar.js';
 
 /**
  * `advance-autopick-lifecycle-pools` (the in-place driver path) — the advance
@@ -72,18 +77,26 @@ function seedObservation(slug: string, triaged?: string): void {
 	writeFileSync(join(dir, `${slug}.md`), lines.join('\n'));
 }
 
-/** Write the identity-keyed sidecar for `<namespace>:<slug>`, answered or pending. */
+/**
+ * Write the identity-keyed sidecar for a `task`/`spec` item, answered or pending.
+ * `'prd'` is a special SEEDER mode: it writes the item as `spec:<slug>` but at the
+ * LEGACY on-disk `prd-<slug>.md` fallback path (CARVE-OUT #1) to prove the reader
+ * still finds a `spec:`-emitted item's not-yet-renamed legacy sidecar.
+ */
 function seedSidecar(
-	namespace: 'task' | 'prd',
+	namespace: 'task' | 'prd' | 'spec',
 	slug: string,
 	answered: boolean,
 ): void {
-	const item = `${namespace}:${slug}`;
+	const legacyPrd = namespace === 'prd';
+	const item = `${legacyPrd ? 'spec' : namespace}:${slug}`;
 	const model = newSidecar(item, [{question: 'pick one?'}]);
 	if (answered) {
 		model.entries[0].answer = 'yes';
 	}
-	const rel = sidecarPathFor(item);
+	// A `'prd'`-mode seed writes the legacy `prd-<slug>.md` fallback (2nd
+	// candidate); otherwise the canonical path (1st candidate).
+	const rel = legacyPrd ? sidecarPathCandidates(item)[1] : sidecarPathFor(item);
 	const abs = join(repo, rel);
 	mkdirSync(join(abs, '..'), {recursive: true});
 	writeFileSync(abs, serialiseSidecar(model));
