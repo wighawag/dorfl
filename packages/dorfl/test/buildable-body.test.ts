@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync} from 'node:fs';
-import {renderTaskBody, renderPrdBody} from '../src/buildable-body.js';
+import {renderTaskBody, renderSpecBody} from '../src/buildable-body.js';
 import {extractPromptSection, resolveTask} from '../src/prompt.js';
 import {gitIn} from './helpers/gitRepo.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
@@ -129,9 +129,9 @@ describe('renderTaskBody — the shared buildable-TASK section skeleton', () => 
 	});
 });
 
-describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
+describe('renderSpecBody — the symmetric PRD-body section skeleton', () => {
 	it('emits ## Problem Statement and NO ## Prompt (a PRD is not dispatched)', () => {
-		const body = renderPrdBody({
+		const body = renderSpecBody({
 			problemStatement: 'Transformed from issue #7: the problem',
 		});
 		expect(body).toContain('## Problem Statement');
@@ -139,21 +139,21 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 	});
 
 	it('transcribes an ## Open questions block when given, and drops it when empty', () => {
-		const withQ = renderPrdBody({
+		const withQ = renderSpecBody({
 			problemStatement: 'a problem',
 			openQuestions: '1. an open scoping question',
 		});
 		expect(withQ).toContain('## Open questions');
 		expect(withQ).toContain('1. an open scoping question');
 
-		const withoutQ = renderPrdBody({problemStatement: 'a problem'});
+		const withoutQ = renderSpecBody({problemStatement: 'a problem'});
 		expect(withoutQ).not.toContain('## Open questions');
 		// Still never a prompt.
 		expect(withoutQ).not.toContain('## Prompt');
 	});
 
 	it("expresses intake's DEFAULT PRD SCAFFOLD shape (## Problem Statement + ## Solution + ## User Stories, NO ## Open questions / ## Prompt)", () => {
-		const body = renderPrdBody({
+		const body = renderSpecBody({
 			problemStatement: 'Transformed from issue #7: the problem',
 			solution: '(to be detailed; this prd needs tasking via `do prd:`).',
 			userStories: '1. As a user, I want issue #7 addressed.',
@@ -175,7 +175,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 
 	it('emits ## Solution and ## User Stories each only when supplied, dropping each independently', () => {
 		// Solution only.
-		const solOnly = renderPrdBody({
+		const solOnly = renderSpecBody({
 			problemStatement: 'a problem',
 			solution: 'the solution prose',
 		});
@@ -184,7 +184,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 		expect(solOnly).not.toContain('## User Stories');
 
 		// User Stories only.
-		const usOnly = renderPrdBody({
+		const usOnly = renderSpecBody({
 			problemStatement: 'a problem',
 			userStories: '1. As a user, I want a thing.',
 		});
@@ -193,7 +193,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 		expect(usOnly).not.toContain('## Solution');
 
 		// Empty/whitespace inputs drop both sections.
-		const emptyBoth = renderPrdBody({
+		const emptyBoth = renderSpecBody({
 			problemStatement: 'a problem',
 			solution: '   ',
 			userStories: '',
@@ -203,7 +203,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 	});
 
 	it('canonical full order is Problem Statement → Solution → User Stories → Open questions', () => {
-		const body = renderPrdBody({
+		const body = renderSpecBody({
 			problemStatement: 'a problem',
 			solution: 'a solution',
 			userStories: '1. a story',
@@ -224,7 +224,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 	it('keeps the existing promotion shape (neither new input) BYTE-FOR-BYTE unchanged', () => {
 		// The already-merged promotion caller passes neither solution nor userStories;
 		// the additive change must not alter its output by a single byte.
-		const promotionWithQ = renderPrdBody({
+		const promotionWithQ = renderSpecBody({
 			problemStatement: 'the mechanism prose',
 			openQuestions: '1. an open scoping question',
 		});
@@ -241,7 +241,7 @@ describe('renderPrdBody — the symmetric PRD-body section skeleton', () => {
 			].join('\n'),
 		);
 
-		const promotionNoQ = renderPrdBody({
+		const promotionNoQ = renderSpecBody({
 			problemStatement: 'the mechanism prose',
 		});
 		expect(promotionNoQ).toBe(

@@ -9,7 +9,7 @@ import {
 } from './advancing-lock.js';
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
-import {renderTaskBody, renderPrdBody} from './buildable-body.js';
+import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 /**
  * The engine-owned TRIAGE PERSIST (prd `advance-loop`, task `advance-rung-triage`,
@@ -407,7 +407,7 @@ export async function promoteObservation(
  * dispatched build throws "has no '## Prompt' section". The body BELOW the
  * frontmatter (lead section + mechanism prose + optional `## Open questions` +
  * the task-only `## Prompt`) is rendered by the SHARED owner of the
- * buildable-task/PRD schema, {@link renderTaskBody} / {@link renderPrdBody}
+ * buildable-task/PRD schema, {@link renderTaskBody} / {@link renderSpecBody}
  * (`buildable-body.ts`), so the producer and the consumer cannot drift apart
  * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion`,
  * US #3/#5/#6). This function owns only the FRONTMATTER writer; the section
@@ -488,12 +488,12 @@ function buildPromotedBody(
 	// The body BELOW the frontmatter is rendered by the SHARED schema owner so the
 	// section skeleton has one home, not two (prd
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion`). A PRD
-	// goes through `renderPrdBody` (no `## Prompt`); a task through
+	// goes through `renderSpecBody` (no `## Prompt`); a task through
 	// `renderTaskBody` (always a `## Prompt`).
 	if (artifact === 'prd') {
 		return (
 			fenceToBody +
-			renderPrdBody({
+			renderSpecBody({
 				problemStatement: mechanism,
 				openQuestions,
 			})

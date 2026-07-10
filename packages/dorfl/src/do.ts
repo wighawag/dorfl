@@ -702,13 +702,17 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}
 
-	// 2. `do prd:<slug>` → the prd-TASKING path (`autoslice-command`): the in-place
+	// 2. `do spec:<slug>` → the spec-TASKING path (`autoslice-command`): the in-place
 	//    `do` worker is AUTONOMOUS, so it tasks as the AGENT (gate-bound + lock).
 	//    The orchestration (gate → lock → to-task harness → runner-owned commit)
-	//    lives in `tasking.ts`; `do` dispatches `prd:` here. The agent only writes
+	//    lives in `tasking.ts`; `do` dispatches `spec:` here. The agent only writes
 	//    task files — the runner owns every git transition (same boundary as the
 	//    build path). It does NOT run the task-build pipeline below.
-	if (resolved.namespace === 'prd') {
+	//    MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+	//    dispatch on the NEW `spec` namespace BESIDE the legacy `prd` — `resolveSlug`
+	//    returns `{namespace:'spec'}` for a `spec:<slug>` arg, so `do spec:<slug>`
+	//    routes here to tasking; the legacy `prd` route is KEPT (contract task drops it).
+	if (resolved.namespace === 'prd' || resolved.namespace === 'spec') {
 		const tasked = await performTask({
 			slug: resolved.slug,
 			cwd,
@@ -1890,11 +1894,14 @@ export async function performDoRemote(
 			return {exitCode: 1, outcome: 'usage-error', message};
 		}
 
-		if (resolved.namespace === 'prd') {
-			// `do --remote prd:<slug>`: task the prd as the AGENT, against the claim
+		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// dispatch on the NEW `spec` namespace BESIDE the legacy `prd`, so
+		// `do --remote spec:<slug>` routes to tasking; the `prd` route is KEPT.
+		if (resolved.namespace === 'prd' || resolved.namespace === 'spec') {
+			// `do --remote spec:<slug>`: task the spec as the AGENT, against the claim
 			// clone (its `origin` IS the arbiter URL + it carries a working tree from the
 			// mirror's main). No job worktree is needed — the tasking transition is a
-			// runner-owned `prd → tasking → prd` move + emit-backlog on the arbiter, not
+			// runner-owned `spec → tasking → spec` move + emit-backlog on the arbiter, not
 			// a build pipeline. The agent only writes task files; the runner does all git.
 			const tasked = await performTask({
 				slug: resolved.slug,

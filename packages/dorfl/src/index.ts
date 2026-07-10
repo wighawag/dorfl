@@ -44,9 +44,9 @@ export {ENV_PREFIX, envVarName, envOverrides} from './env-config.js';
 
 export type {
 	RenderTaskBodyInput,
-	RenderPrdBodyInput,
+	RenderSpecBodyInput,
 } from './buildable-body.js';
-export {renderTaskBody, renderPrdBody} from './buildable-body.js';
+export {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 export type {Frontmatter} from './frontmatter.js';
 export {
@@ -154,11 +154,11 @@ export type {
 export {currentLedgerRead, ledgerRead} from './ledger-read.js';
 
 export type {
-	PrdCompleteInput,
-	PrdTask,
-	PrdCompleteResult,
-} from './prd-complete.js';
-export {isPrdComplete} from './prd-complete.js';
+	SpecCompleteInput,
+	SpecTask,
+	SpecCompleteResult,
+} from './spec-complete.js';
+export {isSpecComplete} from './spec-complete.js';
 
 export type {
 	LedgerTransitionKind,

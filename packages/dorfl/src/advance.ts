@@ -428,13 +428,22 @@ export interface ReadSignalsInput {
 	item: string;
 }
 
-/** Map the resolver's namespace onto the sidecar type. */
+/**
+ * Map the resolver's namespace onto the sidecar type.
+ *
+ * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
+ * new `spec` namespace maps to the `spec` sidecar type BESIDE the legacy `prd`, so
+ * `advance spec:<slug>` resolves its signals/folders (`FOLDERS_FOR_TYPE['spec']`)
+ * and orchestrates `do spec:<slug>`; the `prd` branch is KEPT (contract task drops it).
+ */
 function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
 	return namespace === 'observation'
 		? 'observation'
-		: namespace === 'prd'
-			? 'prd'
-			: 'task';
+		: namespace === 'spec'
+			? 'spec'
+			: namespace === 'prd'
+				? 'prd'
+				: 'task';
 }
 
 /**

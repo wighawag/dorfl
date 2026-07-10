@@ -134,6 +134,20 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', 
 		const out = await runReject(['work-on', 'prd:some-prd']);
 		expect(out).toMatch(/tasks, not prds/);
 	});
+
+	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): a
+	// task-only verb rejects the NEW `spec:` argument with "operates on tasks, not
+	// specs", beside the legacy `prd:` reject above (both are rejected through the
+	// cutover; the contract task drops the `prd:` acceptance).
+	it('resume rejects a spec: argument with "operates on tasks, not specs"', async () => {
+		const out = await runReject(['resume', 'spec:some-spec']);
+		expect(out).toMatch(/tasks, not specs/);
+	});
+
+	it('work-on rejects a spec: argument with "operates on tasks, not specs"', async () => {
+		const out = await runReject(['work-on', 'spec:some-spec']);
+		expect(out).toMatch(/tasks, not specs/);
+	});
 });
 
 describe('resume behaviour — switches to an in-progress branch WITHOUT claiming', () => {

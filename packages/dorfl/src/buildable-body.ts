@@ -28,7 +28,7 @@
  *     mechanism prose, and NO `## Acceptance criteria`. Reproduced by omitting
  *     `acceptanceCriteria` and passing the open-questions block + the seed prose.
  *
- * Symmetrically, {@link renderPrdBody} owns the FULL PRD section schema both PRD
+ * Symmetrically, {@link renderSpecBody} owns the FULL PRD section schema both PRD
  * producers need: intake's default PRD scaffold is `## Problem Statement` +
  * `## Solution` + `## User Stories` (reproduced by passing all three), while
  * promotion's structured PRD body is `## Problem Statement` + optional
@@ -39,7 +39,7 @@
  * carries none (the symmetric reason the task body MUST carry one — the consumer
  * `extractPromptSection`/`resolveTask` in `prompt.ts` throws "has no '## Prompt'
  * section" at dispatch time without it). {@link renderTaskBody} always emits a
- * `## Prompt`; {@link renderPrdBody} never does.
+ * `## Prompt`; {@link renderSpecBody} never does.
  *
  * NOTE (extract-only): this module is a PURE ADDITION. Neither producer is rewired
  * here — that is the two follow-on tasks (kept file-orthogonal so each proves its
@@ -127,7 +127,7 @@ export function renderTaskBody(input: RenderTaskBodyInput): string {
 	return lines.join('\n');
 }
 
-export interface RenderPrdBodyInput {
+export interface RenderSpecBodyInput {
 	/**
 	 * The `## Problem Statement` prose. For intake's default scaffold this is the
 	 * issue-transform line; for promotion it is the observation's mechanism prose.
@@ -158,7 +158,7 @@ export interface RenderPrdBodyInput {
  * canonical order, `## Problem Statement`, then `## Solution`, `## User Stories`,
  * and `## Open questions` (each only when its input is given), and NEVER a
  * `## Prompt` — a PRD is a north-star doc, not a dispatchable task. The symmetric twin of
- * {@link renderTaskBody}, owning the FULL PRD section schema both producers need
+ * {@link renderTaskBody}, owning the FULL SPEC section schema both producers need
  * (intake's default scaffold supplies Problem Statement + Solution + User Stories;
  * promotion's structured body supplies Problem Statement + optional Open
  * questions) so the two artifact shapes cannot drift apart.
@@ -167,7 +167,7 @@ export interface RenderPrdBodyInput {
  * blank; the frontmatter serializer owns the `\n\n` after the closing `---` fence
  * (see `docs/adr/frontmatter-owns-fence-to-heading-blank-line.md`).
  */
-export function renderPrdBody(input: RenderPrdBodyInput): string {
+export function renderSpecBody(input: RenderSpecBodyInput): string {
 	const lines: string[] = [
 		'## Problem Statement',
 		'',

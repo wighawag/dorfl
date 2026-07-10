@@ -9,8 +9,8 @@
  *     uses `issue:` XOR `prd:`; a lone task closes its own `issue:` directly, a
  *     fanned task reaches the number via `task.prd: → work/prds/<prd>.md prd
  *     issue:`, and `prd:` WINS on a (hand-edited) conflict;
- *   - the QUERY — {@link isPrdComplete} (`prd-complete.ts`, task
- *     `prd-complete-query`, done): a prd is COMPLETE iff ≥1 `prd:<slug>` task AND
+ *   - the QUERY — {@link isSpecComplete} (`spec-complete.ts`, task
+ *     `prd-complete-query`, done): a spec is COMPLETE iff ≥1 `spec:<slug>` task AND
  *     all such tasks are in `work/done/`;
  *   - the CLOSE — {@link IssueProvider.closeIssue} (`issue-provider.ts`, the atomic
  *     comment+close seam intake already uses): NO direct `gh` in this core; any
@@ -21,8 +21,8 @@
  *
  *   - a **lone task** (`issue:`, no `prd:`) that resides in `work/done/` — its PR
  *     merged, so its own issue closes (reason `completed`);
- *   - a **prd** (`issue:`) — closes ONLY when {@link isPrdComplete} says ALL its
- *     `prd:<slug>` tasks are in `work/done/` (reason `completed`).
+ *   - a **prd** (`issue:`) — closes ONLY when {@link isSpecComplete} says ALL its
+ *     `spec:<slug>` tasks are in `work/done/` (reason `completed`).
  *
  * A prd whose query is NOT yet complete is left OPEN (the final fanned task's
  * merge tick closes it). A lone task still outside `work/done/` is skipped. The
@@ -46,7 +46,7 @@ import {
 	isWorkItemFile,
 } from './work-layout.js';
 import {parseFrontmatter, resolveClosingIssue} from './frontmatter.js';
-import {isPrdComplete} from './prd-complete.js';
+import {isSpecComplete} from './spec-complete.js';
 import {
 	type IssueProvider,
 	type IssueCloseReason,
@@ -220,7 +220,7 @@ function closeComment(via: 'issue' | 'spec', slug: string): string {
 /**
  * Run the close-job over a repo's `work/` tree: resolve the closure candidates,
  * apply the per-kind closure condition (a landed lone task; a prd whose
- * {@link isPrdComplete} query holds), and close the qualifying issues through the
+ * {@link isSpecComplete} query holds), and close the qualifying issues through the
  * {@link IssueProvider.closeIssue} seam (reason `completed`, an informational
  * comment riding the SAME atomic close). REUSES the unchanged resolution + query +
  * close — it re-implements NONE of them. NEVER throws: a degraded provider close
@@ -240,7 +240,7 @@ export async function runCloseJob(
 		let shouldClose: boolean;
 		let notReady: CloseDecision;
 		if (cand.via === 'spec') {
-			shouldClose = isPrdComplete({repoPath, slug: cand.slug}).complete;
+			shouldClose = isSpecComplete({repoPath, slug: cand.slug}).complete;
 			notReady = 'not-complete';
 		} else {
 			shouldClose = loneTaskLanded(repoPath, cand.slug);
