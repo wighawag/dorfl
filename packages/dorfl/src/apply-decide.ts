@@ -141,7 +141,7 @@ export function buildApplyDecisionInput(opts: {
  * the verdict).
  *
  * Mirrors {@link import('./surface-gate.js').buildSurfacePrompt} /
- * {@link import('./intake.js').buildIntakeDecisionPrd}: a fresh-context agent that
+ * {@link import('./intake.js').buildIntakeDecisionSpec}: a fresh-context agent that
  * EDITS nothing and EMITS one structured object the ENGINE routes/persists.
  */
 export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {

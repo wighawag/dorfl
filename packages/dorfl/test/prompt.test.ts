@@ -17,7 +17,7 @@ import {
 	renderPrompt,
 	resolveItemPromptGuidance,
 	resolvePromptGuidanceForItem,
-	findPrdPath,
+	findSpecPath,
 	PromptError,
 	type ContinueContext,
 } from '../src/prompt.js';
@@ -1089,8 +1089,8 @@ describe('resolvePromptGuidanceForItem — the file-loading seam', () => {
 		expect(out).toEqual({testFirst: true});
 	});
 
-	it('findPrdPath returns undefined when the prd is in neither folder', () => {
-		expect(findPrdPath(scratch.root, 'nope')).toBeUndefined();
+	it('findSpecPath returns undefined when the prd is in neither folder', () => {
+		expect(findSpecPath(scratch.root, 'nope')).toBeUndefined();
 	});
 });
 

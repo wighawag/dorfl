@@ -2,7 +2,7 @@
  * The SINGLE owner of the buildable-task (and PRD-body) markdown SECTION SCHEMA
  * (prd `centralize-buildable-task-renderer-shared-by-intake-and-promotion`, US
  * #1/#4/#7). dorfl has TWO independent producers of a buildable task/PRD body —
- * `intake.ts` (`renderBacklogTask`/`renderPrd`, a wrapper+fallback) and
+ * `intake.ts` (`renderBacklogTask`/`renderSpec`, a wrapper+fallback) and
  * `triage-persist.ts` (`buildPromotedBody`, a structured renderer) — and until
  * this module they each HAND-ROLLED the `## What to build` / `## Acceptance
  * criteria` / `## Open questions` / `## Prompt` skeleton, so the schema could (and

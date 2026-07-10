@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest';
-import {renderBacklogTask, renderPrd} from '../src/intake.js';
+import {renderBacklogTask, renderSpec} from '../src/intake.js';
 
 /**
  * Characterisation (golden) test for intake's task/PRD renderers
@@ -134,7 +134,7 @@ describe('intake renderBacklogTask — task body', () => {
 	});
 });
 
-describe('intake renderPrd — PRD body', () => {
+describe('intake renderSpec — PRD body', () => {
 	it('wraps a DRAFTED PRD body verbatim', () => {
 		const draftedBody = [
 			'## Problem Statement',
@@ -149,7 +149,7 @@ describe('intake renderPrd — PRD body', () => {
 			'',
 			'1. As a user, I want it fixed.',
 		].join('\n');
-		const out = renderPrd({
+		const out = renderSpec({
 			slug: 'fix-thing-prd',
 			title: 'Fix the thing properly',
 			body: draftedBody,
@@ -179,7 +179,7 @@ describe('intake renderPrd — PRD body', () => {
 	});
 
 	it('emits the DEFAULT PRD SCAFFOLD byte-for-byte when no body is drafted', () => {
-		const out = renderPrd({
+		const out = renderSpec({
 			slug: 'fix-thing-prd',
 			title: 'Fix the thing properly',
 			body: undefined,
@@ -209,7 +209,7 @@ describe('intake renderPrd — PRD body', () => {
 	});
 
 	it('emits the gate axes (humanOnly/needsAnswers) above the fence in the scaffold case', () => {
-		const out = renderPrd({
+		const out = renderSpec({
 			slug: 'fix-thing-prd',
 			title: 'Fix the thing properly',
 			body: undefined,

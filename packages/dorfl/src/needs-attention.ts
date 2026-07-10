@@ -874,7 +874,7 @@ export async function promoteFromPreBacklog(
  * (NEVER thrown) via `{moved: false, reasonNotMoved}` so callers branch
  * cleanly. Idempotent: re-running after the move LANDED is a no-op success.
  */
-export interface PromoteFromPrePrdOptions {
+export interface PromoteFromPreSpecOptions {
 	/** The working clone the move is originated from (origin source only; never written). */
 	cwd: string;
 	/** The slug of the staged prd to promote into the pool. */
@@ -887,7 +887,7 @@ export interface PromoteFromPrePrdOptions {
 	note?: (message: string) => void;
 }
 
-export interface PromoteFromPrePrdResult {
+export interface PromoteFromPreSpecResult {
 	/** True iff the staged prd was moved into the pool + committed. */
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
@@ -896,9 +896,9 @@ export interface PromoteFromPrePrdResult {
 	reasonNotMoved?: string;
 }
 
-export async function promoteFromPrePrd(
-	options: PromoteFromPrePrdOptions,
-): Promise<PromoteFromPrePrdResult> {
+export async function promoteFromPreSpec(
+	options: PromoteFromPreSpecOptions,
+): Promise<PromoteFromPreSpecResult> {
 	const note = options.note ?? (() => {});
 	const {cwd, slug, env} = options;
 
