@@ -10,7 +10,7 @@ The **single skill to onboard a repo** onto the **`work/` contract** — the run
 
 **One skill, two phases, auto-detected depth.** setup always does **Phase A — Scaffold** (deterministic; the `work/` skeleton, the protocol docs, `CONTEXT.md`, the `.dorfl.json` gate). If it then detects **existing material to convert** (a task tracker, design docs, substantial source), it ALSO does **Phase B — Convert** (judgement-heavy; map that material onto the contract's buckets, hunt decisions, elicit ADRs). On an empty/near-empty repo, Phase B is simply empty and setup finishes after Phase A. The user never has to choose "scaffold vs migrate" — setup figures out the depth.
 
-> **Where the contract docs live:** setup copies the protocol reference docs into the target repo's **`work/protocol/`** (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, `task-template.md`, `prd-template.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`). Every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to `work/protocol/<doc>` in the repo you are setting up — read them there, not from a sibling skill folder.
+> **Where the contract docs live:** setup copies the protocol reference docs into the target repo's **`work/protocol/`** (`WORK-CONTRACT.md`, `ADR-FORMAT.md`, `task-template.md`, `spec-template.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`). Every bare "WORK-CONTRACT" / "ADR-FORMAT" mention below refers to `work/protocol/<doc>` in the repo you are setting up — read them there, not from a sibling skill folder.
 
 ## The unified shape: detect → PLAN → **STOP for confirmation** → write
 
@@ -110,7 +110,7 @@ work/
   protocol/                               # the propagated protocol docs (copied below)
 ```
 
-The two won't-proceed terminals are deliberately named DIFFERENTLY per regime (`tasks/cancelled/` vs `prds/dropped/`) — a slug-collision correctness fix (a dropped task and a dropped prd sharing a slug must not collide on one bare-slug path); see `work/protocol/WORK-CONTRACT.md`. Then **copy the protocol docs verbatim into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `prd-template.md`, `ADR-FORMAT.md`) and write `work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if present (protocol-owned, per A1); write `CONTEXT.md` and `.dorfl.json` if absent (or merge-in missing keys per A1).
+The two won't-proceed terminals are deliberately named DIFFERENTLY per regime (`tasks/cancelled/` vs `prds/dropped/`) — a slug-collision correctness fix (a dropped task and a dropped prd sharing a slug must not collide on one bare-slug path); see `work/protocol/WORK-CONTRACT.md`. Then **copy the protocol docs verbatim into `work/protocol/`** from this skill's `protocol/` directory (`WORK-CONTRACT.md`, `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `spec-template.md`, `ADR-FORMAT.md`) and write `work/protocol/VERSION` — creating them if absent, RE-SYNCING (overwriting) them if present (protocol-owned, per A1); write `CONTEXT.md` and `.dorfl.json` if absent (or merge-in missing keys per A1).
 
 **Run the gate ONCE and report (catch a wrong `verify` immediately).** After writing `.dorfl.json`, actually EXECUTE the `verify` command once and report green/red — the cheapest moment to discover the gate is wrong (a typo, a missing script, deps not installed), instead of at first build. If red, say WHY (e.g. "`format:check` failed — run `format` first" / "`build` needs deps installed") and offer to adjust the gate or note the prep step; do NOT silently leave a red gate. (Deps clearly not installed = the env-prep gap — that is what the `prepare` field is FOR: put the install in `prepare` (A3b), do NOT contort `verify` to hide it.)
 
@@ -143,7 +143,7 @@ Do the moves with `git mv` so each rename is staged as a rename; sort the old `w
 
 ## Phase B — Convert existing material (only when material was detected)
 
-Phase B fills the scaffolded buckets from what already exists. COMPOSE the producer skills — do NOT reimplement tasking/prd-writing (`to-prd`/`to-task` own those shapes). The mapping table was already presented and CONFIRMED at A4; now execute it.
+Phase B fills the scaffolded buckets from what already exists. COMPOSE the producer skills — do NOT reimplement tasking/prd-writing (`to-spec`/`to-task` own those shapes). The mapping table was already presented and CONFIRMED at A4; now execute it.
 
 ### B1. Inventory → mapping (the table presented at A4)
 
@@ -163,7 +163,7 @@ Classify each source by what it should BECOME (this is the table you showed at A
 ### B2. Convert the task/work system → prds + tasks + ideas
 
 - A single, clear, buildable ask → a **`work/tasks/backlog/<slug>.md`** task (`to-task`' task shape; `covers: []`, no `prd:` — its own source of truth).
-- A coherent ask needing >1 task → a **`work/prds/ready/<slug>.md`** prd (`to-prd`'s framing). Task it only if asked; usually leave the prd for the human to task.
+- A coherent ask needing >1 task → a **`work/prds/ready/<slug>.md`** prd (`to-spec`'s framing). Task it only if asked; usually leave the prd for the human to task.
 - **Buildability gate — decide task-vs-idea BEFORE writing anything to the task board.** A `tasks/backlog/` task is for a **scoped, buildable** ask. `needsAnswers: true` is for a **near-complete spec with a few SPECIFIC open questions listed in the body** — _almost a task_, not a wish. A vague one-liner is NEITHER a task nor a `needsAnswers` task — it is an **`idea`**. The contract is explicit: _under-specified items should not be written into the task board until they are ready_. **When in doubt → `notes/ideas/`, not `tasks/backlog/`.** Do NOT manufacture a `needsAnswers` task to "capture" a wish.
 - **Set the two gate axes honestly** (WORK-CONTRACT §3b), once the item really is a task: `humanOnly: true` where building needs human judgement/security; `needsAnswers: true` where the spec is _near-complete but has specific listed open questions_ (NOT merely vague — that is an `idea`).
 - **Task ↔ prd link:** a self-contained task (chore/refactor/build-fix, no prd stories) carries `covers: []` and **omits `prd:`**. A task pointing into a prd's stories MUST set `covers: [...]` AND name that prd in `prd:` (`prd` required iff `covers` non-empty). Do not invent a `prd:` for a task deriving from no prd.
@@ -195,8 +195,8 @@ Phase B finishes with TWO mandatory checkpoints (a flat report bullet is too eas
 - **REPORT** every path written/created, re-synced, and every repo-owned file left untouched — grouped by bucket — plus anything left as `needsAnswers`/`observations`/`ideas`, and (ephemerally, report-only) any ADR-worthy decisions whose _why_ went un-answered. Note any `findings/` whose `source:` is code-derived (weakest provenance) so the human knows to verify them. Report the gate-run result (green/red).
 - **Update `CONTEXT.md` to reflect what was populated:** fold domain vocabulary into the glossary; note which buckets this repo now uses, precise about polarity (`notes/findings/` = **external** ground-truth with sources; our own architecture in `CONTEXT.md`/`docs/`; open questions in `notes/ideas/` (vague) or `needsAnswers` tasks (near-spec)). Do NOT write "this repo carries reverse-engineered `findings/` about our code" — the polarity mistake B3 exists to prevent. Append/merge only; never clobber.
 - **NEVER enumerate individual items in `CONTEXT.md` (no index files — the FOLDER is the index).** Describe _that_ the repo has ADRs / prds / observations and what they are FOR; do NOT list them one by one (e.g. not "`0001` (…), `0002` (…)"). A hand-maintained list goes stale the moment one is added/removed/superseded — and `docs/adr/` (the folder) already IS the canonical, always-current index (WORK-CONTRACT rule 2: no shared index/manifest; derive lists with `ls`). Applies to every bucket. (FINE and distinct: cross-referencing ONE specific ADR as a glossary term's authority — "the X seam (`docs/adr/x.md`)" — that points a term at its source of truth; the ban is on the _list_, not a pointed cross-reference.)
-- **Hand off:** tell the user the repo is contract-ready and what's next — write a prd (`to-prd`), task it into tasks (`to-task`), or build with `dorfl do` (if the runner is installed — note the `harness`/`verify` configured).
-- **Git etiquette:** do NOT stage/commit/push — leave everything in the working tree for the user to inspect and commit (the `to-prd`/`to-task` producer convention). For a big repo, Phase B is iterative: bound each run to a subset (one source area at a time), report, let the human review, run again.
+- **Hand off:** tell the user the repo is contract-ready and what's next — write a prd (`to-spec`), task it into tasks (`to-task`), or build with `dorfl do` (if the runner is installed — note the `harness`/`verify` configured).
+- **Git etiquette:** do NOT stage/commit/push — leave everything in the working tree for the user to inspect and commit (the `to-spec`/`to-task` producer convention). For a big repo, Phase B is iterative: bound each run to a subset (one source area at a time), report, let the human review, run again.
 
 ## Boundary (what setup does NOT do)
 
@@ -222,7 +222,7 @@ The domain glossary for `<project>`. Agents and skills use THIS vocabulary when 
 
 - **<term>** — <meaning> (seeded from the adoption conversation; refine as you go).
 - **promptGuidance** — the per-repo NUDGE namespace in `.dorfl.json` whose members (currently just `testFirst`) strengthen the wording in the worker's in-band prompt. NOT a gate: the `verify` step is still the only acceptance bar. Omitted ⇒ off; absence is the default.
-- **work/ contract** — the on-disk system this repo uses, defined by the reference docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the contract), `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `prd-template.md`, `ADR-FORMAT.md`. Three REGIME umbrellas — `notes/` (capture buckets), `tasks/` (the build board), `prds/` (the prd lifecycle) — plus top-level `questions/` and `protocol/`. One markdown file per item, status = the folder it lives in (never a field). Capture buckets: `notes/ideas/` (proposed), `notes/observations/` (spotted, unverified, append-only), `notes/findings/` (verified external/domain ground truth, each with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`) record what WE decided and why.
+- **work/ contract** — the on-disk system this repo uses, defined by the reference docs in **`work/protocol/`** (copied here by `setup`): `WORK-CONTRACT.md` (the contract), `CLAIM-PROTOCOL.md`, `REVIEW-PROTOCOL.md`, `task-template.md`, `spec-template.md`, `ADR-FORMAT.md`. Three REGIME umbrellas — `notes/` (capture buckets), `tasks/` (the build board), `prds/` (the prd lifecycle) — plus top-level `questions/` and `protocol/`. One markdown file per item, status = the folder it lives in (never a field). Capture buckets: `notes/ideas/` (proposed), `notes/observations/` (spotted, unverified, append-only), `notes/findings/` (verified external/domain ground truth, each with a `source:`). ADRs (`docs/adr/`, format in `work/protocol/ADR-FORMAT.md`) record what WE decided and why.
 
 ## Conventions
 
@@ -232,7 +232,7 @@ Standing per-change rules agents must follow in this repo.
 
 ## Skills this repo uses
 
-- Required: `setup` (onboarding/migration), `to-prd`, `to-task`.
+- Required: `setup` (onboarding/migration), `to-spec`, `to-task`.
 - Recommended: `review`, `grill-me`.
 ```
 

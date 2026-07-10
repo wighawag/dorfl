@@ -1,4 +1,4 @@
-protocol-version: 2026-07-09
+protocol-version: 2026-07-10
 synced-from: skills/setup/protocol/
-synced-at: 2026-07-09T00:00:00+0000
-source-commit: preisolate-spec-false-positive-words-reword-prd-is-a-spec-adjacencies
+synced-at: 2026-07-10T00:00:00+0000
+source-commit: rename-spec-protocol-contract-and-to-spec-skill

@@ -1,6 +1,6 @@
 # REVIEW-PROTOCOL
 
-The **review discipline** the autonomous runner invokes by name on a `work/`-protocol artifact before that artifact is _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a prd before tasking, a set of tasks before they land, or a captured note. The runner spawns a fresh-context agent and tells it to "run the review protocol"; that agent reads THIS doc and applies its standard.
+The **review discipline** the autonomous runner invokes by name on a `work/`-protocol artifact before that artifact is _trusted_ — a task before it lands/is claimed, code in a work PR against the task that specified it, a spec before tasking, a set of tasks before they land, or a captured note. The runner spawns a fresh-context agent and tells it to "run the review protocol"; that agent reads THIS doc and applies its standard.
 
 The protocol describes how work is AUTHORED (`WORK-CONTRACT.md`, the templates), CLAIMED and BUILT (`CLAIM-PROTOCOL.md`, the Gate-1 `verify` floor), and JUDGED BEFORE LANDING (this doc). It is in-band in every set-up repo, never host-specific. (The human-facing pointer is `skills/review/SKILL.md`; the standard lives here.)
 
@@ -10,8 +10,8 @@ You **emit a verdict; you do not act on it** — see [Your output](#your-output)
 
 ## When to use vs. not
 
-- **Use** to review: a **task** (well-cut? claim-ready?); **code** in a work PR (does it deliver the task it claims?); a **prd** (taskable? gate axes honest?); a **note** (right bucket? actionable?); or a **set of tasks** — the whole-SET lens: **graph coherence / gaps / overlap / goal-composition** (does the dependency graph cohere, are there set-level gaps or overlapping/duplicated tasks, and do they compose into the prd/ADR goal?). The set-level checks live in lens 3 (cross-artifact composition) and lens 5 (the destination check).
-- **Don't** use it to _produce_ the artifact (that's `to-prd` / `to-task` / the build agent), nor to _route_ the verdict (that's the caller — a review gate, a conductor skill, or a human). This protocol only assesses.
+- **Use** to review: a **task** (well-cut? claim-ready?); **code** in a work PR (does it deliver the task it claims?); a **spec** (taskable? gate axes honest?); a **note** (right bucket? actionable?); or a **set of tasks** — the whole-SET lens: **graph coherence / gaps / overlap / goal-composition** (does the dependency graph cohere, are there set-level gaps or overlapping/duplicated tasks, and do they compose into the spec/ADR goal?). The set-level checks live in lens 3 (cross-artifact composition) and lens 5 (the destination check).
+- **Don't** use it to _produce_ the artifact (that's `to-spec` / `to-task` / the build agent), nor to _route_ the verdict (that's the caller — a review gate, a conductor skill, or a human). This protocol only assesses.
 
 ## The core disciplines (what makes a review thorough, not shallow)
 
@@ -33,7 +33,7 @@ For each lens: _what it catches_ + _how to apply it (against the contract)_.
 
 Every concrete claim the artifact makes, checked against the real world.
 
-- Task/prd: each referenced symbol, path, function signature, "reuse X" — does it exist and have the assumed shape? (Catches ghost paths, wrong module homes, "reuse X" where X is private / wrongly-shaped.)
+- Task/spec: each referenced symbol, path, function signature, "reuse X" — does it exist and have the assumed shape? (Catches ghost paths, wrong module homes, "reuse X" where X is private / wrongly-shaped.)
 - Code: does the diff actually do what its task/commit claims?
 - Any doc: does it match what landed in `tasks/done/` and the relevant ADRs/findings?
 - **Drift is a `needs-attention` / `needsAnswers` signal**, never something to paper over (WORK-CONTRACT.md). A task built on a stale premise is a `block`.
@@ -55,14 +55,14 @@ Do the artifacts COMPOSE, and do they obey the contract?
 - **Contract conformance (assume these rules; flag violations):**
   - **status = folder**, never a frontmatter field; **one file per item**; **no shared index/manifest**.
   - **content-derived slug**, never a counter; **camelCase** field names (`humanOnly`, `needsAnswers`, `blockedBy`, `taskedAfter`).
-  - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its prd; a falsely-complete `needsAnswers:false` is a defect.
+  - **gate axes set HONESTLY** — `humanOnly` (a human must drive this) and `needsAnswers` (open questions, listed in the body) reflect the artifact's real nature; a task's gate is decided from _building that task_, NOT inherited from its spec; a falsely-complete `needsAnswers:false` is a defect.
   - **`blockedBy` / `prd` / `covers`** present and correct (`prd` required iff `covers` is set); deps reference real slugs.
   - **bucket polarity** for notes: _observation_ = spotted/unverified (append-only); _finding_ = verified EXTERNAL/domain ground truth; _ADR_ = a decision WE made + why (in `docs/adr/`). A note in the wrong bucket is a finding.
   - **a task's `## Prompt`** is self-contained (an agent could start from the file alone) and includes the drift-check.
 
 ### 4. Conceptual coherence (does it fit the system's LANGUAGE?)
 
-The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — a single concept applied at the WRONG LAYER (e.g. a policy gate placed on an explicit verb when it should gate only the autonomous selection step), an inconsistency that can otherwise survive across multiple tasks and prds.
+The artifact may be internally correct yet INCOHERENT against the concepts the system already has. This lens catches the conflation that mechanical conformance (lens 3) and claim-checking (lens 1) miss — a single concept applied at the WRONG LAYER (e.g. a policy gate placed on an explicit verb when it should gate only the autonomous selection step), an inconsistency that can otherwise survive across multiple tasks and specs.
 
 For each concept / flag / config key / verb / status the artifact introduces or touches, ask three questions:
 
@@ -70,19 +70,19 @@ For each concept / flag / config key / verb / status the artifact introduces or 
 - **(b) Right layer?** Is the concept placed at the conceptual layer it actually belongs to? (A policy gate on the autonomous-SELECTION step vs on the explicit VERB; a knob on the loop vs on the one-shot; a check on "who invoked" when the system cannot even distinguish the invokers.) A correct mechanism at the wrong layer is incoherent.
 - **(c) Duplicate / overlap?** Does it FORK an existing concept under a new name instead of reusing or renaming the one that already exists? (Two flags meaning "isolate"; a new status that is really an existing one; a second lock primitive.) If it overlaps, the artifact should reuse/rename, not add.
 
-A concept that is coherent in ISOLATION but incoherent against the system's existing language is a `block` (or, for a task/prd not yet built, a `needsAnswers` / re-scope). Coherence is a first-class quality, not a nicety: an incoherent concept is debt that compounds silently across every artifact that later reuses the muddled term. When you spot the muddle, also check whether the GLOSSARY (`CONTEXT.md`) needs the term pinned so the next author cannot re-fork it.
+A concept that is coherent in ISOLATION but incoherent against the system's existing language is a `block` (or, for a task/spec not yet built, a `needsAnswers` / re-scope). Coherence is a first-class quality, not a nicety: an incoherent concept is debt that compounds silently across every artifact that later reuses the muddled term. When you spot the muddle, also check whether the GLOSSARY (`CONTEXT.md`) needs the term pinned so the next author cannot re-fork it.
 
 ### 5. The destination check (the final, highest-value move)
 
-_"If every task is built / the code is merged exactly as written, do we END UP WITH the system the prd/ADR describes?"_ — distinct from per-piece correctness, and the strongest signal a decomposition is trustworthy (especially with no human).
+_"If every task is built / the code is merged exactly as written, do we END UP WITH the system the spec/ADR describes?"_ — distinct from per-piece correctness, and the strongest signal a decomposition is trustworthy (especially with no human).
 
-- Take the prd/ADR end-state as the target; **map every promised element to a delivering task** — a hole = an element no task delivers.
+- Take the spec/ADR end-state as the target; **map every promised element to a delivering task** — a hole = an element no task delivers.
 - Confirm **coverage is complete + non-duplicated** — every user story covered exactly once.
 - Audit the **deletion sweep** — a new system means the OLD surface is GONE; every removal owned by exactly one task, none unowned or double-owned.
 - Check for **orphans** (a task delivering something the end-state doesn't need) and that assumed-pre-existing foundations actually exist.
 - Confirm **deliberate non-deliveries are flagged** as named follow-ups, not silently missing.
 
-**`approve` must mean "provably reaches the prd/ADR goal," not "each piece looks fine."** If this lens finds a hole, it is the most important thing to `block`.
+**`approve` must mean "provably reaches the spec/ADR goal," not "each piece looks fine."** If this lens finds a hole, it is the most important thing to `block`.
 
 ## Your output
 
@@ -103,7 +103,7 @@ Several caller-specific optional channels MAY ride on the same JSON object. They
 - `edit` — for the lone-task review only: a single in-memory full-replacement task BODY (the markdown AFTER the frontmatter), applied before the next round. No path — the task has not been emitted yet.
 - `questions` — an array of strings carrying open questions for a human to answer (the non-converge sink in the lone-task review).
 - `uncertainTasks` — for the tasker improver loop: specific tasks to emit `needsAnswers: true` with the questions in their bodies. Each is `{path, questions: string[]}`.
-- `decompositionUnclear` — for the tasker improver loop: when the WHOLE decomposition is unsound, `{questions: string[]}` to record as the prd's needs-attention reason.
+- `decompositionUnclear` — for the tasker improver loop: when the WHOLE decomposition is unsound, `{questions: string[]}` to record as the spec's needs-attention reason.
 
 Any unrecognised field is ignored by the parser; the caller routes on `verdict`/`findings` plus the channels its prompt asked for.
 

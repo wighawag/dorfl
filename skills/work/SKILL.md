@@ -1,7 +1,7 @@
 ---
 name: work
 disable-model-invocation: true
-description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-prd / to-task / drive-tasks / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
+description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-spec / to-task / drive-tasks / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
 ---
 
 # Work (the router)
@@ -12,8 +12,8 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 ## The main flow: idea to built
 
-1. **`setup`** (onboard / adopt the contract): onboard ANY repo onto the `work/` contract (scaffold an empty one OR migrate a populated one — auto-detected depth). Run once per repo, before the rest of the flow. Composes `to-prd` / `to-task` to convert existing material. **NOTE the boundary with `from-idea`:** `setup` is the bare "put this repo on the contract" act with no specific idea in hand; if you are starting **from a raw idea** you want captured as a prd, reach for the **`from-idea`** on-ramp instead (it RUNS `setup` for you, then `to-prd`). Empty-vs-populated is NOT the discriminator (setup handles both) — the discriminator is whether you are holding an idea to prd.
-2. **`to-prd`**: turn the current conversation plus codebase understanding into a prd file in `work/prds/ready/`. The LAUNCH snapshot, not maintained.
+1. **`setup`** (onboard / adopt the contract): onboard ANY repo onto the `work/` contract (scaffold an empty one OR migrate a populated one — auto-detected depth). Run once per repo, before the rest of the flow. Composes `to-spec` / `to-task` to convert existing material. **NOTE the boundary with `from-idea`:** `setup` is the bare "put this repo on the contract" act with no specific idea in hand; if you are starting **from a raw idea** you want captured as a prd, reach for the **`from-idea`** on-ramp instead (it RUNS `setup` for you, then `to-spec`). Empty-vs-populated is NOT the discriminator (setup handles both) — the discriminator is whether you are holding an idea to prd.
+2. **`to-spec`**: turn the current conversation plus codebase understanding into a prd file in `work/prds/ready/`. The LAUNCH snapshot, not maintained.
 3. **`to-task`**: task a prd (or plan/design doc) into independently-grabbable, file-based tasks (`work/tasks/`), using tracer-bullet vertical tasks.
 4. **Build the ready tasks. Pick the conductor:**
    - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `dorfl do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the dorfl CLI. You are present.
@@ -23,7 +23,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 A starting situation that generates work, then merges onto the main flow.
 
-- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be prd-worthy, then sequence `setup` (onboard the `work/` contract) and `to-prd` (synthesize the idea into a prd in `work/prds/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the prd-producer (it calls `to-prd`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
+- **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be prd-worthy, then sequence `setup` (onboard the `work/` contract) and `to-spec` (synthesize the idea into a prd in `work/prds/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the prd-producer (it calls `to-spec`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
 - **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend an outcome, the human decides, execute. Promotes notes into tasks/prds/ADRs (composes `to-task`) or directly deletes them (`git rm` / `dorfl drop`).
 
 ## Cross-cutting disciplines (model-invoked, so the agent may also reach for these itself)
@@ -38,7 +38,7 @@ A starting situation that generates work, then merges onto the main flow.
 
 There is **no issue tracker and no label state-machine** — their job is done by `work/` files and folders-as-status:
 
-- a feature's north-star doc is a **prd file** (`to-prd`), not a tracker epic; buildable units are **task files** (`to-task`), not tracker issues.
+- a feature's north-star doc is a **prd file** (`to-spec`), not a tracker epic; buildable units are **task files** (`to-task`), not tracker issues.
 - signal triage is **`triage-observations`** over the `work/notes/observations/` inbox plus folders-as-status plus the autonomy gate, not a label workflow.
 - onboarding a repo is **`setup`**, not a tracker integration.
 
