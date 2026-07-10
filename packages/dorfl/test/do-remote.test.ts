@@ -279,13 +279,13 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 });
 
 describe('do --remote — slug resolution parity with do-in-place', () => {
-	it('a prd: arg dispatches to the tasking path; an EXPLICITLY-named PRD tasks with autoTask OFF (no worktree)', async () => {
+	it('a spec: arg dispatches to the tasking path; an EXPLICITLY-named SPEC tasks with autoTask OFF (no worktree)', async () => {
 		// Slug-resolution parity + the build/task symmetry (task
-		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote prd:<slug>` is an
+		// `explicit-do-prd-not-gated-by-autoslice`): `do --remote spec:<slug>` is an
 		// EXPLICIT target, so it tasks REGARDLESS of the repo's `autoTask` POLICY
 		// (autoTask OFF / default), exactly as `do <task>` builds regardless of
 		// `autoBuild`. The agent RUNS (the policy no longer gate-refuses the explicit
-		// form); no job worktree is cut for a prd: arg (tasking is not a build pipeline).
+		// form); no job worktree is cut for a spec: arg (tasking is not a build pipeline).
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			specs: ['someprd'],
 		});
@@ -293,7 +293,7 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 
 		let agentRan = false;
 		const result = await performDoRemote({
-			arg: 'prd:someprd',
+			arg: 'spec:someprd',
 			remote: remoteUrl(arbiter),
 			workspacesDir: ws,
 			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.

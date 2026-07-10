@@ -119,17 +119,18 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS taskable PRDS into the matrix as ' +
-			'`prd:<slug>` legs alongside the task legs (the ' +
+		'the propose `enumerate` `jq` UNIONS taskable SPECS into the matrix as ' +
+			'`spec:<slug>` legs alongside the task legs (the ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` fix)',
 		() => {
 			const text = loadAdvanceCiTemplate();
 			// The task-only jq this fix replaced left `DORFL_AUTO_TASK` dead on
-			// the hourly cron — a ready ungated PRD never became a matrix leg. The new jq
+			// the hourly cron — a ready ungated SPEC never became a matrix leg. The new jq
 			// must read `scan --json`'s taskable-SPEC pool (`repos[].specs[]` +
-			// `cwd.repo.specs[]`) and emit `prd:<slug>` legs alongside `task:<slug>`.
+			// `cwd.repo.specs[]`) and emit `spec:<slug>` legs alongside `task:<slug>`.
+			// HARD CUTOVER: the pool emits `spec:` legs (the dead `prd:` leg is GONE).
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"spec:" \+ \.slug/.test(text)).toBe(true);
 			expect(/\.repos\[\]\.specs\[\]\?/.test(text)).toBe(true);
 			expect(/\.cwd\.repo\.specs\[\]\?/.test(text)).toBe(true);
 		},
@@ -236,13 +237,13 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		});
 
 		it(
-			'flags a regression to a TASK-ONLY `jq` (no `prd:` legs) — the ' +
-				'taskable-PRD pool must be enumerated',
+			'flags a regression to a TASK-ONLY `jq` (no `spec:` legs) — the ' +
+				'taskable-SPEC pool must be enumerated',
 			() => {
-				// Strip the PRD union from the jq: a task-only enumerator would silently
+				// Strip the SPEC union from the jq: a task-only enumerator would silently
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
 				const broken = base
-					.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
+					.replace(/"spec:" \+ \.slug/g, '"task:" + .slug')
 					.replace(/\.repos\[\]\.specs\[\]\?/g, '.repos[].items[]?')
 					.replace(/\.cwd\.repo\.specs\[\]\?/g, '.cwd.repo.items[]?');
 				const result = withTmpTemplate(broken);

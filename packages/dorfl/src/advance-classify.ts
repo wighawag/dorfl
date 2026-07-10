@@ -118,11 +118,8 @@ export interface TickClassification {
 /** The per-TYPE ANALYSE rung when there are no open questions (the no-gate path). */
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
-	// The `prd` KEY is a contract-owned `SidecarType` alias the contract task drops;
-	// its VALUE was renamed to the canonical `'task-spec'` rung in migrate batch 4f.
-	prd: 'task-spec',
-	// a `spec` analyses through the SAME `task-spec` rung as the legacy `prd` key
-	// (spec IS the renamed parent-spec artifact).
+	// A `spec` analyses through the `task-spec` rung (spec IS the parent-spec
+	// artifact tasked into build tasks).
 	spec: 'task-spec',
 	observation: 'triage-observation',
 };

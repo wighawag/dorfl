@@ -21,8 +21,8 @@
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
  * TASK lifecycle (`tasksLandIn`: `pre-backlog`/`ready` — the POOL value was
  * renamed `'backlog'` → `'todo'` → `'ready'`, ADR
- * `rename-task-pool-folder-todo-to-ready`) AND the PRD-
- * placement task (`prdsLandIn`: `pre-proposed`/`ready`) without forking. A future
+ * `rename-task-pool-folder-todo-to-ready`) AND the SPEC-
+ * placement lifecycle (`specsLandIn`: `pre-proposed`/`ready`) without forking. A future
  * lifecycle (e.g. intake's lone-task) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
  */
@@ -71,7 +71,7 @@ export interface ResolvePlacementInput {
 	originTrust?: 'trusted' | 'untrusted';
 	/**
 	 * The repo's resolved configured DEFAULT landing (`tasksLandIn` /
-	 * `prdsLandIn`). Caller resolves it like the existing `taskingIntegration`
+	 * `specsLandIn`). Caller resolves it like the existing `taskingIntegration`
 	 * (flag > env > per-repo > global > built-in) and passes the result; this
 	 * resolver just consumes it.
 	 */

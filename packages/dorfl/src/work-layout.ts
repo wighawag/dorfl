@@ -74,9 +74,10 @@ export const WORK_ROOT = 'work' as const;
  * key-only relabel, this batch moves the folders too, so the KEY and VALUE change
  * together and the self-renaming-folder guard stays green. The KEY rename is a
  * mechanical relabel of the key literal at each call site (behaviour-preserving);
- * the frontmatter `prd:` field, the `--prds-land-in` flag/`prdsLandIn` config, and
- * the remaining `Prd*` symbols are LATER batches. The folder-as-status invariant is
- * unchanged.
+ * the frontmatter `prd:` field (a DATA alias the migration command converts) is the
+ * one deliberate survivor; the `--specs-land-in` flag/`specsLandIn` config + the
+ * `Spec*` symbols were completed by the later batches + the contract task. The
+ * folder-as-status invariant is unchanged.
  */
 export const WORK_FOLDER_NAME = {
 	'tasks-backlog': 'tasks/backlog',

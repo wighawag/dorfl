@@ -49,8 +49,8 @@ export type TasksLandIn = 'pre-backlog' | 'ready';
  * auto-tasking POOL — the trusted fast-path landing, on-disk
  * `work/prds/ready/`). The same runner-deterministic placement RESOLVER
  * (`src/placement.ts`) layers on top:
- * `explicit operator flag > untrusted-origin ⇒ pre-proposed > prdsLandIn
- * default > built-in (pre-proposed)`. An untrusted-origin intake prd is FORCED
+ * `explicit operator flag > untrusted-origin ⇒ pre-proposed > specsLandIn
+ * default > built-in (pre-proposed)`. An untrusted-origin intake spec is FORCED
  * to staging even in a `'ready'` repo (the positional analogue of the existing
  * `untrusted-origin-forces-build-propose` rule). The PRD twin of
  * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
@@ -58,16 +58,6 @@ export type TasksLandIn = 'pre-backlog' | 'ready';
  * `prds/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
 export type SpecsLandIn = 'pre-proposed' | 'ready';
-
-/**
- * The legacy `prd` vocabulary ALIAS for {@link SpecsLandIn} (prd
- * `prd-to-spec-vocabulary-cutover-and-migration-command`). The MIGRATE step made
- * `SpecsLandIn` the canonical own type and left `PrdsLandIn` as a readable alias
- * so any not-yet-migrated `PrdsLandIn` annotation keeps compiling; the two are the
- * SAME value spelling (`'pre-proposed' | 'ready'`). The contract task removes
- * `PrdsLandIn`.
- */
-export type PrdsLandIn = SpecsLandIn;
 
 /**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
@@ -382,38 +372,24 @@ export interface Config {
 	 */
 	tasksLandIn: TasksLandIn;
 	/**
-	 * **Per-repo DEFAULT landing for `intake`-authored prd files** (prd
-	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12, task
-	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The PRD twin of
-	 * {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
-	 * `--prds-land-in` > env `DORFL_PRDS_LAND_IN` > per-repo > global >
-	 * built-in `'pre-proposed'`). `intake`'s prd dispatch reads it and passes it as
+	 * **Per-repo DEFAULT landing for `intake`-authored spec files** (spec
+	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12). The SPEC twin
+	 * of {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
+	 * `--specs-land-in` > env `DORFL_SPECS_LAND_IN` > per-repo > global >
+	 * built-in `'pre-proposed'`). `intake`'s spec dispatch reads it and passes it as
 	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
-	 * `intake` NEVER sets placement itself. Prd US #6 / the governing ADR: the
+	 * `intake` NEVER sets placement itself. Spec US #6 / the governing ADR: the
 	 * runner OWNS placement from unforgeable inputs; the agent cannot
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
 	 *
-	 * **The `spec` vocabulary CANONICAL key for the spec-placement default** (prd
-	 * `prd-to-spec-vocabulary-cutover-and-migration-command`, MIGRATE step). The
-	 * primary internal spelling is now `specsLandIn`; the resolver reads EITHER key
-	 * with `specsLandIn` WINNING when both are present (`config.specsLandIn ??
-	 * config.prdsLandIn`); the `--specs-land-in` flag / `DORFL_SPECS_LAND_IN` env sit
-	 * beside `--prds-land-in` / `DORFL_PRDS_LAND_IN`. The contract task removes
-	 * `prdsLandIn` and makes this the sole key.
+	 * The sole spec-placement key after the prd → spec HARD CUTOVER (spec
+	 * `prd-to-spec-vocabulary-cutover-and-migration-command`): the legacy
+	 * `prdsLandIn` config key + `--prds-land-in` flag are GONE (clean break).
 	 */
 	specsLandIn: SpecsLandIn;
-	/**
-	 * **The legacy `prd` vocabulary READABLE ALIAS for {@link specsLandIn}** (prd
-	 * `prd-to-spec-vocabulary-cutover-and-migration-command`). Left OPTIONAL beside
-	 * the primary `specsLandIn` so an existing `prdsLandIn`-only config still
-	 * resolves via the resolver's `config.specsLandIn ?? config.prdsLandIn` fallback.
-	 * `undefined`/unset means "no legacy override". The contract task removes this
-	 * key and the fallback.
-	 */
-	prdsLandIn?: PrdsLandIn;
 	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
@@ -784,11 +760,11 @@ export const DEFAULT_CONFIG: Config = {
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	tasksLandIn: 'pre-backlog',
-	// `intake`-authored prds land STAGED (`pre-proposed/`) by default — the
-	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a prd is
+	// `intake`-authored specs land STAGED (`pre-proposed/`) by default — the
+	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a spec is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `specsLandIn: 'ready'`
-	// (or `--prds-land-in ready` / `DORFL_PRDS_LAND_IN=ready`). The same
+	// (or `--specs-land-in ready` / `DORFL_SPECS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	specsLandIn: 'pre-proposed',

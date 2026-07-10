@@ -17,7 +17,7 @@ import {
 
 /** A canonical two-entry sidecar text in the new human-readable format. */
 const SAMPLE = [
-	'<!-- dorfl-sidecar: item=prd:autotask type=prd slug=autotask allAnswered=false -->',
+	'<!-- dorfl-sidecar: item=spec:autotask type=spec slug=autotask allAnswered=false -->',
 	'',
 	'## Q1',
 	'',
@@ -46,8 +46,8 @@ const SAMPLE = [
 describe('parseSidecar — new human-readable format', () => {
 	it('parses identity from the top HTML comment and ordered entries', () => {
 		const model = parseSidecar(SAMPLE);
-		expect(model.item).toBe('prd:autotask');
-		expect(model.type).toBe('prd');
+		expect(model.item).toBe('spec:autotask');
+		expect(model.type).toBe('spec');
 		expect(model.slug).toBe('autotask');
 		expect(model.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
 		expect(model.entries[0].question).toBe(
@@ -198,7 +198,7 @@ describe('serialiseSidecar — canonical shape + semantic round-trip', () => {
 		const out = serialiseSidecar(model);
 		// Identity comment at the top (HTML comment, no YAML frontmatter).
 		expect(out.startsWith('<!-- dorfl-sidecar:')).toBe(true);
-		expect(out).toContain('item=prd:autotask');
+		expect(out).toContain('item=spec:autotask');
 		expect(out).toContain('allAnswered=false');
 		// No literal block-scalar `|` pipes anywhere (the old format's giveaway).
 		expect(out).not.toContain('question: |');
@@ -487,9 +487,9 @@ describe('appendQuestions — stable monotonic ids, never overwrite', () => {
 });
 
 describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver SoT)', () => {
-	it('prd:<slug> → work/questions/prd-<slug>.md', () => {
-		expect(sidecarPathFor('prd:autotask')).toBe(
-			'work/questions/prd-autotask.md',
+	it('spec:<slug> → work/questions/spec-<slug>.md', () => {
+		expect(sidecarPathFor('spec:autotask')).toBe(
+			'work/questions/spec-autotask.md',
 		);
 	});
 	it('task:<slug> → work/questions/task-<slug>.md', () => {
@@ -510,17 +510,17 @@ describe('resolveSidecarIdentity / sidecarPathFor — identity-keyed (resolver S
 		});
 	});
 	it('the `:`→`-` mapping is in the FILENAME only (item keeps the colon)', () => {
-		expect(resolveSidecarIdentity('prd:x').item).toBe('prd:x');
+		expect(resolveSidecarIdentity('spec:x').item).toBe('spec:x');
 	});
 });
 
 describe('sidecarPathCandidates — spec probes the legacy prd-<slug>.md fallback', () => {
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
-	// producer now emits `spec:<slug>`, but the on-disk sidecar is still the legacy
-	// `prd-<slug>.md` until the migration command renames the DATA. A `spec`-typed
-	// identity therefore probes `spec-<slug>.md` FIRST, then the legacy
-	// `prd-<slug>.md` — so a `spec:`-emitted item still finds its `prd-<slug>.md`
-	// sidecar. This file-path alias is DATA the migration command removes.
+	// CARVE-OUT #1 (DATA-territory survivor): the producer now emits `spec:<slug>`,
+	// but the on-disk sidecar is still the legacy `prd-<slug>.md` until the migration
+	// command renames the DATA. A `spec`-typed identity therefore probes
+	// `spec-<slug>.md` FIRST, then the legacy `prd-<slug>.md` — so a `spec:`-emitted
+	// item still finds its `prd-<slug>.md` sidecar. This FILE-PATH alias is DATA the
+	// migration command removes (NOT the `SidecarType` `'prd'` member, which is gone).
 	it('spec:<slug> → [spec-<slug>.md, prd-<slug>.md] (canonical first, legacy fallback)', () => {
 		expect(sidecarPathCandidates('spec:autotask')).toEqual([
 			'work/questions/spec-autotask.md',
@@ -533,9 +533,6 @@ describe('sidecarPathCandidates — spec probes the legacy prd-<slug>.md fallbac
 	it('a non-spec type has a SINGLE candidate (its canonical path, no fallback)', () => {
 		expect(sidecarPathCandidates('task:foo')).toEqual([
 			'work/questions/task-foo.md',
-		]);
-		expect(sidecarPathCandidates('prd:autotask')).toEqual([
-			'work/questions/prd-autotask.md',
 		]);
 		expect(sidecarPathCandidates('observation:bar')).toEqual([
 			'work/questions/observation-bar.md',

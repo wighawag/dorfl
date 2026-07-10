@@ -71,14 +71,15 @@ import {workItemRel} from './work-layout.js';
 /**
  * The item-types a sidecar can key onto (the slug-namespace + obs).
  *
- * EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
- * parent-spec type is being renamed `prd → spec`. `'spec'` is a member BESIDE
- * `'prd'` through the cutover so a `spec:<slug>` identity gets its OWN
- * `spec-<slug>` lock/sidecar entry instead of silently falling through to
- * `task-<slug>` (the isolation-invariant collision the first expand task missed).
- * `'prd'` and its mapping stay intact; the contract task removes `'prd'`.
+ * HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
+ * contract step): the legacy `'prd'` type member is GONE — the parent-spec type
+ * is `'spec'` only. A `spec:<slug>` identity keys onto the `spec-<slug>`
+ * lock/sidecar entry. The on-disk `prd-<slug>.md` sidecar FILE (dorfl's
+ * not-yet-converted data) is still probed by {@link sidecarPathCandidates} as a
+ * legacy file-path fallback — that is a DATA alias the migration command removes,
+ * NOT this type member.
  */
-export type SidecarType = 'prd' | 'spec' | 'task' | 'observation';
+export type SidecarType = 'spec' | 'task' | 'observation';
 
 /**
  * The optional, machine-only `kind` AXIS on a question entry — the dispatch
@@ -139,7 +140,7 @@ export interface SidecarEntry {
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
 export interface SidecarModel {
-	/** The NAMESPACED identity (`prd:autotask`, `task:foo`, `observation:bar`). */
+	/** The NAMESPACED identity (`spec:autotask`, `task:foo`, `observation:bar`). */
 	item: string;
 	/** The item type (redundant with the filename; explicit for the parser). */
 	type: SidecarType;
@@ -188,7 +189,6 @@ export function allAnswered(model: SidecarModel): boolean {
 }
 
 const TYPE_TO_NAMESPACE: Record<SidecarType, string> = {
-	prd: 'prd',
 	spec: 'spec',
 	task: 'task',
 	observation: 'observation',
@@ -199,14 +199,9 @@ function typeForNamespace(
 	explicit: SlugNamespace | undefined,
 	rawPrefix: string,
 ): SidecarType {
-	if (explicit === 'prd') {
-		return 'prd';
-	}
-	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): a
-	// `spec:` prefix / `explicit === 'spec'` maps to the `'spec'` type BESIDE
-	// `'prd'` — NOT the `task` fall-through below — so `spec:<slug>` gets its own
-	// `spec-<slug>` lock/sidecar entry. The contract task collapses this into the
-	// `prd` branch's replacement.
+	// A `spec:` prefix / `explicit === 'spec'` maps to the `'spec'` type — NOT the
+	// `task` fall-through below — so `spec:<slug>` gets its own `spec-<slug>`
+	// lock/sidecar entry.
 	if (explicit === 'spec') {
 		return 'spec';
 	}
@@ -232,10 +227,10 @@ export interface SidecarIdentity {
 }
 
 /**
- * Resolve a namespaced-identity argument (`prd:autotask`, `task:foo`,
+ * Resolve a namespaced-identity argument (`spec:autotask`, `task:foo`,
  * `observation:bar`, `obs:bar`, or a bare `<slug>` = task) into its
  * `{type, slug, item}`. PURE string work over {@link parseSlugArg} — the
- * resolver is the single source of truth for the task/prd split; the sidecar
+ * resolver is the single source of truth for the task/spec split; the sidecar
  * extends it with the `observation` namespace.
  */
 export function resolveSidecarIdentity(identity: string): SidecarIdentity {

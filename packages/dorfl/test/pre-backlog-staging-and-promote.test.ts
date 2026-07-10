@@ -330,10 +330,10 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
  * THE CLI WIRE (the Gate-2 block this task was bounced for, now closed). The
  * resolver + the `performTask` options + the per-repo/env config keys all worked
  * in isolation, but `config.tasksLandIn` and the `--tasks-land-in` flag were
- * NEVER threaded from `cli.ts` into the `DoOptions` the `do prd:` path builds, so
+ * NEVER threaded from `cli.ts` into the `DoOptions` the `do spec:` path builds, so
  * the configured-default + explicit-flag rungs were dead from the shipped binary
  * (a user setting `tasksLandIn: 'ready'` saw the built-in `pre-backlog` floor).
- * These tests drive the REAL `buildProgram()` `do prd:` path end-to-end on a
+ * These tests drive the REAL `buildProgram()` `do spec:` path end-to-end on a
  * `--bare file://` arbiter, with the tasker STUBBED by a trivial `agentCmd` bash
  * command (the null harness shells `bash -c <agentCmd>` in the worktree), and
  * assert the configured / flag-chosen placement ACTUALLY reaches the runner.
@@ -417,13 +417,13 @@ async function runDo(
 }
 
 describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the tasker (the wire)', () => {
-	it('a per-repo `tasksLandIn: ready` reaches performTask via `do prd:` (task lands in the POOL, not pre-backlog/)', async () => {
+	it('a per-repo `tasksLandIn: ready` reaches performTask via `do spec:` (task lands in the POOL, not pre-backlog/)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		// The key under test: a per-repo configured default of `ready` (the pool).
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'ready'});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'spec:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -441,7 +441,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		// No tasksLandIn — the resolver's built-in floor stages.
 		writeRepoConfig(repo, {autoTask: true});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'spec:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -457,7 +457,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		seedPrd(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'ready'});
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'spec:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',
@@ -480,7 +480,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		// fall-through to the built-in floor. Assert the run did NOT succeed and
 		// nothing was tasked.
 		const {code, captured} = await runDo(repo, [
-			'prd:it',
+			'spec:it',
 			'--arbiter',
 			ARBITER,
 			'--merge',

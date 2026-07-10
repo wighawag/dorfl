@@ -202,17 +202,18 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 	});
 
 	it(
-		'the propose `enumerate` `jq` UNIONS taskable PRDS into the matrix as ' +
-			'`prd:<slug>` legs alongside the task legs (task ' +
+		'the propose `enumerate` `jq` UNIONS taskable SPECS into the matrix as ' +
+			'`spec:<slug>` legs alongside the task legs (task ' +
 			'`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`)',
 		() => {
 			const text = generateAdvanceLifecycleWorkflow(config);
 			// Without this, `DORFL_AUTO_TASK: 'true'` above is dead on the hourly
-			// cron — a ready ungated PRD never becomes a matrix leg. The `jq` must read
+			// cron — a ready ungated SPEC never becomes a matrix leg. The `jq` must read
 			// `scan --json`'s taskable-SPEC pool (`repos[].specs[]` + `cwd.repo.specs[]`)
-			// AND the task pool, and emit BOTH `task:<slug>` and `prd:<slug>` ids.
+			// AND the task pool, and emit BOTH `task:<slug>` and `spec:<slug>` ids.
+			// HARD CUTOVER: the pool emits `spec:` legs (the dead `prd:` leg is GONE).
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
-			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
+			expect(/"spec:" \+ \.slug/.test(text)).toBe(true);
 			expect(/\.repos\[\]\.specs\[\]\?/.test(text)).toBe(true);
 			expect(/\.cwd\.repo\.specs\[\]\?/.test(text)).toBe(true);
 		},
@@ -415,9 +416,10 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(true);
 	});
 
-	it('uses explicit slug prefixes (task:/prd:), never bare', () => {
+	it('uses explicit slug prefixes (task:/spec:), never bare', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(text).toContain('"task:" + .slug');
+		expect(text).toContain('"spec:" + .slug');
 	});
 
 	it('US #9: requests NO `workflows` permission and no job step touches the workflows tree', () => {
@@ -571,13 +573,13 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	});
 
 	it(
-		'flags a regression to a TASK-ONLY `jq` (no `prd:` legs) — the propose ' +
-			'matrix must enumerate the taskable-PRD pool',
+		'flags a regression to a TASK-ONLY `jq` (no `spec:` legs) — the propose ' +
+			'matrix must enumerate the taskable-SPEC pool',
 		() => {
 			// Pre-fix shape: task-only `jq` over `items[]` only. Reintroducing it must
 			// be flagged so `DORFL_AUTO_TASK` is never silently dead on the cron.
 			const broken = base
-				.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
+				.replace(/"spec:" \+ \.slug/g, '"task:" + .slug')
 				.replace(/\.repos\[\]\.specs\[\]\?/g, '.repos[].items[]?')
 				.replace(/\.cwd\.repo\.specs\[\]\?/g, '.cwd.repo.items[]?');
 			expectFlagged(broken, 'propose-enumerates-taskable-specs');

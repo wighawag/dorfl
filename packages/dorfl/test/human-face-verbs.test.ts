@@ -1,6 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import type {Command} from 'commander';
 import {buildProgram} from '../src/cli.js';
+import {resolveTaskOnlyArg} from '../src/slug-namespace.js';
 import {performStart} from '../src/start.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
@@ -99,7 +100,7 @@ describe('work-on — --remote is a FLAG (migrated from positional <remote> <slu
 	});
 });
 
-describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', () => {
+describe('task-only (§3a): resume / work-on reject spec:, accept bare + task:', () => {
 	/** Parse argv through the program, capturing a thrown SlugResolution exit. */
 	async function runReject(argv: string[]): Promise<string> {
 		const program = buildProgram();
@@ -110,7 +111,7 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', 
 		console.error = (msg?: unknown) => {
 			captured += String(msg ?? '');
 		};
-		// resolveTaskOnlySlug calls process.exit(1) on a prd: arg; intercept it.
+		// resolveTaskOnlySlug calls process.exit(1) on a spec: arg; intercept it.
 		(process as {exit: unknown}).exit = ((code?: number) => {
 			throw new Error(`__exit__:${code ?? 0}`);
 		}) as typeof process.exit;
@@ -125,20 +126,10 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', 
 		return captured;
 	}
 
-	it('resume rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
-		const out = await runReject(['resume', 'prd:some-prd']);
-		expect(out).toMatch(/tasks, not prds/);
-	});
-
-	it('work-on rejects a prd: argument with "operates on tasks, not PRDs"', async () => {
-		const out = await runReject(['work-on', 'prd:some-prd']);
-		expect(out).toMatch(/tasks, not prds/);
-	});
-
-	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): a
-	// task-only verb rejects the NEW `spec:` argument with "operates on tasks, not
-	// specs", beside the legacy `prd:` reject above (both are rejected through the
-	// cutover; the contract task drops the `prd:` acceptance).
+	// HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): a
+	// task-only verb rejects the `spec:` argument with "operates on tasks, not
+	// specs". The legacy `prd:` is NO LONGER rejected as a namespace — it is a bare
+	// literal task slug now (asserted below).
 	it('resume rejects a spec: argument with "operates on tasks, not specs"', async () => {
 		const out = await runReject(['resume', 'spec:some-spec']);
 		expect(out).toMatch(/tasks, not specs/);
@@ -147,6 +138,15 @@ describe('task-only (§3a): resume / work-on reject prd:, accept bare + task:', 
 	it('work-on rejects a spec: argument with "operates on tasks, not specs"', async () => {
 		const out = await runReject(['work-on', 'spec:some-spec']);
 		expect(out).toMatch(/tasks, not specs/);
+	});
+
+	it('the HARD CUTOVER: a prd: argument is NOT rejected as a namespace (it is a bare literal task slug)', () => {
+		// `prd:` is no longer a namespace prefix, so the task-only resolver does NOT
+		// reject it — it passes `prd:some-prd` through verbatim as a bare literal task
+		// slug (asserted at the pure resolver the task-only verbs share; driving the
+		// full verb would proceed to a real resume, which is not this assertion's
+		// concern).
+		expect(resolveTaskOnlyArg('prd:some-prd')).toBe('prd:some-prd');
 	});
 });
 

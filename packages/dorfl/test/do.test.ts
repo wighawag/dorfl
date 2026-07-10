@@ -1717,7 +1717,7 @@ describe('do <slug> — noPR (the PR-INTENT axis) + the up-front gh-probe guard'
 	});
 });
 
-describe('do — slug resolution (§3a): bare / task: / prd: + collision', () => {
+describe('do — slug resolution (§3a): bare / task: / spec: + collision', () => {
 	it('a bare slug resolves to the task and builds it', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const result = await performDo({
@@ -1748,46 +1748,12 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(result.slug).toBe('alpha');
 	});
 
-	it('do prd:<slug> dispatches to the tasking path; an EXPLICITLY-named PRD tasks with autoTask OFF (naming IS the authorization)', async () => {
+	it('do spec:<slug> dispatches to the tasking path; an EXPLICITLY-named SPEC tasks with autoTask OFF (naming IS the authorization)', async () => {
 		// The build/task symmetry (task `explicit-do-prd-not-gated-by-autoslice`):
-		// `do prd:<slug>` is an EXPLICIT target the operator named, so it tasks
+		// `do spec:<slug>` is an EXPLICIT target the operator named, so it tasks
 		// REGARDLESS of the repo's `autoTask` POLICY — EXACTLY as `do <task>` builds a
 		// named task regardless of `autoBuild`. autoTask OFF (the default) no longer
 		// refuses the explicit form (the policy gates the auto-pick POOL only).
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		seedPrd(repo, 'somePrd');
-
-		let agentRan = false;
-		const result = await performDo({
-			arg: 'prd:somePrd',
-			cwd: repo,
-			arbiter: ARBITER,
-			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
-			integration: 'merge',
-			dorfl: ({cwd}) => {
-				agentRan = true;
-				const dir = join(cwd, 'work', 'tasks', 'backlog');
-				mkdirSync(dir, {recursive: true});
-				writeFileSync(
-					join(dir, 'somePrd-explicit.md'),
-					'---\nslug: somePrd-explicit\nprd: somePrd\n---\n\n## Prompt\n\n> x\n',
-				);
-				return {ok: true};
-			},
-			env: gitEnv(),
-		});
-		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('tasked');
-		expect(result.slug).toBe('somePrd');
-		// The agent ran (the gate did NOT refuse on the policy).
-		expect(agentRan).toBe(true);
-	});
-
-	it('do spec:<slug> ROUTES to the tasking path (the new canonical prefix, beside prd:)', async () => {
-		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-		// `resolveSlug('spec:<slug>')` returns `{namespace:'spec'}`, and the `do`
-		// dispatch now matches `spec` beside `prd`, so `do spec:<slug>` reaches the
-		// SAME tasking path `do prd:<slug>` does (the legacy prd: route is KEPT).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'someSpec');
 
@@ -1796,6 +1762,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 			arg: 'spec:someSpec',
 			cwd: repo,
 			arbiter: ARBITER,
+			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
 			integration: 'merge',
 			dorfl: ({cwd}) => {
 				agentRan = true;
@@ -1812,16 +1779,36 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.slug).toBe('someSpec');
+		// The agent ran (the gate did NOT refuse on the policy).
 		expect(agentRan).toBe(true);
 	});
 
-	it('do prd:<slug> on an explicitly-named humanOnly PRD STILL refuses (the readiness axis binds, only the policy dropped)', async () => {
+	it('the HARD CUTOVER: do prd:<slug> does NOT dispatch to tasking (prd: is a bare literal task slug now)', async () => {
+		// `prd:` is no longer a namespace prefix, so `do prd:someSpec` resolves to a
+		// bare literal TASK slug `prd:someSpec` (never the parent-spec tasking path).
+		// With no such task, it reports the task absent — it NEVER tasks a spec.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		seedPrd(repo, 'someSpec');
+		const result = await performDo({
+			arg: 'prd:someSpec',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			dorfl: editingAgent,
+			env: gitEnv(),
+		});
+		// It did NOT take the tasking path (outcome is never 'tasked').
+		expect(result.outcome).not.toBe('tasked');
+	});
+
+	it('do spec:<slug> on an explicitly-named humanOnly SPEC STILL refuses (the readiness axis binds, only the policy dropped)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd', {humanOnly: true});
 
 		let agentRan = false;
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'spec:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: PASS,
@@ -1840,13 +1827,13 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(agentRan).toBe(false);
 	});
 
-	it('do prd:<slug> with autoTask on tasks the PRD (runner owns the git)', async () => {
+	it('do spec:<slug> with autoTask on tasks the SPEC (runner owns the git)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'somePrd');
 
 		// The stubbed tasking agent writes a backlog task file (no git).
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'spec:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -1931,7 +1918,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(prd).not.toMatch(/^tasked:/m);
 	});
 
-	it('a bare slug that collides (a task AND a PRD share it) ERRORS loudly', async () => {
+	it('a bare slug that collides (a task AND a SPEC share it) ERRORS loudly', async () => {
 		// Seed a task `dup` AND a PRD `dup` → a bare `do dup` is ambiguous.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup']);
 		seedPrd(repo, 'dup');
@@ -1948,7 +1935,7 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(result.outcome).toBe('usage-error');
 		expect(result.message).toMatch(/ambiguous/i);
 		expect(result.message).toMatch(/task:dup/);
-		expect(result.message).toMatch(/prd:dup/);
+		expect(result.message).toMatch(/spec:dup/);
 		// Nothing was claimed — the collision halts before any git transition.
 		expect(existsOnArbiterMain(repo, 'backlog', 'dup')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'dup')).toBe(false);
@@ -2010,7 +1997,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'spec:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -2081,7 +2068,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'spec:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,
@@ -2116,7 +2103,7 @@ describe('do — per-transition integration mode (taskingIntegration vs integrat
 		seedPrd(repo, 'somePrd');
 
 		const result = await performDo({
-			arg: 'prd:somePrd',
+			arg: 'spec:somePrd',
 			cwd: repo,
 			arbiter: ARBITER,
 			autoTask: true,

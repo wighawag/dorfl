@@ -429,21 +429,16 @@ export interface ReadSignalsInput {
 }
 
 /**
- * Map the resolver's namespace onto the sidecar type.
- *
- * MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`): the
- * new `spec` namespace maps to the `spec` sidecar type BESIDE the legacy `prd`, so
- * `advance spec:<slug>` resolves its signals/folders (`FOLDERS_FOR_TYPE['spec']`)
- * and orchestrates `do spec:<slug>`; the `prd` branch is KEPT (contract task drops it).
+ * Map the resolver's namespace onto the sidecar type. The `spec` namespace maps
+ * to the `spec` sidecar type, so `advance spec:<slug>` resolves its
+ * signals/folders (`FOLDERS_FOR_TYPE['spec']`) and orchestrates `do spec:<slug>`.
  */
 function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
 	return namespace === 'observation'
 		? 'observation'
 		: namespace === 'spec'
 			? 'spec'
-			: namespace === 'prd'
-				? 'prd'
-				: 'task';
+			: 'task';
 }
 
 /**
@@ -494,10 +489,8 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  */
 const FOLDERS_FOR_TYPE: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-backlog', 'tasks-ready', 'in-progress', 'done'],
-	prd: ['specs-proposed', 'specs-ready', 'specs-tasked'],
-	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	// `spec` rests in the SAME parent-spec regime folders as `prd`. Mirrored so
-	// a `spec:<slug>` legs frontmatter-source read resolves; contract drops `prd`.
+	// `spec` rests in the parent-spec regime folders (a `spec:<slug>` legs
+	// frontmatter-source read resolves against these).
 	spec: ['specs-proposed', 'specs-ready', 'specs-tasked'],
 	observation: ['observations'],
 };

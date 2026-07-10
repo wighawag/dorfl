@@ -70,7 +70,7 @@ export function lifecycleGatesFrom(config: {
 /**
  * A lifecycle item as it appears on a {@link RepoReport.lifecycle} sub-pool: the
  * bare `slug` plus, for surface/apply, the `namespace` discriminator the matrix
- * `jq` projects into a `task:`/`prd:`/`observation:` prefix. Triage items carry
+ * `jq` projects into a `task:`/`spec:`/`observation:` prefix. Triage items carry
  * only `{slug}` — the `obs:` prefix is fixed in the matrix `jq`.
  */
 export interface ScannedTriageItem {
@@ -98,8 +98,8 @@ export interface ScannedBlockedItem {
  * config and computed by REUSING `lifecycle-gather.ts` → {@link buildLifecyclePools}
  * (NOT a forked predicate) so it AGREES with the `advance -n` / `run` selection.
  * This is what makes the propose-mode CI matrix enumerate the WHOLE answer-loop —
- * `obs:<slug>` triage legs, `task:`/`prd:<slug>` surface legs (`needsAnswers`, no
- * answered sidecar) AND `task:`/`prd:<slug>` apply legs (`needsAnswers`, answered
+ * `obs:<slug>` triage legs, `task:`/`spec:<slug>` surface legs (`needsAnswers`, no
+ * answered sidecar) AND `task:`/`spec:<slug>` apply legs (`needsAnswers`, answered
  * sidecar) — not only build/task legs
  * (`ci-propose-matrix-enumerates-lifecycle-items`). Inert by default: with
  * `observationTriage:off` + `surfaceBlockers:false` (the calm defaults) triage +
@@ -113,7 +113,7 @@ export interface ScannedLifecycle {
 	/**
 	 * Items WITH an all-answered sidecar → apply legs (CONSUME, always-on). Carries
 	 * `needsAnswers` tasks/prds AND answered OBSERVATIONS (namespace `'observation'`),
-	 * so the matrix `jq` emits `task:`/`prd:`/`observation:` apply legs alike.
+	 * so the matrix `jq` emits `task:`/`spec:`/`observation:` apply legs alike.
 	 */
 	apply: ScannedBlockedItem[];
 }
@@ -135,11 +135,11 @@ export interface ScannedItem extends ReadyItem {
  * A PRD entry in `scan --json`'s taskable-prd pool — the SAME shape an eligible
  * task carries in `items[]` (a `slug` + an `eligibility.eligible` boolean), so
  * the propose-matrix `jq` filter mirrors the task one: `select(.eligibility.eligible)
- * | "prd:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
+ * | "spec:" + .slug`. "Eligible" here means TASKABLE — the per-repo `autoTask`
  * gate + the `humanOnly`/`needsAnswers`/`taskedAfter` predicates of `taskableSpecs`
  * (`autoslice-gate`'s pure predicate). Sits under {@link RepoReport.prds} (and
  * the cwd section's `repo.prds`), DISTINCT from the task-only `items[]` because
- * tasks and prds are different verbs and project to different `task:`/`prd:`
+ * tasks and prds are different verbs and project to different `task:`/`spec:`
  * prefixes — a discriminator on `items[]` would pollute the surface other readers
  * already consume.
  */
@@ -162,12 +162,12 @@ export interface RepoReport {
 	 * every spec in `work/prds/ready/` not already in `work/prds/tasked/`, each tagged with
 	 * `eligibility.eligible` from {@link taskableSpecs} (the SAME `autoslice-gate`
 	 * predicate the mirror-side pool scan uses — NOT a forked predicate). This is
-	 * what makes the propose-mode CI matrix enumerate `prd:<slug>` legs for ready
+	 * what makes the propose-mode CI matrix enumerate `spec:<slug>` legs for ready
 	 * ungated prds alongside `task:<slug>` legs for eligible tasks (the
 	 * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices` task): the
 	 * propose `enumerate` `jq` unions both pools and emits one matrix leg per item.
 	 * The `autoTask` gate still BINDS — a repo with `autoTask` off yields an
-	 * all-`eligible:false` pool (so no `prd:` legs).
+	 * all-`eligible:false` pool (so no `spec:` legs).
 	 */
 	specs: ScannedSpec[];
 	/**
@@ -246,7 +246,7 @@ export function readReadyItems(repoPath: string): ReadyItem[] {
  * in-place `do-autopick` pool already run — so what is taskable does not
  * fork between the autopick paths and the propose-matrix `scan --json` pool.
  * The `autoTask` gate BINDS through that predicate; a config-less repo with
- * `autoTask` off yields an all-`eligible:false` pool (no `prd:` legs).
+ * `autoTask` off yields an all-`eligible:false` pool (no `spec:` legs).
  */
 export function scoreSpecs(
 	repoPath: string,
@@ -276,7 +276,7 @@ export function scoreSpecs(
  * Project the shared {@link buildLifecyclePools} result (via `gatherLifecycle*`)
  * onto the `scan --json` {@link ScannedLifecycle} shape: triage items keep only
  * their `slug` (the `obs:` prefix is fixed in the matrix `jq`), surface/apply keep
- * `{namespace, slug}` so the `jq` projects the right `task:`/`prd:` prefix. NOT a
+ * `{namespace, slug}` so the `jq` projects the right `task:`/`spec:` prefix. NOT a
  * re-enumeration — a pure shape map over the already-gated pools.
  *
  * The pool items' `namespace` is the wider {@link SelectedNamespace}. SURFACE by
@@ -573,7 +573,7 @@ export function scanRepoPaths(
 		// `autoTask` PER REPO from the working-tree `.dorfl.json` (the same
 		// way `autoBuild` is resolved); `taskableSpecs` (the SAME `autoslice-gate`
 		// predicate the autopick paths run) decides what is taskable — no forked
-		// predicate. This is what makes the propose-mode CI matrix enumerate `prd:`
+		// predicate. This is what makes the propose-mode CI matrix enumerate `spec:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
 		const specPool = ledgerRead.resolveSpecPool({repoPath: path});
 		const specs = scoreSpecs(path, specPool, resolved.autoTask);

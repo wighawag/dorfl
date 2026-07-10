@@ -18,7 +18,7 @@ import {
 
 const IDENTITY_FOR: Record<SidecarType, string> = {
 	task: 'task:foo',
-	prd: 'prd:foo',
+	spec: 'spec:foo',
 	observation: 'observation:foo',
 };
 
@@ -43,12 +43,12 @@ function sidecarWith(
 	return model;
 }
 
-const ALL_TYPES: SidecarType[] = ['task', 'prd', 'observation'];
+const ALL_TYPES: SidecarType[] = ['task', 'spec', 'observation'];
 
 /** The per-type ANALYSE rung (no open questions, no sidecar). */
 const ANALYSE_RUNG: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
-	prd: 'task-spec',
+	spec: 'task-spec',
 	observation: 'triage-observation',
 };
 
@@ -56,19 +56,19 @@ const ANALYSE_RUNG: Record<SidecarType, TickRungKind> = {
 
 describe('sidecar fixtures (built via the keystone)', () => {
 	it('a pure-open sidecar is pending (not all answered)', () => {
-		const s = sidecarWith('prd', 2, 0);
+		const s = sidecarWith('spec', 2, 0);
 		expect(allAnswered(s)).toBe(false);
 		expect(pendingEntries(s)).toHaveLength(2);
 	});
 
 	it('a subset-answered sidecar is still pending', () => {
-		const s = sidecarWith('prd', 1, 1);
+		const s = sidecarWith('spec', 1, 1);
 		expect(allAnswered(s)).toBe(false);
 		expect(pendingEntries(s)).toHaveLength(1);
 	});
 
 	it('a fully-answered sidecar is all answered', () => {
-		const s = sidecarWith('prd', 0, 2);
+		const s = sidecarWith('spec', 0, 2);
 		expect(allAnswered(s)).toBe(true);
 		expect(pendingEntries(s)).toHaveLength(0);
 	});
@@ -227,14 +227,14 @@ describe('classifyTick — invariant 2: a pending sidecar ⇒ NO-OP', () => {
 describe('classifyTick — append flips all-answered back to pending (re-pause)', () => {
 	it('appending a new question to an all-answered sidecar re-NO-OPs the tick', () => {
 		// All answered → apply.
-		const answered = sidecarWith('prd', 0, 2);
+		const answered = sidecarWith('spec', 0, 2);
 		expect(
-			classifyTick({type: 'prd', needsAnswers: true, sidecar: answered}).kind,
+			classifyTick({type: 'spec', needsAnswers: true, sidecar: answered}).kind,
 		).toBe('apply');
 		// Apply appends a fresh (pending) question → re-pauses → NO-OP.
 		const repaused = appendQuestions(answered, [{question: 'A follow-up?'}]);
 		const result = classifyTick({
-			type: 'prd',
+			type: 'spec',
 			needsAnswers: true,
 			sidecar: repaused,
 		});
@@ -282,18 +282,18 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 	});
 
 	it('the advanceable pool shrinks monotonically as answers arrive', () => {
-		// Three PRD items, each with two open questions. As the human answers, an
+		// Three SPEC items, each with two open questions. As the human answers, an
 		// item flips pending → (all answered) apply; the NO-OP count only falls.
 		const sidecars = [
-			sidecarWith('prd', 2, 0),
-			sidecarWith('prd', 2, 0),
-			sidecarWith('prd', 2, 0),
+			sidecarWith('spec', 2, 0),
+			sidecarWith('spec', 2, 0),
+			sidecarWith('spec', 2, 0),
 		];
 
 		const noOpCount = () =>
 			sidecars.filter(
 				(sidecar) =>
-					classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind ===
+					classifyTick({type: 'spec', needsAnswers: true, sidecar}).kind ===
 					'no-op',
 			).length;
 
@@ -317,8 +317,8 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 	it('a SUBSET-answered item does NOT leave the NO-OP pool (no premature advance)', () => {
 		// Answering only SOME entries keeps the item pending → still NO-OP (the
 		// loop never thrashes on a half-answered item; the human answers all first).
-		let sidecar = sidecarWith('prd', 2, 0);
-		expect(classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind).toBe(
+		let sidecar = sidecarWith('spec', 2, 0);
+		expect(classifyTick({type: 'spec', needsAnswers: true, sidecar}).kind).toBe(
 			'no-op',
 		);
 		// Answer ONE of the two.
@@ -328,7 +328,7 @@ describe('classifyTick — convergence (read-only, classifier level)', () => {
 				i === 0 ? {...e, answer: 'a'} : e,
 			),
 		};
-		expect(classifyTick({type: 'prd', needsAnswers: true, sidecar}).kind).toBe(
+		expect(classifyTick({type: 'spec', needsAnswers: true, sidecar}).kind).toBe(
 			'no-op',
 		);
 	});

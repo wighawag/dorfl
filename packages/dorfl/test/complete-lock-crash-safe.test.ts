@@ -235,12 +235,12 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(lockRefOnArbiter(arbiter, 'task-epsilon')).toBe(false);
 	});
 
-	it('clears a stale ACTIVE PRD lock when main shows the PRD prd-tasked', async () => {
+	it('clears a stale ACTIVE SPEC lock when main shows the SPEC specs-tasked', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['z'], {
 			specs: ['zeta'],
 		});
 		await acquireItemLock({
-			item: 'prd:zeta',
+			item: 'spec:zeta',
 			action: 'task',
 			cwd: repo,
 			arbiter: ARBITER,
@@ -249,14 +249,14 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		seedTerminalOnArbiter(arbiter, 'prd-tasked', 'zeta', specFile('zeta'));
 
 		const rec = await reconcileItemLockAgainstMain({
-			item: 'prd:zeta',
+			item: 'spec:zeta',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 
 		expect(rec.outcome).toBe('cleared-stale');
-		expect(lockRefOnArbiter(arbiter, 'prd-zeta')).toBe(false);
+		expect(lockRefOnArbiter(arbiter, 'spec-zeta')).toBe(false);
 	});
 
 	it('KEEPS a STUCK lock that co-exists with a done record (not corruption — US #10)', async () => {
@@ -368,14 +368,9 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			'work/tasks/done/s.md',
 			'work/tasks/cancelled/s.md',
 		]);
-		// A prd: tasked (tasked, resting) OR the prd regime's terminal
-		// (prds/dropped). A task-drop and a prd-drop sharing a slug never collide.
-		expect(terminalMainPaths('prd', 'p')).toEqual([
-			'work/specs/tasked/p.md',
-			'work/specs/dropped/p.md',
-		]);
-		// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-		// a `spec` shares the parent-spec regime's durable terminals with `prd`.
+		// A spec: tasked (tasked, resting) OR the spec regime's terminal
+		// (specs/dropped). A task-drop and a spec-drop sharing a slug never collide.
+		// HARD CUTOVER: the legacy `'prd'` type is GONE — only `'spec'` maps here.
 		expect(terminalMainPaths('spec', 'p')).toEqual([
 			'work/specs/tasked/p.md',
 			'work/specs/dropped/p.md',

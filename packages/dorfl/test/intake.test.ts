@@ -357,7 +357,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/specs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-spec-quiet-and-verbose-modes:work/specs/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -652,7 +652,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const subject = commitSubject(
-			`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
+			`${ARBITER}/work/intake-spec-quiet-and-verbose-modes`,
 			repo,
 		);
 		expect(subject).toContain('Quiet and verbose output modes');
@@ -915,7 +915,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 				'rev-parse',
 				'--verify',
 				'--quiet',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes`,
+				`${ARBITER}/work/intake-spec-quiet-and-verbose-modes`,
 			],
 			repo,
 		).trim();
@@ -927,7 +927,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-quiet-and-verbose-modes:work/specs/proposed/quiet-and-verbose-modes.md`,
+				`${ARBITER}/work/intake-spec-quiet-and-verbose-modes:work/specs/proposed/quiet-and-verbose-modes.md`,
 			],
 			repo,
 		);
@@ -941,10 +941,11 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		expect(onBranch).not.toContain('Fixes #42');
 	});
 
-	it('the LEGACY `prd` outcome is still a valid ALIAS — it routes through the SAME spec dispatch (→ spec-written)', async () => {
-		// prd → spec cutover (MIGRATE batch): `spec` is canonical, but the legacy
-		// `prd` outcome MUST still route (the contract task removes it later). Prove
-		// an `outcome: 'prd'` verdict lands the spec exactly like an `outcome: 'spec'`.
+	it('the HARD CUTOVER: a legacy `prd` outcome token does NOT route to the spec dispatch (it is no longer an alias)', async () => {
+		// prd → spec cutover (contract step): `spec` is the SOLE parent-spec outcome.
+		// The legacy `prd` token is GONE from `IntakeOutcome` and its dispatch `case`,
+		// so a verdict naming `prd` matches NO case and emits NO spec (it never lands
+		// like an `outcome: 'spec'` did through the migrate window).
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider({issue: {number: 6}});
 		const result = await performIntake({
@@ -952,18 +953,22 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 			cwd: repo,
 			arbiter: ARBITER,
 			issueProvider,
-			decide: async () => ({
-				outcome: 'prd',
-				specSlug: 'legacy-prd-alias-still-routes',
-				specTitle: 'Legacy prd alias still routes',
-			}),
+			// The dead `prd` token is not a member of `IntakeOutcome` anymore; cast the
+			// raw token so the dispatch (which has no `prd` case) is what drops it.
+			decide: async () =>
+				({
+					outcome: 'prd' as unknown as IntakeVerdict['outcome'],
+					specSlug: 'legacy-prd-token-not-routed',
+					specTitle: 'Legacy prd token not routed',
+				}) satisfies IntakeVerdict,
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(0);
-		expect(result.outcome).toBe('spec-written');
-		expect(result.emitted).toBe(
-			'work/specs/proposed/legacy-prd-alias-still-routes.md',
-		);
+		// It did NOT route to the spec dispatch: no `spec-written` result and NO spec
+		// file emitted (the dead `prd` outcome matches no dispatch case).
+		expect(result?.outcome).not.toBe('spec-written');
+		expect(
+			existsOnArbiterMain(repo, 'pre-prd', 'legacy-prd-token-not-routed'),
+		).toBe(false);
 	});
 
 	it('a `spec` verdict OMITS gate axes the verdict did not declare (undeclared = absent)', async () => {
@@ -987,7 +992,7 @@ describe('intake <N> — the four-outcome dispatcher (stubbed verdicts)', () => 
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-prd-a-coupled-but-small-pair:work/specs/proposed/a-coupled-but-small-pair.md`,
+				`${ARBITER}/work/intake-spec-a-coupled-but-small-pair:work/specs/proposed/a-coupled-but-small-pair.md`,
 			],
 			repo,
 		);
