@@ -57,7 +57,7 @@ describe('branch namespace — a same-slug task and PRD never collide', () => {
 		// Claim the task + onboard in-place: the branch is the TASK ref, carrying
 		// the claim, never the PRD ref.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['dup'], {
-			prds: ['dup'],
+			specs: ['dup'],
 		});
 		const claim = await performClaim({
 			slug: 'dup',

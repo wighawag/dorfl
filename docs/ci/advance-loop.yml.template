@@ -172,9 +172,9 @@ env:
 jobs:
   # ── ENUMERATE (both modes) ──────────────────────────────────────────────────
   # Build the matrix from the eligible-pool scan. `scan --json` reads BOTH the
-  # registry/hub-mirror pool (`repos[].items[]` + `repos[].prds[]`) AND the
-  # in-place working checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`) and emits
-  # eligible items + taskable PRDs; CI runs IN-PLACE so the eligible items live
+  # registry/hub-mirror pool (`repos[].items[]` + `repos[].specs[]`) AND the
+  # in-place working checkout (`cwd.repo.items[]` + `cwd.repo.specs[]`) and emits
+  # eligible items + taskable specs; CI runs IN-PLACE so the eligible items live
   # in the latter (a fresh runner has no registered mirror). `jq` unions + dedups
   # both eligible-TASK pools AND both taskable-PRD pools into a GitHub Actions
   # matrix list (one `task:<slug>` or `prd:<slug>` id per leg). Used by BOTH the
@@ -205,8 +205,8 @@ jobs:
       - id: scan
         # The eligible-pool scan: enumerate eligible items as namespaced ids.
         # `scan --json` reports BOTH pools twice — once for the hub-mirror queue
-        # (`repos[].items[]` + `repos[].prds[]`) AND once for the in-place working
-        # checkout (`cwd.repo.items[]` + `cwd.repo.prds[]`), each carrying `.slug`
+        # (`repos[].items[]` + `repos[].specs[]`) AND once for the in-place working
+        # checkout (`cwd.repo.items[]` + `cwd.repo.specs[]`), each carrying `.slug`
         # and `.eligibility.eligible`. We union both surfaces and take the
         # eligible ones as explicit `task:<slug>` / `prd:<slug>` ids (CI MUST
         # use explicit prefixes). Each becomes one matrix leg → one independent
@@ -214,7 +214,7 @@ jobs:
         # the auto-slice (capability B, `DORFL_AUTO_TASK`).
         run: |
           items="$(dorfl scan --json \
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].specs[]?, .cwd.repo.specs[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] | unique')"
           echo "items=${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"

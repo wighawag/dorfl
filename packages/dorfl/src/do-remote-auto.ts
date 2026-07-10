@@ -114,7 +114,7 @@ export async function performDoRemoteAuto(
 			maxParallel: Number.MAX_SAFE_INTEGER,
 			perRepoMax: Number.MAX_SAFE_INTEGER,
 		},
-		prds: scan.prds,
+		specs: scan.specs,
 		selectionOrder: options.config.selectionOrder,
 		count,
 	});

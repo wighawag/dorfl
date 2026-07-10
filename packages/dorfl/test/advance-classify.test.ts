@@ -48,7 +48,7 @@ const ALL_TYPES: SidecarType[] = ['task', 'prd', 'observation'];
 /** The per-type ANALYSE rung (no open questions, no sidecar). */
 const ANALYSE_RUNG: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
-	prd: 'task-prd',
+	prd: 'task-spec',
 	observation: 'triage-observation',
 };
 

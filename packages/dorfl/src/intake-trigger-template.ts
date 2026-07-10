@@ -30,7 +30,7 @@
  *   - AUTHOR-TRUST → per-outcome FLAGS (Decision 1, {@link deriveIntakeFlags}): an
  *     UNTRUSTED author (`author_association` not in OWNER/MEMBER/COLLABORATOR)
  *     forces `--propose-task` REGARDLESS of the `autoBuild` gate, while
- *     `--merge-prd` stays allowed (a human still tasks a prd before anything
+ *     `--merge-spec` stays allowed (a human still tasks a spec before anything
  *     autonomous acts — the checkpoint is intact). A TRUSTED author gets the plain
  *     gate-derived mode for both. The fully-gateless "all gates on + merge
  *     everywhere" path is a LOUD, NON-DEFAULT opt-in — the default is conservative
@@ -100,8 +100,8 @@ export const TRUSTED_AUTHOR_ASSOCIATIONS = [
  * always resolves BOTH types explicitly). Each is `'merge'` or `'propose'`.
  */
 export interface IntakeIntegrationFlags {
-	/** The prd outcome's mode → `--merge-prd` / `--propose-prd`. */
-	prd: 'merge' | 'propose';
+	/** The spec outcome's mode → `--merge-spec` / `--propose-spec`. */
+	spec: 'merge' | 'propose';
 	/** The task outcome's mode → `--merge-task` / `--propose-task`. */
 	task: 'merge' | 'propose';
 	/**
@@ -125,9 +125,9 @@ export interface IntakeGateState {
 	 */
 	autoBuild: boolean;
 	/**
-	 * `autoTask` — whether an agent will AUTO-TASK an undeclared prd next. ON ⇒ a
-	 * prd needs a human PR checkpoint NOW (`--propose-prd`); OFF ⇒ a human must
-	 * task it, so it may `--merge-prd`.
+	 * `autoTask` — whether an agent will AUTO-TASK an undeclared spec next. ON ⇒ a
+	 * spec needs a human PR checkpoint NOW (`--propose-spec`); OFF ⇒ a human must
+	 * task it, so it may `--merge-spec`.
 	 */
 	autoTask: boolean;
 }
@@ -139,10 +139,10 @@ export interface IntakeGateState {
  * logic the workflow encodes at runtime (it reads `author_association` off the
  * event payload and sets the flags accordingly):
  *
- *   - **PRD** — gate-derived ONLY (author-trust does NOT bite): `--merge-prd` iff
- *     `autoTask` is OFF (a human must task the prd before anything autonomous
+ *   - **SPEC** — gate-derived ONLY (author-trust does NOT bite): `--merge-spec` iff
+ *     `autoTask` is OFF (a human must task the spec before anything autonomous
  *     acts on it — the human checkpoint stays AHEAD even for an untrusted author),
- *     else `--propose-prd`.
+ *     else `--propose-spec`.
  *   - **TASK** — `--propose-task` iff (`autoBuild` ON) OR (author UNTRUSTED);
  *     `--merge-task` ONLY iff (`autoBuild` OFF AND author TRUSTED). An untrusted
  *     author can never auto-merge a task from a public-front-door issue.
@@ -157,9 +157,9 @@ export function deriveIntakeFlags(options: {
 	authorTrusted: boolean;
 }): IntakeIntegrationFlags {
 	const {gate, authorTrusted} = options;
-	// PRD: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
-	// of author-trust, so an untrusted author may still --merge-prd.
-	const prd: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
+	// SPEC: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
+	// of author-trust, so an untrusted author may still --merge-spec.
+	const spec: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
 	// TASK: propose if the agent will auto-build it (gate ON) OR the author is
 	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
 	const task: 'merge' | 'propose' =
@@ -174,7 +174,7 @@ export function deriveIntakeFlags(options: {
 	const originTrust: 'trusted' | 'untrusted' = authorTrusted
 		? 'trusted'
 		: 'untrusted';
-	return {prd, task, originTrust};
+	return {spec, task, originTrust};
 }
 
 /**
@@ -205,7 +205,7 @@ export function isAuthorTrusted(
  *
  * The per-outcome FLAGS are DERIVED AT RUNTIME by a `bash` step that mirrors
  * {@link deriveIntakeFlags}: it reads the gate env block + the event's
- * `author_association` and sets `--merge-prd`/`--propose-prd` +
+ * `author_association` and sets `--merge-spec`/`--propose-spec` +
  * `--merge-task`/`--propose-task` accordingly. The same rule that
  * {@link deriveIntakeFlags} unit-tests is what the workflow executes — they cannot
  * desync because the test asserts the SHELL derivation matches the function.
@@ -241,8 +241,8 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 # can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
 # author (\`author_association\` not OWNER/MEMBER/COLLABORATOR) forces
 # \`--propose-task\` REGARDLESS of the \`autoBuild\` gate — a task from a public
-# front-door issue can never auto-merge — while \`--merge-prd\` stays allowed (a
-# human must still task a prd before anything autonomous acts on it, so the human
+# front-door issue can never auto-merge — while \`--merge-spec\` stays allowed (a
+# human must still task a spec before anything autonomous acts on it, so the human
 # checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
 # fully-gateless "merge everything" path (both gates off + a trusted author) is a
 # LOUD, NON-DEFAULT opt-in; the default is conservative (propose).
@@ -327,9 +327,9 @@ jobs:
         # The merge-vs-propose POLICY, executed at runtime — the SAME rule
         # \`deriveIntakeFlags\` unit-tests (they cannot desync; the test asserts this
         # shell matches the function):
-        #   * PRD — gate-derived ONLY: --merge-prd iff autoTask OFF (a human
+        #   * SPEC — gate-derived ONLY: --merge-spec iff autoTask OFF (a human
         #            tasks it before anything autonomous acts — the checkpoint
-        #            stays ahead even for an UNTRUSTED author), else --propose-prd.
+        #            stays ahead even for an UNTRUSTED author), else --propose-spec.
         #   * TASK  — --propose-task iff (autoBuild ON) OR (author UNTRUSTED);
         #            --merge-task ONLY iff (autoBuild OFF AND author TRUSTED).
         # author_association comes from the COMMENT on an \`issue_comment\` event,
@@ -340,11 +340,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PRD flag: gate-derived only (author-trust does NOT bite a prd).
+          # SPEC flag: gate-derived only (author-trust does NOT bite a spec).
           if [ "\${DORFL_AUTO_TASK}" = "true" ]; then
-            prd_flag="--propose-prd"
+            spec_flag="--propose-spec"
           else
-            prd_flag="--merge-prd"
+            spec_flag="--merge-spec"
           fi
 
           # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
@@ -377,10 +377,10 @@ jobs:
             origin_trust_flag="--origin-trust=untrusted"
           fi
 
-          echo "prd_flag=\${prd_flag}" >> "\$GITHUB_OUTPUT"
+          echo "spec_flag=\${spec_flag}" >> "\$GITHUB_OUTPUT"
           echo "task_flag=\${task_flag}" >> "\$GITHUB_OUTPUT"
           echo "origin_trust_flag=\${origin_trust_flag}" >> "\$GITHUB_OUTPUT"
-          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${prd_flag} \${task_flag} \${origin_trust_flag}"
+          echo "intake policy: author_association='\${AUTHOR_ASSOCIATION:-}' trusted=\${trusted} → \${spec_flag} \${task_flag} \${origin_trust_flag}"
 
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -393,7 +393,7 @@ jobs:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |
           dorfl intake "\${{ github.event.issue.number }}" \\
-            "\${{ steps.policy.outputs.prd_flag }}" \\
+            "\${{ steps.policy.outputs.spec_flag }}" \\
             "\${{ steps.policy.outputs.task_flag }}" \\
             "\${{ steps.policy.outputs.origin_trust_flag }}" \\
             --arbiter origin
@@ -509,14 +509,14 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		operative,
 	), 'the policy derivation must be able to emit `--merge-task` (the ' +
 		'trusted-author + autoBuild-off path).');
-	// --merge-prd stays allowed even for an untrusted author (prd checkpoint ahead).
-	require('derives-merge-prd', /--merge-prd\b/.test(
+	// --merge-spec stays allowed even for an untrusted author (spec checkpoint ahead).
+	require('derives-merge-spec', /--merge-spec\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--merge-prd` (a prd stays ' +
+	), 'the policy derivation must be able to emit `--merge-spec` (a spec stays ' +
 		'mergeable even for an untrusted author — the human-tasks-it checkpoint).');
-	require('derives-propose-prd', /--propose-prd\b/.test(
+	require('derives-propose-spec', /--propose-spec\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--propose-prd` (autoTask on).');
+	), 'the policy derivation must be able to emit `--propose-spec` (autoTask on).');
 	// ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose): the shell
 	// must derive `--origin-trust <trusted|untrusted>` from the SAME author-trust
 	// case it uses for the task/PRD modes, and pass it to `intake` so the emitted

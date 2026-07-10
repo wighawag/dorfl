@@ -345,20 +345,20 @@ const DEFAULT_ARBITER = 'origin';
  * ({@link promoteFromPreSpec} in `needs-attention.ts`) moves an approved prd
  * `prds/proposed/ → prds/ready/` to make it taskable.
  */
-export const STAGED_PRDS_DIR = workFolderRel('specs-proposed');
+export const STAGED_SPECS_DIR = workFolderRel('specs-proposed');
 
 /**
- * The POOL folder prds land in when the runner-deterministic placement
+ * The POOL folder specs land in when the runner-deterministic placement
  * resolver chooses the pool side (`prdsLandIn: 'ready'` + a trusted origin, or
  * an `--prds-land-in ready` operator override). This is `work/prds/ready/`,
  * the tasking candidate pool.
  */
-const POOL_PRDS_DIR = workFolderRel('specs-ready');
+const POOL_SPECS_DIR = workFolderRel('specs-ready');
 
-/** The placement slots for the prd lifecycle (folder names). */
-const PRD_PLACEMENT_SLOTS: PlacementSlots = {
-	staging: STAGED_PRDS_DIR,
-	pool: POOL_PRDS_DIR,
+/** The placement slots for the spec lifecycle (folder names). */
+const SPEC_PLACEMENT_SLOTS: PlacementSlots = {
+	staging: STAGED_SPECS_DIR,
+	pool: POOL_SPECS_DIR,
 };
 
 /**
@@ -379,8 +379,8 @@ function specLandingToSide(
 /**
  * The emitted artifact TYPE `intake` decides at RUNTIME — a `task` verdict emits
  * `work/backlog/<slug>.md`, a `prd` verdict emits the prd file (`work/prds/ready/<slug>.md`). The two
- * granular flag axes (`--merge-task`/`--propose-task` vs `--merge-prd`/
- * `--propose-prd`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
+ * granular flag axes (`--merge-task`/`--propose-task` vs `--merge-spec`/
+ * `--propose-spec`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
 export type IntakeArtifactType = 'task' | 'spec' | 'prd';
@@ -393,7 +393,7 @@ export type IntakeArtifactType = 'task' | 'spec' | 'prd';
  * cannot express a type-conditional policy ("merge a prd but propose a task") —
  * hence the four GRANULAR per-type flags layered over the two AGGREGATES:
  *
- * - **granular:** `--merge-prd`/`--propose-prd` apply iff the outcome is a prd;
+ * - **granular:** `--merge-spec`/`--propose-spec` apply iff the outcome is a spec;
  *   `--merge-task`/`--propose-task` apply iff it is a task.
  * - **aggregates:** `--merge` = merge BOTH types; `--propose` = propose BOTH.
  *
@@ -405,10 +405,10 @@ export interface IntakeIntegrationFlags {
 	merge?: boolean;
 	/** Aggregate: propose BOTH a task and a prd. */
 	propose?: boolean;
-	/** Granular: merge a prd (overrides the aggregate for the prd outcome). */
-	mergePrd?: boolean;
-	/** Granular: propose a prd (overrides the aggregate for the prd outcome). */
-	proposePrd?: boolean;
+	/** Granular: merge a spec (overrides the aggregate for the spec outcome). */
+	mergeSpec?: boolean;
+	/** Granular: propose a spec (overrides the aggregate for the spec outcome). */
+	proposeSpec?: boolean;
 	/** Granular: merge a task (overrides the aggregate for the task outcome). */
 	mergeTask?: boolean;
 	/** Granular: propose a task (overrides the aggregate for the task outcome). */
@@ -421,8 +421,8 @@ export interface IntakeIntegrationModes {
 	task: IntegrationMode;
 	/**
 	 * The mode an EMITTED spec integrates with. `spec` is the CANONICAL key (prd →
-	 * spec cutover, MIGRATE batch); the user-facing `--merge-prd`/`--propose-prd`
-	 * flags that FEED it keep their `prd` spelling until the cli-flag rename batch.
+	 * spec cutover); the user-facing `--merge-spec`/`--propose-spec` flags that FEED
+	 * it carry the same `spec` spelling (the cli-flag rename landed in batch 4f).
 	 */
 	spec: IntegrationMode;
 }
@@ -463,11 +463,11 @@ function granularFromFlags(
  * - **aggregates:** `--merge` ⇒ merge both; `--propose` ⇒ propose both (this axis
  *   COMPOSES the existing {@link integrationFromFlags}, reusing its mutual
  *   exclusion + error message).
- * - **granular routes per type:** `--merge-prd` merges a prd (and leaves a task at
+ * - **granular routes per type:** `--merge-spec` merges a spec (and leaves a task at
  *   the aggregate/default), etc.
- * - **GRANULAR OVERRIDES AGGREGATE:** `--merge --propose-task` ⇒ merge a prd,
+ * - **GRANULAR OVERRIDES AGGREGATE:** `--merge --propose-task` ⇒ merge a spec,
  *   propose a task.
- * - **same type + both modes is a usage ERROR:** `--merge-prd --propose-prd` (and
+ * - **same type + both modes is a usage ERROR:** `--merge-spec --propose-spec` (and
  *   `--merge-task --propose-task`), and the aggregate `--merge --propose`.
  *
  * Throws (a usage error) on any mutually-exclusive pair. The dispatcher picks the
@@ -491,10 +491,10 @@ export function resolveIntakeIntegrationModes(
 		propose: flags.propose,
 	});
 	// GRANULAR axes — `integrationFromFlags` per type (the same-type-both error).
-	const prdGranular = granularFromFlags(
-		'prd',
-		flags.mergePrd,
-		flags.proposePrd,
+	const specGranular = granularFromFlags(
+		'spec',
+		flags.mergeSpec,
+		flags.proposeSpec,
 	);
 	const taskGranular = granularFromFlags(
 		'task',
@@ -503,10 +503,10 @@ export function resolveIntakeIntegrationModes(
 	);
 	// GRANULAR OVERRIDES AGGREGATE; aggregate over the (config/propose) default.
 	// The result KEYS carry the `spec` vocabulary (canonical); the per-type flag axes
-	// (`--merge-prd`/`--merge-task`) keep their user-facing `prd` spelling (the
-	// cli-flag rename is a separate batch).
+	// (`--merge-spec`/`--merge-task`) carry the same `spec` spelling (the cli-flag
+	// rename landed in batch 4f).
 	return {
-		spec: prdGranular ?? aggregate ?? defaultMode,
+		spec: specGranular ?? aggregate ?? defaultMode,
 		task: taskGranular ?? aggregate ?? defaultMode,
 	};
 }
@@ -1272,7 +1272,7 @@ async function dispatchSpec(params: {
 
 	// A content-derived slug — NEVER a counter (prd `issue-intake` US #8). Prefer the drafted
 	// `prdSlug`, else derive from the drafted title.
-	const slug = resolvePrdSlug(verdict);
+	const slug = resolveSpecSlug(verdict);
 	if (slug === '') {
 		const message =
 			`Intake produced a 'spec' verdict for issue #${issueNumber} with no usable ` +
@@ -1295,7 +1295,7 @@ async function dispatchSpec(params: {
 		configuredDefault: specLandingToSide(specsLandIn),
 	});
 	const placementDir = placementFolder(
-		PRD_PLACEMENT_SLOTS,
+		SPEC_PLACEMENT_SLOTS,
 		placementDecision.choice,
 	);
 	const relPath = `${placementDir}/${slug}.md`;
@@ -1305,7 +1305,7 @@ async function dispatchSpec(params: {
 	// producer prefix keeps it distinct from a `do prd:<slug>` tasking branch.
 	await switchToWorkBranch(cwd, arbiter, 'prd', slug, env);
 
-	const prdContent = renderSpec({
+	const specContent = renderSpec({
 		slug,
 		title: verdict.prdTitle ?? slug,
 		body: verdict.prdBody,
@@ -1335,7 +1335,8 @@ async function dispatchSpec(params: {
 			titlePath: join(cwd, relPath),
 			title: verdict.prdTitle ?? slug,
 			commitTag: 'intake',
-			stage: () => stageIntakeContent({cwd, relPath, content: prdContent, env}),
+			stage: () =>
+				stageIntakeContent({cwd, relPath, content: specContent, env}),
 		},
 		env,
 		note,
@@ -1580,7 +1581,7 @@ function resolveSlug(verdict: IntakeVerdict): string {
  * Prefer the drafted `prdSlug`, else derive from the drafted prd title; both go
  * through `paramCase`. An empty result signals the caller to refuse.
  */
-function resolvePrdSlug(verdict: IntakeVerdict): string {
+function resolveSpecSlug(verdict: IntakeVerdict): string {
 	const candidate =
 		verdict.prdSlug && verdict.prdSlug.trim() !== ''
 			? verdict.prdSlug

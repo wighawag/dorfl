@@ -119,15 +119,15 @@ export async function performDoAuto(
 	// Pool 2 — TASKABLE prds: the NEW pool from the shared prd read path
 	// (`resolveSpecPool`) filtered by `autoslice-gate`'s predicate (not reinvented).
 	const pool = read.resolveSpecPool({repoPath: cwd});
-	const prdCandidates: SpecCandidate[] = pool.prds.map((prd) => ({
+	const specCandidates: SpecCandidate[] = pool.specs.map((spec) => ({
 		repoPath: cwd,
-		slug: prd.slug,
-		humanOnly: prd.humanOnly,
-		needsAnswers: prd.needsAnswers,
-		taskedAfter: prd.taskedAfter,
+		slug: spec.slug,
+		humanOnly: spec.humanOnly,
+		needsAnswers: spec.needsAnswers,
+		taskedAfter: spec.taskedAfter,
 	}));
-	const eligiblePrds = taskableSpecs({
-		candidates: prdCandidates,
+	const eligibleSpecs = taskableSpecs({
+		candidates: specCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
@@ -137,7 +137,7 @@ export async function performDoAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		prds: eligiblePrds,
+		specs: eligibleSpecs,
 		selectionOrder: options.config.selectionOrder,
 		count,
 	});

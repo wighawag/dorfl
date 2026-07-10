@@ -669,18 +669,18 @@ export function inferSlugFromBranch(
  * member — mirroring the `humanOnly`/`autoBuild` per-item override shape.
  *
  * A task may carry the override even when it has NO `prd:` (a self-contained
- * chore), by symmetry with `humanOnly` at the item level; `prdFrontmatter`
+ * chore), by symmetry with `humanOnly` at the item level; `specFrontmatter`
  * is then simply absent and the chain reads task ⇒ repo.
  */
 export function resolveItemPromptGuidance(
 	repoResolved: PromptGuidance,
 	taskFrontmatter?: Frontmatter,
-	prdFrontmatter?: Frontmatter,
+	specFrontmatter?: Frontmatter,
 ): PromptGuidance {
 	const taskTestFirst = taskFrontmatter?.promptGuidance.testFirst;
-	const prdTestFirst = prdFrontmatter?.promptGuidance.testFirst;
+	const specTestFirst = specFrontmatter?.promptGuidance.testFirst;
 	return {
-		testFirst: taskTestFirst ?? prdTestFirst ?? repoResolved.testFirst,
+		testFirst: taskTestFirst ?? specTestFirst ?? repoResolved.testFirst,
 	};
 }
 
@@ -692,10 +692,13 @@ export function resolveItemPromptGuidance(
  * through to the repo policy (a missing prd is NOT an error at this seam;
  * the per-item override is OPTIONAL by design).
  */
-export function findSpecPath(cwd: string, prdSlug: string): string | undefined {
+export function findSpecPath(
+	cwd: string,
+	specSlug: string,
+): string | undefined {
 	const candidates = [
-		workItemPath(cwd, 'specs-ready', prdSlug),
-		workItemPath(cwd, 'specs-tasked', prdSlug),
+		workItemPath(cwd, 'specs-ready', specSlug),
+		workItemPath(cwd, 'specs-tasked', specSlug),
 	];
 	for (const path of candidates) {
 		if (existsSync(path)) {
@@ -718,16 +721,16 @@ export function resolvePromptGuidanceForItem(options: {
 	taskContent: string;
 }): PromptGuidance {
 	const taskFm = parseFrontmatter(options.taskContent);
-	let prdFm: Frontmatter | undefined;
+	let specFm: Frontmatter | undefined;
 	// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
 	// read the parent-spec pointer off `fm.spec` (populated beside `fm.prd`).
 	if (taskFm.spec !== undefined) {
-		const prdPath = findSpecPath(options.cwd, taskFm.spec);
-		if (prdPath !== undefined) {
-			prdFm = parseFrontmatter(readFileSync(prdPath, 'utf8'));
+		const specPath = findSpecPath(options.cwd, taskFm.spec);
+		if (specPath !== undefined) {
+			specFm = parseFrontmatter(readFileSync(specPath, 'utf8'));
 		}
 	}
-	return resolveItemPromptGuidance(options.repoResolved, taskFm, prdFm);
+	return resolveItemPromptGuidance(options.repoResolved, taskFm, specFm);
 }
 
 export function renderPrompt(options: PromptOptions): string {

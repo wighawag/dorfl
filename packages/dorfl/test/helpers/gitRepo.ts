@@ -212,7 +212,7 @@ export function seedRepoWithArbiter(
 		 */
 		staged?: string[];
 		/** Spec slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
-		prds?: string[];
+		specs?: string[];
 		/**
 		 * Commit a `.dorfl.json` at the repo root (so it travels onto
 		 * `<arbiter>/main`) — the per-repo config the no-checkout `do --remote` reads
@@ -239,11 +239,11 @@ export function seedRepoWithArbiter(
 			writeFileSync(join(stagedDir, `${slug}.md`), taskFile(slug, opts));
 		}
 	}
-	if (opts.prds && opts.prds.length > 0) {
-		const prdDir = join(repo, 'work', 'specs', 'ready');
-		mkdirSync(prdDir, {recursive: true});
-		for (const slug of opts.prds) {
-			writeFileSync(join(prdDir, `${slug}.md`), prdFile(slug));
+	if (opts.specs && opts.specs.length > 0) {
+		const specDir = join(repo, 'work', 'specs', 'ready');
+		mkdirSync(specDir, {recursive: true});
+		for (const slug of opts.specs) {
+			writeFileSync(join(specDir, `${slug}.md`), specFile(slug));
 		}
 	}
 	if (opts.repoConfig) {
@@ -317,8 +317,8 @@ function taskFile(
 	].join('\n');
 }
 
-/** A minimal prd file body for `work/prds/ready/<slug>.md` (tasking-lock fixtures). */
-export function prdFile(slug: string, marker = 'ORIGINAL'): string {
+/** A minimal spec file body for `work/prds/ready/<slug>.md` (tasking-lock fixtures). */
+export function specFile(slug: string, marker = 'ORIGINAL'): string {
 	return [
 		'---',
 		`title: ${slug}`,

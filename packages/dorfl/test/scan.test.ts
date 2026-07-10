@@ -439,7 +439,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 /**
  * The taskable-prd pool (`prds[]`) surface on `scan`/`scanRepoPaths` (task
  * `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). The CI
- * propose-matrix `jq` reads `repos[].prds[]` + `cwd.repo.prds[]` and unions them
+ * propose-matrix `jq` reads `repos[].specs[]` + `cwd.repo.specs[]` and unions them
  * with the task legs; before this task landed, the pool was invisible there
  * and `DORFL_AUTO_TASK` was dead on the hourly cron. The eligibility
  * predicate REUSES `taskableSpecs` (the SAME `autoslice-gate` predicate the
@@ -469,7 +469,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
+		const prd = report.repos[0].specs.find((p) => p.slug === 'ready');
 		expect(prd).toBeDefined();
 		expect(prd!.eligibility.eligible).toBe(true);
 	});
@@ -489,7 +489,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 			[join(root, 'repo')],
 			mergeConfig({autoTask: true}),
 		);
-		const byslug = new Map(report.repos[0].prds.map((p) => [p.slug, p]));
+		const byslug = new Map(report.repos[0].specs.map((p) => [p.slug, p]));
 		expect(byslug.get('ready')!.eligibility.eligible).toBe(true);
 		expect(byslug.get('human')!.eligibility.eligible).toBe(false);
 		expect(byslug.get('asks')!.eligibility.eligible).toBe(false);
@@ -502,7 +502,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 			[join(root, 'repo')],
 			mergeConfig({autoTask: false}),
 		);
-		const ready = report.repos[0].prds.find((p) => p.slug === 'ready')!;
+		const ready = report.repos[0].specs.find((p) => p.slug === 'ready')!;
 		expect(ready.eligibility.eligible).toBe(false);
 	});
 
@@ -517,7 +517,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 			mergeConfig({autoTask: false}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].specs.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
@@ -533,7 +533,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 			mergeConfig({autoTask: true}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'after')!.eligibility
+			report.repos[0].specs.find((p) => p.slug === 'after')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
@@ -549,7 +549,7 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 				mergeConfig({autoBuild: true, autoTask: true}),
 			);
 			const task = report.repos[0].items.find((i) => i.slug === 'go')!;
-			const prd = report.repos[0].prds.find((p) => p.slug === 'cut')!;
+			const prd = report.repos[0].specs.find((p) => p.slug === 'cut')!;
 			expect(task.eligibility.eligible).toBe(true);
 			expect(prd.eligibility.eligible).toBe(true);
 		},
@@ -564,7 +564,7 @@ describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 		const report = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const prd = report.repos[0].prds.find((p) => p.slug === 'ready');
+		const prd = report.repos[0].specs.find((p) => p.slug === 'ready');
 		expect(prd).toBeDefined();
 		expect(prd!.eligibility.eligible).toBe(true);
 	});
@@ -582,13 +582,13 @@ describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			offReport.repos[0].prds.every((p) => p.eligibility.eligible === false),
+			offReport.repos[0].specs.every((p) => p.eligibility.eligible === false),
 		).toBe(true);
 		// autoTask ON ⇒ only `ready` is taskable; the gated PRDs are NOT.
 		const onReport = await scan(
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: true}),
 		);
-		const by = new Map(onReport.repos[0].prds.map((p) => [p.slug, p]));
+		const by = new Map(onReport.repos[0].specs.map((p) => [p.slug, p]));
 		expect(by.get('ready')!.eligibility.eligible).toBe(true);
 		expect(by.get('human')!.eligibility.eligible).toBe(false);
 		expect(by.get('asks')!.eligibility.eligible).toBe(false);
@@ -604,7 +604,7 @@ describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 			mergeConfig({workspacesDir: workspacesDir(), autoTask: false}),
 		);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'ready')!.eligibility
+			report.repos[0].specs.find((p) => p.slug === 'ready')!.eligibility
 				.eligible,
 		).toBe(true);
 	});
@@ -625,7 +625,7 @@ describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 			report.repos[0].items.find((i) => i.slug === 'go')!.eligibility.eligible,
 		).toBe(true);
 		expect(
-			report.repos[0].prds.find((p) => p.slug === 'cut')!.eligibility.eligible,
+			report.repos[0].specs.find((p) => p.slug === 'cut')!.eligibility.eligible,
 		).toBe(true);
 	});
 });

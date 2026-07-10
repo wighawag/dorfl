@@ -126,12 +126,12 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			const text = loadAdvanceCiTemplate();
 			// The task-only jq this fix replaced left `DORFL_AUTO_TASK` dead on
 			// the hourly cron — a ready ungated PRD never became a matrix leg. The new jq
-			// must read `scan --json`'s taskable-PRD pool (`repos[].prds[]` +
-			// `cwd.repo.prds[]`) and emit `prd:<slug>` legs alongside `task:<slug>`.
+			// must read `scan --json`'s taskable-SPEC pool (`repos[].specs[]` +
+			// `cwd.repo.specs[]`) and emit `prd:<slug>` legs alongside `task:<slug>`.
 			expect(/"task:" \+ \.slug/.test(text)).toBe(true);
 			expect(/"prd:" \+ \.slug/.test(text)).toBe(true);
-			expect(/\.repos\[\]\.prds\[\]\?/.test(text)).toBe(true);
-			expect(/\.cwd\.repo\.prds\[\]\?/.test(text)).toBe(true);
+			expect(/\.repos\[\]\.specs\[\]\?/.test(text)).toBe(true);
+			expect(/\.cwd\.repo\.specs\[\]\?/.test(text)).toBe(true);
 		},
 	);
 
@@ -243,12 +243,12 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				// kill auto-slice on the hourly cron (the exact pre-fix bug).
 				const broken = base
 					.replace(/"prd:" \+ \.slug/g, '"task:" + .slug')
-					.replace(/\.repos\[\]\.prds\[\]\?/g, '.repos[].items[]?')
-					.replace(/\.cwd\.repo\.prds\[\]\?/g, '.cwd.repo.items[]?');
+					.replace(/\.repos\[\]\.specs\[\]\?/g, '.repos[].items[]?')
+					.replace(/\.cwd\.repo\.specs\[\]\?/g, '.cwd.repo.items[]?');
 				const result = withTmpTemplate(broken);
 				expect(result.ok).toBe(false);
 				expect(result.problems.map((p) => p.id)).toContain(
-					'propose-enumerates-taskable-prds',
+					'propose-enumerates-taskable-specs',
 				);
 			},
 		);

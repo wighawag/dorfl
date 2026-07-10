@@ -266,9 +266,9 @@ env:
 jobs:
   # ── ENUMERATE (propose only) ────────────────────────────────────────────────
   # Build the DYNAMIC matrix from the eligible-pool scan. \`scan --json\` reports
-  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`, \`repos[].prds[]\`,
+  # BOTH the registry/hub-mirror pool (\`repos[].items[]\`, \`repos[].specs[]\`,
   # \`repos[].lifecycle\`) AND the in-place working checkout (\`cwd.repo.items[]\`,
-  # \`cwd.repo.prds[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
+  # \`cwd.repo.specs[]\`, \`cwd.repo.lifecycle\`); CI runs IN-PLACE so the items live
   # in the latter (a fresh runner has no registered mirror). \`jq\` unions + dedups
   # the build/task pools AND the LIFECYCLE pools into a deduplicated GitHub
   # Actions matrix list of explicit \`task:<slug>\` / \`prd:<slug>\` / \`obs:<slug>\`
@@ -322,7 +322,7 @@ jobs:
         # leg per item.
         run: |
           items="$(dorfl scan --json --here \\
-            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].prds[]?, .cwd.repo.prds[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
+            | jq -c '[(.repos[].items[]?, .cwd.repo.items[]?) | select(.eligibility.eligible == true) | "task:" + .slug] + [(.repos[].specs[]?, .cwd.repo.specs[]?) | select(.eligibility.eligible == true) | "prd:" + .slug] + [(.repos[].lifecycle.triage[]?, .cwd.repo.lifecycle.triage[]?) | "obs:" + .slug] + [(.repos[].lifecycle.surface[]?, .cwd.repo.lifecycle.surface[]?, .repos[].lifecycle.apply[]?, .cwd.repo.lifecycle.apply[]?) | .namespace + ":" + .slug] | unique')"
           echo "items=\${items}" >> "$GITHUB_OUTPUT"
           if [ "$(echo "\${items}" | jq 'length')" -gt 0 ]; then
             echo "any=true" >> "$GITHUB_OUTPUT"
@@ -746,14 +746,14 @@ export function validateAdvanceLifecycleWorkflow(
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `DORFL_AUTO_TASK: 'true'` dead on the
 	// hourly cron — a ready ungated PRD would never become a matrix leg. The `jq`
-	// must enumerate `prd:<slug>` ids from `scan --json`'s taskable-PRD pool
-	// (`repos[].prds[]` + `cwd.repo.prds[]`) alongside the eligible-task legs.
-	require('propose-enumerates-taskable-prds', /"prd:" \+ \.slug/.test(text) &&
-		/\.prds\[\]/.test(
+	// must enumerate `prd:<slug>` ids from `scan --json`'s taskable-SPEC pool
+	// (`repos[].specs[]` + `cwd.repo.specs[]`) alongside the eligible-task legs.
+	require('propose-enumerates-taskable-specs', /"prd:" \+ \.slug/.test(text) &&
+		/\.specs\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union taskable prds into the ' +
-		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-task ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable specs into the ' +
+		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].specs[]` " +
+		'+ `cwd.repo.specs[]` pools), so a ready ungated SPEC becomes one auto-task ' +
 		'matrix leg per item alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 

@@ -97,7 +97,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			'unblocked',
 		]);
 		// Exactly the taskable PRDs.
-		expect(result.prds.map((p) => p.slug).sort()).toEqual(['taskme']);
+		expect(result.specs.map((p) => p.slug).sort()).toEqual(['taskme']);
 	});
 
 	it('honours the GATES: autoBuild off ⇒ no eligible task; autoTask off ⇒ no taskable PRD', async () => {
@@ -112,7 +112,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(strict.eligibleTasks).toEqual([]);
-		expect(strict.prds).toEqual([]);
+		expect(strict.specs).toEqual([]);
 
 		const permissive = await scanMirrorPool({
 			mirrorPath,
@@ -120,7 +120,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(permissive.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(permissive.prds.map((p) => p.slug)).toEqual(['taskme']);
+		expect(permissive.specs.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
 	it('layers the COMMITTED per-repo .dorfl.json from the mirror main (parity with the working checkout that reads it)', async () => {
@@ -139,7 +139,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(result.eligibleTasks.map((s) => s.slug)).toEqual(['ready']);
-		expect(result.prds.map((p) => p.slug)).toEqual(['taskme']);
+		expect(result.specs.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
 	it('resolves blockedBy / taskedAfter against the mirror own folders (per-repo, like in-place)', async () => {
@@ -156,7 +156,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(before.eligibleTasks).toEqual([]);
-		expect(before.prds).toEqual([]);
+		expect(before.specs).toEqual([]);
 
 		// Re-seed with the deps satisfied (fresh mirror).
 		scratch.cleanup();
@@ -176,7 +176,7 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 			env: gitEnv(),
 		});
 		expect(after.eligibleTasks.map((s) => s.slug)).toEqual(['b']);
-		expect(after.prds.map((p) => p.slug)).toEqual(['after']);
+		expect(after.specs.map((p) => p.slug)).toEqual(['after']);
 	});
 });
 
@@ -229,7 +229,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 		const inPlacePrds = taskableSpecs({
 			candidates: (await import('../src/ledger-read.js')).ledgerRead
 				.resolveSpecPool({repoPath: checkout})
-				.prds.map((p) => ({
+				.specs.map((p) => ({
 					repoPath: checkout,
 					slug: p.slug,
 					humanOnly: p.humanOnly,
@@ -249,7 +249,7 @@ describe('PARITY with the in-place do-autopick pool scan on the SAME logical sta
 				.map((i) => i.slug)
 				.sort(),
 		);
-		expect(mirror.prds.map((p) => p.slug).sort()).toEqual(
+		expect(mirror.specs.map((p) => p.slug).sort()).toEqual(
 			inPlacePrds.map((p) => p.slug).sort(),
 		);
 	});
@@ -269,7 +269,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 
 		// Build the PRD candidate list the SAME way do-autopick does, from the pool the
 		// mirror scan returns (no duplicated enumeration).
-		const prdCandidates = pool.prds;
+		const specCandidates = pool.specs;
 
 		// LOOP driver shape (`run`): take ALL eligible, parallelism is the loop's job.
 		const loopSelection = selectPrioritised({
@@ -278,7 +278,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: prdCandidates,
+			specs: specCandidates,
 		});
 		expect(loopSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([
 			'task:alpha',
@@ -294,7 +294,7 @@ describe('ONE reusable unit: both the run loop driver and the one-shot/CI advanc
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: prdCandidates,
+			specs: specCandidates,
 			count: 2,
 		});
 		expect(oneShotSelection.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

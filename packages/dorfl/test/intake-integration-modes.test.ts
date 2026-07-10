@@ -13,7 +13,7 @@ import {
  * resolution TABLE over the flag set → both per-type modes.
  *
  * The canonical rule (the source of truth: `work/prds/tasked/issue-intake.md`):
- * - granular: `--merge-prd`/`--propose-prd` (prd), `--merge-task`/`--propose-task`
+ * - granular: `--merge-spec`/`--propose-spec` (prd), `--merge-task`/`--propose-task`
  *   (task);
  * - aggregates: `--merge` = both-merge, `--propose` = both-propose;
  * - GRANULAR OVERRIDES AGGREGATE;
@@ -30,10 +30,9 @@ const both = (
 	mode: IntakeIntegrationModes['task'],
 ): IntakeIntegrationModes => ({
 	task: mode,
-	// prd → spec cutover (MIGRATE batch): the OUTPUT mode key is now `spec`
-	// (canonical); the INPUT flag fields (`mergePrd`/`proposePrd`) keep their `prd`
-	// spelling because they map onto the `--merge-prd`/`--propose-prd` CLI flags,
-	// which are renamed by a later batch.
+	// prd → spec cutover: the OUTPUT mode key is `spec` (canonical); the INPUT flag
+	// fields (`mergeSpec`/`proposeSpec`) carry the same `spec` spelling because they
+	// map onto the `--merge-spec`/`--propose-spec` CLI flags (renamed in batch 4f).
 	spec: mode,
 });
 
@@ -52,8 +51,8 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	it('--merge-prd routes per type: merges a prd, leaves a task at the default', () => {
-		expect(resolveIntakeIntegrationModes({mergePrd: true})).toEqual({
+	it('--merge-spec routes per type: merges a prd, leaves a task at the default', () => {
+		expect(resolveIntakeIntegrationModes({mergeSpec: true})).toEqual({
 			spec: 'merge',
 			task: 'propose',
 		});
@@ -66,8 +65,8 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		});
 	});
 
-	it('--propose-prd over the default propose is still propose for the prd', () => {
-		expect(resolveIntakeIntegrationModes({proposePrd: true})).toEqual(
+	it('--propose-spec over the default propose is still propose for the prd', () => {
+		expect(resolveIntakeIntegrationModes({proposeSpec: true})).toEqual(
 			both('propose'),
 		);
 	});
@@ -78,9 +77,9 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		).toEqual({spec: 'merge', task: 'propose'});
 	});
 
-	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-prd ⇒ prd merge, task propose', () => {
+	it('GRANULAR OVERRIDES AGGREGATE: --propose --merge-spec ⇒ prd merge, task propose', () => {
 		expect(
-			resolveIntakeIntegrationModes({propose: true, mergePrd: true}),
+			resolveIntakeIntegrationModes({propose: true, mergeSpec: true}),
 		).toEqual({spec: 'merge', task: 'propose'});
 	});
 
@@ -88,16 +87,16 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		expect(
 			resolveIntakeIntegrationModes({
 				merge: true,
-				proposePrd: true,
+				proposeSpec: true,
 				proposeTask: true,
 			}),
 		).toEqual(both('propose'));
 	});
 
-	it('same-type-both on the PRD axis (--merge-prd --propose-prd) is a usage ERROR', () => {
+	it('same-type-both on the PRD axis (--merge-spec --propose-spec) is a usage ERROR', () => {
 		expect(() =>
-			resolveIntakeIntegrationModes({mergePrd: true, proposePrd: true}),
-		).toThrow(/--merge-prd and --propose-prd are mutually exclusive/i);
+			resolveIntakeIntegrationModes({mergeSpec: true, proposeSpec: true}),
+		).toThrow(/--merge-spec and --propose-spec are mutually exclusive/i);
 	});
 
 	it('same-type-both on the TASK axis (--merge-task --propose-task) is a usage ERROR', () => {

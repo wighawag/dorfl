@@ -446,8 +446,8 @@ describe('ledger-read seam — resolveSpecExistence (the prd read path)', () => 
 			slug: 'p',
 		});
 		expect(r.exists).toBe(true);
-		expect(r.prdFile).toBe('p.md');
-		expect(r.prdTaskedFile).toBeUndefined();
+		expect(r.specFile).toBe('p.md');
+		expect(r.specTaskedFile).toBeUndefined();
 	});
 
 	it('reports a prd present only via its work/prds/tasked/ resting file (already tasked)', () => {
@@ -457,8 +457,8 @@ describe('ledger-read seam — resolveSpecExistence (the prd read path)', () => 
 			slug: 's',
 		});
 		expect(r.exists).toBe(true);
-		expect(r.prdFile).toBeUndefined();
-		expect(r.prdTaskedFile).toBe('s.md');
+		expect(r.specFile).toBeUndefined();
+		expect(r.specTaskedFile).toBe('s.md');
 	});
 
 	it('resolves the slug from frontmatter, falling back to filename', () => {
@@ -486,8 +486,8 @@ describe('ledger-read seam — resolveSpecExistence (the prd read path)', () => 
 			slug: 'nope',
 		});
 		expect(r.exists).toBe(false);
-		expect(r.prdFile).toBeUndefined();
-		expect(r.prdTaskedFile).toBeUndefined();
+		expect(r.specFile).toBeUndefined();
+		expect(r.specTaskedFile).toBeUndefined();
 	});
 });
 

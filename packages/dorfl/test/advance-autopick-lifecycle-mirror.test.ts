@@ -207,7 +207,7 @@ describe('the in-place + mirror-side lifecycle enumerations AGREE (ONE shared un
 				maxParallel: Number.MAX_SAFE_INTEGER,
 				perRepoMax: Number.MAX_SAFE_INTEGER,
 			},
-			prds: pool.prds,
+			specs: pool.specs,
 			lifecycle: pool.lifecycle,
 		});
 		expect(selected.map((s) => `${s.namespace}:${s.slug}`)).toEqual([

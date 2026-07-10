@@ -40,7 +40,7 @@
  * "ANALYSE" is NOT "always advance" — surface-and-pause is itself a rung, so the
  * ANALYSE branch resolves to the per-TYPE rung the executor will run (the cells
  * of the prd's "Per-item-type transitions" table): `build-task` (task),
- * `task-prd` (prd), `triage-observation` (observation) when there are no open
+ * `task-spec` (spec), `triage-observation` (observation) when there are no open
  * questions; `surface` (first-pass question generation) when `needsAnswers` but
  * no sidecar yet; `apply` when all entries are answered.
  */
@@ -74,8 +74,8 @@ export type TickRungKind =
 	// --- ANALYSE rungs (no open questions; advance one lifecycle rung) ---
 	/** A ready task → build it (later: invoke the `do <slug>` machinery). */
 	| 'build-task'
-	/** A ready prd → task it (later: invoke the `do prd:<slug>` machinery). */
-	| 'task-prd'
+	/** A ready spec → task it (later: invoke the `do spec:<slug>` machinery). */
+	| 'task-spec'
 	/** An untriaged observation → triage it (auto-disposition or surface a question). */
 	| 'triage-observation'
 	// --- Transitional ANALYSE rungs (driven by the two signals) ---
@@ -118,12 +118,12 @@ export interface TickClassification {
 /** The per-TYPE ANALYSE rung when there are no open questions (the no-gate path). */
 const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
 	task: 'build-task',
-	prd: 'task-prd',
-	// EXPAND step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	// a `spec` analyses through the SAME `task-prd` rung as `prd` (spec IS the
-	// renamed parent-spec artifact). Mirrored so a `spec:<slug>` tick classifies;
-	// the migrate batch renames the rung + the contract task drops the `prd` key.
-	spec: 'task-prd',
+	// The `prd` KEY is a contract-owned `SidecarType` alias the contract task drops;
+	// its VALUE was renamed to the canonical `'task-spec'` rung in migrate batch 4f.
+	prd: 'task-spec',
+	// a `spec` analyses through the SAME `task-spec` rung as the legacy `prd` key
+	// (spec IS the renamed parent-spec artifact).
+	spec: 'task-spec',
 	observation: 'triage-observation',
 };
 
@@ -136,7 +136,7 @@ const ANALYSE_RUNG_FOR_TYPE: Record<SidecarType, TickRungKind> = {
  *   - `needsAnswers` NOT true:
  *       - a sidecar present ⇒ INVARIANT 1 BROKEN (`sidecar-without-needsAnswers`)
  *         → `invariant-violation`. (`needsAnswers:false ⟺ no active sidecar`.)
- *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-task` / `task-prd` /
+ *       - no sidecar ⇒ ANALYSE: the per-type rung (`build-task` / `task-spec` /
  *         `triage-observation`).
  *   - `needsAnswers` true:
  *       - NO sidecar ⇒ `surface` (first-pass question generation — transitional).

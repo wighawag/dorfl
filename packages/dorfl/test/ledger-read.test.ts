@@ -125,14 +125,14 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['alpha', 'beta']);
-		expect(pool.prds[0]).toMatchObject({
+		expect(pool.specs.map((p) => p.slug)).toEqual(['alpha', 'beta']);
+		expect(pool.specs[0]).toMatchObject({
 			file: 'alpha.md',
 			slug: 'alpha',
 			humanOnly: true,
 			taskedAfter: [],
 		});
-		expect(pool.prds[1]).toMatchObject({
+		expect(pool.specs[1]).toMatchObject({
 			slug: 'beta',
 			needsAnswers: true,
 			taskedAfter: ['alpha'],
@@ -160,7 +160,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 			repoPath: join(root, 'repo'),
 		});
 		expect(pool).not.toBeInstanceOf(Promise);
-		expect(pool.prds).toEqual([]);
+		expect(pool.specs).toEqual([]);
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 
@@ -169,7 +169,7 @@ describe('ledger-read seam — PRD pool resolve method (the do-autopick PRD sour
 		const pool = currentLedgerRead.resolveSpecPool({
 			repoPath: join(root, 'repo'),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
+		expect(pool.specs.map((p) => p.slug)).toEqual(['no-slug']);
 	});
 });
 
@@ -430,14 +430,14 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['beta', 'gamma']);
-		expect(pool.prds[0]).toMatchObject({
+		expect(pool.specs.map((p) => p.slug)).toEqual(['beta', 'gamma']);
+		expect(pool.specs[0]).toMatchObject({
 			file: 'beta.md',
 			slug: 'beta',
 			needsAnswers: true,
 			taskedAfter: ['alpha'],
 		});
-		expect(pool.prds[1]).toMatchObject({slug: 'gamma', humanOnly: true});
+		expect(pool.specs[1]).toMatchObject({slug: 'gamma', humanOnly: true});
 		// Tasked-ness is RESIDENCE in prd-tasked/ (the folder is the source of truth).
 		expect(pool.taskedSlugs).toEqual(new Set(['alpha']));
 	});
@@ -451,7 +451,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.prds.map((p) => p.slug)).toEqual(['no-slug']);
+		expect(pool.specs.map((p) => p.slug)).toEqual(['no-slug']);
 	});
 
 	it('reads an absent work/prd as an empty pool (no throw)', async () => {
@@ -464,7 +464,7 @@ describe('ledger-read seam — mirror-ref PRD pool method (the mirror-side do-au
 			mirrorPath,
 			env: gitEnv(),
 		});
-		expect(pool.prds).toEqual([]);
+		expect(pool.specs).toEqual([]);
 		expect(pool.taskedSlugs).toEqual(new Set());
 	});
 });

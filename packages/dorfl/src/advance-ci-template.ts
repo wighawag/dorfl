@@ -137,14 +137,14 @@ export function validateAdvanceCiTemplate(
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
 	// task-only `jq` would render `DORFL_AUTO_TASK` dead on the hourly
 	// cron — a ready ungated PRD would never become a matrix leg. The `jq` must
-	// read `scan --json`'s taskable-PRD pool (`repos[].prds[]` + `cwd.repo.prds[]`)
+	// read `scan --json`'s taskable-SPEC pool (`repos[].specs[]` + `cwd.repo.specs[]`)
 	// and emit `prd:<slug>` legs alongside the `task:<slug>` legs.
-	require('propose-enumerates-taskable-prds', /"prd:" \+ \.slug/.test(text) &&
-		/\.prds\[\]/.test(
+	require('propose-enumerates-taskable-specs', /"prd:" \+ \.slug/.test(text) &&
+		/\.specs\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union taskable prds into the ' +
-		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].prds[]` " +
-		'+ `cwd.repo.prds[]` pools), so a ready ungated PRD becomes one auto-task ' +
+		), 'the propose-mode `enumerate` `jq` must union taskable specs into the ' +
+		"matrix as `prd:<slug>` legs (read from `scan --json`'s `repos[].specs[]` " +
+		'+ `cwd.repo.specs[]` pools), so a ready ungated SPEC becomes one auto-task ' +
 		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
 	require('propose-one-advance-per-item', /dorfl advance "?\$\{\{\s*matrix\./.test(

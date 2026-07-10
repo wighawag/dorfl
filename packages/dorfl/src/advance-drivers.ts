@@ -183,15 +183,15 @@ export async function performAdvanceAuto(
 	// `autoTask`). With `autoTask` off NO prd is selected — the task rung is
 	// never reached by the bare/`-n` selection.
 	const pool = read.resolveSpecPool({repoPath: cwd});
-	const prdCandidates: SpecCandidate[] = pool.prds.map((prd) => ({
+	const specCandidates: SpecCandidate[] = pool.specs.map((spec) => ({
 		repoPath: cwd,
-		slug: prd.slug,
-		humanOnly: prd.humanOnly,
-		needsAnswers: prd.needsAnswers,
-		taskedAfter: prd.taskedAfter,
+		slug: spec.slug,
+		humanOnly: spec.humanOnly,
+		needsAnswers: spec.needsAnswers,
+		taskedAfter: spec.taskedAfter,
 	}));
-	const eligiblePrds = taskableSpecs({
-		candidates: prdCandidates,
+	const eligibleSpecs = taskableSpecs({
+		candidates: specCandidates,
 		taskedSlugs: pool.taskedSlugs,
 		autoTask: options.config.autoTask,
 	});
@@ -214,7 +214,7 @@ export async function performAdvanceAuto(
 	const selected = selectPrioritised({
 		report,
 		caps: {maxParallel: ALL_ELIGIBLE, perRepoMax: ALL_ELIGIBLE},
-		prds: eligiblePrds,
+		specs: eligibleSpecs,
 		selectionOrder: options.config.selectionOrder,
 		lifecycle,
 		count,

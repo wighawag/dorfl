@@ -51,7 +51,7 @@ import {workItemRel} from './work-layout.js';
  * The READ-STABILITY backstop (the content-identity stale check that used to live
  * in the release, comparing the held `work/tasking/<slug>.md` blob against the
  * acquire-time snapshot) now lives at the integrate seam (`tasking.ts`
- * `heldPrdIsStale`, comparing `work/prds/ready/<slug>.md`) — relocated because the
+ * `heldSpecIsStale`, comparing `work/prds/ready/<slug>.md`) — relocated because the
  * completing transition, not the release, owns the commit. See
  * `work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`.
  *
@@ -159,23 +159,23 @@ async function runAcquire(
 
 	// Is the prd still lockable (present in work/prds/ready/ on the arbiter's main)?
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
-	const prd = workItemRel('specs-ready', `${slug}.md`);
-	const prdBlob = await gitSoft(
-		['rev-parse', `${arbiter}/main:${prd}`],
+	const spec = workItemRel('specs-ready', `${slug}.md`);
+	const specBlob = await gitSoft(
+		['rev-parse', `${arbiter}/main:${spec}`],
 		cwd,
 		env,
 	);
-	if (prdBlob.status !== 0) {
-		const message = `'${prd}' not found on ${arbiter}/main (no such prd, or it was already moved/tasked).`;
+	if (specBlob.status !== 0) {
+		const message = `'${spec}' not found on ${arbiter}/main (no such prd, or it was already moved/tasked).`;
 		note(message);
 		return {exitCode: 2, outcome: 'lost', message};
 	}
-	const lockedBlob = prdBlob.stdout.trim();
+	const lockedBlob = specBlob.stdout.trim();
 
 	// A dry-run takes no lock (it mutates nothing) but still reports the lockable
 	// snapshot it WOULD take.
 	if (dryRun) {
-		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${prd} present on ${arbiter}/main).`;
+		const message = `[dry-run] would acquire the tasking lock for '${slug}' (${spec} present on ${arbiter}/main).`;
 		note(message);
 		return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 	}
@@ -237,7 +237,7 @@ export interface ReleaseTaskingLockOptions {
 	/**
 	 * The git BLOB sha the lock TOOK ({@link AcquireTaskingLockResult.lockedBlob}).
 	 * RETAINED for API parity; the content-identity stale check now lives at the
-	 * integrate seam (`tasking.ts` `heldPrdIsStale`), which runs BEFORE the
+	 * integrate seam (`tasking.ts` `heldSpecIsStale`), which runs BEFORE the
 	 * completing commit. The release itself no longer reads the held body (there is
 	 * no `tasking/` marker), so it does not consult this.
 	 */

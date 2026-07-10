@@ -363,7 +363,7 @@ describe('runTaskReviewLoop — taskerLoopMax cap rejects via the sink', () => {
 			taskerLoopMax: 2,
 		});
 		expect(result.outcome).toBe('decomposition-unclear');
-		expect(result.prdQuestions).toEqual(['should this even be one PRD?']);
+		expect(result.specQuestions).toEqual(['should this even be one PRD?']);
 		// No uncertain tasks emitted on this outcome.
 		expect(result.uncertainTasks).toEqual([]);
 	});
