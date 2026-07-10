@@ -1,6 +1,13 @@
 {
 	"name": "dorfl",
 	"version": "0.1.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/wighawag/dorfl.git",
+		"directory": "packages/dorfl"
+	},
+	"homepage": "https://github.com/wighawag/dorfl#readme",
+	"bugs": "https://github.com/wighawag/dorfl/issues",
 	"publishConfig": {
 		"access": "public"
 	},
