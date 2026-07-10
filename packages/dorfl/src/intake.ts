@@ -45,7 +45,7 @@ import {
 	type IntakeMarkerKind,
 } from './intake-marker.js';
 import {triageIntake, type IntakeTriageDecision} from './intake-triage.js';
-import {renderTaskBody, renderPrdBody} from './buildable-body.js';
+import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 
 /**
  * **`intake <N>`** (prd `issue-intake`, task `intake-tracer-slice-outcome`): the
@@ -1697,7 +1697,7 @@ export function renderPrd(params: {
 	const frontmatter = lines.join('\n');
 	// As with `renderBacklogTask`: the drafted PRD body is wrapped VERBATIM; only
 	// the empty-body DEFAULT SCAFFOLD is sourced from the shared section skeleton
-	// owner (`renderPrdBody` with `solution` + `userStories`, prd
+	// owner (`renderSpecBody` with `solution` + `userStories`, prd
 	// `centralize-buildable-task-renderer-shared-by-intake-and-promotion` US #2),
 	// so intake's PRD fallback and promotion's PRD body cannot drift. `trimEnd()`
 	// drops the renderer's trailing blank line so intake's single trailing `\n`
@@ -1705,7 +1705,7 @@ export function renderPrd(params: {
 	const drafted =
 		body && body.trim() !== ''
 			? body.trim()
-			: renderPrdBody({
+			: renderSpecBody({
 					problemStatement: `Transformed from issue #${issueNumber}: ${title}`,
 					solution: '(to be detailed; this prd needs tasking via `do prd:`).',
 					userStories: `1. As a user, I want issue #${issueNumber} addressed.`,

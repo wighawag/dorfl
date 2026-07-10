@@ -3,7 +3,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fixtureFolderRel} from './helpers/gitRepo.js';
-import {isPrdComplete} from '../src/prd-complete.js';
+import {isSpecComplete} from '../src/spec-complete.js';
 
 let root: string;
 
@@ -29,14 +29,14 @@ function repoPath(): string {
 }
 
 beforeEach(() => {
-	root = mkdtempSync(join(tmpdir(), 'dorfl-prd-complete-'));
+	root = mkdtempSync(join(tmpdir(), 'dorfl-spec-complete-'));
 });
 
 afterEach(() => {
 	rmSync(root, {recursive: true, force: true});
 });
 
-describe('isPrdComplete — the read-only "is this PRD complete?" core query', () => {
+describe('isSpecComplete — the read-only "is this spec complete?" core query', () => {
 	it('NOT complete when NO task carries prd:<slug> (≥1 is required)', () => {
 		// A `work/` tree with tasks, but none link to this prd — even other prds'
 		// done tasks do not count.
@@ -47,7 +47,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		});
 		writeTask('backlog', 'standalone.md', {slug: 'standalone'});
 
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -62,7 +62,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		writeTask('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
 		writeTask('backlog', 'c.md', {slug: 'c', prd: 'issue-intake'});
 
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -77,7 +77,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		writeTask('in-progress', 'b.md', {slug: 'b', prd: 'issue-intake'});
 
 		expect(
-			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
 		).toBe(false);
 
 		// And the needs-attention case is likewise incomplete.
@@ -88,7 +88,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		writeTask('needs-attention', 'b.md', {slug: 'b', prd: 'issue-intake'});
 
 		expect(
-			isPrdComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
+			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
 		).toBe(false);
 	});
 
@@ -101,7 +101,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 			prd: 'other-prd',
 		});
 
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -114,7 +114,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 	it('COMPLETE with a single done task (≥1 is enough)', () => {
 		writeTask('done', 'only.md', {slug: 'only', prd: 'issue-intake'});
 
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -131,7 +131,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 		});
 		writeTask('done', 'filename-fallback.md', {prd: 'issue-intake'});
 
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});
@@ -145,7 +145,7 @@ describe('isPrdComplete — the read-only "is this PRD complete?" core query', (
 
 	it('reads cleanly with NO work/ folders present (no throw, NOT complete)', () => {
 		// An empty repo (no work/ tree at all) → no tasks → not complete.
-		const result = isPrdComplete({
+		const result = isSpecComplete({
 			repoPath: repoPath(),
 			slug: 'issue-intake',
 		});

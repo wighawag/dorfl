@@ -904,10 +904,11 @@ interface CloseMergedIssuesFlags {
 /**
  * Resolve a task-only command's slug argument through the §3a namespace guard
  * (`resolveTaskOnlyArg`): accept bare (= task) + `task:` (explicit alias),
- * REJECT `prd:` with a clear "operates on tasks, not prds" error. On rejection
- * it prints the error to stderr and exits 1 (the task-only commands never act
- * on a prd). An OMITTED slug (`start`/`complete`/`prompt` infer it from the
- * branch) passes through untouched.
+ * REJECT `spec:` with a clear "operates on tasks, not specs" error (and the
+ * legacy `prd:` with "operates on tasks, not prds", still accepted through the
+ * cutover). On rejection it prints the error to stderr and exits 1 (the task-only
+ * commands never act on a spec). An OMITTED slug (`start`/`complete`/`prompt`
+ * infer it from the branch) passes through untouched.
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
@@ -1963,7 +1964,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do prd:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then PRDS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do spec:<slug> (the tasking path; the legacy prd:<slug> is still accepted) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then SPECS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
 		)
 		// EXTENSIBLE argument grammar (the three do-* tasks grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -1972,7 +1973,7 @@ export function buildProgram(): Command {
 		// for the auto-pick form. `do` stays SEQUENTIAL (parallelism is `run`).
 		.argument(
 			'[slugs...]',
-			'the item(s) to do: bare (= the task), task:<slug>, or prd:<slug> (task the PRD). Zero args = auto-pick; multiple = do them in sequence.',
+			'the item(s) to do: bare (= the task), task:<slug>, or spec:<slug> (task the spec; the legacy prd:<slug> is still accepted). Zero args = auto-pick; multiple = do them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -2551,11 +2552,11 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance prd:<slug> (the PRD tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do prd:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (PRD advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung; the legacy prd:<slug> is still accepted) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
 		)
 		.argument(
 			'[slugs...]',
-			'the item(s) to advance: bare (= the task), task:<slug>, prd:<slug>, or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
+			'the item(s) to advance: bare (= the task), task:<slug>, spec:<slug> (the legacy prd:<slug> is still accepted), or obs:<slug> (an observation). Zero args = auto-pick one eligible; multiple = advance them in sequence.',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(

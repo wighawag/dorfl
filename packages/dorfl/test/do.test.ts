@@ -1783,6 +1783,38 @@ describe('do — slug resolution (§3a): bare / task: / prd: + collision', () =>
 		expect(agentRan).toBe(true);
 	});
 
+	it('do spec:<slug> ROUTES to the tasking path (the new canonical prefix, beside prd:)', async () => {
+		// MIGRATE step (prd `prd-to-spec-vocabulary-cutover-and-migration-command`):
+		// `resolveSlug('spec:<slug>')` returns `{namespace:'spec'}`, and the `do`
+		// dispatch now matches `spec` beside `prd`, so `do spec:<slug>` reaches the
+		// SAME tasking path `do prd:<slug>` does (the legacy prd: route is KEPT).
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		seedPrd(repo, 'someSpec');
+
+		let agentRan = false;
+		const result = await performDo({
+			arg: 'spec:someSpec',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			dorfl: ({cwd}) => {
+				agentRan = true;
+				const dir = join(cwd, 'work', 'tasks', 'backlog');
+				mkdirSync(dir, {recursive: true});
+				writeFileSync(
+					join(dir, 'someSpec-explicit.md'),
+					'---\nslug: someSpec-explicit\nspec: someSpec\n---\n\n## Prompt\n\n> x\n',
+				);
+				return {ok: true};
+			},
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('tasked');
+		expect(result.slug).toBe('someSpec');
+		expect(agentRan).toBe(true);
+	});
+
 	it('do prd:<slug> on an explicitly-named humanOnly PRD STILL refuses (the readiness axis binds, only the policy dropped)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedPrd(repo, 'somePrd', {humanOnly: true});
