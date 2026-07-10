@@ -1,5 +1,6 @@
 import {performDo, type DoOptions, type DoResult} from './do.js';
 import {scanRepoPaths} from './scan.js';
+import {heldTaskSlugs} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
@@ -105,6 +106,16 @@ export async function performDoAuto(
 	const cwd = options.cwd;
 	const count = options.count ?? 1;
 
+	// Held-slug subtraction (task
+	// `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`): read the
+	// coordination arbiter's held task-lock refs and pass them into `scanRepoPaths`
+	// so a held item (state `active`/`stuck`) does not enter the item pool NOR the
+	// lifecycle surface/apply pools. `heldTaskSlugs` is the GRACEFUL variant (empty
+	// set on any read fault): the follow-on claim CAS is still the load-bearing
+	// safety net locally — this subtraction is a courtesy that avoids selecting an
+	// item that would immediately lose its claim race.
+	const heldSlugs = await heldTaskSlugs(cwd, options.arbiter, options.env);
+
 	// Pool 1 — eligible TASKS via the EXISTING scan/select path (task-only).
 	// Thread `override` so the per-machine override is applied per repo (the
 	// inner `resolveRepoConfig` re-applies it AFTER the committed file, restoring
@@ -112,7 +123,7 @@ export async function performDoAuto(
 	const report = scanRepoPaths(
 		[cwd],
 		options.config,
-		new Set(),
+		heldSlugs,
 		options.override,
 	);
 

@@ -10,6 +10,7 @@ import {
 	TREELESS_RUNGS,
 } from './advance-treeless-publish.js';
 import {scanRepoPaths} from './scan.js';
+import {heldTaskSlugs} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
@@ -168,6 +169,15 @@ export async function performAdvanceAuto(
 	const cwd = options.cwd;
 	const count = options.count ?? 1;
 
+	// Held-slug subtraction (task
+	// `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`): read the
+	// coordination arbiter's held task-lock refs and pass them into `scanRepoPaths`
+	// so a held item (`active`/`stuck`) is not selected into the build pool NOR the
+	// lifecycle surface/apply pools — the same subtraction the CI enumerate path
+	// runs. `heldTaskSlugs` is the GRACEFUL variant (empty set on any read fault):
+	// the follow-on claim CAS is still the load-bearing safety net locally.
+	const heldSlugs = await heldTaskSlugs(cwd, options.arbiter);
+
 	// Pool 1 — eligible TASKS via the EXISTING scan/select path. `scoreItems`
 	// inside `scanRepoPaths` gates eligibility on `autoBuild` (the build gate), so
 	// with `autoBuild` off NO task is selected — the build rung is never reached
@@ -175,7 +185,7 @@ export async function performAdvanceAuto(
 	const report = scanRepoPaths(
 		[cwd],
 		options.config,
-		new Set(),
+		heldSlugs,
 		options.override,
 	);
 
@@ -206,6 +216,9 @@ export async function performAdvanceAuto(
 		repoPath: cwd,
 		read,
 		gates: options.lifecycleGates,
+		// Subtract held task slugs from the triage/surface/apply candidate inputs,
+		// symmetric to Pool 1's `scoreItems` subtraction above.
+		heldSlugs,
 	});
 
 	// Order across the (up to) FIVE pools per the resolved `selectionOrder` (apply

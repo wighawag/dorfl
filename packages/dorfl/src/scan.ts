@@ -543,13 +543,22 @@ export function scanRepoPaths(
 	repoPaths: string[],
 	config: Config,
 	/**
-	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/ready/`) (spec
-	 * `ledger-status-per-item-lock-refs` US #15). This is a WORKING-TREE, OFFLINE
-	 * scan (it has no arbiter handle to fetch the lock refs from — that is the
-	 * registry `scan`'s job), so the held set is supplied by the in-place CALLER
-	 * (which knows its arbiter) and DEFAULTS to empty: with the body still moving to
-	 * `in-progress/` on claim the subtraction is redundant-but-harmless, so omitting
-	 * it preserves the offline read while keeping the seam in place for task #9.
+	 * The HELD-SLUG set to SUBTRACT from each repo's pool (`tasks/ready/`) AND from
+	 * the in-place lifecycle triage/surface/apply pools (spec
+	 * `ledger-status-per-item-lock-refs` US #15; task
+	 * `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`). Passed
+	 * BOTH to {@link scoreItems} AND to {@link gatherLifecycleInPlace}, so a slug
+	 * whose per-item lock is currently held (state `active`/`stuck`) never leaks
+	 * into the propose matrix via EITHER the eligible-task pool OR a lifecycle
+	 * leg — CI would otherwise enumerate a `task:<slug>` surface/apply leg that
+	 * always loses the claim CAS.
+	 *
+	 * This is a WORKING-TREE, OFFLINE scan (it has no arbiter handle to fetch the
+	 * lock refs from — that is the registry `scan`'s job), so the held set is
+	 * supplied by the in-place CALLER (which knows its arbiter, e.g.
+	 * `resolveCwdSection` reads it fail-CLOSED via `heldTaskSlugsStrict`) and
+	 * DEFAULTS to empty. An empty default preserves the offline read while keeping
+	 * the seam in place.
 	 */
 	heldSlugs: Set<string> = new Set(),
 	/**
@@ -590,6 +599,11 @@ export function scanRepoPaths(
 					surfaceBlockers: resolved.surfaceBlockers,
 					surfaceStaging: resolved.surfaceStaging,
 				}),
+				// Held-slug subtraction on the LIFECYCLE side (task
+				// `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`):
+				// symmetric to the `scoreItems` subtraction above, so a held task never
+				// leaks into a surface/apply leg either.
+				heldSlugs,
 			}),
 		);
 		// The one-slug-one-folder LINT over THIS working tree's `work/` ledger.
