@@ -808,7 +808,7 @@ async function runOneItem(
 				repoResolved: resolvePromptGuidance(config),
 				taskContent: readFileSync(task.path, 'utf8'),
 			});
-			prompt = buildAgentPrompt(task.slug, task.prd, task.taskPrompt, {
+			prompt = buildAgentPrompt(task.slug, task.spec, task.taskPrompt, {
 				cwd: tree.dir,
 				continueContext,
 				promptGuidance: itemGuidance,

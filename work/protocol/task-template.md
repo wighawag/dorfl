@@ -1,12 +1,12 @@
 ---
 title: <Human Readable Title>
 slug: <url-safe-slug>
-prd: <source-prd-slug> # slug of the work/prds/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
+spec: <source-spec-slug> # slug of the work/specs/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []). (The legacy `prd:` key is still READ as back-compat, but author `spec:`.)
 # humanOnly: true     # gate axis 1 (DECIDED, NARROW): NEVER-for-agents BY NATURE (secrets/release/security). Survives even in the pool work/tasks/ready/. OMIT otherwise — "review this before the agent builds" is the POSITION's job (the task is BIRTHED in work/tasks/backlog/), NOT humanOnly's.
 # needsAnswers: true  # gate axis 2 (DISCOVERED): open questions block autonomous work. OMIT otherwise. List them in the body.
-# promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for THIS task, regardless of the repo's resolved policy. OMIT to inherit (prd, else repo). NEVER an acceptance criterion — `verify` still decides pass/fail.
+# promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for THIS task, regardless of the repo's resolved policy. OMIT to inherit (spec, else repo). NEVER an acceptance criterion — `verify` still decides pass/fail.
 blockedBy: [] # slugs that must reach work/tasks/done/ first; [] = startable now
-covers: [] # optional: user-story numbers within `prd` this task covers
+covers: [] # optional: user-story numbers within `spec` this task covers
 ---
 
 <!-- open-questions -->

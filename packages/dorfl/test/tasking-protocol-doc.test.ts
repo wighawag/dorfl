@@ -119,7 +119,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 		'---',
 		'title: A canonical task',
 		'slug: canonical-task',
-		'prd: example-prd',
+		'spec: example-spec',
 		'blockedBy: [other-task]',
 		'covers: [1, 2]',
 		'needsAnswers: true',
@@ -146,7 +146,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 	it('the frontmatter parser accepts the canonical fixture (every field reads back as the doc describes)', () => {
 		const fm = parseFrontmatter(fixture);
 		expect(fm.slug).toBe('canonical-task');
-		expect(fm.prd).toBe('example-prd');
+		expect(fm.spec).toBe('example-spec');
 		expect(fm.blockedBy).toEqual(['other-task']);
 		expect(fm.needsAnswers).toBe(true);
 		expect(fm.humanOnly).toBeUndefined();

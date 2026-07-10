@@ -844,11 +844,21 @@ function printPrdToSpecReport(result: PrdToSpecResult): void {
 	);
 
 	if (result.resync) {
-		const changed = result.resync.docs.filter((d) => !d.unchanged).length;
+		const changed = result.resync.docs.filter(
+			(d) => !d.unchanged && !d.skipped,
+		).length;
 		console.log(
 			`Contract re-sync: ${verb} sync ${result.resync.docs.length} protocol ` +
 				`doc(s) (${changed} changed) + bump ${result.resync.versionPath}.`,
 		);
+		// Surface any doc whose SOURCE could not be resolved LOUDLY: it was NOT
+		// copied, so the contract in the target repo is incomplete for that doc.
+		for (const skipped of result.resync.docs.filter((d) => d.skipped)) {
+			console.warn(
+				`  !! ${skipped.name}: SOURCE could not be resolved — NOT copied ` +
+					`(the contract doc is missing/unchanged in the target repo).`,
+			);
+		}
 	}
 	console.log(`Folders: ${verb} move ${result.folderMoves.length} folder(s).`);
 	for (const m of result.folderMoves) {

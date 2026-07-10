@@ -142,20 +142,20 @@ describe('extractPromptSection', () => {
 });
 
 describe('canonical wrapper — read from the contract, not a divergent copy', () => {
-	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<prd> substituted (default-OFF nudge applied)', () => {
+	it('the emitted wrapper IS the CLAIM-PROTOCOL template with <slug>/<spec> substituted (default-OFF nudge applied)', () => {
 		const protocol = readFileSync(CLAIM_PROTOCOL, 'utf8');
 		const template = extractCanonicalWrapperTemplate(protocol);
 
 		// Sanity: the canonical template carries the placeholders we substitute.
 		expect(template).toContain('<slug>');
 
-		const emitted = wrapper('example', 'my-prd');
+		const emitted = wrapper('example', 'my-spec');
 		// With the nudge OFF (the default), the conditional-fragment transform
 		// strips the markers + the IF-branch and keeps the historic ELSE text
 		// (BYTE-IDENTITY guard — see the `promptGuidance.testFirst` seam tests).
 		const expected = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<prd>/g, 'my-prd');
+			.replace(/<spec>/g, 'my-spec');
 		expect(emitted).toBe(expected);
 	});
 
@@ -168,10 +168,10 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		expect(emitted).not.toContain('<slug>');
 	});
 
-	it('substitutes the source prd path (work/specs/ready/<prd>.md)', () => {
+	it('substitutes the source spec path (work/specs/ready/<spec>.md)', () => {
 		const emitted = wrapper('example', 'dorfl');
 		expect(emitted).toContain('dorfl');
-		expect(emitted).not.toContain('<prd>');
+		expect(emitted).not.toContain('<spec>');
 	});
 
 	it('resolveProtocolDoc finds the bundled contract by default', () => {
@@ -333,10 +333,10 @@ describe('promptGuidance.testFirst nudge — the conditional-fragment seam', () 
 		const template = extractCanonicalWrapperTemplate(protocol);
 		const baseline = applyPromptGuidance(template, {testFirst: false})
 			.replace(/<slug>/g, 'example')
-			.replace(/<prd>/g, 'my-prd');
-		expect(wrapper('example', 'my-prd')).toBe(baseline);
+			.replace(/<spec>/g, 'my-spec');
+		expect(wrapper('example', 'my-spec')).toBe(baseline);
 		expect(
-			wrapper('example', 'my-prd', {promptGuidance: {testFirst: false}}),
+			wrapper('example', 'my-spec', {promptGuidance: {testFirst: false}}),
 		).toBe(baseline);
 		// And the byte-identity guard: with the nudge OFF, the strengthened text
 		// must be absent and the soft historic text must be present (the soft line
@@ -656,7 +656,7 @@ describe('resolveTask — in-progress over backlog', () => {
 		const task = resolveTask(scratch.root, 'foo');
 		expect(task.folder).toBe('in-progress');
 		expect(task.taskPrompt).toContain('in-progress body');
-		expect(task.prd).toBe('my-prd');
+		expect(task.spec).toBe('my-prd');
 	});
 
 	it('falls back to work/tasks/ready/ when not in-progress', () => {
