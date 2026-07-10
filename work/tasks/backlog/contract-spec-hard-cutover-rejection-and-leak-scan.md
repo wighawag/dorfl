@@ -2,7 +2,7 @@
 title: prd→spec CONTRACT phase — flip hard-cutover rejection + add forward/reverse leak scan
 slug: contract-spec-hard-cutover-rejection-and-leak-scan
 prd: prd-to-spec-vocabulary-cutover-and-migration-command
-blockedBy: [rename-spec-protocol-contract-and-to-spec-skill, rename-spec-namespace-emit-sites-and-local-unions, rename-spec-residual-exported-symbols-and-prdslandIn-plumbing, rename-spec-intake-cli-flags-and-residual-prd-identifiers]
+blockedBy: [rename-spec-protocol-contract-and-to-spec-skill, rename-spec-namespace-emit-sites-and-local-unions, rename-spec-residual-exported-symbols-and-prdslandIn-plumbing, rename-spec-intake-cli-flags-and-residual-prd-identifiers, rename-spec-intake-verdict-outcome-and-content-keys]
 covers: [1, 8]
 ---
 
@@ -45,7 +45,7 @@ The CONTRACT phase of the wide refactor (`TASKING-PROTOCOL.md` §3a): now that e
 >
 > Done means: the CODE `prd` aliases removed (SlugNamespace/PRD_PREFIX, SidecarType/item-lock, IntakeArtifactType/Outcome, repo-config `prdsLandIn`/`--prds-land-in`), the dead token rejected, both scans exhaustive + green, full gate green. This task is the trust signal that the source-part cutover is complete. NOT removed here: the two DATA-territory readers the COMMAND owns — the sidecar `prd-<slug>.md` fallback (#1) and the `parseFrontmatter` `prd:` key reader + `Frontmatter.prd` field (#2). dorfl's ledger has 199 live `prd:` fields / 0 `spec:`, so removing the frontmatter reader would break self-hosting + red the gate; per ADR §7e that conversion is the command's.
 >
-> FIRST check drift: confirm batches 1–5 + 4d/4e/4f all landed (this asserts "no caller PRODUCES the old form" — if a code producer/symbol is missing, the forward scan will rightly fail and you should route the missing batch, not weaken the scan). But the two DATA-territory readers (sidecar `prd-<slug>.md` fallback, `parseFrontmatter` `prd:` key) are EXPECTED survivors on the allow-list — do NOT remove them (they read dorfl's not-yet-converted on-disk data; the command removes them). If you find the `prd:` frontmatter reader coupled to live `fm.prd`-asserting tests, that is the carve-out working as designed, not a leak.
+> FIRST check drift: confirm batches 1–5 + 4d/4e/4f/4g all landed (this asserts "no caller PRODUCES the old form" — if a code producer/symbol is missing, the forward scan will rightly fail and you should route the missing batch, not weaken the scan). 4g flipped the intake/decision VERDICT contract (the `prd` outcome token + the `prd*` content keys `prdSlug`/`prdTitle`/`prdBody`/`prdHumanOnly`/`prdNeedsAnswers`) onto `spec`, so removing the `'prd'` `IntakeOutcome`/`IntakeArtifactType` member here compiles + routes clean (the prompt now emits `spec`). But the two DATA-territory readers (sidecar `prd-<slug>.md` fallback, `parseFrontmatter` `prd:` key) are EXPECTED survivors on the allow-list — do NOT remove them (they read dorfl's not-yet-converted on-disk data; the command removes them). If you find the `prd:` frontmatter reader coupled to live `fm.prd`-asserting tests, that is the carve-out working as designed, not a leak.
 
 ## Requeue 2026-07-10
 
