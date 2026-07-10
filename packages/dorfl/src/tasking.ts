@@ -692,7 +692,7 @@ export async function performTask(
 			// BUILD path's body threading (`do.ts` — `body: agent.output`). The tasker
 			// agent produces no `LaunchResult.output` we can carry, but the slice-SET
 			// itself is a summary-worthy artifact: the emitted task slugs+titles, their
-			// coverage of the prd's user stories, the dependency graph (keystone +
+			// coverage of the spec's user stories, the dependency graph (keystone +
 			// blockedBy edges), and any `needsAnswers` open questions the tasker review
 			// loop flagged. Compose it here and thread it into the shared core as `body`
 			// so the propose-mode PR carries the summary instead of degrading to
@@ -1465,9 +1465,9 @@ function collectEmittedTasks(
  * {@link composeProposeBody} then wraps this prose with its runner-owned header.
  *
  * Sections (all suppressed when empty, so the body stays honest):
- *   1. A lead line naming the source prd + emitted task count.
+ *   1. A lead line naming the source spec + emitted task count.
  *   2. **Tasks** — one bullet per task: `slug — title`, plus `covers:` (which
- *      prd user stories it maps to), `blockedBy:`, and `needsAnswers` if set.
+ *      spec user stories it maps to), `blockedBy:`, and `needsAnswers` if set.
  *   3. **Dependency graph** — the KEYSTONE(S) (tasks whose `blockedBy` names no
  *      other task in this set, so they land first) and the `blockedBy` edges.
  *   4. **Needs answers** — any open questions the tasker review→edit loop
@@ -1479,7 +1479,7 @@ function collectEmittedTasks(
  * path's absent-body behaviour).
  */
 export function composeTaskingProposeBody(
-	prdSlug: string,
+	specSlug: string,
 	emitTasks: Record<string, string>,
 ): string | undefined {
 	const entries = Object.entries(emitTasks);
@@ -1493,7 +1493,7 @@ export function composeTaskingProposeBody(
 	const lines: string[] = [];
 	const n = tasks.length;
 	lines.push(
-		`Auto-tasked \`${prdSlug}\` into ${n} backlog task${n === 1 ? '' : 's'}.`,
+		`Auto-tasked \`${specSlug}\` into ${n} backlog task${n === 1 ? '' : 's'}.`,
 	);
 	lines.push('');
 	lines.push('## Tasks');
