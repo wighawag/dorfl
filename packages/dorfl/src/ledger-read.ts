@@ -301,7 +301,7 @@ export interface LedgerReadStrategy {
 	 *
 	 * This is the FIRST spec read path in the seam: `ledger-read.ts`/`scan.ts` read
 	 * only `backlog`/`done`, NEVER `work/specs/ready/`. It is added here
-	 * so the §3a slug-namespace resolver, and later the auto-tasking / `do prd:` work,
+	 * so the §3a slug-namespace resolver, and later the auto-tasking / `do spec:` work,
 	 * share ONE spec read path rather than each growing a bespoke scan. Synchronous
 	 * and OFFLINE (a working-tree read), like {@link resolveLocalState}.
 	 */

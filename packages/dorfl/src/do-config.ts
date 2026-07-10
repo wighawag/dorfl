@@ -130,7 +130,7 @@ export function doFlagOverrides(
 	if (integration !== undefined) {
 		// An explicit `--merge`/`--propose` flag ALWAYS wins for the transition this
 		// command runs. `do` runs EITHER the build transition (a task) OR the tasking
-		// transition (a `do prd:`) per invocation, and the typed flag is
+		// transition (a `do spec:`) per invocation, and the typed flag is
 		// transition-AGNOSTIC, so it must override BOTH the build mode (`integration`)
 		// AND the tasking mode (`taskingIntegration`). Setting both at the top of the
 		// precedence chain means a `--propose` on a `taskingIntegration:'merge'` repo

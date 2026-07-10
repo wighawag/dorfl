@@ -37,15 +37,20 @@ import {fileURLToPath} from 'node:url';
  *
  * # THE PRESERVE ALLOW-LIST (concrete, each class JUSTIFIED)
  *
- * Mirrors the WORD scan's allow-list (the live CODE back-compat aliases are the
- * SAME published survivors), plus the migration ENGINE's own data territory:
+ * After the HARD CUTOVER (task
+ * `hard-cutover-remove-last-prd-back-compat-key-and-dead-verb`) there is NO
+ * `prd:` field/verb back-compat alias to exempt: the `parseFrontmatter` `prd:`
+ * KEY read is GONE and the `do prd:`/`advance prd:` verb refs are flipped to
+ * `spec`. So a stray `prd:` field-key or `do prd:` verb in src prose OUTSIDE the
+ * migration command + provenance allow-list is now a LEAK the scan FAILS on. The
+ * only legitimate `prd`/`prd:` survivors are:
  *
- *   1. **The live CODE back-compat aliases** — the `prd:` frontmatter-FIELD /
- *      `do prd:` / `advance prd:` VERB alias (a `prd:`-prefixed token), and the
- *      inert NAMESPACE forms `refs/dorfl/lock/prd-<slug>` / `work/prd-<slug>`
- *      (branch) / `prd-<slug>` (lock/sidecar) / `prd-*` (a ref glob). The code
- *      keeps reading/dispatching them, so the prose that documents them keeps
- *      naming them.
+ *   1. **The inert NAMESPACE / lock-ref forms** — `refs/dorfl/lock/prd-<slug>` /
+ *      `work/prd-<slug>` (branch) / `prd-<slug>` (lock/sidecar) / `prd-*` (a ref
+ *      glob): the `prd-`-hyphen constructs the tooling still writes/reads on-disk
+ *      for un-migrated data (the file-path DATA alias the migration command
+ *      converts, NOT the `prd:` field/verb). These are `prd-<…>` HEAD-of-hyphen
+ *      forms, never the bare word or a `prd:` prefix.
  *   2. **camelCase / PascalCase / snake_case historical API names** — a
  *      `renderPrdBody` / `prdTitle` / `prd_flag` mention in a comment is the NAME
  *      of a (possibly renamed) symbol. Covered by the word-boundary rule (a
@@ -145,9 +150,9 @@ function isAllowedWordHit(line: string, idx: number): boolean {
 	// camelCase / PascalCase / snake_case → not a standalone word (historical API
 	// names like renderPrdBody, prdTitle, prd_flag, prdsLandIn).
 	if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) return true;
-	// The `prd:` verb/field back-compat alias (`do prd:`, `advance prd:`,
-	// `prd:<slug>`, a `prd:` field mention).
-	if (after === ':') return true;
+	// HARD CUTOVER: a `prd:`-prefixed token is NO LONGER exempt — the `prd:`
+	// field-key read is gone and the `do prd:`/`advance prd:` verb refs are flipped
+	// to `spec`, so a stray `prd:` in prose is a leak (fall through to the leak).
 	// The NAMESPACE / legacy-folder forms: `prd-<…>` (lock/sidecar/branch glob),
 	// `prd/` (legacy flat folder). Only a `prd` that is the HEAD of a
 	// hyphen/slash construct — the bare word `prd` never survives here.
@@ -287,20 +292,19 @@ const PRDS_FOLDER =
 
 /**
  * Is this STRING-literal's WHOLE content a CODE-VALUE alias token the code
- * legitimately matches/dispatches (NOT prose)? The published back-compat aliases
- * are string LITERALS: the `'prd'` namespace/key value (`key === 'prd'`, `case
- * 'prd'`, `explicit: 'prd'`, `from: 'prd'`), a `'prd:'` prefix token, a
- * `'prd-<…>'` / `'work/prd-<…>'` ref, a `'prd-*'` glob. These are the identifier
- * scan's territory (a whole-literal code token), so this PROSE scan must NOT flag
- * them. The distinction from a prose STRING is decisive: a prose string CONTAINS
- * `prd` as a word amid other text; a code-value literal IS the token in its
- * entirety.
+ * legitimately matches (NOT prose)? After the HARD CUTOVER the `'prd'` /
+ * `'prd:'` field/verb value tokens are GONE (no `key === 'prd'`, no `case 'prd'`,
+ * no `do prd:` dispatch), so they are NO LONGER exempt — the surviving whole-value
+ * aliases are the inert `prd-<…>` NAMESPACE / lock-ref forms the tooling still
+ * reads on-disk for un-migrated data: a `'prd-<…>'` / `'work/prd-<…>'` ref, a
+ * `'prd-*'` glob. These are the identifier scan's territory (a whole-literal code
+ * token), so this PROSE scan must NOT flag them. The distinction from a prose
+ * STRING is decisive: a prose string CONTAINS `prd` as a word amid other text; a
+ * code-value literal IS the token in its entirety.
  */
 function isWholeAliasLiteral(value: string): boolean {
 	const v = value.trim();
 	return (
-		v === 'prd' ||
-		v === 'prd:' ||
 		/^prd-(?:<|\$\{|\*|tasked|slug|name)/.test(v) ||
 		/^work\/prd-/.test(v) ||
 		/^refs\/dorfl\/lock\/prd-/.test(v) ||
@@ -405,10 +409,13 @@ describe('prd → spec src PROSE + runtime-string leak scan', () => {
 		expect(badLeaks.some((l) => l.token === 'prd')).toBe(true);
 		expect(badLeaks.some((l) => /prds\//.test(l.token))).toBe(true);
 
-		// The PRESERVE survivors must NOT flag.
+		// The PRESERVE survivors must NOT flag. (A backticked `prd:` / `do prd:`
+		// TOKEN reference is stripped by the inline-code lens — preserve #6 — so it is
+		// not a WORD leak even after the hard cutover; only a NON-backticked `prd:` in
+		// prose leaks. See the hard-cutover self-check below.)
 		const good = [
-			'// the legacy `prd:` frontmatter key is still read (`do prd:` dispatch)',
-			'// dispatch a `do prd:<slug>` tasking run; ref glob `prd-*`',
+			'// a `prd:`-token reference in backticks is stripped (preserve #6)',
+			'// dispatch a `do spec:<slug>` tasking run; ref glob `prd-*`',
 			'// the `renderPrdBody` symbol / `prdTitle` field / `prdsLandIn` key',
 			'// inert lock-ref `refs/dorfl/lock/prd-<slug>`; branch `work/prd-<slug>`',
 			'// migration map: `work/prd/` -> `work/specs/ready/`; `pre-prd/` legacy',
@@ -419,6 +426,20 @@ describe('prd → spec src PROSE + runtime-string leak scan', () => {
 		].join('\n');
 		expect(fileLeaks('src/good.ts', good)).toEqual([]);
 
+		// HARD CUTOVER: the `prd:` field/verb alias is NO LONGER exempt. A NON-backtick
+		// `prd:` field key or `do prd:` verb in prose is now a LEAK (the field read is
+		// gone, the verb refs are flipped to `spec`).
+		expect(
+			fileLeaks('src/hc.ts', '// the prd: frontmatter key is read here').some(
+				(l) => l.token === 'prd',
+			),
+		).toBe(true);
+		expect(
+			fileLeaks('src/hc.ts', '// dispatch a do prd:<slug> tasking run').some(
+				(l) => l.token === 'prd',
+			),
+		).toBe(true);
+
 		// A provenance-word attribution whose SLUG has no prd (`runner-in-ci`) is a
 		// leak on the WORD `PRD` (it must flip to spec; the slug is untouched).
 		expect(
@@ -427,13 +448,17 @@ describe('prd → spec src PROSE + runtime-string leak scan', () => {
 			),
 		).toBe(true);
 
-		// A whole-string-literal code-value alias (`'prd'`, `case 'prd'`) is the
-		// identifier scan's territory, NOT prose — must NOT flag here.
+		// HARD CUTOVER: the whole-string `'prd'` field/verb VALUE alias is GONE (no
+		// `key === 'prd'`, no `case 'prd'` dispatch), so a whole-`'prd'` literal is NO
+		// LONGER exempt — it flags. Only the inert `'prd-<…>'` NAMESPACE / lock-ref
+		// forms the tooling still reads on-disk survive.
 		expect(
-			fileLeaks('src/fm.ts', "if (key === 'spec' || key === 'prd') {}"),
-		).toEqual([]);
+			fileLeaks('src/fm.ts', "if (key === 'prd') {}").some(
+				(l) => l.token === 'prd',
+			),
+		).toBe(true);
 		expect(
-			fileLeaks('src/n.ts', "switchToWorkBranch(cwd, 'prd', slug);"),
+			fileLeaks('src/n.ts', "switchToWorkBranch(cwd, 'prd-<slug>', slug);"),
 		).toEqual([]);
 
 		// The migration engine file is exempt WHOLE.

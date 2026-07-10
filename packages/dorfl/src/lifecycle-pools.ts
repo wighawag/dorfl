@@ -172,7 +172,7 @@ export interface LifecyclePools {
  * Build the three lifecycle sub-pools from the raw candidates + the gates, PURE.
  * Each selected item carries the lifecycle `namespace` discriminator so the
  * driver's per-item dispatch can map it to the right TICK arg (observation \u2192
- * `obs:<slug>`; a blocked task/spec \u2192 `task:`/`prd:<slug>`, which the tick then
+ * `obs:<slug>`; a blocked task/spec \u2192 `task:`/`spec:<slug>`, which the tick then
  * classifies into surface/apply/no-op). This unit decides WHICH sub-pool each item
  * belongs to (and whether its gate lets it through); the TICK re-classifies and
  * runs the actual rung (the classifier + rung bodies are unchanged).

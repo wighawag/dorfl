@@ -341,7 +341,7 @@ export interface Config {
 	integration: IntegrationMode;
 	/**
 	 * **Per-TRANSITION override for the spec→tasks (TASKING) transition only.** When
-	 * set, the tasking transition (a `do prd:<slug>` run: emit `work/tasks/backlog/*.md` +
+	 * set, the tasking transition (a `do spec:<slug>` run: emit `work/tasks/backlog/*.md` +
 	 * the `work/specs/ready/ → work/specs/tasked/` lifecycle move) integrates with THIS
 	 * mode instead of the flat {@link integration}; the task-BUILD transition is
 	 * unaffected (it always reads {@link integration}). UNSET (the default) ⇒ tasking
@@ -519,7 +519,7 @@ export interface Config {
 	reviewMaxRounds: number;
 	/**
 	 * **The tasker IMPROVER loop on/off toggle** (`--tasker-loop` /
-	 * `--no-tasker-loop`). On the `do prd:<slug>` tasking path the improver loop is
+	 * `--no-tasker-loop`). On the `do spec:<slug>` tasking path the improver loop is
 	 * the task path's quality engine (auto-tasking has no `verify` floor), so it is
 	 * ON by default; setting this false gates wiring the loop seam (the candidate
 	 * tasks land as-is). Resolved per-repo like `integration`: flag
@@ -530,7 +530,7 @@ export interface Config {
 	/**
 	 * **The tasker IMPROVER loop's convergence cap** (`slicer-review-edit-loop`,
 	 * GATES spec `work/specs/tasked/review.md` RESOLVED DESIGN — Shape 2 / insertion point
-	 * A). On the `do prd:<slug>` tasking path, AFTER the agent produces candidate
+	 * A). On the `do spec:<slug>` tasking path, AFTER the agent produces candidate
 	 * tasks the loop runs the `review` SKILL, APPLIES its edits, and re-reviews
 	 * until a pass finds no NEW blocking issue (the natural terminator).
 	 * `taskerLoopMax` is the HARD CAP on the in-context review passes (N) so the

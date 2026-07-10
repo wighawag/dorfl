@@ -37,13 +37,13 @@ afterEach(() => {
 });
 
 describe('isSpecComplete — the read-only "is this spec complete?" core query', () => {
-	it('NOT complete when NO task carries prd:<slug> (≥1 is required)', () => {
-		// A `work/` tree with tasks, but none link to this prd — even other prds'
+	it('NOT complete when NO task carries spec:<slug> (≥1 is required)', () => {
+		// A `work/` tree with tasks, but none link to this spec — even other specs'
 		// done tasks do not count.
 		writeTask('done', 'unrelated-done.md', {slug: 'unrelated-done'});
-		writeTask('done', 'other-prd.md', {
-			slug: 'other-prd',
-			prd: 'some-other-prd',
+		writeTask('done', 'other-spec.md', {
+			slug: 'other-spec',
+			spec: 'some-other-spec',
 		});
 		writeTask('backlog', 'standalone.md', {slug: 'standalone'});
 
@@ -56,11 +56,11 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 		expect(result.tasks).toEqual([]);
 	});
 
-	it('NOT complete when ≥1 prd:<slug> task exists but some are NOT in work/tasks/done/', () => {
-		// Three tasks link the prd; two are done, one is still in backlog.
-		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeTask('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
-		writeTask('backlog', 'c.md', {slug: 'c', prd: 'issue-intake'});
+	it('NOT complete when ≥1 spec:<slug> task exists but some are NOT in work/tasks/done/', () => {
+		// Three tasks link the spec; two are done, one is still in backlog.
+		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', spec: 'issue-intake'});
+		writeTask('backlog', 'c.md', {slug: 'c', spec: 'issue-intake'});
 
 		const result = isSpecComplete({
 			repoPath: repoPath(),
@@ -73,8 +73,8 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 	});
 
 	it('NOT complete when a matching task is in in-progress or needs-attention (not done)', () => {
-		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeTask('in-progress', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('in-progress', 'b.md', {slug: 'b', spec: 'issue-intake'});
 
 		expect(
 			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
@@ -85,20 +85,20 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 			recursive: true,
 			force: true,
 		});
-		writeTask('needs-attention', 'b.md', {slug: 'b', prd: 'issue-intake'});
+		writeTask('needs-attention', 'b.md', {slug: 'b', spec: 'issue-intake'});
 
 		expect(
 			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
 		).toBe(false);
 	});
 
-	it('COMPLETE when ≥1 prd:<slug> task exists and ALL are in work/tasks/done/', () => {
-		writeTask('done', 'a.md', {slug: 'a', prd: 'issue-intake'});
-		writeTask('done', 'b.md', {slug: 'b', prd: 'issue-intake'});
-		// An unrelated, not-done task for a different prd must not block completion.
+	it('COMPLETE when ≥1 spec:<slug> task exists and ALL are in work/tasks/done/', () => {
+		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('done', 'b.md', {slug: 'b', spec: 'issue-intake'});
+		// An unrelated, not-done task for a different spec must not block completion.
 		writeTask('backlog', 'elsewhere.md', {
 			slug: 'elsewhere',
-			prd: 'other-prd',
+			spec: 'other-spec',
 		});
 
 		const result = isSpecComplete({
@@ -112,7 +112,7 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 	});
 
 	it('COMPLETE with a single done task (≥1 is enough)', () => {
-		writeTask('done', 'only.md', {slug: 'only', prd: 'issue-intake'});
+		writeTask('done', 'only.md', {slug: 'only', spec: 'issue-intake'});
 
 		const result = isSpecComplete({
 			repoPath: repoPath(),
@@ -123,13 +123,13 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 		expect(result.tasks).toHaveLength(1);
 	});
 
-	it('matches on the parsed prd: field — resolves task slug from frontmatter, falling back to filename', () => {
+	it('matches on the parsed spec: field — resolves task slug from frontmatter, falling back to filename', () => {
 		// Frontmatter slug wins; filename fallback when no slug.
 		writeTask('done', 'on-disk-name.md', {
 			slug: 'real-slug',
-			prd: 'issue-intake',
+			spec: 'issue-intake',
 		});
-		writeTask('done', 'filename-fallback.md', {prd: 'issue-intake'});
+		writeTask('done', 'filename-fallback.md', {spec: 'issue-intake'});
 
 		const result = isSpecComplete({
 			repoPath: repoPath(),

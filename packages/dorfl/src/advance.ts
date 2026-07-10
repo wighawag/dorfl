@@ -96,7 +96,7 @@ import type {NewQuestion} from './sidecar.js';
  * (`advance-rung-surface`), `apply` (`advance-rung-apply`), and
  * `triage-observation` (`advance-rung-triage`) dispatch through the clearly-named
  * executor SEAM ({@link RungExecutor}); the build/task rungs ORCHESTRATE
- * `do`/`do prd:`. What this verb does NOT do (LATER tasks):
+ * `do`/`do spec:`. What this verb does NOT do (LATER tasks):
  *   - The two **DRIVERS** (one-shot sequential / loop) + `-n` + the gate-FAMILY
  *     WIRING that resolves `autoBuild`/`autoTask`/`observationTriage` and threads
  *     them into the build/task gate composition — task `advance-drivers-and-gates`.
@@ -144,7 +144,7 @@ export type AdvanceExitCode = 0 | 1 | 2 | 3;
  * The injectable rung-executor SEAM — WHAT happens once the tick has classified a
  * rung AND won the `advancing` lock. It is the boundary between the skeleton (this
  * task) and the rung bodies (later tasks): the surface/apply/triage rungs are
- * filled by their own tasks; the build/task rungs ORCHESTRATE `do`/`do prd:`.
+ * filled by their own tasks; the build/task rungs ORCHESTRATE `do`/`do spec:`.
  *
  * Production wires {@link defaultRungExecutor}; tests inject a spy to assert the
  * classify→lock→dispatch ORDER (and that a CAS loser never reaches the executor).
@@ -164,7 +164,7 @@ export interface RungExecutor {
 
 /** What a rung executor is handed: the resolved identity + the run context. */
 export interface RungExecInput {
-	/** The canonical namespaced identity (`task:<slug>` / `prd:<slug>` / `observation:<slug>`). */
+	/** The canonical namespaced identity (`task:<slug>` / `spec:<slug>` / `observation:<slug>`). */
 	item: string;
 	/** The resolved namespace (`task` / `prd` / `observation`). */
 	namespace: SlugNamespace;
@@ -172,7 +172,7 @@ export interface RungExecInput {
 	slug: string;
 	/** The classification that selected this rung (the two signals are visible). */
 	classification: TickClassification;
-	/** The tick's run context (cwd, arbiter, …) — threaded to `do`/`do prd:`. */
+	/** The tick's run context (cwd, arbiter, …) — threaded to `do`/`do spec:`. */
 	context: AdvanceContext;
 }
 
@@ -377,7 +377,7 @@ export interface AdvanceContext {
 /** The options one `advance` tick consumes. */
 export interface AdvanceOptions extends AdvanceContext {
 	/**
-	 * The raw CLI slug argument: bare (= task), `task:<slug>`, `prd:<slug>`, or
+	 * The raw CLI slug argument: bare (= task), `task:<slug>`, `spec:<slug>`, or
 	 * `obs:<slug>` / `observation:<slug>`. Omit/empty ⇒ the bare eligible-SET form,
 	 * which needs the driver task (a clear error here — see `## Decisions`).
 	 */
@@ -476,7 +476,7 @@ export function readItemSignals(input: ReadSignalsInput): ItemSignals {
  *
  * STAGING IS INCLUDED (`tasks-backlog` / `prds-proposed`): with `surfaceStaging`
  * on (the user-visible default) the lifecycle surface pool enumerates
- * `needsAnswers` items resting in STAGING as `task:`/`prd:` legs
+ * `needsAnswers` items resting in STAGING as `task:`/`spec:` legs
  * (`lifecycle-gather.ts`). The rung CLASSIFIER's signal read MUST see those
  * staged bodies, or `needsAnswers` reads back `undefined`, the classifier
  * mis-routes the item to the BUILD rung, and claim dies with "not found on
@@ -512,11 +512,11 @@ function readNeedsAnswers(
 
 /**
  * The PRODUCTION rung executor: build/task rungs ORCHESTRATE the existing
- * `do`/`do prd:` machinery ({@link performDo}); the `surface`/`apply`/
+ * `do`/`do spec:` machinery ({@link performDo}); the `surface`/`apply`/
  * `triage-observation` rung bodies are filled by their own tasks
  * ({@link surfaceRung} / {@link applyRung} / {@link triageRung}). It NEVER
  * re-implements the build/task path — it hands the resolved arg to `performDo`,
- * which spans both namespaces (the task path is the `do prd:` rung the spec's
+ * which spans both namespaces (the task path is the `do spec:` rung the spec's
  * 2026-06-09 UPDATE confirms routes through `performIntegration`).
  */
 export const defaultRungExecutor: RungExecutor = {
@@ -1353,7 +1353,7 @@ export async function performAdvance(
 		const message =
 			'`advance` with no item is the eligible-SET form (the one-shot driver). ' +
 			'The single-item tick needs a named item: ' +
-			'`advance <slug>` / `advance prd:<slug>` / `advance obs:<slug>`.';
+			'`advance <slug>` / `advance spec:<slug>` / `advance obs:<slug>`.';
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', message};
 	}

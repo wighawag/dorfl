@@ -16,7 +16,7 @@ import {workItemRel} from './work-layout.js';
  * It GENERALISES the green tracer that proved the dangerous core end-to-end on a
  * bare `file://` arbiter (the tracer is now this file). The one production
  * difference from the tracer is the IDENTITY SEAM: callers pass a NAMESPACED item
- * identity (`task:<slug>` / `prd:<slug>` / `observation:<slug>` / `obs:<slug>`,
+ * identity (`task:<slug>` / `spec:<slug>` / `observation:<slug>` / `obs:<slug>`,
  * or a bare `<slug>` = task), and this module derives the type-encoded lock
  * `<entry>` (`<type>-<slug>`) through {@link resolveSidecarIdentity} — the SAME
  * single source of truth the sidecar (`work/questions/<type>-<slug>.md`) and the
@@ -63,7 +63,7 @@ export const LOCK_REF_PREFIX = 'refs/dorfl/lock';
  * (`<type>-<slug>`) from a NAMESPACED item identity, through the shared
  * {@link resolveSidecarIdentity} resolver (the single source of truth, which the
  * sidecar filename + the advancing-lock marker also key onto). Accepts the same
- * forms as that resolver: `task:<slug>` / `prd:<slug>` / `observation:<slug>` /
+ * forms as that resolver: `task:<slug>` / `spec:<slug>` / `observation:<slug>` /
  * `obs:<slug>`, or a bare `<slug>` (= task). Acquire/release/read ALL key
  * through THIS function, so there is one — and only one — addressing scheme.
  */
@@ -269,7 +269,7 @@ async function gitHardInput(
 }
 export interface AcquireOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`task:<slug>` / `prd:<slug>` /
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `spec:<slug>` /
 	 * `observation:<slug>` / `obs:<slug>`, or a bare `<slug>` = task). Resolved to
 	 * the type-encoded lock `<entry>` through {@link lockEntryFor}.
 	 */
@@ -870,7 +870,7 @@ export async function readItemLock(
  * bare-slug `work/dropped/<slug>.md`):
  *   - a TASK: `work/tasks/done/<slug>.md` (completed) OR
  *     `work/tasks/cancelled/<slug>.md` (the task regime's won't-proceed terminal).
- *   - a PRD: `work/specs/tasked/<slug>.md` (tasked) OR `work/specs/dropped/<slug>.md`
+ *   - a SPEC: `work/specs/tasked/<slug>.md` (tasked) OR `work/specs/dropped/<slug>.md`
  *     (the spec regime's won't-proceed terminal).
  *   - an OBSERVATION: NONE. A note has no durable terminal folder — it leaves by
  *     deletion (its absence, not a terminal record, is the end state). A promoted

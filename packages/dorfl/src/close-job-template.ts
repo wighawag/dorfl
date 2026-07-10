@@ -69,9 +69,9 @@ export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
 #   * the RESOLUTION (resolveClosingIssue): a lone task closes its own \`issue:\`;
-#     a fanned task reaches the number via \`task.prd: → prd issue:\`.
-#   * the "prd complete?" QUERY (prd-complete-query, done): a prd's issue closes
-#     ONLY when ALL its \`prd:<slug>\` tasks are in work/done/.
+#     a fanned task reaches the number via \`task.spec: → spec issue:\`.
+#   * the "spec complete?" QUERY (prd-complete-query, done): a spec's issue closes
+#     ONLY when ALL its \`spec:<slug>\` tasks are in work/done/.
 #   * the CLOSE (IssueProvider.closeIssue): the atomic comment+close seam — NO
 #     direct \`gh\` in the engine core; any comment rides this close, never the PR
 #     comment seam.

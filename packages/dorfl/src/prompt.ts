@@ -459,10 +459,7 @@ export interface ResolvedTask {
 	path: string;
 	/** The folder the task was resolved from (in-progress wins over tasks-ready). */
 	folder: TaskFolder;
-	/**
-	 * The task's source SPEC slug (frontmatter `spec:`, or the legacy `prd:` key
-	 * as read-only back-compat), if any.
-	 */
+	/** The task's source SPEC slug (frontmatter `spec:`), if any. */
 	spec: string | undefined;
 	/** The extracted `## Prompt` body. */
 	taskPrompt: string;
@@ -627,9 +624,8 @@ export function resolveTask(
 			);
 		}
 		const fm = parseFrontmatter(content);
-		// Read the parent-spec pointer off `fm.spec` (populated from EITHER the
-		// canonical `spec:` key or the legacy `prd:` back-compat alias) into the
-		// `spec`-only `ResolvedTask` (spec
+		// Read the parent-spec pointer off `fm.spec` (populated from the canonical
+		// `spec:` key) into the `spec`-only `ResolvedTask` (spec
 		// `prd-to-spec-vocabulary-cutover-and-migration-command`).
 		return {slug, path, folder, spec: fm.spec, taskPrompt};
 	}
@@ -666,12 +662,12 @@ export function inferSlugFromBranch(
 /**
  * Resolve the EFFECTIVE `promptGuidance` for an item by walking the precedence
  * chain (highest → lowest): the per-task frontmatter override, the per-spec
- * frontmatter override (only when the task carries a `prd:`), then the
+ * frontmatter override (only when the task carries a `spec:`), then the
  * already-resolved repo policy. Each nudge member resolves independently — a
  * task's `promptGuidance.testFirst` override never bleeds into a sibling
  * member — mirroring the `humanOnly`/`autoBuild` per-item override shape.
  *
- * A task may carry the override even when it has NO `prd:` (a self-contained
+ * A task may carry the override even when it has NO `spec:` (a self-contained
  * chore), by symmetry with `humanOnly` at the item level; `specFrontmatter`
  * is then simply absent and the chain reads task ⇒ repo.
  */
@@ -714,7 +710,7 @@ export function findSpecPath(
 /**
  * The convenience seam every caller of {@link buildAgentPrompt} reuses to
  * resolve the per-item override: load the task frontmatter from its file +
- * (when the task carries `prd:`) the spec frontmatter, then walk
+ * (when the task carries `spec:`) the spec frontmatter, then walk
  * {@link resolveItemPromptGuidance}. Pure-ish (reads at most two files);
  * returns the repo policy verbatim when neither item layer overrides anything.
  */
@@ -725,8 +721,7 @@ export function resolvePromptGuidanceForItem(options: {
 }): PromptGuidance {
 	const taskFm = parseFrontmatter(options.taskContent);
 	let specFm: Frontmatter | undefined;
-	// Read the parent-spec pointer off `fm.spec` (populated from the `spec:` key or
-	// the legacy `prd:` back-compat alias).
+	// Read the parent-spec pointer off `fm.spec` (populated from the `spec:` key).
 	if (taskFm.spec !== undefined) {
 		const specPath = findSpecPath(options.cwd, taskFm.spec);
 		if (specPath !== undefined) {

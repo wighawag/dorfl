@@ -31,7 +31,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  * **The tasker review→edit→re-review→converge LOOP** (`slicer-review-edit-loop`,
  * GATES spec `work/specs/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A).
  *
- * On the `do prd:<slug>` tasking path (`tasking.ts`/`performTask`), AFTER the
+ * On the `do spec:<slug>` tasking path (`tasking.ts`/`performTask`), AFTER the
  * agent produces a candidate set of `work/tasks/backlog/<slug>.md` tasks and BEFORE the
  * runner finalises/lands them, this loop RUNS the `review` SKILL
  * (`skills/review/SKILL.md`), APPLIES its findings as EDITS to the candidate task

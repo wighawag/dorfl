@@ -154,7 +154,7 @@ function remoteArgFor(item: SelectedItem): string {
  * the GIVEN order (no pool/priority — the operator chose them), each through the
  * EXISTING {@link performDoRemote} pipeline, SEQUENTIALLY. No mirror scan is
  * needed (the args are explicit); the per-item pipeline resolves each
- * bare/`task:`/`prd:` arg itself.
+ * bare/`task:`/`spec:` arg itself.
  */
 export async function performDoRemoteArgs(
 	args: string[],

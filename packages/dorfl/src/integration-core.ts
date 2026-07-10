@@ -98,7 +98,7 @@ export type IntegrationCoreOutcome =
 /**
  * The CORE's input — everything the band needs, nothing caller-shaped. Every
  * divergence between the human `complete` path and the autonomous `do`/`run` path
- * maps to a FIELD VALUE here, not an `if (caller === …)` branch (prd: "zero
+ * maps to a FIELD VALUE here, not an `if (caller === …)` branch (spec: "zero
  * caller-identity leakage"). In-place vs worktree = `cwd`; arbiter name =
  * `arbiter`; human vs autonomous surfacing = `surfaceArbiter`; do's recovery =
  * `source` + `recovering`; per-repo/lang gate = `verify`.
@@ -108,7 +108,7 @@ export type IntegrationCoreOutcome =
  * task-shaped done-move + title source. The shared band
  * (verify→review→commit→rebase→integrate→propose-PR-with-title/body) is
  * IDENTICAL; only the "which item move + which file to read the title from" step
- * is caller-supplied. This is the seam the `do prd:<slug>` TASKING transition
+ * is caller-supplied. This is the seam the `do spec:<slug>` TASKING transition
  * rides (task `slice-output-through-integration`): its "item move" is the spec
  * LIFECYCLE move (`work/specs/ready/<slug>.md → work/specs/tasked/<slug>.md`, residence =
  * tasked-ness) plus its EMITTED backlog files — NOT a task done-move. Supplying it
@@ -139,7 +139,7 @@ export interface IntegrationLifecycle {
 	 * a lifecycle whose output file does NOT yet exist at title-read time — the intake
 	 * lone-task / spec path WRITES `work/backlog/<slug>.md` / `work/specs/ready/<slug>.md` in
 	 * {@link stage}, which runs AFTER the title read, so a `titlePath` read would race
-	 * the write and fall back to a generic subject. The `do prd:` tasking transition
+	 * the write and fall back to a generic subject. The `do spec:` tasking transition
 	 * leaves this unset (its `titlePath` is an already-existing held spec, read fine).
 	 */
 	title?: string;
@@ -564,7 +564,7 @@ export interface IntegrationCoreInput {
 	 * `slice-output-through-integration`). When set, the band reads the title from
 	 * its {@link IntegrationLifecycle.titlePath}, calls its
 	 * {@link IntegrationLifecycle.stage} INSTEAD of the task `git mv → work/done/`,
-	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do prd:`
+	 * and uses the plain rebase ({@link recovering} is irrelevant). The `do spec:`
 	 * TASKING transition supplies it; `do`/`complete`/`run` leave it unset (the
 	 * task done-move is unchanged).
 	 */
@@ -607,7 +607,7 @@ export interface IntegrationCoreResult {
 	 * tasking path (task `slice-acceptance-gate`) reads this: the core's build
 	 * `applyNeedsAttentionTransition` is keyed on a TASK lock, so the tasking path
 	 * routes the spec itself via the lock release's needs-attention redirect (amend the
-	 * `prd:<slug>` unified lock `active -> stuck`, no folder move), using THIS
+	 * `spec:<slug>` unified lock `active -> stuck`, no folder move), using THIS
 	 * findings text as the body. Absent on every non-`review-blocked` outcome. (The
 	 * build path ignores it — its routing already records the findings in-body.)
 	 */
@@ -926,7 +926,7 @@ export async function performIntegration(
 	// When the lifecycle supplies an EXPLICIT `title`, use it DIRECTLY (no file read):
 	// the intake lone-task / spec path writes its output file in `stage()`, which runs
 	// AFTER this point, so a `titlePath` read would race the write and degrade the
-	// subject/PR title to the generic fallback. The `do prd:` tasking path leaves
+	// subject/PR title to the generic fallback. The `do spec:` tasking path leaves
 	// `title` unset and keeps reading its already-existing held spec (unchanged).
 	const explicitTitle = lifecycle?.title;
 	const taskTitle =
@@ -1001,7 +1001,7 @@ export async function performIntegration(
 	// they are TRACKED, not dropped/untracked. Rule B is extended HERE: the runner REPORTS
 	// exactly which note files landed (honest reporting — what actually reached the commit,
 	// read from the staged set, not assumed). This is the ONE shared place — BOTH the build
-	// path (`do <task>`/`run`/`complete`) and the tasking path (`do prd:`, via the
+	// path (`do <task>`/`run`/`complete`) and the tasking path (`do spec:`, via the
 	// `lifecycle` seam) route through it, so the channel is NOT forked. Zero notes ⇒ no
 	// report (the no-note case is byte-for-byte unchanged).
 	await reportScoopedNotes(cwd, env, note);

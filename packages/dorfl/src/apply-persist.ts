@@ -102,7 +102,7 @@ export const OPEN_QUESTIONS_MARKER_CLOSE = '<!-- /open-questions -->';
 export interface ApplyAnsweredQuestionsOptions {
 	/** Working clone/worktree the apply commits in. */
 	cwd: string;
-	/** The namespaced item identity (`task:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `spec:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The

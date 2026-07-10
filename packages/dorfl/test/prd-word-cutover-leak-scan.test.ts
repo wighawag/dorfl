@@ -36,13 +36,22 @@ import {fileURLToPath} from 'node:url';
  *      the ACTUAL `prd`-containing basenames + frontmatter values present in the
  *      tree. Rewriting the word inside one renames a file / desyncs a reference;
  *      `prd-to-spec` is the migration command's own published name.
- *   2. **The live CODE back-compat aliases** (published in dorfl 0.1.x): the
- *      `prd:` frontmatter-FIELD / `do prd:` / `advance prd:` VERB alias (matched
- *      as a `prd:`-prefixed token), and the inert NAMESPACE forms
- *      `refs/dorfl/lock/prd-<slug>` / `work/prd-<slug>` (branch) / `prd-<slug>`
- *      (lock/sidecar) / `prd-*` (a ref glob). These keep un-migrated downstream
- *      repos working — the CODE keeps reading them, so the PROSE keeps naming
- *      them.
+ *   2. **PROVENANCE `prd:` in TERMINAL HISTORY** — a `prd:` frontmatter-FIELD /
+ *      `do prd:` / `advance prd:` VERB reference in a `work/tasks/done/` body or
+ *      title, an observation/finding note, or an ADR that RECORDS the field/verb
+ *      AS IT WAS at build time. HARD CUTOVER (task
+ *      `hard-cutover-remove-last-prd-back-compat-key-and-dead-verb`): the `prd:`
+ *      field read + the `do prd:`/`advance prd:` verb are DEAD in live code (the
+ *      field read removed from `parseFrontmatter`, the verb refs flipped to
+ *      `spec`). Enforcing that on LIVE CODE is the SRC-prose scan's job
+ *      (`prd-src-prose-leak-scan.test.ts`, which no longer exempts `prd:`). This
+ *      WORD scan walks the human-readable trees incl. terminal history, where a
+ *      `prd:` is immutable PROVENANCE — rewriting it FALSIFIES history. So a `prd:`
+ *      prose reference stays exempt HERE as provenance, not as a live alias.
+ *      PLUS the inert NAMESPACE / lock-ref forms `refs/dorfl/lock/prd-<slug>` /
+ *      `work/prd-<slug>` (branch) / `prd-<slug>` (lock/sidecar) / `prd-*` (a ref
+ *      glob): the `prd-`-hyphen constructs the tooling still reads on-disk for
+ *      un-migrated data.
  *   3. **camelCase / PascalCase historical API names** — `renderPrdBody`,
  *      `prdTitle`, `LedgerPrdItem`, … in `work/tasks/done/` bodies are the NAMES
  *      of (now-renamed) symbols AS THEY WERE at build time. Covered by the
@@ -194,6 +203,10 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	'sweep-prd-artifact-word-in-src-prose-and-runtime-strings.md',
 	'word-scan-exempts-prd-cutover-task-bodies-2026-07-10.md',
 	'advance-lifecycle-template-src-prose-still-says-prd-2026-07-10.md',
+	// The hard-cutover task body: its OWN subject is removing the last `prd`
+	// back-compat surfaces, so it legitimately quotes the retired `prd`/`prd:`
+	// word + folder path in prose to describe what it removes.
+	'hard-cutover-remove-last-prd-back-compat-key-and-dead-verb.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {
@@ -225,8 +238,20 @@ function isAllowedWordHit(line: string, idx: number, lower: string): boolean {
 	// camelCase / PascalCase / snake_case → not a standalone word (historical API
 	// names like renderPrdBody, prdTitle, prd_flag).
 	if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) return true;
-	// The `prd:` verb/field back-compat alias (`do prd:`, `advance prd:`,
-	// `prd:<slug>`, a `prd:` field mention).
+	// A `prd:`-prefixed token in PROSE. HARD CUTOVER (task
+	// `hard-cutover-remove-last-prd-back-compat-key-and-dead-verb`): this is NO
+	// LONGER a LIVE back-compat alias — the `parseFrontmatter` `prd:` field read is
+	// GONE and the `do prd:`/`advance prd:` verb refs are flipped to `spec`. The
+	// enforcement of that hard cutover on LIVE CODE is the SRC-prose scan's job
+	// (`prd-src-prose-leak-scan.test.ts`, which no longer exempts `prd:` and FAILS
+	// on a stray live `prd:` field-key / `do prd:` verb). This WORD scan walks the
+	// human-readable TREES — including TERMINAL HISTORY (`work/tasks/done/`,
+	// observation/finding notes) and this cutover's own provenance — where a `prd:`
+	// in a done body/title RECORDS the field/verb AS IT WAS at build time. That is
+	// immutable PROVENANCE (survivor class per this task: provenance is exempt);
+	// rewriting it would FALSIFY history. So a `prd:` in prose stays exempt HERE as
+	// a provenance/historical reference, NOT as a live alias. (A backticked `prd:`
+	// token is already stripped by the inline-code lens, preserve #6.)
 	if (after === ':') return true;
 	// The NAMESPACE / legacy-folder forms: `prd-<…>` (lock/sidecar/branch glob),
 	// `prd/` (legacy flat folder). Only a `prd` that is the HEAD of a
@@ -363,8 +388,8 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 
 		// The PRESERVE survivors must NOT flag.
 		const good = [
-			"Set each task's `spec:` field (the legacy `prd:` key is still read).", // verb/field alias
-			'dispatch a `do prd:<slug>` tasking run', // verb alias
+			"Set each task's `spec:` field (`prd:` in backticks is stripped).", // backticked token ref (preserve #6)
+			'dispatch a `do spec:<slug>` tasking run', // the live verb
 			'the `renderPrdBody` symbol / `prdTitle` field', // camelCase historical API
 			'ref glob `prd-*`; `refs/dorfl/lock/prd-<slug>`; `work/prd-<slug>`', // namespace forms
 			'migration map: `work/prd/` -> `work/specs/ready/`', // legacy flat folder
@@ -376,6 +401,17 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 			'cite `prd-body` / `prd-level` AS an example inside code', // code-span example
 		].join('\n');
 		expect(fileLeaks('good.md', good)).toEqual([]);
+
+		// HARD CUTOVER + PROVENANCE: a NON-backticked `prd:` in terminal-history prose
+		// stays exempt HERE (this WORD scan walks immutable history where `prd:`
+		// RECORDS the dead field/verb as-was; the SRC-prose scan is what FAILS on a
+		// stray LIVE `prd:` field-key / `do prd:` verb in code).
+		expect(
+			fileLeaks('done-body.md', 'Fixed at launch in the prd: ...'),
+		).toEqual([]);
+		expect(fileLeaks('done-body.md', 'Route do prd:<slug> output ...')).toEqual(
+			[],
+		);
 	});
 
 	it('the walk reaches a representative spread (exhaustive-by-construction)', () => {

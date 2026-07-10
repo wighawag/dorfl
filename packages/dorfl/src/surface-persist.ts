@@ -53,7 +53,7 @@ import {
 export interface SurfacePersistOptions {
 	/** Working clone/worktree the persist commits in. */
 	cwd: string;
-	/** The namespaced item identity (`task:foo` / `prd:bar` / `observation:baz`). */
+	/** The namespaced item identity (`task:foo` / `spec:bar` / `observation:baz`). */
 	item: string;
 	/**
 	 * The item file path RELATIVE to `cwd` (e.g. `work/backlog/foo.md`). The

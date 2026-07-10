@@ -67,12 +67,12 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  * - **ASK** (not clear enough to act on): `postIssueComment` the next clarifying
  *   question; emit NOTHING; STOP.
  * - **TASK** (clear AND fits ONE tracer-bullet task): write
- *   `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
+ *   `work/backlog/<slug>.md` (`covers: []`, NO `spec:`) carrying `issue: N` (the
  *   lone-task closure link, NOT `Fixes #N`), integrate via {@link
  *   performIntegration} (default `propose`).
  * - **SPEC** (clear AND coherent but >1 task — INCLUDING a coupled-but-SMALL pair,
  *   which is NEVER bounced): write the spec file (`work/specs/ready/<slug>.md`) with `issue: N` (+ the gate
- *   axes the verdict carried), integrate, STOP (tasking is the separate `do prd:`
+ *   axes the verdict carried), integrate, STOP (tasking is the separate `do spec:`
  *   step).
  * - **BOUNCE** (genuinely UNRELATED concerns — no shared vision): the bounce is
  *   TERMINAL (the asks are unrelated and must be re-filed), so intake CLOSES the
@@ -122,7 +122,7 @@ export interface IntakeVerdict {
 	/**
 	 * The drafted task BODY (`task` outcome) — the markdown AFTER the frontmatter
 	 * (the `## What to build` / `## Acceptance criteria` / `## Prompt` sections). The
-	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `prd:`) carrying
+	 * dispatcher writes the frontmatter (slug/title/`covers: []`, NO `spec:`) carrying
 	 * the lone-task `issue: N` closure link itself; the agent never writes
 	 * git-visible files.
 	 */
@@ -383,8 +383,8 @@ function specLandingToSide(
  * no-ops for them.)
  */
 export type IntakeArtifactType = 'task' | 'spec';
-// `prd` → `spec` cutover (MIGRATE batch): `'spec'` is the CANONICAL artifact type;
-// `'prd'` stays as an accepted ALIAS until the contract task removes it.
+// `prd` → `spec` HARD CUTOVER: `'spec'` is the ONLY spec artifact type value; the
+// legacy `'prd'` alias is GONE (the contract task removed it).
 
 /**
  * The PER-OUTCOME integration mode FLAG SET (spec `issue-intake` US #9). Because
@@ -456,7 +456,7 @@ function granularFromFlags(
  * The PURE per-outcome integration mode resolution (spec `issue-intake` US #9 —
  * the canonical table). Given ONLY the flag set, resolve BOTH per-type modes in
  * one eager pass (so a usage error is caught before the runtime verdict is even
- * known). The rules, all decided in the prd:
+ * known). The rules, all decided in the spec:
  *
  * - **unset ⇒ propose for BOTH** (conservative default; matches `do`).
  * - **aggregates:** `--merge` ⇒ merge both; `--propose` ⇒ propose both (this axis
@@ -1028,7 +1028,7 @@ async function dispatchComment(params: {
 
 /**
  * DISPATCH the `task` outcome: derive a content-derived slug, write
- * `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the
+ * `work/backlog/<slug>.md` (`covers: []`, NO `spec:`) carrying `issue: N` (the
  * lone-task closure link, NOT `Fixes #N`), and integrate via {@link
  * performIntegration}. The runner owns the git: it onboards a
  * `work/<slug>` branch off fresh `<arbiter>/main`, then the lifecycle `stage`
@@ -1089,7 +1089,7 @@ async function dispatchTask(params: {
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
-	// the `do prd:` path gets `runTaskReviewLoop`; the lone-TASK path got NOTHING.
+	// the `do spec:` path gets `runTaskReviewLoop`; the lone-TASK path got NOTHING.
 	// AFTER the `task` verdict and BEFORE the write/integrate, run a bounded (3-round,
 	// HARD-CAPPED) adversarial self-review on the SINGLE drafted task. It mutates the
 	// candidate body IN MEMORY (no `work/backlog/` write pre-convergence). A launch/
@@ -1385,7 +1385,7 @@ async function integrationToIntakeResult(
 				? 'landed it on the arbiter main'
 				: 'opened a PR carrying it (main untouched)';
 		// Both a lone task and a spec carry `issue: N` as their closure link (the task
-		// closes its own issue; a spec is reached via `task.prd: → prd issue:`). On the
+		// closes its own issue; a spec is reached via `task.spec: → spec issue:`). On the
 		// task/spec path `intake` never closes the issue (CI's close-job does, via the
 		// `issue:` field; intake closes ONLY on BOUNCE) and emits no `Fixes #N` (a
 		// deferred GitHub-only optimisation).
@@ -1587,13 +1587,13 @@ function resolveSpecSlug(verdict: IntakeVerdict): string {
 
 /**
  * Render the backlog task file: the frontmatter (`title`/`slug`/`covers: []`, NO
- * `prd:` — its own source of truth, spec `issue-intake` decision table) carrying the lone-task
+ * `spec:` — its own source of truth, spec `issue-intake` decision table) carrying the lone-task
  * `issue: N` closure link + the drafted body. The task closes its source issue
  * via its `issue:` field (the provider-agnostic link a FUTURE CI close-job reads
  * from folder + field state); it carries NO `Fixes #N` (a deferred GitHub-only
  * optimisation, structurally unplaceable on the `--merge` path). The number is
- * the task's own closure path — `issue:` XOR `prd:`; a lone task never carries a
- * `prd:` (spec `issue-intake` decision table). When the agent drafted no body, a thin default
+ * the task's own closure path — `issue:` XOR `spec:`; a lone task never carries a
+ * `spec:` (spec `issue-intake` decision table). When the agent drafted no body, a thin default
  * scaffold keeps the file a valid task.
  */
 export function renderBacklogTask(params: {
@@ -1645,13 +1645,13 @@ export function renderBacklogTask(params: {
  * Render the emitted spec file: the frontmatter (`title`/`slug` + the loop-closure
  * `issue: N` + the gate axes the prompt JUDGED) followed by the drafted spec body.
  * For a FANNED spec the `issue: N` lives ONLY on the spec — never duplicated across
- * the N fanned tasks, which reach it via `task.prd: → prd issue:` (a fanned
- * task carries `prd:`, NOT its own `issue:`; the lone-task outcome is the only
+ * the N fanned tasks, which reach it via `task.spec: → spec issue:` (a fanned
+ * task carries `spec:`, NOT its own `issue:`; the lone-task outcome is the only
  * one that puts `issue:` on a task). The close JOB reaches the spec's number via
- * `task.prd: → prd issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
+ * `task.spec: → spec issue:`. The gate axes (`humanOnly`/`needsAnswers`) are emitted ONLY when the
  * verdict declared them `true` — an omitted axis is `undefined` (undeclared), the
  * same convention `frontmatter.ts` parses. When the agent drafted no body, a thin
- * default scaffold keeps the file a valid spec that `do prd:` can later task.
+ * default scaffold keeps the file a valid spec that `do spec:` can later task.
  */
 export function renderSpec(params: {
 	slug: string;
@@ -1905,7 +1905,7 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 // The LONE-TASK bounded internal review (observation
 // `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C).
 //
-// Give intake's lone-TASK outcome the adversarial refinement the `do prd:` path
+// Give intake's lone-TASK outcome the adversarial refinement the `do spec:` path
 // already gets — but as a small intake-NATIVE bounded review, NOT by integrating
 // the tasker loop. This is a NEW prompt + a small loop + an injectable gate seam,
 // MIRRORING the tasker loop's verdict/output CONVENTIONS (fenced JSON
@@ -2378,7 +2378,7 @@ export function buildIntakeDecisionSpec(
 		'  (a single thin end-to-end path, demoable on its own — `to-task`’ criterion).',
 		'  Draft that ONE task in the `to-task` shape (a `## What to build`,',
 		'  `## Acceptance criteria`, and `## Prompt`). The runner writes',
-		'  `work/backlog/<slug>.md` (`covers: []`, NO `prd:`) carrying `issue: N` (the',
+		'  `work/backlog/<slug>.md` (`covers: []`, NO `spec:`) carrying `issue: N` (the',
 		'  lone-task closure link, NOT `Fixes #N`) and integrates it.',
 		'',
 		'- **SPEC** — the issue is CLEAR *and* coherent but needs MORE THAN ONE task (it',

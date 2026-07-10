@@ -81,7 +81,7 @@ export type AcquireAdvancingLockExitCode = 0 | 1 | 2 | 3;
 
 export interface AcquireAdvancingLockOptions {
 	/**
-	 * The NAMESPACED item identity to lock (`task:<slug>` / `prd:<slug>` /
+	 * The NAMESPACED item identity to lock (`task:<slug>` / `spec:<slug>` /
 	 * `obs:<slug>` / `observation:<slug>`, or a bare `<slug>` = task). The
 	 * resolver derives the type-encoded entry `<type>-<slug>` from it.
 	 */

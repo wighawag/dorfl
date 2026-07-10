@@ -18,7 +18,7 @@ import {workItemRel} from './work-layout.js';
  * no longer moves the task body (task
  * `cutover-claim-body-stays-and-complete-sources-from-backlog`). The tasking lock
  * is now ONLY the UNIFIED per-item lock (`refs/dorfl/lock/<entry>`,
- * `action: task`, keyed `prd:<slug>`) — the SAME ref claim and advance use for
+ * `action: task`, keyed `spec:<slug>`) — the SAME ref claim and advance use for
  * the same item, so tasking a spec is mutually exclusive with claiming/advancing
  * the SAME item BY CONSTRUCTION (the second acquirer loses the SAME create-only
  * ref CAS, with NO retry budget and NO false contention). There is no transient
@@ -55,7 +55,7 @@ import {workItemRel} from './work-layout.js';
  * completing transition, not the release, owns the commit. See
  * `work/notes/observations/tasking-lock-does-not-stabilise-prd-content.md`.
  *
- * This module provides the lock PRIMITIVES only. The orchestrating `do prd:<slug>`
+ * This module provides the lock PRIMITIVES only. The orchestrating `do spec:<slug>`
  * tasking command (`tasking.ts`) acquires, drives the agent's tasking, integrates
  * the emitted tasks + the durable `prd → prd-tasked` move, and releases. The
  * human path (no contention) may task on `main` directly without the lock.
@@ -180,18 +180,17 @@ async function runAcquire(
 		return {exitCode: 0, outcome: 'acquired', message, lockedBlob};
 	}
 
-	// Acquire the UNIFIED per-item lock (`action: task`, keyed `prd:<slug>` so it
+	// Acquire the UNIFIED per-item lock (`action: task`, keyed `spec:<slug>` so it
 	// shares the ONE ref with claim/advance of the SAME item). A create-only ref
 	// CAS: the winner holds it, the loser is DEFINITIVELY `lost` (exit 2, no retry
 	// budget). No auto-steal of an orphaned lock, consistent with claim/advance and
 	// the ADR's recovery model (no liveness heartbeat / auto-sweep; a human asserts
 	// a lock is dead via `release-lock` + `gc --ledger`).
-	// MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`):
-	// EMIT the parent-spec item identity as `spec:<slug>` so the unified per-item
-	// lock ref is `refs/dorfl/lock/spec-<slug>` (the expand-lock task made
-	// `spec:<slug>` resolve to a `spec-<slug>` entry). The resolver still ACCEPTS
-	// `prd:<slug>`, so any lock taken under the old identity stays readable; the
-	// contract task removes the legacy form.
+	// Spec `prd-to-spec-vocabulary-cutover-and-migration-command`: the parent-spec
+	// item identity is `spec:<slug>`, so the unified per-item lock ref is
+	// `refs/dorfl/lock/spec-<slug>`. HARD CUTOVER: the legacy `prd:<slug>` identity
+	// is GONE — the resolver no longer treats `prd:` as the spec namespace (a
+	// `prd:<slug>` arg is a bare literal task slug now).
 	const lock = await acquireItemLock({
 		item: `spec:${slug}`,
 		action: 'task',

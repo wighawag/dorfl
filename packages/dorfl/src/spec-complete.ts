@@ -32,7 +32,7 @@ import {
  * means the spec is not yet complete.
  */
 
-/** The task lifecycle folders a `prd:<slug>` task can reside in. */
+/** The task lifecycle folders a `spec:<slug>` task can reside in. */
 const TASK_FOLDERS = TASK_LIFECYCLE_FOLDERS;
 
 /** Where a task resides — the folder name under `work/`. */

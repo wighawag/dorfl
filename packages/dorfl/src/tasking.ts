@@ -48,7 +48,7 @@ import {
 import type {ReviewGate} from './review-gate.js';
 
 /**
- * The **`do prd:<slug>` tasking path** (spec `auto-slice`, task
+ * The **`do spec:<slug>` tasking path** (spec `auto-slice`, task
  * `autoslice-command`) — the orchestration that ties the tasking GATE
  * (`tasking-eligibility.ts`) and the tasking LOCK (`tasking-lock.ts`) together to
  * task a spec into `work/tasks/backlog/` STAGED items (task
@@ -64,12 +64,12 @@ import type {ReviewGate} from './review-gate.js';
  *   1. **Resolve the gate** (agent path): refuse to task a spec that is
  *      `humanOnly`/`needsAnswers`, or whose `taskedAfter` specs are not yet tasked.
  *      The repo's `autoTask` POLICY also refuses on the AUTO-PICK pool path, but
- *      NOT when the spec was named EXPLICITLY (`do prd:<slug>`, `explicit: true`):
+ *      NOT when the spec was named EXPLICITLY (`do spec:<slug>`, `explicit: true`):
  *      naming it IS the authorization, exactly as `do <task>` builds regardless of
  *      `autoBuild` (the pool, not the explicit claim, gates the policy). The HUMAN
  *      path is unbound by the gate entirely.
  *   2. **Acquire the lock** (agent path) via the unified per-item lock CAS —
- *      serialising concurrent taskers on the `prd:<slug>` ref (the body STAYS in
+ *      serialising concurrent taskers on the `spec:<slug>` ref (the body STAYS in
  *      `work/specs/ready/`; the lock no longer moves it). The HUMAN path with no contention
  *      may task on `main` directly WITHOUT the lock.
  *   3. **Invoke the agent harness** with the `to-task` spec — the agent runs the
@@ -83,7 +83,7 @@ import type {ReviewGate} from './review-gate.js';
  *      integrate via the band honoring `--propose` (push the branch + open a
  *      PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
  *      args resolve ONCE in the shared core, EVERY `do task:` integrate arg applies
- *      to `do prd:` by construction. A content-identity STALE CHECK (the lock's
+ *      to `do spec:` by construction. A content-identity STALE CHECK (the lock's
  *      read-stability backstop) fires FIRST against the acquire-time `lockedBlob`,
  *      so a concurrent edit of the held spec still fails loud (`stale`).
  *
@@ -98,7 +98,7 @@ import type {ReviewGate} from './review-gate.js';
  * owned by `slicer-review-edit-loop`; this path produces + integrates the tasks.
  */
 
-/** The terminal status of one `do prd:<slug>` tasking run. */
+/** The terminal status of one `do spec:<slug>` tasking run. */
 export type TaskOutcome =
 	| 'tasked' // gate passed (agent) / unbound (human) → lock → agent → committed
 	| 'gate-refused' // the agent gate refused (humanOnly/needsAnswers/autoTask/taskedAfter)
@@ -170,14 +170,14 @@ export interface PerformTaskOptions {
 	/** Per-repo `autoTask` policy (resolved by `autoslice-gate`). Agent path only. */
 	autoTask?: boolean;
 	/**
-	 * The spec was named EXPLICITLY by the operator (`do prd:<slug>`), so the
+	 * The spec was named EXPLICITLY by the operator (`do spec:<slug>`), so the
 	 * `autoTask` POLICY is already satisfied — naming the spec IS the authorization,
 	 * EXACTLY as `do <task>` builds a named task regardless of `autoBuild` (the
 	 * build path's precedent: `autoBuild` gates the scan/selection POOL only, never
 	 * `performDo`'s explicit claim). When `true`, the agent tasking gate drops the
 	 * `autoTask` policy term and binds ONLY the spec's own readiness axes
 	 * (`humanOnly`/`needsAnswers`) + `taskedAfter`. Defaults `false`. Both the
-	 * explicit `do prd:` dispatch AND the auto-pick path pass `true` here: the
+	 * explicit `do spec:` dispatch AND the auto-pick path pass `true` here: the
 	 * auto-pick POOL (`do-autopick.ts`) is the single `autoTask`-enforcement point
 	 * (a pool-ineligible spec is never selected), so once a spec is dispatched its
 	 * policy is already settled. Agent path only.
@@ -201,7 +201,7 @@ export interface PerformTaskOptions {
 	 * with (task `slice-output-through-integration`): `propose` (default — push the
 	 * `work/<slug>` branch + open a PR carrying the tasks, NO `main` touch) or
 	 * `merge` (land them on `main`). Resolved ONCE in {@link performIntegration},
-	 * so EVERY `do task:` integrate-time arg applies to `do prd:` by construction.
+	 * so EVERY `do task:` integrate-time arg applies to `do spec:` by construction.
 	 * The AGENT path only; the human path commits its own output. Defaults to the
 	 * system default (`propose`).
 	 */
@@ -369,7 +369,7 @@ function stagedTaskPath(name: string): string {
 }
 
 /**
- * Run the `do prd:<slug>` tasking path end-to-end. Never throws for the expected
+ * Run the `do spec:<slug>` tasking path end-to-end. Never throws for the expected
  * gate-refused / lock-lost / agent-failed / stale cases — those are returned with
  * the appropriate exit code and outcome. The runner owns all git; the agent only
  * writes task files.
@@ -475,7 +475,7 @@ export async function performTask(
 	// the pool, spec US #4) before `git add -A` would sweep them in.
 	const poolBefore = snapshotPool(cwd);
 	// Read the parent-spec self-pointer off `specFm.spec` (populated from the
-	// `spec:` key or the legacy `prd:` back-compat alias).
+	// `spec:` key).
 	const prompt = buildTaskingSpec(slug, specFm.spec);
 	let agent: {ok: boolean; detail?: string};
 	try {
@@ -523,7 +523,7 @@ export async function performTask(
 		});
 		// DECOMPOSITION UNCLEAR: emit NO guessed tasks — route the held spec to
 		// needs-attention with the questions as the reason. The lock release amends the
-		// `prd:<slug>` unified lock `active → stuck` (the tasking needs-attention surface
+		// `spec:<slug>` unified lock `active → stuck` (the tasking needs-attention surface
 		// is the stuck lock now — NO folder write; the spec body stays in `work/specs/ready/`).
 		if (loopDisposition.outcome === 'decomposition-unclear') {
 			const reason = decompositionUnclearReason(
@@ -699,7 +699,7 @@ export async function performTask(
 		// the review BEFORE the stage/integrate and did NOT integrate the tasks
 		// (correct). The CORRECT task-path destination is the SAME needs-attention
 		// route the lock release owns for the decomposition-unclear verdict: it amends
-		// the `prd:<slug>` unified lock `active -> stuck` with the block reason (the
+		// the `spec:<slug>` unified lock `active -> stuck` with the block reason (the
 		// tasking needs-attention surface is the stuck lock now — NO folder write; the
 		// spec body stays in `work/specs/ready/`). So on a block we route the held spec to
 		// needs-attention THROUGH the lock release — the set never lands.
@@ -731,7 +731,7 @@ export async function performTask(
 			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
 			// JSON). Route the held spec to needs-attention through the SAME lock-release
 			// seam the block path uses (the tasking needs-attention surface is the stuck
-			// `prd:<slug>` lock; no folder write). It is NOT a block (the gate output was
+			// `spec:<slug>` lock; no folder write). It is NOT a block (the gate output was
 			// unreadable) — record it as the transient-infra-class re-run signal so the
 			// stuck reason reads correctly; nothing landed.
 			const reason =
@@ -1246,7 +1246,7 @@ function gateRefusalReason(
 		);
 	}
 	// The autoTask POLICY only refuses on the NON-explicit (auto-pick pool) path:
-	// an explicitly-named `do prd:<slug>` is authorized by the naming itself (the
+	// an explicitly-named `do spec:<slug>` is authorized by the naming itself (the
 	// build path's autoBuild precedent), so the policy is never the reason there.
 	if (
 		options.explicit !== true &&
