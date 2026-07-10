@@ -1,4 +1,7 @@
 import {describe, it, expect} from 'vitest';
+import {mkdirSync, mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {
 	parseSidecar,
 	serialiseSidecar,
@@ -613,5 +616,123 @@ describe('entry `kind` axis — INTERIM dispatch primitive (apply-rung reads it)
 			'spec',
 			undefined,
 		]);
+	});
+});
+
+describe('serialiseSidecar — human-visible Markdown link to the item', () => {
+	function makeRepoWithItem(folder: string, basename: string): string {
+		const root = mkdtempSync(join(tmpdir(), 'sidecar-link-'));
+		const dir = join(root, 'work', folder);
+		mkdirSync(dir, {recursive: true});
+		writeFileSync(join(dir, basename), '# body\n');
+		return root;
+	}
+
+	it('renders a relative Markdown link into a task lifecycle folder', () => {
+		const root = makeRepoWithItem('tasks/ready', 'foo.md');
+		try {
+			const model = newSidecar('task:foo', [{question: 'ok?'}]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+			expect(text).toContain('Item: [`task:foo`](../tasks/ready/foo.md)');
+			// The link line lives ABOVE the first `## Q1` heading — i.e. in the
+			// parser's ignored preamble region.
+			const linkAt = text.indexOf('Item:');
+			const firstHeading = text.indexOf('## Q1');
+			expect(linkAt).toBeGreaterThan(0);
+			expect(firstHeading).toBeGreaterThan(linkAt);
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
+	});
+
+	it('renders a relative link into a spec lifecycle folder (different folder)', () => {
+		const root = makeRepoWithItem('specs/ready', 'autotask.md');
+		try {
+			const model = newSidecar('spec:autotask', [{question: 'ok?'}]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+			expect(text).toContain(
+				'Item: [`spec:autotask`](../specs/ready/autotask.md)',
+			);
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
+	});
+
+	it('follows the item to its current lifecycle folder (tasks/done)', () => {
+		const root = makeRepoWithItem('tasks/done', 'bar.md');
+		try {
+			const model = newSidecar('task:bar', [{question: 'ok?'}]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+			expect(text).toContain('Item: [`task:bar`](../tasks/done/bar.md)');
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
+	});
+
+	it('omits the link line when the item cannot be located on disk', () => {
+		const root = mkdtempSync(join(tmpdir(), 'sidecar-link-none-'));
+		try {
+			const model = newSidecar('task:ghost', [{question: 'ok?'}]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+			expect(text).not.toContain('Item:');
+			const back = parseSidecar(text);
+			expect(back.item).toBe('task:ghost');
+			expect(back.entries.length).toBe(1);
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
+	});
+
+	it('omits the link line when `repoRoot` is not passed', () => {
+		const model = newSidecar('task:foo', [{question: 'ok?'}]);
+		const text = serialiseSidecar(model);
+		expect(text).not.toContain('Item:');
+	});
+
+	it('model-equal round-trip is preserved with the link line present', () => {
+		const root = makeRepoWithItem('tasks/ready', 'foo.md');
+		try {
+			const model = newSidecar('task:foo', [
+				{question: 'first?', context: 'ctx'},
+				{question: 'second?'},
+			]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+			expect(text).toContain('Item:');
+			const back = parseSidecar(text);
+			expect(back).toEqual(model);
+			// A second serialise is byte-stable (canonicalisation is idempotent).
+			expect(serialiseSidecar(back, {repoRoot: root})).toBe(text);
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
+	});
+
+	it('human stripping / mangling / duplicating the link line does not corrupt parse', () => {
+		const root = makeRepoWithItem('tasks/ready', 'foo.md');
+		try {
+			const model = newSidecar('task:foo', [
+				{question: 'first?'},
+				{question: 'second?'},
+			]);
+			const text = serialiseSidecar(model, {repoRoot: root});
+
+			const stripped = text
+				.split('\n')
+				.filter((l) => !l.startsWith('Item:'))
+				.join('\n');
+			expect(parseSidecar(stripped)).toEqual(model);
+
+			const mangled = text.replace(
+				/Item:.*/,
+				'note: a human wrote here [wrong](../nowhere/foo.md) and _italics_',
+			);
+			expect(parseSidecar(mangled)).toEqual(model);
+
+			const linkLine = text.split('\n').find((l) => l.startsWith('Item:'))!;
+			const duplicated = text.replace(linkLine, `${linkLine}\n${linkLine}`);
+			expect(parseSidecar(duplicated)).toEqual(model);
+		} finally {
+			rmSync(root, {recursive: true, force: true});
+		}
 	});
 });

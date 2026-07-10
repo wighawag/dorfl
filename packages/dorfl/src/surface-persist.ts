@@ -192,7 +192,7 @@ export function persistSurfacedQuestions(
 
 	// Write the appended/created sidecar.
 	mkdirSync(dirname(sidecarAbs), {recursive: true});
-	writeFileSync(sidecarAbs, serialiseSidecar(model));
+	writeFileSync(sidecarAbs, serialiseSidecar(model, {repoRoot: cwd}));
 
 	// Stage exactly the two paths and commit them TOGETHER (one atomic commit) —
 	// the sidecar write + the `needsAnswers:true` flip land in the SAME commit, so

@@ -304,15 +304,8 @@ const ANSWER_MARKER = '**Your answer** (write below this line):';
  * than advance's rung-classifier reach.
  */
 const LINK_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
-	task: [
-		'tasks-ready',
-		'in-progress',
-		'needs-attention',
-		'done',
-		'cancelled',
-		'tasks-backlog',
-	],
-	prd: ['prds-ready', 'prds-tasked', 'prds-proposed', 'prds-dropped'],
+	task: ['tasks-ready', 'done', 'cancelled', 'tasks-backlog'],
+	spec: ['specs-ready', 'specs-tasked', 'specs-proposed', 'specs-dropped'],
 	observation: ['observations'],
 };
 
