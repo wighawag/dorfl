@@ -121,6 +121,7 @@ import {status, formatStatus} from './status.js';
 import {ledgerWrite} from './ledger-write.js';
 import {
 	releaseItemLock,
+	releaseLiteralLockEntry,
 	reportItemLocks,
 	formatItemLockReport,
 	itemLockReportNeedsAttention,
@@ -929,6 +930,7 @@ interface ReleaseLockFlags {
 	config?: string;
 	cwd?: string;
 	arbiter?: string;
+	entry?: string;
 }
 
 interface DropFlags {
@@ -3667,13 +3669,29 @@ export function buildProgram(): Command {
 	// Idempotent: deleting an absent ref is a clean exit-0 "nothing to clear"
 	// (`not-held`), NOT a failure — deleting the lock ref(s) is "all locks released"
 	// and recoverable (the work is safe on the `work/<slug>` branches + `main`).
+	//
+	// ESCAPE HATCH (`--entry <literal>`, task
+	// `release-lock-entry-escape-hatch-and-literal-entry-reporting`): the item
+	// positional is OPTIONAL because a lock whose entry name is NOT derivable from
+	// any current item-form (a PRE-CUTOVER `slice-<slug>` / `prd-<slug>` entry minted
+	// before the slice→task / `prd-to-spec` vocabulary cutover) is UN-NAMEABLE through
+	// the item-form path. `--entry` takes the literal `<entry>` VERBATIM (bypassing
+	// the namespace mapping) so a human can still NAME + clear such an orphan without
+	// the raw `git push origin --delete refs/dorfl/lock/…` plumbing. It reuses the
+	// SAME leased-delete path (`releaseLiteralLockEntry` → the shared entry-keyed
+	// core), so the trust model is unchanged: the human still asserts liveness.
+	// EXACTLY ONE of {item positional, --entry} must be given.
 	program
-		.command('release-lock <item>')
+		.command('release-lock [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/dorfl/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `spec:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock, never deletes).',
+			'Clear a NAMED stuck/orphaned UNIFIED per-item lock (refs/dorfl/lock/<entry>) by DELETING the ref on the arbiter — the recovery verb for a lock the system orphaned (a crashed build/task/advance that left the hold behind). The generalisation of `release-advancing` from the advancing marker to the ONE lock per item. Same trust model as `requeue`: a HUMAN asserts the lock is dead by NAMING it; the tool never guesses liveness (the lock has NO heartbeat, so there is NO automatic sweep / age-based reaper anywhere). Accepts the same item forms as the lock API: `task:<slug>` / `spec:<slug>` / `obs:<slug>` / a bare `<slug>` (= task). ESCAPE HATCH: `--entry <literal>` (no item positional) targets a LITERAL entry name directly, bypassing the namespace mapping — for a lock whose entry name is not derivable from any current item-form (a pre-vocabulary-cutover `slice-<slug>` / `prd-<slug>` prefix, or a future rename); this is the supported way to clear such orphans, so the raw `git push origin --delete refs/dorfl/lock/…` plumbing is no longer required. Idempotent — re-running on an already-cleared lock is a clean exit-0 no-op (deleting the lock ref is “all locks released”, recoverable). NEVER `--force`. Discoverable via `gc --ledger` (it REPORTS every lingering lock and, for a pre-cutover entry, the exact `release-lock --entry <literal>` invocation).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--entry <literal>',
+			'ESCAPE HATCH: the LITERAL lock-entry name (`refs/dorfl/lock/<literal>`) to release VERBATIM, bypassing the namespace mapping — for a lock whose entry name is not derivable from any current item-form (a pre-cutover `slice-<slug>` / `prd-<slug>` entry). Mutually exclusive with the item positional (give EXACTLY one). Validated to `[A-Za-z0-9._-]+` (no slashes/whitespace) so it cannot escape the lock namespace.',
+		)
 		.option(
 			'--cwd <dir>',
 			'the repo/working clone whose arbiter remote the lock ref is DELETED on (default: cwd)',
@@ -3682,26 +3700,54 @@ export function buildProgram(): Command {
 			'--arbiter <remote>',
 			'the arbiter git remote the lock ref is deleted on (default: origin)',
 		)
-		.action(async (item: string, flags: ReleaseLockFlags) => {
+		.action(async (item: string | undefined, flags: ReleaseLockFlags) => {
 			const cwd = flags.cwd ?? process.cwd();
 			const arbiter = flags.arbiter ?? 'origin';
-			const result = await releaseItemLock({
-				item,
-				cwd,
-				arbiter,
-				env: process.env,
-			});
+			// MUTUAL EXCLUSION: exactly one of {item positional, --entry}. BOTH or
+			// NEITHER is a usage error (non-zero exit, actionable message) — the
+			// item-form and the literal escape hatch are two ways to name ONE lock, not
+			// combinable.
+			if (item !== undefined && flags.entry !== undefined) {
+				console.error(
+					'error: give EITHER an item (task:<slug> / spec:<slug> / obs:<slug> / <slug>) OR --entry <literal>, not both.',
+				);
+				process.exit(1);
+			}
+			if (item === undefined && flags.entry === undefined) {
+				console.error(
+					'error: name the lock to release — an item (task:<slug> / spec:<slug> / obs:<slug> / <slug>) OR --entry <literal> for a pre-cutover entry with no current item-form.',
+				);
+				process.exit(1);
+			}
+			// The LITERAL escape-hatch path (`--entry`): take the entry name verbatim,
+			// bypassing the namespace mapping, and reuse the SAME leased-delete core.
+			const result =
+				flags.entry !== undefined
+					? await releaseLiteralLockEntry({
+							entry: flags.entry,
+							cwd,
+							arbiter,
+							env: process.env,
+						})
+					: await releaseItemLock({
+							item: item as string,
+							cwd,
+							arbiter,
+							env: process.env,
+						});
 			if (result.outcome === 'released') {
 				console.log(
 					`Released lock '${result.entry}' (${result.ref} deleted on ${arbiter}; the item itself was untouched — it rests on main / its work/<slug> branch).`,
 				);
 				return;
 			}
-			// IDEMPOTENT exit semantics: `releaseItemLock` returns `not-held` when the
+			// IDEMPOTENT exit semantics: the release returns `not-held` when the
 			// ref is ALREADY absent. For a HUMAN re-running the verb on an
 			// already-cleared lock that is the CORRECT "nothing to clear" outcome —
 			// deleting the lock ref(s) is "all locks released" and recoverable — so map
-			// it to a clean exit-0 with an honest message (NOT a failure).
+			// it to a clean exit-0 with an honest message (NOT a failure). The message
+			// names the LITERAL entry (`refs/dorfl/lock/<entry>`) so an operator can
+			// copy-paste it straight back into a `--entry` invocation.
 			if (result.outcome === 'not-held') {
 				console.log(
 					`No lock to release for '${result.entry}' (${result.ref} is already absent on ${arbiter} — “all locks released”, recoverable).`,

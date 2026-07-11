@@ -154,8 +154,16 @@ attention)" to "stuck + non-terminal (genuine human attention)"; the previously-
   `gc-remote-branches-cannot-reap-squash-merged-work-branch-2026-06-28`: same orphan root shape
   (durable `main` record says terminal, but a narrower ancestry-only / active-only predicate can't
   see it). Fixing both aligns the reaper on the `main`-record-is-authoritative rule.
-- Complementary human-recovery path: `release-lock <item>` (sibling
-  `release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries` fixed the manual escape hatch
-  for current-vocabulary entries). This addendum closes the AUTO-recovery gap.
+- Complementary human-recovery path: `release-lock <item>` for a current-vocabulary entry, and
+  `release-lock --entry <literal>` for a lock whose entry name is NOT derivable from any current
+  item-form (a pre-vocabulary-cutover `slice-<slug>` / `prd-<slug>` prefix, or a future rename) —
+  the escape hatch shipped by task
+  `release-lock-entry-escape-hatch-and-literal-entry-reporting` (from sibling observation
+  `release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries`). `--entry` bypasses the
+  namespace mapping and targets `refs/dorfl/lock/<literal>` directly via the SAME leased delete, so
+  the raw `git push origin --delete refs/dorfl/lock/…` plumbing is no longer required; `gc --ledger`
+  surfaces the literal entry name + the exact `--entry` invocation for such an orphan. This addendum
+  closes the AUTO-recovery gap; the escape hatch remains the human path until an eventual one-time
+  migration renames the pre-cutover entries.
 - Distinct from the reaper `no-lock` mislabel (`reaper-no-lock-outcome-benign-not-lost`, now a
   task) — same reaper surface, different classification bug; NOT conflated here.
