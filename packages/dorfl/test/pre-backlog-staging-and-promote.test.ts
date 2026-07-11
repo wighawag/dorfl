@@ -226,16 +226,24 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 		expect(before.outcome).not.toBe('claimed');
 
 		// PROMOTE (runner-owned).
+		const promoteNotes: string[] = [];
 		const promoted = await promoteFromPreBacklog({
 			slug: 'to-promote',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
+			note: (m) => promoteNotes.push(m),
 		});
 		expect(promoted.moved).toBe(true);
 		expect(promoted.commitMessage).toMatch(
-			/promote work\/pre-backlog\/ -> work\/backlog\//,
+			/promote work\/tasks\/backlog\/ -> work\/tasks\/ready\//,
 		);
+		// The success note names the live task-layout folders (`tasks/backlog` →
+		// `tasks/ready`), NOT the stale `pre-backlog`/`backlog` vocabulary.
+		expect(promoteNotes.join('\n')).toMatch(
+			/Promoted 'to-promote' from tasks\/backlog to tasks\/ready/,
+		);
+		expect(promoteNotes.join('\n')).not.toMatch(/pre-backlog/);
 
 		// Postcondition: in the pool, no longer staged — and now claimable.
 		expect(onArbiterMain(repo, 'work/tasks/backlog/to-promote.md')).toBe(false);
@@ -249,7 +257,7 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 		expect(after.outcome).toBe('claimed');
 	});
 
-	it('promote on a slug not in pre-backlog/ refuses cleanly (no main move)', async () => {
+	it('promote on a slug not in tasks/backlog/ refuses cleanly (no main move)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await promoteFromPreBacklog({
 			slug: 'nope',
@@ -259,6 +267,10 @@ describe('STEP A — the runner-owned promotion makes a staged task claimable', 
 		});
 		expect(result.moved).toBe(false);
 		expect(result.reasonNotMoved).toMatch(/not staged|wrong slug|nothing/i);
+		// The refusal names the live task-layout folders, NOT `pre-backlog`.
+		expect(result.reasonNotMoved).toMatch(/work\/tasks\/backlog\//);
+		expect(result.reasonNotMoved).toMatch(/work\/tasks\/ready\//);
+		expect(result.reasonNotMoved).not.toMatch(/pre-backlog/);
 	});
 });
 
