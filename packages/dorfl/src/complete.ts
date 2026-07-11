@@ -670,12 +670,14 @@ async function runComplete(
 	// removes it from THERE, so the move can never disagree with what the arbiter
 	// holds even when the local tree diverges (ledger-integrity defect 1). The
 	// `source` we pass is the arbiter-content fallback for the degenerate "arbiter
-	// holds nothing" case, not the authority. `in-progress/` is RETAINED below for
-	// the legacy/bounce surfaces that may still source from it until its folder
-	// removal (9c, OUT of this task's scope).
+	// holds nothing" case, not the authority. The legacy `in-progress/` FOLDER PROBE
+	// is GONE (task `finish-in-progress-folder-cutover-remove-legacy-recovery-readers`):
+	// the per-item-lock cutover moved claim OFF writing `work/in-progress/` (the body
+	// rests in `tasks/backlog/`, liveness is the held lock), so nothing writes that
+	// folder anymore and the `existsSync(inProgress)` arm could not fire. Liveness is
+	// the lock, not the folder.
 	const backlog = workItemPath(cwd, 'tasks-ready', slug);
 	const staged = workItemPath(cwd, 'tasks-backlog', slug);
-	const inProgress = workItemPath(cwd, 'in-progress', slug);
 	const done = workItemPath(cwd, 'done', slug);
 	const onBacklog = existsSync(backlog);
 	// `--allow-backlog` drive (spec
@@ -688,7 +690,6 @@ async function runComplete(
 	// strand `complete` must REFUSE (the honest "not finished, not done" position),
 	// NOT silently integrate — only the deliberate drive promotes from staging.
 	const onPreBacklog = options.allowBacklog === true && existsSync(staged);
-	const onInProgress = existsSync(inProgress);
 	// SELF-RENAMING FOLDER task backstop: the binary-known `work/done/<slug>.md`,
 	// OR — when none of the binary-known ledger folders hold the record — the slug
 	// at a RENAMED done-position the migration agent placed it in (e.g.
@@ -697,13 +698,10 @@ async function runComplete(
 	// resolution is byte-for-byte unchanged.
 	const onDone =
 		existsSync(done) ||
-		(!onBacklog &&
-			!onPreBacklog &&
-			!onInProgress &&
-			recordAtRenamedDonePosition(cwd, slug));
+		(!onBacklog && !onPreBacklog && recordAtRenamedDonePosition(cwd, slug));
 	// STRANDED-DONE AUTO-RECOVER (spec `ledger-integrity` story 6, the autonomous
-	// half of `finish-already-committed-branch`). When neither in-progress/ nor
-	// needs-attention/ holds the slug on the BRANCH tree BUT done/ does, the work
+	// half of `finish-already-committed-branch`). When the pool/staging does NOT
+	// hold the slug on the BRANCH tree BUT done/ does, the work
 	// branch was already built + done-moved + committed by a prior run that never
 	// landed on the arbiter (a terminal push failed, or the PR never merged). The
 	// autonomous `do`/`advance`/plain-`complete` path used to refuse this with
@@ -715,8 +713,7 @@ async function runComplete(
 	// `<arbiter>/main` returns `already-integrated` (clean no-op, NEVER a
 	// re-push/double-integrate). Mutually exclusive with the build-path source +
 	// `recovering` flags — the core ignores them when `committedRecovery` is set.
-	const folderShapeStranded =
-		!onBacklog && !onPreBacklog && !onInProgress && onDone;
+	const folderShapeStranded = !onBacklog && !onPreBacklog && onDone;
 	// DIRTY-CONTINUE GATE (task `recover-autodetect-gated-on-nothing-to-commit`).
 	// The folder-shape stranded-done auto-detect is necessary but NOT sufficient on
 	// a CONTINUE: a requeued task whose prior attempt already done-moved the slug
@@ -751,24 +748,19 @@ async function runComplete(
 	// "nothing to complete" CompleteRefusal). We default `source` to `'tasks-ready'`
 	// so `sourcePath` resolves to the canonical pool path the refusal message
 	// names; the refusal fires because that file does not exist on disk.
-	const source: 'tasks-ready' | 'tasks-backlog' | 'in-progress' | 'done' =
-		dirtyContinue
-			? 'done'
-			: onBacklog
-				? 'tasks-ready'
-				: onInProgress
-					? 'in-progress'
-					: onPreBacklog
-						? 'tasks-backlog'
-						: 'tasks-ready';
+	const source: 'tasks-ready' | 'tasks-backlog' | 'done' = dirtyContinue
+		? 'done'
+		: onBacklog
+			? 'tasks-ready'
+			: onPreBacklog
+				? 'tasks-backlog'
+				: 'tasks-ready';
 	const sourcePath =
 		source === 'tasks-ready'
 			? backlog
 			: source === 'tasks-backlog'
 				? staged
-				: source === 'in-progress'
-					? inProgress
-					: done;
+				: done;
 	if (dirtyContinue) {
 		// Announce LOUDLY (parallel to the `committedRecovery` recovery note above):
 		// the autonomous integrate path took the CONTINUE-BUILD branch, not the
