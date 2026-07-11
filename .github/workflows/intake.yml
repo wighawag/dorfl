@@ -1,10 +1,10 @@
 # dorfl — the ISSUE INTAKE trigger in CI (capability D: consider incoming
-# issues → task/prd, PLUS insertion point E: surface the review verdict into the
-# issue thread, prd runner-in-ci). EMITTED by `dorfl install-ci`; the human
+# issues → task/spec, PLUS insertion point E: surface the review verdict into the
+# issue thread, spec runner-in-ci). EMITTED by `dorfl install-ci`; the human
 # commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the shell.
 #
 # WHAT IT DOES — `dorfl intake <N>` reads issue #N + its comment thread,
-# runs a prompt→verdict decision (ask / task / PRD / bounce), and dispatches it.
+# runs a prompt→verdict decision (ask / task / SPEC / bounce), and dispatches it.
 # CI owns ONLY the trigger + the merge-vs-propose POLICY + the delivery surface;
 # the TRANSFORM is the engine's (the Out-of-Scope fence — CI re-implements none of
 # it). The lone-task review/edit loop `intake` already runs ALSO surfaces its
@@ -90,7 +90,7 @@ env:
   # permissive merge side; author-trust then forces propose for a task from an
   # untrusted author.
   DORFL_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
-  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted prd next?
+  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted spec next?
 
 jobs:
   intake:
@@ -150,8 +150,8 @@ jobs:
 
           # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
           # derived from the SAME ${trusted} case above (one author-trust read,
-          # two consumers — the task/prd modes AND the stamp — so they cannot
-          # desync). `intake` STAMPS this onto the emitted prd/task frontmatter
+          # two consumers — the task/spec modes AND the stamp — so they cannot
+          # desync). `intake` STAMPS this onto the emitted spec/task frontmatter
           # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
           # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
           # so a later auto-task/auto-build of an untrusted-origin artifact still

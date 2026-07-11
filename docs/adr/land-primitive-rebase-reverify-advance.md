@@ -162,7 +162,7 @@ when the follow-on spec is taken up.
 
 ## Cross-references
 
-- prd: `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md` —
+- spec: `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md` —
   the four-gap brief this ADR answers the durable WHY for.
 - Protocol invariant line: `WORK-CONTRACT.md` and `CLAIM-PROTOCOL.md` (dual
   source: `skills/setup/protocol/` → `work/protocol/`, byte-identical).

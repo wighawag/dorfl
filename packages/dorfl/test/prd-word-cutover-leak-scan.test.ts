@@ -213,6 +213,24 @@ function isProvenanceFile(rel: string): boolean {
 	return PROVENANCE_FILE_BASENAMES.some((b) => rel.endsWith(b));
 }
 
+// A `prd:` field / `do prd:` verb reference is exempt ONLY as immutable
+// PROVENANCE inside a TERMINAL-HISTORY body (a done/cancelled task, a
+// tasked/dropped spec, or an append-only note), where rewriting it would
+// FALSIFY the record of what a build did. In a LIVING doc (`CONTEXT.md`,
+// `README.md`, `AGENTS.md`, `skills/`, `docs/`, and ACTIVE `work/` items) the
+// hard cutover killed the `prd:` field-read + `do prd:`/`advance prd:` verb, so
+// a `prd:`/`do prd:` there is a stale reference and MUST be swept.
+function isTerminalHistory(rel: string): boolean {
+	const p = rel.split('\\').join('/');
+	return (
+		p.startsWith('work/tasks/done/') ||
+		p.startsWith('work/tasks/cancelled/') ||
+		p.startsWith('work/specs/tasked/') ||
+		p.startsWith('work/specs/dropped/') ||
+		p.startsWith('work/notes/') // observations/ideas/findings: append-only capture
+	);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // The leak lens (WORD + folder path, minus the PRESERVE allow-list).
 // ───────────────────────────────────────────────────────────────────────────
@@ -232,7 +250,12 @@ const WORD_CHAR = /[A-Za-z0-9_]/;
  * verb/field alias, the `prd-`/`prd/` NAMESPACE + legacy-folder forms, and the
  * enumerated slug identities.
  */
-function isAllowedWordHit(line: string, idx: number, lower: string): boolean {
+function isAllowedWordHit(
+	line: string,
+	idx: number,
+	lower: string,
+	terminalHistory: boolean,
+): boolean {
 	const before = line[idx - 1] ?? '';
 	const after = line[idx + 3] ?? '';
 	// camelCase / PascalCase / snake_case → not a standalone word (historical API
@@ -249,10 +272,11 @@ function isAllowedWordHit(line: string, idx: number, lower: string): boolean {
 	// observation/finding notes) and this cutover's own provenance — where a `prd:`
 	// in a done body/title RECORDS the field/verb AS IT WAS at build time. That is
 	// immutable PROVENANCE (survivor class per this task: provenance is exempt);
-	// rewriting it would FALSIFY history. So a `prd:` in prose stays exempt HERE as
-	// a provenance/historical reference, NOT as a live alias. (A backticked `prd:`
-	// token is already stripped by the inline-code lens, preserve #6.)
-	if (after === ':') return true;
+	// rewriting it would FALSIFY history. So a `prd:` in prose stays exempt ONLY in
+	// TERMINAL-HISTORY trees (provenance), NOT in a LIVING doc where the dead field/
+	// verb must be swept to `spec:`. (A backticked `prd:` token is already stripped
+	// by the inline-code lens, preserve #6.)
+	if (after === ':') return terminalHistory;
 	// The NAMESPACE / legacy-folder forms: `prd-<…>` (lock/sidecar/branch glob),
 	// `prd/` (legacy flat folder). Only a `prd` that is the HEAD of a
 	// hyphen/slash construct — the bare word `prd` never survives here.
@@ -339,7 +363,10 @@ function fileLeaks(rel: string, text: string): Leak[] {
 		while ((m = PRD_HIT.exec(prose))) {
 			const idx = m.index;
 			const tok = prose.slice(idx, idx + 3);
-			if (isAllowedWordHit(prose, idx, tok.toLowerCase())) continue;
+			if (
+				isAllowedWordHit(prose, idx, tok.toLowerCase(), isTerminalHistory(rel))
+			)
+				continue;
 			leaks.push({
 				file: rel,
 				line: i + 1,
@@ -402,16 +429,25 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 		].join('\n');
 		expect(fileLeaks('good.md', good)).toEqual([]);
 
-		// HARD CUTOVER + PROVENANCE: a NON-backticked `prd:` in terminal-history prose
-		// stays exempt HERE (this WORD scan walks immutable history where `prd:`
-		// RECORDS the dead field/verb as-was; the SRC-prose scan is what FAILS on a
-		// stray LIVE `prd:` field-key / `do prd:` verb in code).
+		// HARD CUTOVER + PROVENANCE: a NON-backticked `prd:` in a TERMINAL-HISTORY
+		// body stays exempt (this WORD scan walks immutable history where `prd:`
+		// RECORDS the dead field/verb as-was); rewriting it would falsify the record.
 		expect(
-			fileLeaks('done-body.md', 'Fixed at launch in the prd: ...'),
+			fileLeaks('work/tasks/done/x.md', 'Fixed at launch in the prd: ...'),
 		).toEqual([]);
-		expect(fileLeaks('done-body.md', 'Route do prd:<slug> output ...')).toEqual(
-			[],
-		);
+		expect(
+			fileLeaks('work/tasks/done/x.md', 'Route do prd:<slug> output ...'),
+		).toEqual([]);
+
+		// but the SAME `prd:` / `do prd:` reference in a LIVING doc IS a leak (the
+		// hard cutover killed the field/verb; a living doc must read `spec:`/`do
+		// spec:`). This is the distinction the terminal-history scoping enforces.
+		expect(
+			fileLeaks('CONTEXT.md', 'a task\u2019s prd: field points at').length,
+		).toBe(1);
+		expect(
+			fileLeaks('docs/x.md', 'Route do prd:<slug> output ...').length,
+		).toBe(1);
 	});
 
 	it('the walk reaches a representative spread (exhaustive-by-construction)', () => {

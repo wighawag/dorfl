@@ -1,4 +1,4 @@
-# dorfl — the VERIFY workflow (Tier-1 GitHub ceiling; prd
+# dorfl — the VERIFY workflow (Tier-1 GitHub ceiling; spec
 # land-time-reverify-and-parallel-merge-ceiling, task
 # install-ci-tier1-branch-protection). EMITTED by `dorfl install-ci`; the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade.

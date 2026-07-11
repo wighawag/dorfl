@@ -1,5 +1,5 @@
 # dorfl — the ADVANCE LIFECYCLE loop in CI (capability C: auto-triage
-# observations + surface declared blockers + apply committed answers, prd
+# observations + surface declared blockers + apply committed answers, spec
 # runner-in-ci). EMITTED by `dorfl install-ci` by PARAMETERISING the seed
 # `docs/ci/advance-loop.yml.template` (the advance-loop capability's output) — the
 # human commits it. DO NOT hand-edit a copy — re-run install-ci to upgrade the
@@ -25,7 +25,7 @@
 #   * merge   ⇒ ALSO a MATRIX (one leg per item; build/gate/review fan out, the
 #               LAND tail — rebase + CAS push to `main` — is serialised by the
 #               engine's `mergeRetries` CAS-retry loop, NOT by the workflow shape.
-#               PRD `land-time-reverify-and-parallel-merge-ceiling`: a
+#               SPEC `land-time-reverify-and-parallel-merge-ceiling`: a
 #               non-fast-forward push triggers re-rebase + re-gate + retry, never
 #               a `--force`. The cross-job serialiser is the CAS-retry FLOOR;
 #               there is NO host-specific `concurrency:` group on the merge job).
@@ -289,7 +289,7 @@ jobs:
         run: dorfl advance "${{ matrix.item }}" --propose --watch --arbiter origin
 
   # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
-  # PRD `land-time-reverify-and-parallel-merge-ceiling` (stories 4 + 6): each item
+  # SPEC `land-time-reverify-and-parallel-merge-ceiling` (stories 4 + 6): each item
   # gets its own leg; build/gate/review run concurrently across siblings; the LAND
   # TAIL is serialised by the engine's `mergeRetries` CAS-retry loop — the
   # git-alone floor — NOT by the workflow shape. A non-fast-forward push triggers
