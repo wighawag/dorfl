@@ -120,10 +120,12 @@ describe('work-layout — the single source of every work/ path + folder union',
 			'tasks-ready',
 			'done',
 		]);
+		// `needs-attention` was dropped post-cutover
+		// (`finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`,
+		// ADR `needs-attention-folder-cutover-followup-nits`): the folder is retired.
 		expect([...TASK_LIFECYCLE_FOLDERS]).toEqual([
 			'tasks-ready',
 			'in-progress',
-			'needs-attention',
 			'done',
 		]);
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([

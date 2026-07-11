@@ -27,9 +27,8 @@ import {
  * claim ledger (`ledger-read.ts` resolves claim-STATE, a different concern). It
  * reuses {@link parseFrontmatter} (the `spec:` field) rather than hand-rolling a YAML
  * parse, and scans the task lifecycle folders directly: `work/tasks/ready/`,
- * `work/in-progress/`, `work/needs-attention/`, and `work/done/`. A task that has
- * NOT yet landed in `work/done/` (still in backlog / in-progress / needs-attention)
- * means the spec is not yet complete.
+ * `work/in-progress/`, and `work/done/`. A task that has NOT yet landed in
+ * `work/done/` (still in backlog / in-progress) means the spec is not yet complete.
  */
 
 /** The task lifecycle folders a `spec:<slug>` task can reside in. */

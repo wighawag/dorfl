@@ -9,7 +9,7 @@ let root: string;
 
 /** Seed one `work/<folder>/<file>` task with the given frontmatter. */
 function writeTask(
-	folder: 'backlog' | 'in-progress' | 'needs-attention' | 'done',
+	folder: 'backlog' | 'in-progress' | 'done',
 	file: string,
 	frontmatter: Record<string, string>,
 	body = 'body',
@@ -72,20 +72,12 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 		expect(result.tasks.map((s) => s.slug)).toEqual(['a', 'b', 'c']);
 	});
 
-	it('NOT complete when a matching task is in in-progress or needs-attention (not done)', () => {
+	it('NOT complete when a matching task is in in-progress (not done)', () => {
+		// Post-cutover `needs-attention/` is no longer a task residence (retired to
+		// the per-item lock `state: stuck`), so `in-progress` is the only transient
+		// non-done residence the scan still recognises.
 		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
 		writeTask('in-progress', 'b.md', {slug: 'b', spec: 'issue-intake'});
-
-		expect(
-			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
-		).toBe(false);
-
-		// And the needs-attention case is likewise incomplete.
-		rmSync(join(root, 'repo', 'work', 'in-progress'), {
-			recursive: true,
-			force: true,
-		});
-		writeTask('needs-attention', 'b.md', {slug: 'b', spec: 'issue-intake'});
 
 		expect(
 			isSpecComplete({repoPath: repoPath(), slug: 'issue-intake'}).complete,
