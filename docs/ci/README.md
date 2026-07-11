@@ -129,10 +129,10 @@ Applied Answer q1):**
 queue (`repos[].items[]`) AND the in-place working checkout (`cwd.repo.items[]`);
 the enumeration unions both pools, because CI runs in-place (a fresh runner has no
 registered mirror, so the eligible tasks live in `cwd.repo.items[]`). So the
-propose **matrix** fans out over eligible tasks — one PR per task. Taskable **specs** (the `do prd:`/tasking rung) are advanced via
+propose **matrix** fans out over eligible tasks — one PR per task. Taskable **specs** (the `do spec:`/tasking rung) are advanced via
 the **sequential** path instead: the `merge` job's `advance -n <x>` covers both
 pools (it drives the full eligible set sequentially), or you dispatch a named
-`advance prd:<slug>`. This keeps the matrix to genuinely-independent PRs and does
+`advance spec:<slug>`. This keeps the matrix to genuinely-independent PRs and does
 NOT mint a new mirror-pool JSON CLI surface (that enumeration lives in
 `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a separate
 concern, not this template's).

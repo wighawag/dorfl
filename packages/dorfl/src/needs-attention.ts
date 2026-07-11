@@ -863,7 +863,7 @@ export async function promoteFromPreBacklog(
  * the auto-task pool, not the gates).
  *
  * **RUNNER/human-owned.** There is no agent-facing path that performs this:
- * `intake`'s `prd` dispatch lands the spec STAGED in `work/specs/proposed/` (the
+ * `intake`'s `spec` dispatch lands the spec STAGED in `work/specs/proposed/` (the
  * runner's deterministic placement decision), and only a runner/human
  * invocation moves it into the pool. The agent does no git here, as
  * everywhere; this function is not reachable from any agent surface.
@@ -937,7 +937,7 @@ export async function promoteFromPreSpec(
 	// (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the lock
 	// identity is `spec:${slug}` to match the `spec-<slug>` entry the tasking/apply
 	// path now acquires (`tasking.ts` releases under `spec:${slug}`); a stale
-	// `prd:${slug}` here would key a DIFFERENT ref and break the mutual exclusion.
+	// ''prd:${slug}'' here would key a DIFFERENT ref and break the mutual exclusion.
 	// Loss / crash semantics mirror the task case.
 	const item = `spec:${slug}`;
 	const acquired = await acquireItemLock({

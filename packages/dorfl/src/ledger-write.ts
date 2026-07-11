@@ -799,7 +799,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
  *     posture the old local-only folder move took). NOTE this records nothing
  *     durable, by design: the human is in the loop.
  *
- * Keyed on `task:<slug>` (the bounce surfaces a TASK; the prd/observation locks
+ * Keyed on `task:<slug>` (the bounce surfaces a TASK; the spec/observation locks
  * are tasking/advance holds whose own bounce paths are separate).
  */
 async function bounceToStuckLock(params: {

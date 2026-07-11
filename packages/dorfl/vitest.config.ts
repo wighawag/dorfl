@@ -40,7 +40,7 @@ const RACE_SENSITIVE = [
 	// loser, never --force; keep it out of file-parallel pressure for the same
 	// deterministic lock-CAS reasoning as tasking-lock.test.ts.
 	'test/gc-reap-stale-locks.test.ts',
-	// The tasking concurrency lock reuses the claim CAS (prd → tasking/ → prd)
+	// The tasking concurrency lock reuses the claim CAS (specs/ready → tasking/ → specs/ready)
 	// against a --bare arbiter and runs an in-process two-tasker race plus a
 	// release-rebase-conflict test that writes main; keep it out of file-parallel
 	// pressure for the same deterministic claim/main-CAS reasoning as claim-cas.
@@ -51,20 +51,20 @@ const RACE_SENSITIVE = [
 	// marker-delete release that writes main; keep it out of file-parallel pressure
 	// for the same deterministic claim/main-CAS reasoning as tasking-lock.test.ts.
 	'test/advancing-lock.test.ts',
-	// The `do prd:<slug>` tasking path (`performTask`): drives the lock CAS
-	// (prd → tasking → prd) against a --bare arbiter AND writes main (the
-	// runner-owned completing transition that emits backlog tasks + marks the PRD
+	// The `do spec:<slug>` tasking path (`performTask`): drives the lock CAS
+	// (specs/ready → tasking → specs/tasked) against a --bare arbiter AND writes main (the
+	// runner-owned completing transition that emits backlog tasks + marks the spec
 	// tasked); keep it out of file-parallel pressure for the same deterministic
 	// claim/main-CAS reasoning as tasking-lock.test.ts.
 	'test/tasking.test.ts',
-	// The `do prd:<slug>` slice-output-through-integration keystone
-	// (`slice-output-through-integration`): routes the produced tasks + the PRD
+	// The `do spec:<slug>` slice-output-through-integration keystone
+	// (`slice-output-through-integration`): routes the produced tasks + the spec
 	// lifecycle move through the shared `performIntegration` core, driving the lock
 	// CAS AND writing main (--merge) / pushing the work branch (--propose) against a
 	// --bare arbiter; keep it out of file-parallel pressure for the same
 	// deterministic claim/main-CAS reasoning as tasking.test.ts.
 	'test/tasking-integration.test.ts',
-	// The `do prd:<slug>` task-SET ACCEPTANCE GATE (`slice-acceptance-gate`): the
+	// The `do spec:<slug>` task-SET ACCEPTANCE GATE (`slice-acceptance-gate`): the
 	// task-path mirror of Gate-2 — runs a fresh-context review of the produced SET
 	// before it integrates, driving the lock CAS AND writing main (approve→merge /
 	// block→needs-attention via the lock's tasking/ → needs-attention redirect)
@@ -220,7 +220,7 @@ const RACE_SENSITIVE = [
 	'test/claim-acquires-unified-lock.test.ts',
 	// The POST-#9 EXCLUSION PROOF (task
 	// `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): drives REAL
-	// `performAdvance` build-task/task-prd rungs (which orchestrate the inner
+	// `performAdvance` build-task/task-spec rungs (which orchestrate the inner
 	// `performDo`/`performTask` claim/task lock) racing a direct `performClaim` /
 	// tasking acquire against a --bare `file://` arbiter, in-process, AND writes main
 	// (the inner do's merge integration). It is the git-`file://`-CAS race class

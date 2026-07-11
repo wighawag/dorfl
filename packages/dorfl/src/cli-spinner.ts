@@ -1,6 +1,6 @@
 /**
  * A small, isolated terminal-spinner helper for the standalone
- * `dorfl claim <slug>` CLI command (prd/task `claim-cas-spinner`).
+ * `dorfl claim <slug>` CLI command (spec/task `claim-cas-spinner`).
  *
  * The push the claim CAS performs can take a few seconds (network +
  * arbiter round-trip), so the terminal looked frozen. This helper wraps

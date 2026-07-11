@@ -16,9 +16,10 @@ import {fileURLToPath} from 'node:url';
  *     WORD in the human-readable TREES (`CONTEXT.md`/`docs`/`skills`/`work/**`)
  *     but does NOT walk `packages/dorfl/src` at all.
  *
- * So the artifact WORD `prd`/`PRD`/`Prd` in `src` doc-comment PROSE and the
- * `work/prds/…` FOLDER PATH inside `src` runtime/agent-prompt STRINGS silently
- * survived both gates (see
+ * So the artifact WORD `prd`/`PRD`/`Prd` (and the doubly-retired `brief` — the
+ * gate is BI-WORD, since a `spec`-only scan would pass a stray `brief`) in `src`
+ * doc-comment PROSE and the `work/prds/…` FOLDER PATH inside `src`
+ * runtime/agent-prompt STRINGS silently survived both gates (see
  * `work/notes/observations/advance-lifecycle-template-src-prose-still-says-prd-
  * 2026-07-10.md`). THIS scan closes that hole: it walks `packages/dorfl/src/*.ts`
  * and, over the PROSE positions the other two skip (comment/JSDoc text +
@@ -120,16 +121,26 @@ function isMigrationEngineFile(rel: string): boolean {
 }
 
 /**
- * Blank out markdown-style inline-code spans (`` `…` ``) on a line, preserving
- * column positions with spaces. A `prd`/`PRD` inside a `` `…` `` span in a
- * doc-comment / prompt string is a TOKEN reference (the retired token named in
- * backticks, e.g. "the legacy `prd` outcome is GONE", a `` `prd-body` `` example),
- * NOT the live artifact NOUN — the SAME "judge prose, exempt code spans" cut the
- * WORD scan (preserve #6) applies. The FOLDER-PATH lens still runs on the RAW
- * line, so a migrated-away `work/prds/` inside a code span is STILL caught.
+ * Blank out markdown-style inline-code spans (`` `…` ``) AND the ''…''
+ * PROVENANCE-MARKER spans on a line, preserving column positions with spaces. A
+ * `prd`/`PRD` inside a `` `…` `` span in a doc-comment / prompt string is a TOKEN
+ * reference (the retired token named in backticks, e.g. "the legacy `prd` outcome
+ * is GONE", a `` `prd-body` `` example), NOT the live artifact NOUN — the SAME
+ * "judge prose, exempt code spans" cut the WORD scan (preserve #6) applies.
+ *
+ * The ''…'' (double-single-quote) form is a DELIBERATE, uniquely-greppable
+ * PROVENANCE MARKER this cutover writes around the RETIRED token in
+ * narrate-the-removal comments (e.g. "the legacy ''prd:'' KEY read is GONE"): a
+ * distinct marker from ordinary backticks (which appear ~40× in src) so a
+ * maintainer can `grep "''prd''"` for exactly the "named here only as retired
+ * provenance" mentions. Treated identically to a backtick span (a token
+ * reference, not the live noun). The FOLDER-PATH lens still runs on the RAW line,
+ * so a migrated-away `work/prds/` inside either span is STILL caught.
  */
 function stripInlineCode(line: string): string {
-	return line.replace(/`[^`]*`/g, (span) => ' '.repeat(span.length));
+	return line
+		.replace(/''[^']*''/g, (span) => ' '.repeat(span.length))
+		.replace(/`[^`]*`/g, (span) => ' '.repeat(span.length));
 }
 
 const WORD_CHAR = /[A-Za-z0-9_]/;
@@ -174,6 +185,31 @@ function isAllowedWordHit(line: string, idx: number): boolean {
 	// A truly bare word `prd`/`PRD`: allowed ONLY if an enumerated slug on the
 	// line covers it (a provenance attribution).
 	return slugCovers(line);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// BI-WORD: the doubly-retired `brief` word in src PROSE. Same lens as the WORD
+// scan's `isAllowedBriefHit` (English inflection/adjective, `brief:`/`brief-`
+// namespace + rung/folder forms, an enumerated slug). `brief` is gated in ALL
+// src prose (there is no `work/**`-body provenance carve-out inside `src`).
+// ───────────────────────────────────────────────────────────────────────────
+const BRIEF_HIT = /[Bb][Rr][Ii][Ee][Ff]/g;
+const BRIEF_ENGLISH_CONTEXT =
+	/\bbrief (?:note|mention|summary|overview|description|moment|window|pause|comment|aside|recap|list|explanation|paragraph|sentence)\b|\bbe brief\b|\bbrief the\b|, brief,/i;
+
+function isAllowedBriefHit(line: string, idx: number): boolean {
+	const before = line[idx - 1] ?? '';
+	const after = line[idx + 5] ?? '';
+	// English inflection / camelCase (a letter/digit/_ glued either side): `debrief`,
+	// `briefly`, `briefing`, `briefcase`, a `BriefBody` symbol.
+	if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) return true;
+	// `brief:` / `brief-` / `brief/` namespace, `task-brief` rung: HEAD/TAIL of a
+	// hyphen/colon/slash construct — the retired identity, not the artifact noun.
+	if (after === ':' || after === '-' || after === '/' || before === '-')
+		return true;
+	if (slugCovers(line)) return true;
+	// Genuine English adjective/verb `brief`.
+	return BRIEF_ENGLISH_CONTEXT.test(line);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -361,6 +397,20 @@ function fileLeaks(rel: string, text: string): Leak[] {
 					why: 'standalone artifact-word prd/PRD/Prd in src prose/string — must read spec (or be an enumerated slug/alias)',
 				});
 			}
+			// (c) BI-WORD: the doubly-retired artifact word brief/Brief/BRIEF in src
+			//     prose (English / namespace / slug survivors allowed).
+			BRIEF_HIT.lastIndex = 0;
+			while ((m = BRIEF_HIT.exec(prose))) {
+				const idx = m.index;
+				const t = prose.slice(idx, idx + 5);
+				if (isAllowedBriefHit(prose, idx)) continue;
+				leaks.push({
+					file: rel,
+					line: lineNo,
+					token: t,
+					why: 'standalone artifact-word brief/BRIEF/Brief in src prose/string — the doubly-retired word must read spec (or be English / a namespace form / an enumerated slug)',
+				});
+			}
 		});
 	}
 	return leaks;
@@ -423,8 +473,37 @@ describe('prd → spec src PROSE + runtime-string leak scan', () => {
 			"const desc = 'the spec lifecycle lives in work/specs/ready/';",
 			'// the slug `folder-taxonomy-and-prd-edit-handshake` names a landed file',
 			'// a `prd`-token reference in backticks is preserved (the retired token)',
+			"// the legacy ''prd:'' KEY read is GONE (''…'' provenance marker, preserve #6)",
+			"// the verdict outcome renamed from ''prd'' to 'spec' (marker stripped)",
 		].join('\n');
 		expect(fileLeaks('src/good.ts', good)).toEqual([]);
+
+		// The ''…'' PROVENANCE MARKER is stripped exactly like a backtick span, but a
+		// BARE `prd` (no marker/backtick) on the SAME line still FAILS — the marker
+		// exemption is span-scoped, not line-scoped.
+		expect(
+			fileLeaks('src/mk.ts', "// the ''prd:'' key is a prd concept").some(
+				(l) => l.token === 'prd',
+			),
+		).toBe(true);
+
+		// BI-WORD: the doubly-retired artifact word `brief` in src prose FAILS (a
+		// `spec`-only scan would pass it); English / namespace / slug forms do not.
+		expect(
+			fileLeaks('src/b.ts', '// the brief is the north-star doc').some(
+				(l) => l.token === 'brief',
+			),
+		).toBe(true);
+		expect(
+			fileLeaks(
+				'src/b.ts',
+				[
+					'// add a brief note; debrief; answer briefly in a briefing',
+					'// the `brief:<slug>` namespace / `brief-<slug>` entry / `task-brief` rung',
+					"// the old ''brief'' vocabulary is retired",
+				].join('\n'),
+			),
+		).toEqual([]);
 
 		// HARD CUTOVER: the `prd:` field/verb alias is NO LONGER exempt. A NON-backtick
 		// `prd:` field key or `do prd:` verb in prose is now a LEAK (the field read is

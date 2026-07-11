@@ -60,14 +60,14 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		expect(doc).toMatch(/confidence check/i);
 		// File-orthogonality \u2014 the merge-conflict-minimisation rule.
 		expect(doc).toMatch(/file-orthogonal/i);
-		// The prd-vs-task gate disjointness.
+		// The spec-vs-task gate disjointness.
 		expect(doc).toMatch(/DISJOINT/);
 		expect(doc).toMatch(/taskedAfter/);
 		// The prose-description of the emitted task shape (D2).
 		expect(doc).toMatch(/emitted task shape/i);
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
-		expect(doc).toMatch(/\bprd\b/);
+		expect(doc).toMatch(/\bspec\b/);
 		expect(doc).toMatch(/\bblockedBy\b/);
 		expect(doc).toMatch(/\bcovers\b/);
 		// The placement rule \u2014 staging vs pool.
@@ -157,7 +157,7 @@ describe('Per-discipline shape DRIFT GUARD \u2014 a canonical task fixture parse
 		// Required frontmatter (the parser reads these).
 		expect(doc).toMatch(/\btitle\b/);
 		expect(doc).toMatch(/\bslug\b/);
-		expect(doc).toMatch(/\bprd\b/);
+		expect(doc).toMatch(/\bspec\b/);
 		expect(doc).toMatch(/\bblockedBy\b/);
 		// Optional axes the fixture exercises.
 		expect(doc).toMatch(/\bcovers\b/);

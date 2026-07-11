@@ -52,7 +52,7 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  *     applyEdits(…to disk…) }` — ONE agent LAUNCH per pass, the runner writing the
  *     agent's edits to the candidate task FILES (`work/tasks/backlog/`) between passes, the
  *     next pass's agent re-reading the edited files. Accumulation is via DISK +
- *     re-launch, NOT one agent retaining context. `prd/review.md` §Shape 2 is internally
+ *     re-launch, NOT one agent retaining context. `spec/review.md` §Shape 2 is internally
  *     contradictory on this (single-context headline vs "edit the files" operative spec);
  *     this code implements the operative reading. See
  *     `work/findings/review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl.md`.

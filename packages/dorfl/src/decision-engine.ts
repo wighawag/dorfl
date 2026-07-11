@@ -20,7 +20,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *   "the INPUT adapter differs per front door and is NOT forced to be shared").
  * - **the ALLOWED-OUTCOME SET** ({@link decide}'s `allowedOutcomes`): each caller
  *   passes the SUBSET of {@link DecisionOutcome} it permits — advance-apply allows
- *   `{task | prd | adr | delete | ask}`, intake keeps its own `{task | spec | ask |
+ *   `{task | spec | adr | delete | ask}`, intake keeps its own `{task | spec | ask |
  *   bounce}` (intake is NOT refactored onto this engine here — decision 13). The
  *   engine never hard-codes which outcomes a caller permits; it only VALIDATES the
  *   returned verdict against the set and rejects (loudly) one outside it
@@ -52,9 +52,9 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * {@link decide}. The engine is agnostic to which subset a caller permits.
  */
 // MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
-// parent-spec verdict outcome is `'spec'` (renamed from `'prd'`); the decider
+// parent-spec verdict outcome is `'spec'` (renamed from ''prd''); the decider
 // prompt emits it and the parser accepts it. This is a fresh per-call LLM verdict
-// (nothing `'prd'`-valued is persisted), so the rename needs no on-disk alias.
+// (nothing ''prd''-valued is persisted), so the rename needs no on-disk alias.
 export type DecisionOutcome = 'task' | 'spec' | 'adr' | 'delete' | 'ask';
 
 /**

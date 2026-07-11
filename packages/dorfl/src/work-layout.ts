@@ -74,7 +74,7 @@ export const WORK_ROOT = 'work' as const;
  * key-only relabel, this batch moves the folders too, so the KEY and VALUE change
  * together and the self-renaming-folder guard stays green. The KEY rename is a
  * mechanical relabel of the key literal at each call site (behaviour-preserving);
- * the legacy frontmatter `prd:` field survives ONLY as un-migrated on-disk DATA the
+ * the legacy frontmatter ''prd:'' field survives ONLY as un-migrated on-disk DATA the
  * `dorfl prd-to-spec` command textually converts to `spec:` (HARD CUTOVER: it is no
  * longer READ by `parseFrontmatter` — `spec:` is the only read key); the
  * `--specs-land-in` flag/`specsLandIn` config + the

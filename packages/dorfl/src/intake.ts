@@ -95,7 +95,7 @@ import {renderTaskBody, renderSpecBody} from './buildable-body.js';
  * table). EXPAND step (spec
  * `prd-to-spec-vocabulary-cutover-and-migration-command`): the `spec` outcome
  * names the "clear + coherent but >1 task" classification (a parent SPEC). HARD
- * CUTOVER (contract step): the legacy `prd` outcome token is GONE — the prompt
+ * CUTOVER (contract step): the legacy ''prd'' outcome token is GONE — the prompt
  * emits `spec` and the parser rejects any other token.
  */
 export type IntakeOutcome = 'ask' | 'task' | 'spec' | 'bounce';
@@ -256,7 +256,7 @@ export interface PerformIntakeOptions {
 	 * The PER-OUTCOME integration modes (spec `issue-intake` US #9) the emitted artifact integrates
 	 * THROUGH the shared core with. Because `intake` decides the artifact TYPE at
 	 * RUNTIME, the mode is keyed per type: an emitted task integrates with
-	 * `integration.task`, an emitted spec with `integration.prd` (`propose` =
+	 * `integration.task`, an emitted spec with `integration.spec` (`propose` =
 	 * push the `work/<slug>` branch + open a PR, NO `main` touch; `merge` = land on
 	 * `main`). The CLI resolves this from the granular + aggregate flags via
 	 * {@link resolveIntakeIntegrationModes}; ask/bounce emit nothing, so the modes
@@ -267,7 +267,7 @@ export interface PerformIntakeOptions {
 	 * **The ORIGIN-TRUST verdict, passed IN** (task
 	 * `untrusted-origin-forces-build-propose`; the `--origin-trust <trusted|untrusted>`
 	 * CLI flag). `intake` STAMPS `origin: issue` + this `originTrust` onto every spec/
-	 * task it emits, so the author-trust signal SURVIVES the prd/task merge
+	 * task it emits, so the author-trust signal SURVIVES the spec/task merge
 	 * boundary (a landed-on-main artifact otherwise erases how it was born, the
 	 * laundering gap). `intake` does NOT resolve trust itself: the verdict is CI's
 	 * POLICY, computed in the `intake.yml` shell from the SAME `author_association`
@@ -377,14 +377,14 @@ function specLandingToSide(
 
 /**
  * The emitted artifact TYPE `intake` decides at RUNTIME — a `task` verdict emits
- * `work/backlog/<slug>.md`, a `prd` verdict emits the spec file (`work/specs/ready/<slug>.md`). The two
+ * `work/backlog/<slug>.md`, a `spec` verdict emits the spec file (`work/specs/ready/<slug>.md`). The two
  * granular flag axes (`--merge-task`/`--propose-task` vs `--merge-spec`/
  * `--propose-spec`) are keyed on this. (ask/bounce emit NOTHING, so the modes are
  * no-ops for them.)
  */
 export type IntakeArtifactType = 'task' | 'spec';
-// `prd` → `spec` HARD CUTOVER: `'spec'` is the ONLY spec artifact type value; the
-// legacy `'prd'` alias is GONE (the contract task removed it).
+// ''prd'' → `spec` HARD CUTOVER: `'spec'` is the ONLY spec artifact type value; the
+// legacy ''prd'' alias is GONE (the contract task removed it).
 
 /**
  * The PER-OUTCOME integration mode FLAG SET (spec `issue-intake` US #9). Because
@@ -855,7 +855,7 @@ async function decideAndDispatch(
 				note,
 			});
 		// The `spec` outcome is the parent-spec verdict; it dispatches through
-		// `modes.spec`. HARD CUTOVER: the legacy `prd` outcome case is GONE.
+		// `modes.spec`. HARD CUTOVER: the legacy ''prd'' outcome case is GONE.
 		case 'spec':
 			return dispatchSpec({
 				verdict,
@@ -1217,8 +1217,8 @@ async function dispatchTask(params: {
 }
 
 /**
- * DISPATCH the `spec` outcome (canonical; the legacy `prd` outcome routes here too
- * through the cutover): derive a content-derived slug, write the spec file
+ * DISPATCH the `spec` outcome (the SOLE parent-spec outcome after the HARD CUTOVER;
+ * the legacy ''prd'' outcome token is GONE): derive a content-derived slug, write the spec file
  * (`work/specs/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the
  * close JOB reaches via `task.spec: → spec issue:`; on a fanned spec the number
  * lives ONLY on the spec — a fanned task uses `spec:`, NOT its own `issue:`, which
@@ -1737,7 +1737,7 @@ async function stageIntakeContent(params: {
  * `intake-` PRODUCER prefix keeps this short-lived "create the item" branch
  * DISTINCT from the later build branch (`work/task-<slug>`) for the same slug
  * — the firing `intake` × `do task:` collision the observation traced. The
- * task-emit path passes `'task'`, the spec-emit path `'prd'`. A pre-existing
+ * task-emit path passes `'task'`, the spec-emit path `'spec'`. A pre-existing
  * local branch (a re-run) is force-recreated off fresh main.
  */
 async function switchToWorkBranch(
@@ -1860,7 +1860,7 @@ export function parseIntakeVerdict(output: string): IntakeVerdict {
 		outcome !== 'bounce'
 	) {
 		// The prompt teaches the LLM to emit `spec`, so the accepted outcome set is
-		// `ask|task|spec|bounce`. HARD CUTOVER: the legacy `prd` outcome token is
+		// `ask|task|spec|bounce`. HARD CUTOVER: the legacy ''prd'' outcome token is
 		// fully gone (rejected here + removed from the `IntakeOutcome` type + the
 		// dispatch `case`).
 		throw new Error(

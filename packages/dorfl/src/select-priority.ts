@@ -49,7 +49,7 @@ import {
 
 /**
  * Which namespace a selected item names (mirrors the slug-namespace split). The
- * `do` selection only ever produces `task`/`prd`; the `advance` selection ALSO
+ * `do` selection only ever produces `task`/`spec`; the `advance` selection ALSO
  * produces `observation` (the lifecycle triage pool, task
  * `advance-autopick-lifecycle-pools`), so a selected lifecycle item carries which
  * rung the driver dispatches to. The widening is BACKWARD-COMPATIBLE: `do` never
@@ -76,7 +76,7 @@ export interface SelectedItem {
 /**
  * A lifecycle-pool selected item (task `advance-autopick-lifecycle-pools`). It is
  * a {@link SelectedItem} — the same shape — carrying the lifecycle namespace
- * (`observation` for triage; `task`/`prd` for a `needsAnswers`-blocked item the
+ * (`observation` for triage; `task`/`spec` for a `needsAnswers`-blocked item the
  * tick will surface/apply). A distinct alias names the lifecycle pools at the
  * call sites WITHOUT a structural difference (the discriminator is `namespace`).
  */
@@ -235,7 +235,7 @@ export function selectPrioritised(
 
 	// The per-pool item lists, keyed by the orderable pool name. NOTE the
 	// vocabulary bridge: `build` = the eligible-TASK pool (namespace `task`),
-	// `task` = the taskable-spec pool (namespace `prd`) — the action names, not the
+	// `task` = the taskable-spec pool (namespace `spec`) — the action names, not the
 	// item namespaces (task `advance-selection-order-config`).
 	const byPool: Record<SelectionPool, SelectedItem[]> = {
 		build: buildItems,

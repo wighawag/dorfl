@@ -166,7 +166,7 @@ export interface RungExecutor {
 export interface RungExecInput {
 	/** The canonical namespaced identity (`task:<slug>` / `spec:<slug>` / `observation:<slug>`). */
 	item: string;
-	/** The resolved namespace (`task` / `prd` / `observation`). */
+	/** The resolved namespace (`task` / `spec` / `observation`). */
 	namespace: SlugNamespace;
 	/** The bare slug. */
 	slug: string;
@@ -807,7 +807,7 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
  * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
  * type/context)` via the injected {@link ApplyDecider}, allowing the set
- * `{task | prd | adr | delete | ask}` (= `{mint-task | mint-spec | mint-adr |
+ * `{task | spec | adr | delete | ask}` (= `{mint-task | mint-spec | mint-adr |
  * delete-source | ask-follow-up}`; `adr` is now WIRED by task
  * `agentic-apply-mint-adr-route`, which added the {@link mintAdr} route). The
  * verdict ROUTES:
@@ -817,7 +817,7 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  *   - `adr` → {@link mintAdr} (mint a SELF-CONTAINED ADR into `docs/adr/` + `git
  *     rm` the source + sidecar in the SAME atomic commit; the SIBLING route for the
  *     off-board target);
- *   - `task` / `prd` → {@link promoteObservation} (mint a SELF-CONTAINED artifact +
+ *   - `task` / `spec` → {@link promoteObservation} (mint a SELF-CONTAINED artifact +
  *     `git rm` the source + sidecar in the SAME atomic commit); the artifact type
  *     comes from the agent's VERDICT, NOT a human `promote-*` field;
  *   - `delete` → {@link applyAnsweredQuestions} discharge-by-deletion (`git rm`
@@ -1119,7 +1119,7 @@ function findItemPath(
  *
  *   - `ask` → append the follow-up question(s) + re-pause (the EXISTING loop, via
  *     {@link applyAnsweredQuestions}'s `appendQuestions`);
- *   - `task` / `prd` → {@link promoteObservation} (mint self-contained + delete
+ *   - `task` / `spec` → {@link promoteObservation} (mint self-contained + delete
  *     source in the same atomic commit);
  *   - `adr` → {@link mintAdr} (mint a self-contained ADR into `docs/adr/` + delete
  *     source in the same atomic commit; the SIBLING route for the off-board target,
@@ -1127,7 +1127,7 @@ function findItemPath(
  *   - `delete` → {@link applyAnsweredQuestions}'s discharge-by-deletion (`git rm`
  *     source + sidecar in one revertible commit, the reason in the message).
  *
- * The allowed set is `{task | prd | adr | delete | ask}`; a verdict outside it is
+ * The allowed set is `{task | spec | adr | delete | ask}`; a verdict outside it is
  * rejected by the engine's allowed-outcome guard ({@link DisallowedOutcomeError})
  * and mapped onto a usage-error — never dispatched.
  */

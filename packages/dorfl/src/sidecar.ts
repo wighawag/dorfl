@@ -72,7 +72,7 @@ import {workItemRel} from './work-layout.js';
  * The item-types a sidecar can key onto (the slug-namespace + obs).
  *
  * HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
- * contract step): the legacy `'prd'` type member is GONE — the parent-spec type
+ * contract step): the legacy ''prd'' type member is GONE — the parent-spec type
  * is `'spec'` only. A `spec:<slug>` identity keys onto the `spec-<slug>`
  * lock/sidecar entry. The on-disk `prd-<slug>.md` sidecar FILE (dorfl's
  * not-yet-converted data) is still probed by {@link sidecarPathCandidates} as a
@@ -274,7 +274,7 @@ export function sidecarPathFor(identity: string): string {
  * `spec`-typed identity ALSO probes the legacy `prd-<slug>.md` as a fallback, and
  * a reader takes the FIRST candidate that exists. This is a FILE-PATH DATA alias
  * the migration command removes (it converts `prd-<slug>.md → spec-<slug>.md` on
- * disk); it is NOT the `SlugNamespace`/`SidecarType` `'prd'` type member. Every
+ * disk); it is NOT the `SlugNamespace`/`SidecarType` ''prd'' type member. Every
  * non-`spec` type has a single candidate (its canonical path), unchanged.
  */
 export function sidecarPathCandidates(identity: string): string[] {

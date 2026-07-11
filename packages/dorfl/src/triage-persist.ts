@@ -233,7 +233,7 @@ export interface PromoteObservationOptions {
 	 * CAS) — NOT intake's branch+integrate band — so the CAS-loser-backs-off
 	 * guarantee and the same-commit note deletion are uniform across the two routes.
 	 * MIGRATE step (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
-	 * produced VALUE is `'spec'` (the verdict outcome renamed from `'prd'`).
+	 * produced VALUE is `'spec'` (the verdict outcome renamed from ''prd'').
 	 */
 	artifact?: 'task' | 'spec';
 	/**
@@ -293,7 +293,7 @@ export interface PromoteObservationResult {
  * (create + delete).
  *
  * The artifact TYPE (`options.artifact`) selects the target + body shape: `'task'`
- * (default) mints `work/tasks/ready/<slug>.md`; `'prd'` mints
+ * (default) mints `work/tasks/ready/<slug>.md`; `'spec'` mints
  * `work/specs/proposed/<slug>.md` (SPEC staging — a human later promotes it to
  * `ready/`). BOTH routes use the SAME triage-local {@link createItemThroughCas}
  * writer (NOT intake's `switchToWorkBranch`/`performIntegration` branch+integrate
@@ -398,7 +398,7 @@ export async function promoteObservation(
  *
  * The artifact TYPE selects the frontmatter + lead heading: a `task` gets
  * `## What to build` + `blockedBy: []` + a `## Prompt` (the buildable-task shape);
- * a `prd` gets `## Problem Statement` (the SPEC document shape, with no `blockedBy` —
+ * a `spec` gets `## Problem Statement` (the SPEC document shape, with no `blockedBy` —
  * a SPEC is not a blockable task — and no `## Prompt`, since a SPEC is not
  * dispatched by `do`/`run`). BOTH carry the SAME transcribed mechanism prose +
  * open-question block, so a SPEC minted into `proposed/` is just as self-contained

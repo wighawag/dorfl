@@ -162,11 +162,11 @@ Classify each source by what it should BECOME (this is the table you showed at A
 
 ### B2. Convert the task/work system → specs + tasks + ideas
 
-- A single, clear, buildable ask → a **`work/tasks/backlog/<slug>.md`** task (`to-task`' task shape; `covers: []`, no `prd:` — its own source of truth).
+- A single, clear, buildable ask → a **`work/tasks/backlog/<slug>.md`** task (`to-task`' task shape; `covers: []`, no `spec:` — its own source of truth).
 - A coherent ask needing >1 task → a **`work/specs/ready/<slug>.md`** spec (`to-spec`'s framing). Task it only if asked; usually leave the spec for the human to task.
 - **Buildability gate — decide task-vs-idea BEFORE writing anything to the task board.** A `tasks/backlog/` task is for a **scoped, buildable** ask. `needsAnswers: true` is for a **near-complete spec with a few SPECIFIC open questions listed in the body** — _almost a task_, not a wish. A vague one-liner is NEITHER a task nor a `needsAnswers` task — it is an **`idea`**. The contract is explicit: _under-specified items should not be written into the task board until they are ready_. **When in doubt → `notes/ideas/`, not `tasks/backlog/`.** Do NOT manufacture a `needsAnswers` task to "capture" a wish.
 - **Set the two gate axes honestly** (WORK-CONTRACT §3b), once the item really is a task: `humanOnly: true` where building needs human judgement/security; `needsAnswers: true` where the spec is _near-complete but has specific listed open questions_ (NOT merely vague — that is an `idea`).
-- **Task ↔ spec link:** a self-contained task (chore/refactor/build-fix, no spec stories) carries `covers: []` and **omits `prd:`**. A task pointing into a spec's stories MUST set `covers: [...]` AND name that spec in `prd:` (`spec` required iff `covers` non-empty). Do not invent a `prd:` for a task deriving from no spec.
+- **Task ↔ spec link:** a self-contained task (chore/refactor/build-fix, no spec stories) carries `covers: []` and **omits `spec:`**. A task pointing into a spec's stories MUST set `covers: [...]` AND name that spec in `spec:` (`spec` required iff `covers` non-empty). Do not invent a `spec:` for a task deriving from no spec.
 - Content-derived slugs, never counters. Preserve any traceability (e.g. an `issue: N` link on a spec).
 
 ### B3. Understand the code — split by POLARITY, AND actively hunt decisions

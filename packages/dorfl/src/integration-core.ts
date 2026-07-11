@@ -740,7 +740,7 @@ export async function performIntegration(
 	// passes no flag, so there an untrusted-origin task RELIABLY forces propose.
 	//
 	// SCOPE: the task BUILD transition ONLY. It NEVER fires for a `lifecycle`
-	// transition (tasking / intake-emit — a prd/task FILE landing on main is inert;
+	// transition (tasking / intake-emit — a spec/task FILE landing on main is inert;
 	// intake's OWN per-emit resolver already decided that mode), and the source file
 	// here is the task being built. A `trusted`/unset task ⇒ untouched (zero
 	// behaviour change for the normal human path).
@@ -1590,7 +1590,7 @@ export async function performIntegration(
  * primitive the build path uses.
  *
  * RE-GATE on the REBASED TIP (task `committed-recovery-honours-fresh-worktree-
- * gate`, prd `land-time-reverify-and-parallel-merge-ceiling`): when the caller
+ * gate`, spec `land-time-reverify-and-parallel-merge-ceiling`): when the caller
  * sets `freshWorktreeGate` (and not `skipVerify`), the EXISTING
  * `runFreshWorktreeGate` runs on the rebased tip AFTER the rebase loop and
  * BEFORE `applyCompleteTransition`, mirroring the build path's
@@ -1801,7 +1801,7 @@ async function recoverAlreadyCommitted(params: {
 	}
 
 	// FRESH-WORKTREE GATE on the REBASED TIP (task `committed-recovery-honours-
-	// fresh-worktree-gate`, prd `land-time-reverify-and-parallel-merge-ceiling`):
+	// fresh-worktree-gate`, spec `land-time-reverify-and-parallel-merge-ceiling`):
 	// when `freshWorktreeGate` is set (the answered-merge land caller) and not
 	// `--skip-verify`, re-run the acceptance gate on the rebased tip BEFORE we
 	// integrate, mirroring the build path's `freshWorktreeGate && !skipVerify &&

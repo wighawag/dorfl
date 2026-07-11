@@ -71,7 +71,7 @@ Tell the user, concisely:
 
 - the repo is now contract-ready (what setup scaffolded / re-synced, the `verify` gate configured);
 - the spec written, by path — `work/specs/ready/<slug>.md` — left UNSTAGED for review, plus any `needsAnswers` questions it carries that a human must resolve before tasking;
-- **what's next on the main flow:** review the spec, then task it with `to-task` (or `dorfl do prd:<slug>` once the runner is installed and the spec is agent-safe). If the idea has real design forks worth pressure-testing first, point at the `grilling` skill — explicitly NOT part of this on-ramp.
+- **what's next on the main flow:** review the spec, then task it with `to-task` (or `dorfl do spec:<slug>` once the runner is installed and the spec is agent-safe). If the idea has real design forks worth pressure-testing first, point at the `grilling` skill — explicitly NOT part of this on-ramp.
 
 **Git etiquette:** never stage, commit, or push — leave both setup's scaffold and to-spec's spec in the working tree for the user to inspect and commit (the producer-skill convention setup and to-spec both follow).
 

@@ -95,7 +95,7 @@ Each emitted task file is a markdown document with YAML frontmatter, BORN STAGED
 
 - **`title:`** — a short, human-readable title for the task (one line).
 - **`slug:`** — the URL-safe content-derived slug; matches the filename `<slug>.md`. Never a counter.
-- **`spec:`** — the slug of the source `work/specs/ready/<spec>.md` this task derives from. REQUIRED when `covers:` is non-empty; OMITTED only on a self-contained chore/refactor (with `covers: []`). Disambiguates `covers:` story numbers. (The legacy `prd:` key is still READ as back-compat for un-migrated repos, but author `spec:`.)
+- **`spec:`** — the slug of the source `work/specs/ready/<spec>.md` this task derives from. REQUIRED when `covers:` is non-empty; OMITTED only on a self-contained chore/refactor (with `covers: []`). Disambiguates `covers:` story numbers.
 - **`blockedBy:`** — a YAML inline list of slugs that must reach `work/tasks/done/` first; `[]` means startable now.
 
 ### Optional frontmatter axes (omit when undeclared)

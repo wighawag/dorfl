@@ -280,7 +280,7 @@ export function scoreSpecs(
  * re-enumeration — a pure shape map over the already-gated pools.
  *
  * The pool items' `namespace` is the wider {@link SelectedNamespace}. SURFACE by
- * construction only carries `'task'`/`'prd'` (an observation with no sidecar is a
+ * construction only carries `'task'`/`'spec'` (an observation with no sidecar is a
  * `triage` candidate, never `surface`), so it narrows + drops any non-task/spec
  * defensively. APPLY additionally admits `'observation'` (an answered observation
  * sidecar → apply), and it MUST be kept so the matrix `jq` emits its

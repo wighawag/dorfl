@@ -1569,7 +1569,7 @@ export function formatReapReport(report: ReapReport): string[] {
  */
 export function itemFromLockEntry(entry: string): string {
 	// The lock-entry prefixes: `spec` is the parent-spec type token (the legacy
-	// `prd` token is GONE after the hard cutover), so a `spec-<slug>` lock entry
+	// ''prd'' token is GONE after the hard cutover), so a `spec-<slug>` lock entry
 	// round-trips back to its namespaced `spec:<slug>` form (the inverse of
 	// `lockEntryFor('spec:<slug>')`).
 	for (const prefix of ['task', 'spec', 'observation'] as const) {
@@ -1690,7 +1690,7 @@ export async function listItemLockEntries(
  * List the TASK slugs currently lock-held on the arbiter — the held-slug set the
  * `ready/` pool readers SUBTRACT (spec `ledger-status-per-item-lock-refs` US #15;
  * task `claim-acquires-unified-lock-no-body-move`). Enumerates {@link listItemLocks}
- * and keeps only the `task-<slug>` entries (a prd/observation lock does not gate
+ * and keeps only the `task-<slug>` entries (a spec/observation lock does not gate
  * the TASK pool), mapping each to its bare `<slug>`.
  *
  * LOAD-BEARING since the lock cut-over: the claim NO LONGER moves the body to

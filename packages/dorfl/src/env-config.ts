@@ -113,7 +113,7 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// > global > built-in `pre-proposed`); fed into the shared placement resolver
 	// (`src/placement.ts`) as the configured-default rung for the spec lifecycle.
 	// The legacy `prdsLandIn` key / `DORFL_PRDS_LAND_IN` env are GONE after the
-	// `prd` → `spec` hard cutover (clean break).
+	// ''prd'' → `spec` hard cutover (clean break).
 	specsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed

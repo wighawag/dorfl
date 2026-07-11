@@ -7,8 +7,8 @@
 
 /**
  * **Origin-trust PROVENANCE** (task `untrusted-origin-forces-build-propose`).
- * How a prd/task was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
- * signal SURVIVES the prd/task merge boundary (a landed-on-`main` artifact would
+ * How a spec/task was BORN and the AUTHOR-TRUST verdict at birth, stamped so the
+ * signal SURVIVES the spec/task merge boundary (a landed-on-`main` artifact would
  * otherwise erase how it was created — the laundering gap).
  *
  * - `origin` — `human` (the default / unset: a human authored it locally; a local
@@ -48,8 +48,8 @@ export interface Frontmatter {
 	 * spec lives at `work/specs/ready/<spec>.md`. The `spec` vocabulary name (spec
 	 * `prd-to-spec-vocabulary-cutover-and-migration-command`). `parseFrontmatter`
 	 * populates it from the canonical `spec:` key ONLY — the HARD CUTOVER (the last
-	 * `prd` back-compat surface removed): the legacy `prd:` KEY read is GONE, so an
-	 * un-migrated `prd:` field no longer silently resolves. A downstream repo
+	 * ''prd'' back-compat surface removed): the legacy ''prd:'' KEY read is GONE, so
+	 * an un-migrated ''prd:'' field no longer silently resolves. A downstream repo
 	 * migrates its data with `dorfl prd-to-spec` (a purely TEXTUAL `prd: → spec:`
 	 * rewrite that does NOT go through this parser), after which the field reads
 	 * canonically. There is no `fm.prd` FIELD.
@@ -374,7 +374,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		} else if (key === 'spec') {
 			// The parent-spec pointer, read from the canonical `spec:` key ONLY into the
 			// `fm.spec` field (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
-			// HARD CUTOVER). The legacy `prd:` KEY read is GONE — an un-migrated `prd:`
+			// HARD CUTOVER). The legacy ''prd:'' KEY read is GONE — an un-migrated ''prd:''
 			// field no longer resolves here; a repo converts its data via the TEXTUAL
 			// `dorfl prd-to-spec` rewrite (which does not use this parser). An empty value
 			// leaves the field undefined.

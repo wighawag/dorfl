@@ -397,7 +397,7 @@ export function reviewDisciplinePrompt(): string {
 		'(the in-band, protocol-native review protocol every set-up repo carries;',
 		'the human-facing pointer is `skills/review/SKILL.md`). Apply its lenses',
 		'IN ORDER, ENDING in the destination check ("if this is built/merged',
-		'exactly as written, do we end up with the system the prd/task',
+		'exactly as written, do we end up with the system the spec/task',
 		'goal describes?"). Be ADVERSARIAL; verify against what ACTUALLY LANDED',
 		'(the bytes on disk), not intent. Weight findings by REAL impact \u2014 the',
 		'lenses find candidates, impact decides severity (a technically-true nit',

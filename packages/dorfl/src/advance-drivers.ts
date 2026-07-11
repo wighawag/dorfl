@@ -251,7 +251,7 @@ export async function performAdvanceArgs(
 		repoPath: options.cwd,
 		slug: arg,
 		// The arg is passed VERBATIM to the tick (it does its own slug resolution
-		// across task/prd/observation); the namespace is irrelevant for explicit args.
+		// across task/spec/observation); the namespace is irrelevant for explicit args.
 		namespace: 'task' as const,
 	}));
 	return runSelectedInSequence(selected, options, run, {verbatimArg: true});
@@ -321,7 +321,7 @@ async function runSelectedInSequence(
  * runner — the easy-to-miss site).
  *
  * The promote-apply edge mirrors the existing drivers without a special case: an
- * `apply` rung whose agentic verdict mints an artifact (`mint-task`/`mint-prd`)
+ * `apply` rung whose agentic verdict mints an artifact (`mint-task`/`mint-spec`)
  * runs `promoteObservation`'s OWN arbiter CAS and commits NOTHING tree-less, so the
  * ff-push here is a harmless no-op (a `HEAD` with nothing new) — it does NOT
  * double-publish nor clobber the promote CAS.

@@ -135,7 +135,7 @@ export interface OpenRequestInput {
 	 * When present a provider passes it verbatim (e.g. `gh pr create --body`)
 	 * instead of `--fill`'s empty/commit-derived description. Typically the build
 	 * agent's final summary, optionally under a runner-scaffolded header (a pointer
-	 * to `work/done/<slug>.md` + the prd/ADR it serves). Absent ⇒ today's `--fill`
+	 * to `work/done/<slug>.md` + the spec/ADR it serves). Absent ⇒ today's `--fill`
 	 * (no regression). This is the BODY-AT-OPEN surface; a follow-up PR COMMENT is
 	 * a separate provider method.
 	 */

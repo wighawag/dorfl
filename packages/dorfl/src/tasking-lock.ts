@@ -35,9 +35,10 @@ import {workItemRel} from './work-layout.js';
  *   read-stability backstop). A dry-run takes no lock (it mutates nothing).
  *
  * - **Release** ({@link releaseTaskingLock}) DELETES the unified lock ref. It
- *   moves NO lifecycle file: the durable `prd → prd-tasked` success move is owned
- *   by the integrate band (`tasking.ts`/`integration-core.ts`), and there is no
- *   `tasking/ → prd/` abort bounce anymore (the body never left `prd/`). When
+ *   moves NO lifecycle file: the durable `specs/ready → specs/tasked` success move
+ *   is owned by the integrate band (`tasking.ts`/`integration-core.ts`), and there
+ *   is no `tasking/ → specs/ready/` abort bounce anymore (the body never left
+ *   `specs/ready/`). When
  *   `routeToNeedsAttention` is set (the tasker review/edit loop's
  *   decomposition-unclear verdict, or the task-SET acceptance gate's `block`),
  *   release amends the lock `active → stuck` with the reason on the entry INSTEAD
@@ -57,7 +58,7 @@ import {workItemRel} from './work-layout.js';
  *
  * This module provides the lock PRIMITIVES only. The orchestrating `do spec:<slug>`
  * tasking command (`tasking.ts`) acquires, drives the agent's tasking, integrates
- * the emitted tasks + the durable `prd → prd-tasked` move, and releases. The
+ * the emitted tasks + the durable `specs/ready → specs/tasked` move, and releases. The
  * human path (no contention) may task on `main` directly without the lock.
  */
 
@@ -188,9 +189,9 @@ async function runAcquire(
 	// a lock is dead via `release-lock` + `gc --ledger`).
 	// Spec `prd-to-spec-vocabulary-cutover-and-migration-command`: the parent-spec
 	// item identity is `spec:<slug>`, so the unified per-item lock ref is
-	// `refs/dorfl/lock/spec-<slug>`. HARD CUTOVER: the legacy `prd:<slug>` identity
-	// is GONE — the resolver no longer treats `prd:` as the spec namespace (a
-	// `prd:<slug>` arg is a bare literal task slug now).
+	// `refs/dorfl/lock/spec-<slug>`. HARD CUTOVER: the legacy ''prd:<slug>'' identity
+	// is GONE — the resolver no longer treats ''prd:'' as the spec namespace (a
+	// ''prd:<slug>'' arg is a bare literal task slug now).
 	const lock = await acquireItemLock({
 		item: `spec:${slug}`,
 		action: 'task',
@@ -273,9 +274,9 @@ export interface ReleaseTaskingLockResult {
 /**
  * Release the tasking lock for `slug`: DELETE the unified `action: task` lock ref
  * (idempotent — an already-absent ref is a clean `released`). It moves NO lifecycle
- * file: the durable `prd → prd-tasked` success move is owned by the integrate band,
+ * file: the durable `specs/ready → specs/tasked` success move is owned by the integrate band,
  * and the spec body never left `work/specs/ready/` under the lock, so there is no
- * `tasking/ → prd/` restore.
+ * `tasking/ → specs/ready/` restore.
  *
  * When `routeToNeedsAttention` is set (the tasker decomposition-unclear verdict /
  * the task-SET acceptance gate `block`), the lock is AMENDED `active → stuck`

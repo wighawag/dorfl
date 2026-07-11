@@ -352,7 +352,7 @@ export interface Config {
 	 * {@link integration}: flag (`--merge`/`--propose`) > env
 	 * (`DORFL_TASKING_INTEGRATION`) > per-repo > global > (fall back to)
 	 * `integration` > default `propose`. DISTINCT from intake's per-EMITTED-TYPE
-	 * `{task, prd}` resolver (front door, author-trust-resolved): this is a
+	 * `{task, spec}` resolver (front door, author-trust-resolved): this is a
 	 * per-LIFECYCLE-TRANSITION knob, inside the trust boundary, operator/config-only.
 	 */
 	taskingIntegration?: IntegrationMode;
@@ -385,7 +385,7 @@ export interface Config {
 	 * influence it. KEY-LEVEL SYMMETRY with `tasksLandIn` — one resolver, two
 	 * lifecycles, one precedence change touches ONE place.
 	 *
-	 * The sole spec-placement key after the `prd` → `spec` HARD CUTOVER (spec
+	 * The sole spec-placement key after the ''prd'' → `spec` HARD CUTOVER (spec
 	 * `prd-to-spec-vocabulary-cutover-and-migration-command`): the legacy
 	 * `prdsLandIn` config key + `--prds-land-in` flag are GONE (clean break).
 	 */

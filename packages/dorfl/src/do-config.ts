@@ -375,7 +375,7 @@ export function surfaceBlockersFlagOverrides(
 
 /**
  * **The cross-job merge-serialiser CAS-retry cap CLI flag** (`--merge-retries
- * <n>`) — prd `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied
+ * <n>`) — spec `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied
  * Answer q1 (a). The git-alone FLOOR of the cross-job land-queue; a wide-matrix
  * CI raises the cap so more contenders converge before any spurious bounce to
  * needs-attention. Offered by `do`/`run`/`complete`. Resolved through the SAME

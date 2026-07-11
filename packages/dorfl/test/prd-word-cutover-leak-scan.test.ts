@@ -22,11 +22,20 @@ import {fileURLToPath} from 'node:url';
  * byte-identical mirror of the protocol source). `.git`/`node_modules` are never
  * descended.
  *
- * # WHAT IT FLAGS (the artifact WORD, not identity)
+ * # WHAT IT FLAGS (the artifact WORD, not identity) — BI-WORD
  *
- * A leak is a STANDALONE artifact-word `prd`/`PRD`/`Prd` (a whole word, boundary
- * = not `[A-Za-z0-9_]` on either side) OR a `work/prds/`/`prds/<lifecycle>`
- * FOLDER PATH, that is NOT on the concrete PRESERVE allow-list below.
+ * A leak is a STANDALONE artifact-word `prd`/`PRD`/`Prd` OR the doubly-retired
+ * `brief`/`BRIEF`/`Brief` (a whole word, boundary = not `[A-Za-z0-9_]` on either
+ * side) OR a `work/prds/`/`prds/<lifecycle>` FOLDER PATH, that is NOT on the
+ * concrete PRESERVE allow-list below. The gate is BI-WORD by design: the
+ * `spec → brief → spec` thrash means a `spec`-only scan would silently pass a
+ * stray `brief`. TWO asymmetries between the words: (1) `prd` has ZERO English
+ * collisions, `brief` is real English (`debrief`/`briefly`/"a brief note"), so
+ * the `brief` lens carries an English allow-list; (2) `prd`'s `prd:` field/verb
+ * is gated on ACTIVE `work/**` items (terminal-history-exempt), whereas every
+ * live `brief` mention in a `work/**` body is dated PROVENANCE narration, so the
+ * `brief` lens gates the LIVING DOCS only (not `work/**` bodies, not the deferred
+ * `docs/adr/**`).
  *
  * # THE PRESERVE ALLOW-LIST (concrete, each class JUSTIFIED)
  *
@@ -231,6 +240,33 @@ function isTerminalHistory(rel: string): boolean {
 	);
 }
 
+// A WORK-ITEM BODY is any file under `work/**` (active OR terminal): a task, a
+// spec, an append-only note, a question sidecar. The `prd`→`spec` sweep already
+// runs over these (the `prd:` field/verb is gated on ACTIVE items via
+// `isTerminalHistory`), but the DOUBLY-retired `brief` word is treated
+// differently: a `brief` in ANY work-item body is immutable PROVENANCE (the body
+// narrates a dated past incident/review under the then-current `brief`
+// vocabulary, e.g. "landed under brief `code-identifier-slice-…`"), so rewriting
+// it would FALSIFY the record whether the item is still active or terminal. The
+// `brief` artifact-word lens therefore gates the LIVING DOCS ONLY (`CONTEXT.md`/
+// `README.md`/`AGENTS.md`, `skills/**`, `docs/**` — the current-guidance surface),
+// NOT `work/**` bodies. (`prd` retains its stricter active-vs-terminal split; only
+// `brief`, whose live mentions are all provenance narration, is body-exempt.)
+function isWorkItemBody(rel: string): boolean {
+	return rel.split('\\').join('/').startsWith('work/');
+}
+
+// DEFERRED: the `docs/adr/**` tree is a dated DECISION RECORD; sweeping its
+// retired-vocabulary prose is a SEPARATE, later pass (the ADRs record decisions
+// made WHEN `prd`/`brief` were the live words). The `prd` lens tolerates ADR
+// mentions only because they are all backticked (inline-code stripped); the
+// non-backticked `brief` artifact word in an ADR would otherwise flag, so the
+// BI-WORD `brief` gate explicitly skips `docs/adr/` until that pass. (This is the
+// ONE deferral; every other living-doc tree IS gated for `brief`.)
+function isDeferredAdr(rel: string): boolean {
+	return rel.split('\\').join('/').startsWith('docs/adr/');
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // The leak lens (WORD + folder path, minus the PRESERVE allow-list).
 // ───────────────────────────────────────────────────────────────────────────
@@ -315,16 +351,77 @@ const PRD_HIT = /[Pp][Rr][Dd]/g;
 const PRDS_FOLDER =
 	/work\/prds(?:\/|\b)|(?:^|[^A-Za-z0-9_/-])prds\/(?:proposed|ready|tasked|dropped)\b/;
 
+// ───────────────────────────────────────────────────────────────────────────
+// The DOUBLY-RETIRED `brief` word (the `spec → brief → spec` thrash's remnant).
+// The bi-word gate: a standalone artifact-word `brief`/`BRIEF`/`Brief` in a
+// LIVING DOC (not a `work/**` body, per `isWorkItemBody`) is a leak, UNLESS it
+// is English, a namespace/slug identity, or a code-span/marker reference.
+// ───────────────────────────────────────────────────────────────────────────
+
+const BRIEF_HIT = /[Bb][Rr][Ii][Ee][Ff]/g;
+
 /**
- * Blank out markdown CODE spans on a single line (inline `` `…` `` spans),
- * REPLACING each span's characters with spaces so column indices are preserved
- * for accurate leak-line reporting. A `prd` inside a code span is a
- * token/example reference (preserve #6), so the bare-WORD lens runs over the
- * returned PROSE-only text. (Fenced-code blocks are stripped by the caller,
- * which tracks the ``` fence state across lines.)
+ * GENUINE-ENGLISH `brief` compounds/inflections that are NOT the retired
+ * artifact word (unlike `prd`, `brief` is a real English word). A keep-case
+ * word-replace must never mangle these: `debrief`, `briefly`, `briefing`,
+ * `briefcase`, and the adjective/verb `brief` in "a brief note"/"brief the team".
+ * The `debrief`/`briefly`/`briefing`/`briefcase` forms are caught by the
+ * word-boundary rule (a letter glued after `brief`); the bare adjective/verb
+ * "brief" in prose is admitted by the SURROUNDING-WORD heuristic below.
+ */
+// NOTE the deliberate ASYMMETRY vs `prd` (which had ZERO English collisions):
+// bare "a brief" is the retired NOUN (the artifact) and MUST flag; "a brief
+// <noun>" ("a brief note", "a brief summary") is the English ADJECTIVE and is
+// exempt. So the adjective is admitted only when a following noun disambiguates
+// it — never bare "a brief".
+const BRIEF_ENGLISH_CONTEXT =
+	/\bbrief (?:note|mention|summary|overview|description|moment|window|pause|comment|aside|recap|list|explanation|paragraph|sentence)\b|\bbe brief\b|\bbrief the\b|, brief,/i;
+
+/**
+ * Is the `brief`/`Brief`/`BRIEF` hit at `idx` on `line` an ALLOWED survivor (not
+ * a leak)? camelCase/inflection boundary (English `debrief`/`briefly`/… +
+ * historical API names), the `brief:`/`brief-` namespace + `task-brief` rung /
+ * `brief-tasked` folder forms, the enumerated slug identities, and genuine
+ * English adjective/verb `brief`.
+ */
+function isAllowedBriefHit(line: string, idx: number, lower: string): boolean {
+	const before = line[idx - 1] ?? '';
+	const after = line[idx + 5] ?? '';
+	// camelCase / snake / inflection (a letter/digit/_ glued either side) →
+	// `debrief`, `briefly`, `briefing`, `briefcase`, `debriefing`, a `BriefBody`
+	// symbol: not a standalone artifact word.
+	if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) return true;
+	// `brief:` (namespace prefix) / `brief-` (lock/folder/rung: `brief-<slug>`,
+	// `brief-tasked`) / `brief/` (legacy folder). A HEAD-of-hyphen/colon/slash form
+	// is the retired NAMESPACE identity the tooling/records still carry, not the
+	// artifact NOUN.
+	if (after === ':' || after === '-' || after === '/') return true;
+	// `task-brief` rung / `spec→brief` / `prd-<slug> → brief-<slug>` cutover
+	// narration: the `brief` is TAILED to a hyphen construct or an arrow — a token
+	// reference. Covered by a slug on the line, or the `-brief`/`→ brief` context.
+	if (before === '-') return true;
+	if (slugCovers(line, lower)) return true;
+	// Genuine English adjective/verb `brief` ("a brief note", "brief the team").
+	if (BRIEF_ENGLISH_CONTEXT.test(line)) return true;
+	return false;
+}
+
+/**
+ * Blank out markdown CODE spans on a single line (inline `` `…` `` spans) AND
+ * the ''…'' PROVENANCE-MARKER spans, REPLACING each span's characters with
+ * spaces so column indices are preserved for accurate leak-line reporting. A
+ * `prd` inside a code span is a token/example reference (preserve #6), so the
+ * bare-WORD lens runs over the returned PROSE-only text. The ''…''
+ * (double-single-quote) form is the same uniquely-greppable RETIRED-TOKEN
+ * provenance marker the src-prose scan strips (a `grep "''prd''"` handle for the
+ * narrate-the-removal mentions), treated identically to a backtick span.
+ * (Fenced-code blocks are stripped by the caller, which tracks the ``` fence
+ * state across lines.)
  */
 function stripInlineCode(line: string): string {
-	return line.replace(/`[^`]*`/g, (span) => ' '.repeat(span.length));
+	return line
+		.replace(/''[^']*''/g, (span) => ' '.repeat(span.length))
+		.replace(/`[^`]*`/g, (span) => ' '.repeat(span.length));
 }
 
 function fileLeaks(rel: string, text: string): Leak[] {
@@ -373,6 +470,24 @@ function fileLeaks(rel: string, text: string): Leak[] {
 				token: tok,
 				why: 'standalone artifact-word prd/PRD/Prd — must read spec (or be an enumerated slug/alias)',
 			});
+		}
+		// (c) BI-WORD: the doubly-retired artifact WORD brief/Brief/BRIEF, gated in
+		//     LIVING DOCS ONLY (a `work/**` body's `brief` is provenance narration —
+		//     see `isWorkItemBody`; `docs/adr/**` is the deferred ADR pass). English /
+		//     namespace / slug survivors allowed.
+		if (!isWorkItemBody(rel) && !isDeferredAdr(rel)) {
+			BRIEF_HIT.lastIndex = 0;
+			while ((m = BRIEF_HIT.exec(prose))) {
+				const idx = m.index;
+				const tok = prose.slice(idx, idx + 5);
+				if (isAllowedBriefHit(prose, idx, tok.toLowerCase())) continue;
+				leaks.push({
+					file: rel,
+					line: i + 1,
+					token: tok,
+					why: 'standalone artifact-word brief/BRIEF/Brief in a living doc — the doubly-retired word must read spec (or be English / an enumerated slug / a namespace form)',
+				});
+			}
 		}
 	});
 	return leaks;
@@ -426,8 +541,17 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 			'the whole `spec` lifecycle lives in `work/specs/`', // the live spelling
 			'name the retired token `prd` / `PRD` in inline code (a meta-doc)', // code-span token reference
 			'cite `prd-body` / `prd-level` AS an example inside code', // code-span example
+			"name the retired token ''prd'' / ''prd:'' in the '' … '' provenance marker", // marker span
 		].join('\n');
 		expect(fileLeaks('good.md', good)).toEqual([]);
+
+		// The ''…'' PROVENANCE MARKER is stripped like a backtick span, but a BARE
+		// `prd` (no marker) on the SAME line still FAILS (span-scoped, not line-scoped).
+		expect(
+			fileLeaks('n.md', "the ''prd:'' key names the retired prd artifact").some(
+				(l) => l.token === 'prd',
+			),
+		).toBe(true);
 
 		// HARD CUTOVER + PROVENANCE: a NON-backticked `prd:` in a TERMINAL-HISTORY
 		// body stays exempt (this WORD scan walks immutable history where `prd:`
@@ -448,6 +572,42 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 		expect(
 			fileLeaks('docs/x.md', 'Route do prd:<slug> output ...').length,
 		).toBe(1);
+
+		// BI-WORD: the doubly-retired artifact word `brief`/`BRIEF`/`Brief` in a
+		// LIVING doc FAILS the scan (a `spec`-only scan would have passed it).
+		expect(
+			fileLeaks('CONTEXT.md', 'author a brief and then task it').some(
+				(l) => l.token === 'brief',
+			),
+		).toBe(true);
+		expect(
+			fileLeaks('skills/x/SKILL.md', 'the BRIEF is the north-star doc').some(
+				(l) => l.token === 'BRIEF',
+			),
+		).toBe(true);
+
+		// `brief` survivors that must NOT flag in a living doc: English, namespace/
+		// slug/rung forms, code-span + ''…'' marker references.
+		const goodBrief = [
+			'add a brief note near the relevant code', // English adjective
+			'debrief the run; answer briefly in a briefing', // English inflections
+			'the `brief:<slug>` namespace / `brief-<slug>` lock entry', // namespace forms
+			'the `task-brief` rung / a `brief-tasked` terminal folder', // rung + folder
+			'the slug `code-identifier-slice-prd-to-task-brief-rename`', // slug identity
+			"the old ''brief'' vocabulary is retired (marker span)", // ''…'' marker
+			'name the retired `brief` token in inline code', // code-span reference
+		].join('\n');
+		expect(fileLeaks('docs/x.md', goodBrief)).toEqual([]);
+
+		// PROVENANCE: the SAME artifact-word `brief` in a `work/**` BODY (active OR
+		// terminal) is exempt — the body narrates a dated incident under the retired
+		// vocabulary; rewriting would falsify it. (`prd` keeps its stricter split.)
+		expect(
+			fileLeaks('work/tasks/ready/x.md', 'landed under the original brief'),
+		).toEqual([]);
+		expect(
+			fileLeaks('work/tasks/done/x.md', 'task or brief seeded in backlog/'),
+		).toEqual([]);
 	});
 
 	it('the walk reaches a representative spread (exhaustive-by-construction)', () => {

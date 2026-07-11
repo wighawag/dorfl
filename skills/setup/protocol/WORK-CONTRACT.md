@@ -160,7 +160,7 @@ All frontmatter and config field names are **camelCase** (`humanOnly`, `needsAns
 ---
 title: Human Readable Title
 slug: historical-store-schema
-spec: historical-store # slug of the work/specs/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []). (The legacy `prd:` key is still READ as back-compat, but author `spec:`.)
+spec: historical-store # slug of the work/specs/ready/<slug>.md this task derives from. REQUIRED iff `covers` is set; OMIT for a self-contained chore/refactor (covers: []).
 humanOnly: true # gate axis 1 (DECIDED): a human must drive this. true | omitted. MOST OMIT IT.
 needsAnswers: true # gate axis 2 (DISCOVERED): open questions block autonomous work. true | omitted.
 blockedBy: [] # list of slugs that must reach tasks/done/ first; [] = startable now
@@ -217,7 +217,7 @@ The `promptGuidance` NAMESPACE is a per-repo + per-item layer of PROMPT-TEXT NUD
 The repo policy resolves like every other gate-family field: **CLI flag > env (`DORFL_PROMPT_GUIDANCE_TEST_FIRST`) > per-repo config > global config > built-in default (`false`)**. On top of THAT, a single task or spec may OVERRIDE the resolved repo policy for THAT item only by setting `promptGuidance.<member>: true | false` in its frontmatter — the same repo-default-plus-item-override shape `humanOnly`/`autoBuild` use. The per-item precedence chain (highest → lowest) is:
 
 1. **Per-task frontmatter** — the task's own `promptGuidance.<member>` line (when present).
-2. **Per-spec frontmatter** — the spec's `promptGuidance.<member>` line, consulted ONLY when the task carries a `spec:` (or the legacy `prd:` back-compat key) and the spec file is found in `work/specs/ready/` or `work/specs/tasked/`.
+2. **Per-spec frontmatter** — the spec's `promptGuidance.<member>` line, consulted ONLY when the task carries a `spec:` and the spec file is found in `work/specs/ready/` or `work/specs/tasked/`.
 3. **Repo-resolved policy** — the value the chain above resolves to, with the built-in default `false`.
 
 Each nudge member resolves INDEPENDENTLY — a task's `promptGuidance.testFirst` override never bleeds into a sibling member. A task with no `spec:` (a self-contained chore) MAY still carry the override; the spec layer is simply absent and the chain reads task ⇒ repo. A missing spec file is NOT an error: the override is OPTIONAL by design, so the chain silently falls through to the repo policy. Form: the frontmatter parser reads the DOTTED scalar form `promptGuidance.<member>: <bool>` (a single line, mirroring the flat shape `humanOnly`/`needsAnswers` use at the item level); a mistyped value (e.g. `"yes"`) reads as undefined — the same silent-on-malformed behaviour `humanOnly` has — never a silent coerce.
@@ -266,7 +266,7 @@ It waits on **tasked-ness (`work/specs/tasked/`), not `tasks/done/`** on purpose
 
 ### The `spec` link (required _when `covers` is set_)
 
-`spec` names the source document this task was tasked from — the slug of a `work/specs/ready/<slug>.md` in the same repo. (The legacy `prd:` key is still READ as back-compat for un-migrated repos, but author `spec:`.) Its load-bearing job is to make `covers` unambiguous: `covers: [4]` means nothing without knowing _which_ spec's story 4. So the requirement tracks that job:
+`spec` names the source document this task was tasked from — the slug of a `work/specs/ready/<slug>.md` in the same repo. Its load-bearing job is to make `covers` unambiguous: `covers: [4]` means nothing without knowing _which_ spec's story 4. So the requirement tracks that job:
 
 - **`spec` is REQUIRED iff `covers` is non-empty.** Any task that points into spec user stories MUST name the spec those numbers belong to (a task spanning multiple specs names its primary one in `spec` and references the others in prose).
 - **`spec` MAY be omitted for a self-contained task** — a refactor, chore, build fix, or dependency bump that derives from no spec and covers no user stories (`covers: []`). Such a task MUST instead carry a clear, standalone _What to build_ + _Prompt_ (it is its own source of truth). This is **in contract** — not all work is feature work; only _feature_ work flows from a spec.

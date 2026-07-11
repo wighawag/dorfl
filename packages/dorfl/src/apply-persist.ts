@@ -93,7 +93,7 @@ const APPLIED_HEADING = '## Applied answers';
  * (backward compat — no marker ⇒ nothing to strip ⇒ identical bytes).
  *
  * The sibling task `templates-mark-transient-open-questions-block` introduces
- * the markers in the prd/task templates; this task exports the constants so
+ * the markers in the spec/task templates; this task exports the constants so
  * the two tasks agree on the literal byte sequence.
  */
 export const OPEN_QUESTIONS_MARKER_OPEN = '<!-- open-questions -->';

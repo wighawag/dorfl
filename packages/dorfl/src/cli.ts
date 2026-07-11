@@ -783,7 +783,7 @@ interface IntakeFlags {
 	proposeTask?: boolean;
 	/**
 	 * `--origin-trust <trusted|untrusted>` — the author-trust verdict the CI shell
-	 * passes IN so `intake` STAMPS the emitted prd/task (task
+	 * passes IN so `intake` STAMPS the emitted spec/task (task
 	 * `untrusted-origin-forces-build-propose`). `intake` does NOT resolve trust; the
 	 * shell derives it from the SAME `author_association` case as the integration
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
@@ -982,9 +982,9 @@ interface CloseMergedIssuesFlags {
  * REJECT `spec:` with a clear "operates on tasks, not specs" error. On rejection
  * it prints the error to stderr and exits 1 (the task-only commands never act on
  * a spec). An OMITTED slug (`start`/`complete`/`prompt` infer it from the branch)
- * passes through untouched. (The legacy `prd:` prefix is a DEAD namespace token
+ * passes through untouched. (The legacy ''prd:'' prefix is a DEAD namespace token
  * after the hard cutover — it is neither special-cased nor rejected here; a
- * `prd:<slug>` arg resolves as a bare literal task slug.)
+ * ''prd:<slug>'' arg resolves as a bare literal task slug.)
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`
@@ -3386,7 +3386,7 @@ export function buildProgram(): Command {
 			}
 
 			// Exit non-zero on a REFUSAL (quiescence gate) or a non-green leak scan
-			// (a converted tree that still carries a dangling `prd` ref). A clean
+			// (a converted tree that still carries a dangling ''prd'' ref). A clean
 			// dry-run or a green migration exits 0.
 			if (result.refused || result.leaks.length > 0) {
 				process.exit(1);
@@ -3610,7 +3610,7 @@ export function buildProgram(): Command {
 
 			// AN ITEM → promote it. `task:`/`spec:` are explicit; a bare slug defaults to
 			// a task (mirrors `requeue`). An `obs:`/`observation:` prefix is rejected
-			// (observations have no pool). A legacy `prd:` prefix is a DEAD namespace token
+			// (observations have no pool). A legacy ''prd:'' prefix is a DEAD namespace token
 			// after the hard cutover — it resolves as a bare literal task slug, not a spec.
 			const parsed = parseSlugArg(rawItem);
 			if (parsed.explicit === 'observation') {
@@ -3808,7 +3808,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--origin-trust <trusted|untrusted>',
-			"the author-trust verdict to STAMP onto the emitted prd/task (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the task's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
+			"the author-trust verdict to STAMP onto the emitted spec/task (origin: issue + originTrust: <value>), so an untrusted origin survives the merge boundary and later forces the task's BUILD transition to propose. CI's intake.yml derives it from the SAME author_association case as the integration flags. UNSET (a local intake) ⇒ emitted unstamped (human/trusted) — the human running intake IS the checkpoint.",
 		)
 		.option(
 			'--specs-land-in <where>',

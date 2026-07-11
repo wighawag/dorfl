@@ -43,8 +43,8 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  * {@link resolveAdvanceArg}).
  *
  * HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
- * contract step): the legacy `'prd'` member is GONE — the parent-spec namespace
- * is `'spec'` only. A `prd:<slug>` arg no longer parses to a namespace (it falls
+ * contract step): the legacy ''prd'' member is GONE — the parent-spec namespace
+ * is `'spec'` only. A ''prd:<slug>'' arg no longer parses to a namespace (it falls
  * through to a bare literal slug), and a `work/prd-<slug>` branch ref no longer
  * parses. No back-compat alias (the clean-break stance).
  */
@@ -102,7 +102,7 @@ export function workBranchRef(
  * anchors the optional producer prefix BEFORE the type alternation, so
  * `work/intake-task-foo` resolves to
  * `{producer:'intake', namespace:'task', slug:'foo'}` (the `slug` never
- * swallows the `intake-`/`task-` prefixes). The old `slice`/`brief`/`prd` types
+ * swallows the `intake-`/`task-` prefixes). The old ''slice''/''brief''/''prd'' types
  * are NOT in the alternation, so a pre-rename `work/prd-foo` ref returns
  * `undefined` (the clean-break stance: no migration-window alias).
  */
@@ -112,7 +112,7 @@ export function parseWorkBranchRef(
 	| {producer?: BranchProducer; namespace: SlugNamespace; slug: string}
 	| undefined {
 	// HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
-	// contract step): the type alternation is `task|spec` ONLY — the legacy `prd`
+	// contract step): the type alternation is `task|spec` ONLY — the legacy ''prd''
 	// token is GONE, so a pre-rename `work/prd-<slug>` ref returns `undefined` (no
 	// migration-window alias; the clean-break stance).
 	const match = /^work\/(?:(intake)-)?(task|spec)-(.+)$/.exec(branch);
@@ -155,7 +155,7 @@ const TASK_PREFIX = 'task:';
 /**
  * The parent-spec namespace prefix: `spec:<slug>` → `{explicit: 'spec'}`. HARD
  * CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
- * legacy `prd:` prefix is GONE — a `prd:<slug>` arg falls through to a bare
+ * legacy ''prd:'' prefix is GONE — a ''prd:<slug>'' arg falls through to a bare
  * literal slug (no namespace), the clean-break stance.
  */
 const SPEC_PREFIX = 'spec:';
@@ -184,8 +184,8 @@ export class SlugResolutionError extends Error {
  * slug. PURE string work, no existence check: `task:foo` → explicit task,
  * `spec:foo` → explicit spec, `foo` → bare (`explicit: undefined`). The prefix
  * match is case-sensitive and exact (`task:`/`spec:`); a slug like `tasked` is
- * NOT a prefix and stays bare. HARD CUTOVER: the legacy `prd:` prefix is not a
- * namespace prefix anymore — `prd:foo` stays a bare literal slug.
+ * NOT a prefix and stays bare. HARD CUTOVER: the legacy ''prd:'' prefix is not a
+ * namespace prefix anymore — ''prd:foo'' stays a bare literal slug.
  */
 export function parseSlugArg(arg: string): ParsedSlugArg {
 	if (arg.startsWith(TASK_PREFIX)) {

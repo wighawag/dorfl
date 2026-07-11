@@ -67,7 +67,7 @@ export const REPO_ALLOWED_KEYS = [
 	// still BUILDS each task as a reviewable PR is agreed by all collaborators +
 	// travels with the repo. Resolved per-repo through the SAME chain as
 	// `integration`, then falls back to `integration` when unset. DISTINCT from
-	// intake's per-EMITTED-TYPE `{task, prd}` resolver (front door, author-trust):
+	// intake's per-EMITTED-TYPE `{task, spec}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'taskingIntegration',
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, spec
@@ -91,7 +91,7 @@ export const REPO_ALLOWED_KEYS = [
 	// through the SAME chain as `tasksLandIn` (flag `--specs-land-in` > env
 	// `DORFL_SPECS_LAND_IN` > per-repo > global > built-in). Fed into the shared
 	// placement resolver as the configured-default rung for the spec lifecycle
-	// (`src/placement.ts`). The sole spec-placement key after the `prd` → `spec` HARD
+	// (`src/placement.ts`). The sole spec-placement key after the ''prd'' → `spec` HARD
 	// CUTOVER (the legacy `prdsLandIn` key is GONE — clean break, no accepted alias).
 	'specsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
