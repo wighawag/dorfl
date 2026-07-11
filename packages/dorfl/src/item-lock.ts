@@ -77,6 +77,22 @@ export function itemLockRef(entry: string): string {
 	return `${LOCK_REF_PREFIX}/${entry}`;
 }
 
+/**
+ * The character class a LITERAL lock-entry name must match to be addressable
+ * through `release-lock --entry <literal>` (task
+ * `release-lock-entry-escape-hatch-and-literal-entry-reporting`): a NON-EMPTY run
+ * of `[A-Za-z0-9._-]` — the SAME shape the minting side produces (`<type>-<slug>`,
+ * and the pre-cutover `slice-<slug>` / `prd-<slug>` entries it must be able to
+ * name). It deliberately EXCLUDES `/` and whitespace so a literal can never escape
+ * the `refs/dorfl/lock/` namespace (a `/` would address a different ref path; a
+ * space would break the push refspec). This is the ONLY validation the `--entry`
+ * escape hatch performs before the git operation — the entry name is taken
+ * literally otherwise, bypassing the namespace mapping the item-form path uses.
+ */
+export function isValidLockEntryName(entry: string): boolean {
+	return /^[A-Za-z0-9._-]+$/.test(entry);
+}
+
 /** WHAT holds the lock — the three mutually-exclusive actions over one item. */
 export type LockAction = 'implement' | 'task' | 'advance';
 
@@ -367,13 +383,33 @@ export interface ReleaseOptions {
 export async function releaseItemLock(
 	opts: ReleaseOptions,
 ): Promise<ReleaseResult> {
-	const arbiter = opts.arbiter ?? 'origin';
-	const env = opts.env;
-	const cwd = opts.cwd;
 	if (!opts.item) {
 		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
 	}
-	const entry = lockEntryFor(opts.item);
+	return releaseLockEntry(
+		lockEntryFor(opts.item),
+		opts.cwd,
+		opts.arbiter ?? 'origin',
+		opts.env,
+	);
+}
+
+/**
+ * The ONE entry-keyed release core shared by BOTH the item-form path
+ * ({@link releaseItemLock}, which derives the `<entry>` through the namespace
+ * mapping) AND the LITERAL escape hatch ({@link releaseLiteralLockEntry}, which
+ * takes the `<entry>` verbatim). It fetches the lock refs, checks the ref, and
+ * performs the SAME leased delete (`--force-with-lease=<ref>:<cur>`) with the SAME
+ * `not-held` / `released` / `error` semantics — there is deliberately NO second
+ * delete mechanism (task `release-lock-entry-escape-hatch-and-literal-entry-reporting`).
+ * The ONLY difference between the two callers is HOW the `<entry>` is obtained.
+ */
+async function releaseLockEntry(
+	entry: string,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<ReleaseResult> {
 	const ref = itemLockRef(entry);
 	try {
 		await gitHard(
@@ -424,6 +460,55 @@ export async function releaseItemLock(
 			message: err instanceof Error ? err.message : String(err),
 		};
 	}
+}
+
+export interface ReleaseLiteralOptions {
+	/**
+	 * The LITERAL lock-entry name (`<type>-<slug>`, or a pre-cutover
+	 * `slice-<slug>` / `prd-<slug>`) to release VERBATIM — taken as-is, bypassing
+	 * the namespace mapping {@link lockEntryFor} applies. MUST pass
+	 * {@link isValidLockEntryName}.
+	 */
+	entry: string;
+	cwd: string;
+	arbiter?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The `release-lock --entry <literal>` ESCAPE HATCH (task
+ * `release-lock-entry-escape-hatch-and-literal-entry-reporting`): release a lock
+ * whose `<entry>` name is NOT derivable from any CURRENT item-form — a lock minted
+ * BEFORE the slice→task / `prd-to-spec` vocabulary cutover (`slice-<slug>`,
+ * `prd-<slug>`), which the item-form path can no longer name because there is no
+ * item-form that produces those entries anymore.
+ *
+ * It takes the `<entry>` LITERALLY (bypassing {@link lockEntryFor} /
+ * {@link resolveSidecarIdentity}, the namespace mapping the item-form path uses)
+ * and targets `refs/dorfl/lock/<entry>` directly, then reuses the SAME entry-keyed
+ * leased-delete core {@link releaseItemLock} uses ({@link releaseLockEntry}) — the
+ * SAME lock-lease acquisition, push, absent-is-success no-op, exit codes, and
+ * mirror handling. There is NO second delete path.
+ *
+ * The trust model is UNCHANGED: a human still asserts the lock is dead by NAMING
+ * it; the only thing `--entry` drops is the assumption that the entry name is
+ * derivable from a current item-form. Rejects (`error`) an `<entry>` that fails
+ * {@link isValidLockEntryName} BEFORE any git operation, so a literal can never
+ * escape the `refs/dorfl/lock/` namespace.
+ */
+export async function releaseLiteralLockEntry(
+	opts: ReleaseLiteralOptions,
+): Promise<ReleaseResult> {
+	const entry = opts.entry ?? '';
+	if (!isValidLockEntryName(entry)) {
+		return {
+			outcome: 'error',
+			entry,
+			ref: '',
+			message: `invalid --entry '${entry}': a lock-entry name must be a non-empty run of [A-Za-z0-9._-] (no slashes, no whitespace) so it cannot escape the ${LOCK_REF_PREFIX}/ namespace.`,
+		};
+	}
+	return releaseLockEntry(entry, opts.cwd, opts.arbiter ?? 'origin', opts.env);
 }
 
 /** Outcome of a GUARDED release ({@link releaseHeldItemLock}): the caller HELD the
@@ -1366,7 +1451,6 @@ export function formatItemLockReport(report: ItemLockReport): string[] {
 			'a human asserts a stuck/stale lock is dead via `release-lock`):',
 	];
 	for (const {lock, reconcile} of report.locks) {
-		const item = itemFromLockEntry(lock.entry);
 		lines.push(`  ${lock.entry}  [${lock.action}/${lock.state}]`);
 		lines.push(
 			`    holder: ${lock.holder || '(unknown)'}  since: ${lock.since || '(unknown)'}`,
@@ -1375,9 +1459,23 @@ export function formatItemLockReport(report: ItemLockReport): string[] {
 			lines.push(`    reason: ${lock.reason}`);
 		}
 		lines.push(`    ${reconcileNote(reconcile)}`);
-		lines.push(
-			`    resolve (if the lock is dead): \`dorfl release-lock ${item}\` (never --force).`,
-		);
+		// The copy-pasteable clear hint. An entry that reverse-derives to a CURRENT
+		// item-form (`task-`/`spec-`/`observation-`) points at `release-lock <item>`.
+		// A PRE-CUTOVER entry (`slice-<slug>` / `prd-<slug>`) has NO current item-form,
+		// so it is UN-NAMEABLE that way — print ONLY the literal entry name and hint at
+		// the `release-lock --entry <literal>` escape hatch (task
+		// `release-lock-entry-escape-hatch-and-literal-entry-reporting`).
+		if (hasCurrentItemForm(lock.entry)) {
+			lines.push(
+				`    resolve (if the lock is dead): \`dorfl release-lock ${itemFromLockEntry(
+					lock.entry,
+				)}\` (never --force).`,
+			);
+		} else {
+			lines.push(
+				`    # no current item-form; clear with: dorfl release-lock --entry ${lock.entry}`,
+			);
+		}
 	}
 	return lines;
 }
@@ -1689,13 +1787,33 @@ export function itemFromLockEntry(entry: string): string {
 	// ''prd'' token is GONE after the hard cutover), so a `spec-<slug>` lock entry
 	// round-trips back to its namespaced `spec:<slug>` form (the inverse of
 	// `lockEntryFor('spec:<slug>')`).
-	for (const prefix of ['task', 'spec', 'observation'] as const) {
+	for (const prefix of CURRENT_ITEM_FORM_PREFIXES) {
 		const tag = `${prefix}-`;
 		if (entry.startsWith(tag)) {
 			return `${prefix}:${entry.slice(tag.length)}`;
 		}
 	}
 	return entry;
+}
+
+/** The CURRENT lock-entry type prefixes an `<entry>` can reverse-derive to an
+ * item-form (`<type>:<slug>`). After the slice→task / `prd-to-spec` vocabulary
+ * cutover these are `task`/`spec`/`observation` ONLY — a pre-cutover `slice-`/
+ * `prd-` prefix is NOT here, so its entry has NO current item-form. */
+const CURRENT_ITEM_FORM_PREFIXES = ['task', 'spec', 'observation'] as const;
+
+/**
+ * Does `<entry>` reverse-derive to a CURRENT item-form (`<type>:<slug>`), i.e.
+ * does it carry a known post-cutover type prefix (`task-`/`spec-`/`observation-`)?
+ * FALSE for a pre-cutover `slice-<slug>` / `prd-<slug>` entry (task
+ * `release-lock-entry-escape-hatch-and-literal-entry-reporting`): such an entry is
+ * UN-NAMEABLE through the item-form `release-lock <item>` path and must be cleared
+ * via the `release-lock --entry <literal>` escape hatch instead. This is the
+ * predicate the `gc --ledger` report keys off to decide whether to print the
+ * copy-pasteable item-form hint or the literal-`--entry` hint.
+ */
+export function hasCurrentItemForm(entry: string): boolean {
+	return CURRENT_ITEM_FORM_PREFIXES.some((p) => entry.startsWith(`${p}-`));
 }
 
 /** True iff `<arbiter>/main` shows the item TERMINAL — any of
