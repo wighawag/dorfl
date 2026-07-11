@@ -5,6 +5,8 @@ blockedBy: []
 covers: []
 ---
 
+> Follow-up: three in-scope decisions this task made but did not record (the `complete.ts` default-source branch that falls through to `'tasks-ready'` to fire the refusal, the vestigial `recovering: boolean` field kept on `IntegrationCoreInput`, and the changed `CompleteRefusal` wording) are ratified in `docs/adr/needs-attention-folder-cutover-followup-nits.md` (opened by task `followup-nits-from-finish-needs-attention-folder-cutover`).
+
 ## What to build
 
 The per-item-lock cutover moved the stuck state OFF the `work/needs-attention/`

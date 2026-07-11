@@ -219,12 +219,15 @@ export type TaskResolutionFolder =
 /**
  * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
  * in (spec-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-ready`, `in-progress`,
- * `needs-attention`, `done`.
+ * `done`. `needs-attention` was dropped post-cutover
+ * (`finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`, ratified
+ * in `docs/adr/needs-attention-folder-cutover-followup-nits.md`): the folder is
+ * retired — a stuck item is the per-item lock `state: stuck` with the body resting
+ * in `tasks/ready/`, so no task ever resides in `work/needs-attention/`.
  */
 export const TASK_LIFECYCLE_FOLDERS = [
 	'tasks-ready',
 	'in-progress',
-	'needs-attention',
 	'done',
 ] as const satisfies readonly WorkFolderKey[];
 
