@@ -394,6 +394,15 @@ export function inPlaceStrategy(options: {
  * path uses before force-resetting the work branch onto the claim commit. A
  * not-yet-fetched or rolled-back arbiter main that does NOT reach the claim must
  * fail fast here, never silently build on a stale base.
+ *
+ * DELIBERATELY the RAW `--is-ancestor` predicate, NOT the squash-aware
+ * `isProvablyMergedForReap` (task `reap-squash-merged-remote-work-branches`,
+ * ratified): this is a claim-REACHABILITY guard, not reap-safety. It demands
+ * GENUINE ancestry of the claim commit; a done-record-on-main match would
+ * defeat its whole purpose (refusing to build on a stale base). The
+ * squash-aware helper is scoped to reap-safety ONLY; this module's reap-lane
+ * (`reapJob` → `evaluateDeletionSafety`) is where it belongs. See
+ * work/notes/observations/reap-squash-helper-scope-2026-07-10.md.
  */
 function assertClaimCommitReachable(
 	checkout: string,

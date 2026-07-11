@@ -1,6 +1,8 @@
 import type {IntegrationMode} from './config.js';
 import {git, run} from './git.js';
-import {isAncestor} from './gc.js';
+import {isAncestor, isProvablyMergedForReap} from './gc.js';
+import {parseWorkBranchRef} from './slug-namespace.js';
+import type {SidecarType} from './sidecar.js';
 import type {BackoffOptions, Sleep} from './retry-backoff.js';
 import {pushProposeBranchWithStaleLeaseRetry} from './continue-branch.js';
 
@@ -681,13 +683,24 @@ function deleteMergedHeadBranch(input: IntegrateInput): void {
 	);
 	const headSha = parseLsRemoteSha(ls.stdout);
 	if (headSha !== undefined) {
-		const isMerged = run(
-			'git',
-			['merge-base', '--is-ancestor', headSha, `refs/remotes/${arbiter}/main`],
-			input.cwd,
-			{env},
-		);
-		if (isMerged.status !== 0) {
+		// Provably-merged-for-reap = fast-path ancestor OR squash-aware fallback
+		// (durable done/dropped record on <arbiter>/main + branch carries nothing
+		// main lacks). The SAME predicate the `gc.ts` worktree reaper and the
+		// `reap-branches.ts` remote sweep use — do not fork it.
+		const parsed = parseWorkBranchRef(branch);
+		const arbiterMainRef = `refs/remotes/${arbiter}/main`;
+		const provablyMerged =
+			parsed === undefined
+				? isAncestor(input.cwd, headSha, arbiterMainRef, env)
+				: isProvablyMergedForReap({
+						cwd: input.cwd,
+						tip: headSha,
+						arbiterMain: arbiterMainRef,
+						namespace: parsed.namespace as SidecarType,
+						slug: parsed.slug,
+						env,
+					});
+		if (!provablyMerged) {
 			return; // NOT provably merged (a racing un-merged amend) — never reap.
 		}
 	}

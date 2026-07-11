@@ -13,6 +13,8 @@ import {
 import {ledgerWrite} from './ledger-write.js';
 import {releaseItemLock} from './item-lock.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
+import {isProvablyMergedForReap} from './gc.js';
+import type {SidecarType} from './sidecar.js';
 import type {ReviewProvider} from './integrator.js';
 import type {IntegrationMode} from './config.js';
 import {runAsync, localMainAheadCount, type RunResult} from './git.js';
@@ -1316,15 +1318,29 @@ export async function isLocalBranchProvablyOnArbiter(
 	// Refresh remote-tracking refs against the live arbiter (best-effort).
 	await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
 
-	// Merged: tip is an ancestor of <arbiter>/main.
+	// Merged: the tip is provably on <arbiter>/main — fast-path ancestor OR
+	// squash-aware fallback (durable done/dropped record on main + branch
+	// carries nothing main lacks). The SAME predicate `gc.ts`'s worktree reaper
+	// and `reap-branches.ts`'s remote sweep use — do not fork it.
+	const parsed = parseWorkBranchRef(branch);
+	const arbiterMainRef = `${arbiter}/main`;
 	const merged =
-		(
-			await gitSoft(
-				['merge-base', '--is-ancestor', localTip, `${arbiter}/main`],
-				cwd,
-				env,
-			)
-		).status === 0;
+		parsed === undefined
+			? (
+					await gitSoft(
+						['merge-base', '--is-ancestor', localTip, arbiterMainRef],
+						cwd,
+						env,
+					)
+				).status === 0
+			: isProvablyMergedForReap({
+					cwd,
+					tip: localTip,
+					arbiterMain: arbiterMainRef,
+					namespace: parsed.namespace as SidecarType,
+					slug: parsed.slug,
+					env,
+				});
 	if (merged) {
 		return true;
 	}

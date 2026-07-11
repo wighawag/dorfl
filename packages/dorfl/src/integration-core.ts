@@ -1704,6 +1704,14 @@ async function recoverAlreadyCommitted(params: {
 	// (`isAncestor` is the SAME reachability predicate `gc.ts` uses; do not fork it.)
 	// KEPT before the retry loop: a no-op MUST short-circuit before we burn any
 	// re-fetch/re-rebase budget.
+	//
+	// DELIBERATELY the RAW ancestry predicate, NOT `isProvablyMergedForReap`
+	// (task `reap-squash-merged-remote-work-branches`, ratified): this is an
+	// integration-IDEMPOTENCY check, not reap-safety. A squash-landed LOOKALIKE
+	// whose tip is NOT genuinely reachable would falsely read "already
+	// integrated" here and skip a needed rebase/re-push. The squash-aware helper
+	// is scoped to reap-safety ONLY; see gc.ts `isProvablyMergedForReap` and
+	// work/notes/observations/reap-squash-helper-scope-2026-07-10.md.
 	if (isAncestor(cwd, tip, `refs/remotes/${arbiter}/main`, env)) {
 		const message =
 			`Nothing to recover for '${slug}': its work branch tip is already on ` +
