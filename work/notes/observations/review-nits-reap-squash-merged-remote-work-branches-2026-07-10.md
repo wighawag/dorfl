@@ -1,7 +1,7 @@
 ---
 title: review-gate non-blocking nits for 'reap-squash-merged-remote-work-branches' (Gate 2 approve)
 date: 2026-07-10
-status: open
+status: resolved
 reviewOf: reap-squash-merged-remote-work-branches
 ---
 
@@ -15,3 +15,24 @@ is their durable home for triage — promote-to-task / keep / delete.
   (work/notes/observations/reap-squash-helper-scope-2026-07-10.md; task Acceptance bullet 1 in work/tasks/done/reap-squash-merged-remote-work-branches.md)
 - No 'Decisions' block was recorded in the commit/PR body — the scope-narrowing decision above only lives in a work/notes observation. Consider surfacing such decisions in the PR body per AGENTS guidance so future reviewers see them without hunting.
   (git log 5a1f828e -1 --format=%B has only the subject line; the scope decision lives only in work/notes/observations/reap-squash-helper-scope-2026-07-10.md)
+
+## Resolution (2026-07-11, requeued continuation)
+
+Both nits addressed on the continuation:
+
+1. Scope narrowing RATIFIED. The two contested sites (`integration-core.ts`
+   `recoverAlreadyCommitted`, `isolation.ts` `assertClaimCommitReachable`) were
+   re-verified independently: they are pure-ancestry semantics (integration
+   idempotency / claim-reachability), NOT reap-safety, so the squash-aware
+   helper must not re-mean them. Their reap-lanes are transitively covered by
+   the four rewired sites. Full ratification + rationale:
+   `work/notes/observations/reap-squash-helper-scope-2026-07-10.md` §Ratification.
+2. Decision now SURFACED at the choice sites (not just an observation): the
+   "deliberately raw ancestry, not the squash-aware helper" rationale is now
+   JSDoc at both `integration-core.ts` (the `already-integrated` short-circuit)
+   and `isolation.ts` `assertClaimCommitReachable`, plus a `## Decisions`
+   summary in this task's done record body / completion. A future reader sees
+   WHY without hunting.
+
+No functional code change was needed — the four-site rollout was already
+correct; the requeue only needed the decision made durable and discoverable.
