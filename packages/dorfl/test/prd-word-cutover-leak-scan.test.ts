@@ -216,6 +216,10 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	// back-compat surfaces, so it legitimately quotes the retired `prd`/`prd:`
 	// word + folder path in prose to describe what it removes.
 	'hard-cutover-remove-last-prd-back-compat-key-and-dead-verb.md',
+	// The forward-looking idea note whose OWN subject is widening the prd-to-spec
+	// sweep beyond `work/` + harvesting the reusable cutover pattern: it quotes the
+	// retired `prd` word throughout to describe what the tooling should convert.
+	'prd-to-spec-sweep-beyond-work-tree-and-reusable-cutover-pattern.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {
