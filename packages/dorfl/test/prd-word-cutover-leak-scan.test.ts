@@ -220,6 +220,10 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	// sweep beyond `work/` + harvesting the reusable cutover pattern: it quotes the
 	// retired `prd` word throughout to describe what the tooling should convert.
 	'prd-to-spec-sweep-beyond-work-tree-and-reusable-cutover-pattern.md',
+	// The spec derived from that idea (its OWN subject is the vocabulary cutover +
+	// the reusable sweep discipline), so it names the retired `prd`/`brief` word
+	// throughout in prose to describe what the skill converts.
+	'vocabulary-cutover-prose-sweep-skill.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {
