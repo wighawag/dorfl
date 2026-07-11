@@ -283,7 +283,7 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 		expect(text).toMatch(/NOT auto-cleared/);
 	});
 
-	it('a STUCK lock over a terminal-on-main item is kept for human attention (done+stuck co-exist)', async () => {
+	it('a STUCK lock over a terminal-on-main item is a CRASH-ORPHAN the report names as reconcilable (task `reaper-reap-terminal-stuck-lock-orphans`), NOT cleared by the report itself', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['bounced']);
 		await acquireItemLock({
 			item: 'task:bounced',
@@ -303,8 +303,9 @@ describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clear
 
 		const report = await reportItemLocks(repo, ARBITER, gitEnv());
 		expect(report.locks).toHaveLength(1);
-		expect(report.locks[0].reconcile).toBe('kept-stuck');
-		// Never cleared by the report.
+		// The read-only classifier names it as reconcilable via the new outcome;
+		// the report path never clears (no auto-sweep from the report path).
+		expect(report.locks[0].reconcile).toBe('cleared-stuck-terminal');
 		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(true);
 	});
 });
@@ -345,7 +346,7 @@ describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts'
 		expect(itemLockReportNeedsAttention(report)).toBe(true);
 	});
 
-	it('a STUCK lock over a terminal-on-main item NEEDS attention (gc exits 1)', async () => {
+	it('a STUCK lock over a terminal-on-main item (crash-orphan) NEEDS attention (gc exits 1 — the reaper can now auto-clear it)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-term']);
 		await acquireItemLock({
 			item: 'task:stuck-term',
@@ -363,8 +364,32 @@ describe('gc --ledger EXIT scoping — fail loud only on the ATTENTION verdicts'
 		});
 		seedTerminalOnArbiter(arbiter, 'done', 'stuck-term');
 		const report = await reportItemLocks(repo, ARBITER, gitEnv());
+		expect(report.locks[0].reconcile).toBe('cleared-stuck-terminal');
+		expect(itemLockReportNeedsAttention(report)).toBe(true);
+	});
+
+	it('a STUCK lock over a NON-terminal item NEEDS attention (`kept-stuck` — genuine human-attention case, gc exits 1)', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-live']);
+		await acquireItemLock({
+			item: 'task:stuck-live',
+			action: 'implement',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		await markStuckItemLock({
+			item: 'task:stuck-live',
+			reason: 'genuine build failure requiring human attention',
+			cwd: repo,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		// NO terminal record on main — this is the invariant the contract
+		// loosening MUST preserve (task `reaper-reap-terminal-stuck-lock-orphans`).
+		const report = await reportItemLocks(repo, ARBITER, gitEnv());
 		expect(report.locks[0].reconcile).toBe('kept-stuck');
 		expect(itemLockReportNeedsAttention(report)).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-stuck-live')).toBe(true);
 	});
 
 	it('an empty report needs no attention (gc exits 0)', async () => {

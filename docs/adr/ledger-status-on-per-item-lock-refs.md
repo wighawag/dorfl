@@ -98,3 +98,64 @@ lock refs) rather than `ls work/in-progress/`. Content and durable records stay 
   unreachable and reclaimed by normal git gc (bare arbiter) or the host's gc (GitHub). Churn is one
   tiny object per claim/task/advance, comparable to the existing `work/<slug>` branch create/delete;
   the only lingering case is a crash-orphaned lock (covered by `release-lock`/`gc --ledger`).
+
+## Addendum 2026-07-10 — the `stuck-terminal` orphan class is auto-reapable (task `reaper-reap-terminal-stuck-lock-orphans`)
+
+The original decision above admits that `done` + `stuck` can legitimately CO-EXIST during a
+rebase-conflict bounce of a just-completed item (US #10) and lists the "crash-orphaned lock" as the
+only lingering-storage case, covered by `release-lock` + the `gc --ledger` stuck-lock report.
+
+In practice, once an item bounces `stuck` and THEN reaches its terminal folder on `main` by any
+subsequent path — a human finish, a re-drive, a manual fixup+merge — the `stuck` lock is left
+BEHIND with no in-flight work to justify it (concrete incidents: `slice-claim-cas-spinner`
+2026-06-19, cleared manually via `git push origin --delete refs/dorfl/lock/…` in PR #140;
+re-confirmed 2026-06-28 on a `task-apply-rung-merge-disposition`-shaped orphan). Under the pre-2026-
+07-10 rule the auto-reaper (`gc --ledger --reap-stale-locks`) reaped ONLY the `cleared-stale` class
+(terminal + `active`) and REFUSED to touch the `stuck` axis, so this orphan class survived every
+sweep. That contradicts this ADR's own "the `main` durable record is authoritative over a stale
+lock" recovery rule: a terminal-on-`main` item's held lock has no in-flight work behind it, whether
+its state axis is `active` (stranded between the durable move and the release) or `stuck` (the same
+crash-orphan, one bounce later).
+
+### Contract loosening
+
+The `stuck` axis is now SPLIT by the `main` durable record:
+
+- `stuck` + item TERMINAL on `main` (a task at `tasks/done` / `tasks/cancelled`, a spec at
+  `specs/tasked` / `specs/dropped` — per `terminalMainPaths`) — the CRASH-ORPHAN class — is
+  REAPABLE by the auto-reaper. Classified as `cleared-stuck-terminal` (parallel to
+  `cleared-stale`), cleared via the SAME shared leased delete `release-lock` / the recovery use,
+  reported by the sweep as `reaped-stuck-terminal` so operators can see which orphan class was hit.
+- `stuck` + item NON-TERMINAL on `main` — the GENUINE human-attention case (a real build failure a
+  human must inspect) — REMAINS `kept-stuck` and is NEVER auto-reaped, even with the flag. This is
+  the invariant the loosening MUST preserve.
+
+The `kept-stuck` outcome name is thus re-scoped from "stuck + terminal (co-exist, human wins
+attention)" to "stuck + non-terminal (genuine human attention)"; the previously-orphaning "stuck
++ terminal" case moves to its own `cleared-stuck-terminal` outcome.
+
+### Why this is coherent with the original decision
+
+- **Same authoritative-`main` rule.** The clear goes through the SAME `reconcileItemLockAgainstMain`
+  + `leasedDeleteLockRef` path the existing `cleared-stale` reap uses; the `main` record's
+  authority over an orphan lock is the ADR's own rule, now applied uniformly across both state-axis
+  values.
+- **Same trust model.** The reap is still OPT-IN behind `--reap-stale-locks` (a human authorising
+  the sweep), still uses a LEASED delete (a concurrent change REJECTS as `lost`, never a blind
+  `--force`), and still reads-then-re-classifies per item so a lock that turned stuck-non-terminal
+  or in-flight between the report and the sweep is left alone.
+- **The genuine human-attention case is preserved.** A `stuck` lock with NO terminal record on
+  `main` is exactly the case the "no auto-sweep" clause is protecting. The sibling still refuses to
+  touch it, exactly as before.
+
+### Cross-refs
+
+- Lock-side twin of the branch-side observation
+  `gc-remote-branches-cannot-reap-squash-merged-work-branch-2026-06-28`: same orphan root shape
+  (durable `main` record says terminal, but a narrower ancestry-only / active-only predicate can't
+  see it). Fixing both aligns the reaper on the `main`-record-is-authoritative rule.
+- Complementary human-recovery path: `release-lock <item>` (sibling
+  `release-lock-cannot-name-pre-cutover-slice-prefixed-lock-entries` fixed the manual escape hatch
+  for current-vocabulary entries). This addendum closes the AUTO-recovery gap.
+- Distinct from the reaper `no-lock` mislabel (`reaper-no-lock-outcome-benign-not-lost`, now a
+  task) — same reaper surface, different classification bug; NOT conflated here.
