@@ -1,3 +1,5 @@
+> **RE-SCOPED 2026-07-11 (ready-pool analysis).** Two Priority-2 sites named below no longer exist post-cutover: `slicer-review-loop.ts` and `slicing.ts` were renamed away in the `slicing`→`tasking` cutover. Those bullets are struck below. The LIVE, load-bearing deliverable is unchanged and still real: the Priority-1 user-facing runtime strings in `do.ts` and `cli.ts` (requeue help) that still point a human at `work/needs-attention/`. Treat ALL line numbers as drift-prone hints — grep for `needs-attention/` and `git mv` to find current sites.
+
 ## Context
 
 After the lock cutover (per-item lock `state: stuck` replaced the physical `work/needs-attention/<slug>.md` folder move), several docstrings and — more importantly — human-facing runtime strings across the codebase still describe the retired folder-move behavior as if it were live. The observable half is now the lock amend; nothing actually moves files into `work/needs-attention/` anymore, so any message that points a human at that folder is actively misleading.
@@ -24,7 +26,7 @@ Same pass, lower stakes:
 - `ledger-write.ts:161` (`ApplyNeedsAttentionTransitionInput` docstring: "to bounce to `work/needs-attention/` with its reason"), plus `:325`, `:634`, `:697`.
 - `complete.ts:45`, `:93`, `:294`, `:473`, `:502`, `:755` — notes that say `git mv work/in-progress|done/<slug>.md -> work/needs-attention/<slug>.md`.
 - `integration-core.ts:425`, `:621`, `:650`.
-- `slicer-review-loop.ts:62`, `slicing.ts:1086`, `:1105`.
+- ~~`slicer-review-loop.ts:62`, `slicing.ts:1086`, `:1105`~~ — STRUCK 2026-07-11: these files were renamed away in the `slicing`→`tasking` cutover. If equivalent stale prose exists in the successor `tasking.ts` / tasker-review modules, fix it opportunistically in the same grep-driven pass, but do NOT trust these paths.
 
 Line numbers are drift-prone; treat them as hints and grep for `needs-attention/` and `git mv` patterns to find the actual sites.
 

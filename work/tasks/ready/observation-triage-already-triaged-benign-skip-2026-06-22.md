@@ -1,8 +1,10 @@
+> **RE-SCOPED 2026-07-11 (ready-pool analysis).** Authored mid-cutover; three drifts to reconcile BEFORE building: (1) `work/tasks/todo/` no longer exists — the pool folder is `work/tasks/ready/`; (2) the cited `src/advancing-lock.ts:527/:544` "lost the create race" branch has been REWRITTEN around `createItemThroughCas` — the equivalent message now lives near the `already exists on <arbiter>/main — the new item lost the create race` string; re-locate by grep, not line number; (3) the sequencing dependency `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` has LANDED (its spec is tasked, its emitted tasks are done), so a freshly-triaged observation is now discharged-by-deletion after tasking and cannot re-fire — which SHRINKS this task to a backstop for legacy/pre-existing observations plus the true concurrent-create race. Re-confirm the re-fire still reproduces against the current code before building; it may already be largely mooted.
+
 ## Problem
 
-On every `advance-lifecycle` tick, the triage leg for an observation whose task ALREADY EXISTS re-runs `promote obs:<slug>`, re-loses the create CAS on `work/tasks/todo/<slug>.md`, and exits 2 — reddening CI forever until a human deletes/edits the observation. The current code path (see `src/advancing-lock.ts:527` / `:544`) has only ONE 'lost the create race — back off, left unresolved for a retry' branch, so it cannot tell:
+On every `advance-lifecycle` tick, the triage leg for an observation whose task ALREADY EXISTS re-runs `promote obs:<slug>`, re-loses the create CAS on `work/tasks/ready/<slug>.md`, and exits 2 — reddening CI forever until a human deletes/edits the observation. The current code path (see `src/advancing-lock.ts:527` / `:544`) has only ONE 'lost the create race — back off, left unresolved for a retry' branch, so it cannot tell:
 
-- (A) TERMINAL: a task minted FROM this observation already exists on `<arbiter>/main` — the observation was already triaged in a prior run. Retry can NEVER succeed.
+- (A) TERMINAL: a task minted FROM this observation already exists on `<arbiter>/main` (in `tasks/ready|backlog|done|cancelled/`) — the observation was already triaged in a prior run. Retry can NEVER succeed.
 - (B) TRANSIENT: two ticks genuinely raced to mint the same NEW task at once. Retry is the right response.
 
 Same CI-noise family as the sibling stale-snapshot and held-lock observations — trains the operator to ignore red.
@@ -11,14 +13,14 @@ Provenance:
 - `.github/workflows/advance-lifecycle.yml` (`enumerate` → `lifecycle.triage[]` → `advance "obs:<slug>" --propose` legs)
 - `src/advancing-lock.ts:527` (the single 'lost the create race (or the slug is taken). Back off.' branch that conflates A and B)
 - `src/lifecycle-gather.ts` (`gatherLifecycleInPlace`) and `src/lifecycle-pools.ts` (`buildLifecyclePools`, triage sub-pool) — where the observation is (re-)enumerated as untriaged
-- Live example: observation `integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21` with an existing `work/tasks/todo/integratelock-...-2026-06-21.md` + `work/questions/task-integratelock-...-2026-06-21.md` sidecar
+- Live example: observation `integratelock-is-in-process-only-cross-ci-job-merge-relies-on-cas-retry-cap-2026-06-21` with an existing `work/tasks/ready/integratelock-...-2026-06-21.md` + `work/questions/task-integratelock-...-2026-06-21.md` sidecar
 - Sibling CI-noise observations: `work/notes/observations/advance-leg-on-stale-snapshot-exits-2-and-reds-ci-2026-06-21.md`, `work/notes/observations/advance-matrix-enumerates-held-locked-items-so-legs-fail-every-tick-2026-06-22.md`
 
 ## Scope (from the answered scoping)
 
 Answered up-front by the human on the source observation — carry these as decisions, not open questions:
 
-1. **Detection mechanism: derive from the minted task's existence, NOT a new frontmatter marker.** Do NOT reintroduce a `triaged: promoted` / `triaged: keep` frontmatter marker on the observation. The in-flight task `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` is actively RETIRING the `triaged:` resting-state convention in favour of discharge-by-deletion; a new marker mechanism here would fight that direction. Instead, at the create-CAS step (and/or at gather time), detect that a task provably minted FROM this observation already exists ANYWHERE on `<arbiter>/main` (`tasks/todo|backlog|done|cancelled/`) — via slug derivation and/or an explicit back-reference from the task to the observation — and treat that as terminal 'already triaged'.
+1. **Detection mechanism: derive from the minted task's existence, NOT a new frontmatter marker.** Do NOT reintroduce a `triaged: promoted` / `triaged: keep` frontmatter marker on the observation. The in-flight task `observation-discharge-by-deletion-self-contained-promotion-and-prd-route` is actively RETIRING the `triaged:` resting-state convention in favour of discharge-by-deletion; a new marker mechanism here would fight that direction. Instead, at the create-CAS step (and/or at gather time), detect that a task provably minted FROM this observation already exists ANYWHERE on `<arbiter>/main` (`tasks/ready|backlog|done|cancelled/`) — via slug derivation and/or an explicit back-reference from the task to the observation — and treat that as terminal 'already triaged'.
 
 2. **Auto-disposition: benign skip, no human prompt.** When (and ONLY when) the minting task is PROVABLY the one minted from this observation, auto-treat as already-triaged. This is an idempotency fact — the human already decided when they minted the task — not a judgement call, so it clears the conservative no-question auto-disposition bar. Anything short of a provable observation→task link stays loud (exit 2).
 

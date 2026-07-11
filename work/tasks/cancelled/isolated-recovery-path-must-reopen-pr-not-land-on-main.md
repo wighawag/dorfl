@@ -1,3 +1,11 @@
+---
+title: Isolated recovery path must re-open PR, not land on main
+slug: isolated-recovery-path-must-reopen-pr-not-land-on-main
+reason: superseded-by-done — the load-bearing invariant (the `--isolated` committed-recovery path re-opens the PR and NEVER replays green work directly onto `main`) is now STRUCTURAL, not conditional. `recover-isolated.ts` defaults `mode: 'propose'` and threads it verbatim through `performIntegration` → `recoverAlreadyCommitted` → `applyCompleteTransition` → `Integrator.integrate`, where the direct-to-main push (`${branch}:main`) is reachable ONLY under `mode === 'merge'`; propose pushes the work branch (lease-only) + opens a PR, and a reaped-ref/stale-lease race resolves to benign `alreadyLanded` with no main write and no PR re-open against a landed ref. Pinned by the landed `propose-push-survives-stale-lease-on-reaped-work-ref` work: `stale-lease-propose-push.test.ts` asserts `not.toMatch(/:main/)` + lease-only across BOTH first-pass propose AND `committedRecovery: true, mode: 'propose'`, with a dedicated `RECOVERY-complete propose flow` describe block covering the exact combined stale-lease-on-reaped-ref failure. The Gate-2-crash half is covered by `harden-gate2-verdict-parse-against-malformed-json`. Verified on main 2026-07-11. Residual (WIP/requeue-commit squash shape + runbook wording) is separable and not the structural gap this task narrates; drop clean per the human's instruction.
+---
+
+> **CANCELLED 2026-07-11 (ready-pool analysis).** The never-land-direct-to-main invariant is already structural and test-pinned; see `reason:` above.
+
 ## Context
 
 On 2026-06-23, while drive-tasks was working through the 4 post-rename cleanup tasks under brief `code-identifier-slice-prd-to-task-brief-rename`, task #2 `rename-advance-rung-and-sliced-outcome-tokens` hit a compounding infra failure that defeated the `integration: propose` guarantee: its correct, Gate-1-green (2585 tests), Gate-2-approved work landed on `origin/main` as THREE raw linear commits on the first-parent line — `e30a622` (requeue handoff, authored by the human), `9edf582` (`chore: save aborted work (wip)`, agent), `90a25bd` (`feat …; done`, agent) — with NO `(#NNN)` PR reference. Contrast task #1 in the same brief, which landed as one squashed `… ; done (#217)` via a proper PR.

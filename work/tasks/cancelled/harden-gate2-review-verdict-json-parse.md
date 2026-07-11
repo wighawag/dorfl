@@ -1,3 +1,11 @@
+---
+title: Harden the Gate-2 review verdict JSON parse
+slug: harden-gate2-review-verdict-json-parse
+reason: superseded-by-done — the landed task `harden-gate2-verdict-parse-against-malformed-json` (#246, commit 7083fe65, + the surface-share follow-up 7737b3a2) already delivers all three directions of this task's scope: (1) route-not-crash — `runGate2Review` catches `ReviewParseError` and routes to needs-attention via `applyNeedsAttentionTransition` with the distinct `review-unparseable` outcome (integration-core.ts) mapped to the `transient-infra` cause; (2) the lenient control-char repair pass in `parseReviewVerdict` (review-verdict.ts); (3) the strict-minified / eliminate-inner-quotes / length-cap prompt contract. Verified on main 2026-07-11: `review-unparseable` + the repair pass + the branch-preserving route are all present. No residual scope remains distinct from the done task.
+---
+
+> **CANCELLED 2026-07-11 (ready-pool analysis).** Premise already fixed by a landed sibling; see `reason:` above. Retained here (not deleted) per the work contract — a task leaves via the `cancelled/` terminal, with the reason in the body.
+
 ## Context
 
 Gate-2's review verdict parser (`parseReviewVerdict` in `packages/dorfl/src/review-verdict.ts:106-119`) does a strict `JSON.parse` of the review agent's verdict with no salvage/repair, no per-finding length cap, and no retry. On large-diff builds the agent's verdict occasionally contains an unescaped control character, a raw newline inside a string, or an over-long field, and `parseReviewVerdict` throws `ReviewParseError`. That throw is NOT caught/routed inside `runGate2Review` in `integration-core.ts`, so it crashes the whole `do` run as an unhandled exception AFTER a fully green Gate-1 acceptance build.

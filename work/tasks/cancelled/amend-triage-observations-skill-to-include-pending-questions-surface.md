@@ -1,3 +1,11 @@
+---
+title: Amend triage-observations skill to include the pending-questions surface
+slug: amend-triage-observations-skill-to-include-pending-questions-surface
+reason: superseded-by-done — the primary and highest-value deliverable (step 2 INVESTIGATE also reads the item's own `work/questions/<type>-<slug>.md` sidecar + `needsAnswers` / `## Open questions` state, with the exact-item-match-required vs topical-overlap-surface distinction) already landed in `skills/triage-observations/SKILL.md` via commit 115b65af. Verified on main 2026-07-11. The only unshipped fragment was the cosmetic "leave — blocked on <question>" disposition-guidance line; too thin to carry a whole task. Drop clean per the human's instruction; if that reasoning line ever proves needed it can re-surface as a fresh observation.
+---
+
+> **CANCELLED 2026-07-11 (ready-pool analysis).** Primary deliverable already landed (commit 115b65af); see `reason:` above.
+
 ## Context
 
 The `triage-observations` skill drains `work/notes/observations/` one note at a time (READ → INVESTIGATE → RECOMMEND → WAIT → EXECUTE). Its INVESTIGATE step (step 2) enumerates current-reality sources as "the actual code, tasks, briefs, ADRs, and protocol docs it references" — it does NOT include the **pending-questions surface**:
