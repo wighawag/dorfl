@@ -709,10 +709,11 @@ async function runOneItem(
 		//     `work/<slug>` tip == the arbiter tip (the kept branch, unchanged,
 		//     after-commit). The DURABLE artifact is that branch on the arbiter + the
 		//     main surface (ADR §14: the job worktree is a disposable cache; recovery
-		//     flows through the branch + folder-native surfaces, NOT by editing the
-		//     worktree). So the surface is purely the one-file `in-progress/ →
-		//     needs-attention/` ledger move + reason — no branch push, no worktree
-		//     mutation. Because the branch is provably on the arbiter, the §4 reap
+		//     flows through the branch + lock surfaces, NOT by editing the
+		//     worktree). So the surface is purely the lock amend to `state: stuck` +
+		//     reason (post lock-cutover — no `in-progress/ → needs-attention/` folder
+		//     move, no branch push, no worktree
+		//     mutation). Because the branch is provably on the arbiter, the §4 reap
 		//     predicate still HOLDS and this worktree is reaped — more §14-aligned.
 		if (tree.continueRebaseConflict) {
 			const reason =
@@ -1138,9 +1139,10 @@ function runAgent(
  * This mirrors `do.ts`'s `saveAgentFailure`: route the failure through the SAME
  * ledger write seam's needs-attention transition the gate-fail / integrate-
  * conflict bounces use — which (with the arbiter) saves the agent's work as a wip
- * commit, `git mv`s the item to needs-attention/ with the failure detail recorded
- * as the reason, surfaces the move-only commit on the arbiter's `main`
- * (OBSERVABLE), AND pushes the `work/<slug>` branch (RECOVERABLE — the durable
+ * commit, then — post lock-cutover — amends the item's per-item lock to
+ * `state: stuck` with the failure detail as the reason on the lock entry
+ * (OBSERVABLE; the `needs-attention/` folder move is retired), AND pushes the
+ * `work/<slug>` branch (RECOVERABLE — the durable
  * artifact a requeue-continue lands the next agent on; continue-detection reads
  * <arbiter>/work/<slug> ahead of main). The push is best-effort — an unreachable
  * arbiter leaves the retained worktree + the local commits standing (the genuinely
@@ -1194,8 +1196,9 @@ function failureCauseToItemStatus(cause: FailureCause): ItemStatus {
 
 /**
  * Build the HONEST {@link ItemResult} for a CONTINUE-site surface that did NOT
- * land on the arbiter (`{moved: false}`). The tree-less `in-progress/ →
- * needs-attention/` move lost the CAS race against a busy arbiter (its
+ * land on the arbiter (`{moved: false}`). The tree-less stuck-lock amend (post
+ * lock-cutover — `state: stuck` + reason, in place of the retired `in-progress/ →
+ * needs-attention/` move) lost the CAS race against a busy arbiter (its
  * contention-retry cap exhausted) or had no arbiter to publish to, so the item is
  * STILL in-progress on the arbiter — reporting a clean `needs-attention` would
  * mislead (it claims the surface landed, when it did not). The DISTINCT

@@ -11,8 +11,10 @@ import {JOB_RECORD_FILENAME} from './workspace.js';
  *
  *   1. A HARD **STOP** sentinel ({@link STOP_SENTINEL_OPEN} … {@link
  *      STOP_SENTINEL_CLOSE}): the task DRIFTED / is ambiguous / rests on a stale
- *      premise, so the agent could not build it. The runner routes the item to
- *      `work/needs-attention/` (the agent's reason VERBATIM) and SKIPS the
+ *      premise, so the agent could not build it. The runner marks the item stuck
+ *      on its per-item lock (post lock-cutover — `state: stuck` with the agent's
+ *      reason VERBATIM on the lock entry, no `work/needs-attention/` folder
+ *      write) and SKIPS the
  *      acceptance gate + the Gate-2 review (a clean STOP is not a build that
  *      changed nothing). See {@link parseStopSentinel}.
  *   2. A SOFT **`## Decisions`** block ({@link extractDecisionsBlock}): the agent

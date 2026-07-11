@@ -822,8 +822,9 @@ function surfaceUnmovedStartResult(params: {
  * TREE-LESS (`#89` mechanism), the SAME-PROFILE sibling of
  * {@link routeContinuePushFailure}: the rebase was ABORTED, so the REAL continued
  * `work/<slug>` is already on the arbiter from the prior requeue, untouched
- * (after-commit, durable, recoverable). The surface is PURELY the one-file
- * `in-progress/ → needs-attention/` ledger `.md` move + reason — we publish it via
+ * (after-commit, durable, recoverable). The surface is PURELY the lock amend to
+ * `state: stuck` with the reason (post lock-cutover — no `in-progress/ →
+ * needs-attention/` folder move) — we publish it via
  * the tree-less surface CAS (the SAME no-checkout primitive `requeue` uses for the
  * reverse direction), NO temp-branch switch/restore, NO `pushBranch`, NO worktree.
  */
@@ -863,8 +864,9 @@ async function routeContinueConflict(params: {
  * TREE-LESS (`#89` mechanism): the recoverable artifact — the kept `work/<slug>`
  * — is ALREADY on the arbiter from the prior requeue (our local rebased tip is
  * what FAILED to push, so it is not the cross-machine truth), and the work is
- * already committed. So the surface is PURELY the one-file `in-progress/ →
- * needs-attention/` ledger `.md` move + reason: we publish it via the tree-less
+ * already committed. So the surface is PURELY the lock amend to `state: stuck`
+ * with the reason (post lock-cutover — no `in-progress/ → needs-attention/`
+ * folder move): we publish it via the tree-less
  * surface CAS (the SAME no-checkout primitive `requeue` uses for the reverse
  * direction) — NO temp-branch switch/restore, NO `pushBranch`, NO worktree. A
  * `requeue` then continues from the kept arbiter tip.

@@ -795,10 +795,11 @@ export async function performIntegration(
 		}
 		if (!prep.passed) {
 			const reason = `prepare (env-prep) failed (exit ${prep.exitCode})`;
-			// Bounce from in-progress/ straight to needs-attention/ (the SAME seam a red
-			// gate uses) — recording the prepare-failed reason + committing the move
-			// (with the agent's uncommitted work) as ONE atomic transition. We NEVER
-			// run `verify` on an env that could not be made ready.
+			// Mark the item stuck on its per-item lock (the SAME seam a red gate uses)
+			// — recording the prepare-failed reason on the lock entry + saving the
+			// agent's uncommitted work as a wip commit (post lock-cutover: a lock amend,
+			// no `in-progress/ → needs-attention/` folder move). We NEVER run `verify`
+			// on an env that could not be made ready.
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
@@ -834,12 +835,12 @@ export async function performIntegration(
 		note('Running the acceptance gate (verify)…');
 		const gate = await runVerify({cwd, verify: input.verify, env});
 		if (!gate.passed) {
-			// Don't leave the item dangling in in-progress/: route it to
-			// needs-attention/ with the reason (ADR §12) THROUGH the ledger write
-			// seam's needs-attention transition. The item has NOT been committed/moved
-			// yet, so the move bounces it straight from in-progress/ — recording the
-			// reason + committing the move (with the agent's uncommitted work) as ONE
-			// atomic transition. No partial state.
+			// Don't leave the item dangling: mark it stuck on its per-item lock with
+			// the reason (ADR §12) THROUGH the ledger write seam's needs-attention
+			// transition. Post lock-cutover this is a lock amend (`state: stuck` + the
+			// reason on the lock entry, no `in-progress/ → needs-attention/` folder
+			// move) plus saving the agent's uncommitted work as a wip commit. No
+			// partial state.
 			const reason = `acceptance gate failed (exit ${gate.exitCode})`;
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
@@ -1040,16 +1041,14 @@ export async function performIntegration(
 			// 4. Rebase-before-integrate (ADR §10): rebase the work branch onto the
 			//    latest <arbiter>/main. Clean → continue. Conflict → abort + stop.
 			//
-			//    RECOVERY reconciliation: when completing FROM needs-attention/, the work
-			//    branch's history still carries the original `in-progress → needs-attention`
-			//    MOVE-ONLY commit, and `<arbiter>/main` was SURFACED with that same move
-			//    (the item is in needs-attention/ on main). Replaying that historical move
-			//    onto main conflicts (main has no in-progress/<slug>.md) — exactly the
-			//    rebase conflict the human hit doing this by hand. So we DROP that move-only
-			//    commit during the rebase: the replay becomes `wip + (needs-attention →
-			//    done)`, which applies cleanly onto the surfaced main (it HAS the item in
-			//    needs-attention/). The done-move thus SUPERSEDES the surfaced state — no
-			//    leftover/conflicting on-`main` surface for the human to resolve.
+			//    RECOVERY reconciliation: post the per-item-lock cut-over, a stuck item's
+			//    body never moved into a `needs-attention/` folder (stuck is the lock
+			//    `state: stuck`; the body rests in `backlog/`), so a recovery `complete`'s
+			//    kept branch carries NO historical `in-progress → needs-attention`
+			//    move-only commit to drop and `<arbiter>/main` holds no surface move to
+			//    conflict with. The old recovery drop (`rebaseDroppingNeedsAttentionSurface`,
+			//    drop-bookkeeping-rebase) is deleted; recovery is now the SAME plain replay
+			//    onto `<arbiter>/main` as any other build (see the plain-rebase note below).
 			// Fetch the arbiter's `main` into the `<arbiter>/main` remote-tracking ref
 			// EXPLICITLY. A `run` JOB WORKTREE is cut from a bare hub mirror whose remote
 			// has no fetch refspec (so `<arbiter>/main` would not otherwise resolve / would
@@ -1211,12 +1210,12 @@ export async function performIntegration(
 		// recovery above can fall through to integrate while a genuine code conflict
 		// still routes here.
 		async function rebaseConflictRoute(): Promise<IntegrationCoreResult> {
-			// Then route the item to needs-attention/ with the conflict reason (ADR
-			// §12) THROUGH the ledger write seam's needs-attention transition, rather
-			// than leaving it dangling in done/. The done-move was already committed
-			// above, so the item sits in work/done/; the move bounces it from there and
-			// commits the in-progress→needs-attention move (here done→needs-attention)
-			// as ONE transition. No partial state.
+			// Then mark the item stuck on its per-item lock with the conflict reason
+			// (ADR §12) THROUGH the ledger write seam's needs-attention transition,
+			// rather than leaving it dangling. Post lock-cutover this is a lock amend
+			// (`state: stuck` + the reason on the lock entry, no `done/ →
+			// needs-attention/` folder move); the done-move already committed above
+			// stands. No partial state.
 			const reason = `rebase onto ${arbiter}/main conflicted (aborted, never auto-resolved)`;
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
@@ -1337,7 +1336,8 @@ export async function performIntegration(
 			if (gated.review) {
 				if (gated.review.kind === 'blocked') {
 					// The done-move was already committed (steps 2–3), so the slug sits in
-					// work/done/; the routing bounced it from there to needs-attention/.
+					// work/done/; the routing marked it stuck on its per-item lock (post
+					// lock-cutover — a lock amend, no folder move).
 					return gated.review.result;
 				}
 				approvedVerdict = gated.review.verdict;
@@ -1942,8 +1942,9 @@ function resolveWorkBranch(
  *
  * Carries the {@link slug} so the autonomous-strand surface in `complete.ts`
  * (which catches this error in `performComplete`'s outer try/catch, OUTSIDE the
- * `runComplete` slug scope) can publish the `in-progress/ → needs-attention/`
- * tree-less move without re-deriving the slug from the error message.
+ * `runComplete` slug scope) can mark the item stuck on its per-item lock (post
+ * lock-cutover — the tree-less lock amend, no `in-progress/ → needs-attention/`
+ * folder move) without re-deriving the slug from the error message.
  */
 export class IntegrationNothingStaged extends Error {
 	constructor(
@@ -2124,8 +2125,8 @@ export function composeProposeBody(input: {
  * On a review APPROVE that carries ≥1 NON-BLOCKING finding, write ONE per-run
  * observation `work/notes/observations/review-nits-<slug>-<YYYY-MM-DD>.md` capturing all
  * of this run's non-blocking nits, so they get a durable, contract-native home
- * instead of evaporating (the block path already routes BLOCKING findings to
- * needs-attention/; the approve path dropped non-blocking ones — see
+ * instead of evaporating (the block path already records BLOCKING findings as the
+ * stuck reason on the item's per-item lock; the approve path dropped non-blocking ones — see
  * `work/findings/review-nonblocking-findings-disposition.md`).
  *
  * The RUNNER writes it (the review agent stays write-free). It is a PLAIN

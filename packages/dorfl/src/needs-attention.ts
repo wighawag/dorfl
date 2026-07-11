@@ -140,11 +140,12 @@ export interface RouteToNeedsAttentionResult {
 	/** When the branch push FAILED after retries, the last git error (for the report). */
 	pushError?: string;
 	/**
-	 * When `moved`, the sha of the **move-only** commit — the tip of `work/<slug>`
-	 * that carries PURELY the `git mv → needs-attention/` + the reason (the wip
-	 * commit holding the aborted agent work sits BELOW it). A surfacing strategy
-	 * cherry-picks THIS commit to make the stuck state observable, so the wip never
-	 * reaches the ledger.
+	 * When `moved`, the sha of the `work/<slug>` tip after the RECOVERABLE-half
+	 * save. Post lock-cutover this is the **wip** commit holding the aborted agent
+	 * work (`git add -A`); there is no separate `git mv → needs-attention/`
+	 * move-only commit anymore (that folder is retired). The OBSERVABLE stuck
+	 * state rides on the per-item lock amend (`state: stuck` + reason), not on this
+	 * commit.
 	 */
 	moveCommit?: string;
 	/** When NOT moved, why (e.g. the slug was not in-progress). */
@@ -155,8 +156,9 @@ export interface ReturnToBacklogOptions {
 	/** The working clone the `work/` tree lives in. */
 	cwd: string;
 	/**
-	 * The slug of the stuck item to re-queue — recovered from `needs-attention/`
-	 * OR `in-progress/` (the actual current folder is resolved on the arbiter).
+	 * The slug of the stuck item to re-queue — recovered via its per-item lock on
+	 * the arbiter (post lock-cutover the body never moves into a status folder; it
+	 * rests in `backlog/` and stuck is the lock `state: stuck`).
 	 */
 	slug: string;
 	/** The arbiter remote to push the transition to. Optional (see above). */
@@ -198,7 +200,7 @@ export interface ReturnToBacklogResult {
 	commitMessage?: string;
 	/** True iff `--reset` deleted the remote `work/<slug>` branch on the arbiter. */
 	deletedRemoteBranch?: boolean;
-	/** When NOT moved, why (e.g. the slug was in neither needs-attention/ nor in-progress/, or a failed --reset delete). */
+	/** When NOT moved, why (e.g. the slug held no recoverable per-item lock on the arbiter, or a failed --reset delete). */
 	reasonNotMoved?: string;
 }
 

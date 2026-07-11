@@ -75,8 +75,9 @@ export {parseReviewVerdict as parseTaskReviewVerdict} from './review-verdict.js'
  *   - **a specific uncertain task** → emit it `needsAnswers: true` with the
  *     questions in its body (created, not agent-buildable until a human answers).
  *   - **the whole decomposition unclear / `taskerLoopMax` exhausted with blockers** →
- *     route the spec to `work/needs-attention/<slug>.md` with the questions as the
- *     reason, emitting NO guessed tasks.
+ *     mark the spec stuck on its per-item lock (post lock-cutover — `state: stuck`
+ *     with the questions as the reason, no `work/needs-attention/` folder write),
+ *     emitting NO guessed tasks.
  *
  * The verdict sink itself (the git transitions for those three outcomes) is the
  * caller's (`tasking.ts`): this module decides WHICH outcome and prepares the

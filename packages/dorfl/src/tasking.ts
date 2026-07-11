@@ -1122,8 +1122,9 @@ async function gitHard(
 /**
  * Build the needs-attention REASON for a task-SET ACCEPTANCE GATE block (task
  * `slice-acceptance-gate`): the fresh-context review of the produced set returned
- * `block`, so the spec is routed to `work/needs-attention/` with the review's
- * blocking findings as the body prose and NO tasks landed. Takes the core's
+ * `block`, so the spec is marked stuck on its per-item lock (post lock-cutover —
+ * `state: stuck` with this reason on the lock entry, no `work/needs-attention/`
+ * folder write) and NO tasks land. Takes the core's
  * structured `reviewBlockReason` (the gate's blocking findings); falls back to a
  * generic line when absent. DISTINCT from the improver loop's
  * {@link decompositionUnclearReason} (which carries the loop's open questions).
@@ -1141,8 +1142,8 @@ function taskGateBlockedReason(
 
 /**
  * Build the needs-attention REASON for a decomposition-unclear loop verdict (the
- * spec is routed to `work/needs-attention/` with these open questions, no guessed
- * tasks). Prose only — recorded as the spec's needs-attention body block.
+ * spec is marked stuck on its per-item lock with these open questions, no guessed
+ * tasks). Prose only — recorded as the spec's stuck-lock reason.
  */
 function decompositionUnclearReason(slug: string, questions: string[]): string {
 	const head =

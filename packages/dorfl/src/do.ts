@@ -942,9 +942,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     auto-resolved). Surface to needs-attention TREE-LESSLY via the SAME `#89`
 	//     mechanism `requeue` uses for the reverse direction — the rebase was
 	//     ABORTED, so the kept `work/<slug>` tip == the arbiter tip (already on the
-	//     arbiter, after-commit, recoverable). The surface is purely the one-file
-	//     `in-progress/ → needs-attention/` ledger move + reason (no branch push, no
-	//     worktree mutation) instead of running the agent — the §10 path. The work
+	//     arbiter, after-commit, recoverable). The surface is purely the lock amend
+	//     to `state: stuck` with the reason (post lock-cutover — no folder move, no
+	//     branch push, no worktree mutation) instead of running the agent — the §10
+	//     path. The work
 	//     did NOT onboard; the runner owns the bounce.
 	if (tree.continueRebaseConflict) {
 		const reason =
@@ -1403,10 +1404,12 @@ function routeReport(
  *
  * This routes it through the SAME work-preserving machinery a RED GATE uses: the
  * ledger write seam's needs-attention transition (`git add -A` + a wip commit
- * capturing the agent's work + the `git mv → needs-attention/` move-only commit
- * with the failure detail recorded as the reason in the body), surfaced on the
- * arbiter's `main` (the autonomous, cross-machine-visible mode-M surfacing `do`
- * already uses for the gate-fail path) so `scan`/`status`/another machine see it.
+ * capturing the agent's work, then — post lock-cutover — a LOCK AMEND to
+ * `state: stuck` with the failure detail as the reason on the lock entry, in
+ * place of the retired `git mv → needs-attention/` move-only commit), surfaced on
+ * the arbiter's `main` (the autonomous, cross-machine-visible mode-M surfacing
+ * `do` already uses for the gate-fail path) so `scan`/`status`/another machine
+ * see it.
  *
  * It ALSO pushes the `work/<slug>` branch to the arbiter so the saved partial
  * commits travel cross-machine and the item is RECOVERABLE via `requeue`
@@ -1499,7 +1502,9 @@ function failureCauseToDoOutcome(cause: FailureCause): DoOutcome {
 
 /**
  * Build the HONEST result for a CONTINUE-site surface that did NOT land on the
- * arbiter (`{moved: false}`). The tree-less `in-progress/ → needs-attention/` move
+ * arbiter (`{moved: false}`). The tree-less stuck-lock amend (post lock-cutover —
+ * `state: stuck` with the reason, in place of the retired `in-progress/ →
+ * needs-attention/` move)
  * lost the CAS race against a busy arbiter (its contention-retry cap exhausted) or
  * had no arbiter to publish to, so the item is STILL in-progress on the arbiter —
  * a clean `needs-attention` would mislead (it claims the surface landed). Distinct
