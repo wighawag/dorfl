@@ -789,14 +789,16 @@ export async function promoteFromPreBacklog(
 			).status === 0;
 		if (!hasSource && !hasDest) {
 			const message =
-				`'${slug}' is not staged in work/pre-backlog/ on ${arbiter}/main (and not ` +
-				'already in work/backlog/) — nothing to promote (wrong slug, or never ' +
-				'staged?).';
+				`'${slug}' is not staged in ${workFolderPrefix('tasks-backlog')} on ${arbiter}/main ` +
+				`(and not already in ${workFolderPrefix('tasks-ready')}) — nothing to promote ` +
+				'(wrong slug, or never staged?).';
 			note(message);
 			return {moved: false, reasonNotMoved: message};
 		}
 
-		const commitMessage = `chore(${slug}): promote work/pre-backlog/ -> work/backlog/`;
+		const commitMessage = `chore(${slug}): promote ${workFolderPrefix(
+			'tasks-backlog',
+		)} -> ${workFolderPrefix('tasks-ready')}`;
 		const moved = await runTreelessLedgerMove({
 			cwd,
 			slug,
@@ -824,7 +826,7 @@ export async function promoteFromPreBacklog(
 					base,
 					sourceRel,
 					destRel,
-					// The body is carried byte-for-byte from pre-backlog into the
+					// The body is carried byte-for-byte from tasks/backlog into the
 					// pool — promotion is a placement decision, not a content transform.
 					transformBody: (body) => body,
 					commitMessage,
@@ -834,14 +836,14 @@ export async function promoteFromPreBacklog(
 			},
 		});
 		if (moved) {
-			note(`Promoted '${slug}' from pre-backlog to backlog (claimable).`);
+			note(`Promoted '${slug}' from tasks/backlog to tasks/ready (claimable).`);
 			return {moved: true, commitMessage};
 		}
 
 		const message =
 			`promote for '${slug}': the arbiter's main kept moving (contended) after ` +
-			`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in pre-backlog (no ` +
-			'move). Try again shortly.';
+			`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in tasks/backlog ` +
+			'(no move). Try again shortly.';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	} finally {

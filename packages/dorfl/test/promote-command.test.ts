@@ -221,7 +221,7 @@ describe('promote <item> — error cases fail loud', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const {err, code} = await runPromote(repo, ['task:ghost']);
 		expect(code).toBe(1);
-		expect(err).toMatch(/not staged in work\/pre-backlog\//);
+		expect(err).toMatch(/not staged in work\/tasks\/backlog\//);
 	});
 
 	it('an observation prefix is rejected (observations have no pool)', async () => {
