@@ -34,8 +34,8 @@ import {fileURLToPath} from 'node:url';
  * the `brief` lens carries an English allow-list; (2) `prd`'s `prd:` field/verb
  * is gated on ACTIVE `work/**` items (terminal-history-exempt), whereas every
  * live `brief` mention in a `work/**` body is dated PROVENANCE narration, so the
- * `brief` lens gates the LIVING DOCS only (not `work/**` bodies, not the deferred
- * `docs/adr/**`).
+ * `brief` lens gates the LIVING DOCS only (`docs/adr/**` included — its sweep is
+ * done), NOT `work/**` bodies (where a live `brief` is immutable provenance).
  *
  * # THE PRESERVE ALLOW-LIST (concrete, each class JUSTIFIED)
  *
@@ -256,16 +256,13 @@ function isWorkItemBody(rel: string): boolean {
 	return rel.split('\\').join('/').startsWith('work/');
 }
 
-// DEFERRED: the `docs/adr/**` tree is a dated DECISION RECORD; sweeping its
-// retired-vocabulary prose is a SEPARATE, later pass (the ADRs record decisions
-// made WHEN `prd`/`brief` were the live words). The `prd` lens tolerates ADR
-// mentions only because they are all backticked (inline-code stripped); the
-// non-backticked `brief` artifact word in an ADR would otherwise flag, so the
-// BI-WORD `brief` gate explicitly skips `docs/adr/` until that pass. (This is the
-// ONE deferral; every other living-doc tree IS gated for `brief`.)
-function isDeferredAdr(rel: string): boolean {
-	return rel.split('\\').join('/').startsWith('docs/adr/');
-}
+// NOTE (`docs/adr/**` IS gated). The ADR vocabulary sweep is DONE: live-reference
+// / stale-guidance `prd`/`brief` in the ADRs was swept to `spec`, and the genuine
+// dated DECISION-RECORD mentions that must stay (naming the retired word AS the
+// thing that was retired, or the migration's pre-cutover INPUT) are either
+// backticked token references or wrapped in the ''…'' provenance marker. So the
+// bi-word `brief` gate walks `docs/adr/**` like every other living-doc tree —
+// there is no longer any deferred-tree carve-out.
 
 // ───────────────────────────────────────────────────────────────────────────
 // The leak lens (WORD + folder path, minus the PRESERVE allow-list).
@@ -473,9 +470,9 @@ function fileLeaks(rel: string, text: string): Leak[] {
 		}
 		// (c) BI-WORD: the doubly-retired artifact WORD brief/Brief/BRIEF, gated in
 		//     LIVING DOCS ONLY (a `work/**` body's `brief` is provenance narration —
-		//     see `isWorkItemBody`; `docs/adr/**` is the deferred ADR pass). English /
-		//     namespace / slug survivors allowed.
-		if (!isWorkItemBody(rel) && !isDeferredAdr(rel)) {
+		//     see `isWorkItemBody`; `docs/adr/**` IS gated, its sweep is done). English
+		//     / namespace / slug survivors allowed.
+		if (!isWorkItemBody(rel)) {
 			BRIEF_HIT.lastIndex = 0;
 			while ((m = BRIEF_HIT.exec(prose))) {
 				const idx = m.index;

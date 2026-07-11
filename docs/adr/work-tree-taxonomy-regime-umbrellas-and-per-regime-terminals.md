@@ -39,8 +39,8 @@ The two lifecycles are DELIBERATELY NOT mirror images: `tasks/` is a Kanban boar
 terminal with a DELIBERATELY DIFFERENT word (`tasks/cancelled` vs `specs/dropped`).
 
 The vocabulary follows the folders: a unit of buildable work is a **task**, a
-decomposable north-star doc is a **spec**; `do task:` / `do prd:`, frontmatter `prd:` /
-`taskedAfter:`, lock-ref entries `task-<slug>` / `prd-<slug>`. `observation` /
+decomposable north-star doc is a **spec**; `do task:` / `do spec:`, frontmatter `spec:` /
+`taskedAfter:`, lock-ref entries `task-<slug>` / `spec-<slug>`. `observation` /
 `obs:` is unchanged.
 
 ## Why

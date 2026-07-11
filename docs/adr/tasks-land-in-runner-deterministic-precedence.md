@@ -11,7 +11,7 @@ superseded_by:
 
 > **AMENDMENT (2026-06-24, ADR `rename-task-pool-folder-todo-to-ready`).** The pool
 > VALUE spelling was renamed `'todo'` → `'ready'` (a clean break, matching the on-disk
-> folder `tasks/ready/` and the brief-side `'ready'` pool value). The precedence SHAPE
+> folder `tasks/ready/` and the spec-side `'ready'` pool value). The precedence SHAPE
 > and reasoning below are unchanged; read every `'todo'` value spelling in this ADR as
 > `'ready'`.
 
@@ -131,7 +131,7 @@ The first build of this task was BLOCKED by Gate 2 (and routed to
 needs-attention) for a real defect: the resolver + config keys + env coercion
 + direct `performTask` tests were all in, but `config.tasksLandIn` and the
 `--tasks-land-in` flag were NEVER threaded from `cli.ts` into the `DoOptions`
-the `do prd:` path builds, so the configured-default + explicit-flag rungs were
+the `do spec:` path builds, so the configured-default + explicit-flag rungs were
 dead from the shipped binary (a user setting `tasksLandIn: 'todo'` got the
 built-in `pre-backlog` floor). The continuation closes that wire and ratifies the
 in-scope choices the reviewers asked to pin:
@@ -145,7 +145,7 @@ in-scope choices the reviewers asked to pin:
    value came from config, not the flag. A bad flag value FAILS LOUDLY
    (`explicitTasksLandInFromFlag`), the same discipline as the
    `--observation-triage` enum + the `DORFL_TASKS_LAND_IN` env coercion.
-   A binary-level test (`do prd:` through `buildProgram()` on a `--bare file://`
+   A binary-level test (`do spec:` through `buildProgram()` on a `--bare file://`
    arbiter with a stub tasker) proves the configured value + the flag actually
    reach `performTask` end-to-end, not only via the in-process interface.
 2. **The pool-placement scrub fence is SILENT by design.** `scrubPoolDrift`

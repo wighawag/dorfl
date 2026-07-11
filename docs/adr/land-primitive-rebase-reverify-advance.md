@@ -163,7 +163,7 @@ when the follow-on spec is taken up.
 ## Cross-references
 
 - spec: `work/specs/tasked/land-time-reverify-and-parallel-merge-ceiling.md` —
-  the four-gap brief this ADR answers the durable WHY for.
+  the four-gap spec this ADR answers the durable WHY for.
 - Protocol invariant line: `WORK-CONTRACT.md` and `CLAIM-PROTOCOL.md` (dual
   source: `skills/setup/protocol/` → `work/protocol/`, byte-identical).
 - Engine surfaces (already implementing the primitive — do not change in this

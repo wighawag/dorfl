@@ -40,7 +40,7 @@ compatibility, no deprecation shim — explicit maintainer instruction):
    The CLI flag `--tasks-land-in`, the env enum (`DORFL_TASKS_LAND_IN`),
    and the `TasksLandIn` type all take `'pre-backlog' | 'ready'`. CLEAN BREAK: the
    old `'todo'` spelling is NOT accepted (no shim, no warning). The task-side now
-   mirrors the brief-side `'ready'` pool value spelling.
+   mirrors the spec-side `'ready'` pool value spelling.
 5. **Protocol docs** (both copies, kept byte-identical per AGENTS.md):
    `skills/setup/protocol/*` SOURCE + `work/protocol/*` propagated copy.
 6. **Skills, CONTEXT.md, ADR prose, tests**: every reference to the pool as

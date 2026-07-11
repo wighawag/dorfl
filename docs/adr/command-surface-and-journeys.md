@@ -81,14 +81,14 @@ A spec and a task **can have the same slug** (e.g. spec `auto-slice`). `do` span
 
 | input | resolves to | on collision (both a task AND a spec named `<slug>`) |
 | --- | --- | --- |
-| `<slug>` (bare) | the **task** | **ERROR** — "ambiguous; use `task:<slug>` or `prd:<slug>`" |
+| `<slug>` (bare) | the **task** | **ERROR** — "ambiguous; use `task:<slug>` or `spec:<slug>`" |
 | `task:<slug>` | the task | always unambiguous |
-| `prd:<slug>` | the spec (task it) | always unambiguous |
+| `spec:<slug>` | the spec (task it) | always unambiguous |
 
 - **Bare `<slug>` is HUMAN CONVENIENCE ONLY.** It resolves to the task, but ONLY after confirming no spec shares the slug; on a collision it **errors** (loud, immediate, human-resolvable) — it never silently guesses. (So even the bare path does a cheap cross-namespace existence check.)
 - **CI / automation / `install-ci`-generated workflows MUST use explicit prefixes** (`do task:foo` / `do spec:foo`), NEVER bare — because (a) in CI an ambiguity error halts the job, and (b) a bare slug that works today would silently break when a same-named spec/task appears later. Explicit prefixes are collision-proof across time.
-- **`do`** accepts all three. **Task-only commands** (`claim`, `start`, `resume`, `complete`, `prompt`, `requeue`, `work-on`) accept bare (= task) and `task:` (explicit alias), and **reject `prd:`** with a clear "operates on tasks, not specs" error.
-- This mirrors a distinction the contract ALREADY makes by field: task `blockedBy` resolves against tasks (`work/done/`), spec `taskedAfter` against specs (residence in `work/specs/tasked/` — the folder is the source of truth for tasked-ness, mirroring `blockedBy` → `done/`). The `task:`/`prd:` prefixes are the command-line form of that same namespace split — one coherent rule, not two.
+- **`do`** accepts all three. **Task-only commands** (`claim`, `start`, `resume`, `complete`, `prompt`, `requeue`, `work-on`) accept bare (= task) and `task:` (explicit alias), and **reject `spec:`** with a clear "operates on tasks, not specs" error.
+- This mirrors a distinction the contract ALREADY makes by field: task `blockedBy` resolves against tasks (`work/done/`), spec `taskedAfter` against specs (residence in `work/specs/tasked/` — the folder is the source of truth for tasked-ness, mirroring `blockedBy` → `done/`). The `task:`/`spec:` prefixes are the command-line form of that same namespace split — one coherent rule, not two.
 
 ## 4. The human face — do work yourself (optionally with your AI)
 
