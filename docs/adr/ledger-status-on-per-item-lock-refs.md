@@ -121,8 +121,9 @@ crash-orphan, one bounce later).
 
 The `stuck` axis is now SPLIT by the `main` durable record:
 
-- `stuck` + item TERMINAL on `main` (`done` / `dropped` / `brief-tasked`) — the CRASH-ORPHAN
-  class — is REAPABLE by the auto-reaper. Classified as `cleared-stuck-terminal` (parallel to
+- `stuck` + item TERMINAL on `main` (a task at `tasks/done` / `tasks/cancelled`, a spec at
+  `specs/tasked` / `specs/dropped` — per `terminalMainPaths`) — the CRASH-ORPHAN class — is
+  REAPABLE by the auto-reaper. Classified as `cleared-stuck-terminal` (parallel to
   `cleared-stale`), cleared via the SAME shared leased delete `release-lock` / the recovery use,
   reported by the sweep as `reaped-stuck-terminal` so operators can see which orphan class was hit.
 - `stuck` + item NON-TERMINAL on `main` — the GENUINE human-attention case (a real build failure a
