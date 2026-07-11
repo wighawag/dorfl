@@ -46,20 +46,7 @@ The reusable pattern — proven out by hand in the dorfl self-cutover (commits `
 - **`humanOnly`:** OMITTED. This is tooling/methodology work (a skill doc + the leak-scan pattern); its tasks are agent-buildable. The prose SWEEP itself is judgement-heavy at RUN time, but AUTHORING the skill is not human-only.
 - **`needsAnswers`:** OMITTED — the three launch open questions are resolved (see `## Decisions`): a new standalone `convert-from-prd-to-spec` skill, the skill owns the doc-sweep coverage (no bare-command report-line fallback), `prd`-specific (not pre-generalised). The spec is complete and agent-taskable.
 
-## Implementation Decisions
-
-- **Adopt = skill (ADR §8).** The prose sweep is judgement-carrying adoption work, so it is a SKILL, not a new deterministic command layer. The existing deterministic command (`dorfl prd-to-spec`) is CALLED by the skill; it is not extended to do prose (that would re-introduce the over-rewrite risk the allow-list exists to prevent).
-- **The skill orchestrates two halves in order:** (1) `dorfl prd-to-spec` (deterministic, gated) → (2) prose sweep (judgement) → (3) widened bi-word leak scan as the single acceptance gate over both. The command already exposes its layers as independent exported pieces (`checkQuiescence`, `resyncProtocol`, `migrateFolders`, `migrateItemContent`, `migrateConfig`, `migrateRefs`, `scanForLeaks`) — the hand-do fallback (no `dorfl`) can lean on the documented layer list.
-- **The reusable pattern toolkit is the skill's authoritative discipline** (harvested in `work/notes/ideas/prd-to-spec-sweep-beyond-work-tree-and-reusable-cutover-pattern.md`): the `''word''` provenance marker; the bi-word scan; the coined-vs-real-word English-collision asymmetry; the provenance-vs-living per-tree split; the concrete identity allow-list.
-- **The leak scan is the PROOF the sweep is complete** (as it already is for the DATA layer). The two existing scans (`prd-src-prose-leak-scan.test.ts`, `prd-word-cutover-leak-scan.test.ts`) already encode the marker-strip, the bi-word lens, the English allow-list, the per-tree scoping, and the enumerated identity allow-list — they are the reference implementation of the discipline the skill teaches; the skill should point at them, not fork the logic.
-- **Runner-agnostic (ADR §9):** the skill must complete without `dorfl` installed (hand-follow the layers), mirroring `claim.sh` vs `dorfl claim`. The command is the fast path only.
-
-## Testing Decisions
-
-- **Seam: the leak scan is the acceptance gate.** A repo (or fixture tree) that still carries the retired word in a current-guidance doc after the skill runs FAILS the widened bi-word scan; a repo whose only survivors are marker/backtick/slug/English/provenance PASSES. Test at that seam (it already exists for dorfl itself).
-- **The skill's discipline is testable by fixture:** a planted stray retired word in a living doc must be caught; a planted marker/slug/English survivor must not; a planted retired word in a provenance tree (terminal history / ADR-records-what-was-retired) must not. These are exactly the non-vacuous self-checks the two scans already assert — the skill's acceptance re-uses that shape.
-- **Do NOT unit-test the JUDGEMENT** (which prose mention is a leak vs an identity) — that is the human-in-the-loop deferral, like a review prompt's judgement is not unit-tested. Test the DETECTOR (the scan) and the ORCHESTRATION (the skill calls the command then the prose pass then the gate).
-- **The command-call is stubbable:** the skill's orchestration can be exercised with `dorfl prd-to-spec --dry-run` against a `--bare file://` fixture (the same discipline the command's own fixture test uses), so the skill's two-half flow is provable without a real destructive migration.
+> Tasked 2026-07-11 into `work/tasks/backlog/` (`author-convert-from-prd-to-spec-skill`, `convert-from-prd-to-spec-skill-doc-conformance-guard`). The Implementation / Testing detail moved into those tasks; the durable rationale (adopt = skill / execute = command, runner-agnostic, purpose-named migration verb) lives in ADR §7e/§8/§9 of `docs/adr/command-surface-and-journeys.md`.
 
 ## Out of Scope
 

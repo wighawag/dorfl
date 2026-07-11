@@ -224,6 +224,12 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	// the reusable sweep discipline), so it names the retired `prd`/`brief` word
 	// throughout in prose to describe what the skill converts.
 	'vocabulary-cutover-prose-sweep-skill.md',
+	// The two tasks that spec fans out to: their SUBJECT is authoring the
+	// `convert-from-prd-to-spec` skill + its conformance guard, so they name the
+	// `prd`/`prd-to-spec`/`convert-from-prd-to-spec` proper nouns throughout in
+	// prose (the skill/command names, not the artifact word as a live concept).
+	'author-convert-from-prd-to-spec-skill.md',
+	'convert-from-prd-to-spec-skill-doc-conformance-guard.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {
