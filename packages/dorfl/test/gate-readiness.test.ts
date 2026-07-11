@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, existsSync, mkdirSync} from 'node:fs';
+import {writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {performDo, type DoDorfl} from '../src/do.js';
 import {performComplete} from '../src/complete.js';
@@ -59,19 +59,18 @@ const failIfReached: DoDorfl = () => {
 };
 
 /**
- * Set the repo up the way `performComplete` expects: HEAD on the work branch,
- * the task moved to `work/in-progress/`, and the agent's edit committed. The
- * test then calls `performComplete` and asserts the guard refuses BEFORE the
- * gate runs.
+ * Set the repo up the way `performComplete` expects: HEAD on the work branch
+ * with the agent's edit committed, and the task body RESTING in the pool
+ * (`work/tasks/ready/`). Post the per-item-lock cutover, a claimed-and-in-flight
+ * item is NOT moved to a `work/in-progress/` folder (that folder is retired,
+ * task `finish-in-progress-folder-cutover-remove-legacy-recovery-readers`): the
+ * body stays in the pool and liveness is the held lock, so `complete` resolves
+ * its source from `tasks/ready/`. The test then calls `performComplete` and
+ * asserts the guard refuses BEFORE the gate runs.
  */
-function onWorkBranchWithInProgress(repo: string, slug: string): void {
+function onWorkBranchWithBody(repo: string, slug: string): void {
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
-	mkdirSync(join(repo, 'work', 'in-progress'), {recursive: true});
-	gitIn(
-		['mv', `work/tasks/ready/${slug}.md`, `work/in-progress/${slug}.md`],
-		repo,
-	);
 	writeFileSync(join(repo, 'agent-output.txt'), 'work\n');
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'agent work'], repo);
@@ -330,7 +329,7 @@ describe('end-to-end — `complete` STOPS before performIntegration when the gat
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedLockfile(repo);
 		// Claim + onboard onto work/task-alpha (so complete has something to do).
-		onWorkBranchWithInProgress(repo, 'alpha');
+		onWorkBranchWithBody(repo, 'alpha');
 
 		const result = await performComplete({
 			slug: 'alpha',
@@ -345,10 +344,13 @@ describe('end-to-end — `complete` STOPS before performIntegration when the gat
 		expect(result.outcome).toBe('refused');
 		expect(result.message).toMatch(/pnpm-lock\.yaml/);
 		expect(result.message).toMatch(/--no-fresh-worktree-gate/);
-		// The task is still in-progress in the tree (no done-move happened) and
-		// not on done/ on the arbiter.
-		expect(existsSync(join(repo, 'work', 'in-progress', 'alpha.md'))).toBe(
+		// The task is still un-done in the tree (no done-move happened): the body
+		// rests in the pool (`tasks/ready/`, the lock-based residence), not `done/`.
+		expect(existsSync(join(repo, 'work', 'tasks', 'ready', 'alpha.md'))).toBe(
 			true,
+		);
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			false,
 		);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
@@ -360,7 +362,7 @@ describe('end-to-end — `complete` STOPS before performIntegration when the gat
 		// hatch on every lockfile-bearing repo with no `prepare`).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		seedLockfile(repo);
-		onWorkBranchWithInProgress(repo, 'alpha');
+		onWorkBranchWithBody(repo, 'alpha');
 
 		const result = await performComplete({
 			slug: 'alpha',

@@ -122,7 +122,8 @@ class StartUsageError extends Error {}
 /**
  * Raised for a deliberate REFUSAL (exit 1, outcome 'refused') — distinct from a
  * usage/environment error. Used when the item exists but start declines to act
- * (an in-progress item without --resume). The decision is folder-based.
+ * (an in-progress item without --resume). The decision is LOCK-based (a held
+ * `active` per-item lock), not a `work/in-progress/` folder read.
  */
 class StartRefusal extends Error {}
 
@@ -522,10 +523,14 @@ async function startFromNeedsAttention(params: {
 }
 
 /**
- * In-progress → already claimed (it is no longer in backlog, so the CAS cannot
- * apply). Refuse by default. With --resume the human explicitly asserts
+ * In-progress → already claimed (the per-item LOCK is held `active`, so the CAS
+ * cannot apply). Refuse by default. With --resume the human explicitly asserts
  * ownership, so we switch to the work branch WITHOUT claiming. The decision is
- * folder-based; we never read the advisory `claimed_by` to guess ownership.
+ * LOCK-based: `dispatchFolder` reaches here only when the lock is held `active`
+ * (the body rests in the pool/staging, NOT a `work/in-progress/` folder file —
+ * the folder cutover retired that path,
+ * `finish-in-progress-folder-cutover-remove-legacy-recovery-readers`). We never
+ * read the advisory `claimed_by` to guess ownership.
  */
 async function startFromInProgress(params: {
 	slug: string;
@@ -538,10 +543,11 @@ async function startFromInProgress(params: {
 	const {slug, arbiter, cwd, env, resume, note} = params;
 
 	if (!resume) {
-		// The folder drove the decision (WORK-CONTRACT rule 6: the folder + git
-		// history are the source of truth). We do NOT name the claimer in the
-		// message; whoever holds it is read from git history
-		// (`git log work/in-progress/<slug>.md`).
+		// The held LOCK drove the decision (the per-item lock is the source of truth
+		// for liveness now — the body stays in the pool, no `work/in-progress/` file).
+		// We do NOT name the claimer in the message; whoever holds it is read from git
+		// history (`git log` over the item's `work/tasks/ready/<slug>.md` + the lock
+		// ref history).
 		throw new StartRefusal(
 			`'${slug}' is already in-progress; see \`git log\` for who claimed it; ` +
 				'if this is your own work, re-run with --resume.',
@@ -936,7 +942,14 @@ async function folderOnArbiterMain(
 	)[] = [
 		'tasks-ready',
 		...(allowBacklog ? (['tasks-backlog'] as const) : []),
-		'in-progress',
+		// NOTE: `work/in-progress/` is NOT probed (task
+		// `finish-in-progress-folder-cutover-remove-legacy-recovery-readers`): the
+		// per-item-lock cutover moved claim OFF writing that folder, so nothing lands a
+		// body there. A claimed-and-in-flight item RESTS in the pool/staging on `main`
+		// with the held lock as its liveness — `dispatchFolder` re-keys THAT to the
+		// `in-progress` dispatch off the LOCK (`state: active`), never a folder read.
+		// (`needs-attention/` is likewise the lock `state: stuck`; its retained probe is
+		// a separate cutover's concern, left untouched here.)
 		'needs-attention',
 		'done',
 	];
