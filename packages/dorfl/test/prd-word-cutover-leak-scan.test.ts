@@ -111,6 +111,12 @@ const PRESERVE_SLUGS: readonly string[] = [
 	'complete-intake-slice-prd-to-task-brief-cutover',
 	'contract-spec-blocked-by-untasked-residual-prd-exported-symbols-2026-07-10',
 	'contract-spec-frontmatter-prd-key-read-is-command-data-territory-not-contract-2026-07-10',
+	// The `convert-from-prd-to-spec` operator SKILL's own name — a `prd`-carrying
+	// proper-noun identity (a skill/command name) that names this cutover, carried
+	// verbatim in its `skills/convert-from-prd-to-spec/SKILL.md` frontmatter
+	// `name:` + heading. A name is a file identity, never rewritten (identity
+	// allow-list); enumerated here so the skill doc's own name is not mis-flagged.
+	'convert-from-prd-to-spec',
 	'erase-prd-artifact-word-everywhere-spec-is-the-one-vocabulary',
 	'explicit-do-prd-not-gated-by-autoslice',
 	'extend-renderprdbody-with-solution-and-userstories-inputs',
