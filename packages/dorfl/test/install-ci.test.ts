@@ -1825,6 +1825,8 @@ describe('the generated CI prefers a project-pinned dorfl over the global bootst
 		const adv = await import('../src/advance-lifecycle-template.js');
 		const intake = await import('../src/intake-trigger-template.js');
 		const closeJob = await import('../src/close-job-template.js');
+		const verify = await import('../src/verify-workflow-template.js');
+		const advanceCi = await import('../src/advance-ci-template.js');
 		const capabilities = [
 			{
 				id: adv.ADVANCE_LIFECYCLE_CAPABILITY_ID,
@@ -1853,6 +1855,32 @@ describe('the generated CI prefers a project-pinned dorfl over the global bootst
 					{
 						path: join('workflows', 'close-job.yml'),
 						content: closeJob.generateCloseJobWorkflow(c),
+					},
+				],
+			},
+			{
+				id: verify.VERIFY_CAPABILITY_ID,
+				label: 'verify',
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: verify.VERIFY_WORKFLOW_PATH,
+						content: verify.generateVerifyWorkflow(c),
+					},
+				],
+			},
+			{
+				// `advance-ci-template.ts` is the docs-based advance-loop workflow
+				// template (`docs/ci/advance-loop.yml.template`) — not a
+				// registry-registered capability, but it DOES emit `dorfl scan`
+				// / `dorfl advance` invocations via the shared `dorfl-setup`
+				// action, so it participates in the same PATH-shim contract and
+				// belongs in this uniformity guard.
+				id: 'advance-ci-template',
+				label: 'advance-ci-template',
+				emit: (_c: ResolvedCIConfig) => [
+					{
+						path: join('docs', 'ci', 'advance-loop.yml.template'),
+						content: advanceCi.loadAdvanceCiTemplate(),
 					},
 				],
 			},
