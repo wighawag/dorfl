@@ -895,3 +895,115 @@ describe('scan (registry) — lifecycle pool (bare mirror main)', () => {
 		});
 	});
 });
+
+/**
+ * REGRESSION (task `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`):
+ * the CI enumerate matrix (`dorfl scan --json | jq`) runs IN-PLACE, so the
+ * propose-matrix candidate list is built via `scanRepoPaths`. Before the fix,
+ * `scanRepoPaths` defaulted `heldSlugs = new Set()` AND did not pass it into
+ * `gatherLifecycleInPlace`, so a task with a currently-HELD per-item lock
+ * (state `active`/`stuck`) leaked into both `items[]` (build leg) AND
+ * `lifecycle.surface[]`/`lifecycle.apply[]` (surface/apply legs). Each such leg
+ * then always LOST the claim CAS (`claim-cas.ts:127-132`) and exited 2, reddening
+ * every propose tick while any item was `stuck` — the normal state under
+ * `review: true`.
+ *
+ * These tests SIMULATE a held lock by threading a `heldSlugs` set directly into
+ * `scanRepoPaths` (the same seam `resolveCwdSection` fills from
+ * `heldTaskSlugsStrict` in production). Symmetric to the mirror-side
+ * subtraction that already ran for `items[]`.
+ */
+describe('scanRepoPaths — held-slug subtraction covers items + lifecycle pools', () => {
+	it('a held TASK slug is omitted from items[], surface, and apply', () => {
+		// Two eligible-shape tasks: `stuck-task` is `needsAnswers` with an ANSWERED
+		// sidecar (would enter `lifecycle.apply`); `ok-task` is a plain autoBuild-
+		// eligible task (would enter `items[]`). We hold ONLY `stuck-task`; the fix
+		// must drop it from every pool while leaving `ok-task` alone.
+		writeItem('repo', 'backlog', 'stuck.md', {
+			slug: 'stuck-task',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeSidecar('repo', 'task', 'stuck-task', true);
+		writeItem('repo', 'backlog', 'ok.md', {
+			slug: 'ok-task',
+			blockedBy: '[]',
+		});
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({autoBuild: true, surfaceBlockers: true}),
+			new Set(['stuck-task']),
+		);
+		const repo = report.repos[0];
+		// items[]: `stuck-task` (which would ALSO be `needsAnswers`-ineligible, but
+		// the subtraction runs BEFORE eligibility so it's dropped even if it were
+		// eligible) is absent; `ok-task` survives.
+		expect(repo.items.map((i) => i.slug)).toEqual(['ok-task']);
+		// lifecycle.apply: `stuck-task` is dropped (would otherwise appear because
+		// its sidecar is all-answered).
+		expect(repo.lifecycle.apply).not.toContainEqual({
+			namespace: 'task',
+			slug: 'stuck-task',
+		});
+		// lifecycle.surface: empty (the ONE candidate is held-subtracted).
+		expect(repo.lifecycle.surface).toEqual([]);
+	});
+
+	it('the observed CI signature: a held `needsAnswers` task with no sidecar is gone from surface', () => {
+		// Reproduces the c2-rebase-until-real-... shape: a `needsAnswers` task with
+		// no answered sidecar, held on the arbiter (state `stuck`), enumerated by CI
+		// into a `task:<slug>` surface leg that then always lost the claim CAS.
+		writeItem('repo', 'backlog', 'c2.md', {
+			slug: 'c2-rebase-until-real',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({surfaceBlockers: true}),
+			new Set(['c2-rebase-until-real']),
+		);
+		const lc = report.repos[0].lifecycle;
+		// Zero matrix legs for that slug via surface — no leg can hit the claim-CAS
+		// exit-2 path for a held-at-snapshot item.
+		expect(lc.surface).toEqual([]);
+		expect(lc.apply).toEqual([]);
+		expect(report.repos[0].items.map((i) => i.slug)).toEqual([]);
+	});
+
+	it('a held slug does NOT touch a spec surface entry (task-only lock ref)', () => {
+		// Symmetry check: the lock ref is `task-<slug>`; a spec with the SAME slug is
+		// NOT subtracted (spec locks live under a different ref namespace). This
+		// keeps the fix narrow — it does not accidentally hide a spec surface leg.
+		writePrd('repo', 'prd', 'shared.md', {
+			slug: 'shared-slug',
+			needsAnswers: 'true',
+		});
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({surfaceBlockers: true}),
+			new Set(['shared-slug']),
+		);
+		expect(report.repos[0].lifecycle.surface).toContainEqual({
+			namespace: 'spec',
+			slug: 'shared-slug',
+		});
+	});
+
+	it('default empty heldSlugs preserves pre-fix behaviour (byte-identical)', () => {
+		writeItem('repo', 'backlog', 'q.md', {
+			slug: 'q',
+			needsAnswers: 'true',
+			blockedBy: '[]',
+		});
+		writeSidecar('repo', 'task', 'q', true);
+		const report = scanRepoPaths(
+			[join(root, 'repo')],
+			mergeConfig({surfaceBlockers: true}),
+		);
+		expect(report.repos[0].lifecycle.apply).toContainEqual({
+			namespace: 'task',
+			slug: 'q',
+		});
+	});
+});

@@ -136,9 +136,27 @@ export function gatherLifecycleInPlace(input: {
 	repoPath: string;
 	read?: LedgerReadStrategy;
 	gates?: LifecyclePoolGates;
+	/**
+	 * The HELD TASK slugs to SUBTRACT from the triage/surface/apply candidate
+	 * inputs before {@link buildLifecyclePools} routes them (task
+	 * `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`).
+	 *
+	 * Symmetric to the pool-side subtraction `scoreItems` already runs on
+	 * `state.ready`: without it, a `needsAnswers` TASK whose per-item lock is
+	 * currently held (state `active`/`stuck`) still slips into the surface / apply
+	 * pool, so `scan --json` enumerates a matrix leg for it that then always loses
+	 * the claim CAS (`claim-cas.ts:127-132`) — reddening the propose tick every
+	 * cadence for as long as the item is held. Narrowly TASK-scoped (this is what
+	 * {@link heldTaskSlugs} returns): an observation triage entry / a spec surface
+	 * entry is NOT filtered here, because the lock ref prefix `task-<slug>` only
+	 * gates the task namespace. Defaults empty (byte-identical to pre-fix
+	 * behaviour) so callers who cannot resolve a lock read still work.
+	 */
+	heldSlugs?: Set<string>;
 }): SelectedLifecyclePools {
 	const read = input.read ?? ledgerRead;
 	const repoPath = input.repoPath;
+	const heldSlugs = input.heldSlugs ?? new Set<string>();
 
 	const rawObservations = read.resolveLocalState({repoPath}).observations;
 	const observations: ObservationCandidate[] = rawObservations.map((obs) => ({
@@ -151,12 +169,17 @@ export function gatherLifecycleInPlace(input: {
 		read,
 		repoPath,
 		surfaceStaging,
-	).map((item) => ({
-		repoPath,
-		namespace: item.namespace,
-		slug: item.slug,
-		sidecar: readSidecarInPlace(repoPath, item.namespace, item.slug),
-	}));
+	)
+		// Held-slug subtraction (task-scoped): a `needsAnswers` TASK whose per-item
+		// lock is currently held is EXCLUDED from surface/apply enumeration. Spec /
+		// observation entries are untouched — the lock ref set here is task-only.
+		.filter((item) => !(item.namespace === 'task' && heldSlugs.has(item.slug)))
+		.map((item) => ({
+			repoPath,
+			namespace: item.namespace,
+			slug: item.slug,
+			sidecar: readSidecarInPlace(repoPath, item.namespace, item.slug),
+		}));
 
 	return buildLifecyclePools({
 		repoPath,
