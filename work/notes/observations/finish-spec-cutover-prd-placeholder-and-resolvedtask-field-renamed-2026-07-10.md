@@ -1,7 +1,7 @@
 ---
 title: finish-spec-cutover task — renamed the wrapper `<spec>` placeholder + `ResolvedTask.spec`/`wrapper(spec)` param to `spec` (beyond the literal "~8 readers" list) for concept coherence (2026-07-10)
 date: 2026-07-10
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Decision (PROCEED, recorded per the decision-bar rule)
@@ -22,3 +22,13 @@ This is the internal FIELD/param/placeholder rename (SOURCE), distinct from the 
 Part A of the task lists `work/specs/ → work/specs/` folder paths + `do/advance prd: → spec:` verb forms, but NOT the lock-ref/branch namespace token. Yet `CLAIM-PROTOCOL.md` (`refs/dorfl/lock/<type>-<slug>` with `<type>` is `task`/`spec`; `git switch -c work/<type>-<slug>`) and `WORK-CONTRACT.md` (`action: task` on `refs/dorfl/lock/prd-<slug>`) still said `spec`, while the CODE already renamed the namespace to `spec` (`slug-namespace.ts`: `SlugNamespace = 'task' | 'spec' | 'observation'`, `work/spec-<slug>`, `refs/dorfl/lock/spec-<slug>`; the `'spec'` member is GONE per the prior contract batch). Leaving `spec`-named lock refs in the docs is doc-vs-code drift a `dorfl spec-to-spec` re-sync would re-propagate downstream — exactly the class of live drift this task exists to finish.
 
 Decision (PROCEED, recorded): flipped `<type>` is `task`/`spec` and `refs/dorfl/lock/spec-<slug>` in the docs to match code. **What it touches:** doc-only (CLAIM-PROTOCOL.md, WORK-CONTRACT.md), no code change (the code lock-ref namespace is already `spec`). **Alternative considered:** leave it (strictly out of the listed A/B surfaces) — rejected because it is the same doc-vs-code drift Part A fixes for folder paths, and the tasking-lock is a spec's lifecycle machinery the contract must describe correctly.
+
+## Applied answers 2026-07-12
+
+### q1: What should become of this observation now that its parent task has landed — keep it as a historical decision record, fold its rationale back into the parent spec/task's own notes, or delete it?
+
+Keep it as a historical decision record under work/notes/observations/. It documents a coherence-check judgement made under the decision-bar rule that future readers may want to trace; no ADR/spec/task is needed and folding it into the parent would bury it.
+
+### q2: Does the pre-existing follow-up question in the parent task ('Should parseFrontmatter EVER stop reading the legacy prd: key, or is it a permanent back-compat alias?') want to be lifted out as its own tracked item now that the task is done?
+
+Leave it parked in the done task. Mint a follow-up for 'should parseFrontmatter EVER stop reading the legacy prd: key' only when a concrete signal arrives (e.g. all known downstream repos have migrated); until then it is a back-compat alias with no forcing reason to change, so a tracked item would just sit idle.
