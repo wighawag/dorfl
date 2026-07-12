@@ -1,6 +1,7 @@
 ---
 title: finish-spec-cutover task — renamed the wrapper `<spec>` placeholder + `ResolvedTask.spec`/`wrapper(spec)` param to `spec` (beyond the literal "~8 readers" list) for concept coherence (2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Decision (PROCEED, recorded per the decision-bar rule)
