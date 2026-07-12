@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'slicing-pr-body-summary-threading' (Ga
 date: 2026-07-10
 status: open
 reviewOf: slicing-pr-body-summary-threading
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
