@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Removed a stale, self-defeating leak-scan observation note
 
 Date: 2026-07-12.
