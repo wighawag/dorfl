@@ -1,9 +1,18 @@
 ---
 title: review-gate non-blocking nits for 'sidecar-visible-item-link' (Gate 2 approve)
 date: 2026-07-10
-status: open
+status: resolved
 reviewOf: sidecar-visible-item-link
 ---
+
+## Resolution (2026-07-12)
+
+Both nits were requests to RATIFY-and-record two intentional decisions; neither
+is a code defect. They are now recorded durably in `## Decisions` JSDoc blocks
+at their choice sites in `packages/dorfl/src/sidecar.ts`:
+
+- Nit 1 (task folder set narrowed to the 4 durable folders) -> `LINK_LIFECYCLE_FOLDERS` JSDoc. The narrowing is CORRECT: `in-progress`/`needs-attention` are retired transient lock-ref state (ADR `needs-attention-folder-cutover-followup-nits`), so a task body never lives there.
+- Nit 2 (`repoRoot` optional, defaults to no-link, only wired at the 2 writing call sites) -> `SerialiseSidecarOptions.repoRoot` JSDoc.
 
 ## Non-blocking review findings
 

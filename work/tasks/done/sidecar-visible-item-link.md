@@ -42,3 +42,10 @@ Link target rendering:
 ## Prompt
 
 > Build the task 'sidecar-visible-item-link', described above.
+
+## Decisions
+
+Two design decisions raised as non-blocking review nits (see `work/notes/observations/review-nits-sidecar-visible-item-link-2026-07-10.md`) are recorded durably as `## Decisions` JSDoc blocks at their choice sites in `packages/dorfl/src/sidecar.ts`:
+
+1. **Task link-folder set = the 4 DURABLE folders** (`tasks-ready`, `done`, `cancelled`, `tasks-backlog`), excluding `in-progress`/`needs-attention` — recorded on `LINK_LIFECYCLE_FOLDERS`. Those two are retired transient lock-ref state per ADR `needs-attention-folder-cutover-followup-nits`; a stuck task's body rests in `tasks/ready/`, so no task body ever lives under those folders for the scan to find. Touches: `work-layout.ts` `TASK_LIFECYCLE_FOLDERS` (which is a different, spec-complete/close-job set and legitimately still carries the legacy `in-progress` entry).
+2. **`serialiseSidecar`'s `repoRoot` option is OPTIONAL, defaulting to no-link** — recorded on `SerialiseSidecarOptions.repoRoot`. Only the two writing call sites (`applyAtomic`, `persistSurfacedQuestions`) pass `cwd`; pure-format/round-trip callers omit it. Touches: any future writing caller of `serialiseSidecar` must remember to pass `repoRoot` to emit the link.

@@ -302,6 +302,20 @@ const ANSWER_MARKER = '**Your answer** (write below this line):';
  * this module (rather than reused from `advance.ts`) because this set is the
  * "where might the item CURRENTLY be on disk?" question, which is broader
  * than advance's rung-classifier reach.
+ *
+ * DECISION (sidecar-visible-item-link): the task set is the four DURABLE
+ * folders `tasks-ready` / `done` / `cancelled` / `tasks-backlog` and
+ * deliberately EXCLUDES `in-progress` / `needs-attention`. Those two are NOT
+ * durable folders — they are retired transient lock-ref state (ADR
+ * `needs-attention-folder-cutover-followup-nits`, see the `TASK_LIFECYCLE_FOLDERS`
+ * JSDoc in `work-layout.ts`): a stuck task's BODY rests in `tasks/ready/`
+ * while the lock carries `state: stuck`, so no task body ever lives under
+ * `work/in-progress/` or `work/needs-attention/` for this scan to find. An
+ * earlier WIP of this task listed both; narrowing to the durable set matches
+ * the current on-disk reality and avoids scanning phantom folders.
+ * ALTERNATIVE considered: reuse `TASK_LIFECYCLE_FOLDERS` directly — rejected
+ * because it still carries the legacy `in-progress` entry and omits the
+ * `cancelled` / `tasks-backlog` folders a sidecar link may need to reach.
  */
 const LINK_LIFECYCLE_FOLDERS: Record<SidecarType, readonly WorkFolderKey[]> = {
 	task: ['tasks-ready', 'done', 'cancelled', 'tasks-backlog'],
@@ -717,6 +731,18 @@ export function serialiseSidecar(
  * the sidecar (pointing at the item's current `work/<folder>/<slug>.md`).
  * Callers that don't have a repo root (e.g. pure format tests) simply omit
  * it and the serialiser emits no link — the parse is unaffected either way.
+ *
+ * DECISION (sidecar-visible-item-link): `repoRoot` is OPTIONAL and defaults
+ * to NO link, rather than being a required argument threaded through every
+ * caller. Only the two WRITING call sites (`applyAtomic` in
+ * `sidecar-apply.ts`, `persistSurfacedQuestions` in `surface-persist.ts`)
+ * pass `cwd`; any other current/future caller of `serialiseSidecar` silently
+ * emits no link line. This keeps the many pure-format / round-trip tests
+ * trivial (they need no on-disk repo) and keeps the link a write-only
+ * cosmetic concern of the persist paths. TRADE-OFF: a new writing caller must
+ * remember to pass `repoRoot` to get the link; ALTERNATIVE considered — make
+ * it required — rejected because it would force every format-only caller and
+ * test to fabricate a repo root purely to reach the same no-link output.
  */
 export interface SerialiseSidecarOptions {
 	/**
