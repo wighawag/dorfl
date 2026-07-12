@@ -174,7 +174,7 @@ export function applyAtomic(options: ApplyAtomicOptions): ApplyAtomicResult {
 			writeFileSync(itemAbs, setNeedsAnswersMarker(itemBody, true));
 		}
 		mkdirSync(dirname(sidecarAbs), {recursive: true});
-		writeFileSync(sidecarAbs, serialiseSidecar(sidecar));
+		writeFileSync(sidecarAbs, serialiseSidecar(sidecar, {repoRoot: cwd}));
 		touched.push(sidecarPath);
 	}
 
