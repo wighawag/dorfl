@@ -1,6 +1,7 @@
 ---
 title: The C-audit conflated VALUE aliases with SYMBOL aliases — exported Spec* TS symbols have no alias and must be renamed atomically (4a re-scoped)
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What happened
