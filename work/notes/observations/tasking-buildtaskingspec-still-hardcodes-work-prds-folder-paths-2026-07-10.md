@@ -1,6 +1,7 @@
 ---
 title: tasking.ts `buildTaskingSpec` + its JSDoc still hardcode `work/specs/ready/` / `work/specs/tasked/` folder-path LITERALS (stale vocab, NOT the migrated `work/specs/`) (2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## What I saw
