@@ -1,6 +1,7 @@
 ---
 title: spec→spec re-scope #4 — inserted batch 4g (flip the intake/decision VERDICT contract); resolves batch 4d §4's inconsistent "keep the spec* content keys" carve-out (option A, ratified 2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Trigger
