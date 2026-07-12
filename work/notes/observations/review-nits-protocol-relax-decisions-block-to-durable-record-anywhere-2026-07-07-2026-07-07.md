@@ -3,7 +3,7 @@ title: review-gate non-blocking nits for 'protocol-relax-decisions-block-to-dura
 date: 2026-07-07
 status: open
 reviewOf: protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
