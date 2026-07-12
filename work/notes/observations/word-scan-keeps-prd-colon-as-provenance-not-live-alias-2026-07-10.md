@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # WORD scan keeps `prd:` prose exempt as PROVENANCE (not a live alias) after the hard cutover
 
 Date: 2026-07-10
