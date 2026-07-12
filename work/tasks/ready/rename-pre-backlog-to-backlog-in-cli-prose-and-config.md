@@ -47,3 +47,7 @@ Acceptance: `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:che
 > Update or add tests for the new flag value and the new prose. Then run `pnpm format`, and verify `pnpm -r build && pnpm -r test && pnpm format:check` is green. Finally `rg -n 'pre-backlog' packages/dorfl` and either fix or explicitly justify each remaining hit.
 >
 > Do NOT perform any git operations; the runner owns git-state transitions.
+
+## Requeue 2026-07-12
+
+Requeued after fix 7be9bd2d: the prd-word leak-scan failure was caused by two unswept task bodies (promote-rename-cutover-lessons + sweep-prose-prd-colon), now fixed on main. This item failed only on the shared rebased tip, not its own content.
