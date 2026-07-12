@@ -1,6 +1,7 @@
 ---
 title: 'DECISION: merge-question-surfacer-review-nit-tidyup drops a prior-attempt leak-scan note that itself reddened the gate'
 date: 2026-07-12
+needsAnswers: true
 ---
 
 ## Context / what I saw
