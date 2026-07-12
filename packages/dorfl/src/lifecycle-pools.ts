@@ -201,7 +201,8 @@ export function buildLifecyclePools(
 			// with the triage create-gate off (the create-vs-consume invariant, ADR
 			// `ci-config-policy-and-gate-family` §4). An answered sidecar wins even
 			// when the observation body also carries a `triaged:` marker: a human's
-			// answer must never be stranded (task `## Decisions`).
+			// answer must never be stranded (ADR
+			// `answered-observation-sidecar-dominates-triaged-marker.md`).
 			apply.push({
 				repoPath: input.repoPath,
 				slug: obs.slug,
@@ -216,8 +217,17 @@ export function buildLifecyclePools(
 				slug: obs.slug,
 				namespace: 'observation',
 			});
+		} else if (obs.triaged !== undefined) {
+			// EXPLICIT DROP: SETTLED (`triaged:` non-empty) with no answered sidecar
+			// — deliberately NOT enumerated. A pending sidecar on a settled
+			// observation would only no-op if re-enumerated, and a settled body is
+			// already resolved on the create side (ADR
+			// `answered-observation-sidecar-dominates-triaged-marker.md`). Codified
+			// as an explicit branch so a future reader does not resurface this cell.
+			continue;
 		}
-		// else: SETTLED (triaged:) with no answered sidecar — NOT enumerated.
+		// else: UNTRIAGED with no answered sidecar + triage gate OFF — implicit
+		// drop (the gate deliberately silences the pool).
 	}
 
 	// --- surface / apply: split `needsAnswers` items by sidecar answered-state ---
