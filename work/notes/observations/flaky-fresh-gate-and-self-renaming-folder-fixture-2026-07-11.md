@@ -1,5 +1,5 @@
 ---
-needsAnswers: true
+needsAnswers: false
 ---
 
 # Flaky fixture failures: fresh-gate `m.oldName is not a function` + self-renaming-folder "No projects found"
@@ -13,3 +13,9 @@ On one run of `pnpm --filter dorfl test`, a single test failed with `TypeError: 
 ### q1: What should become of this flaky-fresh-gate / self-renaming-folder observation — delete it (single unreproduced occurrence, no live signal), keep it open pending recurrence, or mint a task to investigate the specific 'm.oldName is not a function' + 'No projects found' failure mode?
 
 Keep open pending recurrence. It is a single unreproduced occurrence with no live signal, so do not mint an investigation task yet, but the failure mode is specific enough ('m.oldName is not a function' + 'No projects found') that deleting it would throw away a useful fingerprint if it recurs. Revisit and promote (or delete) on the next occurrence.
+
+## Applied answers 2026-07-12
+
+### q1: What should become of this observation? Reply with a disposition and a reason: resolve (settle it, keep the note on record — say why), promote (mint a task / spec / adr — say which and why), delete (redundant or obsolete — say why), or duplicate (maps onto an existing item — name it).
+
+Resolve (keep the note on record). It is a single unreproduced occurrence with no live signal, so do not mint an investigation task yet, but the failure mode is specific enough ('m.oldName is not a function' + 'No projects found') that the note is worth keeping as a fingerprint. Re-open / promote to an investigation task only if it recurs.
