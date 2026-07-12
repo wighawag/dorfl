@@ -92,6 +92,31 @@ export interface PushTreelessResultParams {
  */
 export const DEFAULT_TREELESS_JITTER_MS = 25;
 
+/**
+ * Stderr signatures of a PERMANENT push rejection that NO re-fetch+rebase can
+ * ever cure, so the retry loop MUST stop at once instead of burning the whole
+ * liveness ceiling ({@link PushTreelessResultParams.retries}, `1000` in prod) on
+ * identical round-trips.
+ *
+ * The tree-less rungs publish by a DIRECT `git push HEAD:main` of a freshly-made
+ * commit (see the module header). If the arbiter's `main` hard-requires a status
+ * check on EVERY push (GitHub classic branch protection with a non-empty
+ * `required_status_checks.contexts`, or a `pre-receive`/ruleset hook), that fresh
+ * commit is rejected with `GH006 ... Required status check "..." is expected` /
+ * `protected branch hook declined` / `pre-receive hook declined`. A rebase onto
+ * the newest `main` does NOT change the fact that the pushed commit has no green
+ * check, so retrying is pointless: the push is rejected identically every time.
+ *
+ * This is DISTINCT from a fast-forward RACE (`non-fast-forward` / `fetch first` /
+ * `stale info`), which a rebase DOES cure — and it must win OVER the broad
+ * `rejected` contention alternation, because a protected-branch rejection
+ * literally contains the word `rejected` (`! [remote rejected] HEAD -> main
+ * (protected branch hook declined)`) and would otherwise be mis-read as a race
+ * and retried uselessly. See the observation trail for the live incident.
+ */
+export const PERMANENT_PUSH_REJECTION =
+	/GH006|protected branch|hook declined|required status check|cannot force-update the branch/i;
+
 function sleepMs(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -116,6 +141,26 @@ export async function pushTreelessResult(
 			{env},
 		);
 		if (push.status === 0) {
+			return;
+		}
+		// A PERMANENT rejection (branch protection / required status check / a
+		// pre-receive or ruleset hook) can NEVER be cured by a rebase+re-push — the
+		// fresh commit still carries no green check — so stop AT ONCE with an honest,
+		// distinct note instead of exhausting the liveness ceiling on identical
+		// round-trips. This MUST be checked before `contended`, because a protected-
+		// branch rejection contains the word `rejected` and would otherwise be
+		// mistaken for a fast-forward race and retried uselessly (see the incident
+		// observation).
+		if (PERMANENT_PUSH_REJECTION.test(push.stderr)) {
+			note(
+				`advance: the arbiter's \`main\` rejected the direct tree-less push ` +
+					`(${push.stderr.trim() || 'protected branch'}); a re-fetch+rebase cannot ` +
+					`cure a required-status-check / protected-branch rule on a direct push, so ` +
+					`the work is saved in the working clone for the next pass / a human. ` +
+					`Reconcile \`main\`'s protection so direct tree-less ledger writes are ` +
+					`allowed (the required check belongs in a ruleset with ` +
+					`\`do_not_enforce_on_create\`, not the classic on-every-push gate).`,
+			);
 			return;
 		}
 		const contended = /non-fast-forward|rejected|fetch first|stale info/i.test(

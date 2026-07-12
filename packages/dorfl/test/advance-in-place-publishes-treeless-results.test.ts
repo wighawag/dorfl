@@ -22,6 +22,11 @@ import {
 	type SeededRepo,
 } from './helpers/gitRepo.js';
 import {run as runGit} from '../src/git.js';
+import {
+	pushTreelessResult,
+	PERMANENT_PUSH_REJECTION,
+} from '../src/advance-treeless-publish.js';
+import {existsSync, chmodSync} from 'node:fs';
 
 /**
  * `advance-in-place-publishes-treeless-results` task (PRD
@@ -523,5 +528,87 @@ describe('advance in-place — a failing publish is NON-FATAL (the work stays co
 			'utf8',
 		);
 		expect(committed).toContain('q?');
+	});
+});
+
+describe('advance in-place — a PROTECTED-BRANCH rejection is TERMINAL, not retried (the GH006 incident)', () => {
+	// The live incident: the arbiter’s `main` hard-required the `verify` status
+	// check on EVERY push (classic branch protection), so the DIRECT tree-less
+	// `git push HEAD:main` was rejected with `GH006 ... Required status check
+	// “verify” is expected` / `protected branch hook declined`. The stderr contains
+	// the word `rejected`, so the OLD broad contention classifier mis-read it as a
+	// fast-forward race and burned the whole `retries: 1000` ceiling on identical,
+	// unwinnable round-trips. A rebase can NEVER cure a required-check gate on a
+	// fresh direct-push commit, so the push MUST stop at the FIRST attempt.
+	it('stops after ONE push attempt with a protection-specific note (no retry storm)', async () => {
+		const slug = 'gh006';
+		const seed = seedPlainRepo(slug);
+
+		// Install a `pre-receive` hook in the bare arbiter that rejects every push
+		// with a GH006-shaped message AND appends a line to a counter file, so we can
+		// assert EXACTLY one push attempt reached the arbiter (proving no retry loop).
+		const counter = join(scratch.root, `${slug}-hook-hits.log`);
+		const hooksDir = join(seed.arbiter, 'hooks');
+		mkdirSync(hooksDir, {recursive: true});
+		const hook = join(hooksDir, 'pre-receive');
+		writeFileSync(
+			hook,
+			'#!/bin/sh\n' +
+				`echo hit >> ${JSON.stringify(counter)}\n` +
+				'echo "remote: error: GH006: Protected branch update failed for refs/heads/main." 1>&2\n' +
+				'echo "remote: - Required status check \\"verify\\" is expected." 1>&2\n' +
+				'exit 1\n',
+		);
+		chmodSync(hook, 0o755);
+
+		// Commit a tree-less sidecar LOCALLY (what a surface rung does), then publish.
+		const item = `task:${slug}`;
+		const abs = join(seed.repo, sidecarPathFor(item));
+		mkdirSync(join(abs, '..'), {recursive: true});
+		writeFileSync(abs, serialiseSidecar(newSidecar(item, [{question: 'q?'}])));
+		gitIn(['add', '-A'], seed.repo);
+		gitIn(['commit', '-q', '-m', `surface ${slug}`], seed.repo);
+
+		const notes: string[] = [];
+		await pushTreelessResult({
+			cwd: seed.repo,
+			arbiter: 'arbiter',
+			// The production liveness ceiling. If the fix regressed and the rejection
+			// were treated as contention, the hook would be hit ~1000 times.
+			retries: 1000,
+			jitterMs: 0,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		// EXACTLY one push reached the arbiter — the rejection terminated the loop.
+		expect(existsSync(counter)).toBe(true);
+		const hits = readFileSync(counter, 'utf8').trim().split('\n').length;
+		expect(hits).toBe(1);
+
+		// The note names the protection cause (not the generic contention note).
+		expect(
+			notes.some((n) =>
+				/protected branch|required-status-check|rejected the direct/i.test(n),
+			),
+		).toBe(true);
+
+		// The work survives locally for the next pass / a human.
+		expect(existsSync(join(seed.repo, sidecarPathFor(item)))).toBe(true);
+	});
+
+	it('PERMANENT_PUSH_REJECTION matches the live GH006 stderr but NOT a plain non-fast-forward', () => {
+		const gh006 =
+			'remote: error: GH006: Protected branch update failed for refs/heads/main.\n' +
+			'remote: - Required status check "verify" is expected.\n' +
+			' ! [remote rejected]   HEAD -> main (protected branch hook declined)';
+		expect(PERMANENT_PUSH_REJECTION.test(gh006)).toBe(true);
+		// A genuine fast-forward race must NOT be classified as permanent (the rebase
+		// retry still owns that path).
+		expect(
+			PERMANENT_PUSH_REJECTION.test(
+				' ! [rejected]        HEAD -> main (non-fast-forward)\nhint: Updates were rejected; fetch first.',
+			),
+		).toBe(false);
 	});
 });

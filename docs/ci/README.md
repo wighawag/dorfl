@@ -137,6 +137,24 @@ NOT mint a new mirror-pool JSON CLI surface (that enumeration lives in
 `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a separate
 concern, not this template's).
 
+## Branch protection and the tree-less answer-loop (a required-check caveat)
+
+The answer-loop's tree-less rungs (`surface` / `apply` / `triage-observation`) publish their ledger writes (a question sidecar, a `triaged:` marker, an applied answer) by a **direct `git push HEAD:main`** of a freshly-made commit. This is deliberate: `integrationMode` governs how CODE integrates (build/slice branches → PR or merge), it does NOT govern the question ledger, so tree-less writes go straight to `main` in BOTH modes (SPEC `ci-advance-surfaces-questions-not-only-builds`).
+
+That direct push collides with one specific branch-protection shape: **a required status check enforced on EVERY push to `main`**. If `main`'s CLASSIC protection lists a required context (e.g. `required_status_checks.contexts: ["verify"]`), GitHub rejects the fresh tree-less commit with `GH006: Protected branch update failed ... Required status check "verify" is expected` (`protected branch hook declined`). A required check can never be green on a commit that was never PR'd/built, so the push is structurally impossible and no retry can cure it — the work stays saved in the working clone for the next pass, and the loop does not drain.
+
+**The supported shape (what `install-ci` provisions).** Keep the required check OUT of the classic per-push gate and put it in a **ruleset** with `do_not_enforce_on_create: true` instead:
+
+- Classic protection: `strict: true` ("require branches up to date before merging") with an **empty** `checks` array — no named required check at the classic layer, so direct pushes are not gated on a check.
+- A branch **ruleset** carrying the required `verify` check with `do_not_enforce_on_create: true` — this still gates PR **merges** on `verify`, but exempts refs created before the rule / before the check first ran, and does not block the tree-less direct push.
+
+`install-ci-branch-protection.ts` provisions exactly this shape automatically when the credential is repo-admin-scoped, and prints the two ready-to-run `gh api` commands otherwise. If a repo's `main` was protected the OLD way (a classic `contexts: ["verify"]` per-push gate, no ruleset), reconcile it by emptying the classic `checks` and adding the ruleset; otherwise every tree-less answer-loop tick will fail 3-of-4-style on GH006.
+
+> **Two caveats worth knowing before you gate `main`:**
+>
+> 1. **A required-check rejection is now TERMINAL, not retried.** The tree-less publish (`pushTreelessResult`) distinguishes a permanent protected-branch / required-check / hook rejection (`GH006`, `protected branch`, `hook declined`) from a transient fast-forward race. A permanent rejection stops at the FIRST attempt with an honest note naming the protection cause — it no longer burns the whole retry ceiling on identical, unwinnable round-trips. The work is still saved locally for the next pass; it just fails fast and loud instead of spinning.
+> 2. **If you genuinely want EVERY direct push to `main` gated, the answer-loop needs a different landing path.** The supported shape above ungates direct pushes (only PR merges stay gated), which is the SPEC's intent. If your policy really is "no un-checked commit ever touches `main`," the tree-less answer-loop cannot land as-is: it would need a bot admin-bypass token or an alternative publish path (per-sidecar PRs are explicitly out of scope). Weigh this before hard-gating direct pushes.
+
 ## Triggers
 
 - **cron** — a scheduled tick drains whatever has been answered since the last run.
