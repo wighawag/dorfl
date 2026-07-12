@@ -1115,6 +1115,43 @@ async function runComplete(
 	// ONE thing the human must act on, so it is emitted as a visually-distinct
 	// block (blank lines + heading + TTY-aware color) ON TOP of the plain summary
 	// note below — cosmetic only; the structured result is unchanged.
+	//
+	// BENIGN ALREADY-LANDED RACE TAIL (task `propose-push-survives-stale-lease-
+	// on-reaped-work-ref`, follow-up
+	// `complete-propose-honour-already-landed-and-rename-continue-branch-module`):
+	// when the integrator's propose push observed a REAPED `work/<slug>` ref AND
+	// the work was provably on `<arbiter>/main`, it returns `alreadyLanded: true`
+	// with a custom `instruction`. In that case NOTHING was pushed and there is
+	// NO ref for a PR to point at, so emitting the generic
+	// `formatProposeNextStep` push+PR block ("Pushed ... Open a PR/MR ...") would
+	// misreport a clean no-op as unfinished work. Surface the integrator's
+	// `instruction` VERBATIM instead — it is already the correct clean-no-op
+	// prose (the CI-dominant recovery path via `performIntegration` already does
+	// the same; this is the sibling `complete.ts` caller's honest report). The
+	// tail (switch-to-main / delete-local-branch / `--no-switch`) is UNCHANGED
+	// — only the emitted next-step + summary text differ.
+	if (result.alreadyLanded === true) {
+		const instruction =
+			result.instruction ??
+			`${branch}: already on ${arbiter}/main (clean no-op).`;
+		const tail = options.noSwitch
+			? `; left on ${branch} (--no-switch).`
+			: deletedLocalBranch
+				? `; switched to main and deleted ${branch}.`
+				: '; switched to main.';
+		const message = `Completed '${slug}': ${instruction}${tail}`;
+		note(message);
+		return {
+			exitCode: 0,
+			outcome: 'completed',
+			branch,
+			commitMessage,
+			mergedToMain: false,
+			switchedTo,
+			deletedLocalBranch,
+			message,
+		};
+	}
 	const color = options.color ?? shouldUseColor(process.stdout);
 	const noteBlock = options.noteBlock ?? note;
 	noteBlock(
