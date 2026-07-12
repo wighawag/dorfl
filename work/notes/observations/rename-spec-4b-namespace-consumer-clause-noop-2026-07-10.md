@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 4b: the "close-job/lifecycle-gather `namespace === 'spec'` consumers" clause is a no-op in those files (2026-07-10)
 
 While building `rename-spec-remaining-src-modules-b`, the task's first acceptance clause ("`close-job.ts`/`lifecycle-gather.ts` `namespace === 'spec'` consumers also match `'spec'`; add `|| === 'spec'`, keep `'spec'`") rests on a premise that does not match the code:
