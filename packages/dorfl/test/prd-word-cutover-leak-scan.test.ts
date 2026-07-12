@@ -166,13 +166,28 @@ const AGENTS_MD = join(REPO_ROOT, 'AGENTS.md');
 
 function isExcludedDir(rel: string): boolean {
 	// Never descend into build/vendor output, the .git store, the protocol
-	// SOURCE (mirror-managed, its `prd:` survivors are contract mentions), or the
-	// byte-identical protocol MIRROR.
+	// SOURCE (mirror-managed, its `prd:` survivors are contract mentions), the
+	// byte-identical protocol MIRROR, or the machine-generated QUESTION SIDECARS.
+	//
+	// `work/questions/` is EXCLUDED because a sidecar is DERIVED, MACHINE-generated,
+	// TRANSIENT content: the advance loop's surface rung writes it by QUOTING the
+	// observation body it surfaces (the emitted triage question + the agent's `note`
+	// echo the source verbatim), and it is `git rm`-ed the moment the item is
+	// applied. So a sidecar that surfaces a `prd→spec` cutover observation MUST
+	// contain the retired word — that IS its subject — through no authoring drift.
+	// This WORD scan polices AUTHORED prose/paths (the human-readable trees), NOT
+	// derived question text quoting a source; gating sidecars made the autonomous
+	// loop red `main` every time it surfaced a cutover observation (see
+	// `work/notes/observations/prd-word-leak-scan-fails-on-bot-generated-triage-
+	// sidecars-2026-07-12.md`). The source OBSERVATIONS the sidecars quote are still
+	// scanned (they live under `work/notes/`), so a real re-drift in AUTHORED prose
+	// is still caught — only the derived echo is exempt.
 	return (
 		rel === 'node_modules' ||
 		rel === '.git' ||
 		rel === join('skills', 'setup', 'protocol') ||
-		rel === join('work', 'protocol')
+		rel === join('work', 'protocol') ||
+		rel === join('work', 'questions')
 	);
 }
 
@@ -236,6 +251,10 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	// prose (the skill/command names, not the artifact word as a live concept).
 	'author-convert-from-prd-to-spec-skill.md',
 	'convert-from-prd-to-spec-skill-doc-conformance-guard.md',
+	// The incident note whose OWN subject is THIS leak scan failing on bot-generated
+	// triage sidecars: it quotes the retired `prd` word + the `work/prds/` path in
+	// prose (pasted CI output, the scan's own message) to describe what tripped.
+	'prd-word-leak-scan-fails-on-bot-generated-triage-sidecars-2026-07-12.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {

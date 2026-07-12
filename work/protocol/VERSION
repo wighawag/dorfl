@@ -1,4 +1,4 @@
-protocol-version: 2026-07-10
+protocol-version: 2026-07-12
 synced-from: skills/setup/protocol/
-synced-at: 2026-07-10T12:00:00+0000
-source-commit: finish-spec-cutover-protocol-folder-paths-and-frontmatter-field
+synced-at: 2026-07-12T12:00:00+0000
+source-commit: advance-triage-always-asks-deterministic-question
