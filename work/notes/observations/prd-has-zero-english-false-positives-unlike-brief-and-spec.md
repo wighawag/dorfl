@@ -1,6 +1,7 @@
 ---
 title: 'spec' has ZERO English false-positives (unlike brief/spec) — the forward spec→spec sweep is safe; only 'SPEC is a spec' adjacencies needed rewording
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What was spotted
