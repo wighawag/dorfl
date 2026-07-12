@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Decisions — expand-spec-frontmatter-and-namespace-aliases (2026-07-09)
 
 Durable record of the design choices made while implementing the EXPAND step of the spec→spec cutover (task `expand-spec-frontmatter-and-namespace-aliases`, spec `prd-to-spec-vocabulary-cutover-and-migration-command`). Each is additive and reversible by the next migrate/contract batch; recorded here so a reviewer/human can ratify or reverse. Link this from the task's done record.
