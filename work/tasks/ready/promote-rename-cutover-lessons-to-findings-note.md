@@ -70,3 +70,7 @@ Acceptance:
 > Do NOT mint an ADR (explicitly ruled out). Do NOT edit or delete the source observations (git-state transitions are the runner's job). Do NOT change any code. Do NOT touch the separate `rename-expand-checklist.md` finding — that is a different note about definitional mint/map surfaces, owned by another task.
 >
 > When done, run `pnpm format`, verify `pnpm -r build && pnpm -r test && pnpm format:check` is green, then stop. Do NOT perform any git operations.
+
+## Requeue 2026-07-12
+
+Requeued after fix 7be9bd2d: the prd-word leak-scan failure was caused by two unswept task bodies (promote-rename-cutover-lessons + sweep-prose-prd-colon), now fixed on main. This item failed only on the shared rebased tip, not its own content.
