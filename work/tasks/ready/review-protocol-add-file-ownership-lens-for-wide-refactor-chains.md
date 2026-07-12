@@ -1,37 +1,53 @@
 ---
 promotedFrom: observation:prd-to-spec-verb-dispatch-belongs-with-do-ts-batch-not-the-namespace-batch
+consolidates:
+  - observation:prd-to-spec-identity-layer-needs-expand-first-not-hard-swap
 ---
 
 ## What to build
 
-Add a one-line lens item to `REVIEW-PROTOCOL.md`'s lens list capturing the durable lesson from the third scope/boundary miss on the `spec`→`spec` cutover: **a clause belongs in the batch that owns the FILE it must edit** (splitting a wide refactor by CONCEPT instead of by FILE OWNERSHIP produces clauses with no home — e.g. batch 2 of the cutover had a `do spec:`/`advance spec:` verb-dispatch acceptance clause, but the dispatcher lives in `do.ts`/`advance.ts` which are batch 4's files, so the clause was unsatisfiable inside its own batch's scope fence).
+Add TWO new review lenses (as bullets inside the existing lens list) to `REVIEW-PROTOCOL.md`, both review-side complements to `TASKING-PROTOCOL.md` §3a for wide-refactor task chains. Both were ratified as the lightweight "fold inline, no spec/ADR" option.
 
-The framing to add (as a review-side complement to TASKING-PROTOCOL §3a, which codifies the tasking-side rule): **for a wide-refactor task chain, FOR EACH acceptance clause, identify which file(s) must change and verify THIS batch owns them.** This is a distinct review lens from graph coherence / claim-vs-reality / destination coverage — none of those caught the miss, because it is a "can this batch physically edit only its own files and stay green" check.
+> NOTE (consolidation): this task was merged from two apply-rung tasks that each added a bullet to the SAME lens list (the expand-first lens from `prd-to-spec-identity-layer-needs-expand-first-not-hard-swap`, and this file-ownership lens). Doing both edits in one task avoids a parallel-edit conflict and a wrong-path bug: the expand-first task pointed at `skills/review/REVIEW-PROTOCOL.md`, which does NOT exist. The real source of truth is `skills/setup/protocol/REVIEW-PROTOCOL.md`, mirrored to `work/protocol/REVIEW-PROTOCOL.md` (per repo AGENTS.md).
 
-This lens shares a home with the expand-first review lens (the sibling observation `prd-to-spec-identity-layer-needs-expand-first-not-hard-swap` also resolved to a REVIEW-PROTOCOL.md lens-list addition); both are review-side complements for wide-refactor chains. If the expand-first lens has already landed by the time this task runs, add the file-ownership lens as a sibling bullet in the same location; if not, this task adds only the file-ownership lens and the other rides in on its own task.
+### Lens A — expand-first / indirected-vs-hard-swap
+
+> **Wide-refactor batch safety.** For a task chain that performs a pervasive rename / identifier cutover across many call sites, verify — per batch — that the batch is either (a) **indirected-safe** (the renamed identifier is read through a key/indirection, so a hard swap does not break downstream call sites and `pnpm -r build` stays green in isolation), or (b) **expand-first** (an earlier batch already added the new form beside the old across the whole non-indirected identity surface, so this batch is an additive migrate, and a later contract batch removes the aliases). A linear sequence of hard-swap `rename-*` batches over NON-indirected identifiers CANNOT stay green per-batch and must be rejected or restructured into expand → migrate → contract.
+
+Motivation to weave in (parenthetical, keep short): the spec→spec identity-layer chain shipped review-clean yet its batch 2 STOPPED at build time — `fm.spec` / `'spec'` were non-indirected and read at ~28 downstream call sites, so a hard swap could not compile alone. Review had checked graph coherence, claim-vs-reality, and destination coverage, but not per-batch compilability.
+
+### Lens B — file-ownership / clause-belongs-in-its-file's-batch
+
+> **File ownership.** For a wide-refactor task chain, FOR EACH acceptance clause of EACH batch, identify which file(s) it must change and verify THIS batch owns them. A clause whose file lives in another batch is a scope-fence violation and must be moved to the batch that owns the file.
+
+Motivation to weave in (parenthetical): batch 2 of the spec→spec cutover carried a `do spec:` / `advance spec:` verb-dispatch clause, but the dispatcher (`do.ts` L711/L1893, `advance.ts`, `advance-drivers.ts`, `do-autopick.ts`) is owned by batch 4, so the clause was unsatisfiable inside batch 2's scope fence and the `do` agent correctly STOPPED. The fix was to move the clause into batch 4.
+
+These three consecutive `do`-agent stops on the same cutover (identity-layer expand-first, lock/sidecar expand surface missed, verb-dispatch file-ownership) all share the shape "review passed but a batch could not physically edit only its own files and stay green" — a class the current lenses (claim-vs-reality, cross-artifact composition, destination check) do not target.
 
 ### Files
 
-- `skills/setup/protocol/REVIEW-PROTOCOL.md` — **source of truth** (per repo AGENTS.md: edit here, never `work/protocol/` directly).
-- `work/protocol/REVIEW-PROTOCOL.md` — propagated copy; mirror the same change byte-identically so `diff -r skills/setup/protocol work/protocol` stays clean.
+- `skills/setup/protocol/REVIEW-PROTOCOL.md` — **source of truth** (per AGENTS.md: edit HERE, never `work/protocol/` directly).
+- `work/protocol/REVIEW-PROTOCOL.md` — propagated copy; mirror both additions byte-identically so `diff -r skills/setup/protocol work/protocol` stays clean.
 
-### Where to put it
+### Where to put them
 
-The existing lenses (§ "The lenses — apply IN ORDER, ending in the destination check") are numbered 1–5 and end in the destination check. The file-ownership lens is a **narrow, wide-refactor-specific** framing, not a general lens that applies to every review; the cleanest home is a short bullet appended to lens 3 (Cross-artifact composition / contract conformance) or to lens 5 (destination check), whichever the editor judges the better conceptual fit — do NOT insert it as a full new numbered lens (that would inflate the general list for a niche case). A one- or two-line bullet inside the closest existing lens is what the answer asked for ("one-line addition to REVIEW-PROTOCOL.md's lens list").
+The existing lenses are numbered and end in the destination check. Both new lenses are narrow, wide-refactor-specific framings, NOT general lenses that apply to every review. Do NOT inflate the general numbered list with two new top-level lenses. The cleanest home is a short bullet (or a small "wide-refactor sub-checklist" of two bullets) appended inside the closest existing lens — lens 3 (cross-artifact composition / contract conformance) is the natural fit, with lens 5 (destination check) as an alternative. The editor judges the best conceptual home; keep each lens to one or two lines and match the surrounding tone/format.
 
 ### Acceptance
 
-- `REVIEW-PROTOCOL.md` (both copies) contains a bullet, inside an existing lens, that reviewers of a wide-refactor task set can apply: for each acceptance clause of each batch, identify the file(s) that must change and verify the batch owns them; a clause whose file lives in another batch is a scope-fence violation and must be moved to the batch that owns the file.
+- `REVIEW-PROTOCOL.md` (BOTH copies) contains both lenses, phrased in-house, integrated inside an existing lens rather than as two new top-level numbered lenses.
 - `diff -r skills/setup/protocol/ work/protocol/` shows no drift between source and copy.
-- `pnpm -r build && pnpm -r test && pnpm format:check` green.
-- After landing, the source observation note `work/notes/observations/prd-to-spec-verb-dispatch-belongs-with-do-ts-batch-not-the-namespace-batch.md` and its question sidecar can be deleted (the human's answer explicitly said "then delete"); do this as part of the same task if the harness permits, otherwise leave a follow-up crumb.
+- `pnpm -r build && pnpm -r test && pnpm format:check` green (run `pnpm format` first if needed).
+- After landing, both source observations and their question sidecars are dischargeable (the human's answers said "then delete"): `prd-to-spec-identity-layer-needs-expand-first-not-hard-swap` and `prd-to-spec-verb-dispatch-belongs-with-do-ts-batch-not-the-namespace-batch`. Leave the git-state transition to the runner/harness.
 
 ## Prompt
 
-> Add a one-line/one-bullet lens item to `skills/setup/protocol/REVIEW-PROTOCOL.md` (and mirror it byte-identically into `work/protocol/REVIEW-PROTOCOL.md` — the second is a propagated copy of the first; see repo AGENTS.md) capturing this durable review-side lesson from the `spec`→`spec` cutover: **a clause belongs in the batch that owns the FILE it must edit.** For a wide-refactor task chain, reviewers must ask, FOR EACH acceptance clause of EACH batch, "which file(s) must change, and does THIS batch own them?" A clause whose file lives in another batch is a scope-fence violation and must be moved to the batch that owns the file.
+> Add TWO review lenses to `skills/setup/protocol/REVIEW-PROTOCOL.md` (source of truth) and mirror both byte-identically into `work/protocol/REVIEW-PROTOCOL.md` (a propagated copy; see repo AGENTS.md). Do NOT look for `skills/review/REVIEW-PROTOCOL.md` — it does not exist.
 >
-> Concrete example that motivated this (include as an inline parenthetical if it fits, or drop if it does not): batch 2 of the `spec`→`spec` cutover had a `do spec:`/`advance spec:` verb-dispatch acceptance clause, but the dispatcher (`do.ts` L711/L1893, `advance.ts`, `advance-drivers.ts`, `do-autopick.ts`) is owned by batch 4 — so the clause was unsatisfiable inside batch 2's scope fence and the `do` agent correctly STOPPED. The fix was to move the clause into batch 4. Three consecutive `do`-agent stops on the same cutover (identity-layer needs expand-first; lock/sidecar expand surface missed; this one) all shared the shape "the review passed but a batch could not physically edit only its own files" — a class the current lenses (claim-vs-reality, cross-artifact composition, destination check) do not target.
+> Both lenses are review-side complements to `TASKING-PROTOCOL.md` §3a for wide-refactor task chains. Add them as short bullets INSIDE an existing lens (lens 3 "cross-artifact composition" is the natural home; lens 5 "destination check" is the alternative) — do NOT add two new top-level numbered lenses; the answers explicitly asked for lightweight one-line additions.
 >
-> Place the bullet INSIDE an existing lens (lens 3 "Cross-artifact composition" or lens 5 "destination check" — pick whichever reads more naturally) rather than as a new top-level numbered lens; the answer explicitly asked for a one-line addition, not a whole new lens. If a sibling task adding an "expand-first / indirected-vs-hard-swap" lens (from observation `prd-to-spec-identity-layer-needs-expand-first-not-hard-swap`) has already landed, add this file-ownership bullet next to it. If not, add only this one; the other rides its own task.
+> Lens A (expand-first): for each batch of a pervasive rename/identifier cutover, verify the batch is either indirected-safe (renamed identifier read through a key/indirection, hard swap keeps `pnpm -r build` green alone) OR expand-first (a prior batch added the new form beside the old across the whole non-indirected surface, this batch is an additive migrate, a later contract batch removes the aliases). Flag a linear sequence of hard-swap `rename-*` batches over non-indirected identifiers. Motivation (weave in briefly): the spec→spec chain shipped review-clean yet batch 2 stopped at build time — `fm.spec`/`'spec'` were non-indirected, read at ~28 call sites, could not compile alone.
 >
-> After the edit, confirm `diff -r skills/setup/protocol/ work/protocol/` shows no drift, then run `pnpm format` and confirm `pnpm -r build && pnpm -r test && pnpm format:check` is green. The source observation note (`work/notes/observations/prd-to-spec-verb-dispatch-belongs-with-do-ts-batch-not-the-namespace-batch.md`) and its question sidecar (`work/questions/observation-prd-to-spec-verb-dispatch-belongs-with-do-ts-batch-not-the-namespace-batch.md`) should be deleted in the same change — the human's answer said "then delete" — unless the harness reserves note lifecycle for the engine, in which case leave them.
+> Lens B (file ownership): for a wide-refactor chain, FOR EACH acceptance clause of EACH batch, identify which file(s) must change and verify THIS batch owns them; a clause whose file lives in another batch is a scope-fence violation and must be moved to the batch that owns the file. Motivation (weave in briefly): batch 2 carried a `do spec:`/`advance spec:` verb-dispatch clause, but the dispatcher lives in `do.ts`/`advance.ts`/`advance-drivers.ts`/`do-autopick.ts` (batch 4's files), so the clause was unsatisfiable in batch 2 and the `do` agent correctly STOPPED.
+>
+> First read the existing REVIEW-PROTOCOL to match lens style, tone, and length. Add the two bullets (as a small wide-refactor sub-checklist inside one lens is fine). Then confirm `diff -r skills/setup/protocol/ work/protocol/` shows no drift, run `pnpm format`, and verify `pnpm -r build && pnpm -r test && pnpm format:check` is green. Do NOT touch §3a itself, do NOT open a spec/ADR, and do NOT revisit the already-landed spec→spec remediation tasks in `work/tasks/done/`. Do NOT perform any git operations; the runner owns git-state transitions (including deleting the two source observations/sidecars the answers marked "then delete").
