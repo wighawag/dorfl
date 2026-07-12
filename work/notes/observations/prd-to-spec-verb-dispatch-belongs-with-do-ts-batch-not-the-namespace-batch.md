@@ -1,6 +1,7 @@
 ---
 title: The `do spec:`/`advance spec:` verb-dispatch belongs in the batch that owns do.ts/advance.ts (batch 4), not the namespace-migrate batch — a task-boundary miss
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What happened
