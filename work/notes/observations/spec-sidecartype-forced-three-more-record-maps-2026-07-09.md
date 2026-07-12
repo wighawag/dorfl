@@ -1,6 +1,7 @@
 ---
 title: Adding 'spec' to SidecarType compiler-forced three MORE Record<SidecarType> maps beyond the task's named list (all mirrored to spec, additive)
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What happened
