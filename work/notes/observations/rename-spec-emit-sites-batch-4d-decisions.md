@@ -1,7 +1,7 @@
 ---
 title: spec→spec batch 4d (rename-spec-namespace-emit-sites-and-local-unions) — build decisions worth ratifying
 date: 2026-07-10
-needsAnswers: false
+needsAnswers: true
 ---
 
 Durable record of the judgement calls made while flipping the PRODUCER side of the `spec` namespace onto `spec` (task `rename-spec-namespace-emit-sites-and-local-unions`). Recorded here (append-only capture bucket) so the reviewer + human can ratify or reverse; linked from the done record. None are load-bearing/hard-to-reverse enough to STOP on, but each would surprise a later task/reviewer if buried in code.
