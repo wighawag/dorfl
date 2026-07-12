@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # spec→spec contract: source-part leak scan landed; tree-wide bi-word gate DEFERRED to the final run-on-dorfl task
 
 2026-07-10 — task `contract-spec-hard-cutover-rejection-and-leak-scan` (spec `prd-to-spec-vocabulary-cutover-and-migration-command`, US #1/#8).
