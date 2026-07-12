@@ -66,7 +66,12 @@ Organised by two axes: **target** (the registry / one repo) × **doer** (agent /
 - **Human — do work yourself (optionally with your AI):**
   - **In-place** (takes over the current checkout, for when you need its real `.env`): **`start <slug>`** (claim + switch; `--agent` launches the harness) → build → **`complete`** (gate + done-move + integrate). **`resume <slug>`** re-engages an in-progress item. `claim`/`prompt` are low-level.
   - **Parallel** (isolated worktree, doesn't touch your clone): **`work-on <slug>` / `work-on --remote <r> <slug>`** — claim + worktree in the **human area**, `cd`s you in; `--copy` brings gitignored files (e.g. `.env`), `--agent` launches the harness. The human counterpart to `do`.
-- **Ops:** **`scan`** (cross-repo queue — fetches the truth, warns+falls back offline), **`status`** (running/stuck/cleanup dashboard), **`requeue <slug>`** (give up a stuck hold and return the item to the pool by releasing its lock; the defer-don't-finish verb), **`gc`** (reap job worktrees, never mirrors), **`verify`** (run the gate standalone).
+- **Ops:** **`scan`** (cross-repo queue — fetches the truth, warns+falls back offline), **`status`** (running/stuck/cleanup dashboard), **`requeue <slug>`** (give up a stuck hold and return the item to the pool by releasing its lock; the defer-don't-finish verb), **`gc`** (reap job worktrees, never mirrors), **`verify`** (run the gate standalone), **`drop <slug>`** (see below).
+
+Two terms share the English word "drop" but mean DIFFERENT things; keep them distinct:
+
+- **`drop`** (the verb): the direct-delete CLI verb `dorfl drop <slug>`. It `git rm`s the source file(s) (+ its question sidecar), the reason rides in the commit MESSAGE, git history is the archive. NO resting state, NO folder; a single revertible working-tree commit (recover via `git revert`).
+- **`dropped`** (the terminal state): the SPEC won't-proceed TERMINAL `specs/dropped/` (per `work/protocol/WORK-CONTRACT.md`; the task-regime peer is `tasks/cancelled/`, deliberately a DIFFERENT word). The file is RETAINED with the reason in the body: a resting terminal, not a delete. (There is no live `dropped` triage disposition TOKEN. The observation-triage token vocabulary is retired: a discard is the DIRECT `drop`/`git rm`, per `work/protocol/SURFACE-PROTOCOL.md` and `triage-observations`.)
 
 ## Invariants (do not relitigate — see ADRs)
 

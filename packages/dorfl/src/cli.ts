@@ -934,7 +934,6 @@ interface ReleaseLockFlags {
 }
 
 interface DropFlags {
-	config?: string;
 	cwd?: string;
 	reason?: string;
 }
@@ -3775,7 +3774,6 @@ export function buildProgram(): Command {
 		.description(
 			'DIRECTLY delete a source item + its question sidecar (when present) in ONE revertible commit — the "I just want to throw this away" path that does NOT round-trip through the decision engine or any agent. Resolves the source by its namespaced identity (`task:<slug>` / `spec:<slug>` / `obs:<slug>` / a bare `<slug>` = task), `git rm`s the source AND its sidecar together, and records your --reason in the commit MESSAGE (git history is the archive). A single revertible commit, so a wrong delete is recoverable via `git revert`. DISTINCT from `remote rm` (the hub-mirror deleter). A LOCAL working-tree commit (like the apply rung); it does not touch the arbiter — push/integrate it as you normally would. If the named source is already gone it is a clean no-op (nothing to throw away).',
 		)
-		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
 			'--cwd <dir>',
 			'the working clone the revertible delete commit is made in (default: cwd)',
