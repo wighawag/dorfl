@@ -14,6 +14,8 @@ _Suggested default: Accept as-is: the ## Why mention satisfies the relaxed 'reco
 
 **Your answer** (write below this line):
 
+Accept as-is. Under the newly-relaxed rule any durable + linked home counts, and the source-observation link via the task's ## Why body satisfies that. Close the nit without editing the done record; no explicit ## Decisions/backlink block is required.
+
 ## Q2
 
 **Ratify the wording choice of hard-coding 'work/notes/observations/' as the concrete folder path in CLAIM-PROTOCOL.md's list of durable homes, or should it stay generic ('an observation note')?**
@@ -25,3 +27,5 @@ _Suggested default: Ratify: keep the concrete path — it matches the WORK-CONTR
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Ratify the concrete path. Keeping 'work/notes/observations/' in CLAIM-PROTOCOL.md's list of durable homes matches the WORK-CONTRACT folder layout the protocol already assumes elsewhere, and setup-inheriting repos get the same layout, so the concrete path is correct and more useful than a generic 'an observation note'.

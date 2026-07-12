@@ -41,3 +41,5 @@ _Suggested default: Treat it as ratified in-situ (the code cites it by filename)
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Treat it as ratified in-situ and leave the note as-is. The code cites the observation by filename, so the linkage already exists, and this repo uses no separate status/ratified field for observations. No done-record edit is needed.

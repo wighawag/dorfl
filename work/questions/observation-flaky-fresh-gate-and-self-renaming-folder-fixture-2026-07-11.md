@@ -11,3 +11,5 @@ Item: [`observation:flaky-fresh-gate-and-self-renaming-folder-fixture-2026-07-11
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Resolve (keep the note on record). It is a single unreproduced occurrence with no live signal, so do not mint an investigation task yet, but the failure mode is specific enough ('m.oldName is not a function' + 'No projects found') that the note is worth keeping as a fingerprint. Re-open / promote to an investigation task only if it recurs.

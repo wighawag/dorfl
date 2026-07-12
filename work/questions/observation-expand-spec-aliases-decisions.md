@@ -27,3 +27,5 @@ _Suggested default: Check the done record; if unlinked and the human wants the h
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Do not backfill the link; discard. The decisions are already carried into the many landed contract/rename batches, so whether or not this file was ever linked from the expand-spec-frontmatter-and-namespace-aliases done record, the historical linkage adds no future-lookup value now. Just delete the observation on discharge.

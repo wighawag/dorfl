@@ -12,6 +12,8 @@ Item: [`observation:erase-prd-word-cutover-decisions-2026-07-10`](../notes/obser
 
 **Your answer** (write below this line):
 
+Delete the note. The four decisions are discharged: the two load-bearing ones (word-vs-identity boundary + PRESERVE-list discipline) were already ratified for promotion to a small ADR in this note's q2 answer, and the other two (verb-alias prose preservation; setup migration-map SOURCE preservation) are captured in the landed cutover work. Nothing is lost by deleting the observation once the ADR-promotion of the pair is done.
+
 ## Q2
 
 **Should any of the four decisions be promoted to an ADR (in particular the word-vs-identity boundary rule + PRESERVE-list discipline, which is now enforced by a gate test and may govern future vocabulary cutovers)?**

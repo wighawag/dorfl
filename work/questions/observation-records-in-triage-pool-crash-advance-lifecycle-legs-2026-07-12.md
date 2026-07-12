@@ -12,6 +12,8 @@ Item: [`observation:records-in-triage-pool-crash-advance-lifecycle-legs-2026-07-
 
 **Your answer** (write below this line):
 
+Promote. This is a live crash class (records swept into the triage pool crash advance's lifecycle legs), so mint a task to fix it. Per Q2, the specific systemic-fix option is NOT pre-selected here: the four candidate options need review against each other in that task's design step before one is committed. The vocabulary sweep (Q3) and the Mode-2 sibling (Q4) are handled as their own items per those answers.
+
 ## Q2
 
 **Which of the four systemic-fix options (or combination) should be built to stop records from being swept into the triage pool?**
@@ -38,6 +40,8 @@ _Suggested default: Mint a small standalone task for the sweep; do not bundle it
 
 **Your answer** (write below this line):
 
+Mint a small standalone task for the vocabulary sweep (triaged: keep -> triaged: resolve across the ~23 legacy work/notes/observations/*.md files); do NOT bundle it into the systemic-fix work. The two stamps are mechanically identical (presence-keyed drop-out), so nothing breaks, this is purely cosmetic consistency with the retired-keep direction and deserves its own low-priority task rather than muddying the crash fix.
+
 ## Q4
 
 **Should the sibling untriaged observation surface-questions-agent-still-emits-no-parseable-questions-on-decision-record-obs-2026-07-10 be promoted to a task as the Mode-2 (agent-flake) fix?**
@@ -49,3 +53,5 @@ _Suggested default: Yes — promote it now so Mode-2 flakes stop crashing legs i
 <!-- q4 fields: id=q4 -->
 
 **Your answer** (write below this line):
+
+Already covered, no separate promotion needed. The sibling observation surface-questions-agent-still-emits-no-parseable-questions-on-decision-record-obs-2026-07-10 has ALREADY been promoted: its answered sidecar was consumed by the apply rung into the ready task surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit (which covers exactly the Mode-2 agent-flake fix: engine short-circuit for already-triaged/decision-record shapes + always-emit {questions:[]} hardening). So this q4 is satisfied by that existing task.

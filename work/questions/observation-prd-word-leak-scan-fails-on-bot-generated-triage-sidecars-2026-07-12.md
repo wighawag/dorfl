@@ -12,6 +12,8 @@ Item: [`observation:prd-word-leak-scan-fails-on-bot-generated-triage-sidecars-20
 
 **Your answer** (write below this line):
 
+Promote. Mint the scan-scope fix as a task (Q2's option 1: exempt work/questions/ sidecars from the prd-word leak scan, since they are bot-generated artifacts that legitimately quote the retired word as provenance). The parallel discharge of the already-landed sidecars (Q3) is the backlog-drain already in progress via triaging the underlying observations. So: promote the scope-fix; the discharge rides the ongoing answer/apply loop.
+
 ## Q2
 
 **Which scan-scope fix should be adopted: exempt work/questions/ sidecars from the prd-word leak scan (option 1), also exempt work/notes/observations/ bodies (option 2), or leave scope unchanged and only drain sources (options 3/4)?**
@@ -37,3 +39,5 @@ _Suggested default: Yes — un-red main by discharging the sidecars (via triage 
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Yes, discharge them now to un-red main, in parallel with adopting the scan-scope fix (Q2's option 1: exempt work/questions/ sidecars). Discharge is via triaging the underlying cutover observations (answer their sidecars -> apply -> the bot sidecars are deleted with them), which is exactly the backlog-drain in progress: the count has already fallen from ~32 to a handful as these answers land. The scope fix stops the loop re-tripping on future writes; the discharge clears the current red.

@@ -13,3 +13,5 @@ _Suggested default: Keep as historical record linked from the done task; mint th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint the two named follow-ups as their own tasks, keep this note as their linked provenance, then delete it once those tasks exist. The two deferred follow-ups are real code-debt: (1) retire-in-progress-folder-and-union-member (purge the 'in-progress' member from IntegrationCoreInput.source union + WorkFolderKey and the repo layout), and (2) retire-needs-attention-probe-in-folderOnArbiterMain. They are legitimate standalone slices; this diagnosis memo is their provenance and can retire once they are tracked.

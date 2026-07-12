@@ -13,3 +13,5 @@ _Suggested default: Delete — every decision/carve-out and the manual regen fol
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. Every decision (D1-D6) and the manual regen follow-up have landed: the parent task rename-spec-intake-cli-flags-and-residual-prd-identifiers is in work/tasks/done/, and the D3 verdict keys were swept (intake.ts now reads specHumanOnly/specNeedsAnswers). The note adds no future signal.

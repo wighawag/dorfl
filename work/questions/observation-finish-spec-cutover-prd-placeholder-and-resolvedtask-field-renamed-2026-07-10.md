@@ -14,6 +14,8 @@ _Suggested default: Keep it as a historical decision record under work/notes/obs
 
 **Your answer** (write below this line):
 
+Keep it as a historical decision record under work/notes/observations/. It documents a coherence-check judgement made under the decision-bar rule that future readers may want to trace; no ADR/spec/task is needed and folding it into the parent would bury it.
+
 ## Q2
 
 **Does the pre-existing follow-up question in the parent task ('Should parseFrontmatter EVER stop reading the legacy prd: key, or is it a permanent back-compat alias?') want to be lifted out as its own tracked item now that the task is done?**
@@ -25,3 +27,5 @@ _Suggested default: Leave parked in the done task; mint a follow-up only when a 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Leave it parked in the done task. Mint a follow-up for 'should parseFrontmatter EVER stop reading the legacy prd: key' only when a concrete signal arrives (e.g. all known downstream repos have migrated); until then it is a back-compat alias with no forcing reason to change, so a tracked item would just sit idle.

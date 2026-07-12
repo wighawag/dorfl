@@ -14,6 +14,8 @@ _Suggested default: Delete — both nits are small, retrospective, and the subst
 
 **Your answer** (write below this line):
 
+Delete. Both nits are small and retrospective: nit 1 is accepted as-is (Q2) and nit 2 resolves the ADR-filename convention (Q3). The substantive artefacts (the ADR docs/adr/frontmatter-owns-fence-to-heading-blank-line.md and the sibling task's cross-reference) already exist, so the note has no durable role.
+
 ## Q2
 
 **Nit 1: the task's Done-when required the done record to note which convention form (ADR-lite vs Decisions block) was chosen and why, but the ready→done move was a pure rename with no such note. Amend the done record retroactively, mint a follow-up task, or accept-as-is?**
@@ -26,6 +28,8 @@ _Suggested default: Accept-as-is — the cross-reference already exists on the s
 
 **Your answer** (write below this line):
 
+Accept-as-is. The done record was a pure rename with no convention-choice note, but the cross-reference already exists on the sibling side (the intake-adopts-renderer task references the ADR), and retroactively editing a landed done record is high-friction for low gain. Do not amend or mint a follow-up.
+
 ## Q3
 
 **Nit 2: which ADR-filename convention wins going forward — the protocol doc's prescribed 0001-slug.md numbering, or the on-disk plain-slug pattern that all 19 existing ADRs (including this new one) follow?**
@@ -37,3 +41,5 @@ _Suggested default: Ratify plain-slug on-disk convention and update ADR-FORMAT.m
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Ratify the plain-slug on-disk convention and update ADR-FORMAT.md to match. Revealed preference is decisive: all 22 existing ADRs in docs/adr/ use plain-slug filenames and ZERO use the 0001-slug.md numbering that ADR-FORMAT.md:3 prescribes. Numbering adds ordering/merge pain for little benefit. Update the numbering line in BOTH copies (skills/setup/protocol/ADR-FORMAT.md as the source of truth, mirrored byte-identically into work/protocol/ADR-FORMAT.md) to describe the plain-slug convention. This is a small protocol-doc fix worth minting as a task.

@@ -27,3 +27,5 @@ _Suggested default: No — the wording is already consistent across all four sit
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+No. The replacement wording is already consistent across all four sites (integration-core.ts, complete.ts, start.ts, ledger-write.ts) and mirrors the established #243 precedent from do.ts, so a tiny task recording it in an ADR/decisions note is optional, not required. Discharge nit 3 without a follow-up task.

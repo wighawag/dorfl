@@ -27,3 +27,5 @@ _Suggested default: One-off; no protocol change — the symbol-assignment-wins-o
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+One-off; no protocol change. Renaming renderPrdBody -> renderSpecBody inside buildable-body.ts even though the task's file list named only spec-complete.ts is already implicit in how atomic symbol renames work (a symbol assignment authorises editing whichever file defines that symbol, or the build breaks). This is now captured as the atomic-rename lesson in the consolidated rename-cutover-lessons finding, so no WORK-CONTRACT clarification is warranted.

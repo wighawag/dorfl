@@ -14,6 +14,8 @@ _Suggested default: Delete: the four sub-items below are individually ratifiable
 
 **Your answer** (write below this line):
 
+Delete. The code has landed and the four nits below are each ratified in place (Q2-Q5), so no residual signal survives that needs a durable note.
+
 ## Q2
 
 **Ratify the AWS-style decorrelated-jitter shape and LIFECYCLE_CAS_CONTENTION tuning defaults (retries=32, initialDelayMs=25, maxDelayMs=2000, maxTotalMs=30000), or mint a dedicated ADR for these load-bearing numbers?**
@@ -25,6 +27,8 @@ _Suggested default: Ratify in place; the trailing Decisions block plus JSDoc is 
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Ratify in place. The AWS-style decorrelated-jitter shape and the LIFECYCLE_CAS_CONTENTION defaults (retries=32, initialDelayMs=25, maxDelayMs=2000, maxTotalMs=30000) are adequately recorded by the constant's trailing Decisions block plus JSDoc in advancing-lock.ts. No dedicated ADR is needed for tuning constants.
 
 ## Q3
 
@@ -38,6 +42,8 @@ _Suggested default: Ratify: both legs are lifecycle fan-out and share the same c
 
 **Your answer** (write below this line):
 
+Ratify. Widening the contention loop to both the promote (triage-persist) and mint-adr legs is correct: both are lifecycle fan-out and share the same contention envelope by design, so applying the same budget at both advance.ts call sites is consistent, not scope creep.
+
 ## Q4
 
 **Ratify enlarging the public API surface with CasContentionBudget, runCasContentionLoop, nextCasContentionDelayMs, INTERACTIVE_CAS_CONTENTION, LIFECYCLE_CAS_CONTENTION, CasAttemptResult, CasContentionLoopResult (task did not require exposing the primitive)?**
@@ -50,6 +56,8 @@ _Suggested default: Ratify: exposing the primitive lets downstream drivers reuse
 
 **Your answer** (write below this line):
 
+Ratify. Exposing the CAS-contention primitive (CasContentionBudget, runCasContentionLoop, nextCasContentionDelayMs, INTERACTIVE_CAS_CONTENTION, LIFECYCLE_CAS_CONTENTION, CasAttemptResult, CasContentionLoopResult) lets downstream drivers reuse the same contention envelope instead of reinventing it. It is backwards-compatible (interactive defaults preserved), so the enlarged public surface is justified.
+
 ## Q5
 
 **Ratify the new user-visible refusal message on wall-clock exhaustion ('push rejected N times (main is contended; wall-clock budget Xms exhausted). Try again shortly.') as a distinct flavour from the classic attempts-cap message?**
@@ -61,3 +69,5 @@ _Suggested default: Ratify: the two exhaustion modes carry different diagnostic 
 <!-- q5 fields: id=q5 -->
 
 **Your answer** (write below this line):
+
+Ratify. The wall-clock-exhaustion refusal message ('push rejected N times (main is contended; wall-clock budget Xms exhausted). Try again shortly.') is worth keeping distinct from the classic attempts-cap message: the two exhaustion modes carry different diagnostic value, so a distinct message helps operators tell them apart.

@@ -13,3 +13,5 @@ _Suggested default: Discard: the observation captures a done-time PROCEED decisi
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Discard. This is a done-time PROCEED decision on a small factual gap (an acceptance clause that named a consumer switch which those files did not actually contain), fully explained and already resolved by the landed task rename-spec-remaining-src-modules-b. The generalisable tasking-hygiene lesson (ground acceptance clauses that reference specific files against the code) is already captured by the consolidated review-lens task; no separate follow-up is needed here.

@@ -12,6 +12,8 @@ Item: [`observation:advance-watch-surface-leg-hangs-after-release-never-exits-20
 
 **Your answer** (write below this line):
 
+Resolve, conditional on the Q2 CI check. If a post-0b0039d0 lifecycle run has shown a surface/triage leg completing promptly after logging RELEASED (see Q2), delete this observation as fixed-and-confirmed. Until such a run is observed, keep it open as a watch item rather than resolving on faith.
+
 ## Q2
 
 **Has a live CI lifecycle run since fix commit 0b0039d0 shown an 'advance one item in-place' step on a surface/triage leg going in_progress -> completed promptly (not stuck ~20-55min) after logging RELEASED, so this observation can be dropped?**

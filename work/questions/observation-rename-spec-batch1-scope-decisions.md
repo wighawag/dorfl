@@ -14,6 +14,8 @@ _Suggested default: Yes — close as ratified-by-history; the successor batches 
 
 **Your answer** (write below this line):
 
+Close as ratified-by-history. Batches 3 (rename-spec-config-and-intake) and 4 (rename-spec-remaining-src-modules-a/b/c) have all landed done, so the two scope calls that deferred work to them (decision 2: leave PrdsLandIn for batch 3; decision 3: keep close-job/ledger-read internal Spec* aliases for batch 4) are vindicated by those batches landing green against the seam. Decision 1 (touching key-literal call sites inside batch 1) shipped in batch 1 itself. No separate reviewer ACK is needed; the successor batches landing is the ratification signal.
+
 ## Q2
 
 **Should the domain-note miscue in the batch 1 prompt (the claim that 'every call site references keys, never raw strings, so renaming a folder should not re-touch call sites') be lifted into task-authoring guidance so future KEY-rename tasks don't understate their blast radius?**
