@@ -223,20 +223,25 @@ function scannedFiles(): string[] {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// PROVENANCE FILES: task/observation bodies whose OWN SUBJECT is the retired
-// `prd` vocabulary sweep. Such a body legitimately QUOTES the retired word +
-// the migrated-away `work/prds/…` folder path in prose to describe what it
-// converts FROM (the SLUG-based `PRESERVE_SLUGS` mechanism cannot reach these
-// content lines when the slug itself carries no `prd` substring). File-scoped
-// analogue of `PRESERVE_SLUGS`; a concrete, enumerated basename list (asserted
-// non-vacuous below), so it cannot silently swallow a real re-drift elsewhere.
-// See work/notes/observations/word-scan-exempts-prd-cutover-task-bodies-2026-
-// 07-10.md for the decision record.
+// PROVENANCE FILES: task / observation / spec / idea bodies whose OWN SUBJECT is
+// the retired `prd` vocabulary — the sweep that removes it, the skill/guard
+// authored to generalise that sweep, THIS leak scan's own allow-list, or an
+// incident about the scan itself. Such a body legitimately QUOTES the retired
+// word + the migrated-away `work/prds/…` folder path in prose to describe what
+// it converts FROM / removes / documents (the SLUG-based `PRESERVE_SLUGS`
+// mechanism cannot reach these content lines when the slug itself carries no
+// `prd` substring). File-scoped analogue of `PRESERVE_SLUGS`; a concrete,
+// enumerated basename list (asserted non-vacuous below), so it cannot silently
+// swallow a real re-drift elsewhere. This WIDER criterion (beyond "the sweep
+// task's own body") is the one task
+// `work/tasks/ready/provenance-file-basenames-widened-criterion-and-expiry-
+// guard.md` records + guards with an expiry test; the original decision was
+// `word-scan-exempts-prd-cutover-task-bodies-2026-07-10` (now discharged into
+// that task).
 // ───────────────────────────────────────────────────────────────────────────
 
 const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	'sweep-prd-artifact-word-in-src-prose-and-runtime-strings.md',
-	'word-scan-exempts-prd-cutover-task-bodies-2026-07-10.md',
 	'advance-lifecycle-template-src-prose-still-says-prd-2026-07-10.md',
 	// The hard-cutover task body: its OWN subject is removing the last `prd`
 	// back-compat surfaces, so it legitimately quotes the retired `prd`/`prd:`
@@ -256,10 +261,32 @@ const PROVENANCE_FILE_BASENAMES: readonly string[] = [
 	// prose (the skill/command names, not the artifact word as a live concept).
 	'author-convert-from-prd-to-spec-skill.md',
 	'convert-from-prd-to-spec-skill-doc-conformance-guard.md',
-	// The incident note whose OWN subject is THIS leak scan failing on bot-generated
-	// triage sidecars: it quotes the retired `prd` word + the `work/prds/` path in
-	// prose (pasted CI output, the scan's own message) to describe what tripped.
-	'prd-word-leak-scan-fails-on-bot-generated-triage-sidecars-2026-07-12.md',
+	// The task PROMOTED from the (now-discharged) `word-scan-exempts-prd-cutover-
+	// task-bodies-2026-07-10` observation: its OWN subject is THIS provenance
+	// allow-list (widening its criterion + adding the expiry guard), so it names
+	// the retired `prd`/`work/prds/` word+path in prose to describe what it edits.
+	'provenance-file-basenames-widened-criterion-and-expiry-guard.md',
+	// The task whose OWN subject is exempting `work/questions/` sidecars from THIS
+	// scan: it quotes the retired `prd` word to describe the false positive it fixes.
+	'exempt-work-questions-sidecars-from-prd-word-leak-scan.md',
+	// Rename-cutover lesson/checklist bodies whose OWN subject is the `prd`->`spec`
+	// (and prior `prd`->`brief`) namespace rename: they name the retired word +
+	// the `renderPrdBody`/`PrdTask` historical symbols throughout to describe the
+	// cutover the lesson is drawn from.
+	'fold-three-surface-distinction-into-rename-cutover-lessons.md',
+	'promote-rename-cutover-lessons-to-findings-note.md',
+	'mint-rename-expand-checklist-finding.md',
+	'rename-pre-backlog-to-backlog-in-cli-prose-and-config.md',
+	'review-protocol-add-file-ownership-lens-for-wide-refactor-chains.md',
+	// The migrate-batch decision observation whose OWN subject is the `prd`->`spec`
+	// emit-site cutover: it names the retired `prd-to-spec` command + `prd:` field
+	// throughout in prose to record what each batch converted.
+	'rename-spec-emit-sites-batch-4d-decisions.md',
+	// The incident observation whose OWN subject is THIS scan structurally
+	// re-tripping on the loop's own cutover provenance: it names the retired
+	// `prd`/`work/prds/` word+path (pasted failure output, the scan's own message)
+	// to describe the drift.
+	'prd-word-scan-structurally-retrips-on-its-own-cutover-provenance-2026-07-12.md',
 ];
 
 function isProvenanceFile(rel: string): boolean {

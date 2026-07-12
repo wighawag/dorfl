@@ -131,6 +131,13 @@ function isExemptMarkdownDataToken(value: string): boolean {
 	// namespace/branch EXAMPLE (`prd:<slug>`, `work/prd-<slug>`, `work/prd-*`).
 	if (/^prd(?:After)?:(?:\s|<|$)/.test(v)) return true;
 	if (/^work\/prd-(?:<|\*|\$)/.test(v)) return true;
+	// The `setup` migration-MAP LEFT-column legacy FLAT folder names (`work/prd/`,
+	// `work/pre-prd/`, `work/prd-tasked/`): the OLD on-disk folder a pre-umbrella
+	// target repo LITERALLY has, named as the rename SOURCE in `skills/setup`'s
+	// `git mv` map + the taxonomy/preserve-list ADRs. Sweeping the word here would
+	// point `setup` at a folder that does not exist in the repo being migrated, so
+	// these are permanent survivors (ADR preserve-list class (c)).
+	if (/^work\/(?:pre-)?prd(?:-tasked)?\/?$/.test(v)) return true;
 	// DATA folder/file references (`prd-tasked`, `prd-<slug>`, `prds/…`,
 	// `work/prds/…`, `prds-proposed`, …) the command converts.
 	if (/^prd-(?:tasked|<slug>|\$\{slug\})/.test(v)) return true;
