@@ -1,7 +1,7 @@
 ---
 title: spec→spec batch 4d (rename-spec-namespace-emit-sites-and-local-unions) — build decisions worth ratifying
 date: 2026-07-10
-needsAnswers: true
+needsAnswers: false
 ---
 
 Durable record of the judgement calls made while flipping the PRODUCER side of the `spec` namespace onto `spec` (task `rename-spec-namespace-emit-sites-and-local-unions`). Recorded here (append-only capture bucket) so the reviewer + human can ratify or reverse; linked from the done record. None are load-bearing/hard-to-reverse enough to STOP on, but each would surprise a later task/reviewer if buried in code.
@@ -30,3 +30,13 @@ The `promote <item>` handler mapped `parsed.explicit === 'spec' ? 'spec' : 'task
 - `advance.ts:444-445` `sidecarTypeFor` `namespace === 'spec' ? 'spec'`: a CONSUMER mapping a `SlugNamespace` input to its `SidecarType` (both members untouched); keeps a legacy `prd:` INPUT arg resolving. Not an emit.
 - `sidecar.ts:202` `typeForNamespace` `explicit === 'spec' → 'spec'`, and the `slug-namespace.ts` `prd:` resolver branches + error-message `spec:${slug}` disambiguation hints: all CONSUMER/INPUT-acceptance of the still-accepted `prd:` prefix (contract task removes). The `spec:${slug}` in those error strings is an input-suggestion, not a producer emit.
 - intake.ts: NOT in this task's file list; batch 3 already made intake's canonical produced outcome `'spec'` with `'spec'` as an accepted alias. Left as-is.
+
+## Applied answers 2026-07-12
+
+### q1: Should the sidecarPathCandidates fallback (spec-<slug>.md → prd-<slug>.md) be extended to the other readers still on sidecarPathFor (apply-decide, apply-persist, sidecar-apply, advance, drop-source, merge-question-surfacer, mint-adr), or does the plan rely on the prd-to-spec migration command converting data before any spec: identity reaches them?
+
+Leave as-is. Rely on the prd-to-spec migration command converting data before any spec: identity fans out to the other seven readers (apply-decide, apply-persist, sidecar-apply, advance, drop-source, merge-question-surfacer, mint-adr). Extend the sidecarPathCandidates fallback to them only if a concrete break appears; adding it pre-emptively would spread the transitional fallback wider than needed.
+
+### q2: Is the TickRungKind rung-name 'task-spec' (advance-classify.ts) intentionally kept, or does it need its own rung-rename task before the rename-spec contract closes?
+
+Keep 'task-spec' as-is. It is an internal TickRungKind enum value (advance-classify.ts and consumers), not a namespace or CLI token, so it does not leak the retired vocabulary to users or on-disk identity. Do not rename it in this rename-spec arc; a rung-rename would ripple into every rung consumer/dispatch/template/test for no external benefit.
