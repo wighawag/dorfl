@@ -50,6 +50,7 @@
  */
 export type FailureCause =
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry), or a git/provider outage — RETRY the same work
+	| 'needs-reauth' // a credential expired / was revoked (e.g. OAuth refresh token) — RETRY CANNOT help; a human must RE-AUTH
 	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING
 	| 'agent-failed'; // the conservative generic: the agent ran but produced bad/empty output, OR the cause is UNKNOWN
 
@@ -64,6 +65,24 @@ export type FailureCause =
 const CONFIG_ERROR_SIGNATURES = [
 	/wiring bug/i,
 	/no review gate is configured/i,
+];
+
+/**
+ * Substrings that mark a CREDENTIAL-EXPIRY failure surfaced by the harness: an
+ * OAuth refresh token has expired or been revoked, or a 401 came back tagged
+ * `authentication_required`. Retry cannot help these — only a human RE-AUTH can.
+ * Kept SEPARATE from `TRANSIENT_INFRA_SIGNATURES` (see ADR
+ * `transient-infra-and-needs-reauth-routing`) so downstream routing can branch
+ * cleanly on the cause: retry-with-backoff for infra, straight to a needs-reauth
+ * surface for credentials. Conservative: unrelated 401s that don't mention auth /
+ * token stay `agent-failed`.
+ */
+const NEEDS_REAUTH_SIGNATURES = [
+	/authentication_required/i,
+	/OAuth (?:refresh )?token (?:expired|revoked|invalid)/i,
+	/refresh token (?:expired|revoked|invalid)/i,
+	/\b401\b[^\n]{0,80}(?:auth|token|credential|unauthori[sz]ed)/i,
+	/(?:auth|token|credential)[^\n]{0,40}\b401\b/i,
 ];
 
 /**
@@ -118,6 +137,13 @@ export function classifyFailureCause(detail: string | undefined): FailureCause {
 	if (CONFIG_ERROR_SIGNATURES.some((re) => re.test(text))) {
 		return 'config-error';
 	}
+	// Credential-expiry is checked BEFORE `transient-infra` because a 401 body may
+	// also mention words like "unavailable"/network, and no amount of retry helps
+	// — a human must re-auth. Kept as its own cause per ADR
+	// `transient-infra-and-needs-reauth-routing`.
+	if (NEEDS_REAUTH_SIGNATURES.some((re) => re.test(text))) {
+		return 'needs-reauth';
+	}
 	if (TRANSIENT_INFRA_SIGNATURES.some((re) => re.test(text))) {
 		return 'transient-infra';
 	}
@@ -135,6 +161,8 @@ export function failureCauseLabel(cause: FailureCause): string {
 	switch (cause) {
 		case 'transient-infra':
 			return 'transient infra';
+		case 'needs-reauth':
+			return 'needs re-auth (credential expired)';
 		case 'config-error':
 			return 'config error';
 		case 'agent-failed':

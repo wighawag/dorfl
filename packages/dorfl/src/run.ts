@@ -190,6 +190,7 @@ export type ItemStatus =
 	| 'surface-unmoved' // the tree-less surface to needs-attention did NOT land on the arbiter (lost the CAS race / no arbiter) — the item is STILL in-progress on the arbiter; retry/resolve
 	| 'agent-failed' // the agent ran but produced bad/empty output (the conservative generic), OR the cause is unknown
 	| 'transient-infra' // a harness-surfaced model/connection outage (post-retry) or a git/provider outage — RETRY the same work (FAILURE-CAUSE axis)
+	| 'needs-reauth' // a credential expired / was revoked (OAuth refresh) — retry cannot help; a human must RE-AUTH (FAILURE-CAUSE axis)
 	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the task (FAILURE-CAUSE axis)
 	| 'agent-stopped'; // the agent DELIBERATELY stopped (task drifted) OR produced no change — gate + Gate-2 skipped
 
@@ -457,6 +458,7 @@ export async function runOnce(options: RunOnceOptions): Promise<RunOnceResult> {
 			// are the same agent/run-failure routed to needs-attention, just labelled
 			// by cause).
 			i.status === 'transient-infra' ||
+			i.status === 'needs-reauth' ||
 			i.status === 'config-error' ||
 			// The surface to needs-attention did NOT land (lost the CAS race); the item
 			// is still in-progress on the arbiter — a genuine FAILURE (not a clean
