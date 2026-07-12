@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Decisions — spec→spec batch 1 (rename-spec-work-layout-and-folders)
 
 Date: 2026-07-09. Linked from the done record of `rename-spec-work-layout-and-folders`.
