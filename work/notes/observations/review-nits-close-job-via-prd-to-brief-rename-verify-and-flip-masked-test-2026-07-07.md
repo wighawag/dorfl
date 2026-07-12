@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'close-job-via-prd-to-brief-rename-veri
 date: 2026-07-07
 status: open
 reviewOf: close-job-via-prd-to-brief-rename-verify-and-flip-masked-test
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
