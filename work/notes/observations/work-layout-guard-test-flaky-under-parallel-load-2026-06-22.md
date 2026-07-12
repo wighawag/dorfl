@@ -1,5 +1,6 @@
 ---
 needsAnswers: false
+triaged: resolve
 ---
 
 # work-layout-guard.test.ts flakes under full parallel `pnpm -r test`

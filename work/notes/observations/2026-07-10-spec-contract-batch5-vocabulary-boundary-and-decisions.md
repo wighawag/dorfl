@@ -1,6 +1,7 @@
 ---
 title: spec→spec batch 5 (protocol contract + to-spec skill) — option-A vocabulary boundary + decisions for the leak scan
 slug: 2026-07-10-spec-contract-batch5-vocabulary-boundary-and-decisions
+triaged: resolve
 ---
 
 Provenance note for `contract-spec-hard-cutover-rejection-and-leak-scan` (the next / contract batch) so its BI-WORD leak scan knows which `spec` tokens SURVIVED batch 5 ON PURPOSE (option A, a partial migrate-step), and where a few `to-spec`/`spec`-artifact-word references were deliberately LEFT out of this task's scope.

@@ -1,3 +1,9 @@
+---
+type: observation
+status: spotted
+triaged: resolve
+---
+
 # Decisions — complete-propose-honour-already-landed-and-rename-continue-branch-module
 
 Date: 2026-07-12

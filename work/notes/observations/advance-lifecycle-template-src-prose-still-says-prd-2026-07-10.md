@@ -1,6 +1,7 @@
 ---
 title: 'advance-lifecycle-template.ts / advance-ci-template.ts / tasking-lock.ts src JSDoc still say the artifact word (out of the erase-artifact-word task scope)'
 date: 2026-07-10
+triaged: resolve
 ---
 
 ## What I saw
