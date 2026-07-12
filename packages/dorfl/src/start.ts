@@ -838,8 +838,10 @@ async function routeContinueConflict(params: {
 	const {slug, arbiter, cwd, env, note} = params;
 	const reason =
 		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: rebase onto ` +
-		`${arbiter}/main conflicted (aborted, never auto-resolved) — resolve ` +
-		'against the latest main, or `requeue --reset` to discard and start fresh';
+		`${arbiter}/main conflicted (aborted, never auto-resolved) — run ` +
+		'`requeue --reconcile` to non-destructively re-sync the mirror and retry ' +
+		'the rebase (keeps the work). Last resort: `requeue --reset` ' +
+		'DESTRUCTIVELY discards the branch and starts fresh.';
 	note(reason);
 	// PROPAGATE the {moved, reasonNotMoved} result to the caller so a `moved:false`
 	// (the surface did NOT reach main — lost the CAS race) is surfaced honestly
@@ -883,8 +885,10 @@ async function routeContinuePushFailure(params: {
 	const reason =
 		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: publishing ` +
 		`the rebased work branch to ${arbiter} failed terminally (${pushFailure}) — ` +
-		'the kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
-		'retry once the churn settles, or `requeue --reset` to discard and start fresh';
+		'the kept branch is left intact on the arbiter (recoverable); `requeue ' +
+		'--reconcile` to non-destructively re-sync the mirror and retry once the ' +
+		'churn settles (keeps the work). Last resort: `requeue --reset` ' +
+		'DESTRUCTIVELY discards the branch and starts fresh.';
 	note(reason);
 	// PROPAGATE the {moved, reasonNotMoved} result to the caller so a `moved:false`
 	// (the surface did NOT reach main — lost the CAS race) is surfaced honestly

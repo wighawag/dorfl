@@ -956,8 +956,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	if (tree.continueRebaseConflict) {
 		const reason =
 			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
-			'main, or `requeue --reset` to discard and start fresh';
+			'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+			'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
+			'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
+			'branch and starts fresh.';
 		const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
@@ -991,8 +993,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		const reason =
 			`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
 			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
-			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
-			'once the churn settles, or `requeue --reset` to discard and start fresh';
+			'branch is left intact on the arbiter (recoverable); `requeue --reconcile` ' +
+			'to non-destructively re-sync the mirror and retry once the churn ' +
+			'settles (keeps the work). Last resort: `requeue --reset` DESTRUCTIVELY ' +
+			'discards the branch and starts fresh.';
 		const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: tree.dir,
 			slug,
@@ -1380,7 +1384,9 @@ function routeReport(
 		return {
 			fragment:
 				`push of ${branch} FAILED — the work is saved LOCALLY only; push it ` +
-				'when online, then `requeue` (continue), or `requeue --reset` to discard',
+				'when online, then `requeue` (continue) or `requeue --reconcile` ' +
+				'(non-destructive retry). Last resort: `requeue --reset` ' +
+				'DESTRUCTIVELY discards.',
 			pushFailed: true,
 		};
 	}
@@ -1396,7 +1402,10 @@ function routeReport(
 		landed = 'saved locally';
 	}
 	return {
-		fragment: `${landed}. Recover via \`requeue\` (continue) or \`requeue --reset\` to discard`,
+		fragment:
+			`${landed}. Recover via \`requeue\` (continue) or \`requeue --reconcile\` ` +
+			'(non-destructive retry). Last resort: `requeue --reset` ' +
+			'DESTRUCTIVELY discards.',
 		pushFailed: false,
 	};
 }
@@ -1438,7 +1447,8 @@ function routeReport(
  * contract stays coherent). Only the WORK-PRESERVING side-effect (unchanged here)
  * matches the gate-failure path. We do NOT validate or "fix" the partial work — a broken
  * tree committed + surfaced (with the reason) is recoverable; the human chooses
- * `requeue` (continue) vs `requeue --reset` (discard).
+ * `requeue` (continue) / `requeue --reconcile` (non-destructive retry) vs
+ * `requeue --reset` (destructive last resort).
  */
 async function saveAgentFailure(params: {
 	slug: string;
@@ -2109,8 +2119,10 @@ async function runRemotePipeline(
 	if (tree.continueRebaseConflict) {
 		const reason =
 			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-			'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
-			'main, or `requeue --reset` to discard and start fresh';
+			'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+			'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
+			'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
+			'branch and starts fresh.';
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
@@ -2142,8 +2154,10 @@ async function runRemotePipeline(
 		const reason =
 			`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
 			`to the arbiter failed terminally (${tree.continuePushFailure}) — the kept ` +
-			'branch is left intact on the arbiter (recoverable); `requeue` to retry ' +
-			'once the churn settles, or `requeue --reset` to discard and start fresh';
+			'branch is left intact on the arbiter (recoverable); `requeue --reconcile` ' +
+			'to non-destructively re-sync the mirror and retry once the churn ' +
+			'settles (keeps the work). Last resort: `requeue --reset` DESTRUCTIVELY ' +
+			'discards the branch and starts fresh.';
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd,
 			slug,
