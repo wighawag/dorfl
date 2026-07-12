@@ -1,6 +1,7 @@
 ---
 title: The lock/sidecar identity (SidecarType, typeForNamespace, item-lock) is a SEPARATE spec-namespace surface the first expand task missed — added a second expand task
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What happened
