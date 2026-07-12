@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # promote CLI prose still emits stale `pre-backlog` / `work/backlog/` nouns (2026-07-11)
 
 While aligning the `promoteFromPreBacklog` user-facing strings in `packages/dorfl/src/needs-attention.ts` to the live `work/tasks/` layout (`tasks/backlog` -> `tasks/ready`), I noticed the `promote` command wiring in `packages/dorfl/src/cli.ts` still hard-codes the stale `pre-backlog` / `work/backlog/` vocabulary in user-visible prose: the `promote` verb `.description(...)` (~line 3580, `work/pre-backlog/<slug>.md -> work/backlog/<slug>.md` and "the tasks in pre-backlog/"), the surrounding comment (~line 3570), and the empty-list message (~line 3608, "Nothing staged to promote ... (work/pre-backlog/ ...)"). The spec side of the same message already uses `workFolderPrefix('specs-proposed')` etc.
