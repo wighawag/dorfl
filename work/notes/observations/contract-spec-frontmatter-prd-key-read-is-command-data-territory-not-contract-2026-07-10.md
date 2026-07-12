@@ -1,6 +1,7 @@
 ---
 title: The contract task's `parseFrontmatter` `prd:`-key-read removal contradicted its own option-A exemption + ADR §7e — the frontmatter `prd:` KEY read is DATA-territory (like the sidecar fallback), fixed in-task (2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Trigger
