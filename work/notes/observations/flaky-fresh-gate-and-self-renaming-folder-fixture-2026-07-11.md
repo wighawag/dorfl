@@ -1,5 +1,5 @@
 ---
-needsAnswers: false
+needsAnswers: true
 ---
 
 # Flaky fixture failures: fresh-gate `m.oldName is not a function` + self-renaming-folder "No projects found"
