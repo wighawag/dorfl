@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Installed `.github/workflows/close-job.yml` still carries old `prd`-prose comments
 
 Date: 2026-07-10
