@@ -1,3 +1,11 @@
+---
+title: Harden fresh-worktree-gate sandbox count against parallel flake
+slug: harden-fresh-worktree-gate-sandbox-count-against-parallel-flake
+reason: flake-not-reproducible — the `gateSandboxCount()` OFF-path flake this task targets did NOT surface in ~28 full `pnpm -r test` runs on 2026-07-11/12 (3 explicit back-to-back loop runs PLUS ~25 Gate-1 gate runs during the drive-tasks session that merged the rest of the pool), all green. The task's own VERIFY-BEFORE-BUILD banner said to drop it if the flake did not reproduce. There is no live signal to fix; the only current flaky-fresh-gate observation (`flaky-fresh-gate-and-self-renaming-folder-fixture-2026-07-11`) is a DIFFERENT failure (`m.oldName is not a function` / "No projects found"), not this counting race. Dropped clean per the human's instruction (2026-07-12). If the specific `gateSandboxCount()` +1 race resurfaces, mint a fresh observation with a reproducing run rather than resurrecting this task; the per-test-scoping fix sketched below stays a valid starting point.
+---
+
+> **CANCELLED 2026-07-12 (drive-tasks stuck-set resolution).** The targeted flake is not currently reproducible; see `reason:` above.
+
 > **RE-SCOPED / VERIFY-BEFORE-BUILD 2026-07-11 (ready-pool analysis).** The specific `gateSandboxCount()` OFF-path flake this task targets did NOT reproduce in THREE consecutive full `pnpm -r test` runs on main 2026-07-11 (all green, 2968/2968; 16/16 in isolation). The original source observation is gone; the only current flaky-fresh-gate observation (`flaky-fresh-gate-and-self-renaming-folder-fixture-2026-07-11`) is a DIFFERENT failure (`m.oldName is not a function`), not this counting race. So: DEPRIORITISED. Before building, re-run `for i in 1 2 3 4 5; do pnpm -r test || break; done` and confirm the `gateSandboxCount()` +1 race still reproduces. If it does, the per-test-scoping fix below is correct as written. If it does not, close this task (the scoping change is still defensible hardening but is chasing a flake that is not currently observable — route to backlog or drop rather than spend a claim). Do NOT build on the un-reproduced premise.
 
 ## Context
