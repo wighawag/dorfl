@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-07-10 — scope of `isProvablyMergedForReap` rollout
 
 Task `reap-squash-merged-remote-work-branches` listed six files where the
