@@ -3,7 +3,7 @@ title: An `advance --propose --watch` leg on a SURFACE outcome finishes its work
 type: observation
 status: diagnosed
 spotted: 2026-07-09
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## RESOLVED (root cause found, reproduced, fixed) — 2026-07-09
