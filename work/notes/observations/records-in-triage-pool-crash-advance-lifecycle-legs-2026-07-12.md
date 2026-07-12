@@ -2,7 +2,7 @@
 type: observation
 status: spotted
 spotted: 2026-07-12
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
