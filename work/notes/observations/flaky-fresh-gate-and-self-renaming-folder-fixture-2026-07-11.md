@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Flaky fixture failures: fresh-gate `m.oldName is not a function` + self-renaming-folder "No projects found"
 
 > Observed 2026-07-11 while running the full `dorfl` test suite for the `author-convert-from-prd-to-spec-skill` task.
