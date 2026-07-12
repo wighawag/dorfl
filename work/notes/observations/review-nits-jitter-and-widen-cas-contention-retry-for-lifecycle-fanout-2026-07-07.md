@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'jitter-and-widen-cas-contention-retry-
 date: 2026-07-07
 status: open
 reviewOf: jitter-and-widen-cas-contention-retry-for-lifecycle-fanout
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
