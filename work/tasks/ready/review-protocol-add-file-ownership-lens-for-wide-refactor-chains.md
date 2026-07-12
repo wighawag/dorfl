@@ -51,3 +51,7 @@ The existing lenses are numbered and end in the destination check. Both new lens
 > Lens B (file ownership): for a wide-refactor chain, FOR EACH acceptance clause of EACH batch, identify which file(s) must change and verify THIS batch owns them; a clause whose file lives in another batch is a scope-fence violation and must be moved to the batch that owns the file. Motivation (weave in briefly): batch 2 carried a `do spec:`/`advance spec:` verb-dispatch clause, but the dispatcher lives in `do.ts`/`advance.ts`/`advance-drivers.ts`/`do-autopick.ts` (batch 4's files), so the clause was unsatisfiable in batch 2 and the `do` agent correctly STOPPED.
 >
 > First read the existing REVIEW-PROTOCOL to match lens style, tone, and length. Add the two bullets (as a small wide-refactor sub-checklist inside one lens is fine). Then confirm `diff -r skills/setup/protocol/ work/protocol/` shows no drift, run `pnpm format`, and verify `pnpm -r build && pnpm -r test && pnpm format:check` is green. Do NOT touch §3a itself, do NOT open a spec/ADR, and do NOT revisit the already-landed spec→spec remediation tasks in `work/tasks/done/`. Do NOT perform any git operations; the runner owns git-state transitions (including deleting the two source observations/sidecars the answers marked "then delete").
+
+## Requeue 2026-07-12
+
+Requeued after fix 7be9bd2d: the prd-word leak-scan failure was caused by two unswept task bodies (promote-rename-cutover-lessons + sweep-prose-prd-colon), now fixed on main. This item failed only on the shared rebased tip, not its own content.
