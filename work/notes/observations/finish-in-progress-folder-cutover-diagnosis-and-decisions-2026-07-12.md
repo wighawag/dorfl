@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # finish-in-progress-folder-cutover: diagnosis + decisions (2026-07-12)
 
 Recorded by the build of `finish-in-progress-folder-cutover-remove-legacy-recovery-readers` so its cut/keep choices are discoverable (linked from the done record / PR body).
