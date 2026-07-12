@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # The surface-questions agent STILL emits no parseable `{questions}` on a pure decision-record observation — the `note`-field mitigation did not fully close the recurrence (2026-07-10)
 
 ## What happened
