@@ -1,0 +1,44 @@
+---
+promotedFrom: observation:records-in-triage-pool-crash-advance-lifecycle-legs-2026-07-12
+---
+
+## What to build
+
+Durable-record notes living in `work/notes/observations/` (decisions homes, migration/re-scope rationale, family cross-refs) are currently indistinguishable from fresh triage candidates: the triage pool keys ONLY on absence of a `triaged:` frontmatter marker (`packages/dorfl/src/ledger-read.ts` ~L146-182, L514, L846; `packages/dorfl/src/lifecycle-pools.ts` ~L154). So any record authored without that marker is swept into the pool, the surface-questions agent honestly finds nothing to ask, and `detectObservationLimbo` (`packages/dorfl/src/advance.ts` ~L718; sibling agent-gate `catch` ~L654; persist-`nothing` limbo branch ~L668) LOUDLY fails the leg with `observation ... is in a limbo` (exit 1). This is a live crash class: three `advance-lifecycle` legs failed exactly this way on 2026-07-12 (`obs:migrate-batch-left-resolveClosingIssue-prd-read-to-brief-sweep-task-2026-07-09`, `obs:observation-triage-already-triaged-benign-skip-decisions-2026-07-12`, `obs:prd-to-spec-4f-cli-flags-clean-break-full-internal-purge-and-the-c-audit-single-lens-pattern-2026-07-10`), and the latent blast radius is large: of 86 files in `work/notes/observations/`, 63 have NO `triaged:` marker and 17 have NO frontmatter at all, so every record among those is a re-firing CI crash waiting for the next tick.
+
+The fix: teach the system to distinguish a triage CANDIDATE from a durable RECORD so records never enter the triage pool, and enforce it at authoring time so this cannot silently re-introduce.
+
+**Design step (do this FIRST, do NOT skip to implementation).** The observation body lists four candidate options and the disposition explicitly defers the pick to this task. Review them against each other and pick one (or an explicit combination), recording the rationale in a `## Decisions` block on this task before coding:
+
+1. **A distinct "record, never a candidate" marker/type** — e.g. `type: record` (or `triaged: record`) that the pool predicate treats as never-a-candidate, semantically distinct from `triaged: keep`/`resolve` (which mean "a human triaged this and settled it"). Cleanest semantically; touches the ledger-read pool predicate + the authoring convention.
+2. **A separate bucket the triage pool does not scan** — move decisions/rationale records to `work/notes/records/` (or fold them into a done-record channel) so `work/notes/observations/` holds ONLY triage candidates. Touches `capture-signal` + the completion/decisions-home convention + any reader that resolves record links.
+3. **Auto-settle on clean "nothing to ask"** — when the surface-questions agent legitimately returns no questions, auto-stamp a settled marker instead of erroring. Simplest, but FIGHTS the deliberate limbo-loudness (task `advance-surface-limbo-observation-loudly-instead-of-silent-no-op`), so risks silently settling a genuinely-untriaged candidate whose agent merely under-produced. If picked, must reliably distinguish "no judgement exists" from "agent under-produced" — likely UNSAFE on its own.
+4. **Enforce the marker at capture time** — `capture-signal` (and/or a `verify`/lint check) requires every `work/notes/observations/*.md` to declare candidate-vs-record so a record cannot enter the pool unmarked. Belt-and-braces on top of 1/2.
+
+The body's own reading is that 1 or 2 plus 4 is the likely durable shape and 3 alone is risky; treat that as input, not a decision. Whatever you pick, the acceptance criteria below apply.
+
+**Acceptance criteria.**
+
+- After the fix, an observation that is a durable record (decisions home / rationale / cross-ref) does NOT enter the triage pool, and an `advance-lifecycle` tick over the current `work/notes/observations/` corpus (including the 63 unmarked / 17 no-frontmatter files) does not fail a leg with the limbo error on a record.
+- A fresh triage candidate STILL enters the pool and STILL surfaces questions — the fix must not regress the candidate path, and must not weaken the loud limbo detector for genuinely-untriaged candidates.
+- The authoring path (`capture-signal` and/or `verify` lint) prevents a new record from being captured into `work/notes/observations/` without whatever marker/bucket the design step picks, so the crash class cannot silently re-introduce.
+- Existing settled markers (`triaged: keep` on ~23 legacy files, `triaged: resolve` on this session's five mitigated records) continue to drop out of the pool as they do today — the pool predicate stays presence-keyed on `triaged:` OR the new record signal, whichever the design picks.
+- Tests: at least one unit test on the pool predicate for the new record signal, and one end-to-end (or integration) test that `advance` on an observations dir containing a record note completes without a limbo failure.
+
+**Out of scope (handled elsewhere, do NOT bundle).**
+
+- The corpus-wide vocabulary sweep `triaged: keep` -> `triaged: resolve` across the ~23 legacy files — its own low-priority standalone task per the human's Q3 answer.
+- The Mode-2 agent-flake fix (surface-questions agent emitting no parseable `{questions:[]}` on a decision-record shape) — ALREADY covered by the ready task `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit` (engine short-circuit for already-triaged/decision-record shapes + always-emit `{questions:[]}` hardening). Do NOT duplicate that work here; if the design step picks option 1 or 2, coordinate the marker/bucket shape with that task so the short-circuit keys on the same signal.
+- Re-stamping the five records already mitigated this session (they are already `triaged: resolve`).
+
+## Prompt
+
+> You are picking up a self-contained task to fix a live crash class in `advance-lifecycle`: durable-record observations (decisions homes, migration/re-scope rationale, family cross-refs) are being swept into the triage pool because the pool keys ONLY on the absence of a `triaged:` frontmatter marker, so the surface-questions agent honestly finds nothing to ask and `detectObservationLimbo` fails the leg loudly. Three legs failed exactly this way on 2026-07-12, and 63 of 86 files in `work/notes/observations/` currently have no `triaged:` marker (17 have no frontmatter at all), so the blast radius is large.
+>
+> Start with a DESIGN step — do NOT jump to code. Read `packages/dorfl/src/ledger-read.ts` (~L146-182, L514, L846), `packages/dorfl/src/lifecycle-pools.ts` (~L154), and `packages/dorfl/src/advance.ts` (`detectObservationLimbo` ~L718; the `surfaceRung` agent-gate `catch` ~L654; the persist-`nothing` limbo branch ~L668) to ground yourself in how pool membership + the limbo detector actually work today. Then weigh the four candidate options listed in the `## What to build` section against each other (record marker/type; separate records bucket; auto-settle on clean nothing-to-ask; enforce marker at capture time) and pick one or an explicit combination. Record the pick and the WHY in a `## Decisions` block on this task before writing code. The observation body's own reading is that 1 or 2 plus 4 is the likely durable shape and 3 alone is risky (it fights the deliberate limbo-loudness) — treat that as input, not a decision.
+>
+> Then implement the pick against the acceptance criteria in `## What to build`: records stay out of the pool, candidates still surface questions, capture enforces the distinction, existing `triaged: keep`/`resolve` settled files still drop out, and at least one unit test on the pool predicate plus one end-to-end test on `advance` over a records-containing observations dir. Coordinate the record signal shape with the ready task `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit` (Mode-2 agent-flake fix) if your pick affects what that short-circuit should key on.
+>
+> Explicitly OUT OF SCOPE: the `triaged: keep` -> `triaged: resolve` corpus sweep (its own task), the Mode-2 agent-flake fix (already-ready task above), and re-stamping the five records already mitigated this session. Do NOT bundle any of those.
+>
+> Green gate for done: `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` clean, per `AGENTS.md`.
