@@ -23,3 +23,5 @@ _Suggested default: No — keep as historical decision-record only; open a spec/
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, promote the word-vs-identity boundary rule + the PRESERVE-list discipline to a small ADR. These two are now enforced by a gate test and are the load-bearing pair likely to govern future vocabulary cutovers, so they warrant a durable, citable decision record. The other two decisions (verb-alias prose preservation; setup migration-map SOURCE preservation) do not need promotion beyond this note.

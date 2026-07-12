@@ -13,3 +13,5 @@ _Suggested default: Delete — the deferred gate has been completed downstream (
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Discharge by deletion. The deferral is fully landed: the follow-on task run-prd-to-spec-on-dorfl-acceptance is in work/tasks/done/, the parent spec migrated to work/specs/tasked/prd-to-spec-vocabulary-cutover-and-migration-command.md, and both leak-scan tests (prd-to-spec-leak-scan.test.ts and prd-word-cutover-leak-scan.test.ts) coexist as the source-part + tree-wide gates this note anticipated. No residue needs an ADR footnote.

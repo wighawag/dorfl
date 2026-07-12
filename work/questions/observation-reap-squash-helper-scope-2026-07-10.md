@@ -13,3 +13,5 @@ _Suggested default: Keep as historical rationale (no action) — the decision is
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete / resolve. The scope-narrowing decision it records has been ratified and the rationale is now durable at the choice sites (JSDoc in integration-core.ts and isolation.ts) and in the done task's Decisions block. The note has no remaining role.

@@ -13,3 +13,5 @@ _Suggested default: Keep as-is: this is the ratified decision record the done ta
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The task is done and the misdiagnosed note is gone; the sibling removed-stale-leak-scan-observation-note-2026-07-12 already carries the capture, so this is no longer actionable and needs no separate decision record.

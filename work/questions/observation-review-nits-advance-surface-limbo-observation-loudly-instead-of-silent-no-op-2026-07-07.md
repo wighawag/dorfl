@@ -12,6 +12,8 @@ Item: [`observation:review-nits-advance-surface-limbo-observation-loudly-instead
 
 **Your answer** (write below this line):
 
+Delete (see Q2). The observation is obsolete: the loud-limbo design it reviewed has been superseded by the deterministic 'always ask' base-triage-question contract, so there is nothing left to promote.
+
 ## Q2
 
 **Is this review-nits observation now obsolete because the loud-limbo design it reviewed has been SUPERSEDED by the deterministic 'always ask' base-triage-question contract, and should therefore be discharged (resolve/delete) rather than triaged into a task?**
@@ -23,3 +25,5 @@ _Suggested default: resolve/delete as obsolete — the reviewed design was repla
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, obsolete, discharge by deletion. All three nits target the removed detectObservationLimbo path: advance.ts (around L703/722/782-783/850) now always passes a deterministic base question to surfaceRung on the first pass, so an untriaged observation can no longer fall through empty-handed. Nits (a) and (b) ratify a code path that no longer exists; nit (c) is retrospective PR-hygiene on a merged commit that cannot be edited. Not promote.

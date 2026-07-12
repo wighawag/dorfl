@@ -13,3 +13,5 @@ _Suggested default: (b) fold a short lens into REVIEW-PROTOCOL.md ('for a wide-r
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Option (b): fold the review lens inline into REVIEW-PROTOCOL.md's lens list ('for a wide-refactor task chain, verify each batch is either indirected-safe or expand-first'), without a spec/ADR. The concrete remediation has already landed (expand-first task inserted, batches rechained, aliases removed; the three tasks are in tasks/done), so only the durable review-side lesson remains, and TASKING-PROTOCOL §3a already codifies the tasking-side rule, so a lightweight complementary review lens is the proportionate home.

@@ -13,3 +13,5 @@ _Suggested default: Delete — single unreproduced occurrence, no live signal af
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Keep open pending recurrence. It is a single unreproduced occurrence with no live signal, so do not mint an investigation task yet, but the failure mode is specific enough ('m.oldName is not a function' + 'No projects found') that deleting it would throw away a useful fingerprint if it recurs. Revisit and promote (or delete) on the next occurrence.

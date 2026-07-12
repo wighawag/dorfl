@@ -13,3 +13,5 @@ _Suggested default: KEEP as a watch-item, matching the repo's settled recurrence
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote to a small test-hardening slice for run.test.ts (serialise/isolate the flaky case). A test that is green in isolation but flaky under the full suite erodes trust in the acceptance gate itself, which is worth a bounded fix rather than leaving as a watch-item.

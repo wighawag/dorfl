@@ -13,3 +13,5 @@ _Suggested default: Delete the observation note (direct-delete discharge) — th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete the note. As the observation itself records, it is already resolved by reality; there is no residue worth keeping as a historical record.

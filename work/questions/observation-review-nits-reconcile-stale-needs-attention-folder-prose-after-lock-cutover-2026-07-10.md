@@ -14,6 +14,8 @@ _Suggested default: Delete — nits 1+2 are code-obsolete; nit 3 (ratify the 'ma
 
 **Your answer** (write below this line):
 
+Delete. All three code-drift nits are resolved on disk (grep for 'to work/needs-attention' across packages/dorfl/src returns nothing, and the stale test example is gone). Nits 1+2 are code-obsolete; nit 3 is a one-line human ratification not worth a task.
+
 ## Q2
 
 **If retained, should nit 3 be promoted to a tiny task that records the canonical replacement wording for the retired 'routed to work/needs-attention/' idiom in an ADR / decisions note?**

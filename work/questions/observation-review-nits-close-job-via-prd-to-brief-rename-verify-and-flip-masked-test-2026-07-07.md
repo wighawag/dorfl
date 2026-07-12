@@ -13,3 +13,5 @@ _Suggested default: Delete the observation: nit1 is confirmed by the tasked pare
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. None of the three nits needs promotion: (1) 'brief' as the replacement token is already confirmed by the parent spec code-identifier-slice-prd-to-task-brief-rename; (2) the wider vocabulary rename (payload field/prdCandidates/key==='spec' residuals) was explicitly scoped OUT and the parent brief spec is its follow-up home; (3) the missing commit cross-refs are runner/human-side, not agent malpractice. No residue.

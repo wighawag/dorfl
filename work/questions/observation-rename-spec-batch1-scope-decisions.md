@@ -25,3 +25,5 @@ _Suggested default: Yes — capture as a small note under refactor/task-authorin
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes. Lift the domain-note miscue (the claim that 'every call site references keys, never raw strings, so renaming a folder should not re-touch call sites') into task-authoring guidance as a one-line rule: a KEY/folder rename task must ground its blast-radius claim against the code rather than assume indirection, so future KEY-rename tasks do not understate their scope.

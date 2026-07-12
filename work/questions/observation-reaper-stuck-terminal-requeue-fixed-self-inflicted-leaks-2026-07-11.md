@@ -13,3 +13,5 @@ _Suggested default: Discard: keep as landed decision-capture provenance only, no
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The underlying reaper-reap-terminal-stuck-lock-orphans task has landed on main and the two self-inflicted leak-scan reds it describes are already fixed in-tree. Fully discharged.

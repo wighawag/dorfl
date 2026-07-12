@@ -13,3 +13,5 @@ _Suggested default: File as informational (leave the observation in place) — t
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Discard. The additive spec-member changes (APPLY_LIFECYCLE_FOLDERS, FOLDERS_FOR_TYPE, ANALYSE_RUNG_FOR_TYPE) have landed with the expand-spec task. Do NOT mint the 'lint every Record<SidecarType,...>' follow-up: tsc already forces exhaustiveness on a SidecarType widening (that is how these three were found), so a dedicated lint adds low value for its upkeep. No informational note needed beyond the done record.

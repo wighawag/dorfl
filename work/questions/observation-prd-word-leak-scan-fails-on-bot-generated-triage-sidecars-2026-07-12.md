@@ -24,6 +24,8 @@ _Suggested default: Option 1 (exempt work/questions/ sidecars) — narrowest sca
 
 **Your answer** (write below this line):
 
+Option 1: exempt work/questions/ sidecars from the prd-word leak scan. These are bot-generated triage/question artifacts that legitimately quote the retired word as provenance/context, so they are not a live-alias leak. Do NOT also exempt work/notes/observations/ bodies (option 2) yet, that is a broader carve-out best decided separately; and leaving scope unchanged (options 3/4) does not stop the recurring false red. Narrowest correct fix.
+
 ## Q3
 
 **Independent of the scan-scope choice, should the 32 already-landed prd-quoting sidecars on main be discharged now (answer/apply or direct-delete) to un-red main immediately?**

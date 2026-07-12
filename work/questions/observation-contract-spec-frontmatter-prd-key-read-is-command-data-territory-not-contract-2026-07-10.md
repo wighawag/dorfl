@@ -13,3 +13,5 @@ _Suggested default: Promote the retasking lesson into a short finding under work
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The fix landed in-task and the lesson is embedded in this note's own prose; the retasking-discipline lesson does NOT need a separate finding (it is covered by the task-authoring-guidance line being added via the rename-spec-batch1 domain-note-miscue answer). No durable artifact to mint here.

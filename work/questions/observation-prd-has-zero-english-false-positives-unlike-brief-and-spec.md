@@ -13,3 +13,5 @@ _Suggested default: Delete: the cutover is complete, the adjacency reworkings la
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The prd->spec cutover this note advised has landed (in work/tasks/done/). The advice is consumed; no residue.

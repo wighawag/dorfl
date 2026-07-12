@@ -13,3 +13,5 @@ _Suggested default: Delete the observation as already-discharged (the fix it pro
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete as stale. Confirmed discharged in the current tree: grep for work/prds hardcoded paths in tasking.ts returns nothing. No residual drift remains.

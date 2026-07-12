@@ -13,3 +13,5 @@ _Suggested default: Delete it — it is a spent deferral record whose deferred w
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The deferred CLI-flag rename it was waiting on has fully landed (rename-spec-4f). The deferral is discharged; nothing actionable remains.

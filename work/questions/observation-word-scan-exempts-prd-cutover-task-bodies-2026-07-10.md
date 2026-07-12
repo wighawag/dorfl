@@ -14,6 +14,8 @@ _Suggested default: Amend the observation (or add a short sibling note) to recor
 
 **Your answer** (write below this line):
 
+If PROVENANCE_FILE_BASENAMES has grown beyond the criterion this record contemplated, amend the observation (or open a short follow-up note) to state the wider criterion explicitly, rather than letting the list's rationale drift from the record. A full ADR is not required; keeping the decision record honest about the actual criterion is enough.
+
 ## Q2
 
 **Does the whole-file exemption need a cleanup / expiry signal so the list does not silently rot once the retired `prd` word is fully purged from the codebase?**
@@ -25,6 +27,8 @@ _Suggested default: Add a TODO/note that entries whose files have moved to done/
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Yes, add a cleanup/expiry signal so the whole-file exemption list cannot silently rot. Concretely: a test that fails (or a comment/checklist item that fires) once the retired 'prd' word is fully purged from the codebase, prompting removal of the now-unnecessary exemptions. Without it the list will accumulate dead entries.
 
 ## Q3
 

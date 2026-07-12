@@ -13,3 +13,5 @@ _Suggested default: Drop the observation after distilling one line into REVIEW-P
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Capture the general lesson ('a clause belongs in the batch that owns the file it edits; add a file-ownership lens to review for wide-refactor chains') as a one-line addition to REVIEW-PROTOCOL.md's lens list (same home as the expand-first lens), then delete. The concrete fix (moving the verb-dispatch clause into batch 4) has landed, so nothing else remains; no standalone ADR needed.

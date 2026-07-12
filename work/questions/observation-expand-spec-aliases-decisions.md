@@ -14,6 +14,8 @@ _Suggested default: Discard — the cutover has hard-completed via later contrac
 
 **Your answer** (write below this line):
 
+Keep as a historical done-record artefact, or delete: the still-load-bearing choices have already been carried into the many landed contract/rename batches, so they do not need to be re-promoted into a standalone ADR. Treat this as archived provenance rather than live work.
+
 ## Q2
 
 **Was this file ever linked from the done-record of expand-spec-frontmatter-and-namespace-aliases as its author intended, and if not, does that linkage still need to happen before discharge?**

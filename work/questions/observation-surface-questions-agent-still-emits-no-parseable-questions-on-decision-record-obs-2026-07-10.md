@@ -13,3 +13,5 @@ _Suggested default: Mint a surface-robustness task pursuing BOTH angles: engine-
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mint a task pursuing BOTH angles, prioritising the engine short-circuit. Primary: short-circuit already-triaged / decision-record observations in the engine so they never reach the surface agent (deterministic, does not depend on the model behaving). Secondary: also strengthen the surface-questions SKILL prompt to always emit a bare {questions: []} object when there is nothing to ask (best-effort defence-in-depth). The engine fix is the load-bearing half.

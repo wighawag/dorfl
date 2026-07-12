@@ -13,3 +13,5 @@ _Suggested default: Yes — mark resolved: f89c8037 swept the prose AND fixed th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Mark resolved / delete. The stale prd prose in .github/workflows/close-job.yml was swept by commit f89c8037 (cleanup(prd->spec): sweep stale prd/PRD comment prose in generated .github/workflows/*.yml). No live signal remains.

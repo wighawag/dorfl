@@ -13,3 +13,5 @@ _Suggested default: Promote the 'Lesson' block to work/notes/findings/producer-c
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Promote the Lesson, then delete the note. The ratified option-A moves have landed, so the operational residue is discharged. Fold the durable lesson (producer/consumer cutover coupling, and separating a value's TYPE identity from its on-disk FILE identity) into a single shared cutover-lessons note under work/notes/findings/ (together with the sibling 4e C-audit lesson), then delete this observation. Do NOT mint a standalone ADR for it.

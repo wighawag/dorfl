@@ -13,3 +13,5 @@ _Suggested default: Spawn the small follow-up task to sweep prose 'prd:' from th
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Spawn the small prose-sweep follow-up task (sweep prose 'prd:' from the handful of live maintained docs: docs/adr/methodology-and-skills.md, skills/orchestrate/SKILL.md, docs/adr/land-primitive-rebase-reverify-advance.md), then delete this observation. The policy itself (WORD scan treats prd: as provenance; SRC scan is the hard-cutover gate) is self-evident from the two tests and does not need a standalone ADR.

@@ -13,3 +13,5 @@ _Suggested default: Promote the lesson: mint a small task to add a 'classify eac
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Backport the value-vs-symbol alias distinction into the shared cutover-lessons note under work/notes/findings/ (the same note collecting the 4d/4e C-audit lessons), then delete this observation. 4a/b/c have landed, so the operational residue is discharged; the distinction is worth keeping as reusable cutover guidance but does not need its own ADR.

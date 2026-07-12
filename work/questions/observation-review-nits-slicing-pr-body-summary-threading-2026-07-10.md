@@ -13,3 +13,5 @@ _Suggested default: Split: promote nit 3 (fold covers/title into parseFrontmatte
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. Source task is in work/tasks/done/ and the nits don't warrant tasks: nit 4 (slicing.ts -> tasking.ts) is already complete on disk (only tasking.ts exists); nits 1 and 2 are ratify-only doc points; nit 3 (re-parse covers/title via ad-hoc regex) is a tiny optional refactor not worth tracking. No durable artifact needed.

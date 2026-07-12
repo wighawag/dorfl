@@ -13,3 +13,5 @@ _Suggested default: (a) mint a short finding at work/findings/rename-expand-defi
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Option (a): mint a finding under work/notes/findings/ (a 'rename-expand checklist' enumerating the definitional-vs-consumer surface classes: unions, prefix maps, namespace resolvers). This is the SECOND such do-agent STOP catch, so the pattern is real and recurring, and a concrete enumerable checklist is more actionable than folding it into WORK-CONTRACT prose (b) or a discipline ADR (c). The conductor fix has already landed, so only this durable lesson remains.

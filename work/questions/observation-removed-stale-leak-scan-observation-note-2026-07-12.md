@@ -13,3 +13,5 @@ _Suggested default: Keep as-is in the append-only observations bucket as a done-
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The incident this note records is fully closed; nothing actionable or worth archiving remains.

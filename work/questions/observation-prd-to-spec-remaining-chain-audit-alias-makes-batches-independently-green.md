@@ -13,3 +13,5 @@ _Suggested default: Delete the observation: its actionable finding was applied i
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. This is a purely historical audit-log note whose recorded outcome is fully discharged: the entire prd-to-spec migration chain (batches 2/3/4, protocol, contract, build) has landed in work/tasks/done/. No live action or residue remains; the durable record lives in those done-task records.

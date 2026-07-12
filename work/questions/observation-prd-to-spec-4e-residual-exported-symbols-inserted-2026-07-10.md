@@ -13,3 +13,5 @@ _Suggested default: (b) — the actionable residue is the reusable lesson, not t
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Option (b), consolidated: distill the lesson, then drop. Batch 4e has landed (task in work/tasks/done/rename-spec-residual-exported-symbols-and-prdslandIn-plumbing.md), so the action is complete. Fold the "three separate enumerations for a rename cutover coverage audit" lesson (VALUE consumers / VALUE producers / exported SYMBOLS) into the SAME shared cutover-lessons note under work/notes/findings/ as the sibling 4d lesson (the two share the single-lens C-audit pattern), then delete this observation. Do not mint a separate ADR.

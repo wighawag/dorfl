@@ -14,6 +14,8 @@ _Suggested default: Distil the 'three spec surfaces' distinction into a short fi
 
 **Your answer** (write below this line):
 
+Fold the durable lesson (the 'resolver-namespace vs artifact-type vs promote-alias' three-surface distinction) into the shared cutover-lessons / rename-expand checklist note under work/notes/findings/ (the same note gathering D6's surface-class checklist), then discard this observation. Sub-batch (c) is done and green, so only the reusable distinction is worth keeping; do not mint a standalone ADR for it.
+
 ## Q2
 
 **Is decision (2) — renaming renderPrdBody→renderSpecBody inside buildable-body.ts even though the task's file list only named spec-complete.ts — worth surfacing as a WORK-CONTRACT clarification (e.g. that a symbol assignment in one sub-batch implicitly authorises edits to whichever file defines that symbol), or is it a one-off that needs no protocol change?**

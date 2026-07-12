@@ -24,6 +24,8 @@ _Suggested default: Option 2 (separate work/notes/records/ bucket) + Option 4 (e
 
 **Your answer** (write below this line):
 
+Promote to a task to stop records being swept into the triage pool (this is a live crash class in the advance lifecycle legs, so it warrants a real fix, not a note). Do NOT auto-select among the four systemic-fix options here: the specific option (or combination) needs to be reviewed against the four candidates before committing, since the choice is a design fork with different blast radii. The disposition is 'promote'; the option pick is deferred to that task's design step.
+
 ## Q3
 
 **Should the corpus-wide vocabulary sweep triaged: keep -> triaged: resolve across ~23 legacy work/notes/observations/*.md files be done now, or left as residue?**

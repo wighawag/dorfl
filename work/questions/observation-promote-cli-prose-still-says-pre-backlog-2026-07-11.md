@@ -14,6 +14,8 @@ _Suggested default: Keep `pre-backlog` as the stable flag/config token (it is th
 
 **Your answer** (write below this line):
 
+Yes, rename it: 'pre-backlog' is 'backlog' now. This is a real rename, not a prose-only touch-up and not a stable token to preserve. The sweep should rename pre-backlog -> backlog through the `--tasks-land-in <pre-backlog|ready>` accepted-value spelling AND its cascade: the env-config enum, the `tasksLandIn` / `explicitTasksLandIn` config union types (tasking.ts, do.ts), landingToSide, and the prose in ledger-write.ts / needs-attention.ts / repo-config.ts. The staged folder is work/backlog/ and the pool side stays 'ready'.
+
 ## Q2
 
 **Should the sweep additionally cover the OTHER cli.ts sites that still hardcode `work/backlog/` in user-visible prose (claim ~L1520, prompt ~L1793, from-issue ~L3828, remote-scan ~L4176), or is the follow-up strictly scoped to the `promote` verb wiring (description ~L3587, comment ~L3574, empty-list message ~L3615) called out in the observation body?**
@@ -25,3 +27,5 @@ _Suggested default: Bundle all cli.ts user-facing prose that names `work/backlog
 <!-- q2 fields: id=q2 -->
 
 **Your answer** (write below this line):
+
+Widen the sweep to ALL user-visible prose sites, not just the promote-verb wiring. Cover the other cli.ts sites that hardcode work/backlog/ in prose (claim ~L1520, prompt ~L1793, from-issue ~L3828, remote-scan ~L4176) alongside the promote verb's description/comment/empty-list-message sites. It is cheap and keeps the user-facing vocabulary consistent in one pass rather than leaving straggler prose.

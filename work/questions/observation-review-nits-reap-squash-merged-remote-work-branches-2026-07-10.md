@@ -13,3 +13,5 @@ _Suggested default: Delete — the signal is fully discharged (nits addressed, d
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The note is status: resolved with both nits addressed; the decision was surfaced as JSDoc at both choice sites plus a Decisions summary in the done record, and the sibling reap-squash-helper-scope-2026-07-10 carries the ratification rationale. Keeping this file adds no future-lookup value.

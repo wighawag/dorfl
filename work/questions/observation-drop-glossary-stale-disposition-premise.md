@@ -13,3 +13,5 @@ _Suggested default: Drop (git rm) after the done record's reviewer ratifies the 
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Delete. The glossary fix has landed and is captured in the done record. Do NOT mint an ADR/spec note that the observation-triage token vocabulary is retired: the binary answered-slot sidecar model already supersedes the disposition tokens, so the done record suffices.
