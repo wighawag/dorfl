@@ -1,6 +1,7 @@
 ---
 title: 'erase artifact-word cutover — decisions recorded per the decision-bar rule (word-vs-identity boundary, alias preservation, historical-record normalization)'
 date: 2026-07-10
+needsAnswers: true
 ---
 
 Decisions taken while building `erase-prd-artifact-word-everywhere-spec-is-the-one-vocabulary` (spec `prd-to-spec-vocabulary-cutover-and-migration-command`). Recorded here (linked from the done record) because a reviewer / a later task / a user could be surprised these were decided here. (The retired token is written `` `prd` `` throughout \u2014 backticked \u2014 because this is meta-documentation of the cutover; the WORD scan exempts a backtick-wrapped token reference.)
