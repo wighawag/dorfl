@@ -57,6 +57,18 @@ export interface RecoverIsolatedOptions {
 	integration?: IntegrationMode;
 	/** Suppress the PR on the propose path (push the branch, open no review request). */
 	noPR?: boolean;
+	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded VERBATIM into {@link performIntegration} so a wide-matrix CI's
+	 * raised cap actually reaches the cross-job land queue on the isolated-recovery
+	 * path too (task `thread-merge-retries-cross-task-and-ratify-default`). Resolved
+	 * ONCE at the CLI (the `complete --isolated` command) through the SAME
+	 * gate-family precedence chain the plain `complete` path uses (flag > env >
+	 * per-repo > global > default). Unset ⇒ the engine's `DEFAULT_MERGE_RETRIES =
+	 * 1000` (byte-for-byte unchanged).
+	 */
+	mergeRetries?: number;
 	/** Optional fully-formed provider used verbatim (test/embedding seam). */
 	providerInstance?: ReviewProvider;
 	/** Optional injectable PR opener (legacy bridge); used in `propose` mode. */
@@ -177,6 +189,11 @@ export async function performRecoverIsolated(
 		recovering: false,
 		committedRecovery: true,
 		mode: options.integration ?? 'propose',
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
+		// git-alone floor of the cross-job land queue, resolved through the gate-
+		// family precedence chain in the CLI and threaded here so the isolated-
+		// recovery land tail respects the per-repo cap.
+		mergeRetries: options.mergeRetries,
 		noPR: options.noPR,
 		providerInstance: options.providerInstance,
 		openPr: options.openPr,
