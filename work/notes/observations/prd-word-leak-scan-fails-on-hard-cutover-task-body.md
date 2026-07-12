@@ -1,5 +1,6 @@
 ---
 date: 2026-07-10
+needsAnswers: true
 ---
 
 `prd-word-cutover-leak-scan.test.ts` fails on main (independent of the
