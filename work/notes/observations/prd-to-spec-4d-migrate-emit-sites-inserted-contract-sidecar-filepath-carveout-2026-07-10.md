@@ -1,6 +1,7 @@
 ---
 title: spec→spec re-scope — inserted migrate batch 4d (emit sites + local unions) before the contract task; the sidecar FILE-path prd-<slug>.md reader is DATA-territory the command removes (option A, ratified with the human 2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Trigger
