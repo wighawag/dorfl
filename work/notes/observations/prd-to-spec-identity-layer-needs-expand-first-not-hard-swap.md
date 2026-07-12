@@ -1,6 +1,7 @@
 ---
 title: spec→spec identity layer (frontmatter field + SlugNamespace + config key + intake type) needs EXPAND-FIRST, not per-batch hard-swap — the original chain violated its own §3a
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## What happened
