@@ -926,6 +926,13 @@ ${projectSetupBlock}    - name: Setup Node.js
       uses: actions/setup-node@v5
       with:
         node-version: '22'
+        # setup-node@v5 auto-enables package-manager caching, which probes the
+        # project package manager DURING its own run when a lockfile is present,
+        # before that manager is on PATH, so the probe crashes ("Unable to
+        # locate executable file"). dorfl provisions ONLY its own runtime and
+        # leaves the project package-manager cache to the project (toolchain
+        # boundary), so disable it explicitly.
+        package-manager-cache: false
 
     - name: Configure git identity
       shell: bash

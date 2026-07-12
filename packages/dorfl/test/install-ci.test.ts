@@ -527,6 +527,23 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toMatch(/not detection/i);
 	});
 
+	it('disables setup-node package-manager caching (setup-node@v5 probes pnpm before it is installed)', () => {
+		// Regression guard: setup-node@v5 auto-enables package-manager caching,
+		// which runs `pnpm store path` DURING the setup-node step when a
+		// pnpm-lock.yaml is present. pnpm is not on PATH yet at that point, so
+		// the run crashes with "Unable to locate executable file: pnpm". dorfl
+		// leaves the project's package-manager cache to the project (toolchain
+		// boundary), so the emitted setup-node step MUST disable it. Pin it in
+		// both install modes.
+		for (const cfg of [
+			modelsConfig,
+			{...modelsConfig, installSource: 'workspace' as const},
+		]) {
+			const action = generateSetupAction(cfg);
+			expect(action).toContain('package-manager-cache: false');
+		}
+	});
+
 	it('resolveCIConfig defaults a missing installSource to registry', () => {
 		const resolved = resolveCIConfig({
 			authMode: 'models-json',
