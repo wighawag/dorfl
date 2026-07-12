@@ -51,16 +51,22 @@ A sharp boundary, NOT two flavours of one thing:
 - **`do`** — the **per-repo, in-place worker**. Claims + builds + gates + integrates in ONE repo, then **exits**. Sequential. This is **the CI command** (CI has a checkout, is one repo, is one triggered invocation, exits) AND a local one-off worker.
   - `do <arg>` — that one named item (see §3a for slug resolution). `do` (no arg) — auto-pick one eligible thing. `do <arg> <arg> …` — those, in sequence. `do -n <x>` — x eligible things, in sequence.
   - **`--propose` (default) / `--merge`.** Propose (PR) is the CI norm.
-  - **Isolation strategy by form:** `do <slug>` in a checkout works **in-place** (the checkout / CI container IS the isolation — no mirror). `do --remote <r>` (no checkout) materialises a **hub mirror + job worktree in the agents' area** — the SAME isolation `run` uses (agent execution → agents' area, never the human area).
+  - **Isolation strategy by form:** `do <slug>` builds by default in a **hub mirror + job worktree in the agents' area** off THIS repo's arbiter — the SAME isolation `run` and `do --remote` use (agent execution → agents' area, never the human area). `do --in-place <slug>` opts out and works in the current checkout (the checkout / CI container IS the isolation — no mirror). `do --remote <r>` (no checkout) also materialises a hub mirror + job worktree in the agents' area.
     - The targeting/isolation surface is really **two orthogonal questions** — WHICH repo (current vs a foreign `--remote`) and, for the current repo, WHERE to build (in the checkout vs in a worktree). So there are three forms, not a binary:
 
       | form | repo | build location |
       | --- | --- | --- |
-      | `do <slug>` | current | in the checkout (in-place; refuses on a dirty tree) |
-      | `do --isolated <slug>` | current | a job worktree off THIS repo's arbiter |
+      | `do <slug>` (default) | current | a job worktree off THIS repo's arbiter (isolated) |
+      | `do --in-place <slug>` | current | in the checkout (refuses on a dirty tree) |
       | `do --remote <r> <slug>` | foreign | a job worktree (isolation implied — no checkout exists) |
 
-      `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--isolated` names the isolation intent (a worktree off my own arbiter) — the affordance an isolated supervised conductor needs without forcing a foreign URL. The two are orthogonal and `--isolated` is purely additive. **Decided 2026-06-08; all three forms ship today.**
+      `--remote` names the targeting axis (a foreign repo; isolation there is incidental); `--in-place` names the opt-OUT of the isolated default (build here) — the affordance for the edit-locally-then-build loop. `--isolated` remains accepted as a redundant explicit opt-IN alias of the default (some scripts/skills pin it, harmless once implied). The two form flags are mutually exclusive (contradictory intents); `--in-place` + `--remote` is nonsensical (there is no local checkout to take over). **Decided 2026-06-08; the flip to isolated-as-default was amended 2026-07-12 by task `make-isolated-default-build-mode`.**
+
+      **Why isolated is the default (2026-07-12 amendment).** In-place-by-default has a class of bug an isolated default eliminates entirely: a concurrent autonomous `do` job (or an assistant running under a supervised conductor) can sweep a human's or another assistant's uncommitted `work/` files into its own claim/done chore commit, because the build writes the cwd tree. Flipping the default to an isolated job worktree off the arbiter makes the cwd the origin SOURCE only (arbiter-URL and per-repo-config are READ from it; the working tree is never written), so the cwd-entanglement class is gone by construction. It also converges the three faces (`run`, `do --remote`, `do`) onto ONE isolation substrate — `--in-place` is now the DELIBERATE exception, not the silent default. Two consequences worth calling out:
+      1. **No-arbiter is a loud ERROR, not a silent degrade to in-place (D2).** A repo with no configured arbiter cannot isolate; `do <slug>` fails with guidance (configure an arbiter or pass `--in-place`) rather than quietly reintroducing the entanglement risk under the pre-flip name.
+      2. **The task must be on the arbiter (D4).** Isolated builds off `<arbiter>/main`, so a local-only / un-pushed task (or dependency) is invisible to the default — consistent with the arbiter-as-source-of-truth direction (`drive-tasks` already lives with this: push-first, never fall back to in-place). The `--in-place` opt-out covers the edit-locally-then-build loop.
+
+      Per-repo config (`harness` / `verify` / `provider`) is honoured on the isolated default via the SAME `resolveRemoteRepoConfig` read `--isolated` and `--remote` already use (`.dorfl.json` from `<arbiter>/main`), so a repo declaring e.g. `harness: pi` still gets that harness under the default (D1).
   - **Auto-task priority within a tick:** eligible **tasks first, then specs to task** (drain ready work before creating more), with a per-repo toggle to flip it.
 
 CI uses **`do`** AND **`advance`** (wired by the future `install-ci`), never `run --once` — which verb is the §3b routing rule.

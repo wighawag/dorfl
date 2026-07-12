@@ -727,8 +727,10 @@ interface DoFlags {
 	config?: string;
 	arbiter?: string;
 	remote?: string;
-	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). */
+	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). Since `make-isolated-default-build-mode` this is the DEFAULT; the flag remains accepted as a redundant explicit opt-IN alias (D3). */
 	isolated?: boolean;
+	/** `--in-place`: opt OUT of the new default (isolated off the arbiter) and build in the CURRENT checkout, restoring today's dirty-tree-refusing in-place behaviour (D3). */
+	inPlace?: boolean;
 	/** `-n <x>`: do x eligible items in sequence (auto-pick form). */
 	number?: string;
 	/** `--selection-order <order>`: a preset keyword (drain/groom) or comma-separated pool order. */
@@ -2049,7 +2051,7 @@ export function buildProgram(): Command {
 		.command('do')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. In the CURRENT checkout by default (refuses on a dirty tree, integrates in-place). With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do spec:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then SPECS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.',
+			"The per-repo WORKER (the CI command): claim + onboard onto work/<slug>, run the agent, gate, integrate, and exit. Builds in an ISOLATED job worktree off THIS repo's arbiter by DEFAULT (task `make-isolated-default-build-mode` — the cwd is the origin SOURCE only; the human working tree is never written). --in-place opts OUT (build in the current checkout, refusing a dirty tree — today's pre-flip behaviour). --isolated remains accepted as a redundant explicit opt-in alias. With --remote <r>: against a REGISTERED repo with NO checkout — materialise a hub mirror + job worktree in the agents\u2019 area, run the same pipeline there, then reap. do <slug> | do task:<slug> | do spec:<slug> (the tasking path) | do (auto-pick one) | do <a> <b> (those, in sequence) | do -n <x> (x eligible, in sequence). Auto-pick draws TASKS-FIRST then SPECS-to-task by default (per-repo selectionOrder reorders the pools). --propose (default) / --merge resolved at integrate-time. Supersedes ar-run.sh.",
 		)
 		// EXTENSIBLE argument grammar (the three do-* tasks grow this one block):
 		// `do-autopick` widens the single optional positional into a VARIADIC one so
@@ -2079,7 +2081,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--isolated',
-			"build in an ISOLATED job worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap \u2014 the in-place-but-isolated form. Shares the same grammar as the no-checkout forms: a single named item, multiple named items (in sequence), AND -n/auto-pick over the mirror-side eligible-pool scan. Always SEQUENTIAL (parallelism is `run` / the CI matrix). Orthogonal to --remote (a foreign repo); with --remote, remote wins (isolation is already implied).",
+			"build in an ISOLATED job worktree off THIS repo's arbiter (inferred from cwd) instead of taking over the current checkout, then integrate + reap \u2014 NOW THE DEFAULT since `make-isolated-default-build-mode`; the flag remains accepted as a redundant explicit opt-IN alias (some scripts/skills pin it, and it is harmless once implied). Shares the same grammar as the no-checkout forms: a single named item, multiple named items (in sequence), AND -n/auto-pick over the mirror-side eligible-pool scan. Always SEQUENTIAL (parallelism is `run` / the CI matrix). Orthogonal to --remote (a foreign repo); with --remote, remote wins (isolation is already implied). Mutually exclusive with --in-place (contradictory intents).",
+		)
+		.option(
+			'--in-place',
+			"OPT OUT of the new isolated default: build in the CURRENT checkout (integrates in place, refuses a dirty tree) \u2014 today's pre-flip behaviour, now explicit. Mutually exclusive with --isolated (contradictory intents) and with --remote (there is no local checkout to take over). Use this for the edit-locally-then-build loop; the default (isolated off the arbiter) never writes the cwd working tree.",
 		)
 		.option(
 			'--merge',
@@ -2230,14 +2236,52 @@ export function buildProgram(): Command {
 			// `remote-do-reads-per-repo-config-from-arbiter-main`). Only the whitelisted
 			// `REPO_ALLOWED_KEYS` are layered (host-only keys stay global/flag/env-only,
 			// rejected by the SAME `repo-config.ts` split).
+			// Mutually-exclusive intent guards for the three FORM flags (task
+			// `make-isolated-default-build-mode`, D3): `--in-place` opts OUT of the new
+			// isolated default, `--isolated` is the redundant explicit opt-IN alias,
+			// `--remote <r>` targets a foreign repo. `--in-place` + `--isolated` is
+			// contradictory (build here vs build off the arbiter); `--in-place` + `--remote`
+			// is nonsensical (there is no local checkout to take over). Reject loudly
+			// rather than silently prefer one.
+			if (flags.inPlace === true && flags.isolated === true) {
+				console.error(
+					'error: --in-place and --isolated are contradictory (build in the current ' +
+						"checkout vs build in a worktree off this repo's arbiter). Pick one.",
+				);
+				process.exit(1);
+			}
+			if (flags.inPlace === true && flags.remote !== undefined) {
+				console.error(
+					'error: --in-place builds in the CURRENT checkout; --remote <r> targets a ' +
+						'REGISTERED repo with NO checkout. Pick one.',
+				);
+				process.exit(1);
+			}
+			// The DEFAULT flip (task `make-isolated-default-build-mode`): with no
+			// `--remote` and no `--in-place`, `do <slug>` builds in an ISOLATED job
+			// worktree off THIS repo's arbiter — the SAME no-checkout path `--isolated`
+			// already used. The cwd is the origin SOURCE only (arbiter-remote resolution
+			// + per-repo config), never written. `--isolated` remains accepted as a
+			// redundant explicit opt-IN alias (D3). `--in-place` opts out to today's
+			// in-checkout path (the fall-through below). See ADR §3.
 			const isolatedNoRemote =
-				flags.isolated === true && flags.remote === undefined;
+				flags.remote === undefined && flags.inPlace !== true;
+			// Whether the user DEFAULTED into isolated (no form flag typed) vs typed
+			// `--isolated` explicitly. Only used to tune the no-arbiter error message so
+			// the default path names `--in-place` as its natural escape (D2).
+			const defaultedToIsolated = isolatedNoRemote && flags.isolated !== true;
 			if (flags.remote !== undefined || isolatedNoRemote) {
 				// The form's user-facing name + canonical usage, for the shared error
-				// messages below (so `--isolated` errors read in its own terms).
-				const form = isolatedNoRemote ? '--isolated' : '--remote';
+				// messages below (so isolated errors read in the form's own terms).
+				const form = isolatedNoRemote
+					? defaultedToIsolated
+						? 'do'
+						: '--isolated'
+					: '--remote';
 				const usage = isolatedNoRemote
-					? '`do --isolated <slug>`'
+					? defaultedToIsolated
+						? '`do <slug>`'
+						: '`do --isolated <slug>`'
 					: '`do --remote <r> <slug>`';
 				// The no-checkout forms now support the SAME variadic grammar the in-place
 				// form does: a single NAMED item, MULTIPLE named items (sequential), and
@@ -2267,12 +2311,33 @@ export function buildProgram(): Command {
 						identityEnv(bootstrapIdentity, process.env),
 					);
 					if (resolvedUrl === undefined) {
-						console.error(
-							`error: --isolated builds in a worktree off this repo's arbiter ` +
-								`('${arbiterName}'), but no such arbiter remote is configured/found ` +
-								`here. Run inside a participating repo (a clone with an arbiter ` +
-								`remote), or use --remote <url> to target another repo.`,
-						);
+						// Isolated needs an arbiter to build off. Two message variants:
+						//   - defaulted-to-isolated (no form flag typed) leads with the DEFAULT
+						//     and names `--in-place` as the natural local escape (D2). This is
+						//     the ERROR-not-silent-degrade behaviour the flip requires: a repo
+						//     with no arbiter must NOT be quietly built in-place invisibly.
+						//   - explicit `--isolated` keeps its own terms (the user asked for
+						//     isolation deliberately) but ALSO surfaces `--in-place` alongside
+						//     `--remote <url>` as the two escapes.
+						if (defaultedToIsolated) {
+							console.error(
+								`error: no arbiter is configured for this repo ` +
+									`(no '${arbiterName}' remote), and \`do\` now defaults to ` +
+									`building in an ISOLATED worktree off THIS repo's arbiter ` +
+									`(task \`make-isolated-default-build-mode\`). Configure an ` +
+									`arbiter (e.g. \`dorfl remote add <url>\`), pass --in-place ` +
+									`to build in the current checkout, or use --remote <url> to ` +
+									`target another repo.`,
+							);
+						} else {
+							console.error(
+								`error: --isolated builds in a worktree off this repo's arbiter ` +
+									`('${arbiterName}'), but no such arbiter remote is configured/found ` +
+									`here. Run inside a participating repo (a clone with an arbiter ` +
+									`remote), pass --in-place to build in the current checkout, or ` +
+									`use --remote <url> to target another repo.`,
+							);
+						}
 						process.exit(1);
 					}
 					effectiveRemote = resolvedUrl;
