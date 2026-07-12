@@ -1,6 +1,7 @@
 ---
 title: spec→spec remaining-chain audit — the expand alias makes every migrate batch independently green; the only real trap was batch 4's catch-all wording
 date: 2026-07-09
+needsAnswers: true
 ---
 
 ## Why this audit ran
