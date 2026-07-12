@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Requeued `reaper-reap-terminal-stuck-lock-orphans`: two self-inflicted leak-scan reds fixed — 2026-07-11
 
 Continuing the requeued `reaper-reap-terminal-stuck-lock-orphans` branch, `pnpm -r test` was RED on two files, and both reds were introduced by the prior attempt itself (verified against pristine `origin/main`, where both are green), NOT pre-existing:
