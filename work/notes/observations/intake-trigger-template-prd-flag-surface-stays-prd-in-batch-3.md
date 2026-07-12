@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # intake-trigger-template.ts keeps `spec` in batch 3 (it is the `--merge-spec` CLI-flag surface)
 
 2026-07-09, during task `rename-spec-config-and-intake` (spec→spec MIGRATE batch 3).
