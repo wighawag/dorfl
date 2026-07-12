@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'reconcile-stale-needs-attention-folder
 date: 2026-07-10
 status: open
 reviewOf: reconcile-stale-needs-attention-folder-prose-after-lock-cutover
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
