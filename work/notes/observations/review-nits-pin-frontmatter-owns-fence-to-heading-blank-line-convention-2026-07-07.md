@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'pin-frontmatter-owns-fence-to-heading-
 date: 2026-07-07
 status: open
 reviewOf: pin-frontmatter-owns-fence-to-heading-blank-line-convention
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
