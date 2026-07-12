@@ -91,7 +91,7 @@ export type LedgerTransitionKind =
 	/**
 	 * The **promote** transition (spec `staging-pool-position-gate-and-trust-model`,
 	 * task `pre-backlog-staging-folder-and-promote-step-a`): move a STAGED task
-	 * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` to enter the
+	 * `work/tasks/backlog/<slug>.md → work/tasks/ready/<slug>.md` to enter the
 	 * agent-eligible pool. A durable `main` move, the same category as `requeue`
 	 * (tree-less CAS via {@link applyTransition}). RUNNER/human-owned — no
 	 * agent-facing path performs it (governing ADR
@@ -685,7 +685,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	/**
 	 * The return-to-backlog transition under the SAME strategy: re-queue the
 	 * stuck item by delegating to {@link returnToBacklog}, which moves the slug's
-	 * current `work/<needs-attention|in-progress>/<slug>.md → work/backlog/<slug>.md`
+	 * current `work/<needs-attention|in-progress>/<slug>.md → work/tasks/ready/<slug>.md`
 	 * TREE-LESSLY — it
 	 * builds the move off `<arbiter>/main` with plumbing and CAS-publishes it back
 	 * THROUGH this same write seam (`applyTransition`, the very push+lease+verify

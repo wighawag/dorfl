@@ -393,26 +393,27 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('tasksLandIn');
 	});
 
-	it('resolves `tasksLandIn` flag > env > per-repo > global > built-in (`pre-backlog`)', () => {
-		// Built-in floor: unset everywhere ⇒ `pre-backlog` (the conservative
-		// landing that preserves the tracer task's behaviour).
+	it('resolves `tasksLandIn` flag > env > per-repo > global > built-in (`backlog`)', () => {
+		// Built-in floor: unset everywhere ⇒ `backlog` (the conservative
+		// landing that preserves the tracer task's behaviour). The staging value
+		// was renamed `'pre-backlog'` → `'backlog'`.
 		const bare = mergeConfig({});
 		expect(
 			resolveRepoConfig({repoPath: repo, global: bare, env: {}}).config
 				.tasksLandIn,
-		).toBe('pre-backlog');
+		).toBe('backlog');
 		// global override: the user's global config sets the POOL value `ready`
 		// (renamed `'backlog'` → `'todo'` → `'ready'`, ADR
-		// `rename-task-pool-folder-todo-to-ready`; staging is still `'pre-backlog'`).
+		// `rename-task-pool-folder-todo-to-ready`; staging is `'backlog'`).
 		const global = mergeConfig({tasksLandIn: 'ready'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config.tasksLandIn,
 		).toBe('ready');
 		// per-repo file overrides the global.
-		writeRepoConfig(repo, {tasksLandIn: 'pre-backlog'});
+		writeRepoConfig(repo, {tasksLandIn: 'backlog'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config.tasksLandIn,
-		).toBe('pre-backlog');
+		).toBe('backlog');
 		// env (DORFL_TASKS_LAND_IN) beats the per-repo file.
 		expect(
 			resolveRepoConfig({
@@ -427,9 +428,9 @@ describe('resolveRepoConfig — per-key layering', () => {
 				repoPath: repo,
 				global,
 				env: {DORFL_TASKS_LAND_IN: 'ready'},
-				flags: {tasksLandIn: 'pre-backlog'},
+				flags: {tasksLandIn: 'backlog'},
 			}).config.tasksLandIn,
-		).toBe('pre-backlog');
+		).toBe('backlog');
 	});
 
 	// HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,

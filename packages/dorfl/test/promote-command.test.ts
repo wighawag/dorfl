@@ -181,6 +181,11 @@ describe('promote [item] — no argument LISTS what is staged', () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const {out} = await runPromote(repo, []);
 		expect(out).toMatch(/Nothing staged to promote/);
+		// The message names the LIVE staging folders (routed through
+		// `workFolderPrefix`), NOT the stale `work/pre-backlog/` vocabulary.
+		expect(out).toMatch(/work\/tasks\/backlog\//);
+		expect(out).toMatch(/work\/specs\/proposed\//);
+		expect(out).not.toMatch(/pre-backlog/);
 	});
 });
 

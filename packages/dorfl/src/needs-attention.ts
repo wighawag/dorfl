@@ -360,7 +360,7 @@ export async function routeToNeedsAttention(
 
 /**
  * The clean re-queue (ADR §12 / WORK-CONTRACT return path): once the human has
- * resolved the cause, move the stuck item back to `work/backlog/<slug>.md` and
+ * resolved the cause, move the stuck item back to `work/tasks/ready/<slug>.md` and
  * commit it so the item can be re-claimed (it must not rot stuck). It recovers a
  * task stuck in EITHER `work/needs-attention/<slug>.md` (the resolved-surface
  * path) OR `work/in-progress/<slug>.md` (a claim that never surfaced — an
@@ -683,13 +683,13 @@ export async function returnToBacklog(
  * `staging-pool-position-gate-and-trust-model`, task
  * `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Moves
- * `work/pre-backlog/<slug>.md → work/backlog/<slug>.md` as a durable `main`
+ * `work/tasks/backlog/<slug>.md → work/tasks/ready/<slug>.md` as a durable `main`
  * move, the same category as {@link returnToBacklog} (tree-less CAS via
  * {@link runTreelessLedgerMove}). After this transition the task is in the
  * pool and claimable.
  *
  * **RUNNER/human-owned.** There is no agent-facing path that performs this:
- * the agent's tasking output lands STAGED in `work/pre-backlog/` (the runner's
+ * the agent's tasking output lands STAGED in `work/tasks/backlog/` (the runner's
  * deterministic placement decision), and only a runner/human invocation moves
  * it into the pool. The agent does no git here, as everywhere.
  *
@@ -697,7 +697,7 @@ export async function returnToBacklog(
  * lands; the sole strategy publishes to `<arbiter>/main`. Like
  * {@link returnToBacklog} the tree-less CAS needs a ref to push to, so an
  * `arbiter` is REQUIRED. NEVER throws for the expected
- * "not in pre-backlog/" / contention-exhausted cases — it returns
+ * "not in tasks/backlog/" / contention-exhausted cases — it returns
  * `{moved: false, reasonNotMoved}` so callers can branch cleanly.
  */
 export interface PromoteFromPreBacklogOptions {
@@ -726,7 +726,7 @@ export interface PromoteFromPreBacklogResult {
 	moved: boolean;
 	/** When `moved`, the committed transition message. */
 	commitMessage?: string;
-	/** When NOT moved, why (no such pre-backlog item, already in backlog, contention). */
+	/** When NOT moved, why (no such staged item, already in the pool, contention). */
 	reasonNotMoved?: string;
 }
 
@@ -1065,9 +1065,9 @@ export async function promoteFromPreSpec(
 	}
 }
 
-/** One staged item awaiting promotion (a task in `pre-backlog/` or a spec in `specs/proposed/`). */
+/** One staged item awaiting promotion (a task in `tasks/backlog/` or a spec in `specs/proposed/`). */
 export interface PromotableItem {
-	/** `'task'` (staged in `work/pre-backlog/`) or `'spec'` (staged in `work/specs/proposed/`). */
+	/** `'task'` (staged in `work/tasks/backlog/`) or `'spec'` (staged in `work/specs/proposed/`). */
 	namespace: 'task' | 'spec';
 	/** The slug (filename minus `.md`). */
 	slug: string;
@@ -1091,7 +1091,7 @@ export interface ListPromotableResult {
 
 /**
  * LIST every staged item awaiting a runner/human promotion — the tasks in
- * `work/pre-backlog/` and the prds in `work/specs/proposed/` on `<arbiter>/main` (the
+ * `work/tasks/backlog/` and the prds in `work/specs/proposed/` on `<arbiter>/main` (the
  * discovery half of the `promote` verb, so `promote` with no argument answers
  * "what is staged waiting for me?"). It reads the ARBITER's truth (a fetch + a
  * tree read), NOT the local working tree (which may be stale) — the same source

@@ -393,7 +393,7 @@ function buildRegistrySetAdvanceTick(options: {
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
 				// The TASK-PLACEMENT configured default (`do spec:` tasking output:
-				// `pre-backlog` staged vs `ready` pool). No operator flag on this
+				// `backlog` staged vs `ready` pool). No operator flag on this
 				// registry-driven advance context, so only the configured default rung is
 				// threaded (the resolver still layers untrusted-origin force + built-in floor).
 				tasksLandIn: config.tasksLandIn,
@@ -682,13 +682,13 @@ interface CompleteFlags {
  */
 function explicitTasksLandInFromFlag(
 	raw: string | undefined,
-): 'pre-backlog' | 'ready' | undefined {
+): 'backlog' | 'ready' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
-	if (raw !== 'pre-backlog' && raw !== 'ready') {
+	if (raw !== 'backlog' && raw !== 'ready') {
 		throw new Error(
-			`--tasks-land-in must be 'pre-backlog' or 'ready' (got '${raw}').`,
+			`--tasks-land-in must be 'backlog' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -745,7 +745,7 @@ interface DoFlags {
 	strictMergeApproval?: boolean;
 	merge?: boolean;
 	propose?: boolean;
-	/** `--tasks-land-in <pre-backlog|ready>`: the explicit operator placement override for `do spec:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
+	/** `--tasks-land-in <backlog|ready>`: the explicit operator placement override for `do spec:` tasking output (top of the placement precedence). Resolves into the `tasksLandIn` config key. */
 	tasksLandIn?: string;
 	/** `--no-pr` ⇒ commander stores `pr === false` (the suppress-PR intent). */
 	pr?: boolean;
@@ -1519,7 +1519,7 @@ export function buildProgram(): Command {
 		.command('claim')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Atomically claim a work/backlog/<slug>.md item via a compare-and-swap push to the arbiter (in-process; mirrors scripts/claim.sh).',
+			`Atomically claim a ${workFolderPrefix('tasks-ready')}<slug>.md item via a compare-and-swap push to the arbiter (in-process; mirrors scripts/claim.sh).`,
 		)
 		.argument('<slug>', 'the slug of the backlog item to claim')
 		.option(
@@ -1792,7 +1792,7 @@ export function buildProgram(): Command {
 		.command('prompt')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			"Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source spec substituted). Resolves work/in-progress/<slug>.md then work/backlog/<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.",
+			`Print to stdout the work-agent prompt for a task: the canonical CLAIM-PROTOCOL wrapper + the task's own ## Prompt (with <slug> and source spec substituted). Resolves work/in-progress/<slug>.md then ${workFolderPrefix('tasks-ready')}<slug>.md; infers <slug> from a work/<slug> branch when omitted. Read-only, stdout only — the same assembly the autonomous runner feeds agentCmd.`,
 		)
 		.argument(
 			'[slug]',
@@ -2097,7 +2097,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `do spec:<slug>` tasking output lands: `pre-backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `do spec:<slug>` tasking output lands: `backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > tasksLandIn default > built-in). Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--no-pr',
@@ -2759,7 +2759,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--tasks-land-in <where>',
-			'where `advance spec:<slug>` tasking output lands: `pre-backlog` (staged) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
+			'where `advance spec:<slug>` tasking output lands: `backlog` (staged) or `ready` (the agent POOL). The EXPLICIT operator override at the top of the placement precedence. Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--watch',
@@ -3639,7 +3639,7 @@ export function buildProgram(): Command {
 	// `pre-backlog-staging-folder-and-promote-step-a` /
 	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the HUMAN/runner-
 	// owned verb that moves a STAGED item into its agent-eligible POOL — a task
-	// `work/pre-backlog/<slug>.md → work/backlog/<slug>.md`, a spec
+	// `work/tasks/backlog/<slug>.md → work/tasks/ready/<slug>.md`, a spec
 	// `work/specs/proposed/<slug>.md → work/specs/ready/<slug>.md` — as a tree-less CAS on the
 	// arbiter, the SAME trust model + mechanism as `requeue`. The agent emits STAGED;
 	// only this verb (a human, or the runner) admits it to the pool. With NO argument
@@ -3649,7 +3649,7 @@ export function buildProgram(): Command {
 		.command('promote [item]')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			`Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task \`work/pre-backlog/<slug>.md → work/backlog/<slug>.md\`, a spec \`${workFolderPrefix('specs-proposed')}<slug>.md → ${workFolderPrefix('specs-ready')}<slug>.md\`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts \`task:<slug>\` / \`spec:<slug>\` / a bare \`<slug>\` (= task). With NO argument, LISTS every promotable item (the tasks in pre-backlog/ + the specs in specs/proposed/ on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.`,
+			`Admit a STAGED item into its agent-eligible POOL (the runner/human side of the staging gate): a task \`${workFolderPrefix('tasks-backlog')}<slug>.md → ${workFolderPrefix('tasks-ready')}<slug>.md\`, a spec \`${workFolderPrefix('specs-proposed')}<slug>.md → ${workFolderPrefix('specs-ready')}<slug>.md\`, published as a TREE-LESS compare-and-swap to the arbiter ref (EXACTLY like requeue/claim — it never stages/commits in the cwd tree). The agent only ever CREATES staged; this verb is the gate a human (or the runner) opens. Accepts \`task:<slug>\` / \`spec:<slug>\` / a bare \`<slug>\` (= task). With NO argument, LISTS every promotable item (the tasks in ${workFolderPrefix('tasks-backlog')} + the specs in ${workFolderPrefix('specs-proposed')} on the arbiter) so you can see what is staged waiting for promotion. Idempotent: promoting an already-pooled slug is a clean no-op success.`,
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3677,7 +3677,7 @@ export function buildProgram(): Command {
 				}
 				if (listed.items.length === 0) {
 					console.log(
-						`Nothing staged to promote on ${arbiter}/main (work/pre-backlog/ and ${workFolderPrefix('specs-proposed')} are empty).`,
+						`Nothing staged to promote on ${arbiter}/main (${workFolderPrefix('tasks-backlog')} and ${workFolderPrefix('specs-proposed')} are empty).`,
 					);
 					return;
 				}
@@ -3890,7 +3890,7 @@ export function buildProgram(): Command {
 		.command('intake')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed work/backlog/<slug>.md PR carrying an `issue: N` closure link (read by a future CI close-job; not `Fixes #N`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as `do`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-spec/--propose-spec and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.',
+			`Front-of-funnel: turn a GitHub issue into the right work/ artifact. Reads issue #N + its comment thread via the issue seam (gh), runs a prompt→verdict decision, and dispatches it: a clear, small issue → a proposed ${workFolderPrefix('tasks-ready')}<slug>.md PR carrying an \`issue: N\` closure link (read by a future CI close-job; not \`Fixes #N\`). GATE-FREE — your explicit invocation IS the authorization (autoTask/autoBuild do NOT apply), exactly as \`do\`. A LOCAL one-shot AND the SAME command CI schedules. PER-OUTCOME integration modes (the artifact TYPE is decided at runtime): --merge/--propose set BOTH; --merge-spec/--propose-spec and --merge-task/--propose-task override per type; granular overrides the aggregate; unset ⇒ propose for both.`,
 		)
 		.argument(
 			'<number>',
@@ -4238,7 +4238,7 @@ export function buildProgram(): Command {
 		.command('find <folder>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Discover work/-participating repos under <folder> (a populated work/backlog/), then toggle-add the chosen ones via `remote add`. Interactive multi-select by default; --yes adds ALL discovered repos non-interactively.',
+			`Discover work/-participating repos under <folder> (a populated ${workFolderPrefix('tasks-ready')}), then toggle-add the chosen ones via \`remote add\`. Interactive multi-select by default; --yes adds ALL discovered repos non-interactively.`,
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option('--yes', 'add all discovered participating repos (no prompt)')

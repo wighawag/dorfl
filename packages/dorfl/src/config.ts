@@ -22,7 +22,7 @@ export type IntegrationMode = 'propose' | 'merge';
  * `runner-deterministic-slice-placement-policy-and-precedence`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
  * folder the runner lands the tasker's emitted task files in BY DEFAULT —
- * `'pre-backlog'` (staging — durable + readable but NOT in the agent-eligible
+ * `'backlog'` (staging — durable + readable but NOT in the agent-eligible
  * POOL; a runner/human promotion is needed to make an item claimable; the on-disk
  * folder for this value is `work/tasks/backlog/`) or `'ready'` (the agent-eligible
  * POOL — the trusted fast-path landing, on-disk `work/tasks/ready/`). The pool
@@ -30,12 +30,13 @@ export type IntegrationMode = 'propose' | 'merge';
  * `rename-task-pool-folder-todo-to-ready`, a CLEAN BREAK matching the on-disk
  * folder `tasks/ready/` and the spec-side `'ready'` pool spelling). The runner-deterministic
  * placement RESOLVER (`src/placement.ts`) layers on top: `explicit operator flag
- * > untrusted-origin ⇒ pre-backlog > tasksLandIn default > built-in
- * (pre-backlog)`. An untrusted-origin tasker output is FORCED to staging even in
+ * > untrusted-origin ⇒ backlog > tasksLandIn default > built-in
+ * (backlog)`. The staging value was renamed `'pre-backlog'` → `'backlog'`
+ * (matching the on-disk folder `tasks/backlog/`). An untrusted-origin tasker output is FORCED to staging even in
  * a `'ready'` repo (the positional analogue of the existing
  * `untrusted-origin-forces-build-propose` rule).
  */
-export type TasksLandIn = 'pre-backlog' | 'ready';
+export type TasksLandIn = 'backlog' | 'ready';
 
 /**
  * **Per-repo SPEC-PLACEMENT default** (spec
@@ -362,7 +363,7 @@ export interface Config {
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved
 	 * per-repo EXACTLY like {@link taskingIntegration} (flag `--tasks-land-in`
 	 * > env `DORFL_TASKS_LAND_IN` > per-repo > global > built-in
-	 * `'pre-backlog'`). The tasking path reads it and passes it as the
+	 * `'backlog'`). The tasking path reads it and passes it as the
 	 * CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order. The
@@ -752,14 +753,14 @@ export const DEFAULT_CONFIG: Config = {
 	// branch but deliberately skip the PR (the explicit suppress-PR intent that
 	// re-homes the old `provider: none` use). NOT a provider choice.
 	noPR: false,
-	// The tasker's emitted tasks land STAGED (`pre-backlog/`) by default — the
+	// The tasker's emitted tasks land STAGED (`tasks/backlog/`) by default — the
 	// conservative landing that preserves the tracer task's behaviour: an item is
 	// durable + readable but NOT in the agent-eligible pool until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `tasksLandIn:
 	// 'ready'` (or `--tasks-land-in ready` / `DORFL_TASKS_LAND_IN=ready`).
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	tasksLandIn: 'pre-backlog',
+	tasksLandIn: 'backlog',
 	// `intake`-authored specs land STAGED (`pre-proposed/`) by default — the
 	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a spec is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner

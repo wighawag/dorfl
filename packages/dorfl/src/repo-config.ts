@@ -73,11 +73,11 @@ export const REPO_ALLOWED_KEYS = [
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, spec
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker
-	// output lands STAGED (`pre-backlog/`, review-without-PR human-promote path) or
+	// output lands STAGED (`tasks/backlog/`, review-without-PR human-promote path) or
 	// straight in the agent-eligible POOL (`ready/`, trusted fast-path) is agreed
 	// by all collaborators + travels with the repo. Resolved per-repo through the
 	// SAME chain as `taskingIntegration` (flag > env > per-repo > global > built-in
-	// `pre-backlog`). DISTINCT from intake's per-emitted-type stamps (front door):
+	// `backlog`). DISTINCT from intake's per-emitted-type stamps (front door):
 	// this is a per-lifecycle PLACEMENT knob, inside the trust boundary,
 	// config-resolved. Fed into the shared placement resolver as the
 	// configured-default rung (`src/placement.ts`).
