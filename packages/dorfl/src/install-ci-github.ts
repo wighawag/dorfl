@@ -240,6 +240,66 @@ export class GitHubCIContext implements CIProviderContext {
 	}
 
 	/**
+	 * Detect the repo's DEFAULT BRANCH via
+	 * `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`. Returns
+	 * `undefined` when `gh` is unavailable / the repo is unknown / the call fails
+	 * / the name is empty — the caller falls back to `main` (and logs it) so a
+	 * `master`-defaulted repo is never silently protected on a hardcoded `main`.
+	 */
+	async getDefaultBranch(): Promise<string | undefined> {
+		if (!this.repo) {
+			return undefined;
+		}
+		const result = this.runGh([
+			'repo',
+			'view',
+			'--json',
+			'defaultBranchRef',
+			'--jq',
+			'.defaultBranchRef.name',
+		]);
+		if (result === undefined || result.status !== 0) {
+			return undefined;
+		}
+		const name = result.stdout.trim();
+		return name === '' ? undefined : name;
+	}
+
+	/**
+	 * Create the deadlock-guard RULESET via
+	 * `POST /repos/{owner}/{repo}/rulesets`. The `ruleset` body is JSON-piped on
+	 * stdin (`gh api --input -`) so the nested rule shape carries cleanly. Throws
+	 * on a non-zero exit; caller logs + falls back. See the module header of
+	 * `install-ci-branch-protection.ts` for why the required-check guard uses a
+	 * ruleset while base protection stays a classic PUT.
+	 */
+	async setBranchRuleset(ruleset: unknown): Promise<void> {
+		if (!this.repo) {
+			throw new Error('cannot create branch ruleset: repo unknown');
+		}
+		const args = [
+			'api',
+			'-X',
+			'POST',
+			'-H',
+			'Accept: application/vnd.github+json',
+			`repos/${this.repo}/rulesets`,
+			'--input',
+			'-',
+		];
+		const result = this.runGhWithInput(args, JSON.stringify(ruleset));
+		if (result === undefined) {
+			throw new Error('gh not available; cannot create branch ruleset');
+		}
+		if (result.status !== 0) {
+			throw new Error(
+				`gh api POST repos/${this.repo}/rulesets failed: ` +
+					(result.stderr.trim() || 'unknown error'),
+			);
+		}
+	}
+
+	/**
 	 * Configure Tier-1 branch protection via
 	 * `PUT /repos/{owner}/{repo}/branches/{branch}/protection`. The `spec` body
 	 * is JSON-piped on stdin (`gh api --input -`) so a complex shape (the
@@ -322,10 +382,16 @@ export class MemoryCIProviderContext implements CIProviderContext {
 	readonly repoSettings = new Map<string, boolean>();
 	/** Branch-protection spec recorded in memory (branch → spec). */
 	readonly branchProtections = new Map<string, unknown>();
+	/** Deadlock-guard rulesets recorded in memory (append-only). */
+	readonly rulesets: unknown[] = [];
 	/** What `getRepoAdminScope()` should return (tests configure). */
 	private readonly adminScope: boolean | undefined;
+	/** What `getDefaultBranch()` should return (tests configure). */
+	private readonly defaultBranch: string | undefined;
 	/** Whether `setBranchProtection` should throw (tests configure). */
 	private readonly branchProtectionError: string | undefined;
+	/** Whether `setBranchRuleset` should throw (tests configure). */
+	private readonly branchRulesetError: string | undefined;
 
 	constructor(options: {
 		workDir: string;
@@ -333,8 +399,15 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		ghAvailable?: boolean;
 		/** Fixture admin-scope verdict; `undefined` ⇒ unknown. */
 		adminScope?: boolean;
+		/**
+		 * Fixture default-branch name; `undefined` ⇒ lookup "fails" so the caller
+		 * exercises its `main` fallback (models a `gh` that could not resolve it).
+		 */
+		defaultBranch?: string;
 		/** When set, `setBranchProtection` throws with this message (failure path). */
 		branchProtectionError?: string;
+		/** When set, `setBranchRuleset` throws with this message (failure path). */
+		branchRulesetError?: string;
 		/**
 		 * The provider id this stub claims (default `github`). Tests of the
 		 * project-setup seam may override to assert the orchestrator's
@@ -347,7 +420,9 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		this.repo = options.repo;
 		this.ghAvailable = options.ghAvailable ?? false;
 		this.adminScope = options.adminScope;
+		this.defaultBranch = options.defaultBranch;
 		this.branchProtectionError = options.branchProtectionError;
+		this.branchRulesetError = options.branchRulesetError;
 		this.providerId = options.providerId ?? GITHUB_PROVIDER_ID;
 	}
 
@@ -367,10 +442,21 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		return this.adminScope;
 	}
 
+	async getDefaultBranch(): Promise<string | undefined> {
+		return this.defaultBranch;
+	}
+
 	async setBranchProtection(branch: string, spec: unknown): Promise<void> {
 		if (this.branchProtectionError !== undefined) {
 			throw new Error(this.branchProtectionError);
 		}
 		this.branchProtections.set(branch, spec);
+	}
+
+	async setBranchRuleset(ruleset: unknown): Promise<void> {
+		if (this.branchRulesetError !== undefined) {
+			throw new Error(this.branchRulesetError);
+		}
+		this.rulesets.push(ruleset);
 	}
 }

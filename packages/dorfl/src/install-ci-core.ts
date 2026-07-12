@@ -213,6 +213,26 @@ export interface CIProviderContext {
 	 */
 	setBranchProtection?(branch: string, spec: unknown): Promise<void>;
 	/**
+	 * OPTIONALLY report the repo's DEFAULT BRANCH name (GitHub:
+	 * `gh repo view --json defaultBranchRef`). Used by the Tier-1 branch-
+	 * protection step so the PUT and the printed `gh api` fallback both target
+	 * the repo's real default branch (a `master`-defaulted repo would 404 a
+	 * hardcoded `main`). Returns `undefined` when the lookup fails / is empty
+	 * (caller falls back to `main` and logs it). Absent on a provider that has
+	 * no default-branch concept.
+	 */
+	getDefaultBranch?(): Promise<string | undefined>;
+	/**
+	 * OPTIONALLY create/replace a branch RULESET (GitHub:
+	 * `POST /repos/{owner}/{repo}/rulesets`) carrying the deadlock-guard
+	 * `required_status_checks` rule with `do_not_enforce_on_create: true`. The
+	 * `ruleset` body (`BranchProtectionRuleset` in
+	 * `install-ci-branch-protection.ts`) is typed as `unknown` here to keep this
+	 * core seam free of the branch-protection module's import. Absent on a non-
+	 * GitHub provider. Throws on failure (caller catches + logs).
+	 */
+	setBranchRuleset?(ruleset: unknown): Promise<void>;
+	/**
 	 * OPTIONALLY render the user's project-setup payload (the value of
 	 * {@link CIConfigFile.projectSetup}[providerId]) to the NATIVE-SYNTAX
 	 * fragment the composite setup action splices in FIRST (before
