@@ -15,3 +15,11 @@ _Suggested default: Keep as historical record linked from the done task; mint th
 **Your answer** (write below this line):
 
 Mint the two named follow-ups as their own tasks, keep this note as their linked provenance, then delete it once those tasks exist. The two deferred follow-ups are real code-debt: (1) retire-in-progress-folder-and-union-member (purge the 'in-progress' member from IntegrationCoreInput.source union + WorkFolderKey and the repo layout), and (2) retire-needs-attention-probe-in-folderOnArbiterMain. They are legitimate standalone slices; this diagnosis memo is their provenance and can retire once they are tracked.
+
+## Q2
+
+**Your answer says to mint TWO follow-up tasks (retire-in-progress-folder-and-union-member, and retire-needs-attention-probe-in-folderOnArbiterMain), then retire this note. But this decision step can emit only ONE outcome per cycle. Pick one: (A) Mint them as ONE combined task (e.g. `retire-post-cutover-dead-folder-probes`) covering both retirements as sibling sections — cheaper, one PR, and they share the same underlying rationale (dead post-cutover residue). (B) Mint task #1 (`retire-in-progress-folder-and-union-member`) this cycle, and I re-surface this observation on the next advance to mint task #2 (`retire-needs-attention-probe-in-folderOnArbiterMain`) — keeps them as separate slices per your literal answer, at the cost of two advance cycles before this note can be deleted. (C) Same as (B) but reversed order (mint the `needs-attention` probe retirement first because it is the smaller/more isolated slice, then the union+folder purge). Which — A, B, or C?**
+
+<!-- q2 fields: id=q2 -->
+
+**Your answer** (write below this line):

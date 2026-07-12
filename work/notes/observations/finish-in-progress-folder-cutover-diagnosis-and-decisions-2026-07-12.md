@@ -36,3 +36,9 @@ No protocol edit needed. `skills/setup/protocol/WORK-CONTRACT.md` (and its byte-
 ## Originating observation
 
 `observation:in-progress-folder-also-appears-unwritten` (and its question sidecar) was ALREADY deleted by the advance commit that created this task (`c4c988b1`), so the acceptance criterion "the originating observation is deleted" is already satisfied — nothing left to delete.
+
+## Applied answers 2026-07-12
+
+### q1: What becomes of this observation — is it a historical decision record that should stay as-is (linked from the shipped task), or should its two named follow-ups be minted as tasks (and if so, which) before it is retired?
+
+Mint the two named follow-ups as their own tasks, keep this note as their linked provenance, then delete it once those tasks exist. The two deferred follow-ups are real code-debt: (1) retire-in-progress-folder-and-union-member (purge the 'in-progress' member from IntegrationCoreInput.source union + WorkFolderKey and the repo layout), and (2) retire-needs-attention-probe-in-folderOnArbiterMain. They are legitimate standalone slices; this diagnosis memo is their provenance and can retire once they are tracked.
