@@ -625,7 +625,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a reap job that drops its working-tree checkout (orphan sweep is working-tree based)', () => {
 		// Remove the `uses: actions/checkout` line within the reap job only.
 		const broken = base.replace(
-			/(reap-merged-branches:[\s\S]*?)- uses: actions\/checkout@v4\n\s*with:\n\s*fetch-depth: 0\n/,
+			/(reap-merged-branches:[\s\S]*?)- uses: actions\/checkout@v5\n\s*with:\n\s*fetch-depth: 0\n/,
 			'$1',
 		);
 		expectFlagged(broken, 'reap-checks-out-working-tree');

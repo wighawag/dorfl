@@ -21,7 +21,7 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '22'
 
@@ -32,7 +32,7 @@ runs:
         git config user.email "dorfl[bot]@users.noreply.github.com"
 
     - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v5
 
     - name: Add pnpm global bin to PATH
       shell: bash

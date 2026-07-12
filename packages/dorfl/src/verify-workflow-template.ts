@@ -100,7 +100,7 @@ jobs:
   ${VERIFY_CHECK_CONTEXT}:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup

@@ -807,7 +807,7 @@ ${indent(modelsJsonStr, 8)}
 	if (config.installSource === 'workspace') {
 		installSteps = `\
     - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v5
 
     - name: Add pnpm global bin to PATH
       shell: bash
@@ -923,7 +923,7 @@ runs:
   using: composite
   steps:
 ${projectSetupBlock}    - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '22'
 

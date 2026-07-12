@@ -376,7 +376,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		const action = generateSetupAction(modelsConfig);
 		expect(action).toContain('name: Setup dorfl');
 		expect(action).toContain('using: composite');
-		expect(action).toContain('actions/setup-node@v4');
+		expect(action).toContain('actions/setup-node@v5');
 		expect(action).toContain('npm install -g dorfl');
 		expect(action).toContain('npm install -g @mariozechner/pi-coding-agent');
 		expect(action).toContain('git config user.name "dorfl[bot]"');
@@ -450,7 +450,7 @@ describe('composite setup action generation (both auth modes)', () => {
 			installSource: 'workspace',
 		});
 		// The build-from-source steps.
-		expect(action).toContain('uses: pnpm/action-setup@v4');
+		expect(action).toContain('uses: pnpm/action-setup@v5');
 		expect(action).toContain('pnpm setup');
 		expect(action).toContain(
 			'echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"',
@@ -474,7 +474,7 @@ describe('composite setup action generation (both auth modes)', () => {
 			installSource: 'workspace',
 		});
 		for (const shared of [
-			'actions/setup-node@v4',
+			'actions/setup-node@v5',
 			"node-version: '22'",
 			'git config user.name "dorfl[bot]"',
 			'git config user.email "dorfl[bot]@users.noreply.github.com"',
@@ -515,7 +515,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		// project-setup hook (sibling task `install-ci-project-setup-hook`).
 		const action = generateSetupAction(modelsConfig);
 		// dorfl's own Node step still emits (the criterion's "setup-node still emits").
-		expect(action).toContain('actions/setup-node@v4');
+		expect(action).toContain('actions/setup-node@v5');
 		expect(action).toContain("node-version: '22'");
 		// Boundary is stated as a YAML comment (a deliberate, honest line) and
 		// names the project-setup hook by task slug so the supported escape hatch
@@ -1125,7 +1125,7 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 	/** A realistic native-syntax GitHub Actions snippet the user would supply. */
 	const snippet =
 		'- name: Setup pnpm\n' +
-		'  uses: pnpm/action-setup@v4\n' +
+		'  uses: pnpm/action-setup@v5\n' +
 		'  with:\n' +
 		'    version: 10\n' +
 		'- name: Install project dependencies\n' +
@@ -1159,7 +1159,7 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 		// Each verbatim line of the snippet appears, in order, in the output.
 		for (const line of [
 			'- name: Setup pnpm',
-			'uses: pnpm/action-setup@v4',
+			'uses: pnpm/action-setup@v5',
 			'version: 10',
 			'- name: Install project dependencies',
 			'run: pnpm install --frozen-lockfile',
@@ -1169,7 +1169,7 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 		// Ordering: the project-setup steps land BEFORE setup-node + dorfl-install
 		// + the agent-auth (models.json) step.
 		const posPnpm = action.indexOf('Setup pnpm');
-		const posNode = action.indexOf('actions/setup-node@v4');
+		const posNode = action.indexOf('actions/setup-node@v5');
 		const posDorfl = action.indexOf('npm install -g dorfl');
 		const posAuth = action.indexOf('Configure agent models (models.json)');
 		expect(posPnpm).toBeGreaterThan(0);
@@ -1333,10 +1333,10 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 		);
 		// Snippet appears verbatim and BEFORE setup-node / dorfl install.
 		expect(written).toContain('- name: Setup pnpm');
-		expect(written).toContain('uses: pnpm/action-setup@v4');
+		expect(written).toContain('uses: pnpm/action-setup@v5');
 		expect(written).toContain('pnpm install --frozen-lockfile');
 		expect(written.indexOf('Setup pnpm')).toBeLessThan(
-			written.indexOf('actions/setup-node@v4'),
+			written.indexOf('actions/setup-node@v5'),
 		);
 		expect(written.indexOf('Setup pnpm')).toBeLessThan(
 			written.indexOf('npm install -g dorfl'),

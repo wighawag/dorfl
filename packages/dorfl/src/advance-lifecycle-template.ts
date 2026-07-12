@@ -285,7 +285,7 @@ jobs:
       items: \${{ steps.scan.outputs.items }}
       any: \${{ steps.scan.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup
@@ -352,7 +352,7 @@ jobs:
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
@@ -413,7 +413,7 @@ jobs:
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
@@ -463,7 +463,7 @@ jobs:
     if: \${{ (github.event.inputs.sweepMergedBranches || 'true') == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup
