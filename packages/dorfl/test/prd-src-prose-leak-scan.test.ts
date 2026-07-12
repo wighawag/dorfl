@@ -310,6 +310,21 @@ function collectTs(dir: string): string[] {
 	return out;
 }
 
+/**
+ * Read a walk-enumerated file, tolerating a concurrent DELETE. The walk snapshots
+ * names then reads each; a sibling test writing then removing a transient `.ts`
+ * under `src/**` can unlink a path between snapshot and read. Treat a vanished
+ * file as empty rather than throwing ENOENT (a flaky red).
+ */
+function readIfPresent(file: string): string {
+	try {
+		return readFileSync(file, 'utf8');
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
+		throw err;
+	}
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // The leak lens (WORD + folder path over PROSE spans, minus the allow-list).
 // ───────────────────────────────────────────────────────────────────────────
@@ -562,7 +577,7 @@ describe('prd → spec src PROSE + runtime-string leak scan', () => {
 	it('NO artifact-word prd/PRD/Prd prose and NO work/prds/ runtime string in src outside the code-alias allow-list', () => {
 		const leaks: Leak[] = [];
 		for (const file of collectTs(SRC_DIR)) {
-			leaks.push(...fileLeaks(relTo(file), readFileSync(file, 'utf8')));
+			leaks.push(...fileLeaks(relTo(file), readIfPresent(file)));
 		}
 		expect(
 			leaks,

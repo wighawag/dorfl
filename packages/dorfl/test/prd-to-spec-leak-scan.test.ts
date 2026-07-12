@@ -368,6 +368,22 @@ function collectFiles(dir: string, exts: readonly string[]): string[] {
 	return out;
 }
 
+/**
+ * Read a file the tree-walk enumerated, tolerating a concurrent DELETE. The walk
+ * `readdirSync`-snapshots names, then reads each; a sibling test that writes then
+ * removes a transient `.ts` under `src/**` (e.g. the capability-pickup fixture)
+ * can unlink a path between snapshot and read. Treat a vanished file as empty
+ * (nothing to scan) rather than throwing ENOENT and reddening the suite flakily.
+ */
+function readIfPresent(file: string): string {
+	try {
+		return readFileSync(file, 'utf8');
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
+		throw err;
+	}
+}
+
 /** All the files the SOURCE-part scan walks (option A scope). */
 function scannedFiles(): string[] {
 	const files: string[] = [];
@@ -607,7 +623,7 @@ describe('prd → spec leak scan — the SOURCE-part cutover acceptance GATE', (
 		const leaks: Leak[] = [];
 		for (const file of scannedFiles()) {
 			const rel = relTo(file);
-			const text = readFileSync(file, 'utf8');
+			const text = readIfPresent(file);
 			if (file.endsWith('.ts')) {
 				leaks.push(...forwardLeaksTs(rel, tokenizeTs(text)));
 			} else {
@@ -636,7 +652,7 @@ describe('prd → spec leak scan — the SOURCE-part cutover acceptance GATE', (
 			// detector, NOT mangled prose — exactly why THIS test's own copy lives in
 			// `test/` (unscanned). Exempt that ONE module for the same reason.
 			if (rel.endsWith(join('src', 'prd-to-spec.ts'))) continue;
-			leaks.push(...reverseLeaks(rel, readFileSync(file, 'utf8')));
+			leaks.push(...reverseLeaks(rel, readIfPresent(file)));
 		}
 		expect(
 			leaks,

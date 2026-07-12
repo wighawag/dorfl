@@ -22,6 +22,10 @@ Scoped the two scans (option 1, not disabling/deleting the gate): extended `prd-
 - **Narrow the WORD gate's `work/**` scope.** It already excludes `work/questions/` (derived sidecars) and there is a landed task doing exactly that carve-out. Consider whether ACTIVE `work/tasks/*` and `work/notes/*` bodies (as opposed to living guidance docs + code) should be in scope at all, given they are provenance/working-material, not the current-guidance surface the cutover is protecting.
 - **The `provenance-file-basenames-widened-criterion-and-expiry-guard` task already exists** and adds an expiry guard so the list self-deletes once `prd` is fully purged. Landing it would at least make the rot direction safe, but does not stop the reactive-append churn.
 
+## Update (same session): the intermittent red was ALSO a real flake, now fixed
+
+Separately from the scope issue above, the leak scans were INTERMITTENTLY red under the full parallel suite (a different assertion each run). Root cause: `packages/dorfl/test/install-ci.test.ts`'s capability-pickup test wrote a transient `zzz-fixture-cap.ts` into the REAL `packages/dorfl/src/install-ci-capabilities/` tree and deleted it in a `finally`. The leak scans `readdirSync`-snapshot `src/**` then `readFileSync` each file; if the fixture was unlinked between snapshot and read, the scan threw ENOENT and reddened whichever assertion was mid-walk. Fixed by (a) pointing that test at a TEMP dir via `loadCapabilityRegistry(dir)` with the core imported by absolute `file://` URL (no writes into the live source tree), and (b) making all three leak scans' walk-time reads ENOENT-tolerant (`readIfPresent`) as defense-in-depth. Five consecutive full-suite runs are clean.
+
 ## Pointers
 
 - Scans: `packages/dorfl/test/prd-word-cutover-leak-scan.test.ts`, `packages/dorfl/test/prd-to-spec-leak-scan.test.ts`.

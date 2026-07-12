@@ -938,23 +938,30 @@ describe('capability-emitter registry seam (a new capability is a NEW file)', ()
 
 	it('a brand-new capability file in the directory is picked up with no other edit', async () => {
 		// Simulate a sibling task ADDING a capability EXACTLY as it would: drop a new
-		// module into the REAL `install-ci-capabilities/` directory next to the source
-		// (using the same relative core import the shipped reference uses), then run
-		// the default-directory scan. Its pickup proves registration needs NO edit to
-		// any shared list/switch (the file-orthogonality contract). Cleaned up after.
-		const capDir = new URL('../src/install-ci-capabilities/', import.meta.url)
-			.pathname;
-		const fixturePath = join(capDir, 'zzz-fixture-cap.ts');
+		// module into a capabilities directory (using the SAME `registerCapability`
+		// core import the shipped reference uses), then run the directory scan. Its
+		// pickup proves registration needs NO edit to any shared list/switch (the
+		// file-orthogonality contract).
+		//
+		// The fixture is written into a TEMP dir (scanned via the `dir` arg), NOT the
+		// real `src/install-ci-capabilities/` tree: writing a transient `.ts` into the
+		// live source tree races the tree-walking leak scans (`prd-*-leak-scan`),
+		// which `readdirSync` then `readFileSync` the same `src/**` and throw ENOENT
+		// (flaky red) if this test's cleanup deletes the fixture mid-walk. The core
+		// import is resolved to an ABSOLUTE file:// URL so the temp module can still
+		// find `install-ci-core` from outside the source tree.
+		const coreUrl = new URL('../src/install-ci-core.ts', import.meta.url).href;
+		const capDir = mkdtempSync(join(tmpdir(), 'dorfl-cap-pickup-'));
 		try {
 			writeFileSync(
-				fixturePath,
-				"import {registerCapability} from '../install-ci-core.js';\n" +
+				join(capDir, 'zzz-fixture-cap.ts'),
+				`import {registerCapability} from ${JSON.stringify(coreUrl)};\n` +
 					"registerCapability({id: 'zzz-fixture-cap', label: 'Fixture', emit: () => []});\n",
 			);
-			const caps = await loadCapabilityRegistry();
+			const caps = await loadCapabilityRegistry(capDir);
 			expect(caps.map((c) => c.id)).toContain('zzz-fixture-cap');
 		} finally {
-			rmSync(fixturePath, {force: true});
+			rmSync(capDir, {recursive: true, force: true});
 		}
 	});
 });

@@ -222,6 +222,20 @@ function scannedFiles(): string[] {
 	return out;
 }
 
+/**
+ * Read a walk-enumerated file, tolerating a concurrent DELETE (a sibling test
+ * writing then removing a transient file between the readdir snapshot and this
+ * read). Treat a vanished file as empty rather than throwing ENOENT (flaky red).
+ */
+function readIfPresent(file: string): string {
+	try {
+		return readFileSync(file, 'utf8');
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
+		throw err;
+	}
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // PROVENANCE FILES: task / observation / spec / idea bodies whose OWN SUBJECT is
 // the retired `prd` vocabulary — the sweep that removes it, the skill/guard
@@ -706,7 +720,7 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 	it('NO standalone artifact-word prd/PRD/Prd and NO work/prds/ path outside the PRESERVE allow-list', () => {
 		const leaks: Leak[] = [];
 		for (const file of scannedFiles()) {
-			leaks.push(...fileLeaks(relTo(file), readFileSync(file, 'utf8')));
+			leaks.push(...fileLeaks(relTo(file), readIfPresent(file)));
 		}
 		expect(
 			leaks,
