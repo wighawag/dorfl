@@ -17,7 +17,7 @@ import {
  * dispatcher tests:
  *
  *  1. The INJECTED decider seam drives the engine with a CANNED verdict — one per
- *     outcome of the superset {task | spec | adr | delete | ask}.
+ *     outcome of the superset {task | spec | adr | delete | resolve | ask}.
  *  2. The allowed-outcome GUARD: a verdict outside the caller's `allowedOutcomes`
  *     is rejected LOUDLY (never silently coerced); a caller that does not allow
  *     `adr` can never receive it. An empty set is a programming error caught up
@@ -37,7 +37,14 @@ function cannedDecider<TInput>(
 }
 
 /** The full superset every caller draws its allowed SUBSET from. */
-const SUPERSET: DecisionOutcome[] = ['task', 'spec', 'adr', 'delete', 'ask'];
+const SUPERSET: DecisionOutcome[] = [
+	'task',
+	'spec',
+	'adr',
+	'delete',
+	'resolve',
+	'ask',
+];
 
 // ---------------------------------------------------------------------------
 // 1. The injected decider seam — one canned verdict PER outcome.
@@ -80,6 +87,15 @@ describe('decide — the injected seam drives one canned verdict per outcome', (
 		const verdict: DecisionVerdict = {
 			outcome: 'delete',
 			deleteReason: 'the answer says to drop it',
+		};
+		const out = await decide({}, cannedDecider(verdict), SUPERSET);
+		expect(out).toEqual(verdict);
+	});
+
+	it('returns a `resolve` verdict verbatim (settle the loop, mint nothing, keep the note)', async () => {
+		const verdict: DecisionVerdict = {
+			outcome: 'resolve',
+			resolveReason: 'acknowledged; keep this on record, no artifact to mint',
 		};
 		const out = await decide({}, cannedDecider(verdict), SUPERSET);
 		expect(out).toEqual(verdict);
@@ -221,6 +237,36 @@ describe('parseDecisionVerdict — the parse table', () => {
 		expect(v.deleteReason).toBe('stale');
 	});
 
+	it('parses a `resolve` verdict (resolveReason only)', () => {
+		const v = parseDecisionVerdict(
+			'The human settled it; nothing to mint.\n\n```json\n{"outcome":"resolve","resolveReason":"keep on record, no artifact"}\n```',
+		);
+		expect(v.outcome).toBe('resolve');
+		expect(v.resolveReason).toBe('keep on record, no artifact');
+		// resolve mints nothing + keeps the note, so it carries NEITHER a
+		// deleteReason (that is the sibling DROP verdict) NOR any mint channel.
+		expect(v.deleteReason).toBeUndefined();
+		expect(v.taskSlug).toBeUndefined();
+		expect(v.specSlug).toBeUndefined();
+		expect(v.adrSlug).toBeUndefined();
+	});
+
+	it('parses a `resolve` verdict tolerating a MISSING resolveReason (the field is optional/advisory)', () => {
+		// resolveReason is advisory context only; the durable disposition record is
+		// the harvested `## Applied answers` block, so a bare `resolve` is well-formed.
+		const v = parseDecisionVerdict('{"outcome":"resolve"}');
+		expect(v.outcome).toBe('resolve');
+		expect(v.resolveReason).toBeUndefined();
+	});
+
+	it('DROPS a malformed (non-string) resolveReason rather than carrying garbage', () => {
+		// Mirrors how every other reason/content channel is validated: a non-string
+		// field is discarded (kept absent), never coerced onto the verdict shape.
+		const v = parseDecisionVerdict('{"outcome":"resolve","resolveReason":42}');
+		expect(v.outcome).toBe('resolve');
+		expect(v.resolveReason).toBeUndefined();
+	});
+
 	it('parses an `ask` verdict (question only)', () => {
 		const v = parseDecisionVerdict('{"outcome":"ask","question":"Which one?"}');
 		expect(v.outcome).toBe('ask');
@@ -249,9 +295,9 @@ describe('parseDecisionVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in the superset {task,spec,adr,delete,ask}', () => {
+	it('THROWS on an outcome not in the superset {task,spec,adr,delete,resolve,ask}', () => {
 		expect(() => parseDecisionVerdict('{"outcome":"bounce"}')).toThrow(
-			/task\|spec\|adr\|delete\|ask/,
+			/task\|spec\|adr\|delete\|resolve\|ask/,
 		);
 	});
 });

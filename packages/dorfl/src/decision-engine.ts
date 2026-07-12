@@ -45,6 +45,12 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *   14 keeps the engine agnostic so this is added without re-architecting).
  * - **delete** — delete the SOURCE the input is about (a direct, git-recoverable
  *   removal — decision 12).
+ * - **resolve** — the answer SETTLES the item with NO artifact to mint and the
+ *   note RETAINED: route to the apply persist's resolve-fully path (harvest the
+ *   answers into the body, clear `needsAnswers`, delete the sidecar) so the
+ *   already-answered question stops re-surfacing. The SIBLING of `delete` (both
+ *   end the question-loop minting nothing), but `resolve` KEEPS the note whereas
+ *   `delete` drops it (task `apply-decide-resolve-verdict-mint-nothing`).
  * - **ask** — ask the operator a follow-up (re-pause; the conversation
  *   accumulates — decision 5).
  *
@@ -55,7 +61,13 @@ import {extractJsonObjectSpan} from './verdict-json.js';
 // parent-spec verdict outcome is `'spec'` (renamed from ''prd''); the decider
 // prompt emits it and the parser accepts it. This is a fresh per-call LLM verdict
 // (nothing ''prd''-valued is persisted), so the rename needs no on-disk alias.
-export type DecisionOutcome = 'task' | 'spec' | 'adr' | 'delete' | 'ask';
+export type DecisionOutcome =
+	| 'task'
+	| 'spec'
+	| 'adr'
+	| 'delete'
+	| 'resolve'
+	| 'ask';
 
 /**
  * The VERDICT the decider returns — the chosen {@link DecisionOutcome} plus the
@@ -98,6 +110,15 @@ export interface DecisionVerdict {
 	 * delete is git-recoverable, the reason in the commit message).
 	 */
 	deleteReason?: string;
+	/**
+	 * Why the item is settled with NOTHING to mint (`resolve` outcome) — the
+	 * SIBLING of {@link deleteReason}, but the note is RETAINED (the apply rung
+	 * routes this to the resolve-fully path, which harvests the answers into the
+	 * body rather than deleting the note). The reason is advisory context for the
+	 * human/reviewer; the durable disposition record is the `## Applied answers`
+	 * block the resolve-fully path writes.
+	 */
+	resolveReason?: string;
 	/**
 	 * The drafted follow-up question(s) (`ask` outcome) — the caller appends them
 	 * to the conversation and re-pauses (decision 5: reuse the existing
@@ -200,7 +221,7 @@ export async function decide<TInput>(
  * object carrying an `"outcome"` field via the SHARED {@link extractJsonObjectSpan}
  * (the same extractor every prompt→verdict→dispatch seam in this package uses —
  * NOT a forked copy), `JSON.parse`s it, and validates the shape:
- * `outcome ∈ {task,spec,adr,delete,ask}`.
+ * `outcome ∈ {task,spec,adr,delete,resolve,ask}`.
  *
  * This validates the verdict is a WELL-FORMED member of the SUPERSET; the
  * caller-specific allowed-outcome guard ({@link decide}) then rejects one outside
@@ -236,11 +257,12 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 		outcome !== 'spec' &&
 		outcome !== 'adr' &&
 		outcome !== 'delete' &&
+		outcome !== 'resolve' &&
 		outcome !== 'ask'
 	) {
 		throw new Error(
-			`decision verdict 'outcome' was not one of task|spec|adr|delete|ask (got ` +
-				`${JSON.stringify(outcome)}).`,
+			`decision verdict 'outcome' was not one of task|spec|adr|delete|resolve|ask ` +
+				`(got ${JSON.stringify(outcome)}).`,
 		);
 	}
 	// Map the per-outcome fields onto the verdict shape, keeping ONLY the strings
@@ -266,6 +288,9 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 		...(str(obj.adrBody) !== undefined ? {adrBody: str(obj.adrBody)} : {}),
 		...(str(obj.deleteReason) !== undefined
 			? {deleteReason: str(obj.deleteReason)}
+			: {}),
+		...(str(obj.resolveReason) !== undefined
+			? {resolveReason: str(obj.resolveReason)}
 			: {}),
 		...(str(obj.question) !== undefined ? {question: str(obj.question)} : {}),
 	};

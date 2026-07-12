@@ -29,8 +29,13 @@ import {
  * from the agent's VERDICT, NOT a human `promote-*` field.
  *
  * **The allowed set** (the SUBSET the apply rung passes to `decide`):
- * `{task | spec | adr | delete | ask}` \u2014 i.e. `{mint-task | mint-spec | mint-adr |
- * delete-source | ask-follow-up}`. `adr` was DEFERRED at the keystone launch (no
+ * `{task | spec | adr | delete | resolve | ask}` \u2014 i.e. `{mint-task | mint-spec |
+ * mint-adr | delete-source | resolve-no-mint | ask-follow-up}`. `resolve` was added
+ * by the task `apply-decide-resolve-verdict-mint-nothing` so the decider can
+ * honestly handle "the human answered, keep the note on record, mint nothing"
+ * (previously it had no valid verdict for that case and looped on `ask`,
+ * re-surfacing an already-answered question every tick). `adr` was DEFERRED at the
+ * keystone launch (no
  * ADR-mint path existed yet) and is now WIRED by the follow-on task
  * `agentic-apply-mint-adr-route`, which added the {@link
  * import('./mint-adr.js').mintAdr} route and widened this set. Intake's set is
@@ -55,6 +60,7 @@ export const APPLY_ALLOWED_OUTCOMES: readonly DecisionOutcome[] = [
 	'spec',
 	'adr',
 	'delete',
+	'resolve',
 	'ask',
 ];
 
@@ -136,7 +142,8 @@ export function buildApplyDecisionInput(opts: {
  * the human's recorded ANSWER(S) + the SOURCE item and emit a single
  * `{outcome, \u2026}` verdict ({@link parseDecisionVerdict} reads it). The agent decides
  * what to DO with the answered signal \u2014 mint a self-contained task, mint a SPEC,
- * mint an ADR, delete the source, or ask one BATCH of follow-up questions \u2014
+ * mint an ADR, delete the source, resolve it (settle the loop, mint nothing, KEEP
+ * the note), or ask one BATCH of follow-up questions \u2014
  * grounded in the source's full context. It writes NOTHING (the engine acts on
  * the verdict).
  *
@@ -181,6 +188,14 @@ export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
 		`  - "delete": the answer means this signal should be DROPPED. Emit`,
 		`    {"outcome":"delete","deleteReason":"\u2026"} (a single revertible deletion;`,
 		`    the reason rides the commit message, git history is the archive).`,
+		`  - "resolve": the answer SETTLES this item and there is NOTHING to mint (no`,
+		`    task/spec/adr) \u2014 the correct move is to CLOSE the question-loop while`,
+		`    KEEPING the note on record (e.g. an evidence/watch-item observation whose`,
+		`    answer is "acknowledged, keep this on record, no artifact"). The answers are`,
+		`    harvested into the item body and the loop is cleared; the note is RETAINED`,
+		`    (this is the sibling of "delete", which DROPS the note \u2014 pick "resolve" when`,
+		`    the note should SURVIVE, "delete" when it should not). Emit`,
+		`    {"outcome":"resolve","resolveReason":"\u2026"}.`,
 		`  - "ask": you need more from the human before acting. Emit`,
 		`    {"outcome":"ask","question":"\u2026"} \u2014 ask everything you still need as ONE`,
 		`    batch (never a drip); the engine appends it and re-pauses.`,

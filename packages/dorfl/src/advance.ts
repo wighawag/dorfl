@@ -274,7 +274,7 @@ export interface AdvanceContext {
 	 * `agentic-apply-retire-disposition-vocabulary`): the fresh-context decision
 	 * agent the apply rung runs on a fully-answered OBSERVATION to choose what to DO
 	 * with the signal (`mint-task | mint-spec | mint-adr | delete-source |
-	 * ask-follow-up`),
+	 * resolve-no-mint | ask-follow-up`),
 	 * grounded in the source's full context. It is the injected
 	 * {@link ApplyDecider} the shared `decide(input, allowedOutcomes)` engine runs;
 	 * tests inject a CANNED verdict (no model). `undefined` ⇒ the apply rung defaults
@@ -834,8 +834,9 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
  * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
  * type/context)` via the injected {@link ApplyDecider}, allowing the set
- * `{task | spec | adr | delete | ask}` (= `{mint-task | mint-spec | mint-adr |
- * delete-source | ask-follow-up}`; `adr` is now WIRED by task
+ * `{task | spec | adr | delete | resolve | ask}` (= `{mint-task | mint-spec |
+ * mint-adr | delete-source | resolve-no-mint | ask-follow-up}`; `adr` is now WIRED
+ * by task
  * `agentic-apply-mint-adr-route`, which added the {@link mintAdr} route). The
  * verdict ROUTES:
  *   - `ask` → the EXISTING append/re-pause loop ({@link applyAnsweredQuestions}
@@ -847,6 +848,9 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  *   - `task` / `spec` → {@link promoteObservation} (mint a SELF-CONTAINED artifact +
  *     `git rm` the source + sidecar in the SAME atomic commit); the artifact type
  *     comes from the agent's VERDICT, NOT a human `promote-*` field;
+ *   - `resolve` → {@link applyAnsweredQuestions} resolve-fully (harvest answers
+ *     into the body, clear `needsAnswers`, delete the sidecar; the note is
+ *     RETAINED — the sibling of `delete` that mints nothing but keeps the note);
  *   - `delete` → {@link applyAnsweredQuestions} discharge-by-deletion (`git rm`
  *     source + sidecar in one revertible commit, the reason in the commit message).
  *
@@ -1156,10 +1160,16 @@ function findItemPath(
  *   - `adr` → {@link mintAdr} (mint a self-contained ADR into `docs/adr/` + delete
  *     source in the same atomic commit; the SIBLING route for the off-board target,
  *     task `agentic-apply-mint-adr-route`);
+ *   - `resolve` → {@link applyAnsweredQuestions}'s resolve-fully path (harvest the
+ *     answers into `## Applied answers`, strip the open-questions block, clear
+ *     `needsAnswers`, DELETE the sidecar — the note is RETAINED). The sibling of
+ *     `delete` that KEEPS the note instead of git-rm-ing it (task
+ *     `apply-decide-resolve-verdict-mint-nothing`);
  *   - `delete` → {@link applyAnsweredQuestions}'s discharge-by-deletion (`git rm`
  *     source + sidecar in one revertible commit, the reason in the message).
  *
- * The allowed set is `{task | spec | adr | delete | ask}`; a verdict outside it is
+ * The allowed set is `{task | spec | adr | delete | resolve | ask}`; a verdict
+ * outside it is
  * rejected by the engine's allowed-outcome guard ({@link DisallowedOutcomeError})
  * and mapped onto a usage-error — never dispatched.
  */
@@ -1325,6 +1335,36 @@ async function applyAgenticDecision(
 							: result.outcome === 'contended'
 								? 'contended'
 								: 'usage-error',
+				message: result.message,
+			};
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `apply ${item}: ${detail}`,
+			};
+		}
+	}
+
+	if (verdict.outcome === 'resolve') {
+		// resolve-no-mint → the EXISTING resolve-fully path (task
+		// `apply-decide-resolve-verdict-mint-nothing`). The answer SETTLES the item
+		// with NOTHING to mint and the note RETAINED: call `applyAnsweredQuestions`
+		// with NEITHER `appendQuestions` (re-pause) NOR `discharge` (delete), so it
+		// takes the default resolve-fully branch — harvest the answers into `##
+		// Applied answers`, strip the marker-fenced open-questions block, clear
+		// `needsAnswers`, and DELETE the sidecar in ONE atomic commit. Invariant-clean
+		// (`needsAnswers:false` ⟺ no active sidecar). The note file is KEPT (this is
+		// the sibling of `delete`, which git-rm's it). `resolveReason` is advisory
+		// context only; the durable disposition record is the harvested `## Applied
+		// answers` block the resolve-fully path writes (NOT a separate convention).
+		const apply = context.applyPersist ?? applyAnsweredQuestions;
+		try {
+			const result = apply({cwd, item, itemPath, note});
+			return {
+				exitCode: 0,
+				outcome: result.outcome === 'vanished' ? 'vanished' : 'advanced',
 				message: result.message,
 			};
 		} catch (err) {
