@@ -259,7 +259,10 @@ describe('apply rung — answered merge-question dispatches the runner-action la
 		});
 
 		expect(result.exitCode).toBe(1);
-		expect(result.outcome).toBe('usage-error');
+		// `merge-refused` (task `merge-action-nits-followup` nit 2), NOT
+		// `usage-error` — the refusal is a rung-level signal (the land was denied
+		// on the rebased tip), not a caller-usage error.
+		expect(result.outcome).toBe('merge-refused');
 		expect(result.rung).toBe('apply');
 		expect(calls).toHaveLength(1);
 		// the sidecar STAYS (not resolved): the open answer surfaces for follow-up
@@ -532,6 +535,7 @@ describe('apply rung — answered merge-question LANDS via the existing land pri
 
 		// External behaviour: refusal, main never received the failing tree.
 		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('merge-refused');
 		expect(result.rung).toBe('apply');
 		expect(existsOnArbiterMain(repo, 'done', 'stale-red')).toBe(false);
 		// The kept tip is NOT reachable on `<arbiter>/main` (the work that would
@@ -595,5 +599,121 @@ describe('performMergeAction — hold / drop early-return (no worktree spun up)'
 		});
 		expect(result.outcome).toBe('drop');
 		expect(result.integration).toBeUndefined();
+	});
+
+	it('non-task source item ⇒ throws a loud invariant error (nit 4)', async () => {
+		const detected = {
+			verb: 'merge' as const,
+			entry: {
+				id: 'q1',
+				question: 'Land?',
+				context: '',
+				answer: 'merge',
+				kind: 'merge' as const,
+			},
+		};
+		// A `spec:` sidecar (hypothetical future-surfacer bug): the dispatcher
+		// must FAIL LOUDLY at entry rather than silently mis-targeting
+		// `work/task-<slug>` for a non-task item.
+		await expect(
+			performMergeAction({
+				action: detected,
+				item: 'spec:some-spec',
+				slug: 'some-spec',
+				cwd: scratch.root,
+				arbiter: 'origin',
+				arbiterUrl: 'file:///nope',
+				workspacesDir: join(scratch.root, 'ws'),
+			}),
+		).rejects.toThrow(
+			/spec:some-spec.*type.*spec.*merge-action-nits-followup/s,
+		);
+	});
+});
+
+// --- nit 1: `detectAnsweredMergeAction` re-stale ordering --------------------
+
+describe('detectAnsweredMergeAction — re-stale re-surface ordering (nit 1)', () => {
+	/**
+	 * The scenario the task pins down:
+	 *   1. original `kind: merge` entry answered `merge` (apply would fire);
+	 *   2. restale re-surface appends a NEW `kind: merge` follow-up (unanswered);
+	 *   3. the detector MUST see the append as "pending / no answered merge to
+	 *      act on" — the stale prior answer must NOT re-drive the dispatcher;
+	 *   4. once the follow-up is answered, the detector returns the LATEST
+	 *      answered `kind: merge` entry, never the stale prior one.
+	 */
+	it('a re-surfaced unanswered follow-up masks the stale prior answer (apply must NOT fire)', () => {
+		const repo = join(scratch.root, 'project');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		const item = 'task:restale';
+
+		let model = newSidecar(item, [
+			{
+				question: 'Land `work/task-restale`?',
+				context: 'original merge-question',
+				default: 'merge | hold | drop',
+				kind: 'merge',
+			},
+			{
+				question: 'Merge-base moved; re-confirm?',
+				context: 'restale follow-up (unanswered)',
+				default: 'merge | hold | drop',
+				kind: 'merge',
+			},
+		]);
+		// Original answered `merge`; the follow-up appended by the restale branch
+		// is unanswered (mimics `applyAnsweredQuestions({appendQuestions:[...]})`).
+		model = {
+			...model,
+			entries: model.entries.map((e, i) => ({
+				...e,
+				answer: i === 0 ? 'merge' : '',
+			})),
+		};
+		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(join(repo, sidecarPathFor(item)), serialiseSidecar(model));
+
+		// The unanswered follow-up MASKS the stale prior answer — detector returns
+		// undefined so the apply rung does NOT re-fire the land against a stale sibling.
+		expect(detectAnsweredMergeAction(repo, item)).toBeUndefined();
+	});
+
+	it('once the follow-up is answered, the LATEST answer wins (a fresh `hold` beats a stale `merge`)', () => {
+		const repo = join(scratch.root, 'project');
+		mkdirSync(repo, {recursive: true});
+		gitIn(['init', '-q', '-b', 'main'], repo);
+		const item = 'task:restale-answered';
+
+		let model = newSidecar(item, [
+			{
+				question: 'Land `work/task-restale-answered`?',
+				context: 'original merge-question',
+				default: 'merge | hold | drop',
+				kind: 'merge',
+			},
+			{
+				question: 'Merge-base moved; re-confirm?',
+				context: 'restale follow-up',
+				default: 'merge | hold | drop',
+				kind: 'merge',
+			},
+		]);
+		// Original stale answer `merge`; the fresh follow-up answered `hold`.
+		model = {
+			...model,
+			entries: model.entries.map((e, i) => ({
+				...e,
+				answer: i === 0 ? 'merge' : 'hold',
+			})),
+		};
+		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(join(repo, sidecarPathFor(item)), serialiseSidecar(model));
+
+		const detected = detectAnsweredMergeAction(repo, item);
+		expect(detected?.verb).toBe('hold');
+		// And explicitly: NOT the stale `merge` on the first entry.
+		expect(detected?.entry.question).toContain('re-confirm');
 	});
 });

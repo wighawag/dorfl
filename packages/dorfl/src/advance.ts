@@ -135,7 +135,18 @@ export type AdvanceOutcome =
 	| 'lost'
 	| 'contended'
 	| 'not-implemented'
-	| 'invariant-violation';
+	| 'invariant-violation'
+	/**
+	 * The answered-merge dispatcher REFUSED the land on the rebased tip (RED
+	 * re-verify, rebase conflict, or a pre-checkout failure). Distinct from
+	 * `usage-error` (which is reserved for genuine caller-usage errors — e.g.
+	 * the workspacesDir-unset guard below). `performIntegration` has already
+	 * routed the item to needs-attention via its shared seam, so `main` never
+	 * received a failing tree; the sidecar is LEFT IN PLACE so the open answer
+	 * stays surfaced for a human follow-up. `exitCode: 1`.
+	 * (task `merge-action-nits-followup` nit 2.)
+	 */
+	| 'merge-refused';
 
 /** Maps onto the claim-CAS exit codes (identical semantics). */
 export type AdvanceExitCode = 0 | 1 | 2 | 3;
@@ -322,9 +333,13 @@ export interface AdvanceContext {
 	 * The execution working area (`workspacesDir`, default `~/.dorfl`) the
 	 * answered-merge LAND uses to cut a per-job worktree from the hub mirror
 	 * (via `workspace.ts` `createJob`). Unset ⇒ no `workspacesDir` is available
-	 * to the dispatcher, so an answered `kind: merge` entry is REFUSED (clean
-	 * surfacing); the answer stays for a follow-up. The registry-set advance
-	 * driver threads the resolved `workspacesDir` here.
+	 * to the dispatcher, so an answered `kind: merge` entry is REFUSED as a
+	 * genuine caller-usage error (outcome `usage-error`, `exitCode: 1`) and the
+	 * answer stays surfaced for a follow-up — threading `workspacesDir` is the
+	 * caller's contract, and forgetting it gets this documented clean refusal
+	 * rather than a mysterious downstream failure (task
+	 * `merge-action-nits-followup` nit 3). The registry-set advance driver
+	 * threads the resolved `workspacesDir` here.
 	 * (spec `land-time-reverify-and-parallel-merge-ceiling`, task
 	 * `apply-rung-merge-disposition`)
 	 */
@@ -995,8 +1010,13 @@ async function maybeRunMergeAction(
 		// bounce to needs-attention through its own shared seam). SHORT-CIRCUIT:
 		// leave the sidecar so the open answer stays surfaced — the apply rung
 		// MUST NOT also resolve it (the next surfacer / human will follow up).
+		// Outcome tag `merge-refused` (task `merge-action-nits-followup` nit 2):
+		// distinct from `usage-error` — which is reserved for genuine caller-usage
+		// errors (e.g. the workspacesDir-unset guard above) — so reviewers can
+		// grep the refusal-on-rebased-tip signal without confusing it with a
+		// misuse. `exitCode: 1` preserved.
 		note(result.message);
-		return {exitCode: 1, outcome: 'usage-error', message: result.message};
+		return {exitCode: 1, outcome: 'merge-refused', message: result.message};
 	}
 
 	if (result.outcome === 'restale') {

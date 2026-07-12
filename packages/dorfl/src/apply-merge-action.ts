@@ -1,9 +1,9 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {
-	allAnswered,
 	isEntryAnswered,
 	parseSidecar,
+	resolveSidecarIdentity,
 	sidecarPathFor,
 	type SidecarEntry,
 	type SidecarModel,
@@ -116,11 +116,23 @@ export function parseMergeAnswer(text: string): MergeActionVerb | undefined {
 }
 
 /**
- * Detect the FIRST answered `kind: merge` entry's deterministic action verb in
- * a fully-answered sidecar (the apply rung's pre-decider kind-check). Returns
- * `undefined` when the sidecar carries no answered `kind: merge` entry (the
- * apply rung then proceeds to the existing path — agentic for observations,
- * normal apply for task/spec content questions).
+ * Detect the `kind: merge` action verb that should drive the next apply run.
+ * The apply rung's pre-decider kind-check; returns `undefined` when there is
+ * nothing for the dispatcher to act on.
+ *
+ * ORDERING (task `merge-action-nits-followup` nit 1). The re-stale re-surface
+ * path (`advance.ts` `maybeRunMergeAction` restale branch) APPENDS a new
+ * `kind: merge` follow-up via `appendQuestions` rather than clearing the prior
+ * `answer=merge` on the original entry — that append-and-keep-history shape is
+ * canonical, but a naive FIRST-match lookup would re-fire against the STALE
+ * prior answer instead of the human's fresh follow-up. So:
+ *
+ *   1. If ANY `kind: merge` entry is UNANSWERED, return `undefined` — that is
+ *      the re-paused state (a freshly-appended follow-up awaiting an answer),
+ *      and the apply MUST NOT fire against a stale prior sibling.
+ *   2. Otherwise return the LATEST answered `kind: merge` entry — a fresh
+ *      follow-up answer wins over the stale one, and a plain single-entry
+ *      merge-question sidecar behaves as before.
  *
  * The sidecar is read OFF DISK keyed off the namespaced item identity; the
  * model is parsed via the SAME `parseSidecar` the rest of the engine uses.
@@ -139,8 +151,13 @@ export function detectAnsweredMergeAction(
 	} catch {
 		return undefined;
 	}
-	if (!allAnswered(model)) return undefined;
+	// (1) Unanswered `kind: merge` follow-up ⇒ re-paused; the apply must NOT fire.
 	for (const entry of model.entries) {
+		if (entry.kind === 'merge' && !isEntryAnswered(entry)) return undefined;
+	}
+	// (2) LATEST answered `kind: merge` entry — a fresh follow-up beats a stale one.
+	for (let i = model.entries.length - 1; i >= 0; i--) {
+		const entry = model.entries[i];
 		if (entry.kind !== 'merge') continue;
 		if (!isEntryAnswered(entry)) continue;
 		const verb = parseMergeAnswer(entry.answer);
@@ -335,6 +352,27 @@ export async function performMergeAction(
 ): Promise<MergeActionResult> {
 	const note = input.note ?? (() => {});
 	const {verb} = input.action;
+
+	// INVARIANT (task `merge-action-nits-followup` nit 4). The merge-question
+	// surfacer only emits `kind: merge` sidecars for TASKS, so the hard-coded
+	// `type: 'task'` on the `createJob` call below is correct in practice — but
+	// if a future surfacer change ever stamps a `kind: merge` sidecar on a
+	// non-task item (e.g. a spec-level unmerged branch), the branch name
+	// `work/task-<slug>` would silently mis-target. Fail LOUDLY here so the
+	// invariant is asserted at the dispatcher's entry rather than manifesting
+	// as a mysterious rebase/push mis-target downstream.
+	const identity = resolveSidecarIdentity(input.item);
+	if (identity.type !== 'task') {
+		throw new Error(
+			`performMergeAction: sidecar source item \`${input.item}\` has type ` +
+				`\`${identity.type}\`, but the answered-merge dispatcher only supports ` +
+				`\`task\` items (the surfacer only stamps \`kind: merge\` on tasks; the ` +
+				`branch name \`work/task-<slug>\` would silently mis-target otherwise). ` +
+				`This is the entry-invariant asserted by nit 4 of task ` +
+				`\`merge-action-nits-followup\` — reconcile the surfacer or extend the ` +
+				`dispatcher before landing a non-task source item.`,
+		);
+	}
 
 	if (verb === 'hold') {
 		return {
