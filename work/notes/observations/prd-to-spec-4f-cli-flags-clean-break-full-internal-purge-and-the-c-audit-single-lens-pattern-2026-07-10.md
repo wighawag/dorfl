@@ -1,4 +1,7 @@
 ---
+type: observation
+status: spotted
+triaged: keep
 title: spec→spec re-scope #3 — inserted batch 4f (intake CLI flags clean-break + FULL internal-identifier purge); the C-audit's single-consumer-lens dropped THREE producer/symbol classes, caught only by the contract-phase leak-scan tripwire (option A, ratified 2026-07-10)
 date: 2026-07-10
 ---

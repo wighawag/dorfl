@@ -1,3 +1,10 @@
+---
+type: observation
+status: spotted
+spotted: 2026-07-09
+triaged: keep
+---
+
 # MIGRATE batch left `frontmatter.ts:resolveClosingIssue`'s `.spec` read to the brief-sweep/contract task (2026-07-09)
 
 While doing the `spec→spec` MIGRATE batch (`rename-spec-frontmatter-field-and-slug-namespace`), the ONLY functional `.spec` read left in a `frontmatter.ts` own-helper is `resolveClosingIssue` (`frontmatter.ts:~476`), which reads `frontmatter.spec` and returns the `{via: 'brief', spec}` discriminated-union tag. I deliberately did NOT migrate this read here.
