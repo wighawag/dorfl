@@ -244,6 +244,18 @@ export interface PerformTaskOptions {
 	 * loop's {@link taskerLoopModel} — see the note there.
 	 */
 	acceptanceReviewModel?: string;
+	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded VERBATIM into {@link performIntegration} so a wide-matrix CI's
+	 * raised cap actually reaches the cross-job land queue (the CAS loop IS the
+	 * queue across separate jobs) on the `do spec:<slug>` tasking-transition path
+	 * too. Resolved ONCE at the entry point through the gate-family precedence chain
+	 * (flag > env > per-repo > global > default), same as `complete`/`do`/`run`.
+	 * Unset ⇒ falls through to the engine's `DEFAULT_MERGE_RETRIES = 1000`
+	 * (byte-for-byte unchanged).
+	 */
+	mergeRetries?: number;
 	/** Injectable lock seam (tests stub acquire/release). Defaults to the real CAS. */
 	lock?: TaskingLockSeam;
 	/**
@@ -661,6 +673,12 @@ export async function performTask(
 			reviewGate: options.reviewGate,
 			reviewModel: options.acceptanceReviewModel,
 			reviewMaxRounds: 1,
+			// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
+			// threaded so a wide-matrix CI's raised cap reaches the tasking-
+			// transition's land tail too (task
+			// `thread-merge-retries-cross-task-and-ratify-default`). Unset ⇒ falls
+			// through to the engine default (byte-for-byte unchanged).
+			mergeRetries: options.mergeRetries,
 			// The EXPLICITLY-chosen integrate mode proceeds AS-IS on an APPROVE — a
 			// `--merge` tasking run lands on main, `--propose` opens a PR. The tasking
 			// path's merge-vs-propose decision is the `integration` mode the user typed;

@@ -741,6 +741,11 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// `integration:'propose'` + `taskingIntegration:'merge'` lands the task FILES
 			// on main here while the BUILD path below still threads plain `integration`.
 			integration: options.taskingIntegration ?? options.integration,
+			// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
+			// threaded so the `do spec:` tasking-transition's land tail respects the
+			// same per-repo cap the build path uses (task
+			// `thread-merge-retries-cross-task-and-ratify-default`).
+			mergeRetries: options.mergeRetries,
 			// The per-repo TASK-PLACEMENT default + the operator's explicit
 			// override (task `runner-deterministic-slice-placement-policy-and-
 			// precedence`). The tasker reads them as the configured-default + the
@@ -1927,6 +1932,10 @@ export async function performDoRemote(
 				// `taskingIntegration ?? integration`, so the `--remote spec:` output ALSO
 				// routes through the shared core with the tasking-resolved mode.
 				integration: options.taskingIntegration ?? options.integration,
+				// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
+				// threaded on the no-checkout `do --remote spec:` tasking path too,
+				// mirroring the in-place site above.
+				mergeRetries: options.mergeRetries,
 				// The per-repo TASK-PLACEMENT default + the operator's explicit
 				// override (task `runner-deterministic-slice-placement-policy-and-
 				// precedence`). Same threading as the in-place `do spec:` path.

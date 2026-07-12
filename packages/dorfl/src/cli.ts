@@ -1928,6 +1928,11 @@ export function buildProgram(): Command {
 					override,
 					flags: {
 						...(flagMode ? {integration: flagMode} : {}),
+						// `--merge-retries <n>` rides the SAME gate-family precedence chain on
+						// the isolated-recovery path so a wide-matrix CI's raised cap actually
+						// reaches the land tail here too (task
+						// `thread-merge-retries-cross-task-and-ratify-default`).
+						...mergeRetriesFlagOverrides(flags),
 						...noPRFlagOverrides(flags),
 					},
 				});
@@ -1942,6 +1947,9 @@ export function buildProgram(): Command {
 					workspacesDir: flags.workspace ?? isoConfig.workspacesDir,
 					integration: isoConfig.integration,
 					noPR: isoConfig.noPR,
+					// The resolved cross-job CAS-retry cap threaded through so the isolated-
+					// recovery land tail respects the per-repo cap (same chain as `complete`).
+					mergeRetries: isoConfig.mergeRetries,
 					note: (message) => console.error(`>> ${message}`),
 					env: process.env,
 				});
@@ -3966,6 +3974,13 @@ export function buildProgram(): Command {
 				cwd,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: modes,
+				// The resolved cross-job CAS-retry cap (config `mergeRetries`). `intake`
+				// has no `--merge-retries` flag today (task
+				// `thread-merge-retries-cross-task-and-ratify-default` deliberately does
+				// NOT add one — intake is unattended-CI-first, env + per-repo cover the
+				// need); env + per-repo + global fold into `config.mergeRetries` via the
+				// SAME chain, and unset falls through to the engine default.
+				mergeRetries: config.mergeRetries,
 				// The origin-trust stamp the CI shell passes IN (unset ⇒ unstamped).
 				originTrust,
 				noPR: config.noPR,

@@ -325,6 +325,19 @@ export interface PerformIntakeOptions {
 	 * must not act as the bot. Absent ⇒ ambient (today's behaviour).
 	 */
 	identity?: Identity;
+	/**
+	 * **The cross-job merge-serialiser CAS-retry cap** (config `mergeRetries`, spec
+	 * `land-time-reverify-and-parallel-merge-ceiling` Story 5 / Applied Answer q1
+	 * (a)). Threaded VERBATIM into the shared integrate core so a wide-matrix CI's
+	 * raised cap reaches intake's task/spec emit land tail too (task
+	 * `thread-merge-retries-cross-task-and-ratify-default`). Resolved ONCE at the
+	 * entry point (the CLI) through the env + per-repo layers of the gate-family
+	 * precedence chain — the `intake` command has NO `--merge-retries` flag today
+	 * (the flag layer legitimately does not apply here; intake is
+	 * unattended-CI-first, env + per-repo cover the need). Unset ⇒ the engine's
+	 * `DEFAULT_MERGE_RETRIES = 1000` (byte-for-byte unchanged).
+	 */
+	mergeRetries?: number;
 	/** Environment for child git/agent processes (the AGENT-launch ambient env). */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -837,6 +850,9 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.task,
+				// The resolved cross-job CAS-retry cap (config `mergeRetries`) — threaded so
+				// intake's lone-task emit lands under the same per-repo cap the build path uses.
+				mergeRetries: options.mergeRetries,
 				// The origin-trust STAMP, passed IN (not resolved here): the emitted task
 				// carries `origin: issue` + this verdict so the becomes-code checkpoint is
 				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
@@ -863,6 +879,9 @@ async function decideAndDispatch(
 				cwd,
 				arbiter,
 				integration: modes.spec,
+				// The resolved cross-job CAS-retry cap (config `mergeRetries`) — threaded so
+				// intake's spec emit lands under the same per-repo cap the build path uses.
+				mergeRetries: options.mergeRetries,
 				// Same origin-trust stamp on the spec outcome (propagated onto its tasks
 				// later by the tasker). Passed IN; not resolved here.
 				originTrust: options.originTrust,
@@ -1041,6 +1060,8 @@ async function dispatchTask(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
+	/** The resolved cross-job CAS-retry cap (undefined ⇒ engine default). */
+	mergeRetries: number | undefined;
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
@@ -1063,6 +1084,7 @@ async function dispatchTask(params: {
 		cwd,
 		arbiter,
 		integration,
+		mergeRetries,
 		originTrust,
 		noPR,
 		providerInstance,
@@ -1185,6 +1207,12 @@ async function dispatchTask(params: {
 		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-task` lands on main
 		// (`merge` IS the auto-land mode, never downgraded).
 		mode: integration,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
+		// git-alone floor of the cross-job land queue, resolved through the gate-
+		// family precedence chain in the CLI and threaded here so intake's lone-task
+		// emit lands under the same per-repo cap the build path uses. Unset ⇒ the
+		// engine default (byte-for-byte unchanged).
+		mergeRetries,
 		noPR,
 		providerInstance,
 		type: 'feat',
@@ -1234,6 +1262,8 @@ async function dispatchSpec(params: {
 	cwd: string;
 	arbiter: string;
 	integration: IntegrationMode;
+	/** The resolved cross-job CAS-retry cap (undefined ⇒ engine default). */
+	mergeRetries: number | undefined;
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
@@ -1255,6 +1285,7 @@ async function dispatchSpec(params: {
 		cwd,
 		arbiter,
 		integration,
+		mergeRetries,
 		originTrust,
 		noPR,
 		specsLandIn,
@@ -1321,6 +1352,10 @@ async function dispatchSpec(params: {
 		// not a build), exactly as the task branch + the tasking transition skip it.
 		skipVerify: true,
 		mode: integration,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — same
+		// rationale as the lone-task emit above; threaded so intake's spec emit lands
+		// under the same per-repo cap. Unset ⇒ the engine default (byte-for-byte).
+		mergeRetries,
 		noPR,
 		providerInstance,
 		type: 'feat',
