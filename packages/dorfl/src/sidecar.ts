@@ -90,13 +90,19 @@ export type SidecarType = 'spec' | 'task' | 'observation';
  * sniffing the shape of another field. Absent ⇒ the existing binary content
  * entry (every pre-`kind` sidecar parses + renders byte-identically).
  *
- * INTERIM PRIMITIVE — REMOVE when question sidecars move to KIND-BASED
- * SUBFOLDERS (`work/questions/merge/`, …), where the folder ENCODES the kind
- * and this per-entry field is redundant. See the observation
- * `questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` + idea
- * `folder-taxonomy-and-prd-edit-handshake`. Built deliberately as a single
- * typed field read in exactly ONE place (the apply dispatch, a later task) so
- * the folder-cutover can DELETE it in one move.
+ * A TYPED FIELD is the PERMANENT home for the kind axis (not an interim step
+ * toward kind subfolders). Encoding kind in the PATH — either a filename prefix
+ * (`merge-<type>-<slug>.md`) or a subfolder (`work/questions/merge/…`) — was
+ * deliberately REJECTED: kind is a MUTABLE axis (one item can carry a `spec`
+ * question pre-build, then a `merge` question at land time), but `sidecarPathFor`
+ * is a pure function of item IDENTITY alone and does not know the kind, so a
+ * path that encodes kind would make identity-only lookups SILENTLY miss a
+ * sidecar filed under a different kind. So kind lives INSIDE the file (this
+ * field), the path stays identity-keyed, and per-kind queues are RENDERED by the
+ * tool (`status`/`scan`) rather than by the directory tree. See the observation
+ * `questions-folder-rename-and-kind-axis-prefix-vs-subfolder-2026-06-21` (its
+ * round-2 conclusion + the recorded answers) and `SURFACE-PROTOCOL.md`. The
+ * field is read in exactly ONE place (the apply dispatch).
  *
  * A mistyped/unknown `kind=` token parses to `undefined` (silent-on-malformed,
  * mirroring the retired `disposition` precedent), never a throw, never a
