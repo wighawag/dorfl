@@ -3,6 +3,7 @@ import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
+import {readFrontmatterField} from './frontmatter.js';
 import {acquireItemLock, releaseItemLock} from './item-lock.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 
@@ -545,11 +546,25 @@ export function nextCasContentionDelayMs(input: {
 	return Math.max(base, Math.min(cap, Math.floor(base + r * (upper - base))));
 }
 
-/** A semantic label for the new-item creation outcome. */
+/**
+ * A semantic label for the new-item creation outcome.
+ *
+ * `already-exists-from-source` (task
+ * `observation-triage-already-triaged-benign-skip`): the target path already
+ * exists on `<arbiter>/main` AND that existing item is PROVABLY the one this same
+ * `sourceItem` already minted (its `promotedFrom:` back-reference equals
+ * `sourceItem`). This is a TERMINAL idempotency fact — the source was already
+ * triaged in a prior run and a retry can NEVER succeed — so it is a BENIGN SKIP
+ * (`exitCode: 0`), NOT the loud `lost` (exit 2) a genuine concurrent-create race
+ * gets. Distinguishable from `created`/`lost` so a caller (and CI) can grep it out.
+ * Only ever produced when the caller passes `sourceItem`; without it the
+ * path-exists case stays `lost` exactly as before (zero behaviour change).
+ */
 export type CreateItemOutcome =
 	| 'created'
 	| 'usage-error'
 	| 'lost'
+	| 'already-exists-from-source'
 	| 'contended';
 
 /** Maps onto the claim-CAS exit codes (identical semantics). */
@@ -574,6 +589,21 @@ export interface CreateItemThroughCasOptions {
 	 * A listed path that is absent on the create branch is skipped (best-effort rm).
 	 */
 	deletePaths?: string[];
+	/**
+	 * OPTIONAL provenance disambiguator for the LOST-race case (task
+	 * `observation-triage-already-triaged-benign-skip`). When set, this is the
+	 * namespaced identity of the SOURCE item this create was minted FROM (e.g.
+	 * `observation:<slug>`). If the target `path` already exists on `<arbiter>/main`
+	 * AND that existing file's `promotedFrom:` back-reference equals THIS `sourceItem`,
+	 * the create is TERMINAL-by-existence (the source was already triaged in a prior
+	 * run) — a BENIGN SKIP (`already-exists-from-source`, exit 0), NOT the loud `lost`
+	 * (exit 2) a genuine concurrent-create race with an UNRELATED same-path item gets.
+	 * The match is on the explicit back-reference, NOT the slug, so an unrelated task
+	 * that merely shares the slug does NOT false-positive into a benign skip. Absent
+	 * (or the existing file carries no matching `promotedFrom:`) ⇒ the path-exists case
+	 * stays `lost` exactly as before (zero behaviour change for non-provenance callers).
+	 */
+	sourceItem?: string;
 	/** Working clone/worktree the creation runs in. */
 	cwd: string;
 	/** Name of the arbiter remote (`--arbiter`). Defaults to `origin`. */
@@ -686,6 +716,36 @@ async function runCreate(
 		throw new AdvancingLockUsageError(
 			'working tree has uncommitted changes; commit/stash them before creating',
 		);
+	}
+
+	// TERMINAL 'already triaged' PRE-CHECK (case A; task
+	// `observation-triage-already-triaged-benign-skip`). When the caller passes
+	// `sourceItem`, check ONCE UP FRONT whether the target already exists on the
+	// arbiter AND was PROVABLY minted from THIS same source in a PRIOR run (its
+	// `promotedFrom:` back-reference matches). If so this is an idempotency fact, not
+	// a race: a BENIGN SKIP (exit 0), never a retry. Doing this BEFORE the contention
+	// loop is what keeps it distinct from case B (a LIVE concurrent-create race): a
+	// race winner's file appears DURING the loop (the target is absent at this
+	// pre-check), so the loser still funnels through the loop to the loud `lost`
+	// (exit 2) the existing same-NEW-task race semantics require. Only a task that
+	// ALREADY existed before this leg began resolves here.
+	if (options.sourceItem !== undefined && options.sourceItem !== '') {
+		await gitHard(['fetch', '--quiet', arbiter], cwd, env);
+		const skip = await alreadyMintedFromSource(
+			options.sourceItem,
+			path,
+			arbiter,
+			cwd,
+			env,
+		);
+		if (skip !== undefined) {
+			note(skip);
+			return {
+				exitCode: 0,
+				outcome: 'already-exists-from-source',
+				message: skip,
+			};
+		}
 	}
 
 	// A throwaway create branch, slugified off the new item's path (so concurrent
@@ -909,6 +969,41 @@ async function catFileExists(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<boolean> {
 	return (await gitSoft(['cat-file', '-e', object], cwd, env)).status === 0;
+}
+
+/**
+ * The LOST-race case-A disambiguator (task
+ * `observation-triage-already-triaged-benign-skip`): is the item ALREADY at `path`
+ * on `<arbiter>/main` PROVABLY the one `sourceItem` already minted? Reads that
+ * file's `promotedFrom:` back-reference and returns a benign-skip MESSAGE iff it
+ * equals `sourceItem`, else `undefined` (⇒ the caller keeps the loud `lost`).
+ *
+ * The match is on the EXPLICIT `promotedFrom:` back-reference, NOT the slug, so an
+ * unrelated task that merely shares the slug (or a slug PREFIX) never
+ * false-positives — only an item this exact source stamped resolves to the skip. A
+ * plumbing failure reading the existing file degrades to `undefined` (stay loud),
+ * never a false benign skip.
+ */
+async function alreadyMintedFromSource(
+	sourceItem: string,
+	path: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	const show = await gitSoft(['show', `${arbiter}/main:${path}`], cwd, env);
+	if (show.status !== 0) {
+		return undefined;
+	}
+	const promotedFrom = readFrontmatterField(show.stdout, 'promotedFrom');
+	if (promotedFrom !== sourceItem) {
+		return undefined;
+	}
+	return (
+		`'${path}' already exists on ${arbiter}/main and was PROVABLY minted from ` +
+		`${sourceItem} (its promotedFrom: back-reference matches) — already triaged in ` +
+		`a prior run. Terminal by existence; a retry can never succeed. Benign skip.`
+	);
 }
 
 /** Run git, returning the raw result (no throw) — for soft checks. */

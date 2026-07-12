@@ -352,6 +352,37 @@ export function seedDoneOnArbiter(seeded: SeededRepo, slug: string): void {
 	rmSync(dest, {recursive: true, force: true});
 }
 
+/**
+ * Commit an arbitrary `work/<pathRel>` (or any repo-relative) file with EXACT
+ * `content` onto the arbiter's `main`, out-of-band (as a prior run / a sibling
+ * machine would). Used to seed a PRE-EXISTING task carrying a specific
+ * `promotedFrom:` back-reference so the create-CAS lost-race disambiguation (case A
+ * `already-exists-from-source` vs case B `lost`) can be exercised deterministically.
+ */
+export function seedFileOnArbiter(
+	seeded: SeededRepo,
+	pathRel: string,
+	content: string,
+): void {
+	const dest = join(
+		seeded.repo,
+		'..',
+		`seed-file-${Date.now()}-${seedFileN++}`,
+	);
+	gx(['clone', '-q', `file://${seeded.arbiter}`, dest], seeded.repo);
+	gx(['remote', 'add', 'arbiter', `file://${seeded.arbiter}`], dest);
+	gx(['fetch', '-q', 'arbiter'], dest);
+	gx(['checkout', '-q', '-B', 'seed-file', 'arbiter/main'], dest);
+	const abs = join(dest, pathRel);
+	mkdirSync(dirname(abs), {recursive: true});
+	writeFileSync(abs, content);
+	gx(['add', '-A'], dest);
+	gx(['commit', '-q', '-m', `seed ${pathRel}`], dest);
+	gx(['push', '-q', 'arbiter', 'seed-file:main'], dest);
+	rmSync(dest, {recursive: true, force: true});
+}
+let seedFileN = 0;
+
 /** Does `<arbiter>/main` currently track `work/<status>/<slug>.md`? */
 export function existsOnArbiterMain(
 	cwd: string,

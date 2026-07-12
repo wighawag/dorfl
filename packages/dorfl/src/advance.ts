@@ -131,6 +131,18 @@ export type AdvanceOutcome =
 	| 'advanced'
 	| 'no-op'
 	| 'vanished'
+	/**
+	 * The triage/apply promote leg found the task it would mint ALREADY EXISTS on
+	 * the arbiter AND was PROVABLY minted from THIS observation in a prior run (its
+	 * `promotedFrom:` back-reference matches) — an idempotency fact, so the source was
+	 * already triaged. `exitCode: 0` (the matrix tolerates it, so it does NOT red CI),
+	 * DISTINGUISHABLE from `vanished` (item file gone) and `no-op` (calm classify) so
+	 * reviewers can grep it. The LOUD `lost` (exit 2) is reserved for a genuine
+	 * concurrent-create race with an UNRELATED same-path item, where a retry helps.
+	 * (task `observation-triage-already-triaged-benign-skip`; sibling of the
+	 * stale-snapshot / held-lock CI-noise fixes.)
+	 */
+	| 'already-triaged'
 	| 'usage-error'
 	| 'lost'
 	| 'contended'
@@ -1254,11 +1266,13 @@ async function applyAgenticDecision(
 				outcome:
 					result.outcome === 'promoted'
 						? 'advanced'
-						: result.outcome === 'lost'
-							? 'lost'
-							: result.outcome === 'contended'
-								? 'contended'
-								: 'usage-error',
+						: result.outcome === 'already-triaged'
+							? 'already-triaged'
+							: result.outcome === 'lost'
+								? 'lost'
+								: result.outcome === 'contended'
+									? 'contended'
+									: 'usage-error',
 				message: result.message,
 			};
 		} catch (err) {

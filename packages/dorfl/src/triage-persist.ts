@@ -10,6 +10,7 @@ import {
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
 import {renderTaskBody, renderSpecBody} from './buildable-body.js';
+import {setFrontmatterMarker} from './frontmatter.js';
 
 /**
  * The engine-owned TRIAGE PERSIST (spec `advance-loop`, task `advance-rung-triage`,
@@ -273,11 +274,20 @@ export interface PromoteObservationOptions {
 export interface PromoteObservationResult {
 	/**
 	 * `promoted` (the new item landed via the CAS + the observation+sidecar were
-	 * deleted in the SAME commit), `lost` (the same-slug new-item race was lost —
-	 * the loser backs off, observation left INTACT), or `contended` (the CAS push
-	 * kept failing). Maps onto the claim-CAS exit codes.
+	 * deleted in the SAME commit), `already-triaged` (the target task ALREADY exists
+	 * on the arbiter AND was PROVABLY minted from THIS observation in a prior run — a
+	 * TERMINAL, benign idempotency fact, exit 0; the observation is left intact but a
+	 * retry can never succeed, so it is NOT loud), `lost` (a genuine concurrent-create
+	 * race for a same-path NEW item was lost — the loser backs off, observation left
+	 * INTACT, retry helps), or `contended` (the CAS push kept failing). Maps onto the
+	 * claim-CAS exit codes.
 	 */
-	outcome: 'promoted' | 'lost' | 'contended' | 'usage-error';
+	outcome:
+		| 'promoted'
+		| 'already-triaged'
+		| 'lost'
+		| 'contended'
+		| 'usage-error';
 	exitCode: 0 | 1 | 2 | 3;
 	/** The new task's path (relative to repo root) on a WIN. */
 	newItemPath?: string;
@@ -340,11 +350,24 @@ export async function promoteObservation(
 		`${newSlug}.md`,
 	);
 	const by = options.by || resolveBy(cwd, env);
-	const content = ensureTaskDispatchable(
-		artifact,
-		newSlug,
-		options.stubContent ??
-			buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env)),
+	// Stamp the observation→task PROVENANCE back-reference `promotedFrom: <item>` into
+	// the minted body (task `observation-triage-already-triaged-benign-skip`). It is
+	// the PROVABLE LINK the create-CAS lost-race disambiguator reads to tell case A
+	// (this observation ALREADY minted this task — already triaged, benign skip) from
+	// case B (a genuine concurrent-create race with an UNRELATED same-path item — loud
+	// exit 2). Distinct from `origin:` (how BORN: human/issue) and `reviewOf:` (the
+	// review-nits back-pointer); this is the triage-promote lineage. Matching on this
+	// explicit field — not the slug — is what keeps an unrelated same-slug task from
+	// false-positiving into a benign skip.
+	const content = setFrontmatterMarker(
+		ensureTaskDispatchable(
+			artifact,
+			newSlug,
+			options.stubContent ??
+				buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env)),
+		),
+		'promotedFrom',
+		item,
 	);
 
 	// The note + its answered sidecar `git rm` IN THE SAME create commit (promote =
@@ -359,6 +382,10 @@ export async function promoteObservation(
 		path: newItemPath,
 		content,
 		deletePaths: [itemPath, sidecarPath],
+		// The provenance disambiguator: on a LOST create-race, the CAS reads the
+		// existing file's `promotedFrom:` and, iff it equals THIS observation, reports
+		// the benign `already-exists-from-source` instead of the loud `lost`.
+		sourceItem: item,
 		cwd,
 		arbiter: options.arbiter,
 		by,
@@ -369,6 +396,23 @@ export async function promoteObservation(
 			? {contention: options.contention}
 			: {}),
 	});
+	// TERMINAL 'already triaged' (case A): the task this observation would mint
+	// ALREADY exists on the arbiter AND was provably minted from THIS observation in
+	// a prior run. A benign idempotency fact (exit 0) — the human already decided when
+	// they minted it — NOT a retry. The observation is left intact (a later
+	// discharge-by-deletion or a human deletes it); this leg does not red CI.
+	if (created.outcome === 'already-exists-from-source') {
+		const message =
+			`promote ${item}: ${newItemPath} was already minted FROM this observation ` +
+			`in a prior run (${created.message}) — already triaged. Benign skip, no retry.`;
+		note(message);
+		return {
+			outcome: 'already-triaged',
+			exitCode: 0,
+			newItemPath,
+			message,
+		};
+	}
 	if (created.exitCode !== 0) {
 		const message =
 			`promote ${item}: the new item ${newItemPath} ${created.outcome} the ` +

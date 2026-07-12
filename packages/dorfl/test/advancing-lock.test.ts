@@ -383,6 +383,68 @@ describe('createItemThroughCas — new-item creation keyed on the new identity',
 		expect(result.exitCode).toBe(2);
 		expect(result.outcome).toBe('lost');
 	});
+
+	// --- sourceItem lost-race DISAMBIGUATION (case A vs B) --------------------
+	// task `observation-triage-already-triaged-benign-skip`.
+
+	it('case A: an existing task PROVABLY minted from this sourceItem ⇒ benign skip (exit 0, already-exists-from-source)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		// A prior run already minted `work/tasks/ready/dup.md` FROM
+		// `observation:dup`, stamping the provable `promotedFrom:` back-reference.
+		const {seedFileOnArbiter} = await import('./helpers/gitRepo.js');
+		seedFileOnArbiter(
+			seeded,
+			'work/tasks/ready/dup.md',
+			'---\ntitle: dup\nslug: dup\npromotedFrom: observation:dup\nblockedBy: []\n---\n\nbody\n',
+		);
+		const result = await createItemThroughCas({
+			path: 'work/tasks/ready/dup.md',
+			content: '---\ntitle: dup\nslug: dup\nblockedBy: []\n---\n',
+			sourceItem: 'observation:dup',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('already-exists-from-source');
+		expect(result.message).toMatch(/already triaged/i);
+	});
+
+	it('case B (false-positive guard): an UNRELATED task sharing the slug (no matching promotedFrom) stays a LOUD lost (exit 2)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const {seedFileOnArbiter} = await import('./helpers/gitRepo.js');
+		// A DIFFERENT item happens to occupy `work/tasks/ready/dup.md` — either with
+		// NO promotedFrom, or one pointing at a DIFFERENT observation. Neither proves
+		// THIS source minted it, so a retry-worthy concurrent-create race is assumed.
+		seedFileOnArbiter(
+			seeded,
+			'work/tasks/ready/dup.md',
+			'---\ntitle: dup\nslug: dup\npromotedFrom: observation:someone-else\nblockedBy: []\n---\n\nbody\n',
+		);
+		const result = await createItemThroughCas({
+			path: 'work/tasks/ready/dup.md',
+			content: '---\ntitle: dup\nslug: dup\nblockedBy: []\n---\n',
+			sourceItem: 'observation:dup',
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(2);
+		expect(result.outcome).toBe('lost');
+	});
+
+	it('a same-path race with NO sourceItem is unchanged: still a loud lost (zero behaviour change)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['exists']);
+		const result = await createItemThroughCas({
+			path: 'work/tasks/ready/exists.md',
+			content: '---\ntitle: exists\nslug: exists\n---\n',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.exitCode).toBe(2);
+		expect(result.outcome).toBe('lost');
+	});
 });
 
 /**

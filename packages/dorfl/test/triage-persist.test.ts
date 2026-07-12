@@ -22,6 +22,7 @@ import {
 	racerEnv,
 	existsOnArbiterMain,
 	pathOnArbiterMain,
+	seedFileOnArbiter,
 	type Scratch,
 } from './helpers/gitRepo.js';
 
@@ -627,6 +628,87 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		expect(
 			existsSync(join(seeded.repo, 'work/questions/observation-taken.md')),
 		).toBe(true);
+	});
+
+	// --- ALREADY-TRIAGED benign skip (case A) vs concurrent race (case B) -----
+	// task `observation-triage-already-triaged-benign-skip`.
+
+	it('stamps a provable `promotedFrom:` back-reference on the minted task', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'prov');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:prov',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		const taskBody = gitIn(
+			['show', 'arbiter/main:work/tasks/ready/prov.md'],
+			seeded.repo,
+		);
+		expect(taskBody).toContain('promotedFrom: observation:prov');
+	});
+
+	it('case A: the task this observation would mint ALREADY exists on the arbiter AND was minted FROM it ⇒ benign already-triaged (exit 0), no red CI', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		// A prior run already minted the task from THIS observation (carries the
+		// provable `promotedFrom:` back-reference).
+		seedFileOnArbiter(
+			seeded,
+			'work/tasks/ready/again.md',
+			'---\ntitle: again\nslug: again\npromotedFrom: observation:again\nblockedBy: []\n---\n\nbody\n',
+		);
+		// The observation is STILL present locally (a legacy/pre-discharge note that
+		// re-enters the triage pool every tick) and re-answered to promote.
+		const itemPath = seedAnsweredPromote(seeded.repo, 'again');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:again',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('already-triaged');
+		expect(result.exitCode).toBe(0);
+		expect(result.message).toMatch(/already triaged/i);
+		// The observation is LEFT INTACT (not deleted by this benign leg — a later
+		// discharge-by-deletion or a human removes it).
+		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
+	});
+
+	it('case B: a genuine concurrent-create race (an UNRELATED same-slug task, no matching promotedFrom) stays a LOUD lost (exit 2)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		// A DIFFERENT item occupies the target path (minted from someone else) — no
+		// proof THIS observation minted it, so a retry is still the right response.
+		seedFileOnArbiter(
+			seeded,
+			'work/tasks/ready/clash.md',
+			'---\ntitle: clash\nslug: clash\npromotedFrom: observation:unrelated\nblockedBy: []\n---\n\nbody\n',
+		);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'clash');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:clash',
+			itemPath,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('lost');
+		expect(result.exitCode).toBe(2);
+		// Loud loser deletes nothing (left intact for a retry).
+		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
 	});
 });
 
