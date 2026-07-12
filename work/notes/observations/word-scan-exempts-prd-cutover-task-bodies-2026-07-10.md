@@ -1,6 +1,7 @@
 ---
 title: 'DECISION: the WORD leak scan now file-exempts prd→spec cutover task bodies whose OWN SUBJECT is the retired word'
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Context / what I saw
