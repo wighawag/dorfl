@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # `run.test.ts` `claimed-done` assertion is flaky under full-suite parallelism
 
 Date: 2026-07-10
