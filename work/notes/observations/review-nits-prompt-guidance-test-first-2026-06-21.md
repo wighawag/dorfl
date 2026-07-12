@@ -32,3 +32,14 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: Observation is already marked Triaged: promoted and resolved; it maps unambiguously onto the existing backlog slice of the same slug created from it.
+
+## Resolution (recovered from an orphaned question sidecar, 2026-07-12)
+
+CORRECTION: the promoted carrier task was DELETED in commit `d4fd53db` ("repair 12 promptless promoted tasks", GROUP A); no `task:review-nits-prompt-guidance-test-first-...` file exists. Its question sidecar (4 questions) was answered by a human, and the answers CLOSE this out entirely, so nothing needs re-minting. Recovered verbatim below before the orphaned sidecar is removed.
+
+- **Q1 (disposition):** Close/drop as overtaken-by-events. All three captured nits were resolved when the sibling slices landed in `tasks/done/` (config-and-prompt-seam, item-override, setup-adoption-question), leaving nothing for this stub to build. Discharge via the cancelled/drop path.
+- **Q2 (fragment style + REPLACE):** Discharged. q1 (Option A conditional fragment with HTML-comment markers + ADR) and q2 (REPLACE) are answered, recorded, ADR'd, and implemented in the done config-seam slice. Nothing remains.
+- **Q3 (env var):** Confirmed, no follow-up. The concrete env var `DORFL_PROMPT_GUIDANCE_TEST_FIRST` is pinned in the shipped resolver (`config.ts`).
+- **Q4 (precedence ADR needed?):** Sufficient as documented. The per-task > per-spec > repo precedence mirrors the existing `humanOnly`/`autoBuild` item-override shape, so the `WORK-CONTRACT.md` documentation is enough; no separate precedence ADR is owed.
+
+NET: this observation is fully discharged (overtaken by events); no work is owed.

@@ -36,3 +36,14 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: Observation's own body already records it was triaged and promoted to work/tasks/todo/review-nits-question-sidecar-human-readable-format-2026-06-20.md; this is an unambiguous map to that existing slice.
+
+## Resolution (recovered from an orphaned question sidecar, 2026-07-12)
+
+CORRECTION: the promoted carrier task was DELETED in commit `d4fd53db` ("repair 12 promptless promoted tasks", GROUP A); no such file exists under `work/tasks/*`. Its question sidecar (6 questions) was answered by a human and lived nowhere else; recovered verbatim below before the orphaned sidecar is removed. This is a small doc-only body of work; carry it into any re-minted task.
+
+- **Q1 (scope):** Scope to (a)+(b): record the two genuine design rules (`answered=` emitted only on disagreement; `type=`/`slug=` ignored and re-derived from `item=`) as decisions, and add the one-line hand-writer notes the nits request to `SKILL.md`. Treat the two edge-case nits (nested bold, split blockquote) as documented latent corners only, NOT code changes, since both are self-described as acceptable trade-offs.
+- **Q2 (`answered=` on disagreement):** Ratify as-is and record it. Emitting `answered=` only on disagreement (and dropping a redundant override on parse) is the right robustness choice; a stale override must not become sticky and freeze a future tolerant edit. Capture as a decision, no behaviour change.
+- **Q3 (`type=`/`slug=` re-derivation):** Ratify silent re-derivation from `item=` (the single source of truth). If a small change is in scope, prefer OMITTING the redundant `type=`/`slug=` on serialise over adding a validation refusal (fewer fields cannot disagree). Omission is optional polish, not required.
+- **Q4 (heading case):** Add the one-line `SKILL.md` note ("heading case is cosmetic; the per-entry comment id is what counts"). Do not change the parser or heading case; the `## Q1` / `q1` mix is sanctioned by the slice prompt itself.
+- **Q5 (nested bold):** Leave as a documented latent corner, no code change. Surfacers do not nest bold in a question, and the cost of hardening the regex exceeds the risk. A one-line `SKILL.md` note is enough.
+- **Q6 (split blockquote):** Add the `SKILL.md` sentence (blank-separated context paragraphs must keep the `>` prefix on the blank line). Do not change the parser; the current behaviour deliberately avoids re-absorbing an incidental `>` in a human preamble, which is the safer default.

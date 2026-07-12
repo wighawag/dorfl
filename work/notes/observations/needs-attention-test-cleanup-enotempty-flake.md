@@ -24,3 +24,12 @@ covered there), so it is settled — marked triaged:keep and dropped out
 of the candidate pool (never re-asked).
 
 Reason: Observation was already triaged as promoted; the promoted backlog task work/tasks/ready/needs-attention-test-cleanup-enotempty-flake.md carries the work. Observation itself notes 'Triaged: promoted' and 'resolved'.
+
+## Resolution (recovered from an orphaned question sidecar, 2026-07-12)
+
+CORRECTION: the promoted carrier task was DELETED in commit `d4fd53db` ("repair 12 promptless promoted tasks", GROUP A) as an un-buildable promptless stub; the intended re-mint from this observation never happened, so `work/tasks/ready/needs-attention-test-cleanup-enotempty-flake.md` no longer exists. Its question sidecar (4 questions) was answered by a human and lived nowhere else; recovered verbatim below before the orphaned sidecar is removed. Carry these into any re-minted task.
+
+- **Q1 (fix approach):** Approach (b): retry `rmSync` on ENOTEMPTY with a short bounded backoff. Simplest, most localised, directly targets the observed failure. Only add awaiting of in-flight ops (approach a) if the retry proves insufficient in practice.
+- **Q2 (stale refs):** Yes, fix them: rewrite the task to reference `packages/dorfl/test/helpers/gitRepo.ts` `cleanup()` (currently line 152) and `packages/dorfl/test/needs-attention.test.ts` `afterEach`, and instruct the builder to re-confirm line numbers at build time (the observation's :102 and the applied-answer's :150 are both stale).
+- **Q3 (localise vs generalise):** Generalise. Fix the shared `rmSync` path once via a single `safeRemoveDir` helper used by both the `cleanup()` site (:152) and the seed/done helper (:352), rather than patching `cleanup()` in isolation. The race is structural (git/fs ops still touching the tree), so a localised patch leaves a latent flake at the other site. (REVIEW-PROTOCOL discipline 4: a second instance means generalise.)
+- **Q4 (acceptance):** Accept on the hardened shared removal helper (retry-on-ENOTEMPTY) PLUS a targeted unit test exercising it against a deliberately-busy directory to assert it no longer throws ENOTEMPTY, with the verify floor (`pnpm -r build && pnpm -r test && pnpm format:check`) staying green. A deterministic unit test on the helper is the honest proof; do not rely on "verify stays green" alone for an intermittent race.
