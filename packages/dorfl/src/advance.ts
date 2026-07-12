@@ -629,7 +629,10 @@ function mapDoOutcome(result: DoResult): AdvanceOutcome {
  * answered sidecar back to not-all-answered (the persist owns that). An EMPTY
  * emit (the skill's honest "no open judgement") writes nothing and reports it.
  */
-async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
+async function surfaceRung(
+	input: RungExecInput,
+	surfaceOpts: {baseQuestions?: NewQuestion[]} = {},
+): Promise<RungExecResult> {
 	const {item, context} = input;
 	const note = context.note ?? (() => {});
 	const cwd = context.cwd;
@@ -641,6 +644,17 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 	if (itemPath === undefined) {
 		return vanishedSkip({rung: 'surface', item});
 	}
+
+	// DETERMINISTIC BASE QUESTIONS (the triage rung's "always ask" contract): the
+	// caller may pass engine-built questions that MUST be surfaced regardless of the
+	// agent. They are added ONLY on the FIRST pass (no sidecar yet) — on a re-surface
+	// the sidecar already carries them, and `appendQuestions` does NOT dedup, so
+	// re-adding would duplicate. When base questions are present the agent is
+	// ADDITIVE ONLY and its flake/empty is NON-FATAL (the base question still lands).
+	const baseQuestions = surfaceOpts.baseQuestions ?? [];
+	const hasBase = baseQuestions.length > 0;
+	const sidecarExists = existsSync(join(cwd, sidecarPathFor(item)));
+	const baseToAdd = hasBase && !sidecarExists ? baseQuestions : [];
 
 	// 1. SPAWN the fresh-context `surface-questions` agent (the skill JUDGES). The
 	//    expensive model work is POST-lock (the lock is held by `performAdvance`).
@@ -654,38 +668,40 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 		});
 	} catch (err) {
 		const detail = err instanceof Error ? err.message : String(err);
-		return {
-			exitCode: 1,
-			outcome: 'usage-error',
-			message: `surface ${item}: the surface-questions agent produced no usable emit (${detail}).`,
-		};
+		if (!hasBase) {
+			return {
+				exitCode: 1,
+				outcome: 'usage-error',
+				message: `surface ${item}: the surface-questions agent produced no usable emit (${detail}).`,
+			};
+		}
+		// The agent flaked but we have a deterministic base question to surface: the
+		// flake is NON-FATAL. Treat the agent's extras as empty and carry on (the
+		// base triage question still lands, so the human can triage via the sidecar).
+		note(
+			`surface ${item}: the surface-questions agent produced no usable emit ` +
+				`(${detail}); surfacing the deterministic question(s) only.`,
+		);
+		emit = {questions: []};
 	}
 
 	// 2. The ENGINE persists (the skill wrote nothing): append-or-create the sidecar
 	//    + set `needsAnswers:true` in ONE commit (CAS-atomic under the held lock).
+	//    Base questions FIRST (q1…), then the agent's additive extras.
 	const persist = context.surfacePersist ?? persistSurfacedQuestions;
 	const result = persist({
 		cwd,
 		item,
 		itemPath,
-		questions: toNewQuestions(emit),
+		questions: [...baseToAdd, ...toNewQuestions(emit)],
 		note,
 	});
 	if (result.outcome === 'nothing') {
-		// LIMBO DETECTION (task `advance-surface-limbo-observation-loudly-instead-of-
-		// silent-no-op`): an untriaged observation with NO sidecar whose surfacer had
-		// nothing to ask is a TRAP — the human's triage answer may have been recorded
-		// in an in-BODY "Applied answers" block, but the engine reads triage-vs-
-		// settled only from the `triaged:` frontmatter marker (`ledger-read.ts`) and
-		// the promote path only from an answered `disposition: promote` SIDECAR
-		// (`triage-persist.ts`). Without either, the item is untriaged (re-enumerated
-		// every tick), un-surfaceable (nothing to ask), un-promotable (no sidecar) —
-		// a silent exit-0 no-op forever. Surface it LOUDLY instead.
-		const limbo = detectObservationLimbo(input);
-		if (limbo !== undefined) {
-			note(limbo);
-			return {exitCode: 1, outcome: 'usage-error', message: limbo};
-		}
+		// The agent had nothing to ask AND there was no base question to add (a
+		// task/spec surface, or a re-surface whose base question is already present).
+		// This is the calm "no open judgement" no-op — no sidecar written. (There is
+		// no "limbo" any more: the triage rung ALWAYS passes a base question on the
+		// first pass, so an untriaged observation can never fall here empty-handed.)
 		return {
 			exitCode: 0,
 			outcome: 'no-op',
@@ -702,40 +718,26 @@ async function surfaceRung(input: RungExecInput): Promise<RungExecResult> {
 }
 
 /**
- * Detect the OBSERVATION LIMBO shape (task `advance-surface-limbo-observation-
- * loudly-instead-of-silent-no-op`): an observation whose triage answer was
- * (mis-)authored in an in-body "Applied answers" block instead of the sidecar/
- * frontmatter channels the engine reads. All four conditions must hold:
- *
- *   1. the item is an OBSERVATION;
- *   2. its frontmatter has NO `triaged:` marker (untriaged per `ledger-read.ts`);
- *   3. there is NO active question sidecar at `work/questions/observation-<slug>.md`;
- *   4. the surfacer just returned empty (the caller — {@link surfaceRung} — only
- *      calls this on the persist's `nothing` branch).
- *
- * Returns the loud diagnostic to emit (naming BOTH valid channels), or `undefined`
- * when the shape does not match (the surfacer's empty is then the normal calm no-op).
- * The engine does NOT (and will not) honour in-body disposition prose — one channel
- * (the sidecar + `triaged:` frontmatter) keeps the loop honest.
+ * The DETERMINISTIC triage question the triage rung ALWAYS surfaces for an
+ * untriaged observation (the "no limbo, ever" contract). It is engine-built (NOT
+ * LLM output), so it can never be zeroed out or flake: every untriaged observation
+ * gets exactly this question, and the human answers it via the sidecar — a record,
+ * a rationale note, and a fresh-bug signal are all treated identically (the human
+ * decides the disposition). The `surface-questions` agent runs ADDITIVELY on top,
+ * adding any extra pointed questions it extracts from the body.
  */
-function detectObservationLimbo(input: RungExecInput): string | undefined {
-	if (input.namespace !== 'observation') return undefined;
-	const {item, slug, context} = input;
-	const cwd = context.cwd;
-	const itemRel = findItemPath(cwd, input.namespace, slug);
-	if (itemRel === undefined) return undefined;
-	const fm = parseFrontmatter(readFileSync(join(cwd, itemRel), 'utf8'));
-	if (fm.triaged !== undefined && fm.triaged !== '') return undefined;
-	const sidecarRel = sidecarPathFor(item);
-	if (existsSync(join(cwd, sidecarRel))) return undefined;
-	return (
-		`observation \`${slug}\` is in a limbo: no \`triaged:\` frontmatter marker ` +
-		`AND no answered question sidecar at \`${sidecarRel}\`, but the surfacer has ` +
-		`nothing to ask. If a human triage decision (promote-slice / keep / duplicate) ` +
-		`has been recorded in the observation BODY, that channel is INVISIBLE to the ` +
-		`runner — author the sidecar, or set \`triaged:\` in frontmatter. The engine ` +
-		`does not (and will not) honour in-body disposition prose.`
-	);
+export function buildTriageBaseQuestion(): NewQuestion {
+	return {
+		question:
+			'What should become of this observation? Reply with a disposition and a ' +
+			'reason: resolve (settle it, keep the note on record — say why), promote ' +
+			'(mint a task / spec / adr — say which and why), delete (redundant or ' +
+			'obsolete — say why), or duplicate (maps onto an existing item — name it).',
+		context:
+			'The engine records your disposition from the answer (no token needed); an ' +
+			'answered promote mints the artifact, resolve keeps the note settled, ' +
+			'delete/duplicate discharge it.',
+	};
 }
 
 /**
@@ -771,6 +773,28 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 	const {item, context} = input;
 	const note = context.note ?? (() => {});
 	const cwd = context.cwd;
+
+	// SETTLED GUARD: a `triaged:` frontmatter marker means a human already
+	// dispositioned this observation, so it DROPS OUT of the triage pool. The pool
+	// enumeration already excludes it, but an EXPLICIT `obs:<slug>` bypasses the pool
+	// gate and still classifies as `triage-observation` — so re-check the marker here
+	// and no-op rather than surfacing a FRESH triage question on an already-settled
+	// note. (Replaces the old `detectObservationLimbo` special-case: there is no
+	// limbo any more — an UNtriaged observation always surfaces the deterministic
+	// question below; a SETTLED one is a calm no-op here.)
+	{
+		const itemRel = findItemPath(cwd, input.namespace, input.slug);
+		if (itemRel !== undefined) {
+			const fm = parseFrontmatter(readFileSync(join(cwd, itemRel), 'utf8'));
+			if (fm.triaged !== undefined && fm.triaged !== '') {
+				return {
+					exitCode: 0,
+					outcome: 'no-op',
+					message: `triage ${item}: already triaged (triaged:${fm.triaged}) — nothing to do.`,
+				};
+			}
+		}
+	}
 
 	// The CONSERVATIVE auto-disposition EXCEPTION — ONLY under `observationTriage:
 	// 'auto'`. Under `'ask'`/`'off'`/unset (including `off` + an EXPLICIT obs:<slug>
@@ -822,7 +846,12 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
 	// skill emits the triage question — NO disposition token any more, task
 	// `agentic-apply-retire-disposition-vocabulary`); the AGENTIC apply decision
 	// reads the human's answer + source and decides what to DO when it is answered.
-	return surfaceRung(input);
+	//
+	// ALWAYS-ASK (the "no limbo" contract): pass the DETERMINISTIC triage question as
+	// the base question, so an untriaged observation ALWAYS surfaces it (q1) even if
+	// the `surface-questions` agent emits empty or flakes. The agent is ADDITIVE:
+	// any pointed questions it extracts from the body are appended after q1.
+	return surfaceRung(input, {baseQuestions: [buildTriageBaseQuestion()]});
 }
 
 /**
