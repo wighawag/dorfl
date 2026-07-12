@@ -3,6 +3,7 @@ title: advance workflow deleted an observation whose STILL-LIVE residue was expl
 date: 2026-07-07
 status: open
 severity: low
+needsAnswers: true
 ---
 
 While building `default-requeue-succeeds-when-no-work-branch-exists`, noticed
