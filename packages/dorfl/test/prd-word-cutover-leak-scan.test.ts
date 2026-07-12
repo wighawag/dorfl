@@ -154,6 +154,11 @@ const PRESERVE_SLUGS: readonly string[] = [
 	'stale-prd-slice-tokens-in-cli-namespace-guard-comments',
 	'surface-promote-prd-as-human-only-disposition',
 	'tasking-buildtaskingspec-still-hardcodes-work-prds-folder-paths-2026-07-10',
+	// The `promotedFrom:` observation identity of the `sweep-prose-prd-colon-from-
+	// live-maintained-docs` task: a `prd`-carrying cross-reference slug naming the
+	// observation that carved out that sweep. A frontmatter cross-ref value is a
+	// file identity, never rewritten (identity allow-list class #1).
+	'word-scan-keeps-prd-colon-as-provenance-not-live-alias-2026-07-10',
 ];
 
 // ───────────────────────────────────────────────────────────────────────────

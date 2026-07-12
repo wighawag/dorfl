@@ -8,7 +8,7 @@ consolidates:
 
 ## What to build
 
-Create ONE new file `work/notes/findings/rename-cutover-lessons.md` that folds together the durable lessons from FOUR sibling observations of the prd→spec cutover into a single reusable rule about namespace / enum-value rename cutovers. This is a documentation-only task: no code, no ADR. The human ratified (2026-07-10) that this material belongs in `work/notes/findings/`, NOT `docs/adr/`.
+Create ONE new file `work/notes/findings/rename-cutover-lessons.md` that folds together the durable lessons from FOUR sibling observations of the `prd→spec` cutover into a single reusable rule about namespace / enum-value rename cutovers. This is a documentation-only task: no code, no ADR. The human ratified (2026-07-10) that this material belongs in `work/notes/findings/`, NOT `docs/adr/`.
 
 > NOTE (consolidation): this task was merged from what the apply rung minted as four separate tasks (4d, 4e, value-aliases, and the un-minted 4c point), because all four resolved to "fold into the SAME shared note." Writing them as one task avoids two divergently-named files, duplicated content, and dangling provenance links. The `consolidates:` frontmatter lists the extra source observations this task also discharges.
 
@@ -21,7 +21,7 @@ The finding must cover, in the finding's own voice (not just quoted blocks), the
 3. **The C-audit's single-lens blind spot — THREE enumerations, not one (from the 4e observation, twice-confirmed).** A coverage audit that maps a rename by ONE lens (e.g. `namespace === 'old'` consumer sites) is blind to at least two other surfaces. A rename cutover coverage audit needs THREE separate enumerations:
    1. **VALUE consumers** — `=== 'old'` sites; alias-covered; migrate incrementally.
    2. **VALUE producers** — emit-sites + local union type definitions; must be flipped or the alias silently hides them (the 4d gap).
-   3. **Exported SYMBOLS / types / fields** — no alias possible; atomic rename; enumerate by `grep -rn "export.*Old"`, NOT a hand-curated list. The hand-curated list is exactly what dropped `renderPrd`, `buildIntakeDecisionPrd`, `findPrdPath`, `promoteFromPrePrd` (+ `PromoteFromPrePrdOptions` / `PromoteFromPrePrdResult`), and the `PrdsLandIn` plumbing (`config.prdsLandIn`, `prdLandingToSide`, `explicitPrdsLandIn`, `PerformIntakeOptions.prdsLandIn`, env-config schema) in the prd→spec cutover (the 4e gap).
+   3. **Exported SYMBOLS / types / fields** — no alias possible; atomic rename; enumerate by `grep -rn "export.*Old"`, NOT a hand-curated list. The hand-curated list is exactly what dropped `renderPrd`, `buildIntakeDecisionPrd`, `findPrdPath`, `promoteFromPrePrd` (+ `PromoteFromPrePrdOptions` / `PromoteFromPrePrdResult`), and the `PrdsLandIn` plumbing (`config.prdsLandIn`, `prdLandingToSide`, `explicitPrdsLandIn`, `PerformIntakeOptions.prdsLandIn`, env-config schema) in the `prd→spec` cutover (the 4e gap).
    The contract-phase drift-check / leak scan is the honest backstop that caught both blind spots, precisely because it forces a real grep instead of trusting the curated audit list.
 
 4. **VALUE aliases are incremental-safe; SYMBOL/TYPE/FILE renames are NOT (from the value-aliases observation).**
@@ -47,7 +47,7 @@ Acceptance:
 
 ## Prompt
 
-> You are building a single documentation-only finding that consolidates the durable lessons of the prd→spec rename cutover. Create exactly one new file, `work/notes/findings/rename-cutover-lessons.md`.
+> You are building a single documentation-only finding that consolidates the durable lessons of the `prd→spec` rename cutover. Create exactly one new file, `work/notes/findings/rename-cutover-lessons.md`.
 >
 > Read these four observations first to source the material (use the Lesson/Decisions sections):
 > - `work/notes/observations/prd-to-spec-4d-migrate-emit-sites-inserted-contract-sidecar-filepath-carveout-2026-07-10.md` (producer/consumer coupling + TYPE-vs-FILE identity split)
