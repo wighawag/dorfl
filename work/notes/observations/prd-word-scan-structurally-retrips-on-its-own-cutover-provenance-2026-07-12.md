@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # The prd-word cutover leak-scan structurally re-trips on the loop's own cutover provenance
 
 Date: 2026-07-12
