@@ -1,6 +1,7 @@
 ---
 title: spec→spec batch 4f decisions — clean-break CLI flags landed, scan --json `specs[]` output field renamed to `specs[]` (workflow-regen follow-up), and the survivors deliberately LEFT (verdict-content keys, the `<spec>` protocol-template cluster, the `--specs-land-in` input plumbing)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Context
