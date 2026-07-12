@@ -3,7 +3,43 @@ import {join} from 'node:path';
 import {run} from './git.js';
 import {resolveSidecarIdentity} from './sidecar.js';
 import {resolveItemPathByIdentity} from './item-path.js';
+import {terminalMainPaths} from './item-lock.js';
 import {workFolderPath, workFolderRel} from './work-layout.js';
+
+/**
+ * Resolve the source item's CURRENT on-disk path INCLUDING its TERMINAL resting
+ * records — the orphan-sweep existence predicate.
+ *
+ * This deliberately WIDENS {@link resolveItemPathByIdentity} (which scans the
+ * ACTIVE lifecycle folders + staging, and EXCLUDES terminals on purpose: for the
+ * apply rung a terminal-reached item is `vanished`). The orphan sweep asks a
+ * DIFFERENT question — "does a source item for this sidecar exist AT ALL?" — and a
+ * task/spec that reached its terminal (`tasks/cancelled/`, `specs/dropped/`) is a
+ * durable RESTING record that still EXISTS, so its sidecar is NOT an orphan.
+ * Treating "reached a terminal" as "gone" would let a routine `gc` delete a live
+ * sidecar (and any human answer it carries) — the 2026-07-12 false-positive.
+ *
+ * Reuses the shared {@link terminalMainPaths} (`item-lock.ts`, the SAME per-type
+ * terminal set the lock/branch reapers key off) so the "where do terminals live?"
+ * knowledge stays single-sourced. Returns the ACTIVE path when present, else the
+ * first existing TERMINAL path, else `undefined` (a genuine orphan).
+ */
+function resolveSourceForOrphanSweep(
+	cwd: string,
+	item: string,
+): string | undefined {
+	const active = resolveItemPathByIdentity(cwd, item);
+	if (active !== undefined) {
+		return active;
+	}
+	const {type, slug} = resolveSidecarIdentity(item);
+	for (const rel of terminalMainPaths(type, slug)) {
+		if (existsSync(join(cwd, rel))) {
+			return rel;
+		}
+	}
+	return undefined;
+}
 
 /**
  * The **orphan-sidecar reaper** — the WORKING-TREE counterpart of the job-worktree
@@ -26,10 +62,14 @@ import {workFolderPath, workFolderRel} from './work-layout.js';
  *
  * The existence check REUSES the keystone's extracted `resolveItemPathByIdentity`
  * (`item-path.ts`, the neutral re-exported seam) — the same working-tree,
- * by-identity "does the source item exist?" resolver the apply rung uses — never a
- * forked second resolver. A sidecar whose source EXISTS is left untouched; a
- * sidecar whose source is ABSENT is `git rm`'d (deletion, not a `git mv`: the
- * sidecar leaves by deletion, recoverable from git history).
+ * by-identity "does the source item exist?" resolver the apply rung uses — WIDENED
+ * to also count a source that has reached a TERMINAL folder (`tasks/cancelled/`,
+ * `specs/dropped/`, via the shared `terminalMainPaths`) as EXISTING: a terminal is
+ * a durable resting record, not "gone", so its sidecar is NOT an orphan (see
+ * `resolveSourceForOrphanSweep`). A sidecar whose source EXISTS anywhere is left
+ * untouched; a sidecar whose source is ABSENT from every active AND terminal
+ * folder is `git rm`'d (deletion, not a `git mv`: the sidecar leaves by deletion,
+ * recoverable from git history).
  */
 
 /** A sidecar the orphan sweep reaped (its source item was absent). */
@@ -111,9 +151,10 @@ export function sweepOrphanSidecars(
 		const {item} = resolveSidecarIdentity(stem.replace('-', ':'));
 		const path = `${workFolderRel('questions')}/${entry}`;
 
-		const sourcePath = resolveItemPathByIdentity(input.cwd, item);
+		const sourcePath = resolveSourceForOrphanSweep(input.cwd, item);
 		if (sourcePath !== undefined) {
-			// The source item still exists ⇒ a LIVE sidecar ⇒ leave it untouched.
+			// The source item still exists (active lifecycle OR a terminal resting
+			// record) ⇒ a LIVE sidecar ⇒ leave it untouched.
 			retained.push({path, item, sourcePath});
 			note(`Retained ${path}: source ${item} still exists (${sourcePath}).`);
 			continue;

@@ -95,6 +95,46 @@ describe('sweepOrphanSidecars — reap a sidecar whose source is gone, keep the 
 		);
 	});
 
+	// A source that has reached a TERMINAL folder (`tasks/cancelled/`,
+	// `specs/dropped/`) still EXISTS as a durable resting record, so its sidecar is
+	// NOT an orphan. The apply-scoped `resolveItemPathByIdentity` deliberately
+	// excludes terminals (a terminal-reached item is `vanished` for apply), but the
+	// orphan SWEEP must not treat "reached a terminal" as "gone" — else a routine
+	// `gc` deletes a live sidecar (data loss). Regression guard for the
+	// 2026-07-12 false-positive observation.
+	it('LEAVES a sidecar whose source rests in a TERMINAL folder (tasks/cancelled) untouched', () => {
+		const repo = seedRepo();
+		commitSource(repo, 'tasks/cancelled', 'terminal-task');
+		const rel = commitSidecar(repo, 'task:terminal-task');
+
+		const result = sweepOrphanSidecars({cwd: repo, env: gitEnv()});
+
+		expect(result.reaped).toEqual([]);
+		expect(result.retained.map((r) => r.item)).toEqual(['task:terminal-task']);
+		expect(result.retained[0].sourcePath).toBe(
+			'work/tasks/cancelled/terminal-task.md',
+		);
+		expect(existsSync(join(repo, rel))).toBe(true);
+		expect(git(['status', '--porcelain'], repo, {env: gitEnv()}).trim()).toBe(
+			'',
+		);
+	});
+
+	it('LEAVES a sidecar whose source spec rests in specs/dropped untouched', () => {
+		const repo = seedRepo();
+		commitSource(repo, 'specs/dropped', 'terminal-spec');
+		const rel = commitSidecar(repo, 'spec:terminal-spec');
+
+		const result = sweepOrphanSidecars({cwd: repo, env: gitEnv()});
+
+		expect(result.reaped).toEqual([]);
+		expect(result.retained.map((r) => r.item)).toEqual(['spec:terminal-spec']);
+		expect(result.retained[0].sourcePath).toBe(
+			'work/specs/dropped/terminal-spec.md',
+		);
+		expect(existsSync(join(repo, rel))).toBe(true);
+	});
+
 	it('reaps ONLY the orphans in a mixed set (live ones survive)', () => {
 		const repo = seedRepo();
 		// live: source present across DIFFERENT lifecycle folders

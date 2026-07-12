@@ -37,3 +37,17 @@ The orphan predicate should resolve the sidecar's source by the SAME `(umbrella,
 ## Provenance
 
 Spotted directly; `gc --remote-branches` output + a by-hand check of each of the 7 slugs against `work/{tasks,notes,specs}/*` on `main` @ the 2026-07-12 drive-tasks completion state. Not yet turned into a task — capture only.
+
+## Update 2026-07-12 — investigated + fixed; original diagnosis PARTLY over-claimed
+
+On investigation (fixing it directly), the picture is narrower than the title/mechanism above suggested. Of the 7 sidecars the sweep flagged, exactly ONE was a true false-positive:
+
+- **`task:cross-job-ref-based-land-lock`** — source rests in `work/tasks/cancelled/`. GENUINE BUG: a terminal resting record still EXISTS, so its sidecar is not an orphan.
+- The **6 `task:<slug>`** ones whose title implied "observation-namespaced source" are NOT mis-resolved: their declared identity is `task:<slug>` (`item=task:…` in the sidecar's own identity comment) and NO `task:<slug>` exists in ANY folder. A same-slug *observation* is a DIFFERENT item, so the sweep is CORRECT to consider these orphaned. (I had conflated "a same-slug observation exists" with "the source exists.")
+- The 2 genuinely `observation:<slug>` sidecars were already retained correctly (`resolveItemPathByIdentity` does scan `observations`).
+
+Root cause (single): `resolveItemPathByIdentity` (`item-path.ts`) deliberately EXCLUDES terminal folders (correct for the APPLY rung, where a terminal-reached item is `vanished`), and the orphan sweep reused it verbatim — so a source in `tasks/cancelled/` / `specs/dropped/` read as "gone".
+
+Fix (landed same session): the orphan sweep now uses a terminal-INCLUSIVE existence check (`resolveSourceForOrphanSweep` in `orphan-sidecar.ts`), reusing the shared `terminalMainPaths` (`item-lock.ts`) so a terminal source counts as existing. Regression tests added in `orphan-sidecar.test.ts` (cancelled task + dropped spec both RETAINED). Verified by dry-run on this repo: `cross-job-ref-based-land-lock` now retained; the 6 genuine orphans still (correctly) reap.
+
+Discharge: this note's signal is now carried by the fix + its tests; delete once the fix lands.
