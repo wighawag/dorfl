@@ -293,6 +293,36 @@ export function setFrontmatterMarker(
 }
 
 /**
+ * Read ONE arbitrary top-level scalar frontmatter key by name, returning its
+ * unquoted value (or `undefined` when the doc has no fence, or the key is absent).
+ *
+ * A general-purpose companion to {@link parseFrontmatter} for keys that are NOT in
+ * the modelled {@link Frontmatter} shape — e.g. the observation→task provenance
+ * back-reference `promotedFrom:` the triage-promote path stamps and the create-CAS
+ * lost-race disambiguation reads (task
+ * `observation-triage-already-triaged-benign-skip`). Only top-level `key: value`
+ * lines are matched (block-list / nested values are out of scope for a scalar read).
+ */
+export function readFrontmatterField(
+	content: string,
+	key: string,
+): string | undefined {
+	const block = extractBlock(content);
+	if (block === undefined) {
+		return undefined;
+	}
+	const pattern = new RegExp(`^${key}\\s*:\\s*(.*)$`);
+	for (const line of block.split('\n')) {
+		const match = pattern.exec(line);
+		if (match) {
+			const value = unquote(match[1]);
+			return value === '' ? undefined : value;
+		}
+	}
+	return undefined;
+}
+
+/**
  * PROPAGATE the origin-trust PROVENANCE (`origin` + `originTrust`) from a SOURCE
  * artifact (a spec) onto a TARGET artifact's content (an emitted task), returning
  * the new content (task `untrusted-origin-forces-build-propose`). The tasker
