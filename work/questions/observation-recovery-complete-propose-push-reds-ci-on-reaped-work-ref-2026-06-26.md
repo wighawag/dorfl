@@ -33,3 +33,5 @@ Option (a): leave the frontmatter/body as-is but flip `needsAnswers: true` -> `f
 <!-- q3 fields: id=q3 -->
 
 **Your answer** (write below this line):
+
+Resolve via the EXISTING resolve-fully apply path (`applyAnsweredQuestions` path (3) in apply-persist.ts): harvest the answers into the body as a `## Applied answers` block, strip the open-questions block, clear `needsAnswers`, and delete the sidecar. This is invariant-clean (sidecar gone => `needsAnswers:false` is legal, no lie) and IS what "keep/resolve" means: the questions ARE answered, we just do not mint a task/spec/adr. No new KEEP state or frontmatter axis is needed. For THIS observation the harvested `## Applied answers` block already carries the verbatim "keep as evidence until `propose-push-survives-stale-lease-on-reaped-work-ref` lands, then delete" answer, so no separate `## Disposition` heading is needed. The genuine gap is only that the decision agent's verdict set {task,spec,adr,delete,ask} has no verdict routing to path (3) so it loops on `ask`; that is tracked SEPARATELY as a task to add a `resolve` verdict wired to the existing resolve-fully path.
