@@ -158,14 +158,15 @@ export interface ApplyCompleteTransitionInput {
 export type ApplyCompleteTransitionResult = IntegrateResult;
 
 /**
- * A *prepared* NEEDS-ATTENTION transition the caller asks the seam to apply: a
- * stuck claimed item to bounce to `work/needs-attention/` with its reason. Like
- * the other inputs it is storage-agnostic — it names the slug, the reason prose,
- * any surfaced questions, and an OPTIONAL arbiter to also push the branch to,
- * NOT *where* the move commits/publishes (the sole strategy decides that: a
- * `git mv` from whichever of in-progress/ or done/ holds the item, the
- * reason-in-the-body, the ONE atomic commit, the optional branch push). This
- * mirrors {@link RouteToNeedsAttentionOptions} so the move mechanism is unchanged.
+ * A *prepared* NEEDS-ATTENTION transition the caller asks the seam to apply:
+ * mark a stuck claimed item on its per-item lock with the reason. Like the
+ * other inputs it is storage-agnostic — it names the slug, the reason prose,
+ * any surfaced questions, and an OPTIONAL arbiter to also push the work branch
+ * to, NOT *where* the surface commits/publishes (the sole strategy decides
+ * that: post lock-cutover, a lock amend to `state: stuck` with the reason on
+ * the lock entry — no `work/needs-attention/` folder write — plus the optional
+ * branch push). This mirrors {@link RouteToNeedsAttentionOptions} so the
+ * mechanism stays unchanged.
  */
 export type ApplyNeedsAttentionTransitionInput = RouteToNeedsAttentionOptions;
 
@@ -181,9 +182,10 @@ export type ApplyNeedsAttentionTransitionResult = RouteToNeedsAttentionResult;
 
 /**
  * A *prepared* RETURN-TO-BACKLOG transition: re-queue a STUCK item so it can be
- * re-claimed — recovered from EITHER `needs-attention/` (the resolved-surface
- * path) OR `in-progress/` (a claim that never surfaced), the slug's actual
- * current folder resolved on the arbiter and moved to `backlog/`.
+ * re-claimed — recovered via its per-item lock on the arbiter (post lock-cutover
+ * the body never moved into a status folder; it rests in `backlog/`, so requeue
+ * releases/clears the lock rather than moving a `.md`). Covers both a resolved
+ * stuck hold and a claim that never surfaced.
  * Storage-agnostic, mirroring {@link ReturnToBacklogOptions}.
  */
 export type ApplyReturnToBacklogTransitionInput = ReturnToBacklogOptions;
@@ -198,11 +200,12 @@ export type ApplyReturnToBacklogTransitionResult =
 
 /**
  * A *prepared* TREE-LESS NEEDS-ATTENTION (surface) transition: surface a stuck
- * AFTER-COMMIT, LEDGER-ONLY item (`in-progress/ → needs-attention/`, with the
- * reason in the body) WITHOUT a checkout — the SURFACE-direction sibling of the
+ * AFTER-COMMIT, LEDGER-ONLY item (post lock-cutover — mark its per-item lock
+ * `state: stuck` with the reason, no `in-progress/ → needs-attention/` folder
+ * move) WITHOUT a checkout — the SURFACE-direction sibling of the
  * tree-less requeue, sharing its exact mechanism. The work is ALREADY committed
  * on the kept `work/<slug>` branch (intact on the arbiter, recoverable), so the
- * surface is purely the one-file `.md` move + reason — no `pushBranch`, no
+ * surface is purely the lock amend + reason — no `pushBranch`, no
  * worktree. Storage-agnostic, mirroring {@link SurfaceToNeedsAttentionOptions}.
  * NOT for the wip-save / gate-failed / agent-failed surfaces (which may carry
  * uncommitted work — those keep {@link applyNeedsAttentionTransition}, the
@@ -322,21 +325,22 @@ export interface LedgerWriteStrategy {
 		input: ApplyCompleteTransitionInput,
 	): Promise<ApplyCompleteTransitionResult>;
 	/**
-	 * Apply a NEEDS-ATTENTION transition: bounce a stuck claimed item to
-	 * `work/needs-attention/` with its reason recorded in the body. The sole
-	 * strategy delegates to the folder-native move mechanism unchanged; a future
-	 * strategy could surface the stuck item elsewhere (e.g. the cherry-pick-to-
-	 * `main` follow-on) without `complete.ts`/`run.ts` changing.
+	 * Apply a NEEDS-ATTENTION transition: mark a stuck claimed item on its
+	 * per-item lock with its reason (post lock-cutover — no folder write). The
+	 * sole strategy delegates to the underlying mechanism unchanged; a future
+	 * strategy could surface the stuck item elsewhere without
+	 * `complete.ts`/`run.ts` changing.
 	 */
 	applyNeedsAttentionTransition(
 		input: ApplyNeedsAttentionTransitionInput,
 	): Promise<ApplyNeedsAttentionTransitionResult>;
 	/**
 	 * Apply a TREE-LESS NEEDS-ATTENTION (surface) transition: surface a stuck
-	 * AFTER-COMMIT, LEDGER-ONLY item (`in-progress/ → needs-attention/`) WITHOUT a
+	 * AFTER-COMMIT, LEDGER-ONLY item (post lock-cutover — mark its per-item lock
+	 * `state: stuck`, no `in-progress/ → needs-attention/` folder move) WITHOUT a
 	 * checkout, reusing the SAME tree-less mechanism `requeue` uses for the reverse
-	 * direction. The sole strategy delegates to the tree-less surface (now a pure lock amend)
-	 * (fetch + scratch-index move + throwaway-ref + leased fast-forward push). NOT
+	 * direction. The sole strategy delegates to the tree-less surface (a pure lock
+	 * amend CAS-published to the arbiter's lock ref). NOT
 	 * for the uncommitted-wip surfaces, which keep {@link
 	 * applyNeedsAttentionTransition} (the cwd-bound path that can commit wip first).
 	 */
@@ -344,10 +348,11 @@ export interface LedgerWriteStrategy {
 		input: ApplyTreelessNeedsAttentionTransitionInput,
 	): ApplyTreelessNeedsAttentionTransitionResult;
 	/**
-	 * Apply a RETURN-TO-BACKLOG transition: re-queue a STUCK item (in
-	 * `needs-attention/` OR `in-progress/` — resolved on the arbiter) for
+	 * Apply a RETURN-TO-BACKLOG transition: re-queue a STUCK item (recovered via
+	 * its per-item lock on the arbiter — post lock-cutover the body rests in
+	 * `backlog/`, not a status folder) for
 	 * re-claiming, routed through the SAME seam. Like `claim`, it is TREE-LESS —
-	 * the move is a compare-and-swap push to the arbiter ref (it never writes the
+	 * the amend is a compare-and-swap push to the arbiter ref (it never writes the
 	 * cwd tree).
 	 */
 	applyReturnToBacklogTransition(
@@ -630,12 +635,12 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 *     bounce its `work/prd-<slug>`, a temp-branch caller pushes NOTHING.)
 	 *
 	 * Both halves are ONE operation done in ONE place: it delegates to {@link
-	 * routeToNeedsAttention}, which appends the reason as body prose (never a
-	 * frontmatter field — WORK-CONTRACT rule 3), saves the aborted work as a
-	 * **wip** commit, `git mv`s the item to `work/needs-attention/` as the
-	 * **move-only** commit (the tip), and — when an `arbiter` is given — pushes the
-	 * work branch (best-effort, branch-parameterised, emptiness-guarded; SURFACE-
-	 * ONLY when `pushBranch: false`). The seam does NOT strip the arbiter: the same
+	 * routeToNeedsAttention}, which saves the aborted work as a **wip** commit
+	 * on the work branch (post lock-cutover no `work/needs-attention/` folder
+	 * write ever fires here) and — when an `arbiter` is given — pushes the work
+	 * branch (best-effort, branch-parameterised, emptiness-guarded; SURFACE-
+	 * ONLY when `pushBranch: false`). The OBSERVABLE lock amend rides on
+	 * {@link bounceToStuckLock} directly below. The seam does NOT strip the arbiter: the same
 	 * arbiter both publishes the surface (here) AND drives the helper's branch push,
 	 * so "record stuck" and "save the work" can never drift apart. The human-vs-
 	 * autonomous gate rides on whether an `arbiter` is given at all (human
@@ -693,13 +698,12 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	},
 
 	/**
-	 * The tree-less surface transition under the SAME strategy: surface the stuck
-	 * AFTER-COMMIT, LEDGER-ONLY item by delegating to the tree-less surface (now a pure lock amend),
-	 * which moves `work/in-progress/<slug>.md → work/needs-attention/<slug>.md`
-	 * (reason in the body) TREE-LESSLY — it builds the move off `<arbiter>/main` with
-	 * plumbing and CAS-publishes it THROUGH this same write seam
-	 * (`applyTransition`, the very push+lease+verify `claim`/`requeue` use), never
-	 * staging/committing in the cwd working tree. The reverse of
+	 * The tree-less surface transition under the SAME strategy: surface the
+	 * stuck AFTER-COMMIT, LEDGER-ONLY item by delegating to the tree-less
+	 * surface — post lock-cutover a pure LOCK AMEND (`state: stuck` with the
+	 * reason on the lock entry), CAS-published to the arbiter's lock ref via
+	 * the same push+lease+verify seam `claim`/`requeue` use, never staging or
+	 * committing in the cwd working tree. The reverse of
 	 * {@link applyReturnToBacklogTransition}, the same one mechanism.
 	 */
 	async applyTreelessNeedsAttentionTransition(
@@ -727,13 +731,13 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 
 	/**
 	 * The resolve-needs-attention transition under the SAME strategy — satisfying
-	 * the INTENT "clear the stuck surface + restore in-progress." It delegates to
-	 * the resume lock amend (reverse `git mv` needs-attention →
-	 * in-progress, committed) and, when an `arbiter` is given, publishes that
-	 * reverse move-only commit to the arbiter's `main` — CLEARING the stuck surface
-	 * there (the item is back in in-progress on the ledger). Same all-or-nothing,
-	 * never-`--force` publish. "Reverse-move on `main`" is a detail of THIS
-	 * strategy; the seam's contract is only the intent "clear the surface."
+	 * the INTENT "clear the stuck surface + restore active." It delegates to
+	 * the resume lock amend (post lock-cutover — `stuck → active` on the per-item
+	 * lock, no reverse `needs-attention/ → in-progress/` folder move) and, when an
+	 * `arbiter` is given, CAS-publishes that lock amend to the arbiter's lock ref —
+	 * CLEARING the stuck surface there (the item is active again). Same
+	 * all-or-nothing, never-`--force` publish. The lock-ref amend is a detail of
+	 * THIS strategy; the seam's contract is only the intent "clear the surface."
 	 */
 	async applyResolveNeedsAttentionTransition(
 		input: ApplyResolveNeedsAttentionTransitionInput,

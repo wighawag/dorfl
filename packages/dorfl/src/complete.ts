@@ -317,9 +317,12 @@ export interface CompleteResult {
 	outcome: CompleteOutcome;
 	/**
 	 * True iff a FAILURE outcome (gate-failed / rebase-conflict) was routed to
-	 * `work/needs-attention/` via the shared mechanism (ADR §12), rather than left
-	 * dangling. Undefined/false on the success, `--skip-verify`, refused, and
-	 * usage-error paths (none of which move the item to needs-attention).
+	 * the shared needs-attention mechanism (ADR §12) — post lock-cutover, the
+	 * per-item lock is amended to `state: stuck` with the reason recorded on the
+	 * lock entry (there is no `work/needs-attention/` folder write anymore),
+	 * rather than the item being left dangling. Undefined/false on the success,
+	 * `--skip-verify`, refused, and usage-error paths (none of which mark the
+	 * item stuck).
 	 */
 	routedToNeedsAttention?: boolean;
 	/** The work branch that was completed, when one was resolved. */
@@ -491,13 +494,11 @@ function strandRefusalSlug(err: unknown): string | undefined {
 }
 
 /**
- * Surface an autonomous-path strand refusal to `needs-attention/` on the
- * arbiter via the TREE-LESS seam ({@link
- * ledgerWrite.applyTreelessNeedsAttentionTransition}). The mechanism is the
- * one `requeue`/`continue` already use in reverse: fetch `<arbiter>/main`,
- * resolve the slug's actual current folder ON THE ARBITER (arbiter-is-truth),
- * build the one-file `work/<src>/<slug>.md → work/needs-attention/<slug>.md`
- * move on a scratch index, and CAS-publish it. It NEVER touches the caller's
+ * Surface an autonomous-path strand refusal via the TREE-LESS seam ({@link
+ * ledgerWrite.applyTreelessNeedsAttentionTransition}). Post lock-cutover the
+ * seam is a pure LOCK AMEND — the item's per-item lock is moved to
+ * `state: stuck` with the reason on the lock entry; no folder move, no
+ * `work/needs-attention/` write. It NEVER touches the caller's
  * working tree / HEAD / index — important here because the refusal was raised
  * precisely because the working tree does NOT hold an `.md` to `git mv`. It is
  * idempotent (a re-surface of an already-surfaced slug is a no-op) and reports
@@ -525,8 +526,8 @@ async function surfaceAutonomousStrand(params: {
 	});
 	if (surfaced.moved) {
 		const message =
-			`'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ` +
-			`${arbiter}/main so the next autonomous tick does NOT re-claim it.`;
+			`'${slug}' refused (${reason}); marked stuck on its per-item lock ` +
+			`(published on ${arbiter}) so the next autonomous tick does NOT re-claim it.`;
 		note(message);
 		return {
 			exitCode: 1,

@@ -210,7 +210,10 @@ describe('work-layout guard — no raw work/<folder> path literal outside work-l
 		// Legitimate residual that the centralisation DELIBERATELY left — PROSE and
 		// the CI-template glob — MUST NOT match (they would otherwise red the gate).
 		for (const prose of [
-			"'${slug}' refused (${reason}); surfaced to work/needs-attention/ on ",
+			// Retired-folder PROSE (the `work/needs-attention/` folder is gone post
+			// lock-cutover; docstrings still name it to explain it is retired) must not
+			// be mistaken for a raw work-path literal.
+			'the `work/needs-attention/` folder is retired — stuck is the lock state',
 			'work/tasks/ready/${slug}.md (nor work/in-progress/${slug}.md nor ',
 			'Read the source spec (work/specs/ready/${input.slug}.md) and review the candidate',
 			'(A repo participates iff it has a work/tasks/ready/ with >= 1 .md file.)',

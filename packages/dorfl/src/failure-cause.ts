@@ -2,7 +2,8 @@
  * **The failure-CAUSE classifier** (task `failure-cause-classification-model-vs-
  * git-vs-agent`).
  *
- * When a claimed item routes to `work/needs-attention/`, the runner records WHY.
+ * When a claimed item is marked stuck on its per-item lock (post lock-cutover —
+ * `state: stuck`, no `work/needs-attention/` folder write), the runner records WHY.
  * Historically several DIFFERENT causes collapsed into one undifferentiated label
  * ("agent failed"), even though the CAUSE drives the RECOVERY:
  *

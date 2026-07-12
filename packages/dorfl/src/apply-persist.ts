@@ -46,7 +46,7 @@ import {
  * — there is no \"retain as resolved\" state.
  *
  * The work-item (task/spec) terminal MOVES (`tasks/cancelled`, `specs/dropped`) and
- * the `needs-attention/` LIFECYCLE state are a SEPARATE lifecycle concern (a
+ * the stuck (lock `state: stuck`) LIFECYCLE state are a SEPARATE lifecycle concern (a
  * task/spec is dropped by its own lifecycle, not by a question answer) — they are
  * NOT routed from here any more (they were the removed disposition vocabulary).
  *
