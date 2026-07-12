@@ -78,12 +78,31 @@ function seedObservation(
 		frontmatter?: 'none' | 'partial' | 'full';
 		triaged?: string;
 		needsAnswers?: boolean;
+		/**
+		 * Add a non-empty `## Open questions` block so the surface rung's
+		 * decision-record short-circuit (task
+		 * `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit`)
+		 * does NOT fire — use this in tests that need the surface-questions agent
+		 * to be dispatched (e.g. "agent flakes", "agent adds extras").
+		 */
+		provokesAgent?: boolean;
 	} = {},
 ): {itemPath: string} {
 	const itemPath = `work/notes/observations/${slug}.md`;
 	mkdirSync(join(repo, 'work', 'notes', 'observations'), {recursive: true});
 	const shape = opts.frontmatter ?? 'full';
-	const body = ['', `# ${slug}`, '', 'A durable note recorded here.', ''];
+	const tail =
+		opts.provokesAgent === true
+			? ['## Open questions', '', '- Is this the right layer?', '']
+			: [];
+	const body = [
+		'',
+		`# ${slug}`,
+		'',
+		'A durable note recorded here.',
+		'',
+		...tail,
+	];
 	let lines: string[];
 	if (shape === 'none') {
 		lines = body;
@@ -179,7 +198,8 @@ describe('advance triage — ALWAYS surfaces a deterministic triage question (no
 	});
 
 	it('the agent FLAKES (no parseable emit) ⇒ STILL surfaces the triage question, exit 0 (was: crash)', async () => {
-		const {repo} = seedRepoWith('flaky-target');
+		// `provokesAgent` so the short-circuit does NOT fire — we want the flake path.
+		const {repo} = seedRepoWith('flaky-target', {provokesAgent: true});
 		const {gate, spawns} = spySurface({
 			throwErr: 'surface agent produced no parseable {questions} result',
 		});
@@ -221,7 +241,8 @@ describe('advance triage — ALWAYS surfaces a deterministic triage question (no
 	});
 
 	it('the agent DOES add extra questions ⇒ ONE sidecar: q1 = triage question, then the extras', async () => {
-		const {repo} = seedRepoWith('rich-note');
+		// `provokesAgent` so the short-circuit does NOT fire — we want the agent to add extras.
+		const {repo} = seedRepoWith('rich-note', {provokesAgent: true});
 		const {gate} = spySurface({
 			emit: {
 				questions: [

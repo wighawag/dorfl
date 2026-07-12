@@ -78,7 +78,13 @@ const RELEASED: ReleaseAdvancingLockResult = {
 	message: 'released',
 };
 
-/** A throwaway repo with one UNTRIAGED observation (no needsAnswers, no sidecar). */
+/**
+ * A throwaway repo with one UNTRIAGED observation (no needsAnswers, no sidecar).
+ * Carries a non-empty `## Open questions` block so the surface rung's
+ * decision-record short-circuit (task
+ * `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit`)
+ * does NOT fire — these tests want the surface-questions agent to be dispatched.
+ */
 function seedObservation(slug = 'obs'): {repo: string; itemPath: string} {
 	const repo = join(scratch.root, 'project');
 	mkdirSync(repo, {recursive: true});
@@ -94,6 +100,10 @@ function seedObservation(slug = 'obs'): {repo: string; itemPath: string} {
 			'---',
 			'',
 			'Noticed a thing worth capturing.',
+			'',
+			'## Open questions',
+			'',
+			'- Is this the right layer?',
 			'',
 		].join('\n'),
 	);

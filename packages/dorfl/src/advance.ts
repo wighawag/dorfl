@@ -658,31 +658,52 @@ async function surfaceRung(
 
 	// 1. SPAWN the fresh-context `surface-questions` agent (the skill JUDGES). The
 	//    expensive model work is POST-lock (the lock is held by `performAdvance`).
+	//
+	// SHORT-CIRCUIT (primary/load-bearing half of task
+	// `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit`):
+	// an OBSERVATION with provably no open judgement (frontmatter `needsAnswers` NOT
+	// true, no non-empty `## Open questions` section, no pending sidecar) — the
+	// typical shape of a decision-record / already-triaged note — deterministically
+	// yields `{questions: []}` WITHOUT round-tripping the flaky surface-questions
+	// agent (source observation
+	// `surface-questions-agent-still-emits-no-parseable-questions-on-decision-record-obs-2026-07-10`).
+	// The loud-error contract from
+	// `advance-surface-limbo-observation-loudly-instead-of-silent-no-op` is
+	// PRESERVED for the observations that DO reach the agent — this only spares the
+	// ones that provably have nothing to ask. Conservative: fires only on
+	// observations; tasks/specs still always ask.
 	const gate = context.surfaceGate ?? harnessSurfaceGate();
 	let emit;
-	try {
-		emit = await gate({
-			item,
-			cwd,
-			surfaceModel: context.surfaceModel,
-		});
-	} catch (err) {
-		const detail = err instanceof Error ? err.message : String(err);
-		if (!hasBase) {
-			return {
-				exitCode: 1,
-				outcome: 'usage-error',
-				message: `surface ${item}: the surface-questions agent produced no usable emit (${detail}).`,
-			};
-		}
-		// The agent flaked but we have a deterministic base question to surface: the
-		// flake is NON-FATAL. Treat the agent's extras as empty and carry on (the
-		// base triage question still lands, so the human can triage via the sidecar).
+	if (isNothingToSurfaceObservation(cwd, input, itemPath, sidecarExists)) {
 		note(
-			`surface ${item}: the surface-questions agent produced no usable emit ` +
-				`(${detail}); surfacing the deterministic question(s) only.`,
+			`surface ${item}: auto-triaged (no open questions, no sidecar) — skipped agent.`,
 		);
 		emit = {questions: []};
+	} else {
+		try {
+			emit = await gate({
+				item,
+				cwd,
+				surfaceModel: context.surfaceModel,
+			});
+		} catch (err) {
+			const detail = err instanceof Error ? err.message : String(err);
+			if (!hasBase) {
+				return {
+					exitCode: 1,
+					outcome: 'usage-error',
+					message: `surface ${item}: the surface-questions agent produced no usable emit (${detail}).`,
+				};
+			}
+			// The agent flaked but we have a deterministic base question to surface: the
+			// flake is NON-FATAL. Treat the agent's extras as empty and carry on (the
+			// base triage question still lands, so the human can triage via the sidecar).
+			note(
+				`surface ${item}: the surface-questions agent produced no usable emit ` +
+					`(${detail}); surfacing the deterministic question(s) only.`,
+			);
+			emit = {questions: []};
+		}
 	}
 
 	// 2. The ENGINE persists (the skill wrote nothing): append-or-create the sidecar
@@ -715,6 +736,93 @@ async function surfaceRung(
 			`surfaced ${result.entryCount} question(s) for ${item} → ${result.sidecarPath} ` +
 			`(needsAnswers:true, CAS-atomic).`,
 	};
+}
+
+/**
+ * Would this OBSERVATION provably surface `{questions: []}` — i.e. is there no
+ * open judgement anywhere on it? Cheap read-only predicate the surface rung uses
+ * to skip the flaky agent round-trip for already-triaged / decision-record notes
+ * (task
+ * `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit`;
+ * source observation
+ * `surface-questions-agent-still-emits-no-parseable-questions-on-decision-record-obs-2026-07-10`).
+ *
+ * Fires ONLY when ALL of these hold (conservative — err on the side of STILL
+ * calling the agent if uncertain):
+ *   - the item's namespace is `observation` (tasks/specs are out of scope here —
+ *     they carry no engine-owned base question and a false-positive there would
+ *     silently drop a real question the author asked for);
+ *   - the item body's frontmatter does NOT set `needsAnswers: true` (an author
+ *     who set the flag is explicitly asking for the agent's pass);
+ *   - the body carries no non-empty `## Open questions` section (empty /
+ *     whitespace-only sections don't count as judgement);
+ *   - there is no pending open-question sidecar for the item (same signal the
+ *     classifier's invariant-1 read uses — the sidecar path is identity-derived).
+ *
+ * The decision-record shape (a `Decision (…)` line and/or `## Alternatives
+ * considered` section) is a HINT, not required — the four conditions above are
+ * load-bearing on their own.
+ */
+function isNothingToSurfaceObservation(
+	cwd: string,
+	input: RungExecInput,
+	itemPath: string,
+	sidecarExists: boolean,
+): boolean {
+	if (input.namespace !== 'observation') {
+		return false;
+	}
+	if (sidecarExists) {
+		return false;
+	}
+	let content: string;
+	try {
+		content = readFileSync(join(cwd, itemPath), 'utf8');
+	} catch {
+		return false;
+	}
+	const fm = parseFrontmatter(content);
+	if (fm.needsAnswers === true) {
+		return false;
+	}
+	if (hasNonEmptyOpenQuestionsSection(content)) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Does the body carry a non-empty `## Open questions` section? Tolerates the
+ * `## Open questions to NOT guess` variant the capture-signal skill writes (same
+ * pattern the triage split uses). Whitespace-only / "none" markers count as
+ * empty.
+ */
+function hasNonEmptyOpenQuestionsSection(content: string): boolean {
+	const lines = content.replace(/\r\n/g, '\n').split('\n');
+	const startIdx = lines.findIndex((l) => /^##\s+Open questions\b/i.test(l));
+	if (startIdx === -1) {
+		return false;
+	}
+	let endIdx = lines.length;
+	for (let i = startIdx + 1; i < lines.length; i++) {
+		if (/^##\s+/.test(lines[i])) {
+			endIdx = i;
+			break;
+		}
+	}
+	const body = lines
+		.slice(startIdx + 1, endIdx)
+		.join('\n')
+		.trim();
+	if (body === '') {
+		return false;
+	}
+	// A single "none" / "n/a" marker line — treat as empty (author signalled "no
+	// open judgement" explicitly).
+	if (/^(?:none|n\/a|-|_+)\.?$/i.test(body)) {
+		return false;
+	}
+	return true;
 }
 
 /**
