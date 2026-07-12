@@ -80,6 +80,39 @@ export interface LifecyclePoolGates {
 	 * default is `true`). Spec `staging-surface-and-apply-promote-safety` F2.
 	 * BUILD/claim eligibility is UNCHANGED in either mode — staging items stay
 	 * non-claimable, the trust model is untouched.
+	 *
+	 * CREATE-vs-CONSUME EDGE (accepted, spec
+	 * `staging-surface-and-apply-promote-safety` F2 follow-up): `surfaceStaging`
+	 * gates the CREATE half (surface-side ENUMERATION of staged candidates).
+	 * APPLY (the consume half) reads through the SAME enumeration, so flipping
+	 * `surfaceStaging` true→false AFTER a surface tick has minted+answered a
+	 * staged sidecar can STRAND that sidecar in staging until the flag is flipped
+	 * back on. The realistic flip direction is off→on (opt-in widening), and an
+	 * answered staged sidecar only exists if surfacing (opt-in) minted it, so the
+	 * strand window is narrow and accepted. Revisit only if the create-vs-consume
+	 * invariant must hold strictly (e.g. re-route `apply` to consume regardless of
+	 * the surface gate).
+	 *
+	 * ## Decisions (ratified by task
+	 * `f2-mirror-path-staging-test-and-ratify-decisions`, follow-up to slice
+	 * `f2-surface-staging-config-and-pool-extension` — gate-2 review nits)
+	 *
+	 * 1. **Split default is intentional.** `LifecyclePoolGates.surfaceStaging`
+	 *    defaults `false` at the library boundary; `Config.surfaceStaging` defaults
+	 *    `true` at the user-visible layer. The calm library default is load-bearing
+	 *    for any direct caller of `gatherLifecycle*` that does NOT thread CLI gates
+	 *    — they get pool-only behaviour by default and opt IN to staging.
+	 * 2. **Four new public methods on `LedgerReadStrategy` are intentional**
+	 *    (`resolveLocalTaskStaging`, `resolveLocalSpecStaging`,
+	 *    `resolveMirrorTaskStaging`, `resolveMirrorSpecStaging`), rather than
+	 *    overloading `resolveLocalState` / `resolveMirrorState` with a flag. Keeps
+	 *    the state vs. staging axes orthogonal at the interface.
+	 * 3. **The `surfaceStaging` gate is consumed by the GATHER, not by pure
+	 *    `buildLifecyclePools`,** even though the field lives on
+	 *    `LifecyclePoolGates`. Placement acknowledged above; ratified as intentional
+	 *    so the gate colocates with its sibling create-side gates.
+	 * 4. **`surfaceStaging` in `REPO_ALLOWED_KEYS` is intentional** so a repo's
+	 *    `.dorfl.json` can flip it via the normal resolution chain.
 	 */
 	surfaceStaging?: boolean;
 }
