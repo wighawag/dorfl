@@ -70,18 +70,22 @@ describe('cli.ts wires a real apply decider at every advance entry point', () =>
 		expect(applyModelSites.length).toBe(triageSites.length);
 	});
 
-	it('the apply rung permits the full subset including adr (mint-adr is now WIRED)', () => {
+	it('the apply rung permits the full subset including adr + resolve (mint-adr + resolve-no-mint are WIRED)', () => {
 		// `adr` was DEFERRED at the keystone launch and is now WIRED by task
-		// `agentic-apply-mint-adr-route` (which added the mintAdr route). The reachable
-		// rung now PERMITS an `adr` verdict (routed to docs/adr/), so the allowed set
-		// is the full `{task | spec | adr | delete | ask}`.
+		// `agentic-apply-mint-adr-route` (which added the mintAdr route). `resolve` was
+		// added by task `apply-decide-resolve-verdict-mint-nothing` (routed to the
+		// resolve-fully path: settle the loop, mint nothing, KEEP the note). The
+		// reachable rung now PERMITS both, so the allowed set is the full
+		// `{task | spec | adr | delete | resolve | ask}`.
 		expect([...APPLY_ALLOWED_OUTCOMES].sort()).toEqual([
 			'adr',
 			'ask',
 			'delete',
+			'resolve',
 			'spec',
 			'task',
 		]);
 		expect(APPLY_ALLOWED_OUTCOMES).toContain('adr');
+		expect(APPLY_ALLOWED_OUTCOMES).toContain('resolve');
 	});
 });

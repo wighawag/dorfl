@@ -1,6 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {mkdirSync, writeFileSync, existsSync} from 'node:fs';
+import {mkdirSync, writeFileSync, existsSync, readFileSync} from 'node:fs';
+import {parseFrontmatter} from '../src/frontmatter.js';
 import {performAdvanceAuto} from '../src/advance-drivers.js';
 import type {ApplyDecider} from '../src/apply-decide.js';
 import type {DecisionVerdict} from '../src/decision-engine.js';
@@ -222,5 +223,64 @@ describe('answered observation apply — end-to-end through the driver (classifi
 		expect(gitIn(['log', '-1', '--format=%B', 'HEAD'], seeded.repo)).toContain(
 			'DISTINCT-E2E-DELETE-REASON',
 		);
+	});
+
+	it('resolve: `performAdvanceAuto` on an answered observation + a `resolve` verdict settles the loop WITHOUT minting and RETAINS the note — answers harvested into the body, `needsAnswers` cleared, sidecar deleted, no task/spec/adr created, note file kept', async () => {
+		// The resolve verdict is the local-only "mint nothing, keep the note" path
+		// (task `apply-decide-resolve-verdict-mint-nothing`). It routes to the
+		// EXISTING resolve-fully branch of `applyAnsweredQuestions`, so it needs no
+		// arbiter round-trip — it exercises the classifier → apply → decide →
+		// `applyAnsweredQuestions` resolve-fully chain end-to-end.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const {itemPath, sidecarPath} = seedAnsweredObservationOnMain(
+			seeded.repo,
+			'e2e-resolve',
+		);
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
+
+		const {decide, calls} = spyDecide({
+			outcome: 'resolve',
+			resolveReason: 'acknowledged; keep this on record, no artifact to mint',
+		});
+		const result = await performAdvanceAuto({
+			cwd: seeded.repo,
+			arbiter: 'arbiter',
+			applyDecide: decide,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+			lifecycleGates: {triage: false, surface: false},
+			config: mergeConfig({
+				autoBuild: false,
+				autoTask: false,
+				observationTriage: 'off',
+			}),
+			count: 5,
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(result.results).toHaveLength(1);
+		expect(result.results[0].outcome).toBe('advanced');
+		expect(result.results[0].rung).toBe('apply');
+		// The agentic decider was consulted exactly once.
+		expect(calls.count).toBe(1);
+
+		// The NOTE is RETAINED (not deleted, unlike the `delete` sibling) and now
+		// carries the harvested answers; the sidecar is GONE and the flag is cleared.
+		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
+		expect(existsSync(join(seeded.repo, sidecarPath))).toBe(false);
+		const body = readFileSync(join(seeded.repo, itemPath), 'utf8');
+		expect(body).toContain('## Applied answers');
+		expect(body).toContain('mint a task for it');
+		expect(parseFrontmatter(body).needsAnswers).toBe(false);
+
+		// NOTHING was minted: no task, spec, or adr materialised for this slug.
+		expect(
+			existsSync(join(seeded.repo, 'work/tasks/ready/e2e-resolve.md')),
+		).toBe(false);
+		expect(
+			existsSync(join(seeded.repo, 'work/specs/proposed/e2e-resolve.md')),
+		).toBe(false);
+		expect(existsSync(join(seeded.repo, 'docs/adr'))).toBe(false);
 	});
 });
