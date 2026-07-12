@@ -11,16 +11,10 @@
  * pre-branched, pre-edited working clone (the test seeds those steps in the
  * parent process so the race window is the push, not the build), with a
  * filesystem-rendezvous so both processes ARRIVE at the push concurrently
- * without any wall-clock dependency:
- *
- *   - "race" rendezvous: each worker writes `ready-<slug>` into the rendezvous
- *     dir and busy-polls until BOTH ready files exist, then proceeds. Both
- *     processes enter the rebase+push step within a small window, so the CAS
- *     loop arbitrates them.
- *   - "serialise-after" rendezvous: a worker waits for a `done-<other>` file to
- *     appear before proceeding. Used for the deterministic past-cap branch:
- *     the high-cap worker pushes first; the cap=0 worker then hits an advanced
- *     `main` on its first push attempt and exhausts immediately.
+ * without any wall-clock dependency: each worker writes `ready-<slug>` into
+ * the rendezvous dir and busy-polls until BOTH ready files exist, then
+ * proceeds. Both processes enter the rebase+push step within a small window,
+ * so the CAS loop arbitrates them.
  *
  * On completion the worker emits a single JSON line on stdout describing the
  * `performIntegration` outcome (`outcome`, `reason`, `routedToNeedsAttention`)
@@ -29,7 +23,7 @@
  * against the bare arbiter — that's the cross-substrate authority).
  */
 
-import {existsSync, readdirSync, writeFileSync} from 'node:fs';
+import {readdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../../src/integration-core.js';
 import {mergeConfig} from '../../src/config.js';
@@ -40,9 +34,7 @@ interface WorkerArgs {
 	arbiter: string;
 	mergeRetries: number;
 	rendezvousDir: string;
-	/** If set, wait for `done-<slug>` BEFORE proceeding (deterministic loser). */
-	serialiseAfter?: string;
-	/** Otherwise wait until this many `ready-*` files exist (race rendezvous). */
+	/** Wait until this many `ready-*` files exist (race rendezvous). */
 	expectedReadyCount?: number;
 }
 
@@ -71,23 +63,15 @@ async function main(): Promise<void> {
 	// Announce arrival.
 	writeFileSync(join(args.rendezvousDir, `ready-${args.slug}`), 'ready');
 
-	// Block until the rendezvous condition fires.
-	if (args.serialiseAfter !== undefined) {
-		await pollUntil(
-			() => existsSync(join(args.rendezvousDir, `done-${args.serialiseAfter}`)),
-			30_000,
-			`serialise-after ${args.serialiseAfter}`,
-		);
-	} else {
-		const want = args.expectedReadyCount ?? 2;
-		await pollUntil(
-			() =>
-				readdirSync(args.rendezvousDir).filter((f) => f.startsWith('ready-'))
-					.length >= want,
-			30_000,
-			`race ready-count >= ${want}`,
-		);
-	}
+	// Block until the race rendezvous condition fires.
+	const want = args.expectedReadyCount ?? 2;
+	await pollUntil(
+		() =>
+			readdirSync(args.rendezvousDir).filter((f) => f.startsWith('ready-'))
+				.length >= want,
+		30_000,
+		`race ready-count >= ${want}`,
+	);
 
 	const result = await performIntegration({
 		cwd: args.cwd,
@@ -108,9 +92,6 @@ async function main(): Promise<void> {
 		mergeJitterMs: 0,
 		env: process.env,
 	});
-
-	// Signal completion so a serialised peer can proceed.
-	writeFileSync(join(args.rendezvousDir, `done-${args.slug}`), 'done');
 
 	process.stdout.write(
 		JSON.stringify({
