@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-07-10 — sub-batch (c) spec→spec: scope/coherence decisions
 
 Recorded while building `rename-spec-remaining-src-modules-c` (do/advance family consumers + `do spec:`/`advance spec:` verb dispatch + `spec-complete.ts → spec-complete.ts`). These are the judgement calls where the task's literal file/symbol list met the code's actual shape. Full gate green (`pnpm -r build && pnpm -r test && pnpm format:check`; 2918 tests).
