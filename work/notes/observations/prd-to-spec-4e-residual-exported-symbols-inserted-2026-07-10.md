@@ -1,6 +1,7 @@
 ---
 title: spec→spec re-scope #2 — inserted atomic-migrate batch 4e (residual exported Spec* symbols + PrdsLandIn plumbing) before the contract task; the C-audit's symbol coverage was incomplete TWICE (option A, ratified 2026-07-10)
 date: 2026-07-10
+needsAnswers: true
 ---
 
 ## Trigger
