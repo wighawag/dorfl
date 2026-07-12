@@ -57,6 +57,19 @@ This is the in-process half of Story 13; the cross-job half is
   tests, not here. Recorded per follow-up task
   `harden-test-in-process-concurrent-land-review-nits` (Gate 2 nit #1).
 
+- **A stale observation note was removed, not exempted.** The prior
+  attempt at the follow-up task added an observation note claiming the
+  `prd-word-cutover-leak-scan` gate was red on `main` before this work
+  began. That premise was false at land time: the task body it blamed
+  (`hard-cutover-remove-last-prd-back-compat-key-and-dead-verb`) had
+  already landed and been added to that scan's provenance allow-list, so
+  the gate is green on `main`. The note itself was the ONLY thing failing
+  the gate (its own un-backticked hyphen construct tripped the word lens),
+  so it was deleted rather than added to the allow-list: exempting a
+  factually-wrong note would preserve a misleading signal AND widen the
+  allow-list for no real provenance. Recorded per follow-up task
+  `harden-test-in-process-concurrent-land-review-nits`.
+
 ## Prompt
 
 > Read Story 13 + the Testing Decisions section. Read `run.ts` to see
