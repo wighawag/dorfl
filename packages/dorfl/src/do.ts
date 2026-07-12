@@ -252,10 +252,10 @@ export interface DoOptions {
 	 * CONFIGURED-DEFAULT rung into the runner-deterministic placement resolver
 	 * (`src/placement.ts`). Resolved per-repo through the SAME chain as
 	 * `taskingIntegration` (flag > env > per-repo > global > built-in
-	 * `pre-backlog`). The task-BUILD path ignores it (placement is a TASKING
+	 * `backlog`). The task-BUILD path ignores it (placement is a TASKING
 	 * lifecycle concern).
 	 */
-	tasksLandIn?: 'pre-backlog' | 'ready';
+	tasksLandIn?: 'backlog' | 'ready';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung in the placement resolver). Set ONLY when the operator typed
@@ -264,7 +264,7 @@ export interface DoOptions {
 	 * CLI always wins, no special force-key) — the positional analogue of
 	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
 	 */
-	explicitTasksLandIn?: 'pre-backlog' | 'ready';
+	explicitTasksLandIn?: 'backlog' | 'ready';
 	/**
 	 * Override the pre-flight DIVERGENCE guard (`--ignore-diverged-main`, mirroring
 	 * `--ignore-not-ready`): proceed even when local `main` is ahead of
@@ -508,12 +508,12 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 * spec:<slug>` path: threaded into {@link performTask} as the
 	 * configured-default rung. See {@link DoOptions.tasksLandIn}.
 	 */
-	tasksLandIn?: 'pre-backlog' | 'ready';
+	tasksLandIn?: 'backlog' | 'ready';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
 	 * spec:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
-	explicitTasksLandIn?: 'pre-backlog' | 'ready';
+	explicitTasksLandIn?: 'backlog' | 'ready';
 	/** The declared per-repo ENV-PREP step (string | list), run ONCE before the
 	 * first `verify` on a fresh worktree. Unset ⇒ a no-op (NO default install). */
 	prepare?: VerifyConfig;

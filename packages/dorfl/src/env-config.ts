@@ -100,12 +100,12 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	taskingIntegration: {enum: ['propose', 'merge']},
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
-	// `pre-backlog`/`ready` enum, so `DORFL_TASKS_LAND_IN=ready` works and a
+	// `backlog`/`ready` enum, so `DORFL_TASKS_LAND_IN=ready` works and a
 	// typo FAILS LOUDLY. Same
 	// precedence chain as `taskingIntegration` (flag > env > per-repo > global >
-	// built-in `pre-backlog`); fed into the runner-deterministic placement
+	// built-in `backlog`); fed into the runner-deterministic placement
 	// resolver (`src/placement.ts`) as the configured-default rung.
-	tasksLandIn: {enum: ['pre-backlog', 'ready']},
+	tasksLandIn: {enum: ['backlog', 'ready']},
 	// `specsLandIn` (the per-repo SPEC-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
 	// `pre-proposed`/`ready` enum, so `DORFL_SPECS_LAND_IN=ready` works and a typo

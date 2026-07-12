@@ -464,7 +464,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
-	it('the explicit `--tasks-land-in pre-backlog` flag OVERRIDES a `tasksLandIn: ready` config (operator flag wins)', async () => {
+	it('the explicit `--tasks-land-in backlog` flag OVERRIDES a `tasksLandIn: ready` config (operator flag wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		writeRepoConfig(repo, {autoTask: true, tasksLandIn: 'ready'});
@@ -475,7 +475,7 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 			'--merge',
 			'--no-review',
 			'--tasks-land-in',
-			'pre-backlog',
+			'backlog',
 		]);
 		expect(code, captured).toBe(0);
 		// The flag beat the config: STAGED despite `tasksLandIn: ready`.
@@ -501,6 +501,11 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		]);
 		expect(code === undefined || code !== 0).toBe(true);
 		expect(captured).toMatch(/tasks-land-in/i);
+		// The usage error names the CURRENT accepted spellings (`backlog`,
+		// `ready`), not the legacy `pre-backlog` staging spelling.
+		expect(captured).toMatch(/'backlog'/);
+		expect(captured).toMatch(/'ready'/);
+		expect(captured).not.toMatch(/'pre-backlog'/);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});

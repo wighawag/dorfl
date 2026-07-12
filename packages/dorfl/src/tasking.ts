@@ -53,7 +53,7 @@ import type {ReviewGate} from './review-gate.js';
  * (`tasking-eligibility.ts`) and the tasking LOCK (`tasking-lock.ts`) together to
  * task a spec into `work/tasks/backlog/` STAGED items (task
  * `pre-backlog-staging-folder-and-promote-step-a` — the runner-owned promotion
- * moves them `pre-backlog/ → backlog/` later), with the RUNNER owning every git-state
+ * moves them `tasks/backlog/ → tasks/ready/` later), with the RUNNER owning every git-state
  * transition. This is the spec branch of the `do` worker (ADR
  * `command-surface-and-journeys.md` §3/§3a), NOT a standalone `task` command;
  * `do.ts` dispatches `resolved.namespace === 'spec'` here.
@@ -267,10 +267,10 @@ export interface PerformTaskOptions {
 	 * resolver (`src/placement.ts`). The resolver overlays an EXPLICIT operator
 	 * flag ({@link explicitTasksLandIn}, top) and the UNTRUSTED-ORIGIN force
 	 * (`originTrust: untrusted` ⇒ staging) on top. Unset ⇒ the resolver's
-	 * built-in floor applies (`staging` = `pre-backlog/`, the conservative
+	 * built-in floor applies (`staging` = `tasks/backlog/`, the conservative
 	 * landing that preserves zero behaviour change for the normal path).
 	 */
-	tasksLandIn?: 'pre-backlog' | 'ready';
+	tasksLandIn?: 'backlog' | 'ready';
 	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung). When set, the runner-deterministic resolver lands the tasks HERE
@@ -280,7 +280,7 @@ export interface PerformTaskOptions {
 	 * force-key"). Set ONLY when the operator typed `--tasks-land-in <where>`;
 	 * never when the value came from config.
 	 */
-	explicitTasksLandIn?: 'pre-backlog' | 'ready';
+	explicitTasksLandIn?: 'backlog' | 'ready';
 	/**
 	 * **The tasker review→edit→converge LOOP** (`slicer-review-edit-loop`, GATES spec
 	 * `work/specs/ready/review.md` RESOLVED DESIGN — Shape 2 / insertion point A). When
@@ -334,10 +334,10 @@ const DEFAULT_ARBITER = 'origin';
  * task `pre-backlog-staging-folder-and-promote-step-a`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). The runner
  * lands the tasker's emitted task files HERE, NOT in `work/tasks/ready/`: an item
- * born in `pre-backlog/` is durable + readable but NOT in the agent-eligible
+ * born in `tasks/backlog/` is durable + readable but NOT in the agent-eligible
  * pool (`work/tasks/ready/` STILL means the pool — every reader is byte-for-byte
  * unchanged). A runner/human-owned promotion (`promoteFromPreBacklog` in
- * `needs-attention.ts`) moves an approved item `pre-backlog/ → backlog/` to make
+ * `needs-attention.ts`) moves an approved item `tasks/backlog/ → tasks/ready/` to make
  * it claimable. STEP A: ADDITIVE — no `work/tasks/ready/` reader changes here.
  */
 export const STAGED_TASKS_DIR = workFolderRel('tasks-backlog');
@@ -360,17 +360,19 @@ const TASK_PLACEMENT_SLOTS = {
 } as const;
 
 /**
- * Map the `tasksLandIn` value spelling (`pre-backlog` | `ready`) onto the
+ * Map the `tasksLandIn` value spelling (`backlog` | `ready`) onto the
  * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
  * `undefined` when no value is set, so the resolver's next precedence rung
- * applies (the built-in floor). The legacy `'backlog'`/`'todo'` pool spellings
- * are NOT accepted (clean break — the value was renamed `'backlog'` → `'todo'`
- * → `'ready'`, ADR `rename-task-pool-folder-todo-to-ready`).
+ * applies (the built-in floor). The legacy `'pre-backlog'`/`'todo'` spellings
+ * are NOT accepted (clean break — the staging value was renamed
+ * `'pre-backlog'` → `'backlog'`, and the pool value was renamed
+ * `'backlog'` → `'todo'` → `'ready'`, ADR
+ * `rename-task-pool-folder-todo-to-ready`).
  */
 function landingToSide(
-	landing: 'pre-backlog' | 'ready' | undefined,
+	landing: 'backlog' | 'ready' | undefined,
 ): 'staging' | 'pool' | undefined {
-	if (landing === 'pre-backlog') return 'staging';
+	if (landing === 'backlog') return 'staging';
 	if (landing === 'ready') return 'pool';
 	return undefined;
 }
@@ -1087,7 +1089,7 @@ async function stageTaskingLifecycle(params: {
  * snapshot (the branch-base state of `work/tasks/ready/`, taken BEFORE the agent
  * ran), any new file is removed from the worktree and any changed file is
  * checked back out to HEAD — so the subsequent `git add -A` cannot land it. The
- * runner's commit then carries ONLY the explicit `pre-backlog/` placement.
+ * runner's commit then carries ONLY the explicit `tasks/backlog/` placement.
  */
 async function scrubPoolDrift(
 	cwd: string,

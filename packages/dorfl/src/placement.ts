@@ -19,7 +19,7 @@
  *
  * LIFECYCLE-GENERIC. The folder names + the configured-default value are
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
- * TASK lifecycle (`tasksLandIn`: `pre-backlog`/`ready` — the POOL value was
+ * TASK lifecycle (`tasksLandIn`: `backlog`/`ready` — the POOL value was
  * renamed `'backlog'` → `'todo'` → `'ready'`, ADR
  * `rename-task-pool-folder-todo-to-ready`) AND the SPEC-
  * placement lifecycle (`specsLandIn`: `pre-proposed`/`ready`) without forking. A future
@@ -31,7 +31,7 @@
  * Which side of the staging/pool split the runner chose. The CALLER maps this
  * onto the lifecycle's concrete folder name via {@link PlacementSlots}.
  *
- * - `'staging'` — land in the staging area (tasks: `pre-backlog/`; prds:
+ * - `'staging'` — land in the staging area (tasks: `tasks/backlog/`; prds:
  *   `specs/proposed/`). Not in the agent pool; a human/runner promotion is needed to make
  *   the item eligible. Review-without-PR review surface.
  * - `'pool'` — land directly in the agent-eligible pool (tasks: `tasks/ready/`;
@@ -42,7 +42,7 @@ export type PlacementSide = 'staging' | 'pool';
 /**
  * The two folder names a lifecycle uses for its staging/pool split. Supplied by
  * the caller so this resolver stays lifecycle-generic (the TASK caller passes
- * `{staging: 'pre-backlog', pool: 'tasks/ready'}`; the SPEC-placement caller passes
+ * `{staging: 'tasks/backlog', pool: 'tasks/ready'}`; the SPEC-placement caller passes
  * `{staging: 'specs/proposed', pool: 'specs/ready'}`).
  */
 export interface PlacementSlots {

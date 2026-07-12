@@ -221,15 +221,18 @@ describe('envOverrides — enum coercion', () => {
 		});
 		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, task
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as
-		// the `pre-backlog`/`ready` enum, on the
+		// the `backlog`/`ready` enum, on the
 		// SAME flag > env > per-repo > global > built-in chain as
-		// `taskingIntegration`. The legacy `'backlog'`/`'todo'` pool spellings are NOT
-		// accepted (clean break — ADR `rename-task-pool-folder-todo-to-ready`).
+		// `taskingIntegration`. The legacy `'pre-backlog'` staging spelling and the
+		// legacy `'todo'` pool spelling are NOT accepted (clean break — the staging
+		// value was renamed `'pre-backlog'` → `'backlog'`; the pool value was
+		// renamed `'backlog'` → `'todo'` → `'ready'`, ADR
+		// `rename-task-pool-folder-todo-to-ready`).
 		expect(envOverrides({DORFL_TASKS_LAND_IN: 'ready'})).toEqual({
 			tasksLandIn: 'ready',
 		});
-		expect(envOverrides({DORFL_TASKS_LAND_IN: 'pre-backlog'})).toEqual({
-			tasksLandIn: 'pre-backlog',
+		expect(envOverrides({DORFL_TASKS_LAND_IN: 'backlog'})).toEqual({
+			tasksLandIn: 'backlog',
 		});
 		// HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`):
 		// `DORFL_SPECS_LAND_IN` (the sole spec-placement env) coerces the

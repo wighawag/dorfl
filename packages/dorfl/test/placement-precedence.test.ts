@@ -165,7 +165,7 @@ describe('placement rung 4: built-in floor (no tasksLandIn, no explicit, trusted
 			integration: 'merge',
 			dorfl: taskingAgent('child'),
 			// No tasksLandIn, no explicitTasksLandIn \u2014 the resolver's built-in
-			// floor applies (`staging` = `pre-backlog/`).
+			// floor applies (`staging` = `tasks/backlog/`).
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
@@ -202,7 +202,7 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 		expect(result.emitted).toEqual(['work/tasks/ready/child.md']);
 	});
 
-	it('tasksLandIn: pre-backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
+	it('tasksLandIn: backlog + trusted origin \u21d2 lands STAGED in work/tasks/backlog/', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -211,7 +211,7 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			tasksLandIn: 'pre-backlog',
+			tasksLandIn: 'backlog',
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
@@ -295,7 +295,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			autoTask: true,
 			integration: 'merge',
 			// A repo whose configured default is staging \u2026
-			tasksLandIn: 'pre-backlog',
+			tasksLandIn: 'backlog',
 			// \u2026 but the operator EXPLICITLY typed --tasks-land-in ready. The
 			// operator is present; CLI always wins (no special force-key), exactly
 			// like `--merge` overriding the untrusted-origin build-propose rule.
@@ -308,7 +308,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('explicit --tasks-land-in pre-backlog + tasksLandIn: ready + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
+	it('explicit --tasks-land-in backlog + tasksLandIn: ready + trusted origin \u21d2 lands STAGED (operator override beats configured default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -318,7 +318,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'ready',
-			explicitTasksLandIn: 'pre-backlog',
+			explicitTasksLandIn: 'backlog',
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
@@ -332,7 +332,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 // The "runner places, not the agent" structural invariant (AC #4 / US #15).
 // --------------------------------------------------------------------------
 describe("the agent's emitted output lands where the RUNNER's policy dictates, not where the agent wrote", () => {
-	it('a SELF-PLACING agent (writes to both pre-backlog AND backlog) is scrubbed; the runner places the task via the resolver', async () => {
+	it('a SELF-PLACING agent (writes to both backlog AND ready) is scrubbed; the runner places the task via the resolver', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -344,7 +344,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			// The repo's resolved default lands in STAGING; the agent's
 			// attempted self-placement into the pool is scrubbed; the runner's
 			// commit reflects ONLY the policy-resolved destination.
-			tasksLandIn: 'pre-backlog',
+			tasksLandIn: 'backlog',
 			dorfl: selfPlacingAgent('child'),
 			env: gitEnv(),
 		});
