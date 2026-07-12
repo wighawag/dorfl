@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-07-12: drop/dropped glossary, the task's "triage disposition value" sub-premise was stale
 
 Task `drop-verb-cleanup-dead-config-flag-and-glossary` (Context nit 2) asked the CONTEXT.md glossary entry to pin `dropped` as BOTH the SPEC won't-proceed terminal (`specs/dropped/`, WORK-CONTRACT.md) AND "the triage disposition value (per SURFACE-PROTOCOL.md:47/58)". That second clause is STALE relative to the current protocol: the observation-triage disposition-TOKEN vocabulary has since been RETIRED. SURFACE-PROTOCOL.md now states a sidecar entry is binary (no-answer | answered) with no `disposition=` field, and `triage-observations/SKILL.md:38` says outright "there is no `delete`/`dropped` token to stamp" (a discard is the DIRECT `drop`/`git rm`).
