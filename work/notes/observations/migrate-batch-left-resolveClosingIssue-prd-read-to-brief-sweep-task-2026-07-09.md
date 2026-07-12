@@ -2,7 +2,7 @@
 type: observation
 status: spotted
 spotted: 2026-07-09
-triaged: keep
+triaged: resolve
 ---
 
 # MIGRATE batch left `frontmatter.ts:resolveClosingIssue`'s `.spec` read to the brief-sweep/contract task (2026-07-09)

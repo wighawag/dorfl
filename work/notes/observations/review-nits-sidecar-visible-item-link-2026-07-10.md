@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'sidecar-visible-item-link' (Gate 2 app
 date: 2026-07-10
 status: resolved
 reviewOf: sidecar-visible-item-link
+triaged: resolve
 ---
 
 ## Resolution (2026-07-12)

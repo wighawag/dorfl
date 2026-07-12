@@ -3,7 +3,8 @@ title: review-gate non-blocking nits for 'reap-squash-merged-remote-work-branche
 date: 2026-07-10
 status: resolved
 reviewOf: reap-squash-merged-remote-work-branches
-needsAnswers: true
+needsAnswers: false
+triaged: resolve
 ---
 
 ## Non-blocking review findings

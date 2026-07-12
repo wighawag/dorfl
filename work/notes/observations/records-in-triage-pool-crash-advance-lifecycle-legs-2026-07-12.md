@@ -29,7 +29,9 @@ This also interacts with `capture-signal` / the observation-authoring convention
 
 ## Immediate mitigation (done this session)
 
-Stamped `triaged: keep` on the three offending records (adding minimal `type: observation` / `status` frontmatter to the two that had none / partial), so they drop out of the triage pool. A non-empty `triaged:` value is exactly the "settled, drops out" mechanism (`ledger-read.ts`), and matches how ~23 existing observations already rest. This stops the three CI errors on the next tick but does NOT fix the systemic gap (any future record authored without a marker re-introduces it).
+Stamped `triaged: resolve` on the three offending records (adding minimal `type: observation` / `status` frontmatter to the two that had none / partial), so they drop out of the triage pool. A non-empty `triaged:` value is exactly the "settled, drops out" mechanism (`ledger-read.ts` / `lifecycle-pools.ts` key on PRESENCE, not the string), so the specific value is free; `resolve` is chosen over the legacy `keep` for VOCABULARY CONSISTENCY with the retired-`keep` direction (tasks `agentic-apply-retire-disposition-vocabulary` removed the `keep` disposition; `apply-decide-resolve-verdict-mint-nothing` established `resolve` as the preferred "answered, mint nothing, retain the note" word, its naming note: "use `resolve` (not `keep`)"). This stops the three CI errors on the next tick but does NOT fix the systemic gap (any future record authored without a marker re-introduces it).
+
+> **Vocabulary caveat / residue.** ~23 EXISTING observations still rest on the legacy `triaged: keep`. This session's new stamps use `triaged: resolve`, so the corpus is temporarily split (`keep` on legacy files, `resolve` on new ones). Both are mechanically identical (presence-keyed drop-out), so nothing breaks, but a small corpus-wide sweep `triaged: keep` -> `triaged: resolve` across `work/notes/observations/*.md` would make the vocabulary uniform. Captured as a cleanup residue, NOT done here (it touches 23 unrelated files).
 
 ## TWO DISTINCT failure modes (do not conflate)
 
@@ -38,7 +40,12 @@ The `no parseable {questions} result` error has TWO different root causes, needi
 - **Mode 1 — a RECORD in the triage pool (no open judgement).** Legs #1, #2, #3 (and the pure decision-record in the pre-existing sibling note). The honest surface result is `{questions: []}`; the file should never have been a candidate. FIX: drop it out of the pool (`triaged:` marker / a records bucket / a record type) — the systemic gap this note is about.
 - **Mode 2 — a GENUINE candidate the surface agent FLAKED on.** The `review-nits-advance-surface-limbo-...` leg. The file HAS open questions; the agent should have emitted them but produced no extractable JSON. FIX: agent/skill reliability (always emit a bare `{"questions": []}` when nothing to ask; confine prose to `note`) and/or skip the model round-trip for decision-record shapes. This is ALREADY captured, untriaged, in `surface-questions-agent-still-emits-no-parseable-questions-on-decision-record-obs-2026-07-10.md` (both fix angles named there) — that note should be PROMOTED, not left latent. Marking a Mode-2 file `triaged: keep` is a DATA-LOSS bug (discards real un-triaged nits), so the mitigation below was applied ONLY to the three Mode-1 records, NOT to the review-nits candidate.
 
-Latent scope of Mode 2 specifically: 9 `review-nits-*` records currently carry `reviewOf:` but NO `triaged:` marker — each is a genuine triage candidate that will crash a lifecycle leg the moment the agent flakes on it (or, if it does surface, produce a sidecar). They are NOT records to settle; they await real triage.
+Latent scope of the `review-nits-*` population (15 files, 9 initially without `triaged:`) is a MIX, and MUST be classified per-file, never blanket-settled:
+
+- **2 were RESOLVED records** (`status: resolved` + a `## Resolution` block, nits already addressed/ratified): `review-nits-sidecar-visible-item-link-2026-07-10` (hit the LIMBO error — surfacer correctly found nothing to ask) and `review-nits-reap-squash-merged-remote-work-branches-2026-07-10` (also carried a stale `needsAnswers: true`, cleared to `false`). Both are Mode 1 — settled this session with `triaged: resolve`.
+- **7 remain OPEN candidates** (`status: open`, no resolution): `review-nits-advance-surface-limbo-...-2026-07-07`, `-close-job-via-prd-to-brief-rename-verify-and-flip-masked-test-2026-07-07`, `-jitter-and-widen-cas-contention-retry-for-lifecycle-fanout-2026-07-07`, `-pin-frontmatter-owns-fence-to-heading-blank-line-convention-2026-07-07`, `-protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07-2026-07-07`, `-reconcile-stale-needs-attention-folder-prose-after-lock-cutover-2026-07-10`, `-slicing-pr-body-summary-threading-2026-07-10`. These carry real open questions and must NOT be settled; each will crash a lifecycle leg (limbo if the agent honestly finds nothing, or agent-flake if it under-produces) until a human triages it. They await real triage.
+
+So a RESOLVED review-nits record hits the LIMBO error (Mode 1: nothing to ask, correctly), while an OPEN one hits EITHER limbo OR agent-flake depending on the agent — which is exactly why per-file classification (read `status:` + whether the nits are addressed) is mandatory before stamping anything.
 
 ## Options to weigh (NOT decided here)
 
@@ -56,7 +63,7 @@ The judgement call is which of 1–4 (or a combination) to build. 3 alone is ris
 - `packages/dorfl/src/ledger-read.ts` (~L146-182, L514, L846: `triaged:` = pool membership; non-empty drops out).
 - `packages/dorfl/src/advance.ts` (`detectObservationLimbo` ~L718; the `surfaceRung` agent-gate `catch` ~L654; the persist-`nothing` limbo branch ~L668).
 - `packages/dorfl/src/lifecycle-pools.ts` (~L154: the SETTLED marker drops the observation out of the TRIAGE pool).
-- The three mitigated records (now `triaged: keep`): `migrate-batch-left-resolveClosingIssue-prd-read-to-brief-sweep-task-2026-07-09.md`, `observation-triage-already-triaged-benign-skip-decisions-2026-07-12.md`, `prd-to-spec-4f-cli-flags-clean-break-full-internal-purge-and-the-c-audit-single-lens-pattern-2026-07-10.md`.
+- The five mitigated records (now `triaged: resolve`): `migrate-batch-left-resolveClosingIssue-prd-read-to-brief-sweep-task-2026-07-09.md`, `observation-triage-already-triaged-benign-skip-decisions-2026-07-12.md`, `prd-to-spec-4f-cli-flags-clean-break-full-internal-purge-and-the-c-audit-single-lens-pattern-2026-07-10.md`, `review-nits-sidecar-visible-item-link-2026-07-10.md`, `review-nits-reap-squash-merged-remote-work-branches-2026-07-10.md`.
 
 ## Note on scope
 
