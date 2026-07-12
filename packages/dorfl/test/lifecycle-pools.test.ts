@@ -87,7 +87,8 @@ describe('buildLifecyclePools — triage sub-pool (untriaged observations)', () 
 		expect(pools.apply).toEqual([
 			{repoPath: '/repo', slug: 'answered', namespace: 'observation'},
 		]);
-		// untriaged/pending stays in triage (gated), settled/pending w/o gate = nothing.
+		// Triage gate OFF here → empty regardless. (Even with it ON: `answered` →
+		// apply, `pending` DROPS from triage as a pending no-op, `open` would enter.)
 		expect(pools.triage).toEqual([]);
 	});
 
@@ -104,7 +105,14 @@ describe('buildLifecyclePools — triage sub-pool (untriaged observations)', () 
 		expect(pools.triage).toEqual([]);
 	});
 
-	it('a PENDING-sidecar UNTRIAGED observation stays in TRIAGE (as today) — not apply', () => {
+	it('a PENDING-sidecar UNTRIAGED observation is DROPPED from TRIAGE (it is waiting on the human; re-enumerating only re-spawns the surfacer for a no-op)', () => {
+		// The triage question is DETERMINISTIC + already surfaced (the pending
+		// sidecar exists), so re-enumerating this observation every tick would only
+		// re-run a leg + re-spawn the additive surface agent for NOTHING (the persist
+		// appends no duplicate). Mirror the SURFACE pool: only a NO-sidecar-yet
+		// observation is a triage candidate; a pending one drops until it is answered
+		// (→ apply) or a marker settles it. This is the "do not re-evaluate items that
+		// produce no outcome" enumerate-smartness fix.
 		const pools = buildLifecyclePools({
 			repoPath: '/repo',
 			observations: [
@@ -114,7 +122,19 @@ describe('buildLifecyclePools — triage sub-pool (untriaged observations)', () 
 			gates: {triage: true},
 		});
 		expect(pools.apply).toEqual([]);
-		expect(pools.triage.map((s) => s.slug)).toEqual(['half']);
+		expect(pools.triage).toEqual([]);
+	});
+
+	it('a NO-sidecar-yet UNTRIAGED observation STILL enters TRIAGE (the first-pass surface)', () => {
+		// The distinction the drop above turns on: NO sidecar = never surfaced yet =
+		// a real triage candidate; PENDING sidecar = already surfaced, waiting.
+		const pools = buildLifecyclePools({
+			repoPath: '/repo',
+			observations: [obs('fresh', undefined, undefined)],
+			needsAnswers: [],
+			gates: {triage: true},
+		});
+		expect(pools.triage.map((s) => s.slug)).toEqual(['fresh']);
 	});
 
 	it('with the triage gate OFF (default), enumerates NO observation', () => {

@@ -24,9 +24,13 @@ import type {LifecycleSelectedItem} from './select-priority.js';
  * **Three lifecycle sub-pools, gated by PURPOSE (ADR `ci-config-policy-and-gate-
  * family.md` \u00a74 \u2014 gates govern CREATE only; CONSUME is always-on):**
  *
- *   - **triage** \u2014 UNTRIAGED observations (no `triaged:` settled marker). A CREATE
- *     act (the bot mints a promote/keep/delete question), so gated by
- *     {@link LifecyclePoolGates.triage} (the future `observationTriage` gate).
+ *   - **triage** \u2014 UNTRIAGED observations (no `triaged:` settled marker) with NO
+ *     sidecar yet. A CREATE act (the bot mints the deterministic triage question),
+ *     so gated by {@link LifecyclePoolGates.triage} (the future `observationTriage`
+ *     gate). Like SURFACE, a PENDING sidecar is NOT enumerated (already surfaced +
+ *     awaiting the human, so re-enumerating only re-spawns the additive surface
+ *     agent for a no-outcome no-op); it re-enters only when ANSWERED (to apply) or
+ *     settled by a `triaged:` marker.
  *   - **surface** \u2014 `needsAnswers`-blocked tasks/prds with NO all-answered sidecar
  *     (no sidecar yet, or a still-pending one). A CREATE act (the bot mints the
  *     blocker question), so gated by {@link LifecyclePoolGates.surface} (the future
@@ -241,10 +245,21 @@ export function buildLifecyclePools(
 				slug: obs.slug,
 				namespace: 'observation',
 			});
-		} else if (obs.triaged === undefined && triageOn) {
-			// CREATE (mint the promote/keep/delete question) — gated by
-			// `observationTriage`. An untriaged observation with NO sidecar or a
-			// PENDING sidecar is a triage candidate as today.
+		} else if (
+			obs.triaged === undefined &&
+			obs.sidecar === undefined &&
+			triageOn
+		) {
+			// CREATE (mint the deterministic triage question) — gated by
+			// `observationTriage`. ONLY an untriaged observation with NO sidecar yet is
+			// a triage candidate: it has never been surfaced. A PENDING sidecar (surfaced
+			// already, awaiting the human's answer) is DELIBERATELY DROPPED here — mirror
+			// of the SURFACE pool. The triage question is DETERMINISTIC (engine-built) +
+			// already present, so re-enumerating a pending observation every tick would
+			// only re-run a leg + re-spawn the additive surface agent for a NO-OUTCOME
+			// no-op (the persist appends no duplicate). It re-enters only when it is
+			// ANSWERED (→ apply, above) or a `triaged:` marker settles it. This is the
+			// enumerate-smartness fix: do NOT re-evaluate items that produce no outcome.
 			triage.push({
 				repoPath: input.repoPath,
 				slug: obs.slug,
