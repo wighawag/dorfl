@@ -75,6 +75,24 @@ export function gitEnv(): NodeJS.ProcessEnv {
 		GIT_CONFIG_GLOBAL: '/dev/null',
 		GIT_CONFIG_SYSTEM: '/dev/null',
 		GIT_CONFIG_NOSYSTEM: '1',
+		// Disable git's background auto-maintenance in throwaway test repos. A
+		// `gc --auto` / `maintenance` repack triggered by ordinary commit churn keeps
+		// writing into `.git/objects/pack` and can still be mid-flight when the
+		// fixture teardown runs, so a recursive remove races the repack and throws
+		// `ENOTEMPTY: rmdir '.../.git/objects/pack'` (the ROOT of the teardown flake
+		// that `rmrf`'s retry only PARTIALLY masks). Setting these OFF means no
+		// background repack ever runs, so there is no writer to race. Applied via the
+		// GIT_CONFIG_* env mechanism (which composes even under GIT_CONFIG_GLOBAL=
+		// /dev/null + GIT_CONFIG_NOSYSTEM=1), so EVERY test git invocation inherits it
+		// without touching each `init` site. See
+		// `work/notes/observations/full-suite-flaky-enotempty-rmdir-...`.
+		GIT_CONFIG_COUNT: '3',
+		GIT_CONFIG_KEY_0: 'gc.auto',
+		GIT_CONFIG_VALUE_0: '0',
+		GIT_CONFIG_KEY_1: 'maintenance.auto',
+		GIT_CONFIG_VALUE_1: 'false',
+		GIT_CONFIG_KEY_2: 'gc.autoDetach',
+		GIT_CONFIG_VALUE_2: 'false',
 	};
 }
 
@@ -163,8 +181,13 @@ export function rmrf(path: string): void {
 	rmSync(path, {
 		recursive: true,
 		force: true,
-		maxRetries: 10,
-		retryDelay: 50,
+		// Backstop retry budget (~5s total) for the teardown race. The ROOT fix is
+		// disabling auto-gc in `gitEnv` (no background repack to race); this retry is
+		// belt-and-suspenders for any residual EBUSY/ENOTEMPTY from OS-level lag. The
+		// earlier 10x50ms (500ms) proved insufficient when a `.git/objects/pack`
+		// repack was mid-flight, so both fixes ship together.
+		maxRetries: 50,
+		retryDelay: 100,
 	});
 }
 
