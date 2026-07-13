@@ -1,6 +1,9 @@
 ---
 promotedFrom: observation:review-nits-pin-frontmatter-owns-fence-to-heading-blank-line-convention-2026-07-07
+reason: wrong-premise / reverses a kept decision — this task would rewrite `ADR-FORMAT.md` to prescribe PLAIN-slug filenames with NO numeric prefix, but the project has since ADOPTED the Matt Pocock ADR format, which numeric-PREFIXES ADR filenames (`0001-slug.md`). Building this would BACKTRACK that decision. The task's premise ("revealed preference is plain-slug; align the doc to it") is no longer the direction we want. Cancelled per the maintainer 2026-07-13. Note (not acted on here): the 22 existing plain-slug ADRs under `docs/adr/` may eventually warrant renaming to the numeric-prefix form to match the adopted format — that is a SEPARATE decision, deliberately not folded in.
 ---
+
+> **CANCELLED 2026-07-13 (maintainer instruction).** The project adopted the Matt Pocock numeric-prefix ADR format; this task would have reversed that by rewriting `ADR-FORMAT.md` to prescribe plain slugs. See `reason:` above. Kept as a retained terminal record, not deleted.
 
 ## What to build
 
