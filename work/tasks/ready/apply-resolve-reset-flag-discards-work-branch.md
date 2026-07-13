@@ -2,9 +2,16 @@
 title: Add a `resolveReset` flag on the apply `resolve` verdict that discards the work branch (requeue --reset)
 slug: apply-resolve-reset-flag-discards-work-branch
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
-blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic, empty-diff-bounce-surfaces-dispose-defaulted-question]
+blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic, empty-diff-bounce-surfaces-dispose-defaulted-question, bounce-migrate-stuck-assertions-and-flip-exit-codes]
 covers: [2]
 ---
+
+## Re-scope 2026-07-13 (after a Gate-2 BLOCK on the first attempt)
+
+The first build wired `resolveReset` into `applyAgenticDecision` (advance.ts), but that function runs ONLY for `namespace === 'observation'` (advance.ts ~line 1044: `runAgenticDecision = input.namespace === 'observation' && ...`). TASK/SPEC items DELIBERATELY skip the agentic decider and fall through to `applyAnsweredQuestions` (the simple persist), which has NO `resolve`-verdict dispatch. So the flag was UNREACHABLE for its actual target (a bounced TASK with a `work/<slug>` branch) and a permanent no-op on the only path it reached (observations have no `work/observation-<slug>` branch). Gate 2 blocked it (round-1 approve, round-2 block — corroboration caught a dead mechanism). Two fixes, both required:
+
+1. **DISPATCH SITE (decided): the TASK apply-persist path, NOT the agentic decider.** Wire the `resolveReset` honouring into the TASK/SPEC persist path (`applyAnsweredQuestions` / a small branch in `performApply` BEFORE the fall-through persist) so a bounced TASK's answered `resolve` + `resolveReset:true` reaches the branch-delete. Do NOT widen the observation-only `runAgenticDecision` gate to tasks/specs — that changes how EVERY task apply-answer dispatches (a much bigger blast radius) and is explicitly out of scope here. The mechanism the first attempt built is REUSABLE AS-IS: the `resolveReset?: boolean` parser field on `DecisionVerdict` and the extracted shared `deleteRemoteWorkBranchIfPresent` primitive (`needs-attention.ts`) are correct — only the DISPATCH SITE was wrong. Keep them; move the dispatch to the task path.
+2. **DEPENDENCY (added): blocks on `bounce-migrate-stuck-assertions-and-flip-exit-codes` (PR-2b).** This task is only END-TO-END testable once bounced TASKS actually surface as `needsAnswers:true` questions with an answered sidecar — which is exactly what PR-2b delivers (re-pointing the bounce seams to surface). Before PR-2b there is no bounced-task-with-answered-sidecar to drive the reset through, which is why the first attempt could only assert against a spy. Building AFTER PR-2b lets the acceptance test route a REAL task through the reset path end-to-end.
 
 ## What to build
 
@@ -19,6 +26,8 @@ The flag is NATURALLY SCOPED: it only means anything for a TASK with a pre-exist
 
 So the surfaced-item answer vocabulary becomes: continue → `resolve` (no flag); reset/retry-fresh → `resolve` + `resolveReset:true`; cancel → `dispose` (from the sibling task). Thin vertical: the verdict channel + its parser, the apply-rung wiring to the existing `requeue --reset` branch-delete, and tests.
 
+**DISPATCH SITE (see the Re-scope above): the TASK apply path (`applyAnsweredQuestions` / the persist fall-through in `performApply`), NOT the observation-only agentic decider.** Reuse the already-built `resolveReset?: boolean` parser field + the shared `deleteRemoteWorkBranchIfPresent` primitive; only the dispatch site moves. Do NOT widen `runAgenticDecision` (the `namespace === 'observation'` gate) to tasks.
+
 ## Acceptance criteria
 
 - [ ] The apply verdict shape carries an optional `resolveReset` boolean (parsed alongside `resolveReason`); the outcome union is UNCHANGED (no new outcome added).
@@ -32,6 +41,7 @@ So the surfaced-item answer vocabulary becomes: continue → `resolve` (no flag)
 - `bounce-surfaces-stuck-sidecar-and-releases-lock` — the surfaced bounced item is what a reset answer acts on.
 - `apply-disposition-delete-to-dispose-regime-polymorphic` — touches the SAME decision-verdict shape / apply dispatch; serialised to avoid a merge conflict on that module.
 - `empty-diff-bounce-surfaces-dispose-defaulted-question` — ALSO edits the `advance.ts` apply-rung dispatch (the `verdict.outcome` switch); serialised after it so the two apply-dispatch edits do not collide (TASKING-PROTOCOL §3 file-orthogonality). No logical dependency, purely merge-conflict avoidance.
+- `bounce-migrate-stuck-assertions-and-flip-exit-codes` (PR-2b) — LOGICAL dependency (added 2026-07-13, see the Re-scope): a bounced TASK only surfaces as a `needsAnswers:true` question with an answered sidecar ONCE PR-2b re-points the bounce seams to surface. Without it there is no real task-with-answered-sidecar to drive the reset end-to-end, which is why the first attempt could only spy. Build after PR-2b.
 
 ## Prompt
 
