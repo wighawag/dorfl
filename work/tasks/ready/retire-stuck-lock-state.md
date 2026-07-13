@@ -2,7 +2,7 @@
 title: Retire the `stuck` lock state (LockState = active hold only)
 slug: retire-stuck-lock-state
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
-blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock]
+blockedBy: [bounce-atomic-cutover-retire-stuck-lock]
 covers: [5, 6, 10]
 ---
 
