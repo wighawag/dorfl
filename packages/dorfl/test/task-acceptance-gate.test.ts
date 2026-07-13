@@ -247,16 +247,23 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/specs/tasked/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasking/it.md')).toBe(false);
-		// The gate's blocking findings are recorded on the stuck lock entry (the reason).
-		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
+		// PR-2b: the tasking bounce SURFACES the spec on `<arbiter>/main` (sidecar
+		// + `needsAnswers:true`) THEN releases the tasking lock. The blocking
+		// findings ride on the surfaced sidecar's envelope context.
 		const entry = await readItemLock({
 			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toMatch(/coverage gap in the PRD goal/);
+		expect(entry).toBeUndefined();
+		const sidecar = run(
+			'git',
+			['show', `${ARBITER}/main:work/questions/spec-it.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(sidecar).toMatch(/coverage gap in the PRD goal/);
 	});
 
 	it('a BLOCK on the --propose path also routes to needs-attention (no PR of a blocked set)', async () => {
@@ -279,14 +286,15 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
+		// PR-2b: tasking bounce surfaces + releases the lock (see companion assertion
+		// above for the sidecar's contents).
 		const entry = await readItemLock({
 			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(entry?.state).toBe('stuck');
+		expect(entry).toBeUndefined();
 	});
 });
 

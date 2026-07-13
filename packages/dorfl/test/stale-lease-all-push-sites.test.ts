@@ -14,6 +14,7 @@ import {performDoRemote, type DoDorfl} from '../src/do.js';
 import {performClaim} from '../src/claim-cas.js';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
+import {releaseItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	isolatePiAgentDir,
@@ -79,22 +80,18 @@ async function stuckThenRequeued(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work (green, approved)'], repo);
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
+	// PR-2b retired the bounce's `active → stuck` amend (bounce = surface + release
+	// now), so we cannot drive a stuck lock via the seam. Release the lock
+	// directly (the requeued state a continuer sees: kept work branch on the
+	// arbiter, item in the pool, no lock held).
+	await releaseItemLock({
+		item: `task:${slug}`,
 		cwd: repo,
-		slug,
-		reason: 'gate red on the first attempt',
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-	const result = await returnToBacklog({
-		cwd: repo,
-		slug,
-		arbiter: ARBITER,
-		env: gitEnv(),
-	});
-	expect(result.moved).toBe(true);
+	void ledgerWrite;
+	void returnToBacklog;
 	// The item is now back in BACKLOG on the arbiter with its kept work/<slug>
 	// branch still present (the requeue durable artifact). The `start`/`isolation`
 	// continue paths assume the item is already IN-PROGRESS (they onboard AFTER

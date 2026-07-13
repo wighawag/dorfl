@@ -282,8 +282,8 @@ describe('releaseTaskingLock — deletes the unified lock', () => {
 	});
 });
 
-describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', () => {
-	it('amends the prd: lock active → stuck with the reason (no folder write)', async () => {
+describe('releaseTaskingLock — routeToNeedsAttention surfaces + releases (PR-2b)', () => {
+	it('surfaces the spec on <arbiter>/main (sidecar + needsAnswers) THEN releases the tasking lock', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [], {
 			specs: ['alpha'],
 		});
@@ -304,18 +304,31 @@ describe('releaseTaskingLock — routeToNeedsAttention marks the lock stuck', ()
 		});
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('released');
-		// The lock is STILL held — but stuck, carrying the reason. NO folder write.
-		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(true);
+		// PR-2b (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`,
+		// decision #1): the tasking bounce SURFACES the spec on `<arbiter>/main` as
+		// a stuck-kind sidecar + `needsAnswers:true` on the spec body in ONE commit,
+		// THEN RELEASES the tasking lock. The spec body stays where it lives (D1
+		// probe finds it in `specs/ready/` or `specs/proposed/`).
+		expect(lockRefOnArbiter(arbiter, 'alpha')).toBe(false);
 		expect(trackedOnArbiter(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(prdOnArbiter(repo, 'alpha')).toBe(true);
+		// The reason lives on the surfaced sidecar envelope's context on
+		// `<arbiter>/main`.
+		run('git', ['fetch', '-q', 'arbiter'], repo, {env: gitEnv()});
+		const sidecar = run(
+			'git',
+			['show', 'arbiter/main:work/questions/spec-alpha.md'],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(sidecar).toMatch(/decomposition unclear/);
 		const entry = await readItemLock({
 			item: 'spec:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toMatch(/decomposition unclear/);
+		expect(entry).toBeUndefined();
 	});
 
 	it('returns "lost" when there is no held lock to mark stuck', async () => {

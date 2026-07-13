@@ -9,6 +9,7 @@ import {
 import * as ledgerWriteModule from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performComplete} from '../src/complete.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {
 	makeScratch,
@@ -369,10 +370,13 @@ describe('ledger-write seam — needs-attention is dispatched THROUGH it', () =>
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'wip gamma'], repo);
 		gitIn(['push', '-q', 'arbiter', 'work/task-gamma:work/task-gamma'], repo);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'gamma',
+		// PR-2b retired the bounce's `active → stuck` amend (bounce = surface +
+		// release now). Seed a stuck lock directly so `returnToBacklog` (which the
+		// seam dispatches to) has a stuck lock to recover.
+		await markStuckItemLock({
+			item: 'task:gamma',
 			reason: 'resolved later',
+			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});

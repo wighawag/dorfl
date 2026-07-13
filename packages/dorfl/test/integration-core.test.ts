@@ -445,14 +445,13 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(false);
 		expect(sidecarSurfacedOnArbiterMain(repo, 'epsilon')).toBe(true);
 		expect(needsAnswersOnArbiterMain(repo, 'epsilon')).toBe(true);
-		// The blocking findings are recorded on the lock entry (the SOLE stuck record).
-		const lock = await readItemLock({
-			item: 'task:epsilon',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/does not reach the task goal/);
+		// PR-2b: reason lives on the surfaced sidecar (`<arbiter>/main`), not the
+		// released lock.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-epsilon.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/does not reach the task goal/);
 	});
 });
 
@@ -599,13 +598,13 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 		expect(stuckLockOnArbiter(repo, 'theta')).toBe(false);
 		expect(sidecarSurfacedOnArbiterMain(repo, 'theta')).toBe(true);
 		expect(needsAnswersOnArbiterMain(repo, 'theta')).toBe(true);
-		const lock = await readItemLock({
-			item: 'task:theta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/conflict/i);
+		// PR-2b: reason lives on the surfaced sidecar (post-bounce the lock is
+		// released).
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-theta.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/conflict/i);
 		// Nothing landed on arbiter main (the body still rests in backlog/).
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'theta')).toBe(true);

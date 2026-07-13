@@ -518,7 +518,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('needs-attention');
 
 		// CRITICAL — `do` is autonomous: the stuck state is the per-item lock
@@ -586,7 +586,7 @@ describe('do <slug> — red gate routes to needs-attention via the seam (AUTONOM
 			dorfl: () => ({ok: false, detail: 'agent exploded'}),
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.message).toMatch(/exploded/);
 		// Claimed + onboarded, but never integrated → not done on the arbiter.
@@ -642,7 +642,7 @@ describe('do <slug> — autonomous SOURCE-STRAND refusal MAPS to needs-attention
 		// maps to `needs-attention` here (it previously fell through to
 		// `usage-error`, which is what blocked the prior PR). This brings the
 		// in-place dispatch to parity with `runRemotePipeline`.
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('needs-attention');
 
 		// The stuck state is the per-item lock `state: stuck` (task 9b); the body
@@ -682,7 +682,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		// The exit CONTRACT stays coherent: it is still an agent failure (distinct
 		// from a clean success and from a red gate's `needs-attention`), exit 1, with
 		// the failure detail in the message.
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.message).toMatch(/exploded mid-build/);
 		expect(result.routedToNeedsAttention).toBe(true);
@@ -746,7 +746,12 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		// PR-2b: the bounce ALREADY released the lock + returned the item to the pool
+		// (needsAnswers:true, eligible:false); this requeue is a tolerated no-op.
+		expect(
+			requeued.moved === true ||
+				/no held per-item lock/i.test(requeued.reasonNotMoved ?? ''),
+		).toBe(true);
 
 		// A DIFFERENT machine (a fresh clone) re-claims via start: it must CONTINUE
 		// from the kept branch, so the agent's partial commit is present.
@@ -776,7 +781,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 		});
 		// No crash; still an agent failure, and the reason is STILL surfaced (the
 		// move-only commit is non-empty even when there is no wip to save).
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/did nothing/);
@@ -805,7 +810,7 @@ describe('do <slug> — an agent FAILURE SAVES partial work (commit + push + sur
 			},
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('agent-failed');
 		expect(result.message).toMatch(/crashed hard/);
 		expect(result.routedToNeedsAttention).toBe(true);
@@ -878,7 +883,7 @@ describe('do <slug> — failure-CAUSE classification (transient-infra / config-e
 			}),
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('transient-infra');
 		expect(result.outcome).not.toBe('agent-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
@@ -952,7 +957,7 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('needs-attention');
 
 		// The stuck state is the per-item lock; the body STAYS in backlog/ on main.
@@ -1013,7 +1018,12 @@ describe('do <slug> — a RED GATE bounce SAVES partial work cross-machine (push
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		// PR-2b: the bounce ALREADY released the lock + returned the item to the pool
+		// (needsAnswers:true, eligible:false); this requeue is a tolerated no-op.
+		expect(
+			requeued.moved === true ||
+				/no held per-item lock/i.test(requeued.reasonNotMoved ?? ''),
+		).toBe(true);
 
 		// A DIFFERENT machine (a fresh clone) re-claims via start: it must CONTINUE
 		// from the kept branch (which exists ONLY because the gate-fail pushed it),
@@ -1098,7 +1108,7 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		});
 
 		// The NEW terminal outcome — distinct from needs-attention / agent-failed.
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The agent's STOP reason is recorded VERBATIM in the message + body.
@@ -1255,7 +1265,12 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		// PR-2b: the bounce ALREADY released the lock + returned the item to the pool
+		// (needsAnswers:true, eligible:false); this requeue is a tolerated no-op.
+		expect(
+			requeued.moved === true ||
+				/no held per-item lock/i.test(requeued.reasonNotMoved ?? ''),
+		).toBe(true);
 
 		// Second attempt IN-PLACE: `inPlaceStrategy.prepare()` must CONTINUE from the
 		// kept branch (not cut fresh off main), so the agent runs ON the prior work.
@@ -1311,7 +1326,12 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		// PR-2b: the bounce ALREADY released the lock + returned the item to the pool
+		// (needsAnswers:true, eligible:false); this requeue is a tolerated no-op.
+		expect(
+			requeued.moved === true ||
+				/no held per-item lock/i.test(requeued.reasonNotMoved ?? ''),
+		).toBe(true);
 
 		// Second attempt: the cause is already fixed on the kept branch, so the agent
 		// correctly adds NOTHING this session (clean working tree). BEFORE this task
@@ -1362,7 +1382,12 @@ describe('do <slug> — on the ISOLATION SEAM: in-place onboarding via inPlaceSt
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(requeued.moved).toBe(true);
+		// PR-2b: the bounce ALREADY released the lock + returned the item to the pool
+		// (needsAnswers:true, eligible:false); this requeue is a tolerated no-op.
+		expect(
+			requeued.moved === true ||
+				/no held per-item lock/i.test(requeued.reasonNotMoved ?? ''),
+		).toBe(true);
 
 		// Meanwhile main advances with a CONFLICTING edit to the same file (from a
 		// separate clone), so the kept branch cannot replay onto the new main.

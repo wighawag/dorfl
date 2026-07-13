@@ -7,6 +7,7 @@ import {buildProgram} from '../src/cli.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performStart} from '../src/start.js';
 import {ledgerWrite} from '../src/ledger-write.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -99,22 +100,22 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		// Leave agent work so the bounce saves a wip commit + PUSHES the work branch
 		// (the continue-branch the default requeue's safety guard checks for).
 		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'alpha',
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'the work'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/task-alpha:work/task-alpha'], repo);
+		// PR-2b retired the bounce's `active → stuck` amend. Seed the stuck state
+		// directly so the requeue verb has a stuck lock to recover — exactly what a
+		// human is exercising.
+		await markStuckItemLock({
+			item: 'task:alpha',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
-		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
-		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
-		// then RELEASES the lock. Assert the A1 triple.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
-		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
-		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 
 		// Drive the renamed verb through the actual CLI program (the same wiring the
 		// `return` verb had — only the verb name changed).

@@ -305,15 +305,14 @@ describe('cross-process concurrent merge land — only the CAS loop can serialis
 		expect(stuckLockOnArbiter(seeded.repo, loser.slug)).toBe(false);
 		expect(sidecarSurfacedOnArbiterMain(seeded.repo, loser.slug)).toBe(true);
 		expect(needsAnswersOnArbiterMain(seeded.repo, loser.slug)).toBe(true);
-		const stuckLock = await readItemLock({
-			item: `task:${loser.slug}`,
-			cwd: seeded.repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(stuckLock?.state).toBe('stuck');
-		expect(stuckLock?.reason ?? '').toMatch(/non-fast-forward push/);
-		expect(stuckLock?.reason ?? '').not.toMatch(/rebase onto .* conflicted/);
+		// PR-2b: post-bounce the lock is released; the reason lives on the surfaced
+		// sidecar (`<arbiter>/main`).
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-${loser.slug}.md`],
+			seeded.repo,
+		);
+		expect(sidecar).toMatch(/non-fast-forward push/);
+		expect(sidecar).not.toMatch(/rebase onto .* conflicted/);
 
 		// The winner is unaffected — no spurious stuck record from racing.
 		expect(stuckLockOnArbiter(seeded.repo, winner.slug)).toBe(false);

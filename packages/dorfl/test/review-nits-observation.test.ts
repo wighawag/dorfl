@@ -270,14 +270,13 @@ describe('review-nits-observation — no observation when there is nothing to ca
 		expect(core.outcome).toBe('review-blocked');
 		expect(core.routedToNeedsAttention).toBe(true);
 		expect(nitObservations(repo, 'delta')).toHaveLength(0);
-		// The blocking finding lands on the stuck lock entry (the SOLE stuck record).
-		const lock = await readItemLock({
-			item: 'task:delta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/does not reach the task goal/);
+		// PR-2b: the blocking finding lands on the surfaced sidecar's envelope
+		// (`<arbiter>/main`), not the released lock.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-delta.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/does not reach the task goal/);
 	});
 });
 

@@ -129,12 +129,12 @@ describe('advance-lifecycle template — DYNAMIC GitHub backstop (retires legTim
 	it('the agent-leg jobs consume the DYNAMIC output; NO baked static `timeout-minutes: <n>`', () => {
 		const text = generateAdvanceLifecycleWorkflow(templateConfig);
 		expect(
-			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*(?:fromJson\()?needs\.enumerate\.outputs\.githubTimeout\)?\s*\}\}/.test(
 				text,
 			),
 		).toBe(true);
 		expect(
-			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*(?:fromJson\()?needs\.enumerate\.outputs\.githubTimeout\)?\s*\}\}/.test(
 				text,
 			),
 		).toBe(true);

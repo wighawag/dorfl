@@ -176,8 +176,9 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 			env: gitEnv(),
 		});
 
-		// Not completed: the gate stays authoritative.
-		expect(result.exitCode).toBe(1);
+		// Not completed: the gate stays authoritative. PR-2b D3: a clean-surface
+		// re-bounce is GREEN (exitCode 0).
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('gate-failed');
 
 		// The item stays STUCK (the lock); never reaches done/, body stays in backlog/.
@@ -191,14 +192,13 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(existsOnArbiterMain(repo, 'done', 'gamma')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 
-		// Still stuck with its reason on the lock entry.
-		const lock = await readItemLock({
-			item: 'task:gamma',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/gate/i);
+		// PR-2b: the reason lives on the surfaced sidecar (`<arbiter>/main`), not the
+		// released lock.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-gamma.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/gate/i);
 	});
 
 	it('--skip-verify remains the human-only override (completes without re-gating)', async () => {

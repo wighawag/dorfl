@@ -21,9 +21,8 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
-import {releaseItemLock} from '../src/item-lock.js';
+import {markStuckItemLock, releaseItemLock} from '../src/item-lock.js';
 import {performStart} from '../src/start.js';
 import {createJob} from '../src/workspace.js';
 import {branchAheadOfArbiter} from '../src/continue-branch.js';
@@ -72,13 +71,16 @@ async function stuckButNeedsAttention(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Seed a STUCK lock directly (PR-2b retired the bounce's `active → stuck` amend).
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
+	// Leave the cwd on `main` (as a human's checkout would be) so subsequent
+	// operations do not run on the work branch.
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 	return {seeded, repo};

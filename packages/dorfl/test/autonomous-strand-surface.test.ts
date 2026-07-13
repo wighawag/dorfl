@@ -106,7 +106,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 			note: (m) => notes.push(m),
 		});
 
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('strand-surfaced');
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The stuck state is the per-item lock (the body rests in backlog/), so
@@ -127,11 +127,15 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.reason).toMatch(/nothing to complete/i);
-		// LOUD: a surface note fired (distinct from a normal completion message),
-		// so the CI/job log records the autonomous bounce. Post lock-cutover the
-		// surface is the lock amend to `state: stuck`, not a folder move.
-		expect(notes.some((n) => /stuck on its per-item lock/i.test(n))).toBe(true);
+		// PR-2b: the reason lives on the surfaced sidecar (`<arbiter>/main`), not the
+		// released lock.
+		expect(lock).toBeUndefined();
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-alpha.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/nothing to complete/i);
+		void notes;
 	});
 
 	it('HUMAN refusal (no surfaceArbiter) is UNCHANGED: bare `refused`, checkout NOT bounced, arbiter unchanged', async () => {
@@ -278,7 +282,7 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 			note: (m) => notes.push(m),
 		});
 
-		expect(result.exitCode).toBe(1);
+		expect(result.exitCode).toBe(0); // PR-2b D3: clean-surface bounce is exit 0
 		expect(result.outcome).toBe('strand-surfaced');
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The stuck state is the per-item lock; the body rests in backlog/.

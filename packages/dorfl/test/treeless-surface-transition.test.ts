@@ -107,7 +107,7 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 	});
 
-	it('records the reason on the lock entry (read via the arbiter, not the cwd tree)', async () => {
+	it('records the reason on the surfaced sidecar (read from <arbiter>/main, not the cwd tree)', async () => {
 		const {repo} = await claimedOnArbiterOnly('gamma');
 		const reason = 'rebase onto the latest main conflicted (aborted)';
 		const result = await ledgerWrite.applyTreelessNeedsAttentionTransition({
@@ -119,14 +119,21 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		});
 		expect(result.moved).toBe(true);
 
+		// PR-2b: post-bounce the lock is RELEASED; the reason lives on the surfaced
+		// stuck-kind sidecar's envelope (its `context`), read off `<arbiter>/main`.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-gamma.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/rebase onto the latest main conflicted/);
+		// The lock itself is gone: `readItemLock` returns undefined.
 		const lock = await readItemLock({
 			item: 'task:gamma',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/rebase onto the latest main conflicted/);
+		expect(lock).toBeUndefined();
 	});
 
 	it('does NOT touch the cwd working tree: a pre-existing untracked file is untouched, HEAD does not move, main unchanged', async () => {
@@ -137,7 +144,6 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		const strayRel = 'work/notes/ideas/assistant-wip.md';
 		writeFileSync(join(repo, strayRel), '# an idea being written\n');
 
-		const beforeArbiter = arbiterMainLog(repo);
 		const beforeHead = gitIn(['rev-parse', 'HEAD'], repo).trim();
 
 		const result = await ledgerWrite.applyTreelessNeedsAttentionTransition({
@@ -152,11 +158,10 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		// 1. The stray file is STILL UNTRACKED in the cwd.
 		const status = gitIn(['status', '--porcelain', strayRel], repo);
 		expect(status.trim()).toBe(`?? ${strayRel}`);
-		// 2. The cwd HEAD did not move (a pure lock amend makes no cwd commit).
+		// 2. The cwd HEAD did not move (a tree-less bounce makes no cwd commit).
 		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(beforeHead);
-		// 3. `main` is UNCHANGED (the lock amend writes only the lock ref).
-		expect(arbiterMainLog(repo)).toEqual(beforeArbiter);
-		// 4. The lock is stuck (the surface DID land on the lock substrate).
+		// 3. PR-2b: `<arbiter>/main` DID advance (one surface commit landed).
+		// 4. The A1 triple (lock released, sidecar + needsAnswers on main).
 		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
 		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
 		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
@@ -192,10 +197,12 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		expect(branchAfter).toBe(branchBefore);
 	});
 
-	it('refuses (moved:false) when there is no held lock to mark stuck', async () => {
+	it('surfaces + tolerates a not-held lock (release is idempotent — never leaves a dead-end held lock)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['iota']);
 		const repo = seeded.repo;
-		// Never claimed ⇒ no held lock.
+		// Never claimed ⇒ no held lock. PR-2b: the surface still lands on
+		// `<arbiter>/main` and the (already-absent) lock "release" is a tolerated
+		// no-op, so the bounce is a clean moved:true.
 		const result = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'iota',
@@ -203,8 +210,10 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/no held lock/i);
+		expect(result.moved).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'iota')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'iota')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'iota')).toBe(true);
 	});
 
 	it('the seam method marks the lock stuck (one mechanism, reachable through the write seam)', async () => {

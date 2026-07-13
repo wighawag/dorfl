@@ -142,7 +142,10 @@ describe('complete — gate', () => {
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		// PR-2b D3: a clean-surface `gate-failed` bounce is GREEN (exitCode 0) —
+		// the surface transition succeeded and the item is queued as a
+		// `needsAnswers:true` pool item; a FAILED surface would stay non-zero.
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('gate-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 		// The item never reaches done/; the body stays in backlog/ (the bounce is a
@@ -577,7 +580,8 @@ describe('complete — rebase conflict (ADR §10)', () => {
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		// PR-2b D3: a clean-surface `rebase-conflict` bounce is GREEN (exitCode 0).
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('rebase-conflict');
 		expect(result.message).toMatch(/conflict/i);
 		expect(result.message).toMatch(/aborted/i);

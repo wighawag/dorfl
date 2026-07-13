@@ -1,9 +1,5 @@
 import {runAsync, type RunResult} from './git.js';
-import {
-	acquireItemLock,
-	releaseItemLock,
-	readItemLock,
-} from './item-lock.js';
+import {acquireItemLock, releaseItemLock, readItemLock} from './item-lock.js';
 import {surfaceStuckToNeedsAttention} from './needs-attention.js';
 import {workItemRel} from './work-layout.js';
 

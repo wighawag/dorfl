@@ -438,10 +438,11 @@ describe('run through performIntegration — a THROWN core error is caught', () 
 		for (const item of result.items) {
 			expect(item.status).toBe('config-error');
 		}
-		// The work was surfaced (not silently dropped): each item is stuck on its
-		// lock, and its branch was pushed.
+		// The work was surfaced (not silently dropped) — its branch was pushed.
+		// PR-2b: a clean surface RELEASES the lock. The A1 triple lives on
+		// `<arbiter>/main`, not the lock.
 		expect(stuckLockOnArbiter(join(scratch.root, 'project'), 'feat')).toBe(
-			true,
+			false,
 		);
 		gitIn(['fetch', '-q', 'arbiter'], join(scratch.root, 'project'));
 		expect(

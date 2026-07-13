@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {GitHubProvider} from '../src/github.js';
 import {run} from '../src/git.js';
 import {
@@ -228,21 +229,17 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 		// protect, so DEFAULT requeue degrades gracefully to a fresh-claim move
 		// (equivalent effective outcome to `--reset` when there is nothing to lose).
 		const {repo, seeded} = await claimAndBranch('eta', {commitWork: true});
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'eta',
+		// Push the work branch (PR-2b's bounce releases the lock — to exercise the
+		// stuck-recovery requeue path we seed the stuck lock DIRECTLY).
+		gitIn(['push', '-q', ARBITER, 'work/task-eta:work/task-eta'], repo);
+		await markStuckItemLock({
+			item: 'task:eta',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
-			...FAST,
 		});
-		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
-		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
-		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
-		// then RELEASES the lock. Assert the A1 triple.
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
-		expect(sidecarSurfacedOnArbiterMain(repo, 'eta')).toBe(true);
-		expect(needsAnswersOnArbiterMain(repo, 'eta')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
 		gitIn(['push', '-q', ARBITER, '--delete', 'work/task-eta'], repo);
@@ -272,18 +269,14 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 
 	it('REQUEUES when the arbiter branch IS present', async () => {
 		const {repo} = await claimAndBranch('theta', {commitWork: true});
-		const routed = await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'theta',
+		gitIn(['push', '-q', ARBITER, 'work/task-theta:work/task-theta'], repo);
+		await markStuckItemLock({
+			item: 'task:theta',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
-			...FAST,
 		});
-		expect(routed.branchPush).toBe('pushed');
-		// Land local main on the surface so the requeue's HEAD push fast-forwards.
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'theta',
@@ -297,16 +290,13 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 		// No arbiter branch present, but --reset must still proceed (and delete is a
 		// no-op tolerated as already-gone).
 		const {repo} = await claimAndBranch('iota', {commitWork: false});
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'iota',
+		await markStuckItemLock({
+			item: 'task:iota',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
-			...FAST,
 		});
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'iota',
@@ -322,13 +312,12 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 		// claim) — there is no purely-local mode any more, so omitting --arbiter is a
 		// refusal (NOT a silent cwd-tree commit that could sweep a concurrent writer).
 		const {repo} = await claimAndBranch('kappa', {commitWork: false});
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'kappa',
+		await markStuckItemLock({
+			item: 'task:kappa',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
-			...FAST,
 		});
 		const result = await returnToBacklog({
 			cwd: repo,
