@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'skills-add-vendor-incur-agents-map' (G
 date: 2026-07-13
 status: open
 reviewOf: skills-add-vendor-incur-agents-map
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
