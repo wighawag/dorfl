@@ -173,7 +173,13 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 		scratch.cleanup();
 	});
 
-	/** A throwaway repo with one UNTRIAGED observation (no needsAnswers, no sidecar). */
+	/**
+	 * A throwaway repo with one UNTRIAGED observation (no needsAnswers, no sidecar).
+	 * The body carries a non-empty `## Open questions` block so the surface rung's
+	 * decision-record short-circuit (task
+	 * `surface-short-circuit-already-triaged-observations-and-harden-skill-empty-emit`)
+	 * does NOT fire — these tests want the surface-questions agent to be dispatched.
+	 */
 	function seedObservation(slug: string): {repo: string; itemPath: string} {
 		const repo = join(scratch.root, slug);
 		mkdirSync(repo, {recursive: true});
@@ -189,6 +195,10 @@ describe('observationTriage — the RUNG-layer ask-vs-auto distinction + always-
 				'---',
 				'',
 				'a signal',
+				'',
+				'## Open questions',
+				'',
+				'- Is this the right layer?',
 				'',
 			].join('\n'),
 		);
