@@ -8,5 +8,5 @@
   "surfaceBlockers": true,
   "review": true,
   "integration": "propose",
-  "agentDeadlineMinutes": 15
+  "agentDeadlineMinutes": 60
 }
