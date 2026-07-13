@@ -1,6 +1,7 @@
 ---
 title: PR-2a bounce-atomic-cutover — non-obvious in-scope decisions
 date: 2026-07-13
+needsAnswers: true
 ---
 
 Decisions taken while building `bounce-atomic-cutover-retire-stuck-lock` (PR-2a).
