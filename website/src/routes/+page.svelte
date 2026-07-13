@@ -75,7 +75,7 @@
 			<a
 				href="#install"
 				class="hidden text-bone-muted transition-colors hover:text-bone sm:inline"
-				>Install</a
+				>Get started</a
 			>
 			<a
 				href={repoUrl}
@@ -204,35 +204,191 @@
 	</div>
 </section>
 
-<!-- Install -->
+<!-- Get started — three layers: adopt (skill) → work/ contract → execute (CLI + CI) -->
 <section
 	id="install"
 	class="border-t border-border px-4 py-14 sm:px-6 sm:py-20"
 >
-	<div class="mx-auto max-w-3xl text-center">
-		<h2 class="font-serif text-3xl font-bold text-bone sm:text-4xl">
-			Get started
-		</h2>
-		<p class="mx-auto mt-3 mb-10 max-w-xl text-bone-muted">
-			Dorfl is a TS/Node CLI. Install it, register a repo, and let it claim its
-			own work.
-		</p>
-		<div
-			class="rounded-2xl border border-border bg-visor-inset p-5 text-left sm:p-6"
-		>
-			<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
-					><span class="text-bone-muted"># install (placeholder)</span>
+	<div class="mx-auto max-w-4xl">
+		<div class="mb-10 text-center">
+			<h2 class="font-serif text-3xl font-bold text-bone sm:text-4xl">
+				Get started
+			</h2>
+			<p class="mx-auto mt-3 max-w-2xl text-bone-muted">
+				Dorfl comes in three layers, in this order. Adopt the contract with a
+				skill; that gives you the file-based
+				<code class="rounded bg-slate-2 px-1.5 py-0.5 font-mono text-clay-light"
+					>work/</code
+				> substrate; then the CLI executes against it. Adopt is a skill, execute is
+				a command.
+			</p>
+		</div>
+
+		<div class="space-y-5">
+			<!-- Layer 1 — Adopt (a skill) -->
+			<div
+				class="flex gap-5 rounded-2xl border border-border bg-slate-2 p-6 sm:p-8"
+			>
+				<div
+					class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-visor-inset font-mono text-sm font-bold text-amber"
+				>
+					01
+				</div>
+				<div class="min-w-0 flex-1">
+					<h3 class="mb-2 text-lg font-semibold text-bone">
+						Adopt the contract (a skill)
+					</h3>
+					<p class="mb-4 leading-relaxed text-bone-muted">
+						The front door. Install the dorfl skills, then point your agent at
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>from-idea</code
+						>
+						(from scratch) or
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>setup</code
+						>
+						(an existing repo). Runner-agnostic — no
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>dorfl</code
+						> runtime needed to adopt.
+					</p>
+					<div
+						class="rounded-xl border border-border bg-visor-inset p-4 sm:p-5"
+					>
+						<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
+								><span class="text-bone-muted"
+									># install the dorfl skills into your agent</span
+								>
+<span class="text-amber">dorfl skills add</span>
+
+<span class="text-bone-muted"># then, in your agent:</span>
+<span class="text-amber">from-idea</span>   <span class="text-bone-muted"
+									># from scratch: idea → scaffolded work/-contract repo + spec</span
+								>
+<span class="text-amber">setup</span>       <span class="text-bone-muted"
+									># existing repo: onboard onto the work/ contract</span
+								></code
+							></pre>
+					</div>
+				</div>
+			</div>
+
+			<!-- Layer 2 — the work/ contract + protocol side-car -->
+			<div
+				class="flex gap-5 rounded-2xl border border-border bg-slate-2 p-6 sm:p-8"
+			>
+				<div
+					class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-visor-inset font-mono text-sm font-bold text-amber"
+				>
+					02
+				</div>
+				<div class="min-w-0 flex-1">
+					<h3 class="mb-2 text-lg font-semibold text-bone">
+						The <code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-base text-clay-light"
+							>work/</code
+						> contract, versioned with your code
+					</h3>
+					<p class="mb-4 leading-relaxed text-bone-muted">
+						What adoption gives you: a durable, file-based substrate the CLI
+						later consumes. One markdown file per item; status is the folder it
+						lives in, never a field. No database.
+					</p>
+					<div
+						class="rounded-xl border border-border bg-visor-inset p-4 sm:p-5"
+					>
+						<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
+								><span class="text-bone-muted"
+									># what setup / from-idea scaffold into your repo</span
+								>
+<span class="text-amber">work/</span>
+  <span class="text-amber">tasks/</span>       <span class="text-bone-muted"
+									># backlog/ → ready/ → done/ (+ cancelled/)</span
+								>
+  <span class="text-amber">specs/</span>       <span class="text-bone-muted"
+									># proposed/ → ready/ → tasked/ (+ dropped/)</span
+								>
+  <span class="text-amber">notes/</span>       <span class="text-bone-muted"
+									># ideas / observations / findings — capture buckets</span
+								>
+  <span class="text-amber">protocol/</span>   <span class="text-bone-muted"
+									># vendored WORK-CONTRACT.md, ADR-FORMAT.md, templates</span
+								>
+<span class="text-amber">.dorfl.json</span>   <span class="text-bone-muted"
+									># the per-repo acceptance gate (verify / prepare)</span
+								></code
+							></pre>
+					</div>
+				</div>
+			</div>
+
+			<!-- Layer 3 — Execute (the CLI) + CI -->
+			<div
+				class="flex gap-5 rounded-2xl border border-border bg-slate-2 p-6 sm:p-8"
+			>
+				<div
+					class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-visor-inset font-mono text-sm font-bold text-amber"
+				>
+					03
+				</div>
+				<div class="min-w-0 flex-1">
+					<h3 class="mb-2 text-lg font-semibold text-bone">
+						Execute (the CLI) &amp; CI
+					</h3>
+					<p class="mb-4 leading-relaxed text-bone-muted">
+						Once the contract is in place, the CLI is the runner that consumes
+						it. Use
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>dorfl do</code
+						>
+						in one repo, or
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>dorfl run</code
+						>
+						across many. In CI,
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>dorfl intake</code
+						> is the issue → spec/task front door.
+					</p>
+					<div
+						class="rounded-xl border border-border bg-visor-inset p-4 sm:p-5"
+					>
+						<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
+								><span class="text-bone-muted"># install the runner</span>
 <span class="text-amber">npm install -g dorfl</span>
 
 <span class="text-bone-muted"
-						># register a repo and let Dorfl pick a ready task</span
-					>
+									># register a repo and let Dorfl pick a ready task</span
+								>
 <span class="text-amber">dorfl remote add &lt;url&gt;</span>
-<span class="text-amber">dorfl do</span></code
-				></pre>
+<span class="text-amber">dorfl do</span>            <span
+									class="text-bone-muted"># one repo, in place</span
+								>
+<span class="text-amber">dorfl run</span>           <span
+									class="text-bone-muted"
+									># across every registered repo, in parallel</span
+								>
+
+<span class="text-bone-muted"># CI: turn an issue into a spec or task</span>
+<span class="text-amber">dorfl intake</span></code
+							></pre>
+					</div>
+				</div>
+			</div>
 		</div>
-		<p class="mt-6 text-sm text-bone-muted">
-			Full docs and the work/ contract live in the
+
+		<p class="mt-8 text-center text-sm text-bone-muted">
+			Full docs and the <code
+				class="rounded bg-slate-2 px-1.5 py-0.5 font-mono text-clay-light"
+				>work/</code
+			>
+			contract live in the
 			<a
 				href={repoUrl}
 				target="_blank"
