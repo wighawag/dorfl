@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {exportCIConfig, type ResolvedCIConfig} from '../src/install-ci-core.js';
@@ -36,7 +37,7 @@ beforeEach(() => {
 	work = mkdtempSync(join(tmpdir(), 'install-ci-bp-'));
 });
 afterEach(() => {
-	rmSync(work, {recursive: true, force: true});
+	rmrf(work);
 });
 
 const config: ResolvedCIConfig = {

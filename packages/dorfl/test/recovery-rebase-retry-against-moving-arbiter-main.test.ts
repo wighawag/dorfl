@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync} from 'node:fs';
+import {writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -11,6 +11,7 @@ import {
 	existsOnArbiterMain,
 	type Scratch,
 	type SeededRepo,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -113,7 +114,7 @@ function advanceArbiterMain(
 	}
 	gitIn(['commit', '-q', '-m', `arbiter advance ${label}`], dest);
 	gitIn(['push', '-q', 'origin', 'main:main'], dest);
-	rmSync(dest, {recursive: true, force: true});
+	rmrf(dest);
 }
 
 describe('recoverAlreadyCommitted — moving `<arbiter>/main` (CONTENTION) retry loop', () => {

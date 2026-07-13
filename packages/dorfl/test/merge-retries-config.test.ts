@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
@@ -114,7 +115,7 @@ describe('mergeRetries — the full precedence chain (flag > env > per-repo > gl
 			// per-repo (25) beats the global/default (1000).
 			expect(resolved.config.mergeRetries).toBe(25);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -145,7 +146,7 @@ describe('mergeRetries — the full precedence chain (flag > env > per-repo > gl
 			});
 			expect(flagWins.config.mergeRetries).toBe(99);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -159,7 +160,7 @@ describe('mergeRetries — the full precedence chain (flag > env > per-repo > gl
 			});
 			expect(resolved.config.mergeRetries).toBe(1000);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 });
@@ -171,7 +172,7 @@ describe('loadConfig — mergeRetries present with the modest default', () => {
 			const cfg = loadConfig(join(dir, 'does-not-exist.json'));
 			expect(cfg.mergeRetries).toBe(1000);
 		} finally {
-			rmSync(dir, {recursive: true, force: true});
+			rmrf(dir);
 		}
 	});
 });

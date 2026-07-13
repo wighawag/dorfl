@@ -1,8 +1,8 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {fixtureFolderRel} from './helpers/gitRepo.js';
+import {fixtureFolderRel, rmrf} from './helpers/gitRepo.js';
 import {isSpecComplete} from '../src/spec-complete.js';
 
 let root: string;
@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 describe('isSpecComplete — the read-only "is this spec complete?" core query', () => {

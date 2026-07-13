@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	rmSync,
@@ -103,7 +104,7 @@ beforeEach(() => {
 	work = mkdtempSync(join(tmpdir(), 'install-ci-'));
 });
 afterEach(() => {
-	rmSync(work, {recursive: true, force: true});
+	rmrf(work);
 });
 
 // ─── config model + models.json builder ──────────────────────────────────────
@@ -961,7 +962,7 @@ describe('capability-emitter registry seam (a new capability is a NEW file)', ()
 			const caps = await loadCapabilityRegistry(capDir);
 			expect(caps.map((c) => c.id)).toContain('zzz-fixture-cap');
 		} finally {
-			rmSync(capDir, {recursive: true, force: true});
+			rmrf(capDir);
 		}
 	});
 });
@@ -1835,7 +1836,7 @@ describe('the generated CI prefers a project-pinned dorfl over the global bootst
 			// could possibly have touched, and we never wrote anything to it.
 			expect(readdirSync(homeScratch)).toEqual([]);
 		} finally {
-			rmSync(sandbox, {recursive: true, force: true});
+			rmrf(sandbox);
 		}
 	});
 

@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
@@ -125,7 +126,7 @@ describe('strictMergeApproval \u2014 the full precedence chain (flag > env > per
 			// per-repo (true) beats the global/default (false).
 			expect(resolved.config.strictMergeApproval).toBe(true);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -156,7 +157,7 @@ describe('strictMergeApproval \u2014 the full precedence chain (flag > env > per
 			});
 			expect(flagWins.config.strictMergeApproval).toBe(true);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -170,7 +171,7 @@ describe('strictMergeApproval \u2014 the full precedence chain (flag > env > per
 			});
 			expect(resolved.config.strictMergeApproval).toBe(false);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -188,7 +189,7 @@ describe('strictMergeApproval \u2014 the full precedence chain (flag > env > per
 			expect(resolved.config.mergeQuestions).toBe('ask');
 			expect(resolved.config.observationTriage).toBe('off');
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 });
@@ -200,7 +201,7 @@ describe('loadConfig \u2014 strictMergeApproval present with the OFF default', (
 			const cfg = loadConfig(join(dir, 'does-not-exist.json'));
 			expect(cfg.strictMergeApproval).toBe(false);
 		} finally {
-			rmSync(dir, {recursive: true, force: true});
+			rmrf(dir);
 		}
 	});
 });

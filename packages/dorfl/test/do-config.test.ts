@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {mergeConfig} from '../src/config.js';
@@ -31,7 +32,7 @@ beforeEach(() => {
 	repo = mkdtempSync(join(tmpdir(), 'dorfl-do-config-'));
 });
 afterEach(() => {
-	rmSync(repo, {recursive: true, force: true});
+	rmrf(repo);
 });
 
 describe('doFlagOverrides — folds the do CLI flags into a PartialConfig', () => {

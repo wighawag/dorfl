@@ -29,7 +29,7 @@ import type {
 } from '../src/triage-persist.js';
 import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
-import {makeScratch, gitIn, type Scratch} from './helpers/gitRepo.js';
+import {makeScratch, gitIn, type Scratch, rmrf} from './helpers/gitRepo.js';
 import type {
 	AcquireAdvancingLockResult,
 	ReleaseAdvancingLockResult,
@@ -92,7 +92,7 @@ describe('observationTriage — the SELECTION-layer gate over the observation po
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	function seedObservation(slug: string, triaged?: string): void {
@@ -368,7 +368,7 @@ describe('observationTriage — apply is NOT gated (consume always runs, even un
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	function seedTask(slug: string): void {

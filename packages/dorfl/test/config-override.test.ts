@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	rmSync,
@@ -64,7 +65,7 @@ describe('config-override paths', () => {
 			);
 			expect(existsSync(real)).toBe(false);
 		} finally {
-			rmSync(scratch, {recursive: true, force: true});
+			rmrf(scratch);
 		}
 	});
 });
@@ -77,7 +78,7 @@ describe('loadConfigOverride', () => {
 		path = join(dir, 'config.override.json');
 	});
 	afterEach(() => {
-		rmSync(dir, {recursive: true, force: true});
+		rmrf(dir);
 	});
 
 	it('returns an empty map when the file is missing (a no-op)', () => {
@@ -294,7 +295,7 @@ describe('resolveRepoConfig \u2014 working-tree path resolves the arbiter URL it
 		spawnSync('git', ['init', '-q', '-b', 'main', repo]);
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('reads the checkout`s `<defaultArbiter>` remote and applies the matching hub-key entry', () => {
@@ -387,7 +388,7 @@ describe('resolveRepoConfigFromMirror \u2014 mirror path resolves origin itself'
 		spawnSync('git', ['-C', mirror, 'remote', 'remove', 'origin']);
 	});
 	afterEach(() => {
-		rmSync(tmp, {recursive: true, force: true});
+		rmrf(tmp);
 	});
 
 	it('looks up the hub-key bucket from the mirror`s `origin` URL', async () => {

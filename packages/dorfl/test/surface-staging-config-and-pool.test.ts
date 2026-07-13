@@ -33,6 +33,7 @@ import {
 	raceClone,
 	racerEnv,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 import {promoteFromPreBacklog} from '../src/needs-attention.js';
 import {acquireItemLock, releaseItemLock} from '../src/item-lock.js';
@@ -66,7 +67,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 function seedStagedTask(slug: string, fm: {needsAnswers?: boolean} = {}): void {

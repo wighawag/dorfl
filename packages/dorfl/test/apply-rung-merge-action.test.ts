@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync, existsSync} from 'node:fs';
+import {writeFileSync, mkdirSync, existsSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {performAdvance} from '../src/advance.js';
@@ -21,6 +21,7 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	rmrf,
 } from './helpers/gitRepo.js';
 import type {
 	AcquireAdvancingLockResult,
@@ -454,7 +455,7 @@ function advanceMainWithFile(
 	gitIn(['add', '-A'], dest);
 	gitIn(['commit', '-q', '-m', `arbiter advance ${label}`], dest);
 	gitIn(['push', '-q', 'origin', 'main:main'], dest);
-	rmSync(dest, {recursive: true, force: true});
+	rmrf(dest);
 }
 
 describe('apply rung — answered merge-question LANDS via the existing land primitive (end-to-end)', () => {

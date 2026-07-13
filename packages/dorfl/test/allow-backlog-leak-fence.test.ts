@@ -1,6 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {runOnce, type Dorfl} from '../src/run.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -21,6 +21,7 @@ import {
 	existsOnArbiterMain,
 	gitEnv,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -195,7 +196,7 @@ describe('leak-fence: `do` auto-pick / -n / multi-arg never sets --allow-backlog
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	/** Seed a `work/tasks/ready/<slug>.md` pool task. */

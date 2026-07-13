@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync} from 'node:fs';
+import {writeFileSync, mkdirSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
@@ -12,6 +12,7 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -116,7 +117,7 @@ function advanceMainWithFile(
 	gitIn(['add', '-A'], dest);
 	gitIn(['commit', '-q', '-m', `arbiter advance ${label}`], dest);
 	gitIn(['push', '-q', 'origin', 'main:main'], dest);
-	rmSync(dest, {recursive: true, force: true});
+	rmrf(dest);
 }
 
 describe('recoverAlreadyCommitted — `freshWorktreeGate` re-verifies the REBASED tip before landing', () => {

@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -14,6 +14,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -71,7 +72,7 @@ beforeEach(() => {
 });
 afterEach(() => {
 	scratch.cleanup();
-	rmSync(rendezvousDir, {recursive: true, force: true});
+	rmrf(rendezvousDir);
 });
 
 const ARBITER = 'arbiter';

@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync, writeFileSync, mkdirSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync, writeFileSync, mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig} from '../src/config.js';
@@ -86,7 +87,7 @@ describe('per-repo noPR + the deprecated `provider` key', () => {
 		repo = mkdtempSync(join(tmpdir(), 'dorfl-repo-nopr-'));
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('honours a per-repo `noPR` boolean', () => {
@@ -145,7 +146,7 @@ describe('loadRepoConfig', () => {
 	});
 
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('returns an empty config and no rejected keys when the file is absent', () => {
@@ -251,7 +252,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 	});
 
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('a repo with no file resolves to the global config (unchanged behaviour)', () => {
@@ -704,8 +705,8 @@ describe('resolveRepoConfig — multi-repo independence', () => {
 	});
 
 	afterEach(() => {
-		rmSync(repoA, {recursive: true, force: true});
-		rmSync(repoB, {recursive: true, force: true});
+		rmrf(repoA);
+		rmrf(repoB);
 	});
 
 	it('each repo resolves against its OWN file in one run (A merge, B propose)', () => {
@@ -775,7 +776,7 @@ describe('resolveRepoConfig — DORFL_* env layer', () => {
 	});
 
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('env sits ABOVE per-repo + global but BELOW a flag (chain position)', () => {

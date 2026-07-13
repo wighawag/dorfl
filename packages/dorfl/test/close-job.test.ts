@@ -1,8 +1,8 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {fixtureFolderRel} from './helpers/gitRepo.js';
+import {fixtureFolderRel, rmrf} from './helpers/gitRepo.js';
 import {runCloseJob} from '../src/close-job.js';
 import type {
 	IssueProvider,
@@ -108,7 +108,7 @@ beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), 'dorfl-close-job-'));
 });
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 describe('runCloseJob — the spec case (consumes the "spec complete?" query)', () => {

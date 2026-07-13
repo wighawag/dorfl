@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdirSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {resolveCwdSection, cwdSectionDisposition} from '../src/cwd-section.js';
 import {formatReport, formatCwdSection} from '../src/format.js';

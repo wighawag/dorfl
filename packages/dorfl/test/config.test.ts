@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -150,7 +151,7 @@ describe('loadConfig', () => {
 	});
 
 	afterEach(() => {
-		rmSync(dir, {recursive: true, force: true});
+		rmrf(dir);
 	});
 
 	it('returns merged defaults when the config path does not exist', () => {

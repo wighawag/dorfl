@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -149,7 +150,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 				const loaded = loadAdvanceCiTemplate(path);
 				return validateAdvanceCiTemplate(loaded);
 			} finally {
-				rmSync(dir, {recursive: true, force: true});
+				rmrf(dir);
 			}
 		};
 

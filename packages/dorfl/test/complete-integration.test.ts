@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {integrationFromFlags} from '../src/complete.js';
@@ -46,7 +47,7 @@ describe('complete-time integration — precedence (flag > per-repo > global > d
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	function writeRepoConfig(obj: Record<string, unknown>): void {
@@ -118,7 +119,7 @@ describe('complete-time integration — autonomous path is config-only (no flag)
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	function writeRepoConfig(obj: Record<string, unknown>): void {

@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
@@ -66,7 +67,7 @@ describe('taskerLoopMax — the full precedence chain (flag > env > per-repo > g
 			// per-repo (4) beats the global/default (3).
 			expect(resolved.config.taskerLoopMax).toBe(4);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -90,7 +91,7 @@ describe('taskerLoopMax — the full precedence chain (flag > env > per-repo > g
 			});
 			expect(flagWins.config.taskerLoopMax).toBe(9);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -104,7 +105,7 @@ describe('taskerLoopMax — the full precedence chain (flag > env > per-repo > g
 			});
 			expect(resolved.config.taskerLoopMax).toBe(3);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 });
@@ -129,7 +130,7 @@ describe('loadConfig — taskerLoopMax present with the cheap default', () => {
 			const cfg = loadConfig(join(dir, 'does-not-exist.json'));
 			expect(cfg.taskerLoopMax).toBe(3);
 		} finally {
-			rmSync(dir, {recursive: true, force: true});
+			rmrf(dir);
 		}
 	});
 });

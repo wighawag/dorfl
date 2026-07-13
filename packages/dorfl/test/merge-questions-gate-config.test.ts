@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
@@ -136,7 +137,7 @@ describe('mergeQuestions — the full precedence chain (flag > env > per-repo > 
 			// per-repo (auto) beats the global/default (ask).
 			expect(resolved.config.mergeQuestions).toBe('auto');
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -167,7 +168,7 @@ describe('mergeQuestions — the full precedence chain (flag > env > per-repo > 
 			});
 			expect(flagWins.config.mergeQuestions).toBe('auto');
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -181,7 +182,7 @@ describe('mergeQuestions — the full precedence chain (flag > env > per-repo > 
 			});
 			expect(resolved.config.mergeQuestions).toBe('ask');
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -198,7 +199,7 @@ describe('mergeQuestions — the full precedence chain (flag > env > per-repo > 
 			// observationTriage stays at its own default — the two axes are independent.
 			expect(resolved.config.observationTriage).toBe('off');
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 });
@@ -210,7 +211,7 @@ describe("loadConfig — mergeQuestions present with the conservative default 'a
 			const cfg = loadConfig(join(dir, 'does-not-exist.json'));
 			expect(cfg.mergeQuestions).toBe('ask');
 		} finally {
-			rmSync(dir, {recursive: true, force: true});
+			rmrf(dir);
 		}
 	});
 });
