@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {rmrf} from './helpers/gitRepo.js';
+import {rmrf, gitEnv} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	mkdirSync,
@@ -43,21 +43,14 @@ import {
 // Isolated fixture helpers.
 // ───────────────────────────────────────────────────────────────────────────
 
-/** Git env fully isolated from the real global/system config + a fixed identity. */
-function gitEnv(): NodeJS.ProcessEnv {
-	return {
-		...process.env,
-		GIT_AUTHOR_NAME: 'Test Runner',
-		GIT_AUTHOR_EMAIL: 'test@example.com',
-		GIT_COMMITTER_NAME: 'Test Runner',
-		GIT_COMMITTER_EMAIL: 'test@example.com',
-		GIT_TERMINAL_PROMPT: '0',
-		GIT_CONFIG_GLOBAL: '/dev/null',
-		GIT_CONFIG_SYSTEM: '/dev/null',
-		GIT_CONFIG_NOSYSTEM: '1',
-	};
-}
-
+// Reuse the SHARED `gitEnv()` (helpers/gitRepo.ts) rather than a local copy: it
+// isolates git from the real global/system config AND disables background
+// auto-gc/maintenance (`gc.auto=0`, `maintenance.auto=false`, `gc.autoDetach=
+// false`). The local copy here USED to omit the auto-gc disable, so a `gc --auto`
+// repack triggered by this fixture's commit churn could still be mid-flight when
+// `afterEach`'s `rmrf(scratch)` ran, racing the recursive remove and throwing
+// `ENOTEMPTY: rmdir '.../.git'` (the full-suite teardown flake). Sharing the one
+// env keeps the fix from drifting back out.
 const ENV = gitEnv();
 
 function writeFile(repo: string, rel: string, content: string): void {
