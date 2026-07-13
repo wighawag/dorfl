@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'harden-run-test-claimed-done-flaky-und
 date: 2026-07-13
 status: open
 reviewOf: harden-run-test-claimed-done-flaky-under-full-suite
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
