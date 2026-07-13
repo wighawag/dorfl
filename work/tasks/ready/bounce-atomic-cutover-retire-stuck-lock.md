@@ -85,3 +85,7 @@ Retiring `bounceToStuckLock` would instantly falsify all 84 `stuckLockOnArbiter(
 > Ordering is load-bearing: surface-to-`main` FIRST, release SECOND. RETRY (rebase+re-push on CAS rejection) is orthogonal and still applies.
 >
 > Done = the classifier fold + additive recovery predicate + D1 probe helper + new focused tests all land, the 84 assertions stay green + unchanged, `bounceToStuckLock`/`markStuckItemLock` still exist, acceptance gate green. RECORD non-obvious in-scope decisions (the exact recovery predicate + classifier fold; the D1 probe order + body-absent behaviour) durably and linked from the done record; if a decision meets the ADR gate, write an ADR.
+
+## Requeue 2026-07-13
+
+Requeued after re-splitting into PR-2a (this, the mechanism) + PR-2b (the churn) with all four gaps answered (D1 itemPath probe, D2 all-three-producers, D3 exit-code policy, green-split rule). --reset: the stopped run produced no work branch.
