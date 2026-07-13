@@ -1,6 +1,8 @@
 ---
 promotedFrom: observation:prd-word-leak-scan-fails-on-bot-generated-triage-sidecars-2026-07-12
 ---
+> **DONE 2026-07-13 (already-satisfied, no code needed).** The specified fix — exempting `work/questions/` from the prd-word leak scan's `work/**` walk in `packages/dorfl/test/prd-word-cutover-leak-scan.test.ts` — already landed on `origin/main` in commit `970ce7eb` (fix(leak-scan): exempt derived question sidecars). `isExcludedDir` already returns true for `work/questions/` with a WHY comment citing the source observation. `pnpm -r test` is green. No source change was needed; the task premise (a failing test) no longer holds. Resolved by moving to done/ with this record.
+
 
 ## What to build
 

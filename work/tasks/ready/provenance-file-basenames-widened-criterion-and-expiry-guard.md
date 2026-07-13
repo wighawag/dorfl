@@ -2,40 +2,17 @@
 promotedFrom: observation:word-scan-exempts-prd-cutover-task-bodies-2026-07-10
 ---
 
+## RE-SCOPED 2026-07-13 (maintainer answer (a)) — part 1 DROPPED, part 2 kept
+
+The original part 1 ("amend the observation `word-scan-exempts-prd-cutover-task-bodies-2026-07-10.md`") rests on a FALSE premise: that observation was DELETED by discharge-by-deletion at promotion (commit `d7b196e6`), so there is no file to amend. A build agent correctly STOPPED on this collision. The maintainer chose re-scope (a): **drop the observation-edit half entirely.** Record the wider criterion (below) as an amendment inside THIS task's done record and/or by expanding the existing JSDoc block above `PROVENANCE_FILE_BASENAMES` (which already states the wider criterion in prose today) — do NOT resurrect the deleted observation. Then build ONLY part 2 (the expiry guard). The stale reference to the deleted observation is intentionally removed from scope; `covers`/premise now rest solely on the expiry-guard work.
+
+The wider criterion to record (in the done record / JSDoc, NOT a resurrected observation): "any task / observation / spec / idea whose OWN SUBJECT is the retired `prd` vocabulary, the sweep that removes it, the skill/guard authored to generalise that sweep, or an incident about this scan itself — such a file legitimately quotes the retired word + `work/prds/…` path in prose to describe what it converts FROM / removes / documents." Cross-check every current `PROVENANCE_FILE_BASENAMES` entry against it; surface (do not silently remove) any misfit in the done record.
+
 ## What to build
 
-Two small, related changes anchored to the ratified observation
-`work/notes/observations/word-scan-exempts-prd-cutover-task-bodies-2026-07-10.md`
-and its implementation in
-`packages/dorfl/test/prd-word-cutover-leak-scan.test.ts`
-(the `PROVENANCE_FILE_BASENAMES` allow-list + `isProvenanceFile`).
+ONE self-contained change in `packages/dorfl/test/prd-word-cutover-leak-scan.test.ts` (the `PROVENANCE_FILE_BASENAMES` allow-list + `isProvenanceFile`). (Part 1 above is dropped per the 2026-07-13 re-scope.)
 
-1. **Amend the observation to state the ACTUAL, WIDER criterion.**
-   The original decision record contemplated exempting task/observation
-   bodies whose OWN SUBJECT is the retired-vocabulary sweep. In practice the
-   list has grown to also cover: the hard-cutover task, a forward-looking idea
-   note, a derived spec (`vocabulary-cutover-prose-sweep-skill.md`), the two
-   fan-out tasks for that spec (skill authoring + conformance guard), and an
-   incident note about the scan tripping on bot-generated triage sidecars.
-   That is broader than "the sweep task's own body".
-
-   Amend the observation body (this is a note, edits are allowed — the
-   ratified decision stays; you are honestly recording what the criterion
-   grew INTO) to spell out the wider criterion explicitly, e.g. roughly:
-   "any task / observation / spec / idea whose OWN SUBJECT is the retired
-   `prd` vocabulary, the sweep that removes it, the skill/guard authored to
-   generalise that sweep, or an incident about this scan itself — such a
-   file legitimately quotes the retired word + `work/prds/…` path in prose
-   to describe what it converts FROM / removes / documents". Keep it short;
-   a follow-up note or short amendment section in the same file is fine —
-   a full ADR is explicitly NOT required (per the human's answer).
-
-   Cross-check every current entry in `PROVENANCE_FILE_BASENAMES` against
-   the amended criterion; if any entry does NOT fit, call it out (do not
-   silently remove — surface it in the task's done record so a human can
-   decide).
-
-2. **Add an expiry / cleanup guard so the list cannot silently rot** once
+1. **Add an expiry / cleanup guard so the list cannot silently rot** once
    the retired `prd` word is fully purged from the codebase. Concretely,
    in `packages/dorfl/test/prd-word-cutover-leak-scan.test.ts` (or a
    sibling test file if that reads cleaner), add a test that:

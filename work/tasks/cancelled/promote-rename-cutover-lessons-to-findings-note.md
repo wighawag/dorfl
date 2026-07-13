@@ -4,7 +4,10 @@ consolidates:
   - observation:prd-to-spec-4e-residual-exported-symbols-inserted-2026-07-10
   - observation:prd-to-spec-value-aliases-are-not-symbol-aliases-exported-Prd-symbols-need-atomic-rename
   - observation:spec-migrate-4c-scope-decisions
+reason: superseded — the target file `work/notes/findings/rename-cutover-lessons.md` this task would create ALREADY EXISTS on main (landed via the `fold-three-surface-distinction-into-rename-cutover-lessons` task, PR #340). The durable lessons are already captured there. Building this would duplicate or conflict. Cancelled per maintainer 2026-07-13.
 ---
+> **CANCELLED 2026-07-13 (superseded).** Target `work/notes/findings/rename-cutover-lessons.md` already created by PR #340. See `reason:` above.
+
 
 ## What to build
 
