@@ -116,6 +116,13 @@ const RACE_SENSITIVE = [
 	// out of file-parallel pressure for the same deterministic claim/main-CAS
 	// reasoning as needs-attention-surface-on-main.test.ts.
 	'test/needs-attention-as-stuck-lock-state.test.ts',
+	// The PR-1 tree-less surface primitive tests (task
+	// `bounce-surfaces-stuck-sidecar-and-releases-lock`): drive real git against
+	// a --bare arbiter through the shared `runTreelessLedgerMove` CAS loop AND
+	// write main (the surface commit); keep them out of file-parallel pressure
+	// for the same deterministic claim/main-CAS reasoning as
+	// needs-attention-surface-on-main.test.ts.
+	'test/bounce-surface-primitive.test.ts',
 	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
 	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
 	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under
