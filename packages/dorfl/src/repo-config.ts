@@ -257,9 +257,42 @@ export type RepoRejectedKey = (typeof REPO_REJECTED_KEYS)[number];
 
 const ALLOWED_SET = new Set<string>(REPO_ALLOWED_KEYS);
 
-/** The path to a repo's `.dorfl.json` (repo root + filename). */
+/**
+ * The LEGACY per-repo config filename (`.dorfl.json`, the original dotfile form)
+ * still honoured on READ for backward compatibility. Reads prefer
+ * {@link REPO_CONFIG_FILENAME} (`dorfl.json`) and fall back to this; writes /
+ * `setup` use the preferred name. Derived from the single brand identity so a
+ * rename flips it in lockstep (see `brand.ts`).
+ */
+export const REPO_CONFIG_FILENAME_LEGACY = brand.repoConfigFilenameLegacy;
+
+/**
+ * Resolve which per-repo config file a repo USES: the PREFERRED
+ * `dorfl.json` if present, else the LEGACY `.dorfl.json` if present, else the
+ * preferred path (the location a missing file WOULD live / be created at). So a
+ * repo that already committed the legacy dotfile keeps working, while a fresh
+ * repo (and every write) uses the plain name. If BOTH exist, the preferred
+ * `dorfl.json` wins (a deliberate, documented precedence, not a merge).
+ */
+export function resolveRepoConfigPath(repoPath: string): string {
+	const preferred = join(repoPath, REPO_CONFIG_FILENAME);
+	if (existsSync(preferred)) {
+		return preferred;
+	}
+	const legacy = join(repoPath, REPO_CONFIG_FILENAME_LEGACY);
+	if (existsSync(legacy)) {
+		return legacy;
+	}
+	return preferred;
+}
+
+/**
+ * The path to a repo's config file. Prefers the plain `dorfl.json`, falls back
+ * to the legacy `.dorfl.json` when only that exists (see
+ * {@link resolveRepoConfigPath}).
+ */
 export function repoConfigPath(repoPath: string): string {
-	return join(repoPath, REPO_CONFIG_FILENAME);
+	return resolveRepoConfigPath(repoPath);
 }
 
 /** The result of reading (and filtering) a repo's `.dorfl.json`. */

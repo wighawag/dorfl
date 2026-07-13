@@ -77,8 +77,19 @@ export interface Brand {
 	readonly base: string;
 	/** The shared env-var prefix: `constantCase(base) + '_'` ⇒ `DORFL_`. */
 	readonly envPrefix: string;
-	/** The per-repo config filename: `.{paramCase(base)}.json` ⇒ `.dorfl.json`. */
+	/**
+	 * The per-repo config filename PREFERRED + written by default:
+	 * `{paramCase(base)}.json` ⇒ `dorfl.json` (a plain, non-dotfile name, so it is
+	 * visible in a normal `ls` and reads like other tool configs).
+	 */
 	readonly repoConfigFilename: string;
+	/**
+	 * The LEGACY per-repo config filename still honoured on READ for backward
+	 * compatibility: `.{paramCase(base)}.json` ⇒ `.dorfl.json` (the original
+	 * dotfile form). Reads prefer {@link repoConfigFilename} and fall back to this;
+	 * writes/`setup` use {@link repoConfigFilename}.
+	 */
+	readonly repoConfigFilenameLegacy: string;
 	/** The workspaces-dir name (a dotfile dir): `.{paramCase(base)}` ⇒ `.dorfl`. */
 	readonly workdirName: string;
 	/** The per-job record filename: `.{paramCase(base)}-job.json` ⇒ `.dorfl-job.json`. */
@@ -95,7 +106,8 @@ export function deriveBrand(base: string): Brand {
 	return {
 		base,
 		envPrefix: constantCase(base) + '_',
-		repoConfigFilename: `.${param}.json`,
+		repoConfigFilename: `${param}.json`,
+		repoConfigFilenameLegacy: `.${param}.json`,
 		workdirName: `.${param}`,
 		jobRecordFilename: `.${param}-job.json`,
 		configDirName: param,

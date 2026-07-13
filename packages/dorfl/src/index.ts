@@ -26,6 +26,8 @@ export type {
 } from './repo-config.js';
 export {
 	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
+	resolveRepoConfigPath,
 	REPO_ALLOWED_KEYS,
 	REPO_REJECTED_KEYS,
 	repoConfigPath,

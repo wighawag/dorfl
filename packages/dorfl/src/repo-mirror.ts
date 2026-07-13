@@ -5,6 +5,7 @@ import type {Config, PartialConfig} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 import {
 	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
 	loadRepoConfigFromContent,
 	resolveRepoConfigFromLoaded,
 	type LoadedRepoConfig,
@@ -247,7 +248,28 @@ export function readRepoConfigFromMirrorMain(
 	mirrorDir: string,
 	env?: NodeJS.ProcessEnv,
 ): string | undefined {
-	const spec = `main:${REPO_CONFIG_FILENAME}`;
+	// Prefer the plain `dorfl.json`; fall back to the legacy `.dorfl.json` when the
+	// preferred name is absent on `main` (a repo that committed the dotfile before
+	// dual-support). A genuine read fault on the FIRST attempt propagates; a
+	// path-missing on the first falls through to the legacy attempt.
+	const preferred = showConfigOnMain(mirrorDir, REPO_CONFIG_FILENAME, env);
+	if (preferred !== undefined) {
+		return preferred;
+	}
+	return showConfigOnMain(mirrorDir, REPO_CONFIG_FILENAME_LEGACY, env);
+}
+
+/**
+ * `git show main:<filename>` in a mirror, returning the bytes, or `undefined`
+ * when the PATH is absent on `main` (the expected config-less / wrong-name case).
+ * A genuine fault (unresolvable `main` / bad object) throws.
+ */
+function showConfigOnMain(
+	mirrorDir: string,
+	filename: string,
+	env?: NodeJS.ProcessEnv,
+): string | undefined {
+	const spec = `main:${filename}`;
 	const res = run('git', ['show', spec], mirrorDir, {env});
 	if (res.status === 0) {
 		return res.stdout;

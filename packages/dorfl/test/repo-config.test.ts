@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig} from '../src/config.js';
 import {
 	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
 	REPO_ALLOWED_KEYS,
 	REPO_REJECTED_KEYS,
 	repoConfigPath,
@@ -13,14 +14,59 @@ import {
 	resolveRepoConfig,
 } from '../src/repo-config.js';
 
-/** Write a `.dorfl.json` at the root of a throwaway repo dir. */
+/** Write a `dorfl.json` (the preferred name) at the root of a throwaway repo dir. */
 function writeRepoConfig(repoPath: string, value: unknown): void {
 	writeFileSync(join(repoPath, REPO_CONFIG_FILENAME), JSON.stringify(value));
 }
 
+describe('per-repo config filename: `dorfl.json` preferred, `.dorfl.json` legacy', () => {
+	let repo: string;
+	beforeEach(() => {
+		repo = mkdtempSync(join(tmpdir(), 'dorfl-repo-filename-'));
+	});
+	afterEach(() => rmrf(repo));
+
+	it('reads the preferred `dorfl.json`', () => {
+		writeFileSync(
+			join(repo, 'dorfl.json'),
+			JSON.stringify({integration: 'merge'}),
+		);
+		expect(repoConfigPath(repo)).toBe(join(repo, 'dorfl.json'));
+		expect(loadRepoConfig(repo).config.integration).toBe('merge');
+	});
+
+	it('falls back to the legacy `.dorfl.json` when only that exists', () => {
+		writeFileSync(
+			join(repo, '.dorfl.json'),
+			JSON.stringify({integration: 'merge'}),
+		);
+		expect(repoConfigPath(repo)).toBe(join(repo, '.dorfl.json'));
+		expect(loadRepoConfig(repo).config.integration).toBe('merge');
+	});
+
+	it('prefers `dorfl.json` when BOTH exist (no merge)', () => {
+		writeFileSync(
+			join(repo, 'dorfl.json'),
+			JSON.stringify({integration: 'merge'}),
+		);
+		writeFileSync(
+			join(repo, '.dorfl.json'),
+			JSON.stringify({integration: 'propose'}),
+		);
+		expect(repoConfigPath(repo)).toBe(join(repo, 'dorfl.json'));
+		expect(loadRepoConfig(repo).config.integration).toBe('merge');
+	});
+
+	it('resolves to the preferred path (for a future write) when NEITHER exists', () => {
+		expect(repoConfigPath(repo)).toBe(join(repo, 'dorfl.json'));
+		expect(loadRepoConfig(repo).config).toEqual({});
+	});
+});
+
 describe('repo-config constants', () => {
-	it('names the per-repo file `.dorfl.json`', () => {
-		expect(REPO_CONFIG_FILENAME).toBe('.dorfl.json');
+	it('names the per-repo file `dorfl.json` (preferred) with `.dorfl.json` legacy fallback', () => {
+		expect(REPO_CONFIG_FILENAME).toBe('dorfl.json');
+		expect(REPO_CONFIG_FILENAME_LEGACY).toBe('.dorfl.json');
 	});
 
 	it('treats integration, verify, defaultArbiter, autoBuild as repo-appropriate keys', () => {
@@ -131,10 +177,10 @@ describe('per-repo noPR + the deprecated `provider` key', () => {
 });
 
 describe('repoConfigPath', () => {
-	it('joins the repo root with the per-repo filename', () => {
-		expect(repoConfigPath('/some/repo')).toBe(
-			join('/some/repo', '.dorfl.json'),
-		);
+	it('resolves to the preferred `dorfl.json` when neither file exists', () => {
+		// `/some/repo` does not exist, so neither candidate is present → the
+		// resolver returns the PREFERRED path (where a write/create would land).
+		expect(repoConfigPath('/some/repo')).toBe(join('/some/repo', 'dorfl.json'));
 	});
 });
 
@@ -223,7 +269,7 @@ describe('loadRepoConfig', () => {
 		expect(loaded.message).toBeDefined();
 		expect(loaded.message).toMatch(/piBin/);
 		expect(loaded.message).toMatch(/maxParallel/);
-		expect(loaded.message).toMatch(/\.dorfl\.json/);
+		expect(loaded.message).toMatch(/\.?dorfl\.json/);
 	});
 
 	it('has no message when nothing was rejected', () => {
@@ -240,7 +286,7 @@ describe('loadRepoConfig', () => {
 
 	it('throws a helpful error on invalid JSON', () => {
 		writeFileSync(join(repo, REPO_CONFIG_FILENAME), '{ not json');
-		expect(() => loadRepoConfig(repo)).toThrow(/\.dorfl\.json/);
+		expect(() => loadRepoConfig(repo)).toThrow(/\.?dorfl\.json/);
 	});
 });
 

@@ -250,8 +250,9 @@ describe('readRepoConfigFromMirrorMain — sources the committed bytes from <arb
 	});
 
 	it('the sourced filename matches the brand REPO_CONFIG_FILENAME', () => {
-		// Guard against drift: the read targets `main:<REPO_CONFIG_FILENAME>`, and the
-		// test fixture writes that same filename (`.dorfl.json`).
-		expect(REPO_CONFIG_FILENAME).toBe('.dorfl.json');
+		// Guard against drift: the read PREFERS `main:<REPO_CONFIG_FILENAME>`
+		// (`dorfl.json`) and falls back to the legacy `.dorfl.json`; the test fixture
+		// writes the preferred name.
+		expect(REPO_CONFIG_FILENAME).toBe('dorfl.json');
 	});
 });

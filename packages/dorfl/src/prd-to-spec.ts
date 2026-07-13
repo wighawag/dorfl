@@ -8,10 +8,11 @@ import {
 	mkdirSync,
 	rmdirSync,
 } from 'node:fs';
-import {join, relative, dirname} from 'node:path';
+import {join, relative, dirname, basename} from 'node:path';
 import {run, git, gitMv} from './git.js';
 import {resolveProtocolDoc} from './prompt.js';
 import {WORK_ROOT} from './work-layout.js';
+import {repoConfigPath} from './repo-config.js';
 
 /**
  * The **`dorfl prd-to-spec` migration ENGINE** (spec
@@ -675,7 +676,9 @@ export function migrateConfig(
 	migration: VocabularyMigration = MIGRATION,
 	options: {dryRun?: boolean} = {},
 ): ConfigRewrite[] {
-	const configAbs = join(repoPath, '.dorfl.json');
+	// Resolve the repo's actual config file (prefers `dorfl.json`, falls back to
+	// the legacy `.dorfl.json`), so the key rewrite finds it under either name.
+	const configAbs = repoConfigPath(repoPath);
 	if (!existsSync(configAbs)) {
 		return [];
 	}
@@ -922,10 +925,15 @@ export function scanForLeaks(
 			scanText(rel, readFileSync(join(repoPath, rel), 'utf8'), []);
 		}
 	}
-	// The config file (the key layer).
-	const configAbs = join(repoPath, '.dorfl.json');
+	// The config file (the key layer) — under either the preferred `dorfl.json`
+	// or the legacy `.dorfl.json`.
+	const configAbs = repoConfigPath(repoPath);
 	if (existsSync(configAbs)) {
-		scanText('.dorfl.json', readFileSync(configAbs, 'utf8'), configKeyPatterns);
+		scanText(
+			basename(configAbs),
+			readFileSync(configAbs, 'utf8'),
+			configKeyPatterns,
+		);
 	}
 	// The FOLDER TREE itself: a surviving `work/prds/` directory (empty ⇒ no
 	// file, but the folder still leaks). Report it structurally.

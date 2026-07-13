@@ -20,7 +20,7 @@ A task is "green" / done-eligible when this passes (equivalent to `dorfl verify`
 pnpm -r build && pnpm -r test && pnpm format:check
 ```
 
-Note: `format:check` is a ROOT-only script (`prettier --check .`), so it is `pnpm format:check`, NOT `pnpm -r format:check`. The `-r` form errors `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` because no package has that script, whereas `build`/`test` DO exist per-package so the `-r` form is correct for those. This matches the `verify` command in `.dorfl.json`.
+Note: `format:check` is a ROOT-only script (`prettier --check .`), so it is `pnpm format:check`, NOT `pnpm -r format:check`. The `-r` form errors `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` because no package has that script, whereas `build`/`test` DO exist per-package so the `-r` form is correct for those. This matches the `verify` command in `dorfl.json`.
 
 So a normal finish is: `pnpm format` → confirm `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 

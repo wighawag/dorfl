@@ -38,7 +38,8 @@ describe('brand — derived surface equals today’s literals (byte-identical)',
 		// refactor is a pure no-op iff these hold.
 		expect(brand.base).toBe('dorfl');
 		expect(brand.envPrefix).toBe('DORFL_');
-		expect(brand.repoConfigFilename).toBe('.dorfl.json');
+		expect(brand.repoConfigFilename).toBe('dorfl.json');
+		expect(brand.repoConfigFilenameLegacy).toBe('.dorfl.json');
 		expect(brand.workdirName).toBe('.dorfl');
 		expect(brand.jobRecordFilename).toBe('.dorfl-job.json');
 		expect(brand.configDirName).toBe('dorfl');
@@ -51,7 +52,8 @@ describe('brand — changing ONLY the base flips every surface in lockstep', () 
 		const renamed = deriveBrand('robo-forge');
 		expect(renamed.base).toBe('robo-forge');
 		expect(renamed.envPrefix).toBe('ROBO_FORGE_');
-		expect(renamed.repoConfigFilename).toBe('.robo-forge.json');
+		expect(renamed.repoConfigFilename).toBe('robo-forge.json');
+		expect(renamed.repoConfigFilenameLegacy).toBe('.robo-forge.json');
 		expect(renamed.workdirName).toBe('.robo-forge');
 		expect(renamed.jobRecordFilename).toBe('.robo-forge-job.json');
 		expect(renamed.configDirName).toBe('robo-forge');
@@ -61,7 +63,8 @@ describe('brand — changing ONLY the base flips every surface in lockstep', () 
 	it('a single-word rebrand derives all forms consistently', () => {
 		const renamed = deriveBrand('forge');
 		expect(renamed.envPrefix).toBe('FORGE_');
-		expect(renamed.repoConfigFilename).toBe('.forge.json');
+		expect(renamed.repoConfigFilename).toBe('forge.json');
+		expect(renamed.repoConfigFilenameLegacy).toBe('.forge.json');
 		expect(renamed.workdirName).toBe('.forge');
 		expect(renamed.jobRecordFilename).toBe('.forge-job.json');
 		expect(renamed.configDirName).toBe('forge');
@@ -79,7 +82,8 @@ describe('brand — changing ONLY the base flips every surface in lockstep', () 
 		const renamed = deriveBrand('roboForge');
 		expect(renamed.base).toBe('roboForge');
 		expect(renamed.envPrefix).toBe('ROBO_FORGE_');
-		expect(renamed.repoConfigFilename).toBe('.robo-forge.json');
+		expect(renamed.repoConfigFilename).toBe('robo-forge.json');
+		expect(renamed.repoConfigFilenameLegacy).toBe('.robo-forge.json');
 		expect(renamed.workdirName).toBe('.robo-forge');
 		expect(renamed.bin).toBe('robo-forge');
 	});
