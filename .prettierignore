@@ -5,6 +5,11 @@ pnpm-lock.yaml
 *.md
 !skills/**/*.md
 
+# Vendored upstream code — kept BYTE-CLOSE to its origin so future re-copies
+# are mechanical (see packages/dorfl/src/vendor/incur/README.md + the ADR
+# docs/adr/skill-install-vendors-incur-agents-map.md).
+packages/dorfl/src/vendor/
+
 # website/ is a self-contained workspace member with its own prettier config
 # (it declares prettier-plugin-svelte / -tailwindcss, not installed at root) and
 # its own format:check. The root gate must not descend into it.
