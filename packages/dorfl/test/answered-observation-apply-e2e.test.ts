@@ -181,8 +181,8 @@ describe('answered observation apply — end-to-end through the driver (classifi
 		expect(existsSync(join(seeded.repo, sidecarPath))).toBe(false);
 	});
 
-	it('delete-source: `performAdvanceAuto` on an answered observation + a `delete` verdict discharges by deletion — source + sidecar removed in one revertible commit, no artifact on the work board', async () => {
-		// The delete-source verdict is the local-only path (no arbiter mint), so it
+	it('dispose-source: `performAdvanceAuto` on an answered observation + a `dispose` verdict discharges by deletion — source + sidecar removed in one revertible commit, no artifact on the work board', async () => {
+		// The dispose-source verdict is the local-only path (no arbiter mint), so it
 		// exercises the classifier → apply → decide → `applyAnsweredQuestions`
 		// discharge branch end-to-end without needing an arbiter round-trip.
 		const seeded = seedRepoWithArbiter(scratch.root, []);
@@ -194,8 +194,8 @@ describe('answered observation apply — end-to-end through the driver (classifi
 		gitIn(['commit', '-q', '-m', 'seed answered observation'], seeded.repo);
 
 		const {decide} = spyDecide({
-			outcome: 'delete',
-			deleteReason: 'DISTINCT-E2E-DELETE-REASON — the answer says drop it',
+			outcome: 'dispose',
+			disposeReason: 'DISTINCT-E2E-DISPOSE-REASON — the answer says drop it',
 		});
 		const result = await performAdvanceAuto({
 			cwd: seeded.repo,
@@ -221,7 +221,7 @@ describe('answered observation apply — end-to-end through the driver (classifi
 		expect(existsSync(join(seeded.repo, itemPath))).toBe(false);
 		expect(existsSync(join(seeded.repo, sidecarPath))).toBe(false);
 		expect(gitIn(['log', '-1', '--format=%B', 'HEAD'], seeded.repo)).toContain(
-			'DISTINCT-E2E-DELETE-REASON',
+			'DISTINCT-E2E-DISPOSE-REASON',
 		);
 	});
 
@@ -265,7 +265,7 @@ describe('answered observation apply — end-to-end through the driver (classifi
 		// The agentic decider was consulted exactly once.
 		expect(calls.count).toBe(1);
 
-		// The NOTE is RETAINED (not deleted, unlike the `delete` sibling) and now
+		// The NOTE is RETAINED (not deleted, unlike the `dispose` sibling) and now
 		// carries the harvested answers; the sidecar is GONE and the flag is cleared.
 		expect(existsSync(join(seeded.repo, itemPath))).toBe(true);
 		expect(existsSync(join(seeded.repo, sidecarPath))).toBe(false);

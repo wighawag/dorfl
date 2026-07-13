@@ -14,7 +14,7 @@ import {
 	serialiseSidecar,
 	type SidecarModel,
 } from '../src/sidecar.js';
-import {parseFrontmatter} from '../src/frontmatter.js';
+import {parseFrontmatter, readFrontmatterField} from '../src/frontmatter.js';
 import {
 	makeScratch,
 	gitEnv,
@@ -34,13 +34,18 @@ import {run} from '../src/git.js';
  *     ONE commit, via the sidecar contract's atomic-apply);
  *   - either APPENDS new questions (stays needsAnswers:true, re-pauses) OR resolves
  *     fully (clears needsAnswers + deletes the sidecar in the SAME commit) OR
- *     discharges the source BY DELETION (`discharge` set — `git rm` source +
- *     sidecar in a standalone revertible commit, the reason in the message);
+ *     DISPOSES the source (`dispose` set): REGIME-POLYMORPHIC — an observation is
+ *     `git rm`-ed with its sidecar (reason in the commit message); a task is
+ *     `git mv`-ed to `tasks/cancelled/` (reason: written into the moved body,
+ *     sidecar `git rm`-ed in the same commit); a spec is `git mv`-ed to
+ *     `specs/dropped/` (same shape). Task `apply-disposition-delete-to-dispose-
+ *     regime-polymorphic`, spec `surface-stuck-as-questions-and-retire-stuck-
+ *     lock-state` decision #5;
  *   - the disposition VOCABULARY is GONE (task
  *     `agentic-apply-retire-disposition-vocabulary`): there is no `disposition`
  *     field, no most-decisive picker, no `keep`/`triaged:keep`. A sidecar entry is
  *     BINARY (no-answer | answered); what to DO with an answered observation is the
- *     AGENTIC apply decision (advance.ts), which routes here (re-pause / discharge /
+ *     AGENTIC apply decision (advance.ts), which routes here (re-pause / dispose /
  *     via promoteObservation for a mint);
  *   - applying NEVER invents an answer (only applies human-authored answers);
  *   - a SUBSET-answered sidecar is NOT applied (the persist refuses it loudly — the
@@ -204,8 +209,19 @@ describe('applyAnsweredQuestions — append / re-pause (new questions discovered
 	});
 });
 
-describe('applyAnsweredQuestions — discharge by deletion (the delete-source verdict)', () => {
-	it('discharge on an OBSERVATION → the note + sidecar git rm-ed in a STANDALONE revertible commit, reason in the message, no resting residue', () => {
+// `apply-disposition-delete-to-dispose-regime-polymorphic`: the apply-rung
+// disposition token was renamed `delete` → `dispose` and made
+// REGIME-POLYMORPHIC on the source item's type. These tests pin all three
+// branches at the persist seam:
+//   - OBSERVATION → `git rm` the note + sidecar (notes leave by deletion,
+//     decision 12);
+//   - TASK       → `git mv` to `tasks/cancelled/` (RETAINED; `reason:` in the
+//     moved body's frontmatter; sidecar `git rm`-ed);
+//   - SPEC       → `git mv` to `specs/dropped/` (RETAINED; same shape).
+// A TASK is NEVER `git rm`-ed here — dispose is the only path off the board
+// (true by construction: the task branch calls `git mv`).
+describe('applyAnsweredQuestions — dispose (the regime-polymorphic dispose verdict)', () => {
+	it('dispose on an OBSERVATION → the note + sidecar git rm-ed in a STANDALONE revertible commit, reason in the message, no resting residue', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'note',
 			folder: 'observations',
@@ -218,7 +234,7 @@ describe('applyAnsweredQuestions — discharge by deletion (the delete-source ve
 			cwd: repo,
 			item: 'observation:note',
 			itemPath,
-			discharge: {reason: 'yes — out of scope now'},
+			dispose: {reason: 'yes — out of scope now'},
 			env: gitEnv(),
 		});
 
@@ -236,7 +252,7 @@ describe('applyAnsweredQuestions — discharge by deletion (the delete-source ve
 		expect(headCommitMessage(repo)).toContain('out of scope now');
 	});
 
-	it('discharge fires DIRECT (no preview/confirm) on a WORK ITEM too — same mechanism, source git rm-ed', () => {
+	it('dispose on a TASK → `git mv` to `tasks/cancelled/` (RETAINED), `reason:` in the moved body, sidecar rm-ed in the same commit; the task file is NEVER `git rm`-ed', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			slug: 'wi',
 			type: 'task',
@@ -248,19 +264,73 @@ describe('applyAnsweredQuestions — discharge by deletion (the delete-source ve
 			cwd: repo,
 			item: 'task:wi',
 			itemPath,
-			discharge: {reason: 'yes, the human ratified the drop'},
+			dispose: {
+				reason: 'DISTINCT-TASK-DISPOSE-REASON — the human ratified the drop',
+			},
 			env: gitEnv(),
 		});
 
-		// delete-source is uniform across source types (decision 6): the source is
-		// git rm-ed in one revertible commit, the reason in the message.
-		expect(result.outcome).toBe('deleted');
+		// The task is DISPOSED (not `deleted`): the file was `git mv`-ed to its
+		// regime's won't-proceed terminal `tasks/cancelled/` (RETAINED). By
+		// construction there is NO branch that `git rm`s a task here.
+		expect(result.outcome).toBe('disposed');
+		const terminalPath = 'work/tasks/cancelled/wi.md';
 		expect(existsSync(join(repo, itemPath))).toBe(false);
+		expect(existsSync(join(repo, terminalPath))).toBe(true);
+		// The moved body carries the `reason:` frontmatter marker (the durable
+		// in-file record of WHY the task won't proceed).
+		const movedBody = readFileSync(join(repo, terminalPath), 'utf8');
+		expect(readFrontmatterField(movedBody, 'reason')).toBe(
+			'DISTINCT-TASK-DISPOSE-REASON — the human ratified the drop',
+		);
+		// The answered sidecar is `git rm`-ed in the SAME commit as the mv.
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
-		expect(headCommitMessage(repo)).toContain('ratified the drop');
+		const touched = filesInHeadCommit(repo);
+		expect(touched).toContain(sidecarPath);
+		expect(touched).toContain(terminalPath);
+		expect(trackedInHead(repo, terminalPath)).toBe(true);
+		expect(trackedInHead(repo, itemPath)).toBe(false);
+		// The reason ALSO rides the commit message (belt + braces — the frontmatter
+		// is the durable in-file record, the commit is the audit history).
+		expect(headCommitMessage(repo)).toContain('DISTINCT-TASK-DISPOSE-REASON');
+		expect(headCommitMessage(repo)).toContain('cancelled');
 	});
 
-	it('re-pause WINS over a discharge (you cannot discharge a source you are still asking about)', () => {
+	it('dispose on a SPEC → `git mv` to `specs/dropped/` (RETAINED), sidecar rm-ed in the same commit', () => {
+		const {repo, itemPath, sidecarPath} = seed({
+			slug: 'sp',
+			folder: 'prd',
+			type: 'spec',
+			questions: ['drop it?'],
+			answers: ['yes'],
+		});
+
+		const result = applyAnsweredQuestions({
+			cwd: repo,
+			item: 'spec:sp',
+			itemPath,
+			dispose: {reason: 'DISTINCT-SPEC-DISPOSE-REASON — out of scope'},
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('disposed');
+		const terminalPath = 'work/specs/dropped/sp.md';
+		expect(existsSync(join(repo, itemPath))).toBe(false);
+		expect(existsSync(join(repo, terminalPath))).toBe(true);
+		expect(existsSync(join(repo, sidecarPath))).toBe(false);
+		expect(trackedInHead(repo, terminalPath)).toBe(true);
+		expect(trackedInHead(repo, itemPath)).toBe(false);
+		// The reason rides both the commit message AND the moved body's
+		// `reason:` frontmatter (symmetric with the task branch — see
+		// `## Decisions` on `disposeToTerminal` for the rationale).
+		const movedBody = readFileSync(join(repo, terminalPath), 'utf8');
+		expect(readFrontmatterField(movedBody, 'reason')).toBe(
+			'DISTINCT-SPEC-DISPOSE-REASON — out of scope',
+		);
+		expect(headCommitMessage(repo)).toContain('DISTINCT-SPEC-DISPOSE-REASON');
+	});
+
+	it('re-pause WINS over a dispose (you cannot dispose a source you are still asking about)', () => {
 		const {repo, itemPath, sidecarPath} = seed({
 			questions: ['A?'],
 			answers: ['a'],
@@ -270,11 +340,11 @@ describe('applyAnsweredQuestions — discharge by deletion (the delete-source ve
 			item: 'task:foo',
 			itemPath,
 			appendQuestions: [{question: 'follow-up?'}],
-			discharge: {reason: 'should not fire'},
+			dispose: {reason: 'should not fire'},
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('repaused');
-		// The source is INTACT — re-pause took precedence over the discharge.
+		// The source is INTACT — re-pause took precedence over the dispose.
 		expect(existsSync(join(repo, itemPath))).toBe(true);
 		expect(existsSync(join(repo, sidecarPath))).toBe(true);
 	});

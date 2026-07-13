@@ -566,15 +566,15 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		expect(sidecarText).toMatch(/allAnswered=false/);
 	});
 
-	it('verdict delete → delete-source: DISCHARGED BY DELETION (the note + sidecar git rm-ed, the reason in the commit message; DIRECT, no confirm)', async () => {
+	it('verdict dispose → dispose-source (observation): DISCHARGED BY DELETION (the note + sidecar git rm-ed, the reason in the commit message; DIRECT, no confirm)', async () => {
 		const {repo} = seedObservation('del');
 		const {itemPath, sidecarPath} = seedAnsweredObservation(repo, 'del');
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'answered observation'], repo);
 
 		const {decide} = spyDecide({
-			outcome: 'delete',
-			deleteReason: 'the answer says drop it — DISTINCT-DELETE-REASON',
+			outcome: 'dispose',
+			disposeReason: 'the answer says drop it — DISTINCT-DISPOSE-REASON',
 		});
 		const result = await performAdvance({
 			arg: 'obs:del',
@@ -590,7 +590,7 @@ describe('advance — an answered observation flows through the AGENTIC apply de
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 		// The reason rides the commit message (git history is the archive).
 		const commitMessage = gitIn(['log', '-1', '--format=%B', 'HEAD'], repo);
-		expect(commitMessage).toContain('DISTINCT-DELETE-REASON');
+		expect(commitMessage).toContain('DISTINCT-DISPOSE-REASON');
 	});
 
 	it('verdict adr → mint-adr: CAS-creates a SELF-CONTAINED ADR in docs/adr/ + DELETES the observation+sidecar in the same commit (the off-board sibling route)', async () => {

@@ -17,7 +17,7 @@ import {
  * dispatcher tests:
  *
  *  1. The INJECTED decider seam drives the engine with a CANNED verdict — one per
- *     outcome of the superset {task | spec | adr | delete | resolve | ask}.
+ *     outcome of the superset {task | spec | adr | dispose | resolve | ask}.
  *  2. The allowed-outcome GUARD: a verdict outside the caller's `allowedOutcomes`
  *     is rejected LOUDLY (never silently coerced); a caller that does not allow
  *     `adr` can never receive it. An empty set is a programming error caught up
@@ -41,7 +41,7 @@ const SUPERSET: DecisionOutcome[] = [
 	'task',
 	'spec',
 	'adr',
-	'delete',
+	'dispose',
 	'resolve',
 	'ask',
 ];
@@ -83,10 +83,10 @@ describe('decide — the injected seam drives one canned verdict per outcome', (
 		expect(out).toEqual(verdict);
 	});
 
-	it('returns a `delete` verdict verbatim (carrying the reason)', async () => {
+	it('returns a `dispose` verdict verbatim (carrying the reason)', async () => {
 		const verdict: DecisionVerdict = {
-			outcome: 'delete',
-			deleteReason: 'the answer says to drop it',
+			outcome: 'dispose',
+			disposeReason: 'the answer says to dispose it',
 		};
 		const out = await decide({}, cannedDecider(verdict), SUPERSET);
 		expect(out).toEqual(verdict);
@@ -118,7 +118,7 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 	it('a caller that does NOT allow `adr` can never receive it', async () => {
 		// The keystone-minus-adr subset (what advance-apply launches with before
 		// `agentic-apply-mint-adr-route` widens it).
-		const allowed: DecisionOutcome[] = ['task', 'spec', 'delete', 'ask'];
+		const allowed: DecisionOutcome[] = ['task', 'spec', 'dispose', 'ask'];
 		const verdict: DecisionVerdict = {outcome: 'adr', adrTitle: 'sneaky'};
 		await expect(
 			decide({}, cannedDecider(verdict), allowed),
@@ -128,14 +128,14 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 	it('the rejection names the offending outcome + the allowed set', async () => {
 		const allowed: DecisionOutcome[] = ['task', 'ask'];
 		try {
-			await decide({}, cannedDecider({outcome: 'delete'}), allowed);
+			await decide({}, cannedDecider({outcome: 'dispose'}), allowed);
 			expect.unreachable('decide should have rejected the out-of-set verdict');
 		} catch (err) {
 			expect(err).toBeInstanceOf(DisallowedOutcomeError);
 			const e = err as DisallowedOutcomeError;
-			expect(e.outcome).toBe('delete');
+			expect(e.outcome).toBe('dispose');
 			expect(e.allowed).toEqual(['task', 'ask']);
-			expect(e.message).toContain('delete');
+			expect(e.message).toContain('dispose');
 			expect(e.message).toContain('task | ask');
 		}
 	});
@@ -156,8 +156,11 @@ describe('decide — the allowed-outcome guard rejects loudly, never coerces', (
 	});
 
 	it('the guard accepts any iterable allowed set (e.g. a Set)', async () => {
-		const allowed = new Set<DecisionOutcome>(['task', 'delete']);
-		const verdict: DecisionVerdict = {outcome: 'delete', deleteReason: 'drop'};
+		const allowed = new Set<DecisionOutcome>(['task', 'dispose']);
+		const verdict: DecisionVerdict = {
+			outcome: 'dispose',
+			disposeReason: 'drop',
+		};
 		const out = await decide({}, cannedDecider(verdict), allowed);
 		expect(out).toEqual(verdict);
 	});
@@ -179,11 +182,11 @@ describe('decide — input is threaded opaquely to the injected decider', () => 
 		let seen: SidecarInput | undefined;
 		const decider: DecisionDecider<SidecarInput> = async (received) => {
 			seen = received;
-			return {outcome: 'delete', deleteReason: received.answer};
+			return {outcome: 'dispose', disposeReason: received.answer};
 		};
 		const out = await decide(input, decider, SUPERSET);
 		expect(seen).toBe(input);
-		expect(out.deleteReason).toBe('yeah just drop it');
+		expect(out.disposeReason).toBe('yeah just drop it');
 	});
 });
 
@@ -229,12 +232,12 @@ describe('parseDecisionVerdict — the parse table', () => {
 		expect(v.adrTitle).toBe('The choice');
 	});
 
-	it('parses a `delete` verdict (reason only)', () => {
+	it('parses a `dispose` verdict (reason only)', () => {
 		const v = parseDecisionVerdict(
-			'I think this should go.\n\n```json\n{"outcome":"delete","deleteReason":"stale"}\n```',
+			'I think this should go.\n\n```json\n{"outcome":"dispose","disposeReason":"stale"}\n```',
 		);
-		expect(v.outcome).toBe('delete');
-		expect(v.deleteReason).toBe('stale');
+		expect(v.outcome).toBe('dispose');
+		expect(v.disposeReason).toBe('stale');
 	});
 
 	it('parses a `resolve` verdict (resolveReason only)', () => {
@@ -244,8 +247,8 @@ describe('parseDecisionVerdict — the parse table', () => {
 		expect(v.outcome).toBe('resolve');
 		expect(v.resolveReason).toBe('keep on record, no artifact');
 		// resolve mints nothing + keeps the note, so it carries NEITHER a
-		// deleteReason (that is the sibling DROP verdict) NOR any mint channel.
-		expect(v.deleteReason).toBeUndefined();
+		// disposeReason (that is the sibling DISPOSE verdict) NOR any mint channel.
+		expect(v.disposeReason).toBeUndefined();
 		expect(v.taskSlug).toBeUndefined();
 		expect(v.specSlug).toBeUndefined();
 		expect(v.adrSlug).toBeUndefined();
@@ -295,9 +298,9 @@ describe('parseDecisionVerdict — the parse table', () => {
 		).toThrow(/not valid JSON/i);
 	});
 
-	it('THROWS on an outcome not in the superset {task,spec,adr,delete,resolve,ask}', () => {
+	it('THROWS on an outcome not in the superset {task,spec,adr,dispose,resolve,ask}', () => {
 		expect(() => parseDecisionVerdict('{"outcome":"bounce"}')).toThrow(
-			/task\|spec\|adr\|delete\|resolve\|ask/,
+			/task\|spec\|adr\|dispose\|resolve\|ask/,
 		);
 	});
 });

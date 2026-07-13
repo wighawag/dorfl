@@ -273,7 +273,7 @@ export interface AdvanceContext {
 	 * The AGENTIC apply DECISION seam (task
 	 * `agentic-apply-retire-disposition-vocabulary`): the fresh-context decision
 	 * agent the apply rung runs on a fully-answered OBSERVATION to choose what to DO
-	 * with the signal (`mint-task | mint-spec | mint-adr | delete-source |
+	 * with the signal (`mint-task | mint-spec | mint-adr | dispose-source |
 	 * resolve-no-mint | ask-follow-up`),
 	 * grounded in the source's full context. It is the injected
 	 * {@link ApplyDecider} the shared `decide(input, allowedOutcomes)` engine runs;
@@ -863,8 +863,8 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  * apply rung is now AGENT-DRIVEN: it runs the shared `decide(input, allowedOutcomes)`
  * engine ({@link decide}) over `(the answered question(s) + the SOURCE item + its
  * type/context)` via the injected {@link ApplyDecider}, allowing the set
- * `{task | spec | adr | delete | resolve | ask}` (= `{mint-task | mint-spec |
- * mint-adr | delete-source | resolve-no-mint | ask-follow-up}`; `adr` is now WIRED
+ * `{task | spec | adr | dispose | resolve | ask}` (= `{mint-task | mint-spec |
+ * mint-adr | dispose-source | resolve-no-mint | ask-follow-up}`; `adr` is now WIRED
  * by task
  * `agentic-apply-mint-adr-route`, which added the {@link mintAdr} route). The
  * verdict ROUTES:
@@ -879,9 +879,17 @@ async function triageRung(input: RungExecInput): Promise<RungExecResult> {
  *     comes from the agent's VERDICT, NOT a human `promote-*` field;
  *   - `resolve` → {@link applyAnsweredQuestions} resolve-fully (harvest answers
  *     into the body, clear `needsAnswers`, delete the sidecar; the note is
- *     RETAINED — the sibling of `delete` that mints nothing but keeps the note);
- *   - `delete` → {@link applyAnsweredQuestions} discharge-by-deletion (`git rm`
- *     source + sidecar in one revertible commit, the reason in the commit message).
+ *     RETAINED — the sibling of `dispose` that mints nothing but keeps the note);
+ *   - `dispose` → {@link applyAnsweredQuestions} regime-polymorphic disposal
+ *     (task `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+ *     `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5): an
+ *     OBSERVATION is `git rm`-ed in one revertible commit (notes leave by
+ *     deletion; reason in the message); a TASK is `git mv`-ed to
+ *     `tasks/cancelled/` (RETAINED, `reason:` written into the moved body); a
+ *     SPEC is `git mv`-ed to `specs/dropped/` (RETAINED). Making `dispose`
+ *     polymorphic (rather than a literal `delete`) makes "a task cannot be
+ *     hard-deleted by the apply rung, only disposed to its terminal" true BY
+ *     CONSTRUCTION.
  *
  * For a TASK/SPEC (answering its OWN open questions) or a caller-supplied follow-up
  * batch, it delegates straight to {@link applyAnsweredQuestions} (resolve fully /
@@ -1192,12 +1200,15 @@ function findItemPath(
  *   - `resolve` → {@link applyAnsweredQuestions}'s resolve-fully path (harvest the
  *     answers into `## Applied answers`, strip the open-questions block, clear
  *     `needsAnswers`, DELETE the sidecar — the note is RETAINED). The sibling of
- *     `delete` that KEEPS the note instead of git-rm-ing it (task
+ *     `dispose` that KEEPS the note instead of moving/rm-ing it (task
  *     `apply-decide-resolve-verdict-mint-nothing`);
- *   - `delete` → {@link applyAnsweredQuestions}'s discharge-by-deletion (`git rm`
- *     source + sidecar in one revertible commit, the reason in the message).
+ *   - `dispose` → {@link applyAnsweredQuestions}'s regime-polymorphic disposal
+ *     (task `apply-disposition-delete-to-dispose-regime-polymorphic`): an
+ *     observation is `git rm`-ed in one revertible commit (reason in the
+ *     message); a task is `git mv`-ed to `tasks/cancelled/` (reason written into
+ *     the body); a spec is `git mv`-ed to `specs/dropped/`.
  *
- * The allowed set is `{task | spec | adr | delete | resolve | ask}`; a verdict
+ * The allowed set is `{task | spec | adr | dispose | resolve | ask}`; a verdict
  * outside it is
  * rejected by the engine's allowed-outcome guard ({@link DisallowedOutcomeError})
  * and mapped onto a usage-error — never dispatched.
@@ -1380,12 +1391,12 @@ async function applyAgenticDecision(
 		// resolve-no-mint → the EXISTING resolve-fully path (task
 		// `apply-decide-resolve-verdict-mint-nothing`). The answer SETTLES the item
 		// with NOTHING to mint and the note RETAINED: call `applyAnsweredQuestions`
-		// with NEITHER `appendQuestions` (re-pause) NOR `discharge` (delete), so it
+		// with NEITHER `appendQuestions` (re-pause) NOR `dispose` (drop/terminal), so it
 		// takes the default resolve-fully branch — harvest the answers into `##
 		// Applied answers`, strip the marker-fenced open-questions block, clear
 		// `needsAnswers`, and DELETE the sidecar in ONE atomic commit. Invariant-clean
 		// (`needsAnswers:false` ⟺ no active sidecar). The note file is KEPT (this is
-		// the sibling of `delete`, which git-rm's it). `resolveReason` is advisory
+		// the sibling of `dispose`, which git-rm's it or moves it to a terminal). `resolveReason` is advisory
 		// context only; the durable disposition record is the harvested `## Applied
 		// answers` block the resolve-fully path writes (NOT a separate convention).
 		const apply = context.applyPersist ?? applyAnsweredQuestions;
@@ -1406,16 +1417,23 @@ async function applyAgenticDecision(
 		}
 	}
 
-	// delete-source → discharge by deletion (DIRECT, no confirm — decision 12). The
-	// human's answer is the source of truth; the deletion is a single revertible
-	// commit with the reason in the message.
+	// dispose-source → regime-polymorphic disposal (DIRECT, no confirm — decision
+	// 12; task `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5). The
+	// human's answer is the source of truth; the persist chooses the on-disk
+	// effect by the source's regime: an OBSERVATION is `git rm`-ed in one
+	// revertible commit (reason in the message, git history = archive); a TASK is
+	// `git mv`-ed to `tasks/cancelled/` (RETAINED, `reason:` written into the
+	// moved body); a SPEC is `git mv`-ed to `specs/dropped/` (RETAINED). A task
+	// cannot be hard-deleted by the apply rung — dispose is the only path off the
+	// board.
 	const apply = context.applyPersist ?? applyAnsweredQuestions;
 	try {
 		const result = apply({
 			cwd,
 			item,
 			itemPath,
-			discharge: {reason: verdict.deleteReason ?? ''},
+			dispose: {reason: verdict.disposeReason ?? ''},
 			note,
 		});
 		return {

@@ -20,7 +20,7 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  *   "the INPUT adapter differs per front door and is NOT forced to be shared").
  * - **the ALLOWED-OUTCOME SET** ({@link decide}'s `allowedOutcomes`): each caller
  *   passes the SUBSET of {@link DecisionOutcome} it permits — advance-apply allows
- *   `{task | spec | adr | delete | ask}`, intake keeps its own `{task | spec | ask |
+ *   `{task | spec | adr | dispose | ask}`, intake keeps its own `{task | spec | ask |
  *   bounce}` (intake is NOT refactored onto this engine here — decision 13). The
  *   engine never hard-codes which outcomes a caller permits; it only VALIDATES the
  *   returned verdict against the set and rejects (loudly) one outside it
@@ -43,14 +43,23 @@ import {extractJsonObjectSpan} from './verdict-json.js';
  * - **adr** — mint an adr from the input (NO caller wires this yet; the keystone's
  *   allowed set will, and `agentic-apply-mint-adr-route` adds the route — decision
  *   14 keeps the engine agnostic so this is added without re-architecting).
- * - **delete** — delete the SOURCE the input is about (a direct, git-recoverable
- *   removal — decision 12).
+ * - **dispose** — DISPOSE the SOURCE the input is about, POLYMORPHIC on the
+ *   source's regime (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`
+ *   resolved decision #5; task
+ *   `apply-disposition-delete-to-dispose-regime-polymorphic`): an OBSERVATION is
+ *   `git rm`-ed (notes leave by deletion, decision 12); a TASK is `git mv`-ed to
+ *   its regime's won't-proceed terminal `tasks/cancelled/` (RETAINED — a task
+ *   cannot be hard-deleted by the apply rung, only disposed to its terminal); a
+ *   SPEC is `git mv`-ed to `specs/dropped/` (RETAINED). Making the token
+ *   polymorphic (rather than adding a second `cancel` beside a literal `delete`)
+ *   makes "a task cannot be deleted, only disposed to its terminal" true BY
+ *   CONSTRUCTION.
  * - **resolve** — the answer SETTLES the item with NO artifact to mint and the
  *   note RETAINED: route to the apply persist's resolve-fully path (harvest the
  *   answers into the body, clear `needsAnswers`, delete the sidecar) so the
- *   already-answered question stops re-surfacing. The SIBLING of `delete` (both
+ *   already-answered question stops re-surfacing. The SIBLING of `dispose` (both
  *   end the question-loop minting nothing), but `resolve` KEEPS the note whereas
- *   `delete` drops it (task `apply-decide-resolve-verdict-mint-nothing`).
+ *   `dispose` drops-or-terminals it (task `apply-decide-resolve-verdict-mint-nothing`).
  * - **ask** — ask the operator a follow-up (re-pause; the conversation
  *   accumulates — decision 5).
  *
@@ -65,7 +74,7 @@ export type DecisionOutcome =
 	| 'task'
 	| 'spec'
 	| 'adr'
-	| 'delete'
+	| 'dispose'
 	| 'resolve'
 	| 'ask';
 
@@ -74,7 +83,7 @@ export type DecisionOutcome =
  * DRAFTED content for that outcome (the analogue of {@link IntakeVerdict}). Every
  * content field is OPTIONAL on the shape: a given verdict only fills the channels
  * its outcome consumes (a `task` fills the task channels, an `ask` fills
- * `question`, a `delete` may carry only a `reason`). The dispatching CALLER
+ * `question`, a `dispose` may carry only a `reason`). The dispatching CALLER
  * decides which channels it requires for each outcome it allows — the engine only
  * guards the `outcome` discriminator against the allowed set, never the content
  * (it stays outcome-agnostic).
@@ -105,14 +114,18 @@ export interface DecisionVerdict {
 	/** The drafted adr BODY (`adr` outcome) — the markdown AFTER the frontmatter. */
 	adrBody?: string;
 	/**
-	 * The reason the source should be deleted (`delete` outcome) — the caller
-	 * carries it into the revertible deletion's commit message (decision 12: the
-	 * delete is git-recoverable, the reason in the commit message).
+	 * The reason the source should be DISPOSED (`dispose` outcome) — carried by
+	 * the caller into the regime-polymorphic disposal: an OBSERVATION's reason
+	 * rides the revertible git-rm commit message (decision 12: notes leave by
+	 * deletion, git history = archive); a TASK/SPEC's reason is written into the
+	 * moved item's `reason:` frontmatter so the durable body records why the
+	 * item won't proceed (the file is RETAINED at the regime's terminal —
+	 * `tasks/cancelled/` or `specs/dropped/`).
 	 */
-	deleteReason?: string;
+	disposeReason?: string;
 	/**
 	 * Why the item is settled with NOTHING to mint (`resolve` outcome) — the
-	 * SIBLING of {@link deleteReason}, but the note is RETAINED (the apply rung
+	 * SIBLING of {@link disposeReason}, but the note is RETAINED (the apply rung
 	 * routes this to the resolve-fully path, which harvests the answers into the
 	 * body rather than deleting the note). The reason is advisory context for the
 	 * human/reviewer; the durable disposition record is the `## Applied answers`
@@ -221,7 +234,7 @@ export async function decide<TInput>(
  * object carrying an `"outcome"` field via the SHARED {@link extractJsonObjectSpan}
  * (the same extractor every prompt→verdict→dispatch seam in this package uses —
  * NOT a forked copy), `JSON.parse`s it, and validates the shape:
- * `outcome ∈ {task,spec,adr,delete,resolve,ask}`.
+ * `outcome ∈ {task,spec,adr,dispose,resolve,ask}`.
  *
  * This validates the verdict is a WELL-FORMED member of the SUPERSET; the
  * caller-specific allowed-outcome guard ({@link decide}) then rejects one outside
@@ -256,12 +269,12 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 		outcome !== 'task' &&
 		outcome !== 'spec' &&
 		outcome !== 'adr' &&
-		outcome !== 'delete' &&
+		outcome !== 'dispose' &&
 		outcome !== 'resolve' &&
 		outcome !== 'ask'
 	) {
 		throw new Error(
-			`decision verdict 'outcome' was not one of task|spec|adr|delete|resolve|ask ` +
+			`decision verdict 'outcome' was not one of task|spec|adr|dispose|resolve|ask ` +
 				`(got ${JSON.stringify(outcome)}).`,
 		);
 	}
@@ -286,8 +299,8 @@ export function parseDecisionVerdict(output: string): DecisionVerdict {
 		...(str(obj.adrSlug) !== undefined ? {adrSlug: str(obj.adrSlug)} : {}),
 		...(str(obj.adrTitle) !== undefined ? {adrTitle: str(obj.adrTitle)} : {}),
 		...(str(obj.adrBody) !== undefined ? {adrBody: str(obj.adrBody)} : {}),
-		...(str(obj.deleteReason) !== undefined
-			? {deleteReason: str(obj.deleteReason)}
+		...(str(obj.disposeReason) !== undefined
+			? {disposeReason: str(obj.disposeReason)}
 			: {}),
 		...(str(obj.resolveReason) !== undefined
 			? {resolveReason: str(obj.resolveReason)}
