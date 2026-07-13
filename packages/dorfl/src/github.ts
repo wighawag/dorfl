@@ -209,6 +209,26 @@ export class GitHubProvider implements ReviewProvider {
 			return this.parseOpened(input, first);
 		}
 
+		// PR ALREADY EXISTS (task `committed-recovery-completes-existing-pr`): a
+		// re-pushed branch whose PR is still open makes `gh pr create` fail with
+		// "a pull request for branch ... already exists". This is NOT an outage and
+		// NOT a missing/unauth `gh` — retrying is pointless (it fails identically)
+		// and degrading to push-only would DROP the refreshed body + the Gate-2
+		// review comment on a PR that genuinely exists (the committed-recovery re-run
+		// case). Instead RESOLVE the existing PR, UPDATE its title/body to match what
+		// this run would have created, and return it as `opened` so the caller's
+		// review-comment path fires normally. NEVER throws; a failed edit still
+		// returns the resolved PR (the comment is the more important audit trail).
+		if (prAlreadyExists(first)) {
+			const existing = this.updateExistingRequest(input);
+			if (existing !== undefined) {
+				return existing;
+			}
+			// Could not resolve the existing PR's url (e.g. a transient `gh pr view`
+			// failure) — fall through to the degrade path rather than crashing; the
+			// branch is already pushed, so the work is safe.
+		}
+
 		// Failed once — distinguish DETERMINISTIC (missing/unauth) from a TRANSIENT
 		// outage by an availability probe. Missing/unauth ⇒ degrade now (no retry).
 		// Thread the FAILED first attempt so the degrade surfaces the REAL `gh` cause
@@ -244,6 +264,47 @@ export class GitHubProvider implements ReviewProvider {
 			return this.degrade(input, 'outage');
 		}
 		return this.parseOpened(input, attempt.value);
+	}
+
+	/**
+	 * The PR for this branch ALREADY EXISTS (task
+	 * `committed-recovery-completes-existing-pr`): resolve its url, REFRESH its
+	 * title/body via `gh pr edit` (so a committed-recovery re-run's synthesised
+	 * title + task-pointer body replace the earlier run's blank `--fill` ones),
+	 * and return it as `{opened: true, url}` so the caller's review-comment path
+	 * fires on the existing PR. Returns `undefined` when the url cannot be
+	 * resolved (the caller then falls through to the degrade path). The `gh pr
+	 * edit` is best-effort: a failed edit still returns the resolved PR (posting
+	 * the review comment matters more than refreshing the body), and it is only
+	 * attempted when this run actually has explicit title/body to set (else the
+	 * existing PR's content is left untouched).
+	 */
+	private updateExistingRequest(
+		input: OpenRequestInput,
+	): OpenRequestResult | undefined {
+		const url = this.resolvePrUrlForBranch(input.branch, input.cwd, input.env);
+		if (url === undefined) {
+			return undefined;
+		}
+		// Refresh the PR body/title only when this run supplies them (a committed-
+		// recovery re-run does; an unset run leaves the existing content alone).
+		if (input.title !== undefined || input.body !== undefined) {
+			const editArgs = ['pr', 'edit', url];
+			if (input.title !== undefined) {
+				editArgs.push('--title', input.title);
+			}
+			if (input.body !== undefined) {
+				editArgs.push('--body', input.body);
+			}
+			// Best-effort: ignore the result. A failed edit must not lose the PR (or
+			// the upcoming review comment) — NEVER throws (runGh swallows spawn errors).
+			this.runGh(editArgs, input.cwd, input.env);
+		}
+		return {
+			opened: true,
+			url,
+			instruction: `Updated the existing GitHub PR for ${input.branch}: ${url}`,
+		};
 	}
 
 	/** Map a successful `gh pr create` RunResult to an OpenRequestResult. */
@@ -455,6 +516,23 @@ export function prCreateContentArgs(input: {
 		return ['--fill'];
 	}
 	return ['--title', input.title ?? '', '--body', input.body ?? ''];
+}
+
+/**
+ * Does a FAILED `gh pr create` result mean "a PR for this branch already
+ * exists" (task `committed-recovery-completes-existing-pr`)? `gh` exits non-zero
+ * with a message like `a pull request for branch "work/task-x" into branch
+ * "main" already exists: https://github.com/.../pull/357`. We match on the
+ * stable "already exists" phrase in `gh`'s stderr/stdout so a re-pushed branch
+ * whose PR is still open is treated as an UPDATE, not a transient outage. A
+ * missing `gh` (`undefined`) or a success is not this case.
+ */
+function prAlreadyExists(result: RunResult | undefined): boolean {
+	if (result === undefined || result.status === 0) {
+		return false;
+	}
+	const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`.toLowerCase();
+	return text.includes('already exists');
 }
 
 /**

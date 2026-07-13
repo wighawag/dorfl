@@ -53,6 +53,45 @@ function writeGhStub(opts: {stdout?: string; exitCode?: number} = {}): {
 	return {bin, argsFile};
 }
 
+/**
+ * A `gh` stub that DISPATCHES on the sub-command (`create` / `view` / `edit` /
+ * `comment` / `auth`), so a test can simulate the "PR already exists" flow:
+ * `pr create` fails with the `already exists` stderr, `pr view` resolves the
+ * existing PR url, `pr edit` succeeds, `pr comment` succeeds. Every invocation's
+ * argv is APPENDED to `argsFile` (one call per line-group, blank-line separated)
+ * so a test can assert which sub-commands ran and in what order.
+ */
+function writeGhDispatchStub(opts: {
+	viewUrl?: string;
+	createExit?: number;
+	createStderr?: string;
+}): {bin: string; argsFile: string} {
+	const bin = join(scratch.root, 'gh-dispatch.sh');
+	const argsFile = join(scratch.root, 'gh-dispatch-args.txt');
+	const viewUrl = opts.viewUrl ?? 'https://github.com/o/r/pull/357';
+	const createExit = opts.createExit ?? 1;
+	const createStderr =
+		opts.createStderr ??
+		`a pull request for branch "x" into branch "main" already exists: ${viewUrl}`;
+	const script = [
+		'#!/usr/bin/env bash',
+		// Record every invocation (argv joined by newlines, then a blank separator).
+		`{ printf '%s\\n' "$@"; printf -- '---\\n'; } >> ${JSON.stringify(argsFile)}`,
+		'sub="$2"', // `gh pr <sub> ...` → $1=pr $2=create/view/edit/comment
+		'case "$1 $sub" in',
+		`  'pr create') printf '%s\\n' ${JSON.stringify(createStderr)} 1>&2; exit ${createExit} ;;`,
+		`  'pr view')   printf '%s\\n' ${JSON.stringify(viewUrl)}; exit 0 ;;`,
+		"  'pr edit')   exit 0 ;;",
+		"  'pr comment') exit 0 ;;",
+		"  'auth status') exit 0 ;;",
+		'  *) exit 0 ;;',
+		'esac',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
 /** A `gh` path that does NOT exist on disk → spawn fails (gh missing). */
 function missingGhBin(): string {
 	return join(scratch.root, 'no-such-gh-binary');
@@ -159,6 +198,60 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 			cwd: scratch.root,
 			branch: 'work/task-feat',
 			arbiter: 'origin',
+		});
+		expect(result.opened).toBe(false);
+		expect(result.instruction).toMatch(/manually|open a/i);
+	});
+
+	// Task `committed-recovery-completes-existing-pr`: a re-pushed branch whose PR
+	// is still open makes `gh pr create` fail with "already exists". Instead of
+	// degrading to push-only (dropping the refreshed body + the review comment), we
+	// RESOLVE the existing PR, refresh its title/body, and return it as `opened`
+	// so the caller's review-comment path fires on the existing PR.
+	it('PR ALREADY EXISTS ⇒ resolves the existing PR, refreshes its body/title, and returns opened+url (no degrade)', async () => {
+		const stub = writeGhDispatchStub({
+			viewUrl: 'https://github.com/o/r/pull/357',
+		});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/task-feat',
+			arbiter: 'origin',
+			title: 'feat(feat): the thing',
+			body: 'Task pointer + summary.',
+		});
+
+		// Treated as opened (NOT a push-only degrade), carrying the resolved url.
+		expect(result.opened).toBe(true);
+		expect(result.url).toBe('https://github.com/o/r/pull/357');
+		expect(result.instruction).toMatch(/updated|existing/i);
+
+		const calls = readFileSync(stub.argsFile, 'utf8');
+		// It tried to create (failed already-exists), then resolved the PR (view),
+		// then refreshed the content (edit --title/--body). It did NOT retry create
+		// or probe auth.
+		expect(calls).toMatch(/^create$/m);
+		expect(calls).toMatch(/^view$/m);
+		expect(calls).toMatch(/^edit$/m);
+		expect(calls).toMatch(/^--body$/m);
+		expect(calls).not.toMatch(/^status$/m); // no auth probe on this path
+	});
+
+	it('PR ALREADY EXISTS but its url cannot be resolved ⇒ falls through to the degrade path (branch is safe)', async () => {
+		// create fails already-exists, but `pr view` returns no url (empty) ⇒ we
+		// cannot resolve the existing PR, so we honestly degrade rather than crash.
+		const stub = writeGhDispatchStub({viewUrl: ''});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/task-feat',
+			arbiter: 'origin',
+			title: 'feat(feat): the thing',
+			body: 'body',
+			// Zero-delay backoff: the fall-through path retries `pr create` (still
+			// failing) before the clean give-up; keep the test fast.
+			sleep: async () => {},
+			backoff: {maxAttempts: 2},
 		});
 		expect(result.opened).toBe(false);
 		expect(result.instruction).toMatch(/manually|open a/i);
