@@ -1,6 +1,9 @@
 ---
 promotedFrom: observation:word-scan-keeps-prd-colon-as-provenance-not-live-alias-2026-07-10
+reason: nothing-to-do / empty-diff — a build agent produced no source change (empty diff vs arbiter main); the prose sweep it describes has no remaining live targets. Re-scoping or re-claiming would re-bounce identically. Cancelled per maintainer 2026-07-13; if a genuine remaining `prd:` prose target is later found, re-surface as a fresh observation.
 ---
+> **CANCELLED 2026-07-13 (empty-diff no-op).** A build agent found no source change to make (nothing left to sweep). See `reason:` above.
+
 
 ## What to build
 
