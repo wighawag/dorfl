@@ -145,3 +145,7 @@ intent: keep+continue exists precisely to PRESERVE good work across requeues, an
 >
 > Acceptance gate: run `pnpm format`, then confirm `pnpm -r build && pnpm -r test &&
 > pnpm format:check` all green.
+
+## Requeue 2026-07-13
+
+Requeued to re-run through the fixed committed-recovery path (commit f06646a6): the prior PR #358 opened with no Gate-2 review and an empty body (608 lines of code across cli/do/run/start/needs-attention landed unreviewed). Keeping the branch so the next claim continues from the completed tip and exercises the recovery-path review + PR-body fix.
