@@ -159,7 +159,13 @@ describe('runOnce — test gate keeps failing work out of done/', () => {
 		// actively-in-progress.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		// Folder-native surfacing (ADR §12): the runner bounced the work item from
 		// in-progress/ to needs-attention/ on the work branch, with the reason in
 		// its body, and PUSHED the branch to the arbiter (so the saved wip is
@@ -426,7 +432,13 @@ describe('runOnce — GENUINE concurrency safety (multiple jobs in flight)', () 
 		expect(byStatus.get('clash')).toBe('needs-attention');
 		// The conflict is isolated: the sibling clean job still integrated.
 		expect(byStatus.get('clean')).toBe('claimed-done');
-		expect(stuckLockOnArbiter(seeded.repo, 'clash')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, 'clash')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, 'clash')).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, 'clash')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', 'clean')).toBe(true);
 	});
 });
@@ -707,7 +719,13 @@ describe('runOnce — agent failure', () => {
 		// `run`'s agent-failure now routes through the seam (not a bare-return): the
 		// stuck state is SURFACED on main (needs-attention, not the in-progress claim)
 		// and the work branch is PUSHED — cross-machine recoverable.
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
 		gitIn(['fetch', '-q', 'arbiter'], repo);
 		expect(
@@ -747,7 +765,13 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 		expect(result.items[0].status).not.toBe('agent-failed');
 		// Still routed + surfaced (the work-preserving seam is unchanged — only the
 		// label is more precise).
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
@@ -767,7 +791,13 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 			agentId: () => 'agentA',
 		});
 		expect(result.items[0].status).toBe('agent-failed');
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 
 	it('a thrown CORE wiring/config error (review on, no reviewGate) → config-error (NOT agent-failed)', async () => {
@@ -786,7 +816,13 @@ describe('runOnce — failure-CAUSE classification (transient-infra / config-err
 		});
 		expect(result.items[0].status).toBe('config-error');
 		expect(result.items[0].status).not.toBe('agent-failed');
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 });
 
@@ -818,7 +854,13 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(item.status).toBe('agent-stopped');
 		expect(item.detail).toMatch(/already landed elsewhere/);
 		// Routed + surfaced on the arbiter main; never reached done.
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
@@ -991,7 +1033,13 @@ describe('runOnce — rebase-before-integrate (ADR §10)', () => {
 		expect(arbiterHasBranch(arbiter, repo, 'work/task-feat')).toBe(true);
 		// The needs-attention surface is on the arbiter's main (mode-M), where it is
 		// observable to scan/status/another machine.
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 
 		// main was NOT advanced to the agent's version (never auto-resolved).

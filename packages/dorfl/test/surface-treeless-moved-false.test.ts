@@ -16,6 +16,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -182,7 +184,13 @@ describe('do — continue-site surface moved:false (surface-unmoved)', () => {
 		expect(result.exitCode).toBe(1);
 		// The surface landed: the item is on the arbiter's needs-attention.
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(stuckLockOnArbiter(repo, 'beta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
 	});
 });
 
@@ -250,7 +258,13 @@ describe('run — continue-site surface moved:false (surface-unmoved)', () => {
 		expect(item?.status).toBe('needs-attention');
 		expect(result.needsAttention).toBe(1);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'delta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'delta')).toBe(true);
 	});
 });
 
@@ -296,6 +310,12 @@ describe('start — continue-site surface moved:false (surface-unmoved)', () => 
 		expect(result.outcome).toBe('needs-attention');
 		expect(result.exitCode).toBe(1);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		expect(stuckLockOnArbiter(repo, 'zeta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'zeta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'zeta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'zeta')).toBe(true);
 	});
 });

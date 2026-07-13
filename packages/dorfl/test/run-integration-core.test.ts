@@ -22,6 +22,8 @@ import {
 	gitIn,
 	type Scratch,
 	rmrf,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -141,7 +143,13 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 		expect(result.claimedAndDone).toBe(0);
 		// NOT integrated: never reached done on main; surfaced as a stuck lock.
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 
 	it('review on + an APPROVE verdict integrates normally (the gate ran, did not block)', async () => {
@@ -181,7 +189,13 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 		expect(result.items[0].status).toBe('needs-attention');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 
 	it('TERMINAL BLOCK: a round-1 BLOCK (reviewMaxRounds=2) short-circuits — the reviewer is NOT re-rolled and the work stays blocked (no retry-until-pass)', async () => {
@@ -203,7 +217,13 @@ describe('run through performIntegration — review-gated (Gate 2)', () => {
 		expect(result.items[0].status).toBe('needs-attention');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 
 	it('UNANIMOUS APPROVE: two approving rounds (reviewMaxRounds=2) integrate, and the gate ran BOTH rounds (corroboration, not first-approve-wins)', async () => {
@@ -326,7 +346,13 @@ describe('run through performIntegration — per-repo, language-agnostic gate', 
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 });
 

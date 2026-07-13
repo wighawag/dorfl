@@ -18,6 +18,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -108,7 +110,13 @@ describe('the bounce marks the lock stuck and writes NO main', () => {
 		expect(mainTree).not.toMatch(/feature\.txt/);
 
 		// The stuck reason rides on the lock entry (the SOLE stuck record).
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		const lock = await readItemLock({
 			item: 'task:alpha',
 			cwd: repo,
@@ -135,7 +143,13 @@ describe('the bounce marks the lock stuck and writes NO main', () => {
 		});
 		expect(result.moved).toBe(true);
 
-		expect(stuckLockOnArbiter(repo, 'beta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
 		// The body still rests in backlog/ on main (the done-move was branch-only).
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
@@ -198,7 +212,13 @@ describe('the stuck lock is marked in BOTH merge and propose', () => {
 			expect(result.claimedAndDone).toBe(0);
 			// The stuck state is the per-item lock — independent of the code
 			// integration axis (merge or propose). The body stays in backlog/.
-			expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+			// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+			// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+			// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+			// then RELEASES the lock. Assert the A1 triple.
+			expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+			expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+			expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 			expect(existsOnArbiterMain(repo, 'backlog', 'feat')).toBe(true);
 			expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		});
@@ -216,7 +236,13 @@ describe('scan/status read the lock; selection stays offline', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'delta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'delta')).toBe(true);
 
 		// The offline working-tree scan subtracts the held slug (supplied by the
 		// in-place caller); `stays` remains claimable.
@@ -239,7 +265,13 @@ describe('resolve via start (no manual moves) — through the lock', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'epsilon')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'epsilon')).toBe(true);
 
 		// A human on a SEPARATE clone resolves it via `start` — no --resume, no
 		// manual file move.

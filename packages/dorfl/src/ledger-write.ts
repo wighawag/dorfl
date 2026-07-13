@@ -9,6 +9,7 @@ import type {IntegrationMode} from './config.js';
 import {
 	routeToNeedsAttention,
 	returnToBacklog,
+	surfaceStuckToNeedsAttention,
 	type RouteToNeedsAttentionOptions,
 	type RouteToNeedsAttentionResult,
 	type ReturnToBacklogOptions,
@@ -17,11 +18,8 @@ import {
 	type SurfaceToNeedsAttentionResult,
 	type BranchPushOutcome,
 } from './needs-attention.js';
-import {
-	markStuckItemLock,
-	resumeItemLock,
-	type TransitionOutcome,
-} from './item-lock.js';
+import {resumeItemLock} from './item-lock.js';
+import type {NewQuestion} from './sidecar.js';
 
 /**
  * The **write half** of the ledger-transition seam (ADR
@@ -662,9 +660,10 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 		// outage-retried), so the partial work travels cross-machine and a `requeue`
 		// continues from the tip. The work-branch push is NOT a `main` write.
 		const saved = await routeToNeedsAttention(input);
-		const stuck = await bounceToStuckLock({
+		const surfaced = await bounceThroughSurface({
 			cwd: input.cwd,
 			slug: input.slug,
+			item: `task:${input.slug}`,
 			reason: input.reason,
 			questions: input.questions,
 			arbiter: input.arbiter,
@@ -672,11 +671,12 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			note: input.note,
 		});
 		return {
-			// `moved` reflects the OBSERVABLE half (the stuck record): the lock amend.
-			moved: stuck.moved,
-			reasonNotMoved: stuck.reasonNotMoved,
+			// `moved` reflects the OBSERVABLE half (the surface record): the sidecar +
+			// `needsAnswers:true` on `<arbiter>/main` (or the human-local no-op).
+			moved: surfaced.moved,
+			reasonNotMoved: surfaced.reasonNotMoved,
 			// The branch push outcome is the honest RECOVERABLE report (`do`/`run` read
-			// it). The on-`main` surface half is GONE (the lock is the surface now).
+			// it).
 			branchPush: saved.branchPush,
 			pushError: saved.pushError,
 		};
@@ -709,24 +709,25 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	async applyTreelessNeedsAttentionTransition(
 		input: ApplyTreelessNeedsAttentionTransitionInput,
 	): ApplyTreelessNeedsAttentionTransitionResult {
-		// PURE LOCK AMEND (task
-		// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
-		// the after-commit / ledger-only surface (continue-push-failure /
-		// continue-rebase-conflict) is now the SAME `active → stuck` lock amend as the
-		// cwd-bound bounce — NO `git mv`, NO `main` write. The recoverable work is
-		// already committed on the kept `work/<slug>` branch (intact on the arbiter);
-		// the stuck reason + questions ride on the lock entry. A re-surface of an
-		// already-stuck item is a tolerated idempotent no-op (`wrong-state`).
-		const moved = await bounceToStuckLock({
+		// PR-2b surface cutover (spec
+		// `surface-stuck-as-questions-and-retire-stuck-lock-state`, decision #1): the
+		// after-commit / ledger-only surface (continue-push-failure / continue-rebase-
+		// conflict) surfaces the item on `<arbiter>/main` (a `stuck`-kind sidecar +
+		// `needsAnswers:true` on the item body in ONE commit) THEN releases the per-
+		// item lock. Surface-FIRST, release-SECOND, with `main`-authoritative crash
+		// recovery inherited from {@link runTreelessLedgerMove}. The recoverable work
+		// is already committed on the kept `work/<slug>` branch (intact on the arbiter).
+		const surfaced = await bounceThroughSurface({
 			cwd: input.cwd,
 			slug: input.slug,
+			item: `task:${input.slug}`,
 			reason: input.reason,
 			questions: input.questions,
 			arbiter: input.arbiter,
 			env: input.env,
 			note: input.note,
 		});
-		return {moved: moved.moved, reasonNotMoved: moved.reasonNotMoved};
+		return {moved: surfaced.moved, reasonNotMoved: surfaced.reasonNotMoved};
 	},
 
 	/**
@@ -774,88 +775,89 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 };
 
 /**
- * The SOLE stuck-state RECORD: amend the item's HELD per-item lock
- * `active → stuck` + the FULL reason prose + any agent-surfaced questions, via the
- * state machine's mark-stuck CAS amend ({@link markStuckItemLock}) — task
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface` (decision i+; spec
- * `ledger-status-per-item-lock-refs` US #5/#8; ADR
- * `ledger-status-on-per-item-lock-refs`). This REPLACES the `git mv →
- * needs-attention/` folder bounce + its on-`main` surface + branch push: the
- * bounce now touches ONLY the lock ref (NO `main` write — so a protected-`main`
- * bounce succeeds, and a work branch cut from `main` inherits no stuck record).
+ * The SOLE stuck-state RECORD (PR-2b, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`, user stories 1/3/8,
+ * decisions #1/#4): surface the bounced item as a `stuck`-kind sidecar +
+ * `needsAnswers:true` on the item body in ONE commit on `<arbiter>/main`, THEN
+ * release the per-item lock. Surface-FIRST, release-SECOND — the ordering is
+ * load-bearing so a crash between them is recoverable from `main` (the classifier
+ * fold in `item-lock.ts` re-derives `cleared-stale` from the main-side truth
+ * PR-2a landed). This REPLACES the retired `active → stuck` lock amend: no
+ * bounce leaves a `stuck` lock; a bounced item rests as a plain `needsAnswers:true`
+ * pool item (`eligible:false` by construction).
  *
- * The bounce holds the TASK's `implement` lock that `claim` acquired (task
- * `claim-acquires-unified-lock-no-body-move`), so the normal stuck path is a plain
- * `active → stuck` amend (`transitioned`). The OUTCOME MAPPING onto `{moved}`:
- *   - `transitioned`  — the lock is now stuck (the stuck state is recorded) ⇒
- *     `moved: true`.
- *   - `wrong-state`   — the lock is ALREADY `stuck` (an idempotent re-surface of a
- *     still-stuck item) ⇒ `moved: true` (the stuck record stands).
- *   - `not-held`      — there is NO held lock to amend (an item that predates the
- *     lock, or a flow where claim did not acquire) ⇒ `moved: false` honestly: with
- *     the folder retired there is no other substrate to record the stuck state on,
- *     so the caller reports the bounce did NOT land (retry/resolve) rather than
- *     fake a success.
- *   - `lost`/`error`  — a concurrent CAS race / environment fault ⇒ `moved: false`.
- *   - no arbiter      — a human local-only `complete` (no arbiter handle): the lock
- *     ref lives on the arbiter, so there is no lock to amend; treat as a recorded
- *     no-op (`moved: true`) — a human is right there (the same human-vs-autonomous
- *     posture the old local-only folder move took). NOTE this records nothing
- *     durable, by design: the human is in the loop.
- *
- * Keyed on `task:<slug>` (the bounce surfaces a TASK; the spec/observation locks
- * are tasking/advance holds whose own bounce paths are separate).
+ * The OUTCOME MAPPING onto `{moved}`:
+ *   - `surfaced`        — the sidecar + `needsAnswers:true` commit landed on
+ *     `<arbiter>/main` and the lock was released ⇒ `moved: true`.
+ *   - `bodyAbsent`      — the D1 probe found no body for the item on `main` (a
+ *     bounce for an item whose body never landed — e.g. a claim that lost/raced).
+ *     The surface is a CLEAN NO-OP; the lock is STILL released so the bounce is
+ *     never a dead-end held lock ⇒ `moved: true` (nothing to record, nothing left
+ *     stuck).
+ *   - `!surfaced`       — the surface commit did NOT land (contention exhausted,
+ *     item missing on main by explicit path, environment fault) ⇒ `moved: false`
+ *     with `reasonNotMoved` so the caller reports the honest not-landed state.
+ *   - no arbiter        — a human local-only `complete` (no arbiter handle): the
+ *     surface primitive requires an arbiter, so this is a recorded no-op (`moved:
+ *     true`) — a human is right there (the same human-vs-autonomous posture the
+ *     retired lock amend took). NOTE this records nothing durable, by design.
  */
-async function bounceToStuckLock(params: {
+async function bounceThroughSurface(params: {
 	cwd: string;
 	slug: string;
+	item: string;
 	reason: string;
 	questions?: string[];
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
 	note?: (message: string) => void;
 }): Promise<{moved: boolean; reasonNotMoved?: string}> {
-	const {cwd, slug, reason, questions, arbiter, env} = params;
+	const {cwd, slug, item, reason, questions, arbiter, env} = params;
 	const note = params.note ?? (() => {});
 	if (!arbiter) {
-		// No arbiter handle ⇒ no lock ref to amend. A human local-only `complete`:
-		// the human is right there, so this is a recorded no-op (parity with the old
-		// local-only folder move that wrote nothing cross-machine).
+		// No arbiter handle ⇒ no `<arbiter>/main` to surface on. A human local-only
+		// `complete`: the human is right there, so this is a recorded no-op (parity
+		// with the retired local-only lock amend that wrote nothing cross-machine).
 		note(
-			`'${slug}' bounced locally (no arbiter) — the stuck reason is not recorded ` +
-				'on a lock ref (a human is right here).',
+			`'${slug}' bounced locally (no arbiter) — the stuck reason is not surfaced ` +
+				'on <arbiter>/main (a human is right here).',
 		);
 		return {moved: true};
 	}
+	const asNewQuestions: NewQuestion[] | undefined = questions?.map((q) => ({
+		question: q,
+		kind: 'stuck' as const,
+	}));
 	try {
-		const r = await markStuckItemLock({
-			item: `task:${slug}`,
-			reason,
-			questions,
+		const r = await surfaceStuckToNeedsAttention({
 			cwd,
+			slug,
+			item,
+			reason,
+			questions: asNewQuestions,
 			arbiter,
 			env,
+			note,
 		});
-		const movedOutcomes: TransitionOutcome[] = ['transitioned', 'wrong-state'];
-		if (movedOutcomes.includes(r.outcome)) {
-			if (r.outcome === 'transitioned') {
-				note(`Marked the per-item lock for '${slug}' stuck: ${reason}`);
-			} else {
-				note(`The per-item lock for '${slug}' is already stuck (re-surface).`);
-			}
+		if (r.surfaced) {
+			note(`Surfaced '${item}' on ${arbiter}/main (stuck): ${reason}`);
+			return {moved: true};
+		}
+		if (r.bodyAbsent) {
+			note(
+				`'${item}' has no body on ${arbiter}/main — surface skipped as a clean ` +
+					'no-op; the lock was still released to avoid a dead-end held lock.',
+			);
 			return {moved: true};
 		}
 		const reasonNotMoved =
-			r.outcome === 'not-held'
-				? `'${slug}' has no held lock to mark stuck (the bounce could not record ` +
-					'the stuck state — the item is not lock-held).'
-				: `could not mark the per-item lock for '${slug}' stuck (${r.outcome}: ` +
-					`${r.message}).`;
+			r.reasonNotSurfaced ??
+			`could not surface '${item}' on ${arbiter}/main (unknown reason).`;
 		note(reasonNotMoved);
 		return {moved: false, reasonNotMoved};
 	} catch (err) {
 		const reasonNotMoved =
-			`could not mark the per-item lock for '${slug}' stuck ` +
+			`could not surface '${item}' on ${arbiter}/main ` +
 			`(${err instanceof Error ? err.message : String(err)}).`;
 		note(reasonNotMoved);
 		return {moved: false, reasonNotMoved};

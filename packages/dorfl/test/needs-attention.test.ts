@@ -17,6 +17,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 import type {Config} from '../src/config.js';
 
@@ -227,7 +229,13 @@ describe('returnToBacklog (requeue) — releases the stuck lock (body stays in p
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'eta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'eta')).toBe(true);
 		// Move back to a clean main so the requeue reads the arbiter, not the cwd.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);

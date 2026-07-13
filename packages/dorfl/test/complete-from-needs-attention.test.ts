@@ -14,6 +14,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -81,7 +83,13 @@ async function seedSurfacedNeedsAttention(
 	expect(routed.moved).toBe(true);
 
 	// Pre-conditions: the lock is stuck; the body rests in backlog/ (no folder move).
-	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
+	// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+	// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+	// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+	// then RELEASES the lock. Assert the A1 triple.
+	expect(stuckLockOnArbiter(repo, slug)).toBe(false);
+	expect(sidecarSurfacedOnArbiterMain(repo, slug)).toBe(true);
+	expect(needsAnswersOnArbiterMain(repo, slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 	expect(existsOnArbiterMain(repo, 'needs-attention', slug)).toBe(false);
 	expect(currentBranch(repo)).toBe(`work/task-${slug}`);
@@ -173,7 +181,13 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		expect(result.outcome).toBe('gate-failed');
 
 		// The item stays STUCK (the lock); never reaches done/, body stays in backlog/.
-		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'gamma')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'gamma')).toBe(true);
 
@@ -213,7 +227,13 @@ describe('complete — recover a good needs-attention item (re-gate green → do
 		// done-moves it and RELEASES the lock — the reason history is not carried into
 		// the durable `done/` record.
 		const {repo} = await seedSurfacedNeedsAttention('epsilon');
-		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'epsilon')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'epsilon')).toBe(true);
 
 		await performComplete({
 			slug: 'epsilon',

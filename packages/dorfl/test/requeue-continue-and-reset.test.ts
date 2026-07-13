@@ -16,6 +16,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -192,7 +194,13 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		expect(started.outcome).toBe('needs-attention');
 		// The item is STUCK on its per-item lock (bounced, not auto-resolved); the
 		// body rests in backlog/ but the held stuck lock makes it non-claimable.
-		expect(stuckLockOnArbiter(fresh, 'gamma')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(fresh, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(fresh, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(fresh, 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'needs-attention', 'gamma')).toBe(false);
 	});
@@ -289,7 +297,13 @@ describe('requeue --reset — discard + fresh', () => {
 		// A missing arbiter remote is refused up front (it is the CAS push target).
 		expect(result.reasonNotMoved).toMatch(/no git remote named/i);
 		// The item is STILL stuck (the lock was NOT released); body rests in backlog/.
-		expect(stuckLockOnArbiter(reset.repo, 'eta-reset')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(reset.repo, 'eta-reset')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(reset.repo, 'eta-reset')).toBe(true);
+		expect(needsAnswersOnArbiterMain(reset.repo, 'eta-reset')).toBe(true);
 		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(true);
 	});
 });

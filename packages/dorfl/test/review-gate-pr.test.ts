@@ -15,6 +15,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -171,7 +173,13 @@ describe('Gate 2 — block routes to needs-attention and NEVER merges', () => {
 		expect(result.outcome).toBe('needs-attention');
 		// Routed via the SAME stuck-lock machinery the red gate uses (autonomous `do`
 		// passes surfaceArbiter so the lock CAN be marked).
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		// The work never reached main (NO merge of a blocked review).
@@ -267,7 +275,13 @@ describe('Gate 2 — verify is the non-skippable floor, review is ON TOP', () =>
 		// short-circuits before the judgement gate (review never replaces verify).
 		expect(gate.calls).toBe(0);
 		// Surfaced as a gate failure (not a review block) on the stuck lock.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
@@ -360,7 +374,13 @@ describe('Gate 2 — reviewModel reaches the gate; reviewMaxRounds bounds the lo
 		expect(gate.rounds).toEqual([1]);
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 		// The block reason is recorded on the stuck lock entry (never a silent
 		// merge/loop).

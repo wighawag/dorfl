@@ -15,6 +15,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -138,7 +140,13 @@ describe('needs-attention route — honest per-op reporting', () => {
 		// branch-push outcome is reported.
 		expect(routed.branchPush).toBe('pushed');
 		// The stuck state is the lock; the branch really reached the arbiter.
-		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'gamma')).toBe(true);
 	});
 
 	it('(b) surface ✓ + branch SKIPPED-empty (the observed early-failure case)', async () => {
@@ -228,7 +236,13 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 			env: gitEnv(),
 			...FAST,
 		});
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'eta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'eta')).toBe(true);
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
 		gitIn(['push', '-q', ARBITER, '--delete', 'work/task-eta'], repo);

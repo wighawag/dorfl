@@ -12,6 +12,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -130,7 +132,13 @@ describe('mergeRetries (resolved through config) — cap controls bounce vs conv
 			const loserSlug = winnerSlug === 'r0a' ? 'r0b' : 'r0a';
 			expect(existsOnArbiterMain(seeded.repo, 'done', winnerSlug)).toBe(true);
 			expect(existsOnArbiterMain(seeded.repo, 'done', loserSlug)).toBe(false);
-			expect(stuckLockOnArbiter(seeded.repo, loserSlug)).toBe(true);
+			// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+			// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+			// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+			// then RELEASES the lock. Assert the A1 triple.
+			expect(stuckLockOnArbiter(seeded.repo, loserSlug)).toBe(false);
+			expect(sidecarSurfacedOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
+			expect(needsAnswersOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
 		}
 	});
 

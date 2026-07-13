@@ -11,6 +11,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -149,7 +151,13 @@ describe('requeue default — arbiter branch EXISTS but is not ahead of main (re
 		);
 		// The lock is STILL held stuck (nothing was released — this is the guard's
 		// point when there IS a branch to protect).
-		expect(stuckLockOnArbiter(repo, 'flat-branch-slug')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'flat-branch-slug')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'flat-branch-slug')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'flat-branch-slug')).toBe(true);
 	});
 });
 

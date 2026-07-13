@@ -12,6 +12,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -207,7 +209,13 @@ describe('land-time re-verify catches a clean-rebase-but-semantically-broken mer
 		// 7b. EXTERNAL ASSERTION #2: B's per-item lock ends in `state: stuck`,
 		//     with a reason that names the REBASED-TIP re-verify failure — NOT a
 		//     rebase conflict.
-		expect(stuckLockOnArbiter(repoB, 'caller-b')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repoB, 'caller-b')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repoB, 'caller-b')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repoB, 'caller-b')).toBe(true);
 		const lock = await readItemLock({
 			item: 'task:caller-b',
 			cwd: repoB,

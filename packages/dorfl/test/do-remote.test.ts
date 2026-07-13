@@ -257,7 +257,13 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/a flag that was removed/);
 		// Surfaced on the arbiter main; never reached done.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
@@ -444,7 +450,13 @@ describe('do --remote — teardown re-applies the §4 predicate (reapJob)', () =
 		expect(result.outcome).toBe('needs-attention');
 		// `do` is autonomous: the stuck state is SURFACED ON MAIN (mode-M cherry-pick
 		// of the move-only commit) so scan/status/another machine can see it.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});

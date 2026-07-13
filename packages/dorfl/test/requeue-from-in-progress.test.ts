@@ -13,6 +13,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -62,7 +64,13 @@ async function stuckInProgress(
 	});
 	expect(bounced.moved).toBe(true);
 	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
-	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
+	// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+	// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+	// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+	// then RELEASES the lock. Assert the A1 triple.
+	expect(stuckLockOnArbiter(repo, slug)).toBe(false);
+	expect(sidecarSurfacedOnArbiterMain(repo, slug)).toBe(true);
+	expect(needsAnswersOnArbiterMain(repo, slug)).toBe(true);
 	// Leave the cwd on a clean main (NOT the work branch): the requeue must resolve
 	// the lock state from the arbiter, not the cwd tree.
 	gitIn(['fetch', '-q', ARBITER], repo);
@@ -98,7 +106,13 @@ describe('requeue recovers a task stuck on its per-item lock (releases the lock)
 	it('releases the stuck lock WITHOUT a cwd checkout of the item; body stays in backlog/', async () => {
 		const {repo} = await stuckInProgress('alpha');
 		// Precondition: the item is stuck (the lock), body rests in backlog/.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
 		const result = await returnToBacklog({

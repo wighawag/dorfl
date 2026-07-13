@@ -13,6 +13,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -94,7 +96,13 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		expect(result.moved).toBe(true);
 
 		// The lock is stuck; the body still rests in backlog/ (no folder move).
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 	});
@@ -149,7 +157,13 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 		// 3. `main` is UNCHANGED (the lock amend writes only the lock ref).
 		expect(arbiterMainLog(repo)).toEqual(beforeArbiter);
 		// 4. The lock is stuck (the surface DID land on the lock substrate).
-		expect(stuckLockOnArbiter(repo, 'beta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
 	});
 
 	it('the recoverable kept work/task-<slug> branch is UNCHANGED on the arbiter', async () => {
@@ -203,7 +217,13 @@ describe('the tree-less surface is a pure lock amend (no cwd tree, no main write
 			env: gitEnv(),
 		});
 		expect(result.moved).toBe(true);
-		expect(stuckLockOnArbiter(repo, 'kappa')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'kappa')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'kappa')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'kappa')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'kappa')).toBe(true);
 	});
 });

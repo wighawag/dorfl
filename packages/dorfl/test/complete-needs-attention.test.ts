@@ -12,6 +12,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -88,7 +90,13 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
 			false,
 		);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 
 		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
 		const lock = await readItemLock({
@@ -182,7 +190,13 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 
 		// The stuck state is the lock; nothing landed on the arbiter's done/ (the
 		// done-move happened on the BRANCH tree but never reached main).
-		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'theta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'theta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'theta')).toBe(true);
 
 		// Nothing landed on arbiter main.
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);

@@ -15,6 +15,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -106,7 +108,13 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 
 		// Drive the renamed verb through the actual CLI program (the same wiring the
 		// `return` verb had — only the verb name changed).

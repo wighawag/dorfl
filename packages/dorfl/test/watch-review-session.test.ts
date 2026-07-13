@@ -19,6 +19,8 @@ import {
 	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -275,7 +277,13 @@ describe('the gate DECISION is identical with watch on vs off (observability onl
 		expect(blockOff.result.outcome).toBe('needs-attention');
 		expect(blockOn.result.outcome).toBe(blockOff.result.outcome);
 		expect(blockOn.result.exitCode).toBe(blockOff.result.exitCode);
-		expect(stuckLockOnArbiter(blockOn.repo, 'b-on')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(blockOn.repo, 'b-on')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(blockOn.repo, 'b-on')).toBe(true);
+		expect(needsAnswersOnArbiterMain(blockOn.repo, 'b-on')).toBe(true);
 		expect(existsOnArbiterMain(blockOn.repo, 'done', 'b-on')).toBe(false);
 	});
 });

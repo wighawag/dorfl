@@ -24,6 +24,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -459,7 +461,13 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		// STUCK on its per-item lock (NOT silently in-progress).
 		expect(started.outcome).toBe('needs-attention');
 		expect(started.exitCode).toBe(1);
-		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(fresh, 'zeta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(fresh, 'zeta')).toBe(true);
 		// RECOVERABLE: the kept work branch is still on the arbiter.
 		expect(arbiterWorkTip(seeded.arbiter, 'work/task-zeta')).not.toBe('');
 	});
@@ -543,7 +551,13 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 		expect(agentRan).toBe(false);
 		// The item is STUCK on its per-item lock and is NO LONGER in-progress (the
 		// observed silent-strand bug, now closed on the incident's own path).
-		expect(stuckLockOnArbiter(seeded.repo, 'theta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, 'theta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, 'theta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, 'theta')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'theta')).toBe(
 			false,
 		);

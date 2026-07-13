@@ -15,6 +15,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -184,7 +186,13 @@ describe('requeue --reconcile — genuine content conflict after mirror re-sync'
 		expect(idxDeferred).toBeGreaterThan(-1);
 		expect(idxReset).toBeGreaterThan(idxDeferred);
 		// The lock is STILL held (item stays stuck).
-		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'bravo')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'bravo')).toBe(true);
 		// The branch is UNTOUCHED on the arbiter (nothing deleted, tip unchanged).
 		expect(arbiterRef(seeded, 'refs/heads/work/task-bravo')).toBe(priorTip);
 	});
