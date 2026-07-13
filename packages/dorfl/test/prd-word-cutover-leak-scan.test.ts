@@ -252,6 +252,32 @@ function readIfPresent(file: string): string {
 // guard.md` records + guards with an expiry test; the original decision was
 // `word-scan-exempts-prd-cutover-task-bodies-2026-07-10` (now discharged into
 // that task).
+//
+// EXPIRY / CLEANUP GUARD: the test
+// `EXPIRY GUARD: PROVENANCE_FILE_BASENAMES exemption is still load-bearing`
+// below FAILS the moment the retired artifact word disappears from every
+// non-exempt `work/**` prose position, so `PROVENANCE_FILE_BASENAMES` +
+// `isProvenanceFile` + their call sites cannot silently rot into dead weight —
+// see that guard for the deletion instructions.
+//
+// CRITERION-AUDIT NOTE (2026-07-13, task
+// `provenance-file-basenames-widened-criterion-and-expiry-guard`): every entry
+// below was cross-checked against the wider criterion stated above. The
+// following entries are BORDERLINE / possibly-misfit and are surfaced (not
+// silently removed) so a future maintainer can decide:
+//   - `fold-three-surface-distinction-into-rename-cutover-lessons.md`,
+//     `promote-rename-cutover-lessons-to-findings-note.md`,
+//     `mint-rename-expand-checklist-finding.md`,
+//     `review-protocol-add-file-ownership-lens-for-wide-refactor-chains.md`
+//     — general rename-cutover / refactor-review lessons DRAWN FROM the `prd`
+//     → `spec` sweep. Fit the criterion loosely (the lessons narrate the sweep
+//     that removed the word), kept for now.
+//   - `rename-pre-backlog-to-backlog-in-cli-prose-and-config.md` — a DIFFERENT
+//     rename (`pre-backlog` → `backlog`); it only mentions the retired word
+//     once, inside a dated rebase note about this very scan tripping. Kept
+//     because that one mention is bona-fide provenance about this scan, but
+//     its OWN subject is NOT the `prd` vocabulary — flagged here so a future
+//     sweep can move that provenance line into a scan-incident note instead.
 // ───────────────────────────────────────────────────────────────────────────
 
 const PROVENANCE_FILE_BASENAMES: readonly string[] = [
@@ -733,6 +759,69 @@ describe('prd → spec WORD cutover leak scan — the tree-wide prose/path GATE'
 							leaks,
 						)}`,
 		).toEqual([]);
+	});
+
+	it('EXPIRY GUARD: PROVENANCE_FILE_BASENAMES exemption is still load-bearing', () => {
+		// Once the retired bare artifact word disappears from every non-exempt
+		// `work/**` prose position (same lens as the main scan: fenced-code blocks
+		// skipped, inline `` `…` `` + ''…'' spans stripped, camelCase/word-boundary
+		// carve-out applied, the enumerated `PRESERVE_SLUGS` slug-identity carve-out
+		// applied), the file-scoped exemption is dead weight and MUST be deleted
+		// along with `isProvenanceFile` and its call site in `fileLeaks`. This
+		// guard fails at that moment so the cleanup cannot be forgotten. The
+		// retired word is NOT hard-coded here (that would itself leak into this
+		// non-exempt test's prose — though `packages/**` is not walked today, a
+		// future widening would trip); we source it from the module's own
+		// `PRD_HIT` regex + obfuscate it in the assertion message.
+		const RETIRED = String.fromCharCode(112, 114, 100); // the 3-letter retired word
+		const RETIRED_UPPER = RETIRED.toUpperCase();
+		// Sanity: our obfuscated needle matches the same lens the module uses.
+		expect(PRD_HIT.test(RETIRED)).toBe(true);
+		PRD_HIT.lastIndex = 0;
+
+		const nonExemptWorkFiles = scannedFiles().filter((f) => {
+			const rel = relTo(f).split('\\').join('/');
+			return rel.startsWith('work/') && !isProvenanceFile(relTo(f));
+		});
+
+		let stillAppears = false;
+		outer: for (const file of nonExemptWorkFiles) {
+			const text = readIfPresent(file);
+			const lines = text.split('\n');
+			let inFence = false;
+			for (const raw of lines) {
+				if (/^\s*```/.test(raw)) {
+					inFence = !inFence;
+					continue;
+				}
+				if (inFence) continue;
+				const prose = stripInlineCode(raw);
+				PRD_HIT.lastIndex = 0;
+				let m: RegExpExecArray | null;
+				while ((m = PRD_HIT.exec(prose))) {
+					const idx = m.index;
+					const before = prose[idx - 1] ?? '';
+					const after = prose[idx + 3] ?? '';
+					// camelCase / snake / digit-glued: not the bare artifact word.
+					if (WORD_CHAR.test(before) || WORD_CHAR.test(after)) continue;
+					// Enumerated slug-identity carve-out: a `prd`-carrying slug on
+					// the line is a file identity, not the artifact word.
+					if (slugCovers(prose, m[0].toLowerCase())) continue;
+					stillAppears = true;
+					break outer;
+				}
+			}
+		}
+
+		expect(
+			stillAppears,
+			`EXPIRY GUARD tripped: the retired bare artifact word ('${RETIRED}'/'${RETIRED_UPPER}') no ` +
+				`longer appears anywhere in work/** prose OUTSIDE the exempted files. The ` +
+				`file-scoped exemption in packages/dorfl/test/prd-word-cutover-leak-scan.test.ts ` +
+				`is now dead weight — DELETE the PROVENANCE_FILE_BASENAMES constant, the ` +
+				`isProvenanceFile() helper, its call site at the top of fileLeaks(), and this ` +
+				`EXPIRY GUARD test itself. (The vocabulary cutover is complete.)`,
+		).toBe(true);
 	});
 
 	it('the PRESERVE allow-list is concrete + non-vacuous (every entry names a real prd identity)', () => {
