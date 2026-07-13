@@ -2,6 +2,7 @@ import {readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	mergeConfig,
+	validateDeadlineConfig,
 	warnDeprecatedConfigKeys,
 	type Config,
 	type PartialConfig,
@@ -207,6 +208,16 @@ export const REPO_ALLOWED_KEYS = [
 	// default or shape. The re-surface vs. land branch is
 	// `apply-rung-merge-disposition`'s consumer, never here.
 	'strictMergeApproval',
+	// `agentDeadlineMinutes` / `checkpointHeadroomMinutes` / `maxAutoCheckpoints`
+	// (spec `graceful-pre-timeout-wip-checkpoint`) are genuine repo properties:
+	// how long an agent session runs before checkpointing, and how much head-room
+	// the GitHub backstop leaves above it, are agreed by all collaborators + travel
+	// with the repo. The dynamic GitHub `timeout-minutes` cap is rendered by the
+	// `enumerate` job at run time FROM this committed config, so an edit reflects
+	// EVERYWHERE (internal deadline AND GitHub cap) with no install-ci re-run.
+	'agentDeadlineMinutes',
+	'checkpointHeadroomMinutes',
+	'maxAutoCheckpoints',
 	// `promptGuidance` (the NUDGE namespace — prompt-text knobs that strengthen
 	// the worker's in-band wrapper line, e.g. `testFirst`) is a genuine repo
 	// property: "is this repo nudged toward test-first?" travels with the repo
@@ -575,6 +586,11 @@ export function resolveRepoConfigFromLoaded(
 		...envOverrides(env),
 		...(flags ?? {}),
 	});
+	// Fail-loud range validation for the deadline / backstop / ceiling triple
+	// (spec `graceful-pre-timeout-wip-checkpoint`): a bad value from ANY layer
+	// (flag / env / per-repo / global) throws with a clear message naming the
+	// field + range — NEVER silently clamped.
+	validateDeadlineConfig(config);
 	return {
 		config,
 		rejected: repo.rejected,

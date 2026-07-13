@@ -336,9 +336,6 @@ describe('config load + --export-config round-trip', () => {
 			// The default maxParallel: omitted from the exported JSON (it equals the
 			// default) but re-applied by resolveCIConfig on load, so it round-trips.
 			maxParallel: 2,
-			// Same for legTimeoutMinutes: equals the default, omitted from the export,
-			// re-applied by resolveCIConfig on load.
-			legTimeoutMinutes: 120,
 		};
 		const noSecrets = exportCIConfig(config);
 		expect(noSecrets).not.toContain('maxParallel');

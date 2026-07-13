@@ -66,6 +66,18 @@ export interface LaunchWithOptionalWatchInput {
 	sessionsDir?: string;
 	/** Tail the session `.jsonl` live (pi harness only). */
 	watch?: boolean;
+	/**
+	 * **Optional agent-session DEADLINE** (absolute epoch-ms wall-clock timestamp,
+	 * spec `graceful-pre-timeout-wip-checkpoint`) threaded through to
+	 * {@link LaunchInput.deadlineMs}. Forces the ASYNC {@link
+	 * PiHarness.launchAsync} path (even without `watch`), because the deadline
+	 * race only works there — `spawnSync` cannot be interrupted from the same
+	 * event loop. A non-pi harness with a deadline set silently degrades to a
+	 * plain `harness.launch` (no race is possible), the same safe fall-through
+	 * used for `watch` on a non-pi harness. Absent ⇒ no deadline; a run that
+	 * finishes normally is byte-for-byte unchanged.
+	 */
+	deadlineMs?: number;
 	/** Where the tailed high-signal lines are written (defaults to stderr). */
 	watchSink?: (line: string) => void;
 	/** Emit ANSI colour in the tailed lines (the caller's TTY/`NO_COLOR` decision). */
@@ -97,17 +109,27 @@ export async function launchWithOptionalWatch(
 		id: input.sessionId,
 	});
 
-	// `--watch` (pi only): launch async + tail the KNOWN session .jsonl path
-	// concurrently. The caller is responsible for rejecting `--watch` on a non-pi
-	// harness up-front (as `do` does); a non-pi harness here falls through to the
-	// sync launch below rather than tailing a log that will never exist.
-	if (input.watch === true && harness instanceof PiHarness) {
-		const tailer = new SessionTailer({
-			sessionFile: session,
-			color: input.color ?? false,
-			sink: input.watchSink,
-		});
-		tailer.start();
+	const wantsAsync =
+		(input.watch === true || input.deadlineMs !== undefined) &&
+		harness instanceof PiHarness;
+
+	// `--watch` OR a threaded deadline (spec
+	// `graceful-pre-timeout-wip-checkpoint`) forces the ASYNC path: the deadline
+	// race is only expressible against `launchAsync` (a spawnSync child cannot be
+	// SIGTERMed from the same event loop), and `--watch` needs it to tail the
+	// session log concurrently. Both are pi-only — a non-pi harness here falls
+	// through to the sync launch below (safe: watch would have no log to tail,
+	// and the deadline was already opt-in).
+	if (wantsAsync) {
+		const tailer =
+			input.watch === true
+				? new SessionTailer({
+						sessionFile: session,
+						color: input.color ?? false,
+						sink: input.watchSink,
+					})
+				: undefined;
+		tailer?.start();
 		try {
 			return await harness.launchAsync({
 				dir: input.dir,
@@ -116,12 +138,15 @@ export async function launchWithOptionalWatch(
 				prompt: input.prompt,
 				model: input.model,
 				session,
+				deadlineMs: input.deadlineMs,
 				env: input.env,
 			});
 		} finally {
 			// Always release the tailer (one final drain) — even on a launch error —
 			// so the observer never outlives the run or leaks a handle.
-			await tailer.stop();
+			if (tailer) {
+				await tailer.stop();
+			}
 		}
 	}
 

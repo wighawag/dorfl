@@ -85,13 +85,6 @@ export interface InstallCIOptions {
 	 * file (if set) else {@link DEFAULT_MAX_PARALLEL}. Must be a positive integer.
 	 */
 	maxParallel?: number;
-	/**
-	 * Per-leg wall-clock cap (minutes) for the advance-lifecycle matrix jobs,
-	 * overriding the config file's value. When omitted, it comes from the config
-	 * file (if set) else {@link DEFAULT_LEG_TIMEOUT_MINUTES}. Must be a positive
-	 * integer.
-	 */
-	legTimeoutMinutes?: number;
 	/** The interactive prompt seam (required unless `configFile` is given). */
 	prompts?: WizardPrompts;
 	/** The capability emitters to emit workflows for (none in this core task). */
@@ -157,11 +150,6 @@ export async function installCI(
 	// folded in BEFORE the export so it round-trips through --export-config.
 	if (options.maxParallel !== undefined) {
 		config.maxParallel = options.maxParallel;
-	}
-	// Same for --leg-timeout-minutes: an explicit flag wins over the config file
-	// and is folded in before export so it round-trips through --export-config.
-	if (options.legTimeoutMinutes !== undefined) {
-		config.legTimeoutMinutes = options.legTimeoutMinutes;
 	}
 
 	// 2. --export-config: round-trip the gathered config back to JSON and exit.

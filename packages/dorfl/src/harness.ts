@@ -61,6 +61,21 @@ export interface LaunchInput {
 	 * `undefined` ⇒ the pi adapter falls back to a generated default for its cwd.
 	 */
 	session?: string;
+	/**
+	 * **Optional agent-session DEADLINE** (absolute epoch-ms wall-clock timestamp)
+	 * for the ASYNC {@link Harness} launch (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). When set AND the future arrives
+	 * before the child exits, the harness sends SIGTERM (a ~10s grace, then
+	 * SIGKILL) and resolves the {@link LaunchResult} with `timedOut: true` — so
+	 * the caller can route the run as a CHECKPOINT (save WIP + auto-continue /
+	 * surface) rather than a generic agent-failure. Ignored on the synchronous
+	 * {@link Harness.launch} path (`spawnSync` cannot be interrupted from the
+	 * same event loop; the async path is where CI's `--watch` legs run and where
+	 * the checkpoint discipline lives). Absent ⇒ no deadline (byte-for-byte the
+	 * pre-task behaviour: a run finishing before its deadline is unchanged; on
+	 * `exit` the timer is cleared).
+	 */
+	deadlineMs?: number;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -170,6 +185,16 @@ export interface LaunchResult {
 	record: HarnessRecord;
 	/** Failure detail when `ok` is false (the stderr/failure channel). */
 	detail?: string;
+	/**
+	 * **True iff the launch was stopped by the dorfl-internal DEADLINE**
+	 * ({@link LaunchInput.deadlineMs}) rather than exiting on its own (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). Distinct from `ok` (a deadline
+	 * stop is neither a success nor a generic failure — it is a CHECKPOINT the
+	 * caller routes through the save+auto-continue/surface path). Absent/false
+	 * when the child exited before the deadline, so a run that finishes
+	 * normally is byte-for-byte unchanged.
+	 */
+	timedOut?: boolean;
 	/**
 	 * The agent's final ANSWER (task `harness-agent-output`): the concatenated
 	 * `text` of the LAST assistant turn the invocation produced. This is the

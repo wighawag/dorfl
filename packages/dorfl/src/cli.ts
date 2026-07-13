@@ -971,7 +971,6 @@ interface InstallCiFlags {
 	includeSecrets?: boolean;
 	installSource?: string;
 	maxParallel?: string;
-	legTimeoutMinutes?: string;
 	cwd?: string;
 	repo?: string;
 	ghBin?: string;
@@ -1170,6 +1169,44 @@ export function buildProgram(): Command {
 	program
 		.name(brand.bin)
 		.description('Autonomous parallel agents over file-based work/ queues.');
+
+	// `dorfl config --json` (spec `graceful-pre-timeout-wip-checkpoint` — step 5):
+	// print the RESOLVED per-repo config as JSON, so BOTH the advance-lifecycle
+	// workflow's `enumerate` job (which reads it to emit the dynamic
+	// `githubTimeout` output) AND a human debugging a config-precedence question
+	// share ONE honest primitive. A focused honest primitive — NOT overloaded
+	// onto `scan`. Runs in the cwd (in-place), so the resolution chain reads THIS
+	// repo's committed `dorfl.json` exactly like `scan --here`.
+	program
+		.command('config')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			"Print the resolved config for the current repo (flag > env > per-repo > global > default). Consumed by the advance-lifecycle workflow's enumerate job to emit the dynamic GitHub timeout backstop (agentDeadlineMinutes + checkpointHeadroomMinutes) at run time from the committed dorfl.json — so editing dorfl.json reflects everywhere (internal deadline AND GitHub cap) on the next tick, no install-ci re-run.",
+		)
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.option(
+			'--arbiter <remote>',
+			'name of the arbiter git remote (default: per-repo/global defaultArbiter)',
+		)
+		.option('--json', 'output the resolved config as JSON')
+		.action(
+			async (flags: {config?: string; arbiter?: string; json?: boolean}) => {
+				if (flags.json !== true) {
+					console.error(
+						'error: `dorfl config` currently supports only --json output. Pass --json.',
+					);
+					process.exit(1);
+				}
+				const cwd = process.cwd();
+				const {global, override} = loadGlobalAndOverride(flags.config);
+				const resolved = resolveRepoConfig({
+					repoPath: cwd,
+					global,
+					override,
+				}).config;
+				console.log(JSON.stringify(resolved, null, 2));
+			},
+		);
 
 	program
 		.command('scan')
@@ -2447,6 +2484,11 @@ export function buildProgram(): Command {
 							})
 						: undefined,
 					watch: flags.watch === true,
+					// The dorfl-internal agent deadline + anti-loop ceiling (spec
+					// `graceful-pre-timeout-wip-checkpoint`). Threaded from the RESOLVED
+					// remote-repo config (its committed `dorfl.json` on <arbiter>/main).
+					agentDeadlineMinutes: remoteConfig.agentDeadlineMinutes,
+					maxAutoCheckpoints: remoteConfig.maxAutoCheckpoints,
 					color: shouldUseColor(process.stdout),
 					note: (message) => console.error(`>> ${message}`),
 					noteBlock: (message) => console.error(message),
@@ -2628,6 +2670,11 @@ export function buildProgram(): Command {
 				// `--watch`: tail the pi session log live (pi harness only; the
 				// performDo guard errors clearly on any other adapter). READ-ONLY.
 				watch: flags.watch === true,
+				// The dorfl-internal agent deadline + anti-loop ceiling (spec
+				// `graceful-pre-timeout-wip-checkpoint`). Threaded from the resolved
+				// per-repo config so an edit to dorfl.json reflects on the NEXT tick.
+				agentDeadlineMinutes: config.agentDeadlineMinutes,
+				maxAutoCheckpoints: config.maxAutoCheckpoints,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
@@ -3074,6 +3121,10 @@ export function buildProgram(): Command {
 				taskReviewGate: config.review
 					? harnessTaskAcceptanceGate({harness, agentCmd: config.agentCmd})
 					: undefined,
+				// The dorfl-internal agent deadline + anti-loop ceiling (spec
+				// `graceful-pre-timeout-wip-checkpoint`). Threaded from resolved config.
+				agentDeadlineMinutes: config.agentDeadlineMinutes,
+				maxAutoCheckpoints: config.maxAutoCheckpoints,
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
@@ -4336,10 +4387,6 @@ export function buildProgram(): Command {
 			'--max-parallel <n>',
 			'cap on CONCURRENT advance-lifecycle matrix legs (the propose/merge `max-parallel`). Each leg is a full agent session, so a large fan-out can exhaust the model provider rate limit + thrash the CAS. Default 2.',
 		)
-		.option(
-			'--leg-timeout-minutes <n>',
-			"per-leg wall-clock cap (`timeout-minutes`) on each advance-lifecycle matrix job. Without it a leg inherits GitHub's 6h job default, so a wedged/throttled leg (model-provider 429 backoff) strands the run for hours; this reaps it as a fast isolated failure the fail-fast:false matrix tolerates. Set ABOVE a legit worst-case build (some run ~1h), well UNDER 6h. Default 120 (2h).",
-		)
 		.action(async (flags: InstallCiFlags) => {
 			const workDir = flags.cwd ?? process.cwd();
 			if (
@@ -4365,18 +4412,7 @@ export function buildProgram(): Command {
 				}
 				maxParallel = n;
 			}
-			let legTimeoutMinutes: number | undefined;
-			if (flags.legTimeoutMinutes !== undefined) {
-				const n = Number(flags.legTimeoutMinutes);
-				if (!Number.isInteger(n) || n < 1) {
-					console.error(
-						`install-ci: --leg-timeout-minutes must be a positive integer (got "${flags.legTimeoutMinutes}")`,
-					);
-					process.exitCode = 1;
-					return;
-				}
-				legTimeoutMinutes = n;
-			}
+
 			const ctx = new GitHubCIContext({
 				workDir,
 				repo: flags.repo,
@@ -4401,7 +4437,6 @@ export function buildProgram(): Command {
 					| 'workspace'
 					| undefined,
 				maxParallel,
-				legTimeoutMinutes,
 				prompts,
 				capabilities,
 				log: (line) => console.error(line),
