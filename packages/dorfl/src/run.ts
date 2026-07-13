@@ -720,8 +720,10 @@ async function runOneItem(
 		if (tree.continueRebaseConflict) {
 			const reason =
 				`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-				'conflicted (aborted, never auto-resolved) — resolve against the latest ' +
-				'main, or `requeue --reset` to discard and start fresh';
+				'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+				'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
+				'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
+				'branch and starts fresh.';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
 			const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,
@@ -750,9 +752,10 @@ async function runOneItem(
 			const reason =
 				`continuing the kept ${tree.branch}: publishing the rebased work branch ` +
 				`to the arbiter failed terminally (${tree.continuePushFailure}) — the ` +
-				'kept branch is left intact on the arbiter (recoverable); `requeue` to ' +
-				'retry once the churn settles, or `requeue --reset` to discard and start ' +
-				'fresh';
+				'kept branch is left intact on the arbiter (recoverable); ' +
+				'`requeue --reconcile` to non-destructively re-sync the mirror and ' +
+				'retry once the churn settles (keeps the work). Last resort: ' +
+				'`requeue --reset` DESTRUCTIVELY discards the branch and starts fresh.';
 			updateJobRecord(tree.dir, {state: 'needs-attention', reason});
 			const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
 				cwd: tree.dir,

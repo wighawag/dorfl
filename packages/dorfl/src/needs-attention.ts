@@ -9,7 +9,10 @@ import {
 	isWorkItemFile,
 } from './work-layout.js';
 import {run, runAsync, type RunResult} from './git.js';
-import {branchAheadOf} from './continue-branch.js';
+import {
+	branchAheadOf,
+	rebaseContinuedBranchOntoMain,
+} from './continue-branch.js';
 import {
 	acquireItemLock,
 	releaseItemLock,
@@ -188,6 +191,29 @@ export interface ReturnToBacklogOptions {
 	 */
 	reset?: boolean;
 	/**
+	 * `requeue --reconcile` (the NON-DESTRUCTIVE recovery verb — the middle rung
+	 * of the escalation ladder between the default keep+continue and the
+	 * destructive `--reset`). When the item's per-item lock is held stuck AND the
+	 * arbiter's `work/<slug>` branch EXISTS and is ahead of main, re-sync the
+	 * mirror to the arbiter (a prune-fetch that clears the stale-ref residue that
+	 * historically silently resurrected a supposedly-`--reset`-ed branch) and
+	 * RETRY the rebase of the kept branch onto latest `<arbiter>/main` in a
+	 * SCRATCH worktree (never touching the caller's tree, `--force-with-lease`
+	 * only, NEVER a bare force). On a clean rebase, the reconciled tip is
+	 * pushed back to the arbiter with a lease + the reconcile completes as a
+	 * standard keep+continue requeue (lock released, branch preserved). On a
+	 * genuine content conflict after the clean mirror re-sync, the lock is LEFT
+	 * HELD (item stays stuck), the branch is LEFT UNTOUCHED on the arbiter
+	 * (NEVER deleted), and the caller is told the retry happened + pointed at the
+	 * deferred mirror-side resolve follow-on + `--reset` as the destructive last
+	 * resort. If the branch is ABSENT (never pushed, or a prior `--reset` already
+	 * deleted it), reconcile falls through to the default keep+continue path
+	 * (which itself degrades gracefully to a fresh-claim move). Incompatible
+	 * with `--reset` (destructive vs non-destructive are exclusive verbs on the
+	 * same escalation).
+	 */
+	reconcile?: boolean;
+	/**
 	 * `requeue -m "<note>"` (the handoff note): an optional human steer for the
 	 * NEXT agent. APPENDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
 	 * section to the item BODY before the move — the ledger file is the durable,
@@ -209,6 +235,14 @@ export interface ReturnToBacklogResult {
 	commitMessage?: string;
 	/** True iff `--reset` deleted the remote `work/<slug>` branch on the arbiter. */
 	deletedRemoteBranch?: boolean;
+	/**
+	 * True iff `--reconcile` re-synced the mirror + rebased the kept branch onto
+	 * latest `<arbiter>/main` and pushed the reconciled tip back to the arbiter
+	 * (before the lock release). Absent on the default path / on `--reset` / on
+	 * a reconcile that fell through (branch absent) — for those, the ordinary
+	 * keep+continue path ran with no rebase.
+	 */
+	reconciled?: boolean;
 	/** When NOT moved, why (e.g. the slug held no recoverable per-item lock on the arbiter, or a failed --reset delete). */
 	reasonNotMoved?: string;
 }
@@ -385,12 +419,26 @@ export async function routeToNeedsAttention(
  *     it is the durable artifact the next claim CONTINUES from (the continue-
  *     detection in `continue-branch.ts` feeds both onboarding paths). This
  *     function only does the ledger move.
- *   - **`--reset` = DISCARD + FRESH.** When `reset` is set, DELETE the remote
- *     `work/<slug>` branch on `arbiter` FIRST (+ drop any stale local branch),
- *     THEN the backlog move. Delete-before-move closes the claim-race window; a
- *     FAILED delete ABORTS (no backlog move) so the item stays in
- *     needs-attention. The next claim then finds NO arbiter branch and cuts
- *     fresh — no special claim-time logic.
+ *   - **`--reconcile` = NON-DESTRUCTIVE RECOVERY (middle rung).** When
+ *     `reconcile` is set AND the arbiter's `work/<slug>` exists + is ahead of
+ *     main, re-sync the hub mirror to the arbiter (a prune-fetch that clears
+ *     the stale-ref residue that historically resurrected a supposedly
+ *     `--reset`-ed branch) and RETRY the rebase of the kept branch onto latest
+ *     `<arbiter>/main` in a SCRATCH worktree (never touching the caller's
+ *     tree, `--force-with-lease` only, NEVER a bare force). Clean rebase =>
+ *     push the reconciled tip back to the arbiter and fall through to the
+ *     standard keep+continue path (lock released, branch preserved). Genuine
+ *     content conflict AFTER the clean mirror re-sync => item stays stuck,
+ *     branch UNTOUCHED (NEVER deleted), message references the deferred
+ *     mirror-side resolve follow-on and mentions `--reset` LAST as the
+ *     destructive last resort. Branch absent / not-ahead => fall through to
+ *     the default keep+continue path (which handles the fresh-claim case).
+ *   - **`--reset` = DISCARD + FRESH (destructive last resort).** When `reset`
+ *     is set, DELETE the remote `work/<slug>` branch on `arbiter` FIRST (+ drop
+ *     any stale local branch), THEN the backlog move. Delete-before-move
+ *     closes the claim-race window; a FAILED delete ABORTS (no backlog move)
+ *     so the item stays in needs-attention. The next claim then finds NO
+ *     arbiter branch and cuts fresh — no special claim-time logic.
  *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, APPEND a dated
  *     `## Requeue YYYY-MM-DD` section to the item BODY (append-only; accumulates
  *     over repeated requeues) for the next agent. Applies to BOTH modes.
@@ -485,6 +533,67 @@ export async function returnToBacklog(
 				'task whose lock is held stuck (needs-attention) or active (a killed ' +
 				'in-progress run).',
 		};
+	}
+
+	// `--reconcile`: the NON-DESTRUCTIVE recovery rung (task
+	// `requeue-reconcile-nondestructive-recovery-verb`, parent observation
+	// `rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset`).
+	// When the kept `work/<slug>` exists + is ahead of `<arbiter>/main`, re-sync
+	// the mirror (prune-fetch — the exact step whose absence let
+	// `requeue-reset-does-not-prune-hub-mirror-stale-branch-ref` silently
+	// resurrect a stale branch) and RETRY the rebase in a SCRATCH worktree. Clean
+	// rebase => push the reconciled tip back (`--force-with-lease`, never bare
+	// force, WORK branch only — ADR §11) and fall through to the standard
+	// keep+continue path. Genuine content conflict AFTER the clean re-sync =>
+	// return with a message that LEADS with what happened, references the
+	// deferred mirror-side resolve path, and mentions `--reset` LAST as the
+	// destructive last resort. Branch absent / not-ahead => fall through to the
+	// default keep+continue path (which handles the fresh-claim case). NEVER
+	// deletes the remote branch — this verb's contract is "keep the work".
+	let reconciled: boolean | undefined;
+	if (options.reconcile) {
+		if (options.reset) {
+			return {
+				moved: false,
+				reasonNotMoved:
+					`requeue for '${slug}': --reconcile and --reset are mutually ` +
+					'exclusive (non-destructive recovery vs destructive last resort). ' +
+					'Pick one.',
+			};
+		}
+		const attempt = await attemptReconcile({
+			cwd,
+			slug,
+			arbiter,
+			env,
+			note,
+		});
+		if (attempt.kind === 'conflict') {
+			const branch = workBranchRef('task', slug);
+			const message =
+				`requeue --reconcile for '${slug}': re-synced the ${arbiter} mirror ` +
+				`and RETRIED the rebase of ${branch} onto latest ${arbiter}/main, but ` +
+				`the rebase still conflicts on genuine content (${attempt.detail}). The ` +
+				'kept branch is left UNTOUCHED on the arbiter (nothing deleted) and the ' +
+				'item is left stuck. A supported mirror-side "resolve against latest ' +
+				'main" command that fetches the kept branch into a scratch worktree, ' +
+				'rebases, and re-pushes is planned but not yet built (see observation ' +
+				'`rebase-conflict-on-continue-needs-nondestructive-recovery-not-reset`, ' +
+				'point 2 of its LIVE residue). LAST RESORT: `requeue --reset` ' +
+				'DESTRUCTIVELY discards the branch and starts fresh.';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
+		}
+		if (attempt.kind === 'reconciled') {
+			reconciled = true;
+			note(
+				`Reconciled '${slug}': re-synced the ${arbiter} mirror, rebased the ` +
+					`kept ${workBranchRef('task', slug)} onto latest ${arbiter}/main, and ` +
+					'pushed the reconciled tip back (non-destructive; branch preserved).',
+			);
+		}
+		// 'no-branch' => fall through to the default keep+continue path (branch
+		// absent / not ahead — the existing default guard handles both cases).
 	}
 
 	// `--reset`: DELETE the remote work branch (before the backlog move). The
@@ -684,7 +793,130 @@ export async function returnToBacklog(
 	note(
 		`Returned '${slug}' to backlog (released the lock; body rests in pool).`,
 	);
-	return {moved: true, commitMessage, deletedRemoteBranch};
+	return {moved: true, commitMessage, deletedRemoteBranch, reconciled};
+}
+
+/**
+ * The outcome of an in-progress `--reconcile` attempt (task
+ * `requeue-reconcile-nondestructive-recovery-verb`):
+ *   - `'reconciled'` — mirror re-synced, rebase onto latest `<arbiter>/main`
+ *     was clean AND the reconciled tip was pushed back to the arbiter. The
+ *     caller falls through to the default keep+continue path.
+ *   - `'no-branch'` — the arbiter's `work/<slug>` is absent or not ahead of
+ *     main after the re-sync. Nothing to reconcile; the caller falls through
+ *     to the default keep+continue path (which itself handles the fresh-claim
+ *     case gracefully).
+ *   - `'conflict'` — the rebase after the CLEAN mirror re-sync still
+ *     conflicted on genuine content, or the reconciled-tip push failed. The
+ *     branch is left untouched on the arbiter; the caller returns a stuck
+ *     message that leads with what was tried and mentions `--reset` LAST.
+ */
+type ReconcileAttempt =
+	| {kind: 'reconciled'}
+	| {kind: 'no-branch'}
+	| {kind: 'conflict'; detail: string};
+
+/**
+ * The `--reconcile` recovery attempt — the non-destructive middle rung of the
+ * `requeue` escalation ladder. Runs in a SCRATCH worktree so the caller's cwd
+ * tree/HEAD/index is NEVER touched (parity with the tree-less move machinery):
+ *
+ *   1. **Re-sync the mirror.** `git fetch --prune <arbiter>` on the caller's
+ *      cwd — the exact prune step whose absence let
+ *      `requeue-reset-does-not-prune-hub-mirror-stale-branch-ref` silently
+ *      resurrect a supposedly-`--reset`-ed branch. This clears the stale
+ *      remote-tracking residue that historically fooled the retry.
+ *   2. **Guard.** The arbiter's `work/<slug>` must EXIST + be ahead of main
+ *      (via {@link branchAheadOf} on the freshly-fetched
+ *      `<arbiter>/work/<slug>` vs `<arbiter>/main`). Absent / not-ahead =>
+ *      `'no-branch'` and the caller falls through to the default keep+continue
+ *      path.
+ *   3. **Rebase in a scratch worktree.** `git worktree add --detach <scratch>
+ *      <arbiter>/work/<slug>` and run {@link rebaseContinuedBranchOntoMain}
+ *      against `<arbiter>/main`. A CLEAN rebase is a full non-destructive fix;
+ *      a CONFLICT is `--abort`ed (never auto-resolved) => `'conflict'`.
+ *   4. **Push the reconciled tip back.** `git push <arbiter> HEAD:work/<slug>
+ *      --force-with-lease=work/<slug>:<observed-arbiter-tip>` from the scratch
+ *      worktree. `--force-with-lease` ONLY, NEVER bare `--force`, NEVER
+ *      `:main`, the WORK branch ONLY (ADR §11). A rejected push (stale lease
+ *      or otherwise) => `'conflict'` — non-destructive by construction, the
+ *      user can retry.
+ *
+ * Cleanup of the scratch worktree is best-effort in a `finally` (never fails
+ * the reconcile on cleanup).
+ */
+async function attemptReconcile(params: {
+	cwd: string;
+	slug: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<ReconcileAttempt> {
+	const {cwd, slug, arbiter, env, note} = params;
+	const branch = workBranchRef('task', slug);
+	const arbBranchRef = `refs/remotes/${arbiter}/${branch}`;
+	const arbMainRef = `refs/remotes/${arbiter}/main`;
+
+	// 1. Re-sync the mirror to the arbiter (prune-fetch clears stale refs).
+	await gitSoftAsync(['fetch', '--prune', '--quiet', arbiter], cwd, env);
+
+	// 2. Guard: branch must exist + be ahead of main.
+	if (!branchAheadOf(cwd, arbBranchRef, arbMainRef, env)) {
+		return {kind: 'no-branch'};
+	}
+
+	// 3. Scratch worktree — the caller's tree is NEVER touched.
+	const worktree = join(
+		tmpdir(),
+		`dorfl-reconcile-${slug}-${process.pid}-${Date.now()}`,
+	);
+	const wtCreate = gitSoftRun(
+		['worktree', 'add', '--quiet', '--detach', worktree, arbBranchRef],
+		cwd,
+		env,
+	);
+	if (wtCreate.status !== 0) {
+		return {
+			kind: 'conflict',
+			detail: `could not create scratch worktree (${wtCreate.stderr.trim() || `exit ${wtCreate.status}`})`,
+		};
+	}
+	try {
+		const rebase = rebaseContinuedBranchOntoMain(worktree, arbMainRef, env);
+		if (rebase.kind === 'conflict') {
+			return {kind: 'conflict', detail: 'rebase conflicted after re-sync'};
+		}
+		// 4. Push the reconciled tip back (`--force-with-lease`, WORK branch only).
+		const observedTip = gitSoftRun(
+			['rev-parse', '--verify', '--quiet', `${arbBranchRef}^{commit}`],
+			cwd,
+			env,
+		).stdout.trim();
+		const lease =
+			observedTip === '' ? `${branch}:` : `${branch}:${observedTip}`;
+		const push = gitSoftRun(
+			[
+				'push',
+				arbiter,
+				`HEAD:refs/heads/${branch}`,
+				`--force-with-lease=${lease}`,
+			],
+			worktree,
+			env,
+		);
+		if (push.status !== 0) {
+			return {
+				kind: 'conflict',
+				detail: `push of reconciled tip rejected (${push.stderr.trim() || `exit ${push.status}`})`,
+			};
+		}
+		// Advance the local remote-tracking ref so subsequent reads see the truth.
+		await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
+		void note;
+		return {kind: 'reconciled'};
+	} finally {
+		await gitSoftAsync(['worktree', 'remove', '--force', worktree], cwd, env);
+	}
 }
 
 /**

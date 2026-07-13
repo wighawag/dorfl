@@ -920,6 +920,8 @@ interface RequeueFlags {
 	cwd?: string;
 	arbiter?: string;
 	reset?: boolean;
+	reconcile?: boolean;
+	rebase?: boolean;
 	message?: string;
 }
 
@@ -3580,7 +3582,7 @@ export function buildProgram(): Command {
 		.command('requeue <slug>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note — no --reset needed, since there is nothing to continue from. --reset = discard + fresh: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (both modes; append-only).',
+			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. Escalation ladder (least to most destructive): (1) DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note. (2) --reconcile (alias --rebase) = NON-DESTRUCTIVE recovery: re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept branch onto latest arbiter/main in a scratch worktree; on a clean rebase, push the reconciled tip back (--force-with-lease, work branch only) and release the lock; on a genuine content conflict AFTER the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted) so the human can retry when the churn settles. NEVER deletes the remote branch. (3) --reset = DESTRUCTIVE last resort: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). -m/--message appends a dated handoff note to the item body (all modes; append-only).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -3592,8 +3594,13 @@ export function buildProgram(): Command {
 			'the arbiter git remote the tree-less move is CAS-published to (default: origin). --cwd resolves this remote; the move is never written to the cwd tree.',
 		)
 		.option(
+			'--reconcile',
+			'NON-DESTRUCTIVE recovery (middle rung, between the default keep+continue and the destructive --reset): re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept work/<slug> onto latest arbiter/main in a scratch worktree; on success, push the reconciled tip back with --force-with-lease and release the lock; on a genuine content conflict after the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted). NEVER deletes the remote branch. Incompatible with --reset.',
+		)
+		.option('--rebase', 'alias of --reconcile (canonical name)')
+		.option(
 			'--reset',
-			'DISCARD the kept work: delete the remote work/<slug> branch FIRST, then move to backlog so the next claim starts FRESH (guarded; a deliberate departure from the never-delete-the-remote-branch invariant). Never the default.',
+			'DESTRUCTIVE last resort: DISCARD the kept work by deleting the remote work/<slug> branch FIRST, then move to backlog so the next claim starts FRESH (guarded; a deliberate departure from the never-delete-the-remote-branch invariant). Never the default; try --reconcile first.',
 		)
 		.option(
 			'-m, --message <note>',
@@ -3615,6 +3622,14 @@ export function buildProgram(): Command {
 			// call site, rather than relying on the seam's silent `?? process.env`
 			// default by omission (the implicit fallback that made `requeue`'s human
 			// attribution accidental rather than declared).
+			const reconcile = flags.reconcile === true || flags.rebase === true;
+			if (reconcile && flags.reset) {
+				console.error(
+					'error: --reconcile and --reset are mutually exclusive ' +
+						'(non-destructive recovery vs destructive last resort). Pick one.',
+				);
+				process.exit(1);
+			}
 			const result = await ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
@@ -3623,6 +3638,7 @@ export function buildProgram(): Command {
 				// `--cwd` is purely the ORIGIN SOURCE the remote is resolved from.
 				arbiter: flags.arbiter ?? 'origin',
 				reset: flags.reset,
+				reconcile,
 				message: flags.message,
 				env: process.env,
 				note: (message) => console.error(`>> ${message}`),
@@ -3633,7 +3649,9 @@ export function buildProgram(): Command {
 			}
 			const how = result.deletedRemoteBranch
 				? ` (--reset: deleted the remote ${workBranchRef('task', slug)} branch; next claim starts fresh)`
-				: ' (kept the work branch; next claim continues from its tip)';
+				: result.reconciled
+					? ` (--reconcile: re-synced mirror + rebased ${workBranchRef('task', slug)} onto latest main and pushed the reconciled tip back; next claim continues from it)`
+					: ' (kept the work branch; next claim continues from its tip)';
 			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
 		});
 
