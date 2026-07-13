@@ -2,6 +2,12 @@
 promotedFrom: observation:run-test-claimed-done-flaky-under-full-suite-2026-07-10
 ---
 
+## RE-SCOPED 2026-07-13 — CI-timeout constraint + the ENOTEMPTY half is already fixed
+
+This task was mis-scoped for CI in two ways, now corrected (see `Done when` + Prompt step 4):
+1. **The "20 consecutive full-suite runs" acceptance is un-CI-able.** ~5min/suite × 20 = ~100min, which exceeds the `timeout-minutes: 120` per-leg cap once agent reasoning/edits are added, so the leg TIMES OUT every attempt (confirmed live: run 29235819078's leg hit exactly 2h0m and was reaped, losing all WIP — a hard SIGKILL pushes nothing to a branch). Re-scoped to **3 consecutive `build && test` runs** (bounded, in-cap).
+2. **The broader half (the ENOTEMPTY teardown race) is ALREADY FIXED** on main by the git-auto-gc-off change in `gitEnv` (commit `4fb7d87d`, 2026-07-13) — disable `gc.auto`/`maintenance.auto` in test fixtures so no background repack races the teardown. So this task's remaining scope is: verify whether the `claimed-done` assertion still flakes at all on current main; if not, record the discharge (pointing at `4fb7d87d`) rather than inventing a fix.
+
 ## Related findings (folded in 2026-07-12 — the flake is BROADER than one assertion)
 
 Live lifecycle run `29206312575` gave concrete reproductions showing this is not confined to the `run.test.ts` `claimed-done` line. Under the `max-parallel: 4` fan-out (4 full `pnpm -r test` suites at once), the SAME class of full-suite-parallel flakiness red-bounced FIVE otherwise-fine advance-propose legs, on DIFFERENT test files each time, all via a fixture-teardown race:
@@ -32,9 +38,10 @@ Scope:
 - Non-goals: refactoring `run` orchestration; changing unrelated tests; changing the acceptance gate itself.
 
 Done when:
-- The specific assertion passes reliably under `pnpm -r test` across at least 20 consecutive full-suite runs locally (record the count in the PR/findings).
+- The specific assertion passes reliably under `pnpm -r build && pnpm -r test` across **3 consecutive full-suite runs** (record the count in the PR/findings). NOTE (re-scoped 2026-07-13): the original "20 consecutive runs" is UN-CI-ABLE — 20× a ~5min suite is ~100min, over the `timeout-minutes: 120` per-leg cap once agent overhead is added, so it times out every time and loses all WIP (a hard SIGKILL saves nothing to a branch). 3 runs is a bounded, in-cap confidence check; if a human wants a deeper soak they can run more locally.
 - `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 - A short note in the test (or a sibling findings file) explains WHY the hardening is there, so a future reader doesn't undo it.
+- **If the flake NO LONGER REPRODUCES** on current main across the 3-run check (the ENOTEMPTY teardown race — the broader half of this task — is ALREADY fixed on main by the git-auto-gc-off root fix in `gitEnv`, commit `4fb7d87d`, and the `claimed-done` assertion may have been an adjacent face of the same contention): this task's remaining deliverable is to VERIFY + RECORD that (a findings note confirming the 3-run green + pointing at the gc-fix as the discharging artifact), NOT to invent a code change. Do not manufacture a fix for a flake that no longer bites.
 
 ## Prompt
 
@@ -46,7 +53,7 @@ Done when:
 > 1. First reproduce the flake locally under full-suite parallelism and record the recipe + observed failure rate. Do not fix blind.
 > 2. Diagnose the actual cause: racy wait/poll in the test, vitest parallelism starving spawned subprocesses, or tmpdir/filesystem contention.
 > 3. Prefer fixing by tightening synchronisation in the test (await the real state transition rather than a fixed timeout or racy poll). If that alone is insufficient, fall back to a LOCAL carve-out (e.g. mark just this file non-concurrent, isolate its tmpdir, give it its own pool/shard). Do NOT globally lower test concurrency. Do NOT touch `run` orchestration logic.
-> 4. Verify by running `pnpm -r test` at least 20 times consecutively and confirming the assertion is stable; record the count.
+> 4. Verify by running `pnpm -r build && pnpm -r test` **3 times consecutively** (NOT 20 — 20× exceeds the CI per-leg `timeout-minutes` cap and would lose all work to a hard SIGKILL) and confirming the assertion is stable; record the count. FIRST check whether the flake still reproduces AT ALL on current main: the ENOTEMPTY teardown race (the broader half of this task) is already fixed by the git-auto-gc-off change in `gitEnv` (commit `4fb7d87d`), and the `claimed-done` assertion may have been an adjacent face of the same full-suite contention. If 3 consecutive `build && test` runs are GREEN with no code change, the flake is already discharged — write a findings note recording that (pointing at `4fb7d87d`) and finish; do NOT invent a fix for a flake that no longer bites.
 > 5. Leave a short in-code or sibling-findings note explaining WHY the hardening exists, so it isn't reverted later.
 > 6. Final gate: `pnpm format` then confirm `pnpm -r build && pnpm -r test && pnpm format:check` is green.
 >
