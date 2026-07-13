@@ -1,6 +1,7 @@
 ---
 title: skills-add-vendor-incur-agents-map — in-scope decisions
 created: 2026-07-13
+needsAnswers: true
 ---
 
 # Decisions recorded while implementing `skills-add-vendor-incur-agents-map`
