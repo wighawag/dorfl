@@ -89,3 +89,7 @@ Retiring `bounceToStuckLock` would instantly falsify all 84 `stuckLockOnArbiter(
 ## Requeue 2026-07-13
 
 Requeued after re-splitting into PR-2a (this, the mechanism) + PR-2b (the churn) with all four gaps answered (D1 itemPath probe, D2 all-three-producers, D3 exit-code policy, green-split rule). --reset: the stopped run produced no work branch.
+
+## Requeue 2026-07-13
+
+Requeued (continue) after resolving the integration rebase conflict in needs-attention.ts (merge of #364's envelope + PR-2a's optional itemPath). The branch now holds the cleanly-rebased tip; full suite green (223 files/3135 tests). Next claim re-hits the recovery path -> Gate 2 -> opens a reviewed PR.
