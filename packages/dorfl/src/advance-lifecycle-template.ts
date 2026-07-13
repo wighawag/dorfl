@@ -376,7 +376,11 @@ jobs:
     # SIGKILL only fires if the graceful save itself wedges. Editing
     # \`dorfl.json\` flips BOTH the internal deadline AND this cap on the
     # next tick — no \`install-ci\` re-run, no baked-in YAML number.
-    timeout-minutes: \${{ needs.enumerate.outputs.githubTimeout }}
+    # A job output is always a STRING; \`timeout-minutes\` needs an INTEGER, so
+    # coerce it with \`fromJson(...)\` (the same pattern the \`item\` matrix uses).
+    # A raw \`\${{ ... }}\` substitution makes GitHub reject it ("Unexpected
+    # value '45'").
+    timeout-minutes: \${{ fromJson(needs.enumerate.outputs.githubTimeout) }}
     strategy:
       # Independent PRs: one failing item must NOT cancel the others.
       fail-fast: false
@@ -441,8 +445,9 @@ jobs:
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     # Per-leg wall-clock cap: the DYNAMIC GitHub backstop the enumerate job
-    # emits (see advance-propose for the rationale).
-    timeout-minutes: \${{ needs.enumerate.outputs.githubTimeout }}
+    # emits (see advance-propose for the rationale). \`fromJson(...)\` coerces the
+    # string job output to the INTEGER \`timeout-minutes\` requires.
+    timeout-minutes: \${{ fromJson(needs.enumerate.outputs.githubTimeout) }}
     strategy:
       # Independent landings: one failing item must NOT cancel the others; a
       # loser of the CAS race re-rebases + re-gates + retries.
@@ -842,15 +847,16 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'the `enumerate` job must compute `githubTimeout` as ' +
 		'`agentDeadlineMinutes + checkpointHeadroomMinutes` (the backstop is ' +
 		'DELIBERATELY head-room above the internal deadline).');
-	require('propose-uses-dynamic-github-timeout', /advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+	require('propose-uses-dynamic-github-timeout', /advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
 		text,
 	), 'the `advance-propose` job must set `timeout-minutes: ${{ ' +
-		'needs.enumerate.outputs.githubTimeout }}` (the DYNAMIC GitHub backstop, ' +
-		'not a baked-in number).');
-	require('merge-uses-dynamic-github-timeout', /advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+		'fromJson(needs.enumerate.outputs.githubTimeout) }}` (the DYNAMIC GitHub ' +
+		'backstop, fromJson-coerced to an integer, not a baked-in number).');
+	require('merge-uses-dynamic-github-timeout', /advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
 		text,
 	), 'the `advance-merge` job must set `timeout-minutes: ${{ ' +
-		'needs.enumerate.outputs.githubTimeout }}` (the DYNAMIC GitHub backstop).');
+		'fromJson(needs.enumerate.outputs.githubTimeout) }}` (the DYNAMIC GitHub ' +
+		'backstop, fromJson-coerced to an integer).');
 	// A baked static `timeout-minutes: <number>` on an agent-leg job is the
 	// retired `legTimeoutMinutes` render — forbid it so a future edit cannot
 	// silently re-introduce the drift the dynamic backstop is fixing.

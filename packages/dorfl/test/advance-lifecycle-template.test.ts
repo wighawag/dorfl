@@ -214,14 +214,16 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			),
 		).toBe(false);
 		// Both propose + merge agent-legs consume the enumerate job's dynamic
-		// `githubTimeout` output via `${{ needs.enumerate.outputs.githubTimeout }}`.
+		// `githubTimeout` output via
+		// `${{ fromJson(needs.enumerate.outputs.githubTimeout) }}` — fromJson-coerced
+		// because a job output is a STRING but `timeout-minutes` needs an INTEGER.
 		expect(
-			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
 				text,
 			),
 		).toBe(true);
 		expect(
-			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
 				text,
 			),
 		).toBe(true);
