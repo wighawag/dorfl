@@ -3,6 +3,7 @@ import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {run, git} from '../../src/git.js';
 import {mirrorPath} from '../../src/repo-mirror.js';
+import {parseFrontmatter} from '../../src/frontmatter.js';
 import {
 	WORK_FOLDER_NAME,
 	workFolderName,
@@ -489,6 +490,56 @@ export function stuckLockOnArbiter(
 		return false;
 	}
 	return /^state:\s*stuck\s*$/m.test(show.stdout);
+}
+
+/**
+ * Is the TASK `slug`'s question sidecar surfaced on `<arbiter>/main`? Reads
+ * `work/questions/task-<slug>.md` off the arbiter's `main` (a task's canonical
+ * sidecar path via `sidecarPathFor`). The `main`-visible complement of
+ * {@link stuckLockOnArbiter}, added for the PR-1 surface primitive (task
+ * `bounce-surfaces-stuck-sidecar-and-releases-lock`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`, story #1). PR-2
+ * migrates the 137 `stuckLockOnArbiter(...).toBe(true)` assertions to use this
+ * + {@link needsAnswersOnArbiterMain}; PR-1 only ADDS the helper and uses it
+ * in the new primitive tests.
+ */
+export function sidecarSurfacedOnArbiterMain(
+	cwd: string,
+	slug: string,
+	type: 'task' | 'spec' | 'observation' = 'task',
+): boolean {
+	return pathOnArbiterMain(cwd, `work/questions/${type}-${slug}.md`);
+}
+
+/**
+ * Is the TASK `slug`'s item body carrying `needsAnswers: true` on
+ * `<arbiter>/main`? Reads the body off the arbiter's `main` and probes the
+ * flag via {@link parseFrontmatter}. Sibling of {@link sidecarSurfacedOnArbiterMain}
+ * added for the PR-1 surface primitive (spec story #1); PR-2 migrates the
+ * existing 137 assertions to the (stuckLock=false) + sidecar-on-main +
+ * needsAnswers-on-main triple.
+ */
+export function needsAnswersOnArbiterMain(
+	cwd: string,
+	slug: string,
+	status:
+		| 'backlog'
+		| 'pre-backlog'
+		| 'in-progress'
+		| 'needs-attention'
+		| 'done' = 'backlog',
+): boolean {
+	run('git', ['fetch', '-q', 'arbiter'], cwd, {env: gitEnv()});
+	const show = run(
+		'git',
+		['show', `arbiter/main:work/${fixtureFolderRel(status)}/${slug}.md`],
+		cwd,
+		{env: gitEnv()},
+	);
+	if (show.status !== 0) {
+		return false;
+	}
+	return parseFrontmatter(show.stdout).needsAnswers === true;
 }
 
 /**

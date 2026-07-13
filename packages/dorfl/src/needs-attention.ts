@@ -22,6 +22,15 @@ import {
 import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
 import {workBranchRef} from './slug-namespace.js';
 import {
+	appendQuestions,
+	newSidecar,
+	parseSidecar,
+	serialiseSidecar,
+	sidecarPathFor,
+	type NewQuestion,
+} from './sidecar.js';
+import {parseFrontmatter, setNeedsAnswersMarker} from './frontmatter.js';
+import {
 	retryWithBackoff,
 	realSleep,
 	type BackoffOptions,
@@ -1369,6 +1378,293 @@ function prepareTreelessMoveCommit(params: {
 
 /** The heading that opens an appended requeue handoff note in the item body. */
 const REQUEUE_HEADING_PREFIX = '## Requeue';
+
+// --- Tree-less SURFACE primitive (PR-1, spec
+// `surface-stuck-as-questions-and-retire-stuck-lock-state`, task
+// `bounce-surfaces-stuck-sidecar-and-releases-lock`) --------------------
+
+/**
+ * PR-1 ADDITIVE primitive (task `bounce-surfaces-stuck-sidecar-and-releases-lock`).
+ * The 2-file SIBLING of {@link prepareTreelessMoveCommit}: pure git plumbing
+ * (`hash-object` / scratch-index `update-index` / `write-tree` /
+ * `commit-tree`, NEVER touches the caller's index/HEAD/working tree) that in
+ * ONE commit off {@link base} both
+ *
+ *   1. writes or appends to the item's `work/questions/<type>-<slug>.md`
+ *      sidecar (see {@link sidecarPathFor}) a `stuck`-kind entry carrying the
+ *      bounce {@link reason} plus any agent-surfaced {@link questions}, and
+ *   2. sets `needsAnswers: true` on the item body at {@link itemPath} (via
+ *      {@link setNeedsAnswersMarker}).
+ *
+ * The current sidecar (if any) and the current item body are read as BLOBS off
+ * `<arbiter>/main` (via {@link catBlob}) — no working tree required and no
+ * dependency on the cwd's `HEAD` matching `main`. That is what makes this the
+ * tree-less path's surface primitive: a `applyTreelessNeedsAttentionTransition`
+ * caller (`continue-push-failure` / rebase-conflict) has NO writable-`main`
+ * checkout, so `persistSurfacedQuestions` (working-tree bound) cannot be reused;
+ * the pure CONTENT builders (`newSidecar` / `appendQuestions` /
+ * `serialiseSidecar` / `setNeedsAnswersMarker`) ARE reused, only the commit
+ * mechanism differs (spec decision #7).
+ *
+ * Returns the throwaway ref + commit sha, exactly like {@link
+ * prepareTreelessMoveCommit}, so the SAME {@link runTreelessLedgerMove} CAS loop
+ * publishes the surface commit through the shared write seam. The
+ * surface-first / release-second ordering + `main`-authoritative crash-safety
+ * (spec decision #4) come FREE from routing through that loop — the caller wires
+ * the release into a `finally` AFTER a successful publish (see the harness
+ * {@link surfaceStuckToNeedsAttention}).
+ *
+ * DECISION — sidecar entry shape for a reason-only bounce (build-time, PR-1):
+ * every bounce always appends ONE engine-authored `stuck`-kind envelope entry
+ * whose `question` names the item and whose `context` is the {@link reason}
+ * prose, THEN any {@link questions} the agent surfaced. So a reason-only bounce
+ * (no agent questions) still surfaces exactly ONE entry a human can answer, and
+ * the agent's own questions (when present) are appended AFTER it, verbatim. The
+ * envelope entry is what turns a raw exit reason into a human-drainable
+ * question; the extra entries are the LLM prose the spec's decision #2 keeps
+ * untouched. Alternative considered — treating an empty `questions` array as a
+ * NO-OP surface — REJECTED because that is the spec's `stuck` retirement
+ * problem all over again (a bounced item with no on-`main` outcome).
+ * Alternative considered — dropping the envelope when agent questions are given
+ * — REJECTED because the reason is engine-authored ground truth; the agent's
+ * questions are advisory prose ABOVE it, not a replacement for it.
+ *
+ * PR-1 boundary: this primitive is EXERCISED BY TESTS ONLY; it is NOT yet
+ * called from any bounce seam. Wiring `applyNeedsAttentionTransition` /
+ * `applyTreelessNeedsAttentionTransition` to it — and migrating the existing
+ * `stuckLockOnArbiter(...).toBe(true)` assertions — is the follow-up PR-2 task
+ * `bounce-atomic-cutover-retire-stuck-lock`.
+ */
+export function prepareTreelessSurfaceCommit(params: {
+	/** The origin cwd whose object store the plumbing writes into (never a target). */
+	cwd: string;
+	/** The slug (used only to name the throwaway ref). */
+	slug: string;
+	/** The namespaced item identity (e.g. `task:foo`); drives the sidecar path. */
+	item: string;
+	/** The item body's on-`main` path (e.g. `work/tasks/ready/foo.md`). */
+	itemPath: string;
+	/** The base commit (`<arbiter>/main`) the surface commit parents on. */
+	base: string;
+	/** The bounce reason (envelope entry's context). */
+	reason: string;
+	/** Any agent-surfaced questions to append after the envelope. */
+	questions?: NewQuestion[];
+	/** The commit subject for the surface commit. */
+	commitMessage: string;
+	/** The throwaway ref namespace (`refs/dorfl/<refNamespace>/<slug>`). */
+	refNamespace: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): {ref: string; commit: string} {
+	const {
+		cwd,
+		slug,
+		item,
+		itemPath,
+		base,
+		reason,
+		questions,
+		commitMessage,
+		refNamespace,
+		env,
+	} = params;
+
+	const sidecarPath = sidecarPathFor(item);
+
+	// Read the item body off `main` as a BLOB — never off the cwd working tree,
+	// which the tree-less caller does not have on `main`. `catBlob` throws when
+	// the path is not tracked, which is the honest signal: the tree-less bounce
+	// only fires against an item whose body already rests on `main` (the caller's
+	// plan should short-circuit `missing` beforehand).
+	const itemBody = catBlob(`${base}:${itemPath}`, cwd, env);
+	const flagged = setNeedsAnswersMarker(itemBody, true);
+
+	// Defense-in-depth (the `sidecar-without-needsAnswers` guard, mirrored from
+	// `persistSurfacedQuestions`): if the marker did not actually parse back as
+	// `true`, refuse to write the sidecar rather than tear the
+	// `needsAnswers ⟺ sidecar` invariant.
+	if (parseFrontmatter(flagged).needsAnswers !== true) {
+		throw new Error(
+			`prepareTreelessSurfaceCommit: could not set needsAnswers:true on '${itemPath}' ` +
+				`for '${item}' — refusing to surface without the flag.`,
+		);
+	}
+
+	// Compose the entries: an engine-authored envelope carrying the reason, then
+	// any agent-surfaced questions (stamped `stuck`-kind if the caller left the
+	// kind unset — this IS the stuck-surface path).
+	const envelope: NewQuestion = {
+		question: `'${item}' was bounced — how should we proceed?`,
+		context: reason,
+		kind: 'stuck',
+	};
+	const surfaced: NewQuestion[] = (questions ?? []).map((q) => ({
+		...q,
+		kind: q.kind ?? 'stuck',
+	}));
+	const additions: NewQuestion[] = [envelope, ...surfaced];
+
+	// APPEND to an existing sidecar on `main` (never overwrite) or CREATE it
+	// first-pass — the same append-never-overwrite rule the working-tree surface
+	// path enforces. Read the current sidecar off `main` as a BLOB.
+	const sidecarExists = pathInCommit(base, sidecarPath, cwd, env);
+	const model = sidecarExists
+		? appendQuestions(
+				parseSidecar(catBlob(`${base}:${sidecarPath}`, cwd, env)),
+				additions,
+			)
+		: newSidecar(item, additions);
+	const sidecarContent = serialiseSidecar(model);
+
+	// Hash both blobs INTO the cwd's object store (no working tree write).
+	const itemBlob = hashObject(flagged, cwd, env);
+	const sidecarBlob = hashObject(sidecarContent, cwd, env);
+
+	// A scratch index so `read-tree` / `update-index` never touch the caller's
+	// index. `--add --cacheinfo` both ADDS a new entry and REPLACES an existing
+	// one (so a re-surface that rewrites the sidecar path is a no-op replace).
+	const scratchIndex = join(
+		tmpdir(),
+		`dorfl-${refNamespace}-${process.pid}-${Date.now()}.index`,
+	);
+	const withIndex: NodeJS.ProcessEnv = {
+		...(env ?? process.env),
+		GIT_INDEX_FILE: scratchIndex,
+	};
+	try {
+		gitHard(['read-tree', base], cwd, withIndex);
+		gitHard(
+			[
+				'update-index',
+				'--add',
+				'--cacheinfo',
+				`100644,${itemBlob},${itemPath}`,
+			],
+			cwd,
+			withIndex,
+		);
+		gitHard(
+			[
+				'update-index',
+				'--add',
+				'--cacheinfo',
+				`100644,${sidecarBlob},${sidecarPath}`,
+			],
+			cwd,
+			withIndex,
+		);
+		const tree = runHard(['write-tree'], cwd, withIndex).stdout.trim();
+		const commit = runHard(
+			['commit-tree', tree, '-p', base, '-m', commitMessage],
+			cwd,
+			env,
+		).stdout.trim();
+		const ref = `refs/dorfl/${refNamespace}/${slug}`;
+		gitHard(['update-ref', ref, commit], cwd, env);
+		return {ref, commit};
+	} finally {
+		rmSync(scratchIndex, {force: true});
+	}
+}
+
+export interface SurfaceStuckToNeedsAttentionOptions {
+	/**
+	 * The working clone the move is ORIGINATED from — purely the ORIGIN SOURCE
+	 * (it resolves the arbiter remote + holds the object store the plumbing
+	 * writes into), NEVER a write TARGET. Tree-less: the cwd index/HEAD/working
+	 * tree are never touched.
+	 */
+	cwd: string;
+	/** The slug of the item to surface as a stuck question. */
+	slug: string;
+	/**
+	 * The item body's on-`main` path (e.g. `work/tasks/ready/foo.md`). Provided
+	 * by the caller (parity with `persistSurfacedQuestions`); PR-1 is the raw
+	 * primitive, so it does not encode a folder-resolution policy.
+	 */
+	itemPath: string;
+	/** The namespaced item identity. Defaults to `task:${slug}`. */
+	item?: string;
+	/** Why the item is stuck (bounce reason — envelope entry's context). */
+	reason: string;
+	/** Any questions the agent surfaced (appended after the envelope). */
+	questions?: NewQuestion[];
+	/** The arbiter remote the surface commit is CAS-published to. REQUIRED. */
+	arbiter: string;
+	env?: NodeJS.ProcessEnv;
+	note?: (message: string) => void;
+}
+
+export interface SurfaceStuckToNeedsAttentionResult {
+	/** True iff the surface commit landed on `<arbiter>/main`. */
+	surfaced: boolean;
+	/** True iff the per-item lock ref was released (after a successful surface). */
+	released: boolean;
+	/** When NOT surfaced, why (missing item, contention exhausted). */
+	reasonNotSurfaced?: string;
+}
+
+/**
+ * The PR-1 thin HARNESS around {@link prepareTreelessSurfaceCommit}: run it
+ * through the EXISTING {@link runTreelessLedgerMove} CAS loop, then release the
+ * per-item lock. Ordering is LOAD-BEARING and INHERITED from that harness —
+ * the surface commit lands on `<arbiter>/main` FIRST, and the lock release only
+ * fires on a successful publish. `main` is authoritative on crash recovery
+ * (spec decision #4).
+ *
+ * PR-1 boundary: this is EXERCISED BY TESTS ONLY. Wiring the seams to call it
+ * is the PR-2 task `bounce-atomic-cutover-retire-stuck-lock`.
+ */
+export async function surfaceStuckToNeedsAttention(
+	options: SurfaceStuckToNeedsAttentionOptions,
+): Promise<SurfaceStuckToNeedsAttentionResult> {
+	const note = options.note ?? (() => {});
+	const {cwd, slug, itemPath, reason, questions, arbiter, env} = options;
+	const item = options.item ?? `task:${slug}`;
+
+	const surfaced = await runTreelessLedgerMove({
+		cwd,
+		slug,
+		arbiter,
+		kind: 'needs-attention',
+		onContended: 'surface',
+		explicitMainRefspec: true,
+		env,
+		note,
+		plan: (base) => {
+			if (!pathInCommit(base, itemPath, cwd, env)) {
+				return 'missing';
+			}
+			return prepareTreelessSurfaceCommit({
+				cwd,
+				slug,
+				item,
+				itemPath,
+				base,
+				reason,
+				questions,
+				commitMessage: `surface ${item} (stuck): ${reason}`,
+				refNamespace: 'surface-stuck',
+				env,
+			});
+		},
+	});
+
+	if (!surfaced) {
+		return {
+			surfaced: false,
+			released: false,
+			reasonNotSurfaced:
+				`surface for '${item}' did not land on ${arbiter}/main ` +
+				'(item missing on main, or contention exhausted after retries).',
+		};
+	}
+
+	// Surface-first / release-second: only reach here on a successful publish.
+	const rel = await releaseItemLock({item, cwd, arbiter, env});
+	const released = rel.outcome === 'released' || rel.outcome === 'not-held';
+	return {surfaced: true, released};
+}
 
 /**
  * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
