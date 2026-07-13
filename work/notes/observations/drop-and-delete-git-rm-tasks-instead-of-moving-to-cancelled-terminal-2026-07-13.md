@@ -20,15 +20,19 @@ So a TASK that is given up on leaves by DELETION (history-only), not by moving t
 - **The `cancelled/` terminal is half-used.** The folder + layout key + glossary entry all exist, but the disposal verbs never route a task there, so in practice a cancelled task vanishes into git history rather than resting in `tasks/cancelled/`. An adopter reading `CONTEXT.md` would expect cancelled tasks to be `ls`-able; they are not.
 - **Auditability.** A retained `cancelled/<slug>.md` with `reason:` in the body is easier to find, review, and reverse than a `git rm` buried in history. For an autonomous loop that cancels tasks, the durable record is the safer default.
 
-## The distinction to preserve (NOT a bug to "fix" by renaming)
+## The distinction to preserve (NOT a bug to "fix" by renaming the FOLDERS)
 
-`CONTEXT.md:71-74` deliberately keeps three senses of the word: `drop` (the verb = `git rm`), `dropped` (the SPEC terminal folder), `cancelled` (the TASK terminal folder, a DELIBERATELY different word so a task + spec sharing a slug cannot collide on one terminal path, per the work-tree-taxonomy ADR). So the fix is NOT to rename `cancelled`->`drop` (that re-introduces the collision and overloads `drop`); it is to make the task-disposal PATH `git mv` to `tasks/cancelled/` instead of `git rm`.
+`CONTEXT.md:71-74` deliberately keeps three senses: `drop` (the verb = `git rm`), `dropped` (the SPEC terminal folder), `cancelled` (the TASK terminal folder, a DELIBERATELY different word so a task + spec sharing a slug cannot collide on one terminal path, per the work-tree-taxonomy ADR). So the fix is NOT to rename the FOLDER words; it is to make the task-disposal PATH `git mv` to `tasks/cancelled/` instead of `git rm`.
+
+## Update: the APPLY path is now resolved by the surface-stuck spec (delete -> dispose)
+
+The APPLY-rung half of this is decided in `work/specs/proposed/surface-stuck-as-questions-and-retire-stuck-lock-state.md` resolved decision #5: the apply DISPOSITION TOKEN `delete` (channel `deleteReason`) is renamed to `dispose` (`disposeReason`) and made REGIME-POLYMORPHIC — dispose a task by `git mv -> tasks/cancelled/`, an observation by `git rm`, a spec by `git mv -> specs/dropped/`. So a task can never be hard-deleted, only disposed to its terminal. THIS observation now narrows to the STANDALONE `drop <slug>` CLI verb, which still `git rm`s a task and is NOT covered by that spec.
 
 ## Open questions
 
-1. **Should the standalone `drop <slug>` verb move a TASK to `tasks/cancelled/` (git mv, retained) instead of `git rm`?** Or is `drop` DEFINED as "the direct hard-delete regardless of type" (in which case a SEPARATE `cancel <slug>` verb is the task-terminal move, and `drop` stays `git rm`)? I.e. is the gap "`drop` is mis-implemented for tasks" or "`drop` is fine, but there is no `cancel` verb"?
-2. **Same question for the apply `delete` outcome:** when the apply rung disposes of a bounced TASK, should it `git mv`->`cancelled/` (retained) rather than `git rm`? (The `surface-stuck-...` spec's resolved decision #5 already takes the position that the APPLY path should move a task to `cancelled/`; this observation asks whether the STANDALONE `drop` verb should match, for consistency.)
-3. **Is this in scope for the `surface-stuck-...` spec, or its own slice?** The spec fixes the APPLY path; the standalone `drop` verb is arguably a separate, smaller consistency fix. Confirm whether to fold or split.
+1. **Should the standalone `drop <slug>` verb ALSO become regime-polymorphic** (a task → `git mv tasks/cancelled/`, retained), MIRRORING the apply `dispose` outcome the surface-stuck spec introduces? Or is the human-invoked `drop` DEFINED as "the direct hard-delete regardless of type" (in which case a SEPARATE `cancel <slug>` verb is the task-terminal move, and `drop` stays `git rm`)? I.e. is the gap "`drop` should match `dispose`" or "`drop` is fine, but there is no `cancel` verb"?
+2. **Should the verb be RENAMED for consistency** now that the apply token is `dispose`? (E.g. a `dispose <slug>` verb, with `drop` kept only if a true hard-`git rm` human escape hatch is wanted.) Weigh against churn on an existing verb.
+3. **Fold or split from `surface-stuck-...`?** That spec fixes the APPLY path (`delete`→`dispose`); this standalone-verb consistency fix is arguably a separate, smaller slice. Confirm fold-vs-split.
 
 ## Refs
 
