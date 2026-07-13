@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
+import type {ReviewGate, ReviewVerdict} from '../src/review-gate.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -55,6 +56,24 @@ afterEach(() => {
 });
 
 const ARBITER = 'arbiter';
+
+/** A stubbed review gate returning a fixed verdict (no real model). */
+function stubGate(verdict: ReviewVerdict): ReviewGate {
+	return async () => verdict;
+}
+const APPROVE: ReviewVerdict = {
+	verdict: 'approve',
+	findings: [{severity: 'non-blocking', question: 'a nit to capture'}],
+	review: 'Approved. The recovered kept commit reaches the task goal.',
+};
+const BLOCK: ReviewVerdict = {
+	verdict: 'block',
+	findings: [
+		{severity: 'blocking', question: 'the diff does not reach the task goal'},
+	],
+};
+/** A verify that passes on the rebased tip (the kept commit's canary content). */
+const PASS_VERIFY = 'test "$(cat feature.txt)" = "the work"';
 
 /**
  * Stand a repo up exactly as the answered-merge apply-rung will hand it to
@@ -244,5 +263,109 @@ describe('recoverAlreadyCommitted — `freshWorktreeGate` re-verifies the REBASE
 		// The integrated tip is NOT the original (main moved → rebase produced a
 		// new sha), but the WORK from the kept commit landed.
 		expect(gitIn(['rev-parse', `${ARBITER}/main`], repo).trim()).not.toBe(tip);
+	});
+});
+
+/**
+ * Task `committed-recovery-always-reviews` (this fix): a stranded already-
+ * complete branch is NOT trusted as already-reviewed — its earlier attempt's PR
+ * never merged, and Gate 2 may never have run on it. So when `review` is on, the
+ * committed-recovery tail MUST run Gate 2 on the rebased tip (the SAME reasoning
+ * that forces the re-verify: `<arbiter>/main` moved, the merged tree is new). A
+ * BLOCK routes to needs-attention and NEVER integrates; an APPROVE integrates and
+ * folds the per-run nits observation into the kept commit.
+ */
+describe('recoverAlreadyCommitted — Gate 2 review runs on the rebased tip (never trusts "already reviewed")', () => {
+	it('review on + BLOCK ⇒ routes to needs-attention; `<arbiter>/main` never receives the kept commit', async () => {
+		const {repo, tip} = await seedCommittedRecovery('delta');
+
+		const result = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'delta',
+			source: 'tasks-ready',
+			recovering: false,
+			committedRecovery: true,
+			mode: 'merge',
+			freshWorktreeGate: true,
+			verify: PASS_VERIFY,
+			review: true,
+			reviewGate: stubGate(BLOCK),
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('review-blocked');
+		expect(result.routedToNeedsAttention).toBe(true);
+		// The kept commit did NOT land — a blocked review never integrates.
+		expect(existsOnArbiterMain(repo, 'done', 'delta')).toBe(false);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const isAncestor = spawnSync(
+			'git',
+			['merge-base', '--is-ancestor', tip, `${ARBITER}/main`],
+			{cwd: repo, env: gitEnv()},
+		);
+		expect(isAncestor.status).not.toBe(0);
+	});
+
+	it('review on + APPROVE ⇒ integrates the kept commit AND folds the per-run nits observation into it', async () => {
+		const {repo} = await seedCommittedRecovery('epsilon');
+
+		const result = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'epsilon',
+			source: 'tasks-ready',
+			recovering: false,
+			committedRecovery: true,
+			mode: 'merge',
+			freshWorktreeGate: true,
+			verify: PASS_VERIFY,
+			review: true,
+			reviewGate: stubGate(APPROVE),
+			env: gitEnv(),
+		});
+
+		expect(result.outcome).toBe('completed');
+		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
+		// The approve carried a non-blocking finding ⇒ a per-run `review-nits-*`
+		// observation was written and FOLDED into the kept commit that integrated
+		// (it reaches `<arbiter>/main`, not a separate commit).
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const obs = gitIn(
+			[
+				'ls-tree',
+				'-r',
+				'--name-only',
+				`${ARBITER}/main`,
+				'work/notes/observations/',
+			],
+			repo,
+		);
+		expect(obs).toMatch(/review-nits-epsilon-/);
+	});
+
+	it('review on with NO reviewGate wired ⇒ the recovery tail throws the config-error (the floor is never silently skipped)', async () => {
+		const {repo} = await seedCommittedRecovery('zeta');
+
+		// `review: true` but no gate wired is a wiring bug the core must NOT swallow
+		// into a silent skip — it throws, exactly like the build path.
+		await expect(
+			performIntegration({
+				cwd: repo,
+				arbiter: ARBITER,
+				slug: 'zeta',
+				source: 'tasks-ready',
+				recovering: false,
+				committedRecovery: true,
+				mode: 'merge',
+				freshWorktreeGate: true,
+				verify: PASS_VERIFY,
+				review: true,
+				// reviewGate intentionally OMITTED.
+				env: gitEnv(),
+			}),
+		).rejects.toThrow(/review is on but no review gate is configured/);
+		// Nothing landed — the throw happened before integrate.
+		expect(existsOnArbiterMain(repo, 'done', 'zeta')).toBe(false);
 	});
 });

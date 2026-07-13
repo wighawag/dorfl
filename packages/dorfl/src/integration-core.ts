@@ -689,6 +689,19 @@ export async function performIntegration(
 			recoveryRebaseJitterMs: input.recoveryRebaseJitterMs,
 			recoveryRebaseSleep: input.recoveryRebaseSleep,
 			recoveryRebaseRandom: input.recoveryRebaseRandom,
+			// GATE-2 REVIEW on the recovery path (task
+			// `committed-recovery-always-reviews`): a stranded already-complete
+			// branch is NOT "already reviewed" — its earlier attempt's PR never
+			// merged and Gate 2 may never have run on it. So when `review` is on we
+			// MUST run Gate 2 on the rebased tip here too (the SAME reasoning that
+			// forces the re-verify: `<arbiter>/main` moved, the merged tree is new).
+			// Pass the whole `input` so the recovery tail can call `runGate2Review`
+			// with the identical gate/model/watch/round wiring the build path uses.
+			input,
+			// PR BODY on the recovery path: the recovery has NO fresh agent output
+			// (no rebuild), so carry whatever `body` the caller supplied so the PR
+			// gets a description instead of degrading to a blank `gh --fill`.
+			body: input.body,
 			// Answered-merge land (task `committed-recovery-honours-fresh-worktree-gate`,
 			// spec `land-time-reverify-and-parallel-merge-ceiling`): the apply-rung
 			// dispatches an answered `merge` through this committed-recovery tail (the
@@ -1657,6 +1670,23 @@ async function recoverAlreadyCommitted(params: {
 	/** Acceptance gate config for the fresh gate (mirrors the build path). */
 	verify?: VerifyConfig;
 	/**
+	 * The full integration input, threaded so the recovery tail can run Gate 2
+	 * (`runGate2Review`) with the identical gate/model/watch/round wiring the
+	 * build path uses (task `committed-recovery-always-reviews`). Gate 2 runs on
+	 * the rebased tip when `input.review` is on and the fresh gate ran green — a
+	 * stranded already-complete branch is NOT trusted as already-reviewed (its
+	 * earlier attempt never merged). Optional so the pre-existing non-review
+	 * callers (and tests) that do not thread it stay byte-identical.
+	 */
+	input?: IntegrationCoreInput;
+	/**
+	 * The propose-mode PR BODY (task `committed-recovery-always-reviews`): the
+	 * recovery has NO fresh agent output (no rebuild), so the caller passes
+	 * whatever advisory body it has so the PR carries a description instead of a
+	 * blank `gh --fill`. Undefined ⇒ today's `--fill` fallback.
+	 */
+	body?: string;
+	/**
 	 * Autonomous needs-attention surface (mirrors the build path): when set, a
 	 * red rebased-tip gate cherry-picks the bounce onto `main` + pushes the
 	 * work branch (observable + cross-machine). Unset ⇒ local-only routing.
@@ -1823,13 +1853,23 @@ async function recoverAlreadyCommitted(params: {
 	// clean-rebase-but-broken merge. With `freshWorktreeGate` UNSET (the original
 	// stranded-recovery caller, whose pre-strand build already gated) this whole
 	// block is skipped and behaviour is byte-identical to before.
+	// Carry an approved Gate-2 verdict (when review ran) so its authored `review`
+	// prose is posted as a PR comment AFTER the integrate below — the SAME audit
+	// trail the build path keeps (task `committed-recovery-always-reviews`).
+	let approvedVerdict: ReviewVerdict | undefined;
 	if (params.freshWorktreeGate && !params.skipVerify) {
 		const tip = (
 			await gitSoft(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, env)
 		).stdout.trim();
-		// No `review:` callback here: the recovery tail re-verifies an already-
-		// reviewed, already-committed result, so Gate-2 review semantics do not
-		// apply on this path.
+		// GATE-2 REVIEW callback (task `committed-recovery-always-reviews`): when
+		// `input.review` is on, run Gate 2 on the rebased tip AFTER the green verify
+		// — EXACTLY the build path's fresh-gate `review:` callback. A stranded
+		// already-complete branch is NOT trusted as already-reviewed (its earlier
+		// attempt's PR never merged, and Gate 2 may never have run on it); the same
+		// reasoning that forces the re-verify here (`<arbiter>/main` moved, so the
+		// merged tree is new) forces the re-review. The needs-attention ROUTING
+		// targets `cwd` (the work branch + ledger), identical to the build path.
+		const reviewInput = params.input;
 		const gated = await runFreshWorktreeGate({
 			cwd,
 			commit: tip,
@@ -1837,6 +1877,19 @@ async function recoverAlreadyCommitted(params: {
 			verify: params.verify,
 			env,
 			note,
+			review:
+				reviewInput?.review === true
+					? (reviewCwd) =>
+							runGate2Review({
+								reviewCwd,
+								input: reviewInput,
+								slug,
+								branch,
+								cwd,
+								env,
+								note,
+							})
+					: undefined,
 		});
 		if (!gated.passed) {
 			const outcome: IntegrationCoreOutcome =
@@ -1871,6 +1924,34 @@ async function recoverAlreadyCommitted(params: {
 						'override.',
 			};
 		}
+		// GATE-2 REVIEW outcome on the rebased tip: a BLOCK routes to needs-attention
+		// exactly as the build path (only the reviewed tree moved, not the routing).
+		// On APPROVE: carry the verdict for the post-integrate PR comment and write
+		// the per-run non-blocking-nits observation. UNLIKE the build path this branch
+		// integrates the ALREADY-committed kept tip (no upcoming done-move/commit to
+		// sweep the nits file into), so we FOLD the observation into the kept commit
+		// via `commit --amend` — mirroring the build path's fresh-gate amend so the
+		// nits still land in the SAME commit that integrates (no separate commit).
+		if (gated.review) {
+			if (gated.review.kind === 'blocked') {
+				return gated.review.result;
+			}
+			approvedVerdict = gated.review.verdict;
+			const nitsBefore = await stagedCaptureNotes(cwd, env);
+			writeReviewNitsObservation({
+				cwd,
+				slug,
+				findings: gated.review.verdict?.findings ?? [],
+				note,
+			});
+			await gitHard(['add', '-A'], cwd, env);
+			if (!(await nothingStaged(cwd, env))) {
+				const nitsAfter = await stagedCaptureNotes(cwd, env);
+				if (nitsAfter.length > nitsBefore.length) {
+					await gitHard(['commit', '-q', '--amend', '--no-edit'], cwd, env);
+				}
+			}
+		}
 	}
 
 	// Integrate the rebased kept commit through the SAME complete-transition
@@ -1883,12 +1964,27 @@ async function recoverAlreadyCommitted(params: {
 		(params.openPr
 			? bridgeProvider(params.openPr)
 			: selectProvider({arbiterUrl: await arbiterUrl(cwd, arbiter, env)}));
+	// PR TITLE + BODY on the recovery path (task `committed-recovery-always-
+	// reviews`): the stranded branch already holds the task in `work/done/`, so
+	// synthesise the SAME single-line `<type>(<slug>): <title>` PR title the build
+	// path does (from the done-resident task file, never agent text) and scaffold
+	// the task-pointer body around the caller-supplied advisory `body`. Undefined
+	// body ⇒ `composeProposeBody` returns undefined ⇒ the provider degrades to
+	// `gh --fill` (no regression); a supplied body gives the PR a real description
+	// instead of the blank one the recovery path used to open.
+	const prTitle = synthesiseProposeTitle({
+		type: (params.input?.type ?? DEFAULT_TYPE).trim() || DEFAULT_TYPE,
+		slug,
+		title: readTaskTitle(workItemPath(cwd, 'done', slug)),
+	});
 	const integration = await ledgerWrite.applyCompleteTransition({
 		arbiter,
 		branch,
 		mode,
 		provider,
 		noPR: params.noPR,
+		title: prTitle,
+		body: composeProposeBody({slug, body: params.body}),
 		deleteMergedHead: true,
 		cwd,
 		env,
@@ -1900,6 +1996,32 @@ async function recoverAlreadyCommitted(params: {
 					`(absorbed a moving ${arbiter}/main across ${attempt} re-fetch+re-` +
 					`rebase attempt${attempt === 1 ? '' : 's'}).`,
 	);
+	// Post the Gate-2 review as a PR comment (task `committed-recovery-always-
+	// reviews`): the SAME post-integrate audit trail the build path keeps — the
+	// approved verdict's authored `review` prose, on the opened PR. Advisory only
+	// (a block never reaches here — it returned above); the same URL/branch
+	// precedence the build path uses (parsed url wins; else a branch-resolved
+	// fallback when a PR opened but its url was unparseable). `postPRComment*`
+	// never throws. A clean no-op in merge mode / push-only propose (no PR).
+	if (approvedVerdict?.review !== undefined) {
+		if (integration.url !== undefined) {
+			const posted = provider.postPRComment({
+				cwd,
+				url: integration.url,
+				body: approvedVerdict.review,
+				env,
+			});
+			note(posted.instruction);
+		} else if (integration.requestOpened) {
+			const posted = provider.postPRCommentOnBranch({
+				cwd,
+				branch,
+				body: approvedVerdict.review,
+				env,
+			});
+			note(posted.instruction);
+		}
+	}
 	return {
 		outcome: 'completed',
 		routedToNeedsAttention: false,
