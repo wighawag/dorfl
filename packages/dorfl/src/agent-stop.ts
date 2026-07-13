@@ -1,5 +1,6 @@
 import {runAsync} from './git.js';
 import {JOB_RECORD_FILENAME} from './workspace.js';
+import type {NewQuestion} from './sidecar.js';
 
 /**
  * **The build-agent → runner REPORTING CHANNEL** (task `agent-stop-signal`).
@@ -360,4 +361,59 @@ export function emptyDiffStopReason(slug: string): string {
 		`the agent produced no source change building '${slug}' (empty diff vs the ` +
 		'arbiter main); treating as a no-op/stop — re-scope or re-claim.'
 	);
+}
+
+/**
+ * The DISCRIMINATED classification of a `saveAgentStop` reason (spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state` resolved decision #2,
+ * task `empty-diff-bounce-surfaces-dispose-defaulted-question`). The two kinds
+ * route DIFFERENTLY at the bounce seam:
+ *
+ *   - `'sentinel'` — the agent raised a hard STOP with a specific drift report
+ *     (the principled case). The runner surfaces the reason VERBATIM through the
+ *     existing lock-stuck bounce path.
+ *   - `'empty-diff'` — the agent produced no source change (the deterministic
+ *     backstop). Because "nothing to do" is a NON-DETERMINISTIC LLM judgement, a
+ *     blind requeue would infinite-loop; instead the runner surfaces a sidecar
+ *     with an engine-authored DISPOSE-DEFAULTED disposition question. The engine
+ *     owns the envelope + the safe default; the LLM owns the prose.
+ */
+export type AgentStopKind = 'sentinel' | 'empty-diff';
+
+/** A classified STOP verdict + the needs-attention reason prose. */
+export interface AgentStopClass {
+	kind: AgentStopKind;
+	reason: string;
+}
+
+/**
+ * The DISPOSE-DEFAULTED disposition question the empty-diff bounce path surfaces
+ * as its engine-authored envelope entry (spec resolved decision #2). The engine
+ * GUARANTEES this envelope exists on every empty-diff bounce even when the
+ * agent surfaced no questions of its own; the LLM/human owns the prose that
+ * follows. The `default: 'dispose'` hint routes an answered "cancel" to the
+ * regime-polymorphic `dispose` outcome (task → `git mv → tasks/cancelled/`,
+ * RETAINED; NOT a `git rm`, NOT a requeue) via the shared apply decider
+ * (`apply-decide.ts`).
+ */
+export function emptyDiffDisposeEnvelope(params: {
+	item: string;
+	reason: string;
+}): NewQuestion {
+	const {item, reason} = params;
+	return {
+		question:
+			`'${item}': the agent produced no change (${reason}). ` +
+			'Cancel this item? [default: yes]',
+		context:
+			'"Nothing to do" is a non-deterministic LLM judgement, so this bounce is ' +
+			'SURFACED (not blindly requeued) to break any infinite "re-run → re-judge ' +
+			'nothing-to-do → re-bounce" loop. Answering "cancel" (or accepting the ' +
+			'default) disposes this task to its terminal (`git mv → ' +
+			'`work/tasks/cancelled/`, retained) via the regime-polymorphic `dispose` ' +
+			'outcome — the task is NOT hard-deleted. Answer with a REQUEUE / RESET ' +
+			'directive if you disagree with the agent and want the loop to try again.',
+		default: 'dispose (cancel this task → work/tasks/cancelled/, retained)',
+		kind: 'stuck',
+	};
 }

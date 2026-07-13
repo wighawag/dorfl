@@ -17,6 +17,8 @@ import {
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	stuckLockOnArbiter,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -273,7 +275,12 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 		});
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// Empty-diff surfaces a dispose-defaulted sidecar + releases the lock
+		// (task `empty-diff-bounce-surfaces-dispose-defaulted-question`), unlike
+		// the sentinel STOP which still marks the lock stuck.
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 });
