@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'requeue-reconcile-nondestructive-recov
 date: 2026-07-13
 status: open
 reviewOf: requeue-reconcile-nondestructive-recovery-verb
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
