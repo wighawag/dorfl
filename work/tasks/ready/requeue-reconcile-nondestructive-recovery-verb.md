@@ -149,3 +149,7 @@ intent: keep+continue exists precisely to PRESERVE good work across requeues, an
 ## Requeue 2026-07-13
 
 Requeued to re-run through the fixed committed-recovery path (commit f06646a6): the prior PR #358 opened with no Gate-2 review and an empty body (608 lines of code across cli/do/run/start/needs-attention landed unreviewed). Keeping the branch so the next claim continues from the completed tip and exercises the recovery-path review + PR-body fix.
+
+## Requeue 2026-07-13
+
+Re-requeued to validate the recovery+PR-delivery fixes end-to-end (f06646a6 review-on-recovery + 7720365b update-existing-PR). Prior re-run did not re-process it; keep+continue so the next claim re-hits the committed-recovery path and should post the Gate-2 review + refresh PR #358's body.
