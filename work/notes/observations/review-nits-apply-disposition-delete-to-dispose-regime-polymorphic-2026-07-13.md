@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'apply-disposition-delete-to-dispose-re
 date: 2026-07-13
 status: open
 reviewOf: apply-disposition-delete-to-dispose-regime-polymorphic
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
