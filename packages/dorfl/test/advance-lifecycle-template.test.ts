@@ -63,7 +63,6 @@ const config: ResolvedCIConfig = {
 	harness: 'pi',
 	installSource: 'registry',
 	maxParallel: 4,
-	legTimeoutMinutes: 120,
 };
 
 let work: string;
@@ -203,20 +202,37 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(DEFAULT_MAX_PARALLEL).toBe(2);
 	});
 
-	it('caps each leg with `timeout-minutes` from config (both propose + merge)', () => {
+	it('caps each agent-leg with a DYNAMIC `timeout-minutes` sourced from the enumerate job (spec `graceful-pre-timeout-wip-checkpoint`)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// Both matrix jobs carry the per-leg wall-clock cap (config.legTimeoutMinutes = 120 here).
-		const timeouts = text.match(/timeout-minutes: \d+/g) ?? [];
-		expect(timeouts).toEqual(['timeout-minutes: 120', 'timeout-minutes: 120']);
-		// Threaded from config, not hard-coded: an override flows through.
-		const overridden = generateAdvanceLifecycleWorkflow({
-			...config,
-			legTimeoutMinutes: 90,
-		});
-		expect(overridden.match(/timeout-minutes: \d+/g)).toEqual([
-			'timeout-minutes: 90',
-			'timeout-minutes: 90',
-		]);
+		// The retired `legTimeoutMinutes` render — a baked-in numeric
+		// `timeout-minutes: <n>` on an agent-leg job — must NOT appear anywhere. The
+		// GitHub backstop is now DYNAMIC: computed at run time from the committed
+		// dorfl.json as agentDeadlineMinutes + checkpointHeadroomMinutes.
+		expect(
+			/(?:advance-propose|advance-merge):[\s\S]*?timeout-minutes:\s*\d/.test(
+				text,
+			),
+		).toBe(false);
+		// Both propose + merge agent-legs consume the enumerate job's dynamic
+		// `githubTimeout` output via `${{ needs.enumerate.outputs.githubTimeout }}`.
+		expect(
+			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+				text,
+			),
+		).toBe(true);
+		expect(
+			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+				text,
+			),
+		).toBe(true);
+		// The enumerate job emits it as an output, computed via `dorfl config --json`
+		// at run time so an edit to dorfl.json flips it on the NEXT tick with no
+		// install-ci re-run.
+		expect(/enumerate:[\s\S]*?outputs:[\s\S]*?githubTimeout:/.test(text)).toBe(
+			true,
+		);
+		expect(text).toContain('dorfl config --json');
+		expect(text).toContain('agentDeadlineMinutes + checkpointHeadroomMinutes');
 	});
 
 	it(

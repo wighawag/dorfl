@@ -284,6 +284,17 @@ jobs:
     outputs:
       items: \${{ steps.scan.outputs.items }}
       any: \${{ steps.scan.outputs.any }}
+      # Dynamic GitHub-backstop cap (spec
+      # \`graceful-pre-timeout-wip-checkpoint\`): the agent-leg jobs
+      # (advance-propose / advance-merge) read this as their
+      # \`timeout-minutes\` — replacing the retired static
+      # \`legTimeoutMinutes\`. Computed at run time from the committed
+      # \`dorfl.json\` (via \`dorfl config --json\`) as
+      # \`agentDeadlineMinutes + checkpointHeadroomMinutes\`, so an edit to
+      # \`dorfl.json\` reflects EVERYWHERE (the internal deadline the legs
+      # honour AND this GitHub cap) on the NEXT tick — no \`install-ci\`
+      # re-run, no baked-in YAML number.
+      githubTimeout: \${{ steps.timeout.outputs.githubTimeout }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -329,6 +340,22 @@ jobs:
           else
             echo "any=false" >> "$GITHUB_OUTPUT"
           fi
+      - id: timeout
+        # Dynamic GitHub-backstop cap (spec
+        # \`graceful-pre-timeout-wip-checkpoint\` — step 5): read the committed
+        # \`dorfl.json\` via \`dorfl config --json\` (in-place, so the resolution
+        # chain reads THIS repo's file exactly like \`scan --here\`), and emit
+        # \`githubTimeout = agentDeadlineMinutes + checkpointHeadroomMinutes\` as
+        # a job OUTPUT the agent-leg jobs consume via
+        # \`timeout-minutes: \${{ needs.enumerate.outputs.githubTimeout }}\`. So
+        # the SAME committed config drives BOTH the legs' internal deadline AND
+        # this GitHub cap — edit + commit, next tick uses it for both, no
+        # \`install-ci\` re-run, no baked YAML number. \`dorfl.json\` is the
+        # single source read at run time by BOTH consumers.
+        run: |
+          cap="$(dorfl config --json \\
+            | jq '.agentDeadlineMinutes + .checkpointHeadroomMinutes')"
+          echo "githubTimeout=\${cap}" >> "$GITHUB_OUTPUT"
 
   # ── PROPOSE: a MATRIX of independent jobs (one PR per item) ──────────────────
   # True parallelism — each item is an independent PR, so a matrix is the right
@@ -340,14 +367,16 @@ jobs:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
-    # Per-leg wall-clock cap (config \`legTimeoutMinutes\`, install-ci
-    # --leg-timeout-minutes): one leg is a full agent session (build + Gate-2
-    # review). Without this it inherits GitHub's 6h job default, so a wedged /
-    # throttled leg (model-provider 429 backoff) strands the whole run for hours.
-    # This bounds it; past the cap the leg is reaped as a fast isolated failure
-    # the \`fail-fast:false\` matrix tolerates (the item just isn't advanced this
-    # tick). Set ABOVE a legit worst-case build, well UNDER 6h.
-    timeout-minutes: ${config.legTimeoutMinutes}
+    # Per-leg wall-clock cap: the DYNAMIC GitHub backstop the enumerate job
+    # emits (spec \`graceful-pre-timeout-wip-checkpoint\`), computed at run
+    # time from the committed \`dorfl.json\` as
+    # \`agentDeadlineMinutes + checkpointHeadroomMinutes\`. It is a STRICTLY
+    # LARGER backstop than the dorfl-internal deadline the leg self-stops at
+    # (which SAVES its WIP + auto-continues on the next tick), so the GitHub
+    # SIGKILL only fires if the graceful save itself wedges. Editing
+    # \`dorfl.json\` flips BOTH the internal deadline AND this cap on the
+    # next tick — no \`install-ci\` re-run, no baked-in YAML number.
+    timeout-minutes: \${{ needs.enumerate.outputs.githubTimeout }}
     strategy:
       # Independent PRs: one failing item must NOT cancel the others.
       fail-fast: false
@@ -411,9 +440,9 @@ jobs:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
-    # Per-leg wall-clock cap (config \`legTimeoutMinutes\`, see advance-propose):
-    # bound a wedged/throttled landing leg instead of inheriting the 6h default.
-    timeout-minutes: ${config.legTimeoutMinutes}
+    # Per-leg wall-clock cap: the DYNAMIC GitHub backstop the enumerate job
+    # emits (see advance-propose for the rationale).
+    timeout-minutes: \${{ needs.enumerate.outputs.githubTimeout }}
     strategy:
       # Independent landings: one failing item must NOT cancel the others; a
       # loser of the CAS race re-rebases + re-gates + retries.
@@ -791,6 +820,45 @@ export function validateAdvanceLifecycleWorkflow(
 		'so the WHOLE answer-loop (triage + surface + apply) runs in propose mode, ' +
 		'not only in merge mode ' +
 		'(`ci-propose-matrix-enumerates-lifecycle-items`).');
+
+	// --- DYNAMIC GitHub backstop (spec `graceful-pre-timeout-wip-checkpoint`) ---
+	// The agent-leg jobs (advance-propose / advance-merge) must consume the
+	// enumerate job's dynamic `githubTimeout` output, NOT a baked-in number. This
+	// closes the drift where the static `legTimeoutMinutes` render only refreshed
+	// on `install-ci` re-run; now the same committed `dorfl.json` drives BOTH the
+	// internal deadline AND the GitHub cap on every tick.
+	require('enumerate-emits-github-timeout-output', /enumerate:[\s\S]*?outputs:[\s\S]*?githubTimeout:/.test(
+		text,
+	), 'the `enumerate` job must declare a `githubTimeout` job OUTPUT (computed ' +
+		'from the committed `dorfl.json` as ' +
+		'`agentDeadlineMinutes + checkpointHeadroomMinutes`).');
+	require('enumerate-reads-dorfl-config-json', /dorfl config --json/.test(
+		text,
+	), 'the `enumerate` job must read the committed config via ' +
+		'`dorfl config --json` at run time (so an edit to `dorfl.json` ' +
+		'reflects on the next tick without an `install-ci` re-run).');
+	require('enumerate-computes-deadline-plus-headroom', /agentDeadlineMinutes \+ checkpointHeadroomMinutes/.test(
+		text,
+	), 'the `enumerate` job must compute `githubTimeout` as ' +
+		'`agentDeadlineMinutes + checkpointHeadroomMinutes` (the backstop is ' +
+		'DELIBERATELY head-room above the internal deadline).');
+	require('propose-uses-dynamic-github-timeout', /advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+		text,
+	), 'the `advance-propose` job must set `timeout-minutes: ${{ ' +
+		'needs.enumerate.outputs.githubTimeout }}` (the DYNAMIC GitHub backstop, ' +
+		'not a baked-in number).');
+	require('merge-uses-dynamic-github-timeout', /advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*needs\.enumerate\.outputs\.githubTimeout\s*\}\}/.test(
+		text,
+	), 'the `advance-merge` job must set `timeout-minutes: ${{ ' +
+		'needs.enumerate.outputs.githubTimeout }}` (the DYNAMIC GitHub backstop).');
+	// A baked static `timeout-minutes: <number>` on an agent-leg job is the
+	// retired `legTimeoutMinutes` render — forbid it so a future edit cannot
+	// silently re-introduce the drift the dynamic backstop is fixing.
+	require('no-static-agent-leg-timeout', !/(?:advance-propose|advance-merge):[\s\S]*?timeout-minutes:\s*\d/.test(
+		text,
+	), 'no agent-leg job may set a baked-in numeric `timeout-minutes` ' +
+		'(the retired `legTimeoutMinutes` render); the GitHub backstop is ' +
+		'DYNAMIC (read from `dorfl.json` at run time).');
 
 	// --- Wires the SHARED composite setup action -------------------------------
 	require('uses-shared-setup-action', /uses:\s*\.\/\.github\/actions\/dorfl-setup\b/.test(

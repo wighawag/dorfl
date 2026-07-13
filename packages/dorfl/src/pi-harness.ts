@@ -65,6 +65,15 @@ import type {HarnessAdapter} from './config.js';
 /** The default pi CLI binary name (resolved on `PATH`). */
 export const DEFAULT_PI_BIN = 'pi';
 
+/**
+ * The grace period between a deadline SIGTERM and the follow-up SIGKILL in
+ * {@link PiHarness.launchAsync} (spec `graceful-pre-timeout-wip-checkpoint`).
+ * Ten seconds gives pi enough time to flush its session `.jsonl` and exit
+ * cleanly; a wedged/frozen child that ignores SIGTERM still gets reaped in a
+ * bounded time so the promise settles and the caller's checkpoint routing runs.
+ */
+export const DEADLINE_SIGKILL_GRACE_MS = 10_000;
+
 export interface PiHarnessOptions {
 	/**
 	 * The pi CLI binary (default `pi` on `PATH`). Tests inject a stub script here
@@ -239,11 +248,60 @@ export class PiHarness implements Harness {
 			child.stdout?.on('data', () => {});
 			// Guard so `exit` and a late `error` never double-settle the promise.
 			let settled = false;
+			let timedOut = false;
+			// DEADLINE RACE (spec `graceful-pre-timeout-wip-checkpoint`): when the
+			// caller threads a `deadlineMs` (absolute wall-clock epoch-ms), arm a
+			// SOFT SIGTERM at that time, then a HARD SIGKILL after a ~10s grace. The
+			// child's own `exit` handler below still resolves the promise (with
+			// `timedOut: true`), so we preserve the settle-once + FD-release
+			// discipline and never double-settle. A run that finishes BEFORE the
+			// deadline clears both timers (see the `exit` handler) — byte-for-byte
+			// unchanged from the pre-task behaviour.
+			let softTimer: NodeJS.Timeout | undefined;
+			let hardTimer: NodeJS.Timeout | undefined;
+			const clearDeadlineTimers = (): void => {
+				if (softTimer !== undefined) {
+					clearTimeout(softTimer);
+					softTimer = undefined;
+				}
+				if (hardTimer !== undefined) {
+					clearTimeout(hardTimer);
+					hardTimer = undefined;
+				}
+			};
+			if (input.deadlineMs !== undefined) {
+				const softMs = Math.max(0, input.deadlineMs - Date.now());
+				softTimer = setTimeout(() => {
+					if (settled) {
+						return;
+					}
+					timedOut = true;
+					try {
+						child.kill('SIGTERM');
+					} catch {
+						// Best-effort: a already-exited child throws ESRCH; the `exit`
+						// handler will still settle the promise.
+					}
+					hardTimer = setTimeout(() => {
+						if (settled) {
+							return;
+						}
+						try {
+							child.kill('SIGKILL');
+						} catch {
+							// Best-effort: see above.
+						}
+					}, DEADLINE_SIGKILL_GRACE_MS);
+					hardTimer.unref?.();
+				}, softMs);
+				softTimer.unref?.();
+			}
 			child.on('error', (err) => {
 				if (settled) {
 					return;
 				}
 				settled = true;
+				clearDeadlineTimers();
 				reject(new Error(`failed to spawn pi (${this.piBin}): ${err.message}`));
 			});
 			// Resolve on `exit` (pi itself terminated), NOT `close`: `close` waits for
@@ -255,6 +313,7 @@ export class PiHarness implements Harness {
 					return;
 				}
 				settled = true;
+				clearDeadlineTimers();
 				// Release our end of the stdio pipes so a leaked grandchild's inherited
 				// FDs stop keeping our streams referenced; `unref` the child handle too.
 				child.stdout?.destroy();
@@ -263,9 +322,11 @@ export class PiHarness implements Harness {
 				child.unref?.();
 				const status = code ?? -1;
 				resolve({
-					ok: status === 0,
+					ok: status === 0 && !timedOut,
 					record,
-					detail: status === 0 ? undefined : stderr.trim(),
+					detail:
+						status === 0 && !timedOut ? undefined : stderr.trim() || undefined,
+					timedOut: timedOut ? true : undefined,
 					// Read the agent's ANSWER from the `.jsonl` at `exit` — the same
 					// last-assistant-text read `launch` does at return (task
 					// `harness-agent-output`); the process has exited so the log is final.

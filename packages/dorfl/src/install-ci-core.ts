@@ -103,18 +103,6 @@ export interface CIConfigFile {
 	 * positive integer.
 	 */
 	maxParallel?: number;
-	/**
-	 * Per-leg wall-clock cap (minutes) applied as `timeout-minutes` on the
-	 * advance-propose / advance-merge matrix jobs. A leg is one full agent session
-	 * (build + Gate-2 review); with no cap it inherits GitHub's 6h job default, so a
-	 * wedged/throttled leg (e.g. model-provider 429 backoff) can strand the whole
-	 * run for hours. This bounds it: past the cap the leg is reaped as a fast,
-	 * isolated failure the `fail-fast:false` matrix tolerates (the item just isn't
-	 * advanced this tick). Default {@link DEFAULT_LEG_TIMEOUT_MINUTES}. Set it ABOVE
-	 * a legitimate worst-case build session, well UNDER 6h. Must be a positive
-	 * integer.
-	 */
-	legTimeoutMinutes?: number;
 	/** API key values keyed by env var name. Only present with `--include-secrets`. */
 	secrets?: Record<string, string>;
 	/**
@@ -153,8 +141,6 @@ export interface ResolvedCIConfig {
 	projectSetup?: Record<string, unknown>;
 	/** See {@link CIConfigFile.maxParallel}. Always resolved (default applied). */
 	maxParallel: number;
-	/** See {@link CIConfigFile.legTimeoutMinutes}. Always resolved (default applied). */
-	legTimeoutMinutes: number;
 }
 
 /** The default harness the composite setup action installs. */
@@ -167,16 +153,6 @@ export const DEFAULT_HARNESS: HarnessAdapter = 'pi';
  * arbiter CAS. Tunable via `install-ci --max-parallel <n>` / the config file.
  */
 export const DEFAULT_MAX_PARALLEL = 2;
-
-/**
- * The default {@link CIConfigFile.legTimeoutMinutes}: cap each advance-lifecycle
- * matrix leg at 120 minutes (2h). Above a legitimate worst-case build-agent
- * session (some hard tasks legitimately run ~1h) but well under GitHub's 6h job
- * default, so a wedged/throttled leg is reaped in a bounded time instead of
- * stranding the run for hours. Tunable via `install-ci --leg-timeout-minutes <n>`
- * / the config file.
- */
-export const DEFAULT_LEG_TIMEOUT_MINUTES = 120;
 
 /** The default install source: the published CLI via `npm install -g`. */
 export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
@@ -651,7 +627,6 @@ export function resolveCIConfig(file: CIConfigFile): ResolvedCIConfig {
 		installSource: file.installSource ?? DEFAULT_INSTALL_SOURCE,
 		projectSetup: file.projectSetup,
 		maxParallel: file.maxParallel ?? DEFAULT_MAX_PARALLEL,
-		legTimeoutMinutes: file.legTimeoutMinutes ?? DEFAULT_LEG_TIMEOUT_MINUTES,
 	};
 }
 
@@ -677,9 +652,6 @@ export function exportCIConfig(
 	// config stays minimal (mirrors how projectSetup is omitted when empty).
 	if (config.maxParallel !== DEFAULT_MAX_PARALLEL) {
 		file.maxParallel = config.maxParallel;
-	}
-	if (config.legTimeoutMinutes !== DEFAULT_LEG_TIMEOUT_MINUTES) {
-		file.legTimeoutMinutes = config.legTimeoutMinutes;
 	}
 	if (config.projectSetup && Object.keys(config.projectSetup).length > 0) {
 		file.projectSetup = config.projectSetup;

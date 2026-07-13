@@ -62,7 +62,10 @@ import {
 	emptyDiffDisposeEnvelope,
 	type AgentStopClass,
 } from './agent-stop.js';
-import {surfaceStuckToNeedsAttention} from './needs-attention.js';
+import {
+	surfaceStuckToNeedsAttention,
+	routeToNeedsAttention,
+} from './needs-attention.js';
 import {resolveItemPathByIdentity} from './item-path.js';
 import {
 	classifyFailureCause,
@@ -121,6 +124,149 @@ import {
  * `complete` (the caller threads the resolved mode in as `integration`).
  */
 
+/**
+ * The commit-message subject the deadline-checkpoint save writes, and the
+ * pattern used to COUNT consecutive checkpoints on the branch (spec
+ * `graceful-pre-timeout-wip-checkpoint` — the anti-loop ceiling). Living
+ * on-branch means the counter naturally RESETS when the item completes (the
+ * branch is discarded on integration) and when a `--reset` requeue discards
+ * the branch: a genuinely-progressing task cannot silently accumulate a
+ * ceiling breach across generations.
+ */
+const DEADLINE_CHECKPOINT_COMMIT_SUBJECT_PREFIX = 'chore(deadline-checkpoint)';
+
+/**
+ * Distinct reason strings for the two deadline-checkpoint branches (spec
+ * `graceful-pre-timeout-wip-checkpoint` — the CI/human report must NEVER
+ * collapse to a generic "agent-failed"). Auto-continue and surface carry
+ * different phrasing so the counter + ceiling are legible.
+ */
+function deadlineAutoContinueReason(params: {
+	slug: string;
+	count: number;
+	max: number;
+}): string {
+	return (
+		`deadline checkpoint (auto-continued ${params.count}/${params.max}): ` +
+		`'${params.slug}' hit the dorfl-internal deadline with new work-branch ` +
+		`progress this session; saved the WIP and released the lock so the next ` +
+		`tick continues from the branch tip.`
+	);
+}
+function deadlineSurfaceReason(params: {
+	slug: string;
+	kind: 'no-progress' | 'ceiling';
+	count?: number;
+	max?: number;
+}): string {
+	if (params.kind === 'no-progress') {
+		return (
+			`deadline checkpoint (no progress / ceiling): '${params.slug}' hit ` +
+			`the dorfl-internal deadline WITHOUT any work-branch progress this ` +
+			`session — indistinguishable from a wedge; surfaced for a human to ` +
+			`decide (continue / split / cancel).`
+		);
+	}
+	return (
+		`deadline checkpoint (no progress / ceiling): '${params.slug}' has hit ` +
+		`the dorfl-internal deadline ${params.count}/${params.max} times ` +
+		`consecutively — it may be too big for one CI leg. Split it or run ` +
+		`it locally; surfaced for a human to decide.`
+	);
+}
+
+/**
+ * Count how many DEADLINE-CHECKPOINT commits (subject prefix
+ * `chore(deadline-checkpoint)`) currently sit on the work branch ahead of
+ * `<arbiter>/main` — the branch-based anti-loop counter (spec
+ * `graceful-pre-timeout-wip-checkpoint`). A best-effort count: an unreachable
+ * arbiter / a bare mirror reads as 0 (the SAFE direction — never falsely block
+ * an auto-continue) so a genuine plumbing fault degrades to "under the ceiling"
+ * rather than surfacing a spurious ceiling breach. Resets naturally when the
+ * item completes (the branch is discarded on integration).
+ */
+async function countDeadlineCheckpointsOnBranch(params: {
+	cwd: string;
+	arbiter: string;
+	branch: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<number> {
+	const {cwd, arbiter, branch, env} = params;
+	const range = `${arbiter}/main..HEAD`;
+	void branch;
+	const r = await runAsync('git', ['log', '--format=%s', range], cwd, {env});
+	if (r.status !== 0) {
+		return 0;
+	}
+	const lines = r.stdout.split('\n').filter((s) => s.length > 0);
+	return lines.filter((s) =>
+		s.startsWith(DEADLINE_CHECKPOINT_COMMIT_SUBJECT_PREFIX),
+	).length;
+}
+
+/**
+ * SAVE the WIP on a deadline stop (spec `graceful-pre-timeout-wip-checkpoint`,
+ * build step 3): commit the tree as-is + push `work/<slug>`. Reuses the SAVE
+ * HALF of the needs-attention mechanism ({@link routeToNeedsAttention}) but
+ * ADDS a distinguishing checkpoint-marker commit on top so
+ * {@link countDeadlineCheckpointsOnBranch} can count auto-continues. Distinct
+ * from `applyNeedsAttentionTransition` (the whole thing) which ALSO marks the
+ * lock stuck — auto-continue must NOT mark stuck; only the surface branch does.
+ */
+async function saveDeadlineCheckpoint(params: {
+	slug: string;
+	branch: string;
+	cwd: string;
+	arbiter: string;
+	reason: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<import('./needs-attention.js').RouteToNeedsAttentionResult> {
+	const {slug, branch, cwd, arbiter, reason, env, note} = params;
+	void reason;
+	// Save any uncommitted work first (the routeToNeedsAttention save half also
+	// commits + pushes; but we ALSO want a distinct checkpoint-marker commit so
+	// countDeadlineCheckpointsOnBranch can enumerate them). Stage everything and
+	// commit a MARKER commit if there's anything to record OR if there is not
+	// already a marker on the tip — the marker's job is to make the checkpoint
+	// COUNTABLE, not to represent new work.
+	const addResult = await runAsync('git', ['add', '-A'], cwd, {env});
+	void addResult;
+	const diffCached = await runAsync(
+		'git',
+		['diff', '--cached', '--quiet'],
+		cwd,
+		{env},
+	);
+	const hasStaged = diffCached.status !== 0;
+	if (hasStaged) {
+		await runAsync(
+			'git',
+			[
+				'commit',
+				'-q',
+				'-m',
+				`${DEADLINE_CHECKPOINT_COMMIT_SUBJECT_PREFIX}: save wip for '${slug}'`,
+			],
+			cwd,
+			{env},
+		);
+	}
+	// Push the branch to the arbiter (best-effort). Reuse routeToNeedsAttention's
+	// save-half exact contract: it commits any residue + pushes the branch with
+	// bounded backoff. We already committed above; the wip commit inside
+	// routeToNeedsAttention will be a no-op (clean tree) and the push runs.
+	return routeToNeedsAttention({
+		cwd,
+		slug,
+		reason: `deadline-checkpoint save for '${slug}' (see branch)`,
+		arbiter,
+		branch,
+		note,
+		env,
+	});
+}
+
 /** The terminal status of one in-place `do` run. */
 export type DoOutcome =
 	| 'completed' // claimed/onboarded → agent → gate green → integrated → exited
@@ -133,6 +279,8 @@ export type DoOutcome =
 	| 'needs-reauth' // a credential expired / was revoked (OAuth refresh) — retry cannot help; a human must RE-AUTH (FAILURE-CAUSE axis)
 	| 'config-error' // a thrown CORE wiring/config error (e.g. review on, no reviewGate) — fix the WIRING, not the task (FAILURE-CAUSE axis)
 	| 'agent-stopped' // the agent DELIBERATELY stopped (task drifted/ambiguous) OR produced no change → surfaced; gate + Gate-2 SKIPPED
+	| 'deadline-auto-continued' // the dorfl-internal deadline fired; WIP saved + branch pushed + lock RELEASED (no sidecar) so the next tick continues (spec `graceful-pre-timeout-wip-checkpoint`)
+	| 'deadline-surfaced' // the dorfl-internal deadline fired but auto-continue was refused (no progress this session, or the maxAutoCheckpoints ceiling was hit); WIP saved + question SURFACED for a human
 	| 'refused' // refused (dirty tree, wrong folder, nothing to complete, …)
 	| 'usage-error' // usage / environment problem, or a slug-resolution error
 	| 'tasked' // `do spec:<slug>` — the spec was tasked into work/backlog/ (runner-owned)
@@ -173,6 +321,14 @@ export type DoDorfl = (input: {
 	 * Absent ⇒ no body ⇒ the provider degrades to `--fill` (no regression).
 	 */
 	output?: string;
+	/**
+	 * **True iff the injected agent simulates a dorfl-internal DEADLINE stop**
+	 * (spec `graceful-pre-timeout-wip-checkpoint`). Test-only signal so an
+	 * injected `DoDorfl` can drive the checkpoint routing (save WIP +
+	 * auto-continue / surface). Production `runDoAgent` never sets this on the
+	 * injected path — the real deadline race lives in `PiHarness.launchAsync`.
+	 */
+	timedOut?: boolean;
 };
 
 export interface DoOptions {
@@ -413,6 +569,22 @@ export interface DoOptions {
 	 * a sink to assert the surfaced lines without a real terminal.
 	 */
 	watchSink?: (line: string) => void;
+	/**
+	 * The dorfl-internal agent-session deadline in minutes (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). Threaded through {@link runDoAgent}
+	 * to `launchWithOptionalWatch` — the harness races the child against it and
+	 * flags a graceful stop on fire, which `performDo` routes as a CHECKPOINT
+	 * (save WIP + auto-continue on progress under the ceiling, else surface).
+	 * Absent ⇒ no deadline (a run that finishes on its own is byte-for-byte
+	 * unchanged).
+	 */
+	agentDeadlineMinutes?: number;
+	/**
+	 * Anti-loop ceiling on CONSECUTIVE deadline auto-continues (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). On hitting this the next
+	 * deadline checkpoint surfaces to a human instead of auto-continuing.
+	 */
+	maxAutoCheckpoints?: number;
 }
 
 /**
@@ -438,6 +610,25 @@ interface DoAgentLaunchOptions {
 	watch?: boolean;
 	watchSink?: (line: string) => void;
 	color?: boolean;
+	/**
+	 * **The dorfl-internal agent deadline in minutes** (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). Threaded to {@link runDoAgent},
+	 * which converts it to a wall-clock `deadlineMs` and passes it to
+	 * {@link launchWithOptionalWatch} — the pi harness races the child against
+	 * that deadline. When the deadline fires, the agent is gracefully stopped
+	 * (SIGTERM + 10s grace + SIGKILL) and the caller routes the run as a
+	 * CHECKPOINT (save WIP + auto-continue / surface). Absent ⇒ no deadline
+	 * (byte-for-byte the pre-task behaviour).
+	 */
+	agentDeadlineMinutes?: number;
+	/**
+	 * **The anti-loop ceiling** for consecutive deadline auto-continues (spec
+	 * `graceful-pre-timeout-wip-checkpoint`). On hitting this the next deadline
+	 * checkpoint SURFACES to a human instead of auto-continuing. Absent ⇒
+	 * unlimited (⇒ defensive callers should always thread the resolved config
+	 * value; the default is 5).
+	 */
+	maxAutoCheckpoints?: number;
 	env?: NodeJS.ProcessEnv;
 	/**
 	 * The optional runner IDENTITY (a bot). Threaded from the host-only
@@ -1089,7 +1280,12 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		throw err;
 	}
 
-	let agent: {ok: boolean; detail?: string; output?: string};
+	let agent: {
+		ok: boolean;
+		detail?: string;
+		output?: string;
+		timedOut?: boolean;
+	};
 	try {
 		agent = await runDoAgent(options, tree.dir, prompt, slug);
 	} catch (err) {
@@ -1100,6 +1296,23 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			cwd: tree.dir,
 			arbiter: tree.arbiterRemote,
 			detail: message,
+			env,
+			note,
+		});
+	}
+	// DEADLINE CHECKPOINT (spec `graceful-pre-timeout-wip-checkpoint`): the
+	// dorfl-internal deadline fired — stop is graceful, NOT a failure. Route
+	// through the shared checkpoint path (save WIP + auto-continue on progress
+	// under the ceiling, else surface). Distinct from `saveAgentFailure` on
+	// purpose — the deadline path must NOT mark the item stuck when it
+	// auto-continues.
+	if (agent.timedOut) {
+		return await routeDeadlineCheckpoint({
+			slug,
+			branch,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
+			maxAutoCheckpoints: options.maxAutoCheckpoints ?? 5,
 			env,
 			note,
 		});
@@ -1706,11 +1919,26 @@ async function runDoAgent(
 	cwd: string,
 	prompt: string,
 	slug: string,
-): Promise<{ok: boolean; detail?: string; output?: string}> {
+): Promise<{
+	ok: boolean;
+	detail?: string;
+	output?: string;
+	timedOut?: boolean;
+}> {
 	if (options.dorfl) {
 		return options.dorfl({cwd, prompt, slug, env: options.env});
 	}
 	const harness = options.harness ?? new NullHarness();
+	// Convert the dorfl-internal deadline (minutes) into a wall-clock epoch-ms so
+	// the harness (`launchAsync`) can race the child against it (spec
+	// `graceful-pre-timeout-wip-checkpoint`). Absent ⇒ no deadline; a run that
+	// finishes before it is byte-for-byte unchanged (the harness clears the
+	// timer on normal exit). Forcing the async path when a deadline is set is
+	// {@link launchWithOptionalWatch}'s job.
+	const deadlineMs =
+		options.agentDeadlineMinutes !== undefined
+			? Date.now() + options.agentDeadlineMinutes * 60_000
+			: undefined;
 	const launched = await launchWithOptionalWatch({
 		harness,
 		dir: cwd,
@@ -1722,6 +1950,7 @@ async function runDoAgent(
 		sessionId: slug,
 		sessionsDir: options.sessionsDir,
 		watch: options.watch,
+		deadlineMs,
 		watchSink: options.watchSink,
 		color: options.color,
 		env: options.env,
@@ -1729,7 +1958,134 @@ async function runDoAgent(
 	// Surface the agent's FINAL SUMMARY (`LaunchResult.output`) — the source channel
 	// for the propose-mode PR body — instead of dropping it. Absent (no parseable
 	// assistant text) ⇒ undefined ⇒ the body degrades to `--fill` (no regression).
-	return {ok: launched.ok, detail: launched.detail, output: launched.output};
+	return {
+		ok: launched.ok,
+		detail: launched.detail,
+		output: launched.output,
+		timedOut: launched.timedOut,
+	};
+}
+
+/**
+ * Route a DEADLINE STOP (spec `graceful-pre-timeout-wip-checkpoint`) through
+ * the checkpoint machinery: ALWAYS save the WIP (commit + push), then
+ * decide — progress AND under ceiling ⇒ AUTO-CONTINUE (release lock, keep
+ * branch, NO sidecar, exit 0); else ⇒ SURFACE a `needsAnswers:true` question.
+ * Shared by {@link performDo} and {@link runRemotePipeline} so the in-place
+ * and remote forms route a deadline stop identically.
+ */
+async function routeDeadlineCheckpoint(params: {
+	slug: string;
+	branch: string;
+	cwd: string;
+	arbiter: string;
+	maxAutoCheckpoints: number;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<DoResult> {
+	const {slug, branch, cwd, arbiter, maxAutoCheckpoints, env, note} = params;
+
+	// 1. ALWAYS save the WIP first: commit any residue + push the work branch.
+	const savedReason = `deadline checkpoint save for '${slug}'`;
+	const saved = await saveDeadlineCheckpoint({
+		slug,
+		branch,
+		cwd,
+		arbiter,
+		reason: savedReason,
+		env,
+		note,
+	});
+	void saved;
+
+	// 2. Progress this session? Reuse the SAME primitive the STOP backstop uses.
+	const emptyDiff = await isWorkBranchDiffEmpty({cwd, arbiter, env});
+	const madeProgressThisSession = !emptyDiff;
+
+	// 3. Count consecutive deadline checkpoints on the branch (ceiling gate). The
+	//    marker commit we just saved is included — so the count is the number
+	//    of checkpoints INCLUDING this one.
+	const checkpointCount = await countDeadlineCheckpointsOnBranch({
+		cwd,
+		arbiter,
+		branch,
+		env,
+	});
+
+	if (madeProgressThisSession && checkpointCount <= maxAutoCheckpoints) {
+		// AUTO-CONTINUE: release the lock via the SAME default keep+continue path
+		// `requeue` uses (no --reset, no --reconcile, no sidecar). The branch is
+		// KEPT on the arbiter so the next claim continues from its tip.
+		const reason = deadlineAutoContinueReason({
+			slug,
+			count: checkpointCount,
+			max: maxAutoCheckpoints,
+		});
+		const returned = await ledgerWrite.applyReturnToBacklogTransition({
+			cwd,
+			slug,
+			arbiter,
+			env,
+			note,
+		});
+		if (returned.moved) {
+			const message =
+				`Auto-continued '${slug}' at the dorfl-internal deadline (checkpoint ` +
+				`${checkpointCount}/${maxAutoCheckpoints}): WIP saved + branch pushed, ` +
+				`lock released so the next tick continues from ${branch}. ${reason}`;
+			note(message);
+			return {
+				exitCode: 0,
+				outcome: 'deadline-auto-continued',
+				slug,
+				branch,
+				message,
+			};
+		}
+		// The auto-continue lock release did not land — fall through to SURFACE.
+		note(
+			`Auto-continue lock release for '${slug}' did not land ` +
+				`(${returned.reasonNotMoved ?? 'unknown'}); surfacing instead.`,
+		);
+	}
+
+	// SURFACE: mark the lock stuck via the whole applyNeedsAttentionTransition
+	// (save + push + stuck). The WIP was already saved above; a second save is
+	// idempotent (empty commit is skipped inside routeToNeedsAttention).
+	const surfaceReason = madeProgressThisSession
+		? deadlineSurfaceReason({
+				slug,
+				kind: 'ceiling',
+				count: checkpointCount,
+				max: maxAutoCheckpoints,
+			})
+		: deadlineSurfaceReason({slug, kind: 'no-progress'});
+	const routed = await ledgerWrite.applyNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason: surfaceReason,
+		arbiter,
+		env,
+		note,
+	});
+	const report = routed.moved ? routeReport(routed, branch) : undefined;
+	const message = routed.moved
+		? `Surfaced '${slug}' at the deadline checkpoint (${
+				madeProgressThisSession
+					? `ceiling ${checkpointCount}/${maxAutoCheckpoints}`
+					: 'no progress this session'
+			}); ${report!.fragment}. ${surfaceReason}`
+		: `Could not surface '${slug}' at the deadline checkpoint ` +
+			`(${routed.reasonNotMoved ?? 'unknown'}). ${surfaceReason}`;
+	note(message);
+	return {
+		exitCode: 1,
+		outcome: 'deadline-surfaced',
+		slug,
+		branch,
+		routedToNeedsAttention: routed.moved,
+		message,
+	};
 }
 
 /**
@@ -2353,7 +2709,12 @@ async function runRemotePipeline(
 		throw err;
 	}
 
-	let agent: {ok: boolean; detail?: string; output?: string};
+	let agent: {
+		ok: boolean;
+		detail?: string;
+		output?: string;
+		timedOut?: boolean;
+	};
 	try {
 		agent = await runDoAgent(options, cwd, prompt, slug);
 	} catch (err) {
@@ -2364,6 +2725,19 @@ async function runRemotePipeline(
 			cwd,
 			arbiterRemote,
 			detail: message,
+			env,
+			note,
+		});
+	}
+	// Deadline checkpoint on the no-checkout `do --remote` path — same routing
+	// as the in-place path (see performDo).
+	if (agent.timedOut) {
+		return await routeDeadlineCheckpoint({
+			slug,
+			branch: branch ?? workBranchRef('task', slug),
+			cwd,
+			arbiter: arbiterRemote,
+			maxAutoCheckpoints: options.maxAutoCheckpoints ?? 5,
 			env,
 			note,
 		});
@@ -2702,6 +3076,8 @@ export function jobWorktreeDoDriver(closure: {
 			watch: options.watch,
 			watchSink: options.watchSink,
 			color: options.color,
+			agentDeadlineMinutes: options.agentDeadlineMinutes,
+			maxAutoCheckpoints: options.maxAutoCheckpoints,
 			read: options.read,
 			env: options.env,
 			note: options.note,

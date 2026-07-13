@@ -628,6 +628,40 @@ export interface Config {
 	 */
 	strictMergeApproval: boolean;
 	/**
+	 * **The dorfl-INTERNAL agent deadline** (minutes). The agent session self-stops
+	 * at this budget; dorfl then SAVES the WIP (commit + push `work/<slug>`) and
+	 * routes it per the progress+ceiling decision (auto-continue, or surface). This
+	 * is the PRIMARY stop (see spec `graceful-pre-timeout-wip-checkpoint`); the
+	 * GitHub `timeout-minutes` cap is a BACKSTOP set above it as
+	 * `agentDeadlineMinutes + checkpointHeadroomMinutes`. Default 60; MAX 240 (4h).
+	 * FAIL-LOUD: values outside `[1, 240]` throw at config load (never silently
+	 * clamped). Resolved per-repo through the SAME chain as `integration` (flag >
+	 * env `DORFL_AGENT_DEADLINE_MINUTES` > per-repo > global > default).
+	 */
+	agentDeadlineMinutes: number;
+	/**
+	 * **The GitHub-backstop head-room above the internal deadline** (minutes). The
+	 * enumerate job's dynamic `githubTimeout` output is
+	 * `agentDeadlineMinutes + checkpointHeadroomMinutes`; the MIN 10 guarantees the
+	 * GitHub cap is always at least 10 minutes above the internal deadline so the
+	 * graceful save always has room to commit + push before the hard kill. Default
+	 * 30; MIN 10; MAX 60 (1h). FAIL-LOUD: out-of-range throws at load. Resolved
+	 * per-repo through the SAME chain as `agentDeadlineMinutes`.
+	 */
+	checkpointHeadroomMinutes: number;
+	/**
+	 * **The auto-continue ceiling** for the deadline-checkpoint anti-loop guard
+	 * (spec `graceful-pre-timeout-wip-checkpoint`). Counts CONSECUTIVE deadline
+	 * auto-continues; on hitting this cap the next deadline checkpoint SURFACES a
+	 * `needsAnswers:true` question ("this task has hit the deadline N times — it
+	 * may be too big for one CI leg; split it or run it locally?") instead of
+	 * auto-continuing. The counter naturally resets when the item completes (the
+	 * work branch is discarded on integration). Default 5. Must be a positive
+	 * integer (fail-loud). Resolved per-repo through the SAME chain as its
+	 * siblings.
+	 */
+	maxAutoCheckpoints: number;
+	/**
 	 * The optional runner **identity** (a bot): run the runner's git + provider
 	 * operations as a configured entity via process-scoped env overrides, without
 	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
@@ -807,7 +841,64 @@ export const DEFAULT_CONFIG: Config = {
 	// `DORFL_STRICT_MERGE_APPROVAL=true`). The re-surface vs. land branch is
 	// `apply-rung-merge-disposition`'s consumer, NOT here.
 	strictMergeApproval: false,
+	// The dorfl-INTERNAL agent deadline defaults to 60 minutes (spec
+	// `graceful-pre-timeout-wip-checkpoint`). A legitimately-long task that runs
+	// past this checkpoints its WIP + auto-continues on the next tick (rather than
+	// losing everything to a 6h GitHub SIGKILL). MAX 240 (4h); fail-loud outside.
+	agentDeadlineMinutes: 60,
+	// The GitHub-backstop head-room above the internal deadline defaults to 30
+	// minutes: the enumerate job's dynamic `githubTimeout` output is
+	// deadline + headroom, so the default GitHub cap is 60 + 30 = 90 (1h30). MIN 10
+	// (guarantees the graceful save has room); MAX 60; fail-loud outside.
+	checkpointHeadroomMinutes: 30,
+	// The auto-continue ceiling defaults to 5 CONSECUTIVE deadline checkpoints;
+	// past that the next checkpoint SURFACES to a human (spec
+	// `graceful-pre-timeout-wip-checkpoint` anti-loop guard).
+	maxAutoCheckpoints: 5,
 };
+
+/**
+ * Fail-loud range validation for the deadline / backstop / ceiling triple
+ * (spec `graceful-pre-timeout-wip-checkpoint`). Called at the two resolution
+ * FINAL points (`loadConfig` for the global chain; `resolveRepoConfigFromLoaded`
+ * for the per-repo chain), so an out-of-range value from ANY layer (flag / env /
+ * per-repo / global) surfaces as a clean throw naming the field + the valid
+ * range. Never clamps — the task's decision is fail-loud, since a silently
+ * clamped 400-minute deadline would look correct in `dorfl config --json` and
+ * quietly break the invariant that GitHub cap > internal deadline.
+ */
+export function validateDeadlineConfig(config: Config): void {
+	const adm = config.agentDeadlineMinutes;
+	if (!Number.isInteger(adm) || adm < 1 || adm > 240) {
+		throw new Error(
+			`agentDeadlineMinutes must be a positive integer in [1, 240] ` +
+				`(got ${adm}). The dorfl-internal agent deadline caps a single ` +
+				`agent session; 240 minutes (4h) is the hard ceiling so the ` +
+				`GitHub backstop (deadline + headroom) still fits under GitHub's ` +
+				`6h job limit.`,
+		);
+	}
+	const chm = config.checkpointHeadroomMinutes;
+	if (!Number.isInteger(chm) || chm < 10 || chm > 60) {
+		throw new Error(
+			`checkpointHeadroomMinutes must be an integer in [10, 60] ` +
+				`(got ${chm}). This is the head-room the GitHub 'timeout-minutes' ` +
+				`backstop sits above the internal deadline (rendered dynamically ` +
+				`as agentDeadlineMinutes + checkpointHeadroomMinutes by the ` +
+				`advance-lifecycle 'enumerate' job); MIN 10 guarantees the ` +
+				`graceful save always has room to commit + push before the hard kill.`,
+		);
+	}
+	const cap = config.maxAutoCheckpoints;
+	if (!Number.isInteger(cap) || cap < 1) {
+		throw new Error(
+			`maxAutoCheckpoints must be a positive integer (got ${cap}). ` +
+				`It caps CONSECUTIVE deadline auto-continues; past this the ` +
+				`next checkpoint surfaces a needs-answers question to a human ` +
+				`(the anti-loop guard for the graceful pre-timeout checkpoint).`,
+		);
+	}
+}
 
 /** The conventional config location (`~/.config/dorfl/config.json`). */
 export function defaultConfigPath(): string {
@@ -880,5 +971,7 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 			);
 		}
 	}
-	return mergeConfig(parsed);
+	const merged = mergeConfig(parsed);
+	validateDeadlineConfig(merged);
+	return merged;
 }

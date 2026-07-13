@@ -152,6 +152,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Default OFF; ON re-surfaces the
 	// merge-question on a merge-base change instead of auto-landing.
 	strictMergeApproval: 'boolean',
+	// The dorfl-INTERNAL agent deadline (minutes) — spec
+	// `graceful-pre-timeout-wip-checkpoint`. NUMBER coercion (like
+	// `reviewMaxRounds`); range validation is fail-loud in `validateDeadlineConfig`
+	// (not clamped here). Env is a per-machine source, so CI can override the
+	// per-repo default without a config edit: `DORFL_AGENT_DEADLINE_MINUTES=90`.
+	agentDeadlineMinutes: 'number',
+	checkpointHeadroomMinutes: 'number',
+	maxAutoCheckpoints: 'number',
 	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env
 	// var of its own — each MEMBER carries its own env var (the nested-key form
 	// `DORFL_PROMPT_GUIDANCE_<MEMBER>`), handled out-of-band in
