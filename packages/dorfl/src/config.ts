@@ -742,7 +742,7 @@ export const DEFAULT_CONFIG: Config = {
 	// always first. Reproduces today's tasks-first two-pool default. Subsumes the
 	// removed `prdsFirst` boolean (`[task, build, ...]` reproduces `prdsFirst: true`).
 	selectionOrder: DEFAULT_SELECTION_ORDER,
-	maxParallel: 4,
+	maxParallel: 2,
 	perRepoMax: 2,
 	defaultArbiter: 'origin',
 	workspacesDir: join(homedir(), brand.workdirName),

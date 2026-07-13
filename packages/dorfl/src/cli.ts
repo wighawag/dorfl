@@ -968,6 +968,7 @@ interface InstallCiFlags {
 	includeSecrets?: boolean;
 	installSource?: string;
 	maxParallel?: string;
+	legTimeoutMinutes?: string;
 	cwd?: string;
 	repo?: string;
 	ghBin?: string;
@@ -4314,7 +4315,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--max-parallel <n>',
-			'cap on CONCURRENT advance-lifecycle matrix legs (the propose/merge `max-parallel`). Each leg is a full agent session, so a large fan-out can exhaust the model provider rate limit + thrash the CAS. Default 4.',
+			'cap on CONCURRENT advance-lifecycle matrix legs (the propose/merge `max-parallel`). Each leg is a full agent session, so a large fan-out can exhaust the model provider rate limit + thrash the CAS. Default 2.',
+		)
+		.option(
+			'--leg-timeout-minutes <n>',
+			"per-leg wall-clock cap (`timeout-minutes`) on each advance-lifecycle matrix job. Without it a leg inherits GitHub's 6h job default, so a wedged/throttled leg (model-provider 429 backoff) strands the run for hours; this reaps it as a fast isolated failure the fail-fast:false matrix tolerates. Set ABOVE a legit worst-case build (some run ~1h), well UNDER 6h. Default 120 (2h).",
 		)
 		.action(async (flags: InstallCiFlags) => {
 			const workDir = flags.cwd ?? process.cwd();
@@ -4341,6 +4346,18 @@ export function buildProgram(): Command {
 				}
 				maxParallel = n;
 			}
+			let legTimeoutMinutes: number | undefined;
+			if (flags.legTimeoutMinutes !== undefined) {
+				const n = Number(flags.legTimeoutMinutes);
+				if (!Number.isInteger(n) || n < 1) {
+					console.error(
+						`install-ci: --leg-timeout-minutes must be a positive integer (got "${flags.legTimeoutMinutes}")`,
+					);
+					process.exitCode = 1;
+					return;
+				}
+				legTimeoutMinutes = n;
+			}
 			const ctx = new GitHubCIContext({
 				workDir,
 				repo: flags.repo,
@@ -4365,6 +4382,7 @@ export function buildProgram(): Command {
 					| 'workspace'
 					| undefined,
 				maxParallel,
+				legTimeoutMinutes,
 				prompts,
 				capabilities,
 				log: (line) => console.error(line),

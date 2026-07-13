@@ -340,6 +340,14 @@ jobs:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    # Per-leg wall-clock cap (config \`legTimeoutMinutes\`, install-ci
+    # --leg-timeout-minutes): one leg is a full agent session (build + Gate-2
+    # review). Without this it inherits GitHub's 6h job default, so a wedged /
+    # throttled leg (model-provider 429 backoff) strands the whole run for hours.
+    # This bounds it; past the cap the leg is reaped as a fast isolated failure
+    # the \`fail-fast:false\` matrix tolerates (the item just isn't advanced this
+    # tick). Set ABOVE a legit worst-case build, well UNDER 6h.
+    timeout-minutes: ${config.legTimeoutMinutes}
     strategy:
       # Independent PRs: one failing item must NOT cancel the others.
       fail-fast: false
@@ -403,6 +411,9 @@ jobs:
     needs: enumerate
     if: \${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    # Per-leg wall-clock cap (config \`legTimeoutMinutes\`, see advance-propose):
+    # bound a wedged/throttled landing leg instead of inheriting the 6h default.
+    timeout-minutes: ${config.legTimeoutMinutes}
     strategy:
       # Independent landings: one failing item must NOT cancel the others; a
       # loser of the CAS race re-rebases + re-gates + retries.

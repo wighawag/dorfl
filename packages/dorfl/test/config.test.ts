@@ -76,7 +76,7 @@ describe('mergeConfig', () => {
 
 	it('defaults the execution fields (maxParallel, perRepoMax, arbiter, integration)', () => {
 		const cfg = mergeConfig({});
-		expect(cfg.maxParallel).toBe(4);
+		expect(cfg.maxParallel).toBe(2);
 		expect(cfg.perRepoMax).toBe(2);
 		expect(cfg.defaultArbiter).toBe('origin');
 		expect(cfg.integration).toBe('propose');

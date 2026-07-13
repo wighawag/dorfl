@@ -63,6 +63,7 @@ const config: ResolvedCIConfig = {
 	harness: 'pi',
 	installSource: 'registry',
 	maxParallel: 4,
+	legTimeoutMinutes: 120,
 };
 
 let work: string;
@@ -184,7 +185,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).toBe(false);
 	});
 
-	it('caps the matrix fan-out with `max-parallel` from config (default 4, both propose + merge)', () => {
+	it('caps the matrix fan-out with `max-parallel` from config (both propose + merge)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		// Both matrices carry the cap (config.maxParallel = 4 here).
 		const caps = text.match(/max-parallel: \d+/g) ?? [];
@@ -199,7 +200,23 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			'max-parallel: 8',
 		]);
 		// Sanity: the default matches DEFAULT_MAX_PARALLEL.
-		expect(DEFAULT_MAX_PARALLEL).toBe(4);
+		expect(DEFAULT_MAX_PARALLEL).toBe(2);
+	});
+
+	it('caps each leg with `timeout-minutes` from config (both propose + merge)', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		// Both matrix jobs carry the per-leg wall-clock cap (config.legTimeoutMinutes = 120 here).
+		const timeouts = text.match(/timeout-minutes: \d+/g) ?? [];
+		expect(timeouts).toEqual(['timeout-minutes: 120', 'timeout-minutes: 120']);
+		// Threaded from config, not hard-coded: an override flows through.
+		const overridden = generateAdvanceLifecycleWorkflow({
+			...config,
+			legTimeoutMinutes: 90,
+		});
+		expect(overridden.match(/timeout-minutes: \d+/g)).toEqual([
+			'timeout-minutes: 90',
+			'timeout-minutes: 90',
+		]);
 	});
 
 	it(
