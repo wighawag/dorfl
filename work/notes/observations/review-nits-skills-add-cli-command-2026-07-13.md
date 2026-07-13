@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'skills-add-cli-command' (Gate 2 approv
 date: 2026-07-13
 status: open
 reviewOf: skills-add-cli-command
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
