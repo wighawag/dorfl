@@ -93,3 +93,7 @@ this repo has no separate ratified/status field for observations).
 >
 > Green gate: `pnpm format` then confirm
 > `pnpm -r build && pnpm -r test && pnpm format:check` is clean.
+
+## Requeue 2026-07-13
+
+Requeued to re-run through the fixed committed-recovery path (commit f06646a6): the prior PR #357 opened with no Gate-2 review and an empty body because recoverAlreadyCommitted skipped review. Keeping the branch so the next claim continues from the completed tip and exercises the recovery-path review + PR-body fix.
