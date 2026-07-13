@@ -3835,7 +3835,7 @@ export function buildProgram(): Command {
 	// away" verb — `git rm` a source item AND its question sidecar (when present) in
 	// ONE revertible commit, the reason in the commit MESSAGE (git history is the
 	// archive). It does NOT round-trip through the decision engine or spawn an agent
-	// (that is the SEPARATE agentic `delete-source` verdict in apply-persist.ts);
+	// (that is the SEPARATE agentic `dispose` verdict in apply-persist.ts);
 	// this is the human/skill/CLI no-ceremony delete of decision 7. DISTINCT from
 	// the existing `remote rm` (the hub-MIRROR deleter) — different concern, no
 	// collision. A LOCAL one-commit primitive over the working tree (like apply): it

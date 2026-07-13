@@ -80,7 +80,7 @@ describe('cli.ts wires a real apply decider at every advance entry point', () =>
 		expect([...APPLY_ALLOWED_OUTCOMES].sort()).toEqual([
 			'adr',
 			'ask',
-			'delete',
+			'dispose',
 			'resolve',
 			'spec',
 			'task',

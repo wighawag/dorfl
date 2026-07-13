@@ -1,20 +1,24 @@
-import {existsSync, readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
 import {run, type RunResult} from './git.js';
+import {setFrontmatterMarker} from './frontmatter.js';
 import {applyAtomic, type ApplyAtomicResult} from './sidecar-apply.js';
 import {
 	allAnswered,
 	appendQuestions,
 	parseSidecar,
+	resolveSidecarIdentity,
 	sidecarPathFor,
 	type NewQuestion,
 	type SidecarEntry,
 	type SidecarModel,
+	type SidecarType,
 } from './sidecar.js';
 import {
 	APPLY_LIFECYCLE_FOLDERS,
 	resolveItemPathByIdentity,
 } from './item-path.js';
+import {workItemRel} from './work-layout.js';
 
 /**
  * The engine-owned APPLY PERSIST (spec `advance-loop`, task `advance-rung-apply`;
@@ -27,10 +31,15 @@ import {
  *   - **append / re-pause** — when the apply has NEW questions to ask: append
  *     `qN+1…`, stay `needsAnswers:true`, re-pause (the "all answered?" flips back
  *     to false); OR
- *   - **discharge by deletion** — when the caller decided the SOURCE should leave
- *     by deletion (`discharge` set): `git rm` the source + sidecar in a STANDALONE
- *     revertible commit, the reason in the commit message (git history is the
- *     archive); OR
+ *   - **dispose** — when the caller decided the SOURCE should be DISPOSED
+ *     (`dispose` set): REGIME-POLYMORPHIC on the source's type (task
+ *     `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+ *     `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5):
+ *     an OBSERVATION is `git rm`-ed with its sidecar in one revertible commit
+ *     (reason in the message, git history = archive); a TASK is `git mv`-ed to
+ *     `tasks/cancelled/` (RETAINED, `reason:` written into the moved body); a
+ *     SPEC is `git mv`-ed to `specs/dropped/` (RETAINED). A task can NEVER be
+ *     hard-deleted from here — dispose is the only path off the board; OR
  *   - **resolve fully** (the default) — clear `needsAnswers` + DELETE the sidecar
  *     in the SAME atomic commit (the invariant `needsAnswers:false ⟺ no active
  *     sidecar`); the item advances toward build by its normal lifecycle.
@@ -41,7 +50,7 @@ import {
  * no `keep`/`triaged:keep` resting state. A sidecar entry is BINARY (no-answer |
  * answered); what to DO with a fully-answered OBSERVATION is decided by the
  * AGENTIC apply decision in the advance tick (`advance.ts` `applyRung` over the
- * shared `decide` engine), which then routes here (re-pause / discharge / via
+ * shared `decide` engine), which then routes here (re-pause / dispose / via
  * `promoteObservation` for a mint). A signal is still-open, acted-on, or deleted
  * — there is no \"retain as resolved\" state.
  *
@@ -53,7 +62,7 @@ import {
  * It is the SIBLING of {@link import('./surface-persist.js').persistSurfacedQuestions}:
  * that is the SURFACE rung's one-commit primitive (append-or-create + set
  * `needsAnswers`); this is the APPLY rung's (apply answers + resolve / re-pause /
- * discharge). Kept file-orthogonal so the rung bodies land in different tasks.
+ * dispose). Kept file-orthogonal so the rung bodies land in different tasks.
  *
  * **NEVER invents an answer (US #4).** The apply rung applies ONLY what the human
  * authored — the recorded `answer:` text. It does NOT fill, guess, or author an
@@ -116,19 +125,30 @@ export interface ApplyAnsweredQuestionsOptions {
 	 * a caller-supplied batch). When non-empty, the apply APPENDS them (`qN+1…`,
 	 * never mutating an answered entry) and RE-PAUSES (`needsAnswers:true` stays) —
 	 * the "all answered?" flips back to false. Empty/omitted ⇒ resolve the item (or
-	 * discharge it, when `discharge` is set).
+	 * dispose it, when `dispose` is set).
 	 */
 	appendQuestions?: NewQuestion[];
 	/**
-	 * DISCHARGE the SOURCE by DELETION (the agentic `delete-source` verdict, or a
-	 * direct discharge): instead of resolving in place, `git rm` the source + its
-	 * answered sidecar in a STANDALONE revertible commit, the `reason` recorded in
-	 * the commit message (git history is the archive). Fires DIRECT (no
-	 * preview/confirm — decision 12). Mutually exclusive with `appendQuestions`
-	 * (re-pause and discharge cannot both happen on one apply); when both are given
-	 * the re-pause wins (you cannot discharge a source you are still asking about).
+	 * DISPOSE the SOURCE (the agentic `dispose` verdict, or a direct disposal):
+	 * REGIME-POLYMORPHIC on the source's type (task
+	 * `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+	 * `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5):
+	 *   - OBSERVATION → `git rm` the source + its answered sidecar in a STANDALONE
+	 *     revertible commit, the `reason` recorded in the commit message (git
+	 *     history is the archive; notes leave by deletion, decision 12);
+	 *   - TASK → `git mv` the source to the task regime's won't-proceed terminal
+	 *     `tasks/cancelled/` (RETAINED, `reason:` written into the moved body's
+	 *     frontmatter); the sidecar is `git rm`-ed in the same commit;
+	 *   - SPEC → `git mv` the source to `specs/dropped/` (RETAINED); sidecar
+	 *     `git rm`-ed in the same commit.
+	 * A TASK can NEVER be hard-deleted through this option — dispose is the only
+	 * path off the board, true by construction (there is no `delete: true` escape
+	 * hatch here). Fires DIRECT (no preview/confirm — decision 12). Mutually
+	 * exclusive with `appendQuestions` (re-pause and dispose cannot both happen on
+	 * one apply); when both are given the re-pause wins (you cannot dispose a
+	 * source you are still asking about).
 	 */
-	discharge?: {reason: string};
+	dispose?: {reason: string};
 	/** Advisory committer id for the commit subject. Defaults to git user.name. */
 	by?: string;
 	/** Environment for child git processes. */
@@ -144,14 +164,26 @@ export type ApplyTerminal =
 	/** New questions appended; stayed needsAnswers:true and re-paused. */
 	| 'repaused'
 	/**
-	 * The SOURCE was DISCHARGED BY DELETION (the agentic `delete-source` verdict, or
-	 * a direct discharge): the source (+ its answered sidecar) were `git rm`-ed in a
-	 * STANDALONE revertible commit, the reason recorded in the commit message (git
-	 * history = archive). A discharged item leaves by being GONE — there is no
-	 * resting marker. This is the apply rung applying the human's RATIFIED answer
-	 * (human-authored, not a unilateral agent destruction of a live signal).
+	 * The SOURCE (an OBSERVATION) was disposed BY DELETION (the agentic `dispose`
+	 * verdict on an observation, or a direct disposal): the source (+ its answered
+	 * sidecar) were `git rm`-ed in a STANDALONE revertible commit, the reason in
+	 * the commit message (git history = archive). Notes leave by being GONE —
+	 * there is no resting marker. This is the apply rung applying the human's
+	 * RATIFIED answer (human-authored, not a unilateral agent destruction of a
+	 * live signal). Preserved verbatim as `'deleted'` for observation disposals;
+	 * see {@link ApplyTerminal | 'disposed'} for the task/spec branches.
 	 */
 	| 'deleted'
+	/**
+	 * The SOURCE (a TASK or SPEC) was DISPOSED to its regime's won't-proceed
+	 * terminal (task `apply-disposition-delete-to-dispose-regime-polymorphic`,
+	 * spec `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5):
+	 * a task `git mv`-ed to `tasks/cancelled/`, a spec `git mv`-ed to
+	 * `specs/dropped/`. The file is RETAINED (git history + terminal folder is
+	 * the archive), with the human's `reason:` written into the moved body's
+	 * frontmatter and the answered sidecar `git rm`-ed in the same commit.
+	 */
+	| 'disposed'
 	/**
 	 * The item file was GONE by the time apply tried to write (a concurrent
 	 * promote/terminal-move/delete between capture and write). Apply exited
@@ -324,9 +356,12 @@ function stripOpenQuestionsBlocks(body: string): string {
  *
  *   1. **append / re-pause** — `appendQuestions` is non-empty: append `qN+1…`,
  *      keep `needsAnswers:true`, re-pause (one commit, body + sidecar).
- *   2. **discharge by deletion** — `discharge` is set (the `delete-source`
- *      verdict): `git rm` the source + sidecar in a standalone revertible commit,
- *      the reason in the commit message.
+ *   2. **dispose** — `dispose` is set (the `dispose` verdict): REGIME-POLYMORPHIC
+ *      on the source's type — an OBSERVATION is `git rm`-ed with its sidecar in
+ *      a standalone revertible commit (reason in the message); a TASK is `git
+ *      mv`-ed to `tasks/cancelled/` (`reason:` written into the moved body,
+ *      sidecar `git rm`-ed in the same commit); a SPEC is `git mv`-ed to
+ *      `specs/dropped/` (same shape as the task branch).
  *   3. **resolve fully** (the default) — clear `needsAnswers` + delete the sidecar
  *      in ONE commit; the item advances toward build by its normal lifecycle.
  */
@@ -383,7 +418,7 @@ export function applyAnsweredQuestions(
 
 	// (1) APPEND / RE-PAUSE: the apply has new questions. Append them (`qN+1…`,
 	// never mutating an answered entry), stay needsAnswers:true, re-pause. Re-pause
-	// WINS over a discharge — you cannot discharge a source you are still asking
+	// WINS over a dispose — you cannot dispose a source you are still asking
 	// about.
 	const followups = options.appendQuestions ?? [];
 	if (followups.length > 0) {
@@ -409,17 +444,39 @@ export function applyAnsweredQuestions(
 		};
 	}
 
-	// (2) DISCHARGE BY DELETION: the caller decided the source should leave by
-	// deletion (the `delete-source` verdict). `git rm` the source + sidecar in a
-	// STANDALONE revertible commit, the reason in the commit message (git history =
-	// archive). DIRECT — no preview/confirm (decision 12); the human's answer is
-	// the source of truth.
-	if (options.discharge !== undefined) {
-		return dischargeByDeletion({
+	// (2) DISPOSE: the caller decided the source should be DISPOSED (the `dispose`
+	// verdict). REGIME-POLYMORPHIC on the source type (task
+	// `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5):
+	//   - observation → `git rm` the note + sidecar in one revertible commit
+	//     (reason in the message; notes leave by deletion, decision 12);
+	//   - task → `git mv` to `tasks/cancelled/` (RETAINED; `reason:` written into
+	//     the moved body; sidecar `git rm`-ed in the same commit);
+	//   - spec → `git mv` to `specs/dropped/` (RETAINED, same shape).
+	// DIRECT — no preview/confirm (decision 12); the human's answer is the source
+	// of truth. A TASK is never `git rm`-ed here (true by construction: the
+	// task-branch calls `git mv`, no branch of this dispatcher hard-deletes a
+	// task).
+	if (options.dispose !== undefined) {
+		const {type} = resolveSidecarIdentity(item);
+		if (type === 'observation') {
+			return disposeObservationByDeletion({
+				cwd,
+				item,
+				itemPath,
+				reason: options.dispose.reason,
+				sidecarPath,
+				by,
+				env,
+				note,
+			});
+		}
+		return disposeToTerminal({
 			cwd,
 			item,
 			itemPath,
-			reason: options.discharge.reason,
+			type,
+			reason: options.dispose.reason,
 			sidecarPath,
 			by,
 			env,
@@ -455,11 +512,11 @@ export function applyAnsweredQuestions(
 	};
 }
 
-interface DischargeInput {
+interface DisposeInput {
 	cwd: string;
 	item: string;
 	itemPath: string;
-	/** The human's discharge reason (their answer text), recorded in the commit message. */
+	/** The human's dispose reason (their answer text), recorded in the commit message. */
 	reason: string;
 	sidecarPath: string;
 	by: string;
@@ -468,25 +525,27 @@ interface DischargeInput {
 }
 
 /**
- * DISCHARGE a source by DELETION (the `delete-source` verdict, US #5/#11): `git
- * rm` the source AND its answered sidecar in ONE STANDALONE commit, the human's
- * discharge reason recorded in the commit MESSAGE (git history is the archive).
- * There is no spawned artifact for a discharge, so the deletion is a standalone
- * commit (a `mint`, by contrast, rides the new artifact's create commit through
- * `promoteObservation`).
+ * DISPOSE an OBSERVATION by DELETION (task
+ * `apply-disposition-delete-to-dispose-regime-polymorphic`; US #5/#11): `git rm`
+ * the observation-note AND its answered sidecar in ONE STANDALONE commit, the
+ * human's dispose reason recorded in the commit MESSAGE (git history = archive).
+ * There is no spawned artifact for a dispose-by-deletion, so the deletion is a
+ * standalone commit (a `mint`, by contrast, rides the new artifact's create
+ * commit through `promoteObservation`).
  *
- * A discharged item leaves by being GONE — no resting body marker, no `triaged:`
- * stamp (the resting-state machinery is retired; an item is still-open, acted-on,
- * or deleted). This is the apply rung applying the human's RATIFIED answer (the
- * deletion is human-authored), and it is git-recoverable (a single revertible
- * commit) — a wrong inference is never catastrophic.
+ * A disposed observation leaves by being GONE — notes have no terminal folder
+ * (decision 12: "notes leave by deletion"), unlike a task/spec which is `git
+ * mv`-ed to its regime's terminal by {@link disposeToTerminal}. This is the
+ * apply rung applying the human's RATIFIED answer (the deletion is
+ * human-authored), and it is git-recoverable (a single revertible commit) — a
+ * wrong inference is never catastrophic.
  */
-function dischargeByDeletion(
-	input: DischargeInput,
+function disposeObservationByDeletion(
+	input: DisposeInput,
 ): ApplyAnsweredQuestionsResult {
 	const {cwd, item, itemPath, reason, sidecarPath, by, env, note} = input;
 	// `git rm` the source. The sidecar may not exist in every path; rm it too when
-	// present, so the discharge leaves no answered-sidecar residue. Both ride ONE
+	// present, so the dispose leaves no answered-sidecar residue. Both ride ONE
 	// commit.
 	const rmPaths = [itemPath];
 	if (existsSync(join(cwd, sidecarPath))) {
@@ -496,7 +555,7 @@ function dischargeByDeletion(
 	const reasonLine = reason.trim() === '' ? '(no reason given)' : reason.trim();
 	const subject = `advance: ${item} → deleted (by ${by})`;
 	const messageBody =
-		`Discharged by deletion (the human's ratified answer authors it; ` +
+		`Disposed by deletion (the human's ratified answer authors it; ` +
 		`git history is the archive).\n\nreason: ${reasonLine}`;
 	gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
 	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
@@ -509,6 +568,121 @@ function dischargeByDeletion(
 		commit,
 		sidecarPath,
 		itemPath,
+		message,
+	};
+}
+
+/**
+ * The per-regime WON'T-PROCEED TERMINAL folder key {@link disposeToTerminal}
+ * moves a task/spec into. The folder WORDS are deliberately different
+ * (`cancelled` for tasks, `dropped` for specs) so a task and spec sharing a slug
+ * cannot collide on one terminal path — the two regimes have namespaced
+ * terminals by design (spec `surface-stuck-as-questions-and-retire-stuck-lock-
+ * state`, and see `work-layout.ts`). Do NOT rename the folders here; the token
+ * that changed is the verdict outcome (`dispose`), NOT the folder words.
+ */
+const DISPOSE_TERMINAL_FOLDER = {
+	task: 'cancelled',
+	spec: 'specs-dropped',
+} as const;
+
+interface DisposeToTerminalInput extends DisposeInput {
+	type: Exclude<SidecarType, 'observation'>;
+}
+
+/**
+ * DISPOSE a TASK or SPEC to its regime's won't-proceed TERMINAL folder (task
+ * `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5): `git
+ * mv` the item to `tasks/cancelled/` (task) or `specs/dropped/` (spec), with the
+ * human's dispose reason written into the moved body's `reason:` frontmatter
+ * (durable, in-file archive of WHY the item won't proceed — symmetric across
+ * both regimes; the source of the moved item is the human's ratified answer),
+ * then `git rm` the answered sidecar, all in ONE commit.
+ *
+ * ## Decisions (recorded here per task etiquette)
+ *
+ * - **`reason:` frontmatter, symmetric across task AND spec.** The acceptance
+ *   criteria explicitly require the reason for the task branch; the spec
+ *   branch is only required to `git mv` to `specs/dropped/`. We nonetheless
+ *   write the same `reason:` marker onto a disposed SPEC too, because (a) the
+ *   two regimes are the same shape ("disposed to terminal"), so asymmetric
+ *   behaviour would be a surprise; (b) the spec regime's dropped/ folder had
+ *   no in-file WHY at all before, so any adjacent surface (an operator
+ *   inspecting `specs/dropped/`) would otherwise have to grep the commit
+ *   history for the reason. Setting it uses the same {@link
+ *   setFrontmatterMarker} the surface rung already uses for `needsAnswers`.
+ *   The commit message still carries the reason too (belt + braces — the
+ *   frontmatter is the durable in-file record, the commit is the audit
+ *   history). If a reviewer disagrees they can flip the spec branch back to a
+ *   bare `git mv` in one line — the task branch is the load-bearing acceptance.
+ *
+ * - **The sidecar is `git rm`-ed in the same commit as the mv.** A disposed
+ *   item is no longer in the question-loop (the answer settled it), so the
+ *   sidecar has no reason to survive at the terminal folder. Same commit
+ *   preserves the sidecar's `needsAnswers ⇔ active sidecar` invariant.
+ *
+ * A TASK is NEVER `git rm`-ed on this branch (that is the invariant this
+ * function exists to enforce): the disposal is a `git mv` to `tasks/cancelled/`,
+ * a folder-move that git can revert with a single `git revert`.
+ */
+function disposeToTerminal(
+	input: DisposeToTerminalInput,
+): ApplyAnsweredQuestionsResult {
+	const {cwd, item, itemPath, type, reason, sidecarPath, by, env, note} = input;
+	const {slug} = resolveSidecarIdentity(item);
+	const folderKey = DISPOSE_TERMINAL_FOLDER[type];
+	const terminalPath = workItemRel(folderKey, `${slug}.md`);
+
+	// (a) Rewrite the item body with the `reason:` frontmatter marker BEFORE the
+	// mv so the marker rides the same commit as the terminal move. `git mv` reads
+	// the working-tree file, so a pre-mv rewrite is picked up by the subsequent
+	// stage of the moved path.
+	const reasonLine = reason.trim() === '' ? '(no reason given)' : reason.trim();
+	const itemAbs = join(cwd, itemPath);
+	const rewritten = setFrontmatterMarker(
+		readFileSync(itemAbs, 'utf8'),
+		'reason',
+		reasonLine,
+	);
+	writeFileSync(itemAbs, rewritten);
+
+	// (b) Ensure the terminal folder exists (git mv fatals on a missing parent).
+	mkdirSync(dirname(join(cwd, terminalPath)), {recursive: true});
+
+	// (c) `git mv` the source to its regime terminal.
+	gitHard(['mv', '--', itemPath, terminalPath], cwd, env);
+
+	// (d) `git rm` the answered sidecar (the loop is settled) in the same commit.
+	const rmPaths: string[] = [];
+	if (existsSync(join(cwd, sidecarPath))) {
+		rmPaths.push(sidecarPath);
+	}
+	if (rmPaths.length > 0) {
+		gitHard(['rm', '--quiet', '--', ...rmPaths], cwd, env);
+	}
+
+	// (e) Stage the rewritten (now-moved) body so its `reason:` marker rides the
+	// same commit as the mv.
+	gitHard(['add', '--', terminalPath], cwd, env);
+
+	const subject = `advance: ${item} → disposed (by ${by})`;
+	const messageBody =
+		`Disposed to regime terminal '${folderKey}' (the human's ratified answer ` +
+		`authors it; git history + terminal folder are the archive).\n\n` +
+		`reason: ${reasonLine}`;
+	gitHard(['commit', '--quiet', '-m', subject, '-m', messageBody], cwd, env);
+	const commit = gitHard(['rev-parse', 'HEAD'], cwd, env).stdout.trim();
+	const message =
+		`applied ${item} → disposed (source git mv-ed to '${terminalPath}', ` +
+		`reason: written into the moved body's frontmatter, sidecar deleted in the ` +
+		`same commit).`;
+	note(message);
+	return {
+		outcome: 'disposed',
+		commit,
+		sidecarPath,
+		itemPath: terminalPath,
 		message,
 	};
 }

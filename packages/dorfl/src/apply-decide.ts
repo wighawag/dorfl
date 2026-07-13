@@ -29,8 +29,14 @@ import {
  * from the agent's VERDICT, NOT a human `promote-*` field.
  *
  * **The allowed set** (the SUBSET the apply rung passes to `decide`):
- * `{task | spec | adr | delete | resolve | ask}` \u2014 i.e. `{mint-task | mint-spec |
- * mint-adr | delete-source | resolve-no-mint | ask-follow-up}`. `resolve` was added
+ * `{task | spec | adr | dispose | resolve | ask}` \u2014 i.e. `{mint-task | mint-spec |
+ * mint-adr | dispose-source | resolve-no-mint | ask-follow-up}`. The `dispose`
+ * verdict replaced the older `delete` token (task
+ * `apply-disposition-delete-to-dispose-regime-polymorphic`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #5): the
+ * disposal is now REGIME-POLYMORPHIC (observation \u2192 `git rm`, task \u2192
+ * `git mv` to `tasks/cancelled/`, spec \u2192 `git mv` to `specs/dropped/`), so a
+ * task can no longer be hard-deleted by the apply rung. `resolve` was added
  * by the task `apply-decide-resolve-verdict-mint-nothing` so the decider can
  * honestly handle "the human answered, keep the note on record, mint nothing"
  * (previously it had no valid verdict for that case and looped on `ask`,
@@ -59,7 +65,7 @@ export const APPLY_ALLOWED_OUTCOMES: readonly DecisionOutcome[] = [
 	'task',
 	'spec',
 	'adr',
-	'delete',
+	'dispose',
 	'resolve',
 	'ask',
 ];
@@ -142,8 +148,10 @@ export function buildApplyDecisionInput(opts: {
  * the human's recorded ANSWER(S) + the SOURCE item and emit a single
  * `{outcome, \u2026}` verdict ({@link parseDecisionVerdict} reads it). The agent decides
  * what to DO with the answered signal \u2014 mint a self-contained task, mint a SPEC,
- * mint an ADR, delete the source, resolve it (settle the loop, mint nothing, KEEP
- * the note), or ask one BATCH of follow-up questions \u2014
+ * mint an ADR, DISPOSE the source (regime-polymorphic: an observation is
+ * git-rm-ed, a task is `git mv`-ed to `tasks/cancelled/`, a spec to
+ * `specs/dropped/`), resolve it (settle the loop, mint nothing, KEEP the note),
+ * or ask one BATCH of follow-up questions \u2014
  * grounded in the source's full context. It writes NOTHING (the engine acts on
  * the verdict).
  *
@@ -185,16 +193,22 @@ export function buildApplyDecisionPrompt(input: ApplyDecisionInput): string {
 		`    a self-contained ADR (docs/adr/, the context/decision/why shape) carrying`,
 		`    the WHY from the answer(s). Emit {"outcome":"adr","adrSlug":"\u2026",`,
 		`    "adrTitle":"\u2026","adrBody":"\u2026 (markdown AFTER the frontmatter)"}.`,
-		`  - "delete": the answer means this signal should be DROPPED. Emit`,
-		`    {"outcome":"delete","deleteReason":"\u2026"} (a single revertible deletion;`,
-		`    the reason rides the commit message, git history is the archive).`,
+		`  - "dispose": the answer means this signal should be DISPOSED. Emit`,
+		`    {"outcome":"dispose","disposeReason":"\u2026"}. REGIME-POLYMORPHIC on the`,
+		`    SOURCE type: an OBSERVATION is git-rm-ed in a single revertible commit`,
+		`    (reason rides the message, git history is the archive); a TASK is git-mv-ed`,
+		`    to \`tasks/cancelled/\` (RETAINED, reason recorded in the moved body's`,
+		`    \`reason:\` frontmatter); a SPEC is git-mv-ed to \`specs/dropped/\` (RETAINED).`,
+		`    A task can NEVER be hard-deleted by the apply rung \u2014 dispose is the`,
+		`    only path off the board.`,
 		`  - "resolve": the answer SETTLES this item and there is NOTHING to mint (no`,
 		`    task/spec/adr) \u2014 the correct move is to CLOSE the question-loop while`,
 		`    KEEPING the note on record (e.g. an evidence/watch-item observation whose`,
 		`    answer is "acknowledged, keep this on record, no artifact"). The answers are`,
 		`    harvested into the item body and the loop is cleared; the note is RETAINED`,
-		`    (this is the sibling of "delete", which DROPS the note \u2014 pick "resolve" when`,
-		`    the note should SURVIVE, "delete" when it should not). Emit`,
+		`    (this is the sibling of "dispose", which DROPS the observation-note or`,
+		`    moves a task/spec to its terminal \u2014 pick "resolve" when the observation`,
+		`    should SURVIVE in place, "dispose" when it should not). Emit`,
 		`    {"outcome":"resolve","resolveReason":"\u2026"}.`,
 		`  - "ask": you need more from the human before acting. Emit`,
 		`    {"outcome":"ask","question":"\u2026"} \u2014 ask everything you still need as ONE`,
