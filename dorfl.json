@@ -7,5 +7,6 @@
   "observationTriage": "auto",
   "surfaceBlockers": true,
   "review": true,
-  "integration": "propose"
+  "integration": "propose",
+  "agentDeadlineMinutes": 15
 }
