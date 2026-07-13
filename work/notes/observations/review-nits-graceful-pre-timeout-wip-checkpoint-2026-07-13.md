@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'graceful-pre-timeout-wip-checkpoint' (
 date: 2026-07-13
 status: open
 reviewOf: graceful-pre-timeout-wip-checkpoint
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
