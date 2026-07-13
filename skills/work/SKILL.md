@@ -1,7 +1,7 @@
 ---
 name: work
 disable-model-invocation: true
-description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-spec / to-task / drive-tasks / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
+description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-spec / to-task / drive-tasks / merge-prs / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
 ---
 
 # Work (the router)
@@ -18,6 +18,8 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 4. **Build the ready tasks. Pick the conductor:**
    - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `dorfl do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the dorfl CLI. You are present.
    - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / specs / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".
+5. **Land the resulting PRs efficiently (optional, `propose` mode):**
+   - **`merge-prs`**: the batch-LANDING conductor. Starts where a build left an OPEN work PR: review the open PRs, partition them into conflict-free clusters (disjoint file-sets), gate each cluster's combined tip ONCE, then merge the cluster; PRs that don't cleanly combine fall out to their own gate. The sibling of `drive-tasks` (which builds+merges one task at a time) for when a `run`/CI/`drive-tasks` burst left a PILE of PRs to land in as few gate runs as possible. Requires `gh` + a GitHub arbiter in propose mode.
 
 ## On-ramps
 
