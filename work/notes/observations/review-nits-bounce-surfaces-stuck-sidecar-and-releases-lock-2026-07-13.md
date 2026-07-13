@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'bounce-surfaces-stuck-sidecar-and-rele
 date: 2026-07-13
 status: open
 reviewOf: bounce-surfaces-stuck-sidecar-and-releases-lock
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
