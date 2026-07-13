@@ -54,3 +54,7 @@ So the surfaced-item answer vocabulary becomes: continue → `resolve` (no flag)
 > Where to look (by concept): the decision-verdict shape + its parser (where `resolveReason` lives); the apply-rung dispatch of the `resolve` outcome (the resolve-fully path); the `requeue --reset` branch-delete mechanism to reuse. Seams to test at: inject a `resolve` verdict with `resolveReset:true` for a task WITH a work branch and assert the branch is deleted then needsAnswers cleared; without the flag assert the branch survives; with the flag but NO branch assert a harmless no-op.
 >
 > Do NOT add a new decision outcome — the flag on `resolve` IS the decision. Ensure the reset path reuses the SAME branch-delete the `requeue --reset` verb uses (do not re-implement branch deletion). Done = the flag works and is safely ignorable, tests cover all three cases, gate green. RECORD any non-obvious in-scope decision (e.g. ordering of branch-delete vs needsAnswers-clear on a partial failure) durably, linked from the done record.
+
+## Requeue 2026-07-13
+
+Requeued after Gate-2 block + re-scope. --reset: the first attempt wired resolveReset into the observation-only agentic decider (dead for tasks); the corrected body dispatches on the TASK apply path and now blocks on PR-2b (bounce-migrate) so it is built when bounced tasks actually surface as questions. Discard the wrong-scoped WIP; rebuild fresh.
