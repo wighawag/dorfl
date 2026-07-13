@@ -2,7 +2,7 @@
 title: Surface every "needs a human" bounce as a question sidecar on main, and retire the `stuck` lock state
 slug: surface-stuck-as-questions-and-retire-stuck-lock-state
 humanOnly: true
-needsAnswers: true
+needsAnswers: false
 ---
 
 > Launch snapshot — records intent at creation, NOT maintained. Current truth: `docs/adr/` (decisions) + the code; remaining work: `work/tasks/ready/` tasks. (Technical-detail sections below are trimmed by `to-task` once tasked; the spec then settles to Problem / Solution / User Stories / Out of Scope.)
@@ -88,11 +88,22 @@ A bounce reason of "empty diff / produced no change" is a NON-DETERMINISTIC LLM 
 - **Prior-art files to read at slicing time** (`packages/dorfl/src/`): `item-lock.ts` (the `LockState`/`LockEntry` state machine to amend), `ledger-write.ts` (`bounceToStuckLock`/`applyNeedsAttentionTransition` — the bounce seam to re-point), `needs-attention.ts` (the bounce prose/commit), `surface-persist.ts` (`persistSurfacedQuestions` — the atomic sidecar primitive to reuse), `sidecar.ts` (`sidecarPathFor` keying), `advance.ts` (surface/apply rungs), `start.ts` (`--resume`/`resolved` recovery reading `stuck`), `format.ts` (status render of `stuck`). Reconcile the SPEC/ADR `ledger-status-per-item-lock-refs` (defines `active|stuck`).
 - **Why this composes cleanly:** the stuck-clear apply is a tree-less TRANSITION on state the loop already understands (`needsAnswers` + answered sidecar), not a fresh `acquire`; the surface-on-bounce reuses the surface rung's exact atomic commit; the disposition reuses `requeue`/`drop`. The only genuinely new logic is (a) re-pointing the bounce seam and (b) the empty-diff delete-default classification.
 
-## Open questions (why `needsAnswers: true`)
+## Resolved decisions (answered with the maintainer 2026-07-13)
 
-These are genuine forks that would cut the wrong slices if guessed:
+These four forks were open at creation; the maintainer answered them, so the spec is now `needsAnswers: false` and taskable.
 
-1. **Does a bounced leg's PROCESS exit code change?** Once the item is cleanly surfaced on `main`, is the leg a benign `exitCode: 0` (like `already-triaged`/`vanished`, "parked cleanly, matrix tolerates it") or does it stay non-zero so the run still flags "a human owes an answer"? (This is the superseded A/B/C, re-asked in the new frame.)
-2. **Sidecar question shape + disposition vocabulary.** Confirm the exact question wording and the answer→verb mapping (requeue / reset / drop / hold), and whether "hold" is a distinct disposition or just "leave `needsAnswers:true`".
-3. **Migration of EXISTING stuck locks.** On rollout, are there live `stuck` locks to convert (a one-shot `stuck → surface-on-main + release` migration), or is retirement forward-only (new bounces surface; old stuck locks handled by a documented `requeue`)?
-4. **Recovery semantics for a crash-orphaned `active` lock after this change.** Confirm the deterministic `main`-authoritative resolution (re-eligible vs re-surface) for every crash point in the new one-transition bounce.
+1. **A cleanly-surfaced bounce is GREEN (`exitCode: 0`).** Once the item is surfaced on `main` (`needsAnswers:true` + sidecar) the repo is in a GOOD, known, loop-drained state — exactly like `already-triaged`/`vanished` (already green). The exit code answers "did this leg leave the tree in a good state?", NOT "does someone eventually owe an answer?" (that signal is the sidecar on `main`, not a red leg). Red is reserved for a genuinely bad tree / broken gate. **Nuance (load-bearing):** green iff the surface TRANSITION SUCCEEDED. If the bounce tried to surface but the atomic transition FAILED (sidecar not written / lock not released), the item is NOT cleanly parked, so THAT stays non-zero. So the rule is "green iff the surface landed cleanly," not "green for all bounces." This fully dissolves the superseded A/B/C observation.
+
+2. **The engine owns the ENVELOPE + default; the LLM owns the PROSE.** The engine does NOT hardcode question text. Two cases, one mechanism:
+   - **needs-attention bounce with agent questions:** the agent already emits its open questions; the engine surfaces them AS-IS into the sidecar (the existing surface behaviour).
+   - **empty-diff / "nothing to do":** the agent's stop-context becomes the sidecar body, and the engine GUARANTEES at least one disposition question with a SAFE DEFAULT — a cancel/delete-the-task question defaulting to delete. The LLM writes the prose/context; the engine guarantees "there is always at least a disposition question with a safe default."
+   So the seam is: engine guarantees the envelope + the delete-default for the no-op case; the LLM generates the questions/context. No fixed answer→verb vocabulary is baked in beyond "an answered disposition dispatches the existing `requeue`/`drop`"; the specific questions are per-item LLM output.
+
+3. **Migrate existing stuck locks (one-shot).** On rollout, convert any live `stuck` locks via a one-shot `stuck → surface-on-main + release` migration (not forward-only), so no pre-existing stuck item is silently stranded when the state is retired.
+
+4. **Crash-recovery = ordered transition + `main`-authoritative (reuse `complete`'s rule).** The bounce is three coupled effects; a process CRASH (not a transient error) can land between any two, and retry cannot help a dead process — so the ORDER is load-bearing and recovery reads `main`:
+   - **Order:** (1) write sidecar + set `needsAnswers:true` to `main` as ONE atomic commit/CAS, THEN (2) release/delete the lock ref.
+   - **Crash after (1), before (2):** `main` shows the item surfaced but the lock ref lingers. Recovery sees "main says surfaced" → `main` authoritative → just releases the orphan lock. Idempotent, no loss. (This is why (1)-before-(2) is the chosen order.)
+   - **Crash before (1):** nothing on `main`, lock still held with no live holder. Recovery sees "not surfaced, item still in pool, dead-holder lock" → clears the lock → item re-eligible → a later tick re-attempts the bounce.
+   - **Reverse order (release then write) is FORBIDDEN:** it can leave the lock gone but the sidecar never written (item silently back in the pool with no surface, or two legs grabbing it).
+   - **Retry is for CONTENTION, not crashes (orthogonal):** a transient CAS rejection on the `main`-write (someone else advanced `main`) is retried in-process (rebase + re-push), exactly like every other `main`-CAS. That handles contention; the ordering above handles crashes. Both are needed. This reuses `complete`'s existing "hold → land durable `main` move → release; `main` authoritative over a stale lock" crash-safety (`complete-lock-then-durable-main-move-crash-safe`) — no new mechanism.

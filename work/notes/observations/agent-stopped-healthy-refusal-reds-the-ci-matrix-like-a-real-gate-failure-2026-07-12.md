@@ -8,7 +8,9 @@ needsAnswers: false
 
 ## SUPERSEDED 2026-07-12 — folded into a spec
 
-The A/B/C decision below is SUBSUMED by the proposed spec `work/specs/proposed/surface-stuck-as-questions-and-retire-stuck-lock-state.md`. That spec's deeper fix (a bounce/`agent-stopped` SURFACES a question sidecar on `main` and RELEASES the lock, retiring the `stuck` state) turns a healthy refusal from a raw exit-1 red into a legible surfaced-question state, which dissolves this legibility problem at the root rather than papering it with a summary. The raw A-vs-B-vs-C exit-code question survives only as open question #1 in that spec (re-asked in the new frame: is a cleanly-surfaced bounced leg a benign exit-0, or does it stay non-zero so the run flags "a human owes an answer"). Do NOT decide A/B/C standalone; decide it inside the spec. Kept below for the record.
+The A/B/C decision below is SUBSUMED by the proposed spec `work/specs/proposed/surface-stuck-as-questions-and-retire-stuck-lock-state.md`. That spec's deeper fix (a bounce/`agent-stopped` SURFACES a question sidecar on `main` and RELEASES the lock, retiring the `stuck` state) turns a healthy refusal from a raw exit-1 red into a legible surfaced-question state, which dissolves this legibility problem at the root rather than papering it with a summary.
+
+The A/B/C exit-code question is now ANSWERED inside that spec (resolved decision #1): a cleanly-surfaced bounced leg is GREEN (`exitCode: 0`, like `already-triaged`/`vanished`) — the sidecar on `main` is the "a human owes an answer" signal, and red is reserved for a genuinely bad tree; a bounce whose surface TRANSITION failed stays non-zero. So this is effectively option A, reached via the deeper surface-on-bounce mechanism. Do NOT re-decide standalone. Kept below for the record.
 
 ## What was seen
 
