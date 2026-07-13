@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'bounce-atomic-cutover-retire-stuck-loc
 date: 2026-07-13
 status: open
 reviewOf: bounce-atomic-cutover-retire-stuck-lock
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
