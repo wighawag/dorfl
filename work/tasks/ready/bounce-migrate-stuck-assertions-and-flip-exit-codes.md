@@ -3,6 +3,7 @@ title: 'PR-2b: re-point the three bounce seams + migrate the 84 stuck assertions
 slug: bounce-migrate-stuck-assertions-and-flip-exit-codes
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-atomic-cutover-retire-stuck-lock]
+humanOnly: true
 covers: [1, 3, 8]
 ---
 
@@ -35,6 +36,9 @@ D1 (itemPath probe: task `tasks/ready`→`tasks/backlog`, spec `specs/ready`→`
 ## Blocked by
 
 - `bounce-atomic-cutover-retire-stuck-lock` (PR-2a): consumes its classifier fold, recovery predicate, D1 probe helper, and the proven surface-then-release wiring.
+## humanOnly hold (2026-07-13)
+
+`humanOnly: true` — held OUT of the autonomous pool for now (NOT a never-by-nature gate; a temporary human-driven hold). This task's ~84-assertion migration PROVED it cannot complete in one 120-min CI leg — it hard-killed twice (runs 29268967187 etc.), losing all WIP each time. The fix (`graceful-pre-timeout-wip-checkpoint`: a dorfl-internal deadline that saves WIP + auto-continues across ticks) is landing separately. Once it merges, a HUMAN should: (1) set a SHORT `agentDeadlineMinutes` in `dorfl.json` (e.g. 15) to VALIDATE the checkpoint behaviour on this exact task (does it save WIP + auto-continue?), then (2) clear `humanOnly` (and set the deadline back to full) so the loop can drain PR-2b across ticks. Do NOT autonomously re-attempt PR-2b at the full 120-min timeout — it just wastes a leg.
 
 ## Prompt
 
