@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Observation: `prd-to-spec.test.ts` has a duplicate local `gitEnv()` that missed the `4fb7d87d` gc-auto-off fix
 
 Date: 2026-07-13
