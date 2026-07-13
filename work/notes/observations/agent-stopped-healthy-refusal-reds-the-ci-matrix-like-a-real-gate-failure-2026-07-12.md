@@ -1,10 +1,14 @@
 ---
 title: A healthy `agent-stopped` refusal (task drifted / stale premise / empty diff) exits 1 and reds the CI matrix identically to a real gate failure, so the autonomous loop is hard to read at a glance
 type: observation
-status: open
+status: superseded
 spotted: 2026-07-12
-needsAnswers: true
+needsAnswers: false
 ---
+
+## SUPERSEDED 2026-07-12 — folded into a spec
+
+The A/B/C decision below is SUBSUMED by the proposed spec `work/specs/proposed/surface-stuck-as-questions-and-retire-stuck-lock-state.md`. That spec's deeper fix (a bounce/`agent-stopped` SURFACES a question sidecar on `main` and RELEASES the lock, retiring the `stuck` state) turns a healthy refusal from a raw exit-1 red into a legible surfaced-question state, which dissolves this legibility problem at the root rather than papering it with a summary. The raw A-vs-B-vs-C exit-code question survives only as open question #1 in that spec (re-asked in the new frame: is a cleanly-surfaced bounced leg a benign exit-0, or does it stay non-zero so the run flags "a human owes an answer"). Do NOT decide A/B/C standalone; decide it inside the spec. Kept below for the record.
 
 ## What was seen
 
