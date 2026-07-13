@@ -57,7 +57,7 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 		});
 		expect(formatWatchEvent(record, false)).toEqual([
 			'Reading the prd, then the PRD.',
-			'▶ read',
+			'▶ read x',
 		]);
 	});
 
@@ -69,7 +69,7 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 				content: [{type: 'toolCall', toolName: 'edit', args: {path: 'y'}}],
 			},
 		});
-		expect(formatWatchEvent(record, false)).toEqual(['▶ edit']);
+		expect(formatWatchEvent(record, false)).toEqual(['▶ edit y']);
 	});
 
 	it('a toolCall with no name falls back to "tool"', () => {
@@ -78,6 +78,92 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 			message: {role: 'assistant', content: [{type: 'toolCall'}]},
 		});
 		expect(formatWatchEvent(record, false)).toEqual(['▶ tool']);
+	});
+
+	it("shows a bash toolCall's command after the name", () => {
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [
+					{
+						type: 'toolCall',
+						name: 'bash',
+						arguments: {command: 'pnpm -r build'},
+					},
+				],
+			},
+		});
+		expect(formatWatchEvent(record, false)).toEqual(['▶ bash pnpm -r build']);
+	});
+
+	it("shows a grep toolCall's pattern (its high-signal arg, not path)", () => {
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [
+					{
+						type: 'toolCall',
+						name: 'grep',
+						arguments: {pattern: 'toolName', path: 'src'},
+					},
+				],
+			},
+		});
+		expect(formatWatchEvent(record, false)).toEqual(['▶ grep toolName']);
+	});
+
+	it('truncates a long detail to 64 chars + an ellipsis, collapsing whitespace', () => {
+		const command = 'echo ' + 'a'.repeat(200);
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [{type: 'toolCall', name: 'bash', arguments: {command}}],
+			},
+		});
+		const [line] = formatWatchEvent(record, false);
+		// `▶ bash ` prefix (7 chars) + 64 detail chars + the ellipsis.
+		expect(line).toBe(`▶ bash ${'echo ' + 'a'.repeat(59)}…`);
+		expect(line.endsWith('…')).toBe(true);
+	});
+
+	it('collapses embedded newlines in a multi-line command to one line', () => {
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [
+					{type: 'toolCall', name: 'bash', arguments: {command: 'a\nb\n c'}},
+				],
+			},
+		});
+		expect(formatWatchEvent(record, false)).toEqual(['▶ bash a b c']);
+	});
+
+	it('an unmapped tool probes generic keys (path/command/pattern/query)', () => {
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [
+					{type: 'toolCall', name: 'websearch', arguments: {query: 'pi 0.73'}},
+				],
+			},
+		});
+		expect(formatWatchEvent(record, false)).toEqual(['▶ websearch pi 0.73']);
+	});
+
+	it('shows just the name when the toolCall carries no informative arg', () => {
+		const record = JSON.stringify({
+			type: 'message',
+			message: {
+				role: 'assistant',
+				content: [{type: 'toolCall', name: 'read', arguments: {}}],
+			},
+		});
+		expect(formatWatchEvent(record, false)).toEqual(['▶ read']);
 	});
 
 	it('tolerates an assistant message whose content is a plain string', () => {
@@ -175,9 +261,9 @@ describe('formatWatchEvent — the pi SESSION-LOG classifier (not --mode json st
 		// assistant (text + edit toolCall), and a content-as-string assistant.
 		expect(surfaced).toEqual([
 			"I'll start by reading the task prd, then its source PRD.",
-			'▶ read',
+			'▶ read work/in-progress/do-watch-session-log-format.md',
 			'Now editing the file.',
-			'▶ edit',
+			'▶ edit src/watch-session.ts',
 			'All done — the build is green.',
 		]);
 	});

@@ -31,8 +31,10 @@ import {open, type FileHandle} from 'node:fs/promises';
  * surfaces the same high-signal level `ar-run.sh --watch` gave, read off the
  * SESSION-LOG shape:
  *
- *   - an `assistant` `message` → its `content[]` `text` parts, then `▶ <name>`
- *     (cyan) per `content[]` `toolCall` part;
+ *   - an `assistant` `message` → its `content[]` `text` parts, then
+ *     `▶ <name> <detail>` (cyan) per `content[]` `toolCall` part, where
+ *     `<detail>` is the high-signal argument for that tool (a `read`'s path, a
+ *     `bash`'s command, …), truncated to 64 chars with a trailing `…`;
  *   - `✓ agent finished` (green) on PROCESS EXIT — the session log has no
  *     `agent_end` event, so the tailer emits it once on `stop()`;
  *   - everything else (`session`/`model_change`/user messages/tool results/…) →
@@ -58,6 +60,77 @@ const RESET = '\u001b[0m';
 /** Wrap `text` in `code` + reset when `color`, else return it unchanged. */
 function paint(text: string, color: boolean, code: string): string {
 	return color ? `${code}${text}${RESET}` : text;
+}
+
+/**
+ * The max width of a tool-call DETAIL string (the `read <path>` / `bash <cmd>`
+ * argument summary appended after the tool name). A longer detail is truncated
+ * to this many characters with a trailing `…`, so a giant `bash` heredoc or a
+ * long path never floods the live view with one enormous line.
+ */
+const MAX_DETAIL_LENGTH = 64;
+
+/** Truncate `text` to {@link MAX_DETAIL_LENGTH} chars, appending `…` when cut. */
+function truncateDetail(text: string): string {
+	// Collapse any embedded newlines/tabs to single spaces first: a multi-line
+	// `bash` command must stay ONE line in the tail view.
+	const oneLine = text.replace(/\s+/g, ' ').trim();
+	if (oneLine.length <= MAX_DETAIL_LENGTH) {
+		return oneLine;
+	}
+	return `${oneLine.slice(0, MAX_DETAIL_LENGTH)}…`;
+}
+
+/**
+ * The FIRST non-empty string among `keys` in a tool-call's arguments object, or
+ * `undefined` when the args are absent / none of the keys carry a string. The
+ * args live under `arguments` (pi's canonical key) OR `args` (the variant seen
+ * in some session records), mirroring the `name || toolName` defensiveness used
+ * for the tool name itself.
+ */
+function firstArgString(
+	part: Record<string, unknown>,
+	keys: readonly string[],
+): string | undefined {
+	const rawArgs =
+		(typeof part.arguments === 'object' && part.arguments) ||
+		(typeof part.args === 'object' && part.args) ||
+		undefined;
+	if (!rawArgs || rawArgs === null) {
+		return undefined;
+	}
+	const args = rawArgs as Record<string, unknown>;
+	for (const key of keys) {
+		const value = args[key];
+		if (typeof value === 'string' && value !== '') {
+			return value;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * The high-signal ARGUMENT to show after a tool name, chosen per tool so the
+ * `▶ <name>` marker reads like the agent's actual action (`▶ read work/x.md`,
+ * `▶ bash pnpm -r build`). The mapping mirrors this harness's own tool set
+ * (read/edit/write/grep/find/ls take a `path`; bash a `command`; grep a
+ * `pattern`; find/ls a `pattern`/`path`); any unmapped tool falls back to a
+ * generic `path`/`command`/`pattern`/`query` probe so a new tool still shows
+ * *something* useful. Returns `''` when no informative arg is present.
+ */
+function toolCallDetail(name: string, part: Record<string, unknown>): string {
+	const byTool: Record<string, readonly string[]> = {
+		read: ['path'],
+		edit: ['path'],
+		write: ['path'],
+		ls: ['path'],
+		find: ['pattern', 'path'],
+		grep: ['pattern', 'path'],
+		bash: ['command'],
+	};
+	const keys = byTool[name] ?? ['path', 'command', 'pattern', 'query', 'file'];
+	const detail = firstArgString(part, keys);
+	return detail === undefined ? '' : truncateDetail(detail);
 }
 
 /**
@@ -104,9 +177,10 @@ export function boundaryLine(label: string, color: boolean): string {
  *   - a `{type:"message", message:{role:"assistant", content}}` record → for each
  *     `content[]` part: a `text` part yields its text (parts concatenated into
  *     ONE line, like the old `jq` `.content[]` select); a `toolCall` part yields
- *     `▶ <name>` (cyan; `name` OR `toolName`, defaulting to `tool`); a `thinking`
- *     part (and anything else) is skipped. A plain-string `content` yields one
- *     text line.
+ *     `▶ <name> <detail>` (cyan; `name` OR `toolName`, defaulting to `tool`;
+ *     `<detail>` is the per-tool argument summary, truncated to 64 chars with a
+ *     `…`); a `thinking` part (and anything else) is skipped. A plain-string
+ *     `content` yields one text line.
  *   - everything else (`session`/`model_change`/`thinking_level_change`, user
  *     messages, tool results, blank/malformed lines) → `[]` (skipped).
  *
@@ -148,7 +222,9 @@ export function formatWatchEvent(line: string, color: boolean): string[] {
  * pi-remote's `session-pool.ts` reference parser. The `text` parts are
  * concatenated into a SINGLE leading line (so a multi-part assistant turn reads
  * as one sentence, as `ar-run.sh --watch` showed it); each `toolCall` part adds a
- * `▶ <name>` line after it. A plain-string content yields the single text line.
+ * `▶ <name> <detail>` line after it (`<detail>` = the tool's high-signal
+ * argument, truncated to 64 chars). A plain-string content yields the single
+ * text line.
  * `thinking` parts and any other block type are skipped.
  */
 function assistantLines(content: unknown, color: boolean): string[] {
@@ -170,7 +246,9 @@ function assistantLines(content: unknown, color: boolean): string[] {
 				(typeof p.name === 'string' && p.name !== '' && p.name) ||
 				(typeof p.toolName === 'string' && p.toolName !== '' && p.toolName) ||
 				'tool';
-			lines.push(paint(`▶ ${name}`, color, CYAN));
+			const detail = toolCallDetail(name, p);
+			const label = detail === '' ? name : `${name} ${detail}`;
+			lines.push(paint(`▶ ${label}`, color, CYAN));
 		}
 		// `text` is collected by assistantContentText; `thinking` and any other
 		// block type are skipped.
