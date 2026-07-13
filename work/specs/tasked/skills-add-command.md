@@ -27,21 +27,7 @@ The command COPIES skills into the canonical `~/.agents/skills/` (and symlinks t
 6. As the maintainer, I want the command to source skills from dorfl's own `skills/` folder (packaged with the CLI), so that `skills add` ships the CURRENT dorfl skills without a separate download step.
 7. As a project reading the license carefully, I want the vendored incur file kept under its MIT notice with incur's LICENSE beside it, so that AGPL-consuming-MIT attribution is honoured (per the ADR).
 
-### Autonomy notes (the two gate axes — set the frontmatter flags accordingly)
-
-Straightforwardly agent-taskable: a bounded, well-understood command that vendors a known file and wraps it. No `humanOnly` (no product/security judgement beyond the already-decided ADR), no `needsAnswers` (the open questions below are refinements the tasker can resolve against the vendored file + existing command conventions, not blockers). Both flags omitted.
-
-## Implementation Decisions
-
-- **Vendor incur's `src/internal/agents.ts`** into dorfl (per ADR `skill-install-vendors-incur-agents-map`) as a clearly-labelled `vendor/incur/` copy under `packages/dorfl/src/`, kept byte-close to upstream with incur's MIT `LICENSE` beside it. Only wrapper code is written around it; the vendored file is not rewritten, so future incur harness-map updates are a mechanical re-copy.
-- **Source of skills = dorfl's `skills/` directory, PACKAGED via the `vendor-protocol.mjs` precedent — NOT via `files`.** `skills/` lives at the MONOREPO ROOT, outside `packages/dorfl/`, and a published npm package cannot reference files outside itself (the exact constraint `vendor-protocol.mjs` already solves for the protocol docs, which live at the same root under `skills/setup/protocol/`). So `files: ["dist","src"]` cannot include `skills/`. Follow the established pattern: add a build step (part of `pnpm build`, like `vendor-protocol.mjs`) that copies the root `skills/*` into `dist/skills/`, and have `skills add` resolve its source from `dist/skills/` at runtime with a dev-only fallback to walking the repo-root `skills/` tree (mirroring how `resolveProtocolDoc` checks `dist/protocol/` then falls back to the dev `skills/` walk). This is what makes the skill files present after `npm i -g dorfl`.
-- **New command surface: `dorfl skills add`** under a `skills` group, consistent with the existing command surface (`docs/adr/command-surface-and-journeys.md`) and its commander-based structure. Likely `--global` (default) / `--local`, and a report of installed paths. A `skills list` / `skills remove` may fall out of the vendored file's `list`/`remove` exports but are secondary — the tasker decides whether to expose them now or defer.
-- **Coherence check (per `CONTEXT.md`):** the word "skills" and any new flags must not re-mean existing dorfl concepts; `skills add` is a new, orthogonal surface (it touches the OPERATOR's harness dirs, never a repo's `work/` tree).
-
-## Testing Decisions
-
-- Drive the vendored install against a TEMP source dir + TEMP target dirs (override home/cwd), asserting: canonical copy created, non-universal harness symlinks created, idempotent re-run, stale-skill cleanup, project-local vs global placement. Mirror dorfl's existing test style (throwaway dirs, no real home writes).
-- Keep the vendored file's own behaviour trusted (it's upstream-tested); test dorfl's WRAPPER: correct source dir resolution from the packaged skills, correct option threading, correct report output.
+> Tasked 2026-07-13 — implementation/testing detail moved into `work/tasks/` (`skills-add-vendor-incur-agents-map`, `skills-add-cli-command`); the durable rationale (vendor-not-depend, licensing, packaging precedent) lives in ADR `docs/adr/skill-install-vendors-incur-agents-map.md`. This spec has settled to its durable framing below.
 
 ## Out of Scope
 
@@ -49,7 +35,3 @@ Straightforwardly agent-taskable: a bounded, well-understood command that vendor
 - Depending on incur as an npm package (rejected in the ADR).
 - Setting dorfl's own project license (a separate pre-existing gap flagged in the ADR — do it independently).
 - The website getting-started rewrite that will POINT at this command — that is the sibling spec `website-getting-started-skill-first`, which depends on this command existing.
-
-## Further Notes
-
-Open refinements for the tasker (not blockers): whether to ship `skills list`/`skills remove` in the first cut or defer; exact flag names; whether project-local install writes into `.agents/skills` or the harness-specific project dirs the vendored map already knows. All resolvable against the vendored `agents.ts` and existing dorfl command conventions.

@@ -30,21 +30,7 @@ The current "npm install -g dorfl / remote add / do" panel is NOT deleted — it
 6. As a reader, I want the skill-install step to point at a REAL command (`dorfl skills add`), so that the getting-started copy is actionable, not aspirational.
 7. As a maintainer, I want the copy to stay faithful to the repo's own framing (`CONTEXT.md`, `work/protocol/WORK-CONTRACT.md`), so that the site does not drift from the product.
 
-### Autonomy notes (the two gate axes — set the frontmatter flags accordingly)
-
-Agent-taskable as a Svelte content/section rewrite of a single page, but it is COPY about the product — worth a human eye on messaging. Not `humanOnly` (no security/product-decision gate; the three-layer structure is decided here). Not `needsAnswers` (the messaging refinements below are copy choices, not blockers). Both flags omitted; the review gate is the human reviewing the unstaged site diff. `taskedAfter: [skills-add-command]` because story 6 needs the real command to exist and be nameable before this lands.
-
-## Implementation Decisions
-
-- **Edit `website/src/routes/+page.svelte`** (and any small supporting `$lib` bits). Reuse the existing pillar/step/section component patterns and the established brand tokens (clay/bone/slate). Do NOT restyle the site; re-order and add content only.
-- **Three-layer structure** replaces the single "Install" section: an "Adopt (skills)" panel first, a "The work/ contract" panel second, an "Execute (CLI + CI)" panel third. The existing `#install` anchor / nav link maps onto the new flow (rename to "Get started" if clearer).
-- **`intake`** gets an explicit mention as a distinctive CI capability in layer three (per the maintainer's ask), framed as the issue → spec/task front door.
-- **Placeholder honesty:** the current site has a `# install (placeholder)` block; the rewrite should use the real `dorfl skills add` for layer one and keep the CLI install accurate for layer three.
-- **Follow `website/AGENTS.md`** (site-scoped guidance) and record any template-worthy deviation in `website/TEMPLATE-NOTES.md`, per the site's house rules.
-
-## Testing Decisions
-
-- Site is content, so acceptance is the standard gate green (`pnpm -r build && pnpm -r test && pnpm format:check`) plus a human review of the rendered page. No new logic to unit-test; if any small helper is added, test its output, not the markup.
+> Tasked 2026-07-13 — implementation/testing detail moved into `work/tasks/` (`website-getting-started-three-layer`, a single content task — one page, so no vertical split). No ADR: a copy rewrite carries no durable decision. This spec has settled to its durable framing below.
 
 ## Out of Scope
 
@@ -54,4 +40,4 @@ Agent-taskable as a Svelte content/section rewrite of a single page, but it is C
 
 ## Further Notes
 
-Depends on `skills-add-command` landing first (hence `taskedAfter`) so the layer-one copy names a real command. If the site must ship before the command, the layer-one panel can describe the skill-first flow while flagging the command as forthcoming — but the intended order is command first, then this site copy.
+The `taskedAfter: [skills-add-command]` gate is about NAMING: the layer-one copy references `dorfl skills add`, so that command's spec had to be tasked (the command nameable) before this was tasked. It does NOT require the command to be BUILT first — the page copy can land ahead of the implementation (the emitted task is unblocked), though shipping the built command around the same time keeps the copy honest.
