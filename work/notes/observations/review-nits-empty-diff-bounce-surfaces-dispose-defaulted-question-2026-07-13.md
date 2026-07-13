@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'empty-diff-bounce-surfaces-dispose-def
 date: 2026-07-13
 status: open
 reviewOf: empty-diff-bounce-surfaces-dispose-defaulted-question
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
