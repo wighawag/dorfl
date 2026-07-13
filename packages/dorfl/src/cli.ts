@@ -147,6 +147,7 @@ import {installCI, type WizardPrompts} from './install-ci.js';
 import {GitHubCIContext} from './install-ci-github.js';
 import {loadCapabilityRegistry} from './install-ci-core.js';
 import {performCloseMergedIssues} from './close-job.js';
+import {installSkills, type InstallSkillsResult} from './install-skills.js';
 
 interface ScanFlags {
 	config?: string;
@@ -4389,7 +4390,87 @@ export function buildProgram(): Command {
 			});
 		});
 
+	// The `skills` group (ADR `skill-install-vendors-incur-agents-map`): install the
+	// packaged dorfl skills (`from-idea`, `setup`, ...) into the OPERATOR's OWN
+	// harness dirs. Distinct from any target-repo propagation (ADR
+	// `methodology-and-skills` §6 — skills don't travel into target repos; only
+	// `work/protocol/` does). Only `add` is exposed in this pass — `list`/`remove`
+	// are deferred until we have a real use case (the vendored `install()` is
+	// idempotent, so `add` alone covers upgrade + drift-repair; a future `remove`
+	// would map onto the vendored `remove()` and is intentionally out of scope
+	// here to keep the CLI surface minimal).
+	const skills = program
+		.command('skills')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			"Install the packaged dorfl skills (`from-idea`, `setup`, ...) into the operator's own agent harness(es). Installs into your OWN harness dirs (~/.agents/skills/ + per-harness symlinks) — this is operator tooling, NOT target-repo propagation (skills don't travel into `work/` repos; only `work/protocol/` does).",
+		);
+
+	skills
+		.command('add')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			'Copy the packaged dorfl skills into the canonical `~/.agents/skills/` (global; `--local` scopes to <cwd>/.agents/skills/) and symlink each detected non-universal harness (Claude Code, Cursor, Windsurf, ...) to it. Idempotent; re-run to pick up new/updated skills.',
+		)
+		.option(
+			'--local',
+			'install project-locally into <cwd>/.agents/skills/ (and each detected harness\u2019s PROJECT dir) instead of globally into ~/.agents/skills/. Default: global.',
+		)
+		.action((flags: SkillsAddFlags) => {
+			const result = installSkills({global: flags.local !== true});
+			console.log(formatSkillsAddReport(result, flags.local === true));
+		});
+
 	return program;
+}
+
+interface SkillsAddFlags {
+	/**
+	 * `--local`: project-local install (canonical base `<cwd>/.agents/skills/`)
+	 * instead of the global `~/.agents/skills/` default. Named to mirror the
+	 * `remote add --local` sibling ('local' = "scope to here") and the vendored
+	 * `install()`'s `global: false` semantic. Chosen over `--project` /
+	 * `--here` / `--global` inversion for consistency with the existing verb.
+	 */
+	local?: boolean;
+}
+
+/**
+ * Human-readable report for `dorfl skills add`. Prints the SOURCE the skills
+ * were read from, each canonical install path (one per skill), and each
+ * non-universal harness placement (symlink | copy) with its absolute path.
+ * Universal harnesses read from the canonical dir directly and need no line.
+ * Output goes to stdout; the shape is stable enough for a human to audit "what
+ * landed where" but is NOT a machine contract (no JSON mode in this pass).
+ */
+export function formatSkillsAddReport(
+	result: InstallSkillsResult,
+	local: boolean,
+): string {
+	const lines: string[] = [];
+	const scope = local ? 'project-local' : 'global';
+	lines.push(`Installed dorfl skills (${scope}) from ${result.sourceDir}:`);
+	if (result.paths.length === 0) {
+		lines.push('  (no skills found in source)');
+	} else {
+		for (const p of result.paths.slice().sort()) {
+			lines.push(`  ${p}`);
+		}
+	}
+	if (result.agents.length === 0) {
+		lines.push(
+			'Harnesses: no non-universal harness detected (universal harnesses read from the canonical dir directly).',
+		);
+	} else {
+		lines.push('Harnesses:');
+		for (const a of result.agents.slice().sort((x, y) => {
+			const byAgent = x.agent.localeCompare(y.agent);
+			return byAgent !== 0 ? byAgent : x.path.localeCompare(y.path);
+		})) {
+			lines.push(`  ${a.agent}: ${a.mode} -> ${a.path}`);
+		}
+	}
+	return lines.join('\n');
 }
 
 /**
