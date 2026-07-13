@@ -65,3 +65,7 @@ So the classifier change in THIS task is minimal: teach `classifyItemLockAgainst
 > Ordering is load-bearing: surface-to-`main` FIRST, release SECOND (crash leaves a recoverable state). Do NOT reverse it. RETRY (rebase+re-push on CAS rejection) is orthogonal contention handling and still applies.
 >
 > Done = both seams surface+release in order, no `stuck` lock remains after a bounce, crash-safety holds via the new predicate, all 137 assertions migrated + green, bounce exit codes green-on-clean-surface (empty-diff untouched), acceptance gate green. RECORD non-obvious in-scope decisions (the exact recovery predicate + its classifier fold; how a reason-only bounce shapes the sidecar's questions) durably and linked from the done record; if a decision meets the ADR gate, write an ADR.
+
+## Requeue 2026-07-13
+
+Requeued after resolving the crash-orphan classifier decision in the task body (fold into cleared-stale; no new bucket; no PR-2a/PR-2b split). --reset: the stopped run produced no work branch. Next claim can build it.
