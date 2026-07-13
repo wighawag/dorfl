@@ -15,6 +15,8 @@ import {
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	stuckLockOnArbiter,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 	gitEnv,
 	gitIn,
 	raceClone,
@@ -846,7 +848,12 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(result.items[0].detail).toMatch(
 			/no source change|empty diff|no-op/i,
 		);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// Empty-diff surfaces a dispose-defaulted sidecar + releases the lock
+		// (task `empty-diff-bounce-surfaces-dispose-defaulted-question`), unlike
+		// the sentinel STOP which still marks the lock stuck.
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 

@@ -31,7 +31,11 @@ import {
 	parseStopSentinel,
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
+	emptyDiffDisposeEnvelope,
+	type AgentStopKind,
 } from './agent-stop.js';
+import {surfaceStuckToNeedsAttention} from './needs-attention.js';
+import {resolveItemPathByIdentity} from './item-path.js';
 import {
 	classifyFailureCause,
 	failureCauseLabel,
@@ -868,18 +872,25 @@ async function runOneItem(
 		//     the arbiter) and SKIPS the gate + Gate-2 (the whole `performIntegration`
 		//     band) — a clean STOP is NOT "a build that changed nothing".
 		const sentinel = parseStopSentinel(agent.output);
-		const stopReason =
+		const stopReason: {kind: AgentStopKind; reason: string} | undefined =
 			sentinel !== undefined
-				? sentinel.reason
+				? {kind: 'sentinel', reason: sentinel.reason}
 				: (await isWorkBranchDiffEmpty({
 							cwd: tree.dir,
 							arbiter: tree.arbiterRemote,
 							env: gitEnv,
 					  }))
-					? emptyDiffStopReason(slug)
+					? {kind: 'empty-diff', reason: emptyDiffStopReason(slug)}
 					: undefined;
 		if (stopReason !== undefined) {
-			return await saveAgentStop(base, tree, slug, stopReason, ctx);
+			return await saveAgentStop(
+				base,
+				tree,
+				slug,
+				stopReason.reason,
+				stopReason.kind,
+				ctx,
+			);
 		}
 
 		// 5–7 (CONVERGED). The whole gate → review → done-move → commit → rebase →
@@ -1244,9 +1255,36 @@ async function saveAgentStop(
 	tree: IsolatedTree,
 	slug: string,
 	reason: string,
+	kind: AgentStopKind,
 	ctx: OneItemContext,
 ): Promise<ItemResult> {
 	updateJobRecord(tree.dir, {state: 'needs-attention', reason});
+	// EMPTY-DIFF branch (spec resolved decision #2, task
+	// `empty-diff-bounce-surfaces-dispose-defaulted-question`): surface a sidecar
+	// carrying an engine-authored DISPOSE-DEFAULTED envelope question on
+	// `<arbiter>/main` (via the PR-1 tree-less surface primitive) and release the
+	// lock — NOT the general lock-stuck bounce path. "Nothing to do" is a
+	// non-deterministic LLM judgement, so a blind requeue would infinite-loop;
+	// the surfaced sidecar + `needsAnswers:true` on `main` parks the item as a
+	// human-visible question a `dispose` answer settles to `tasks/cancelled/`.
+	if (kind === 'empty-diff') {
+		const item = `task:${slug}`;
+		const itemPath = resolveItemPathByIdentity(tree.dir, item);
+		if (itemPath !== undefined) {
+			await surfaceStuckToNeedsAttention({
+				cwd: tree.dir,
+				slug,
+				item,
+				itemPath,
+				reason,
+				envelope: emptyDiffDisposeEnvelope({item, reason}),
+				arbiter: tree.arbiterRemote,
+				env: ctx.gitEnv ?? ctx.env,
+			});
+			return {...base, status: 'agent-stopped', detail: reason};
+		}
+		// Fallthrough (body missing) — fall through to the lock-stuck bounce below.
+	}
 	await ledgerWrite.applyNeedsAttentionTransition({
 		cwd: tree.dir,
 		slug,

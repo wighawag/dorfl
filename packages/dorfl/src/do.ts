@@ -59,7 +59,11 @@ import {
 	parseStopSentinel,
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
+	emptyDiffDisposeEnvelope,
+	type AgentStopClass,
 } from './agent-stop.js';
+import {surfaceStuckToNeedsAttention} from './needs-attention.js';
+import {resolveItemPathByIdentity} from './item-path.js';
 import {
 	classifyFailureCause,
 	failureCauseLabel,
@@ -1134,7 +1138,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			branch,
 			cwd: tree.dir,
 			arbiter: tree.arbiterRemote,
-			reason: stopReason,
+			reason: stopReason.reason,
+			kind: stopReason.kind,
 			env,
 			note,
 		});
@@ -1565,14 +1570,14 @@ async function resolveStopReason(params: {
 	cwd: string;
 	arbiter: string;
 	env: NodeJS.ProcessEnv | undefined;
-}): Promise<string | undefined> {
+}): Promise<AgentStopClass | undefined> {
 	const {output, slug, cwd, arbiter, env} = params;
 	const sentinel = parseStopSentinel(output);
 	if (sentinel !== undefined) {
-		return sentinel.reason;
+		return {kind: 'sentinel', reason: sentinel.reason};
 	}
 	if (await isWorkBranchDiffEmpty({cwd, arbiter, env})) {
-		return emptyDiffStopReason(slug);
+		return {kind: 'empty-diff', reason: emptyDiffStopReason(slug)};
 	}
 	return undefined;
 }
@@ -1591,11 +1596,65 @@ async function saveAgentStop(params: {
 	cwd: string;
 	arbiter: string;
 	reason: string;
+	kind: 'sentinel' | 'empty-diff';
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<DoResult> {
-	const {slug, cwd, arbiter, reason, env, note} = params;
+	const {slug, cwd, arbiter, reason, kind, env, note} = params;
 	const branch = params.branch ?? workBranchRef('task', slug);
+
+	// EMPTY-DIFF branch (spec resolved decision #2, task
+	// `empty-diff-bounce-surfaces-dispose-defaulted-question`): surface a sidecar
+	// on `<arbiter>/main` carrying an engine-authored DISPOSE-DEFAULTED envelope
+	// question, THEN release the lock. "Nothing to do" is a non-deterministic LLM
+	// judgement, so this seam MUST NOT blindly requeue (that would infinite-loop);
+	// the surfaced sidecar + `needsAnswers:true` on `main` parks the item as a
+	// human-visible question a `dispose` answer settles to `tasks/cancelled/`.
+	if (kind === 'empty-diff') {
+		const item = `task:${slug}`;
+		const itemPath = resolveItemPathByIdentity(cwd, item);
+		if (itemPath === undefined) {
+			const message =
+				`The agent STOPPED building '${slug}' (empty diff) but its body could ` +
+				`not be located on the arbiter to surface a sidecar. Reason: ${reason}`;
+			note(message);
+			return {
+				exitCode: 1,
+				outcome: 'agent-stopped',
+				slug,
+				branch,
+				routedToNeedsAttention: false,
+				message,
+			};
+		}
+		const surfaced = await surfaceStuckToNeedsAttention({
+			cwd,
+			slug,
+			item,
+			itemPath,
+			reason,
+			envelope: emptyDiffDisposeEnvelope({item, reason}),
+			arbiter,
+			env,
+			note,
+		});
+		const message = surfaced.surfaced
+			? `The agent STOPPED building '${slug}' (empty diff); surfaced a ` +
+				`dispose-defaulted question on ${arbiter}/main and released the lock. ` +
+				`Reason: ${reason}`
+			: `The agent STOPPED building '${slug}' (empty diff) but the surface ` +
+				`did not land (${surfaced.reasonNotSurfaced ?? 'unknown'}). ` +
+				`Reason: ${reason}`;
+		note(message);
+		return {
+			exitCode: 1,
+			outcome: 'agent-stopped',
+			slug,
+			branch,
+			routedToNeedsAttention: surfaced.surfaced,
+			message,
+		};
+	}
 
 	const routed = await ledgerWrite.applyNeedsAttentionTransition({
 		cwd,
@@ -2340,7 +2399,8 @@ async function runRemotePipeline(
 			branch,
 			cwd,
 			arbiter: arbiterRemote,
-			reason: stopReason,
+			reason: stopReason.reason,
+			kind: stopReason.kind,
 			env,
 			note,
 		});

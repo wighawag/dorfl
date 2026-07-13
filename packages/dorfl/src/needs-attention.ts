@@ -1682,6 +1682,22 @@ export function prepareTreelessSurfaceCommit(params: {
 	reason: string;
 	/** Any agent-surfaced questions to append after the envelope. */
 	questions?: NewQuestion[];
+	/**
+	 * OPTIONAL engine-authored envelope entry OVERRIDE. When provided, replaces
+	 * the built-in generic `"<item> was bounced — how should we proceed?"`
+	 * envelope with a caller-supplied one — the seam the empty-diff bounce path
+	 * uses to guarantee a DISPOSE-DEFAULTED disposition question exists on the
+	 * surfaced sidecar (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`
+	 * resolved decision #2, task
+	 * `empty-diff-bounce-surfaces-dispose-defaulted-question`). The override still
+	 * defaults its `kind` to `'stuck'` when unset. `reason` (envelope context)
+	 * remains the caller-owned prose; the override lets the caller set the
+	 * envelope's `question` + `default` so the human sees a one-glance
+	 * dispose/cancel prompt instead of the generic "how should we proceed?"
+	 * catch-all. When absent, the built-in envelope is used (the reason-only
+	 * bounce shape).
+	 */
+	envelope?: NewQuestion;
 	/** The commit subject for the surface commit. */
 	commitMessage: string;
 	/** The throwaway ref namespace (`refs/dorfl/<refNamespace>/<slug>`). */
@@ -1696,6 +1712,7 @@ export function prepareTreelessSurfaceCommit(params: {
 		base,
 		reason,
 		questions,
+		envelope: envelopeOverride,
 		commitMessage,
 		refNamespace,
 		env,
@@ -1724,12 +1741,25 @@ export function prepareTreelessSurfaceCommit(params: {
 
 	// Compose the entries: an engine-authored envelope carrying the reason, then
 	// any agent-surfaced questions (stamped `stuck`-kind if the caller left the
-	// kind unset — this IS the stuck-surface path).
-	const envelope: NewQuestion = {
-		question: `'${item}' was bounced — how should we proceed?`,
-		context: reason,
-		kind: 'stuck',
-	};
+	// kind unset — this IS the stuck-surface path). Callers may OVERRIDE the
+	// envelope (e.g. the empty-diff path swaps in a dispose-defaulted question);
+	// the override still defaults `kind` to `stuck` and `context` to the bounce
+	// reason when the override leaves them unset (the caller can restate the
+	// reason in the envelope prose without duplicating it in `context`).
+	const envelope: NewQuestion = envelopeOverride
+		? {
+				kind: envelopeOverride.kind ?? 'stuck',
+				question: envelopeOverride.question,
+				context: envelopeOverride.context ?? reason,
+				...(envelopeOverride.default !== undefined
+					? {default: envelopeOverride.default}
+					: {}),
+			}
+		: {
+				question: `'${item}' was bounced — how should we proceed?`,
+				context: reason,
+				kind: 'stuck',
+			};
 	const surfaced: NewQuestion[] = (questions ?? []).map((q) => ({
 		...q,
 		kind: q.kind ?? 'stuck',
@@ -1821,6 +1851,15 @@ export interface SurfaceStuckToNeedsAttentionOptions {
 	reason: string;
 	/** Any questions the agent surfaced (appended after the envelope). */
 	questions?: NewQuestion[];
+	/**
+	 * OPTIONAL engine-authored envelope override, forwarded to
+	 * {@link prepareTreelessSurfaceCommit}. The empty-diff bounce path uses this
+	 * to guarantee the first surfaced entry is a DISPOSE-DEFAULTED disposition
+	 * question (task `empty-diff-bounce-surfaces-dispose-defaulted-question`,
+	 * spec resolved decision #2). Absent ⇒ the built-in generic
+	 * "how should we proceed?" envelope (a reason-only bounce).
+	 */
+	envelope?: NewQuestion;
 	/** The arbiter remote the surface commit is CAS-published to. REQUIRED. */
 	arbiter: string;
 	env?: NodeJS.ProcessEnv;
@@ -1851,7 +1890,8 @@ export async function surfaceStuckToNeedsAttention(
 	options: SurfaceStuckToNeedsAttentionOptions,
 ): Promise<SurfaceStuckToNeedsAttentionResult> {
 	const note = options.note ?? (() => {});
-	const {cwd, slug, itemPath, reason, questions, arbiter, env} = options;
+	const {cwd, slug, itemPath, reason, questions, envelope, arbiter, env} =
+		options;
 	const item = options.item ?? `task:${slug}`;
 
 	const surfaced = await runTreelessLedgerMove({
@@ -1875,6 +1915,7 @@ export async function surfaceStuckToNeedsAttention(
 				base,
 				reason,
 				questions,
+				envelope,
 				commitMessage: `surface ${item} (stuck): ${reason}`,
 				refNamespace: 'surface-stuck',
 				env,

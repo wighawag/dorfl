@@ -19,6 +19,8 @@ import {
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
 	stuckLockOnArbiter,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 	gitEnv,
 	gitIn,
 	raceClone,
@@ -1085,7 +1087,14 @@ describe('do <slug> — a deliberate STOP routes to needs-attention BEFORE the g
 		expect(result.outcome).toBe('agent-stopped');
 		expect(result.routedToNeedsAttention).toBe(true);
 		expect(result.message).toMatch(/no source change|empty diff|no-op/i);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// Empty-diff SURFACES a dispose-defaulted sidecar on `<arbiter>/main` and
+		// RELEASES the lock (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`
+		// resolved decision #2, task
+		// `empty-diff-bounce-surfaces-dispose-defaulted-question`) — it is NOT the
+		// lock-stuck bounce path the sentinel STOP still rides.
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
 	});
 
