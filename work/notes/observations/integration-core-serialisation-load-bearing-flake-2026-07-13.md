@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # integration-core "serialisation is load-bearing" test intermittently flakes
 
 Date: 2026-07-13
