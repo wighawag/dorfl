@@ -49,3 +49,7 @@ D1 (itemPath probe: task `tasks/ready`→`tasks/backlog`, spec `specs/ready`→`
 > Ordering is load-bearing (surface FIRST, release SECOND). RETRY (rebase+re-push on CAS rejection) is orthogonal and still applies.
 >
 > Done = three seams re-pointed + no `stuck` producer left on a bounce path + 84 assertions migrated + exit codes flipped (empty-diff untouched) + acceptance gate green. RECORD non-obvious in-scope decisions durably; if a decision meets the ADR gate, write an ADR.
+
+## Requeue 2026-07-13
+
+Clearing the orphaned active lock left by the 120min SIGKILL (run 29268967187, cancelled) — the hard kill discarded all WIP and never released the lock (the exact trap graceful-pre-timeout-wip-checkpoint fixes). --reset: no branch to preserve. Hold from auto-pick until the checkpoint feature merges + a short deadline is set to validate it.
