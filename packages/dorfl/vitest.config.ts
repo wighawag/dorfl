@@ -123,6 +123,13 @@ const RACE_SENSITIVE = [
 	// for the same deterministic claim/main-CAS reasoning as
 	// needs-attention-surface-on-main.test.ts.
 	'test/bounce-surface-primitive.test.ts',
+	// The PR-2a mechanism tests for the bounce atomic cutover (task
+	// `bounce-atomic-cutover-retire-stuck-lock`): drive real git against a --bare
+	// arbiter through `runTreelessLedgerMove` AND write main (surface commits) +
+	// exercise the classifier fold + recovery predicate + D1 body-path probe;
+	// keep them out of file-parallel pressure for the same deterministic
+	// claim/main-CAS reasoning as bounce-surface-primitive.test.ts.
+	'test/bounce-atomic-cutover-primitives.test.ts',
 	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
 	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
 	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under

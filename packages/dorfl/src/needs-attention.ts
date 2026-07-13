@@ -28,9 +28,11 @@ import {
 	appendQuestions,
 	newSidecar,
 	parseSidecar,
+	resolveSidecarIdentity,
 	serialiseSidecar,
 	sidecarPathFor,
 	type NewQuestion,
+	type SidecarType,
 } from './sidecar.js';
 import {parseFrontmatter, setNeedsAnswersMarker} from './frontmatter.js';
 import {
@@ -1841,10 +1843,15 @@ export interface SurfaceStuckToNeedsAttentionOptions {
 	slug: string;
 	/**
 	 * The item body's on-`main` path (e.g. `work/tasks/ready/foo.md`). Provided
-	 * by the caller (parity with `persistSurfacedQuestions`); PR-1 is the raw
-	 * primitive, so it does not encode a folder-resolution policy.
+	 * by the caller (parity with `persistSurfacedQuestions`). PR-2a made this
+	 * OPTIONAL: when absent the harness invokes {@link resolveBounceItemBodyPathOnMain}
+	 * to PROBE `<arbiter>/main` in the D1 order for the item's namespace
+	 * (task/spec/observation). A body-absent probe (item body never landed on
+	 * `main` — e.g. a claim that lost/raced) is a CLEAN NO-OP surface that STILL
+	 * RELEASES the lock: never throw, never leave a held lock, never drop the
+	 * bounce silently to a dead end.
 	 */
-	itemPath: string;
+	itemPath?: string;
 	/** The namespaced item identity. Defaults to `task:${slug}`. */
 	item?: string;
 	/** Why the item is stuck (bounce reason — envelope entry's context). */
@@ -1869,10 +1876,18 @@ export interface SurfaceStuckToNeedsAttentionOptions {
 export interface SurfaceStuckToNeedsAttentionResult {
 	/** True iff the surface commit landed on `<arbiter>/main`. */
 	surfaced: boolean;
-	/** True iff the per-item lock ref was released (after a successful surface). */
+	/** True iff the per-item lock ref was released. On a body-absent probe
+	 * (see {@link bodyAbsent}) the lock is STILL released — the bounce cannot
+	 * silently strand a held lock over an item with no `main` body. */
 	released: boolean;
-	/** When NOT surfaced, why (missing item, contention exhausted). */
+	/** When NOT surfaced, why (missing item, contention exhausted, body-absent probe). */
 	reasonNotSurfaced?: string;
+	/** True iff the D1 probe found no body on `<arbiter>/main` for this item
+	 * (task: `tasks/ready` then `tasks/backlog`; spec: `specs/ready` then
+	 * `specs/proposed`; observation: `notes/observations`). In this case
+	 * {@link surfaced} is false but {@link released} is true — the lock is
+	 * always released to prevent a dead-end held lock. */
+	bodyAbsent?: boolean;
 }
 
 /**
@@ -1890,10 +1905,45 @@ export async function surfaceStuckToNeedsAttention(
 	options: SurfaceStuckToNeedsAttentionOptions,
 ): Promise<SurfaceStuckToNeedsAttentionResult> {
 	const note = options.note ?? (() => {});
-	const {cwd, slug, itemPath, reason, questions, envelope, arbiter, env} =
-		options;
+	// Merge of #364 (envelope) + PR-2a (itemPath is re-declared as `let` below for
+	// the D1 probe fallback, so it must NOT be in this const destructure).
+	const {cwd, slug, reason, questions, envelope, arbiter, env} = options;
 	const item = options.item ?? `task:${slug}`;
 
+	// PR-2a D1 body-path probe: when the caller does not name an on-`main`
+	// body path, PROBE `<arbiter>/main` in a fixed order per namespace
+	// (task/spec/observation). A body-absent probe is a CLEAN NO-OP surface
+	// that STILL releases the lock — never leave a bounce as a dead-end held
+	// lock.
+	let itemPath = options.itemPath;
+	if (itemPath === undefined) {
+		const probed = await resolveBounceItemBodyPathOnMain({
+			cwd,
+			item,
+			arbiter,
+			env,
+		});
+		if (probed === undefined) {
+			// Body-absent: skip the surface commit entirely and STILL release the
+			// lock (idempotent). Signal the distinction on the result so a caller
+			// can tell a body-absent no-op apart from a `missing` plan on a
+			// caller-provided itemPath.
+			const rel = await releaseItemLock({item, cwd, arbiter, env});
+			const released = rel.outcome === 'released' || rel.outcome === 'not-held';
+			return {
+				surfaced: false,
+				released,
+				bodyAbsent: true,
+				reasonNotSurfaced:
+					`no body for '${item}' on ${arbiter}/main (probed the D1 ` +
+					'candidates in order) — surface skipped as a clean no-op; the ' +
+					'lock was still released to avoid a dead-end held lock.',
+			};
+		}
+		itemPath = probed;
+	}
+
+	const resolvedItemPath = itemPath;
 	const surfaced = await runTreelessLedgerMove({
 		cwd,
 		slug,
@@ -1904,14 +1954,14 @@ export async function surfaceStuckToNeedsAttention(
 		env,
 		note,
 		plan: (base) => {
-			if (!pathInCommit(base, itemPath, cwd, env)) {
+			if (!pathInCommit(base, resolvedItemPath, cwd, env)) {
 				return 'missing';
 			}
 			return prepareTreelessSurfaceCommit({
 				cwd,
 				slug,
 				item,
-				itemPath,
+				itemPath: resolvedItemPath,
 				base,
 				reason,
 				questions,
@@ -1938,6 +1988,65 @@ export async function surfaceStuckToNeedsAttention(
 	const released = rel.outcome === 'released' || rel.outcome === 'not-held';
 	return {surfaced: true, released};
 }
+
+/**
+ * The D1 body-path probe (PR-2a task `bounce-atomic-cutover-retire-stuck-lock`,
+ * spec `surface-stuck-as-questions-and-retire-stuck-lock-state`, decision D1):
+ * resolve the item's on-`main` body path by probing `<arbiter>/main` in a
+ * FIXED order per namespace:
+ *   - task: `work/tasks/ready/<slug>.md` then `work/tasks/backlog/<slug>.md`.
+ *   - spec: `work/specs/ready/<slug>.md` then `work/specs/proposed/<slug>.md`.
+ *   - observation: `work/notes/observations/<slug>.md`.
+ *
+ * Returns the first candidate that EXISTS on `<arbiter>/main`, or `undefined`
+ * when no candidate exists (a bounce for an item whose body never landed on
+ * `main`). The caller MUST handle `undefined` by STILL releasing the lock —
+ * never leave a held lock over a body-absent item.
+ *
+ * The probe fetches `<arbiter>/main` with an EXPLICIT refspec (the
+ * `runTreelessLedgerMove` pattern) so a job-worktree with a narrower default
+ * fetch refspec still resolves `<arbiter>/main` reliably.
+ */
+export async function resolveBounceItemBodyPathOnMain(params: {
+	cwd: string;
+	item: string;
+	arbiter: string;
+	env?: NodeJS.ProcessEnv;
+}): Promise<string | undefined> {
+	const {cwd, item, arbiter, env} = params;
+	const {type, slug} = resolveSidecarIdentity(item);
+	await gitSoftAsync(
+		[
+			'fetch',
+			'--quiet',
+			arbiter,
+			`+refs/heads/main:refs/remotes/${arbiter}/main`,
+		],
+		cwd,
+		env,
+	);
+	const base = `${arbiter}/main`;
+	const folders = BOUNCE_BODY_PROBE_ORDER[type];
+	for (const folder of folders) {
+		const rel = workItemRel(folder, `${slug}.md`);
+		if (pathInCommit(base, rel, cwd, env)) {
+			return rel;
+		}
+	}
+	return undefined;
+}
+
+/** The FIXED per-namespace probe order for {@link resolveBounceItemBodyPathOnMain}
+ * (D1): the FIRST candidate that exists on `<arbiter>/main` is the item's body
+ * path. The ordering encodes the working assumption that a claimed/in-flight
+ * item is in `ready/` and a not-yet-promoted item is in `backlog/`
+ * (spec-tasked/proposed for a spec); an observation has one location.
+ * Callers with an explicit `itemPath` bypass this probe entirely. */
+const BOUNCE_BODY_PROBE_ORDER: Record<SidecarType, readonly WorkFolderKey[]> = {
+	task: ['tasks-ready', 'tasks-backlog'],
+	spec: ['specs-ready', 'specs-proposed'],
+	observation: ['observations'],
+};
 
 /**
  * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT

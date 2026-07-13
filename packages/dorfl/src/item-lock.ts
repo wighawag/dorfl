@@ -1,6 +1,11 @@
 import {randomUUID} from 'node:crypto';
 import {runAsync, type RunResult} from './git.js';
-import {resolveSidecarIdentity, type SidecarType} from './sidecar.js';
+import {
+	resolveSidecarIdentity,
+	sidecarPathFor,
+	type SidecarType,
+} from './sidecar.js';
+import {parseFrontmatter} from './frontmatter.js';
 import {workItemRel} from './work-layout.js';
 
 /**
@@ -820,6 +825,54 @@ export async function resumeItemLock(
 			};
 		}
 		if (held.lock.state !== 'stuck') {
+			// PR-2a additive wiring (task `bounce-atomic-cutover-retire-stuck-lock`,
+			// spec `surface-stuck-as-questions-and-retire-stuck-lock-state`,
+			// decision D3 crash-recovery = main-authoritative): if the held lock is
+			// `active` and the item is SURFACED on `<arbiter>/main` (needsAnswers +
+			// sidecar) but NOT terminal, this is the CRASH-WINDOW ORPHAN the
+			// ordered bounce transition (surface-FIRST-release-SECOND) leaves when
+			// step 1 lands but step 2 never runs. `main` is authoritative: clear
+			// the lock ref via the SHARED leased delete (never `--force`) and
+			// report the recovery so the `resume` verb converges the crash-orphan
+			// rather than failing with `wrong-state`. Additive: leaves the
+			// `stuck`-based resume path untouched.
+			const {type, slug} = resolveSidecarIdentity(opts.item);
+			// Refresh `<arbiter>/main` so the surfaced-on-main probe reads the live
+			// snapshot rather than a stale local tracking ref.
+			await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
+			const terminalOnMain = await isTerminalOnMain(
+				type,
+				slug,
+				arbiter,
+				cwd,
+				env,
+			);
+			if (
+				!terminalOnMain &&
+				(await isItemSurfacedOnMain(type, slug, opts.item, arbiter, cwd, env))
+			) {
+				const cleared = await leasedDeleteLockRef(
+					ref,
+					held.sha,
+					cwd,
+					arbiter,
+					env,
+				);
+				if (cleared === 'deleted') {
+					return {
+						outcome: 'transitioned',
+						entry,
+						ref,
+						message: `cleared the crash-window orphan lock for '${entry}' (item is SURFACED on ${arbiter}/main via needsAnswers + sidecar; the surface landed but the release never ran) — answer the question sidecar to drain it.`,
+					};
+				}
+				return {
+					outcome: 'lost',
+					entry,
+					ref,
+					message: `'${entry}' crash-orphan clear lost the CAS race (concurrent writer); back off and re-run.`,
+				};
+			}
 			return {
 				outcome: 'wrong-state',
 				entry,
@@ -1121,7 +1174,16 @@ export async function reconcileItemLockAgainstMain(
 			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10):
 			//   - `stuck` + non-terminal = the GENUINE human-attention case (the build
 			//     asked for a human), NEVER auto-cleared — `kept-stuck`.
-			//   - `active` + non-terminal = the NORMAL in-flight hold — `kept-in-flight`.
+			//   - `active` + non-terminal + SURFACED on main (needsAnswers:true + a
+			//     matching sidecar) = the CRASH-WINDOW ORPHAN the PR-2a classifier
+			//     fold catches (spec `surface-stuck-as-questions-and-retire-stuck-
+			//     lock-state`, task `bounce-atomic-cutover-retire-stuck-lock`): the
+			//     bounce's surface commit landed on `main` but the release step never
+			//     ran (crash between step 1 and step 2 of the ordered transition).
+			//     `main` is authoritative — treat it as `cleared-stale` and CLEAR
+			//     via the SAME shared leased delete.
+			//   - `active` + non-terminal + NOT surfaced = the NORMAL in-flight hold
+			//     — `kept-in-flight`.
 			if (held.lock.state === 'stuck') {
 				return {
 					outcome: 'kept-stuck',
@@ -1129,6 +1191,53 @@ export async function reconcileItemLockAgainstMain(
 					ref,
 					terminalOnMain,
 					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
+				};
+			}
+			const surfaced = await isItemSurfacedOnMain(
+				type,
+				slug,
+				opts.item,
+				arbiter,
+				cwd,
+				env,
+			);
+			if (surfaced) {
+				const cleared = await leasedDeleteLockRef(
+					ref,
+					held.sha,
+					cwd,
+					arbiter,
+					env,
+				);
+				if (cleared === 'deleted') {
+					return {
+						outcome: 'cleared-stale',
+						entry,
+						ref,
+						terminalOnMain,
+						message: `cleared the crash-window orphan lock for '${entry}' (item is SURFACED on ${arbiter}/main via needsAnswers:true + sidecar; the surface landed but the release never ran)`,
+					};
+				}
+				// Leased delete rejected: fall through to the shared rejection
+				// arm below (same distinguish-then-report shape).
+				const remote = await gitSoft(['ls-remote', arbiter, ref], cwd, env);
+				const remoteEmpty = remote.status === 0 && remote.stdout.trim() === '';
+				if (remoteEmpty) {
+					await gitSoft(['update-ref', '-d', ref], cwd, env);
+					return {
+						outcome: 'no-lock',
+						entry,
+						ref,
+						terminalOnMain,
+						message: `'${entry}' has no lock to reconcile (already cleared by another reaper / release-lock / requeue)`,
+					};
+				}
+				return {
+					outcome: 'error',
+					entry,
+					ref,
+					terminalOnMain,
+					message: `crash-orphan clear for '${entry}' rejected (changed concurrently to a different value); a racer may have moved the ref. Re-run after re-checking.`,
 				};
 			}
 			return {
@@ -1274,7 +1383,11 @@ export async function classifyItemLockAgainstMain(
 			// Split by state (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
 			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): stuck +
 			// non-terminal is the genuine human-attention case (`kept-stuck`); active
-			// + non-terminal is the normal in-flight hold (`kept-in-flight`).
+			// + non-terminal + SURFACED (needsAnswers:true + sidecar on
+			// `<arbiter>/main`) is the PR-2a crash-window orphan (spec
+			// `surface-stuck-as-questions-and-retire-stuck-lock-state`) reported
+			// here as `cleared-stale` (reconcilable, NOT auto-cleared by the report);
+			// active + non-terminal + NOT surfaced is the normal in-flight hold.
 			if (held.lock.state === 'stuck') {
 				return {
 					outcome: 'kept-stuck',
@@ -1282,6 +1395,23 @@ export async function classifyItemLockAgainstMain(
 					ref,
 					terminalOnMain,
 					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
+				};
+			}
+			const surfaced = await isItemSurfacedOnMain(
+				type,
+				slug,
+				opts.item,
+				arbiter,
+				cwd,
+				env,
+			);
+			if (surfaced) {
+				return {
+					outcome: 'cleared-stale',
+					entry,
+					ref,
+					terminalOnMain,
+					message: `'${entry}' is a CRASH-WINDOW ORPHAN — SURFACED on ${arbiter}/main (needsAnswers:true + sidecar) but the release never ran; reconcilable, auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
 				};
 			}
 			return {
@@ -1814,6 +1944,65 @@ const CURRENT_ITEM_FORM_PREFIXES = ['task', 'spec', 'observation'] as const;
  */
 export function hasCurrentItemForm(entry: string): boolean {
 	return CURRENT_ITEM_FORM_PREFIXES.some((p) => entry.startsWith(`${p}-`));
+}
+
+/**
+ * True iff `<arbiter>/main` shows the item SURFACED as a needs-attention
+ * question (PR-2a classifier fold, task
+ * `bounce-atomic-cutover-retire-stuck-lock`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`): the item body
+ * carries `needsAnswers: true` in its frontmatter AND a matching sidecar
+ * (`work/questions/<type>-<slug>.md`) exists on `<arbiter>/main`. This is the
+ * on-`main`-authoritative signature of the ordered bounce transition
+ * (surface-to-main FIRST, release SECOND) that a crash BETWEEN steps 1 and 2
+ * leaves behind: the surface commit landed but the lock ref release never ran.
+ *
+ * Best-effort + degrades safely (`false` on any read fault or absent body):
+ * the recovery direction is to DECIDE the lock is NOT surfaced (fall through
+ * to `kept-in-flight`) when we cannot prove the surface — never a
+ * false-positive clear.
+ */
+async function isItemSurfacedOnMain(
+	type: SidecarType,
+	slug: string,
+	item: string,
+	arbiter: string,
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<boolean> {
+	const sidecar = sidecarPathFor(item);
+	const sidecarExists =
+		(await gitSoft(['cat-file', '-e', `${arbiter}/main:${sidecar}`], cwd, env))
+			.status === 0;
+	if (!sidecarExists) {
+		return false;
+	}
+	// Probe the two bounce body-folder candidates (D1 order) for a body carrying
+	// `needsAnswers: true`. Kept in sync with `resolveBounceItemBodyPathOnMain`
+	// in `needs-attention.ts`; duplicated here (a small closed list) to avoid a
+	// cyclic import between `item-lock.ts` and `needs-attention.ts`.
+	const candidates =
+		type === 'task'
+			? [
+					workItemRel('tasks-ready', `${slug}.md`),
+					workItemRel('tasks-backlog', `${slug}.md`),
+				]
+			: type === 'spec'
+				? [
+						workItemRel('specs-ready', `${slug}.md`),
+						workItemRel('specs-proposed', `${slug}.md`),
+					]
+				: [workItemRel('observations', `${slug}.md`)];
+	for (const path of candidates) {
+		const show = await gitSoft(['show', `${arbiter}/main:${path}`], cwd, env);
+		if (show.status !== 0) {
+			continue;
+		}
+		if (parseFrontmatter(show.stdout).needsAnswers === true) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /** True iff `<arbiter>/main` shows the item TERMINAL — any of
