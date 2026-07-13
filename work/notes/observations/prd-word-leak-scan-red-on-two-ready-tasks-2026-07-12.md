@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # 2026-07-12 — `prd-word-cutover-leak-scan` red on two pre-existing `work/tasks/ready/` files
 
 While completing the unrelated `mint-rename-expand-checklist-finding` task, verified (via `git stash -u` then re-run) that `test/prd-word-cutover-leak-scan.test.ts` was already failing on `main` before any change in this task. Flagged files:
