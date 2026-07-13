@@ -142,6 +142,36 @@ not recorded as drift.
 - **Tag:** **Dorfl-specific** (brand content). Note the `npx ttf2woff2` TTF->woff2
   step used here, since the source was TTF-only — relevant to backport B6.
 
+## Content decisions (`+page.svelte`)
+
+Content-only changes that carry a non-obvious choice, recorded so a reviewer
+can see WHY they landed the way they did. These are Dorfl-specific and NOT
+template-backport candidates.
+
+### C1. Getting-started section is skill-first, three ordered layers
+
+- **What:** The single CLI-first "Install" section was replaced with three
+  stacked panels under the same heading: (1) **Adopt the contract** —
+  `dorfl skills add` + `from-idea` / `setup` skills, (2) the **`work/` contract**
+  substrate that adoption yields (`work/tasks|specs|notes|protocol/` +
+  `.dorfl.json`), (3) **Execute** — `dorfl do` / `run` / `intake`.
+- **Why:** `CONTEXT.md` states the invariant _adopt = skill, execute = command_.
+  The old page led with the runner and never mentioned skills, which put layer
+  one (adopt, runner-agnostic) behind layer three (execute). Skill-first
+  matches the real front door for a newcomer. Task
+  `website-getting-started-three-layer` (spec
+  `website-getting-started-skill-first`).
+- **Anchor/label:** Nav link relabelled `Install` → `Get started`; the
+  `#install` anchor is KEPT (the hero CTA already used it and any external
+  deep-link keeps working). No dead in-page links.
+- **Component reuse:** The three panels reuse the existing `id="how"` "How it
+  works" step pattern (numbered circle + title + body + code block on the
+  visor-inset), not a new component. Palette/tokens (clay / bone / slate /
+  amber) unchanged.
+- **`dorfl skills add`:** referenced by name per the spec (`taskedAfter:
+[skills-add-command]`); the command need not be BUILT for this copy to land
+  — the sibling spec is tasked, so the name is stable.
+
 ## Root-of-repo change required (outside `website/`)
 
 > `website/AGENTS.md` says "touch only `website/`". This single change is the
