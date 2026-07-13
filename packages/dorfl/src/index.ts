@@ -785,3 +785,11 @@ export type {
 	InstallCIResult,
 } from './install-ci.js';
 export {installCI, runWizard} from './install-ci.js';
+
+export type {
+	InstallSkillsOptions,
+	InstallSkillsResult,
+	InstalledAgent,
+} from './install-skills.js';
+export {installSkills, resolveSkillsSourceDir} from './install-skills.js';
+export type {Agent} from './vendor/incur/agents.js';
