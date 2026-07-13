@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -20,6 +20,7 @@ import {
 	gitIn,
 	type Scratch,
 	fixtureFolderRel,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 let root: string;
@@ -46,7 +47,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 	vi.restoreAllMocks();
 });
 

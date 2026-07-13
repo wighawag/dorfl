@@ -22,7 +22,7 @@ import {
 	MODEL_PLACEHOLDER,
 } from '../src/harness.js';
 import {PiHarness} from '../src/pi-harness.js';
-import {makeScratch, type Scratch} from './helpers/gitRepo.js';
+import {makeScratch, type Scratch, rmrf} from './helpers/gitRepo.js';
 
 /**
  * The model-config task (ADR §13): `model` is a first-class, harness-agnostic
@@ -54,7 +54,7 @@ describe('repo-config — model + harness allowed per-repo, piBin rejected', () 
 		repo = mkdtempSync(join(tmpdir(), 'dorfl-model-'));
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	function writeRepoConfig(value: unknown): void {

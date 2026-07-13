@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	writeFileSync,
@@ -57,7 +58,7 @@ describe('runPrepare — step status propagation', () => {
 		dir = mkdtempSync(join(tmpdir(), 'dorfl-prepare-'));
 	});
 	afterEach(() => {
-		rmSync(dir, {recursive: true, force: true});
+		rmrf(dir);
 	});
 
 	it('unset ⇒ no-op pass (runs nothing, reports noop)', async () => {
@@ -141,7 +142,7 @@ describe('prepared-ness marker — non-committed, in the git control area', () =
 		execFileSync('git', ['commit', '-q', '-m', 'init'], {cwd: repo});
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('resolves the marker path INSIDE the git dir (.git), never the work tree', () => {
@@ -170,7 +171,7 @@ describe('prepared-ness marker — non-committed, in the git control area', () =
 			expect(preparedMarkerPath(plain)).toBeUndefined();
 			expect(isPrepared(plain)).toBe(false);
 		} finally {
-			rmSync(plain, {recursive: true, force: true});
+			rmrf(plain);
 		}
 	});
 });
@@ -188,7 +189,7 @@ describe('ensurePrepared — once-per-worktree (marker-gated skip)', () => {
 		execFileSync('git', ['commit', '-q', '-m', 'init'], {cwd: repo});
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	it('runs prepare on a fresh (unmarked) worktree, then SKIPS the second time', async () => {
@@ -297,7 +298,7 @@ describe('prepare does NOT pollute the committed repo tree', () => {
 			// The marker exists, but in .git (untracked-invisible), not the work tree.
 			expect(isPrepared(repo)).toBe(true);
 		} finally {
-			rmSync(repo, {recursive: true, force: true});
+			rmrf(repo);
 		}
 	});
 });

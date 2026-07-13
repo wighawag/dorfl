@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {fixtureFolderRel} from './helpers/gitRepo.js';
+import {fixtureFolderRel, rmrf} from './helpers/gitRepo.js';
 import {
 	detectDuplicateSlugs,
 	lintLocalLedger,
@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 /** Write `work/<folder>/<slug>.md` in the fixture repo (a minimal task body). */

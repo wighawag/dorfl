@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -43,7 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 function seedTask(

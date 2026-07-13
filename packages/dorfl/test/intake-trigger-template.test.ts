@@ -39,6 +39,7 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -81,7 +82,7 @@ beforeEach(() => {
 	work = mkdtempSync(join(tmpdir(), 'intake-trigger-'));
 });
 afterEach(() => {
-	rmSync(work, {recursive: true, force: true});
+	rmrf(work);
 });
 
 // ─── the AUTHOR-TRUST → per-outcome-flags DERIVATION (CI's POLICY) ────────────

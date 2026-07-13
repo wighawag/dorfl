@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync} from 'node:fs';
+import {writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performComplete} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -21,6 +21,7 @@ import {
 	specFile,
 	type Scratch,
 	fixtureFolderRel,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 const ARBITER = 'arbiter';
@@ -89,7 +90,7 @@ function seedTerminalOnArbiter(
 	run('git', ['add', '-A'], dest, {env});
 	run('git', ['commit', '-q', '-m', seed], dest, {env});
 	run('git', ['push', '-q', 'origin', `seed/${slug}:main`], dest, {env});
-	rmSync(dest, {recursive: true, force: true});
+	rmrf(dest);
 }
 
 describe('complete — cross-substrate crash-safety (hold → durable main move → release)', () => {

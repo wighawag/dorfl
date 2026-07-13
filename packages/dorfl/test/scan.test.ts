@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -18,6 +18,7 @@ import {
 	pushWorkToMirrorOrigin,
 	breakMirrorOrigin,
 	fixtureFolderRel,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /** Write an observation under a repo's `work/notes/observations/` (untriaged unless `triaged`). */
@@ -85,7 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 describe('toScannedLifecycle (pool → scan-shape projection)', () => {
@@ -260,7 +261,7 @@ describe("scan (registry: reads each hub mirror's bare main ref)", () => {
 		expect(b.eligibility.eligible).toBe(false);
 
 		// now satisfy the dependency: a fresh fixture with a done/ alongside backlog/.
-		rmSync(workspacesDir(), {recursive: true, force: true});
+		rmrf(workspacesDir());
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			backlog: {'b.md': task({slug: 'b', blockedBy: '[a]'})},
 			done: {'a.md': task({slug: 'a'})},

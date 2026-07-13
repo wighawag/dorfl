@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {join} from 'node:path';
 import {
 	mkdirSync,
@@ -35,7 +36,7 @@ beforeEach(() => {
 	mkdirSync(join(cwd, 'work', 'tasks', 'backlog'), {recursive: true});
 });
 afterEach(() => {
-	rmSync(cwd, {recursive: true, force: true});
+	rmrf(cwd);
 });
 
 /** Seed a candidate task file under `work/tasks/backlog/` (the STAGING folder). */

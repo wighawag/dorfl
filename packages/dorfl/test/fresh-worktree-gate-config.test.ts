@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig, loadConfig} from '../src/config.js';
@@ -102,7 +103,7 @@ describe('freshWorktreeGate — the full precedence chain (flag > env > per-repo
 			// per-repo (false) beats the global/default (true).
 			expect(resolved.config.freshWorktreeGate).toBe(false);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -126,7 +127,7 @@ describe('freshWorktreeGate — the full precedence chain (flag > env > per-repo
 			});
 			expect(flagWins.config.freshWorktreeGate).toBe(true);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 
@@ -140,7 +141,7 @@ describe('freshWorktreeGate — the full precedence chain (flag > env > per-repo
 			});
 			expect(resolved.config.freshWorktreeGate).toBe(true);
 		} finally {
-			rmSync(repoDir, {recursive: true, force: true});
+			rmrf(repoDir);
 		}
 	});
 });
@@ -152,7 +153,7 @@ describe('loadConfig — freshWorktreeGate present with the ON default', () => {
 			const cfg = loadConfig(join(dir, 'does-not-exist.json'));
 			expect(cfg.freshWorktreeGate).toBe(true);
 		} finally {
-			rmSync(dir, {recursive: true, force: true});
+			rmrf(dir);
 		}
 	});
 });

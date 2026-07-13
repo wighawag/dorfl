@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {spawnSync, execSync} from 'node:child_process';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -300,7 +301,7 @@ const hasSsh = (() => {
 				const firstIdentity = lines.find((l) => l.startsWith('identityfile '));
 				expect(firstIdentity).toBe(`identityfile ${keyPath.toLowerCase()}`);
 			} finally {
-				rmSync(dir, {recursive: true, force: true});
+				rmrf(dir);
 			}
 		});
 	},

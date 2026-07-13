@@ -20,7 +20,7 @@ import {buildLifecyclePools} from '../src/lifecycle-pools.js';
 import {mergeConfig, type Config} from '../src/config.js';
 import type {SurfaceGate, SurfaceEmit} from '../src/surface-gate.js';
 import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
-import {makeScratch, gitIn, type Scratch} from './helpers/gitRepo.js';
+import {makeScratch, gitIn, type Scratch, rmrf} from './helpers/gitRepo.js';
 import type {
 	AcquireAdvancingLockResult,
 	ReleaseAdvancingLockResult,
@@ -88,7 +88,7 @@ describe('surfaceBlockers — the SELECTION-layer gate over the needsAnswers-blo
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	/** A `needsAnswers: true` task in `work/tasks/ready/` (a declared blocker, no sidecar). */
@@ -331,7 +331,7 @@ describe('surfaceBlockers — the two gates compose orthogonally + apply/needs-a
 		mkdirSync(repo, {recursive: true});
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	function seedObservation(slug: string): void {

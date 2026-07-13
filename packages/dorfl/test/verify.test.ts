@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	mkdirSync,
@@ -46,7 +47,7 @@ describe('runVerify — gate status propagation', () => {
 		dir = mkdtempSync(join(tmpdir(), 'dorfl-verify-'));
 	});
 	afterEach(() => {
-		rmSync(dir, {recursive: true, force: true});
+		rmrf(dir);
 	});
 
 	it('exits 0 when the gate passes', async () => {

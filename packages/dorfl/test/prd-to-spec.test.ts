@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	mkdirSync,
@@ -139,7 +140,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(scratch, {recursive: true, force: true});
+	rmrf(scratch);
 });
 
 // ───────────────────────────────────────────────────────────────────────────

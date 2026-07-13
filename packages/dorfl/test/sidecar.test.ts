@@ -1,5 +1,6 @@
 import {describe, it, expect} from 'vitest';
-import {mkdirSync, mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {
@@ -641,7 +642,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 			expect(linkAt).toBeGreaterThan(0);
 			expect(firstHeading).toBeGreaterThan(linkAt);
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 
@@ -654,7 +655,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 				'Item: [`spec:autotask`](../specs/ready/autotask.md)',
 			);
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 
@@ -665,7 +666,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 			const text = serialiseSidecar(model, {repoRoot: root});
 			expect(text).toContain('Item: [`task:bar`](../tasks/done/bar.md)');
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 
@@ -679,7 +680,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 			expect(back.item).toBe('task:ghost');
 			expect(back.entries.length).toBe(1);
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 
@@ -703,7 +704,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 			// A second serialise is byte-stable (canonicalisation is idempotent).
 			expect(serialiseSidecar(back, {repoRoot: root})).toBe(text);
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 
@@ -732,7 +733,7 @@ describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 			const duplicated = text.replace(linkLine, `${linkLine}\n${linkLine}`);
 			expect(parseSidecar(duplicated)).toEqual(model);
 		} finally {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		}
 	});
 });

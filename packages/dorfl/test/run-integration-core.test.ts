@@ -21,6 +21,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -366,7 +367,7 @@ describe('run through performIntegration — one-slug-one-folder invariant FAILS
 		gitIn(['add', '-A'], corrupt);
 		gitIn(['commit', '-q', '-m', 'corrupt: feat in two folders'], corrupt);
 		gitIn(['push', '-q', 'arbiter', 'corrupt/feat:main'], corrupt);
-		rmSync(corrupt, {recursive: true, force: true});
+		rmrf(corrupt);
 
 		const config = configFor();
 		const result = await runOnce({

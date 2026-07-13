@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync} from 'node:fs';
+import {writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -10,6 +10,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	rmrf,
 } from './helpers/gitRepo.js';
 
 /**
@@ -125,7 +126,7 @@ describe('atomic done-move — --allow-backlog staged source (tasks/backlog/ →
 		gitIn(['add', '-A'], sibling);
 		gitIn(['commit', '-q', '-m', 'done: sibling-x'], sibling);
 		gitIn(['push', '-q', ARBITER, 'sibling/x:main'], sibling);
-		rmSync(sibling, {recursive: true, force: true});
+		rmrf(sibling);
 
 		const core = await performIntegration({
 			cwd: repo,
@@ -195,7 +196,7 @@ describe('one-slug-one-folder invariant — FAIL LOUD on a two-folder slug (defe
 		gitIn(['add', '-A'], other);
 		gitIn(['commit', '-q', '-m', 'corrupt: gamma in two folders'], other);
 		gitIn(['push', '-q', ARBITER, 'corrupt/gamma:main'], other);
-		rmSync(other, {recursive: true, force: true});
+		rmrf(other);
 
 		const core = await performIntegration({
 			cwd: repo,

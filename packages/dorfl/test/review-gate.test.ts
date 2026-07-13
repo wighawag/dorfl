@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {rmrf} from './helpers/gitRepo.js';
+import {writeFileSync, mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DEFAULT_CONFIG, mergeConfig} from '../src/config.js';
@@ -123,7 +124,7 @@ describe('repo-config — the four keys are per-repo policy (allowed), like inte
 		repo = mkdtempSync(join(tmpdir(), 'dorfl-review-cfg-'));
 	});
 	afterEach(() => {
-		rmSync(repo, {recursive: true, force: true});
+		rmrf(repo);
 	});
 
 	function writeRepoConfig(value: unknown): void {

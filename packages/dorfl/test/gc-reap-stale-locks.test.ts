@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, rmSync} from 'node:fs';
+import {writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	acquireItemLock,
@@ -16,6 +16,7 @@ import {
 	gitEnv,
 	type Scratch,
 	fixtureFolderRel,
+	rmrf,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
 
@@ -78,7 +79,7 @@ function seedTerminalOnArbiter(
 	run('git', ['add', '-A'], dest, {env});
 	run('git', ['commit', '-q', '-m', `${folder}: ${slug}`], dest, {env});
 	run('git', ['push', '-q', 'origin', `seed/${slug}:main`], dest, {env});
-	rmSync(dest, {recursive: true, force: true});
+	rmrf(dest);
 }
 
 describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes (stale + stuck-terminal), keeps the human-attention case', () => {

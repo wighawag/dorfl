@@ -138,6 +138,36 @@ export function raceClone(seeded: SeededRepo, who: string): string {
 	return dir;
 }
 
+/**
+ * Retry-hardened recursive remove for THROWAWAY TEST FIXTURES.
+ *
+ * WHY this exists (do NOT revert to a bare `rmSync(path, {recursive, force})`):
+ * under full-suite parallelism (`pnpm -r test`, and especially the lifecycle's
+ * `max-parallel: 4` fan-out that runs several suites at once) a recursive delete
+ * of a git working tree intermittently throws
+ * `ENOTEMPTY: directory not empty, rmdir '.../.git'` (or `.git/objects`). `force:
+ * true` suppresses `ENOENT` but NOT `ENOTEMPTY`, so when git background activity
+ * (`gc --auto`, pack/index churn) or filesystem lag leaves an entry in a
+ * directory at the instant `rmdir` fires, the whole delete throws and, because it
+ * runs in an `afterEach`/teardown, fails an UNRELATED test. That false failure
+ * red-bounced 5 advance-propose legs on run 29206312575 (see
+ * `work/notes/observations/full-suite-flaky-enotempty-rmdir-on-git-fixture-teardown-fails-advance-legs-2026-07-12.md`).
+ *
+ * Node's `rmSync` retries EXACTLY this class (`EBUSY`/`EMFILE`/`ENFILE`/
+ * `ENOTEMPTY`/`EPERM`) when given `maxRetries`+`retryDelay` (linear backoff),
+ * which closes the teardown race without touching product code or reducing test
+ * concurrency. This is the single seam every fixture teardown should route
+ * through.
+ */
+export function rmrf(path: string): void {
+	rmSync(path, {
+		recursive: true,
+		force: true,
+		maxRetries: 10,
+		retryDelay: 50,
+	});
+}
+
 /** A scratch workspace that cleans itself up. */
 export interface Scratch {
 	root: string;
@@ -149,7 +179,7 @@ export function makeScratch(prefix = 'dorfl-git-'): Scratch {
 	return {
 		root,
 		cleanup() {
-			rmSync(root, {recursive: true, force: true});
+			rmrf(root);
 		},
 	};
 }

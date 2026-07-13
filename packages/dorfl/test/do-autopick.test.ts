@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -31,7 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	rmSync(root, {recursive: true, force: true});
+	rmrf(root);
 });
 
 /** Seed a `work/tasks/ready/<slug>.md` task with the given gate frontmatter. */

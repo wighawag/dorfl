@@ -1,6 +1,6 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
-import {existsSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {
 	arbiterPath,
 	arbiterInit,

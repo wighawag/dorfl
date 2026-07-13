@@ -1,4 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {rmrf} from './helpers/gitRepo.js';
 import {
 	mkdtempSync,
 	rmSync,
@@ -57,7 +58,7 @@ beforeEach(() => {
 	work = mkdtempSync(join(tmpdir(), 'close-job-'));
 });
 afterEach(() => {
-	rmSync(work, {recursive: true, force: true});
+	rmrf(work);
 });
 
 // ─── the generated workflow satisfies every structural invariant ─────────────

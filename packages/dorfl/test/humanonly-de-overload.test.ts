@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, rmSync, readFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -11,7 +11,7 @@ import {
 } from '../src/tasking-eligibility.js';
 import {scan} from '../src/scan.js';
 import {mergeConfig} from '../src/config.js';
-import {registerMirrorWithWork} from './helpers/gitRepo.js';
+import {registerMirrorWithWork, rmrf} from './helpers/gitRepo.js';
 import {performTask, type TaskDorfl} from '../src/tasking.js';
 import {buildTaskReviewPrompt} from '../src/tasker-review-loop.js';
 import {
@@ -116,7 +116,7 @@ describe('pool residency — humanOnly task in `work/tasks/ready/` (the pool) is
 		root = mkdtempSync(join(tmpdir(), 'humanonly-de-overload-'));
 	});
 	afterEach(() => {
-		rmSync(root, {recursive: true, force: true});
+		rmrf(root);
 	});
 
 	it('scan reports a backlog `humanOnly` task as not eligible; an undeclared neighbour is eligible (autoBuild on)', async () => {
