@@ -4,7 +4,7 @@ slug: apply-resolve-reset-flag-discards-work-branch
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic, empty-diff-bounce-surfaces-dispose-defaulted-question, bounce-migrate-stuck-assertions-and-flip-exit-codes]
 covers: [2]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Re-scope 2026-07-13 (after a Gate-2 BLOCK on the first attempt)
@@ -73,3 +73,13 @@ Corrective guidance for the rebuild (carry into the next attempt; the re-scope i
 3. Add the END-TO-END test the re-scope asked for: drive a REAL bounced task through the rung dispatcher (now possible after PR-2b `bounce-migrate-stuck-assertions-and-flip-exit-codes`), not just a direct `applyAnsweredQuestions` unit call, and assert the remote `work/<slug>` branch is deleted then `needsAnswers` is cleared.
 4. Record the delete-first-then-clear ordering decision (a partial failure leaves `needsAnswers:true` + sidecar present + branch already-gone; the next tick self-heals via the already-gone no-op) in a `## Decisions` block linked from the done record, NOT only in code JSDoc.
 5. Acknowledge the new refusal shape: a branch-delete push FAILURE aborting the whole resolve via `ApplyPersistError` is a new user-visible refusal on the resolve path — either spell it out as intended in the acceptance notes or soften it to a safe-ignore consistent with the already-gone contract.
+
+## Applied answers 2026-07-14
+
+### q1: 'task:apply-resolve-reset-flag-discards-work-branch' was bounced — how should we proceed?
+
+Resolve, and RESET (rebuild fresh). This bounce was a TRANSIENT infrastructure failure, NOT a defect: the Anthropic API stream dropped mid-run (`stream ended before message_stop`) while the agent was still in the read/investigate phase, before it made any edits. So there is no partial work to keep and no saved branch to continue from — reset is trivially correct (nothing to discard). Just re-pool it for a fresh build attempt.
+
+The rebuild guidance from the prior resolve still holds in full (the task body + re-scope carry it): keep the correct mechanism shape (`resolveReset?: boolean` on `DecisionVerdict` + its parser; the shared `deleteRemoteWorkBranchIfPresent` primitive), thread `verdict.resolveReset` AND `arbiter` through the REAL `resolve` dispatch site in `advance.ts` (~line 1498, which today calls `apply({cwd, item, itemPath, note})` with neither), add an END-TO-END test through the rung dispatcher, record the delete-first ordering in a `## Decisions` block linked from the done record, and address the branch-delete-failure refusal shape. Do NOT widen the observation-only `runAgenticDecision` gate.
+
+Note (transient re-surface): this is the SECOND non-content bounce of this item (Gate-2 block, then this stream drop). If a THIRD transient failure re-surfaces it, that is a flakiness signal worth capturing rather than just re-answering — the build has not yet reached the edit phase on its own merits.
