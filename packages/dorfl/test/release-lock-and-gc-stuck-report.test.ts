@@ -166,7 +166,7 @@ describe('release-lock — clears a NAMED unified lock (generalises release-adva
 	});
 });
 
-describe('gc --ledger stuck-lock report — REPORTS lingering locks, NEVER clears', () => {
+describe('gc --ledger orphan-lock report — REPORTS lingering locks, NEVER clears', () => {
 	it('lists held + stuck locks with holder/since/reason, and does NOT clear them', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [
 			'building',
