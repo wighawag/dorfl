@@ -1,5 +1,13 @@
 # dorfl
 
+## 0.3.1
+
+### Patch Changes
+
+- 1a79008: Add `dorfl --version` (and the lower-case `-v` alias) to print the installed CLI version.
+
+  The version is read at runtime from the package's own `package.json` (the single source of truth changesets bumps on release), so it never drifts from the published version. Previously `dorfl --version` errored with "unknown option '--version'".
+
 ## 0.3.0
 
 ### Minor Changes
