@@ -249,20 +249,28 @@
 							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
 							>setup</code
 						>
-						(an existing repo). Runner-agnostic — no
+						(an existing repo). Runner-agnostic — nothing to install globally;
+						the skills go in via
+						<code
+							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
+							>npx dorfl</code
+						>, and adopting the contract needs no
 						<code
 							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
 							>dorfl</code
-						> runtime needed to adopt.
+						> runtime.
 					</p>
 					<div
 						class="rounded-xl border border-border bg-visor-inset p-4 sm:p-5"
 					>
 						<pre class="overflow-x-auto font-mono text-sm leading-relaxed"><code
 								><span class="text-bone-muted"
-									># install the dorfl skills into your agent</span
+									># install the dorfl skills into your agent (no install needed — run via npx)</span
 								>
-<span class="text-amber">dorfl skills add</span>
+<span class="text-amber">npx dorfl skills add</span>
+<span class="text-bone-muted"
+									># (or install the CLI once — `npm install -g dorfl` — then `dorfl skills add`)</span
+								>
 
 <span class="text-bone-muted"># then, in your agent:</span>
 <span class="text-amber">from-idea</span>   <span class="text-bone-muted"

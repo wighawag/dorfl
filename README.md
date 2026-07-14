@@ -7,6 +7,55 @@ repos, both as a guided **human loop** and as an unattended **autonomous runner*
 on top of a file-based `work/` contract and an atomic git-ref claim protocol. It is
 built by dogfooding itself: it tracks its own roadmap in its own `work/` tree.
 
+## What it does
+
+Four jobs, one tireless golem: **discover, schedule, claim, run.** Point it at your
+repos and it finds the claimable work, picks what is ready, claims each item
+atomically so many agents never collide, and drives it through your acceptance gate
+— either guiding you step by step, or running unattended in CI. The state lives in
+plain markdown files versioned with your code (no database, no dashboard): folders
+hold the durable status, git lock refs hold the live one.
+
+## Get started
+
+Adoption is three layers. You only need the later ones when you want the runner; the
+contract itself adopts with no global install.
+
+**1. Adopt the contract (a skill) — the front door.** Install the dorfl skills into
+your agent, then drive from your agent. Nothing to install globally (the skills go in
+via `npx dorfl`), and adopting the contract needs no `dorfl` runtime:
+
+```sh
+# install the dorfl skills into your agent (no install needed — run via npx)
+npx dorfl skills add
+# (or install the CLI once — `npm install -g dorfl` — then `dorfl skills add`)
+
+# then, in your agent:
+from-idea   # from scratch: idea → scaffolded work/-contract repo + spec
+setup       # existing repo: onboard onto the work/ contract
+```
+
+**2. The `work/` contract, versioned with your code.** What adoption scaffolds into
+your repo: one markdown file per item, status is the folder it lives in, plus a
+`.dorfl.json` acceptance gate. This is the durable substrate the CLI later consumes
+(see [The `work/` contract](#the-work-contract) below for the full layout).
+
+**3. Execute (the CLI) & CI.** Once the contract is in place, install the runner and
+let it consume the pool: `dorfl do` in one repo, `dorfl run` across many, `dorfl
+intake` as the issue → spec/task front door in CI:
+
+```sh
+# install the runner
+npm install -g dorfl
+
+dorfl remote add <repo>   # register a repo to watch
+dorfl do                  # pick a ready task in this repo and build it
+dorfl run                 # the cross-repo parallel daemon
+```
+
+See the [website](https://wighawag.github.io/dorfl/) for the same walkthrough with
+more context.
+
 ## The idea in one breath
 
 - **Status is the folder, never a field.** Every work item is one markdown file, and
