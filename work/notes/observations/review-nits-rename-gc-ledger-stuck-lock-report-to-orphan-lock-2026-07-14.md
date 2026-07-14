@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'rename-gc-ledger-stuck-lock-report-to-
 date: 2026-07-14
 status: open
 reviewOf: rename-gc-ledger-stuck-lock-report-to-orphan-lock
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
