@@ -467,6 +467,92 @@ async function readLocalItemLock(
 	return parseLockEntry(show.stdout);
 }
 
+/**
+ * Options the shared {@link deleteRemoteWorkBranchIfPresent} primitive consumes.
+ */
+export interface DeleteRemoteWorkBranchOptions {
+	/** Working clone whose remote `arbiter` points at the real arbiter. */
+	cwd: string;
+	/** The arbiter remote NAME in `cwd`. */
+	arbiter: string;
+	/** Bare slug (the branch is `work/task-<slug>`). */
+	slug: string;
+	/** Environment for child git processes. */
+	env?: NodeJS.ProcessEnv;
+}
+
+/** The three terminal states {@link deleteRemoteWorkBranchIfPresent} can report. */
+export type DeleteRemoteWorkBranchStatus =
+	/** The push --delete succeeded; the arbiter branch is gone. */
+	| 'deleted'
+	/**
+	 * The branch was already absent from the arbiter (`remote ref does not
+	 * exist` / `unable to delete`). Local refs may still have been cleaned up.
+	 * SEMANTICALLY equivalent to `deleted` for callers who only care that the
+	 * branch is not on the arbiter afterwards — idempotent no-op.
+	 */
+	| 'already-gone'
+	/** The push --delete failed for a reason OTHER than already-gone; caller decides. */
+	| 'failed';
+
+/** The outcome {@link deleteRemoteWorkBranchIfPresent} reports. */
+export interface DeleteRemoteWorkBranchResult {
+	/** The `work/<type>-<slug>` branch ref name that was targeted. */
+	branch: string;
+	/** See {@link DeleteRemoteWorkBranchStatus}. */
+	status: DeleteRemoteWorkBranchStatus;
+	/** The stderr from the failed `push --delete` (`''` on success/already-gone). */
+	stderr: string;
+}
+
+/**
+ * Delete the remote `work/task-<slug>` branch on the arbiter using the SAME
+ * write-through ordering the `requeue --reset` recovery verb uses:
+ *
+ *   1. Delete the LOCAL tracking ref (`refs/remotes/<arbiter>/work/<...>`)
+ *      — the ref the continue-detection path READS; if we skip this the
+ *      staleness silently resurrects a supposedly-discarded branch (verified in
+ *      `work/notes/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`).
+ *   2. Delete any LOCAL head `work/<...>` (best-effort).
+ *   3. `git push <arbiter> --delete work/<...>` — the ARBITER delete, the
+ *      source of truth. A `remote ref does not exist` / `unable to delete`
+ *      stderr is TOLERATED as `already-gone` so the primitive is IDEMPOTENT
+ *      and safely callable on an item with no work branch (an observation, or
+ *      a task never built).
+ *
+ * Extracted from {@link returnToBacklog}'s `--reset` path so the apply-rung
+ * `kind: 'stuck'` answered `reset` verb (task
+ * `apply-resolve-reset-flag-discards-work-branch`) can dispatch through the
+ * SAME primitive without re-implementing branch deletion — the two callers
+ * MUST stay behaviourally identical (delete-before-move / delete-before-clear;
+ * local-first write-through; already-gone tolerance).
+ */
+export async function deleteRemoteWorkBranchIfPresent(
+	options: DeleteRemoteWorkBranchOptions,
+): Promise<DeleteRemoteWorkBranchResult> {
+	const {cwd, arbiter, slug, env} = options;
+	const branch = workBranchRef('task', slug);
+	await gitSoftAsync(
+		['update-ref', '-d', `refs/remotes/${arbiter}/${branch}`],
+		cwd,
+		env,
+	);
+	await gitSoftAsync(['branch', '-D', branch], cwd, env);
+	const del = await gitSoftAsync(
+		['push', arbiter, '--delete', branch],
+		cwd,
+		env,
+	);
+	if (del.status === 0) {
+		return {branch, status: 'deleted', stderr: ''};
+	}
+	const stderr = del.stderr.trim();
+	if (/remote ref does not exist|unable to delete/i.test(stderr)) {
+		return {branch, status: 'already-gone', stderr};
+	}
+	return {branch, status: 'failed', stderr};
+}
+
 export async function returnToBacklog(
 	options: ReturnToBacklogOptions,
 ): Promise<ReturnToBacklogResult> {
@@ -611,49 +697,29 @@ export async function returnToBacklog(
 	// continue. Delete-before-move also closes the claim-race window.
 	let deletedRemoteBranch = false;
 	if (options.reset) {
-		const branch = workBranchRef('task', slug);
-		// LOCAL-FIRST: the tracking ref `branchAheadOf` reads (the one whose
-		// staleness today silently turns `--reset` into a no-op — verified live in
-		// `work/notes/observations/requeue-reset-does-not-prune-hub-mirror-stale-branch-ref.md`,
-		// where `--reset` deleted the arbiter branch but the local tracking ref
-		// survived and resurrected a "continue" on the next `do`). Both deletes
-		// are best-effort — their absence is fine, what matters is they are not
-		// LEFT BEHIND when the arbiter delete succeeds.
-		await gitSoftAsync(
-			['update-ref', '-d', `refs/remotes/${arbiter}/${branch}`],
+		const dropped = await deleteRemoteWorkBranchIfPresent({
 			cwd,
+			arbiter,
+			slug,
 			env,
-		);
-		await gitSoftAsync(['branch', '-D', branch], cwd, env);
-		// THEN the arbiter delete (explicit/guarded departure from the "never delete
-		// the remote branch" invariant; only on the `--reset` path, never the
-		// default).
-		const del = await gitSoftAsync(
-			['push', arbiter, '--delete', branch],
-			cwd,
-			env,
-		);
-		if (del.status !== 0) {
-			const stderr = del.stderr.trim();
-			// Tolerate "remote ref does not exist" (already gone): treat as deleted.
-			const alreadyGone = /remote ref does not exist|unable to delete/i.test(
-				stderr,
-			);
-			if (!alreadyGone) {
-				const message =
-					`requeue --reset for '${slug}': failed to delete the remote branch ` +
-					`${branch} on ${arbiter} (${stderr || 'unknown error'}); ` +
-					'aborting the requeue — item left in needs-attention (no backlog move). ' +
-					'The local tracking ref was already cleared (write-through ordering); ' +
-					'a subsequent fetch will restore it from the arbiter — the local store ' +
-					'is BEHIND the arbiter (self-healing), never AHEAD (which would drive a ' +
-					'stale continue).';
-				note(message);
-				return {moved: false, reasonNotMoved: message};
-			}
+		});
+		if (dropped.status === 'failed') {
+			const stderr = dropped.stderr;
+			const message =
+				`requeue --reset for '${slug}': failed to delete the remote branch ` +
+				`${dropped.branch} on ${arbiter} (${stderr || 'unknown error'}); ` +
+				'aborting the requeue — item left in needs-attention (no backlog move). ' +
+				'The local tracking ref was already cleared (write-through ordering); ' +
+				'a subsequent fetch will restore it from the arbiter — the local store ' +
+				'is BEHIND the arbiter (self-healing), never AHEAD (which would drive a ' +
+				'stale continue).';
+			note(message);
+			return {moved: false, reasonNotMoved: message};
 		}
 		deletedRemoteBranch = true;
-		note(`Deleted the remote branch ${branch} on ${arbiter} (--reset).`);
+		note(
+			`Deleted the remote branch ${dropped.branch} on ${arbiter} (--reset).`,
+		);
 	}
 
 	// DEFAULT (keep+continue) REQUEUE-SAFETY GUARD: a claimable item's continue-

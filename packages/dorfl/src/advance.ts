@@ -66,6 +66,12 @@ import {
 	type MergeActionHandler,
 	type MergeActionResult,
 } from './apply-merge-action.js';
+import {
+	detectAnsweredStuckAction,
+	performStuckAction,
+	type StuckActionHandler,
+	type StuckActionResult,
+} from './apply-stuck-action.js';
 import type {VerifyConfig} from './verify.js';
 import type {NewQuestion} from './sidecar.js';
 
@@ -397,6 +403,20 @@ export interface AdvanceContext {
 	 * WITHOUT spinning up a hub mirror or running real verify.
 	 */
 	mergeAction?: MergeActionHandler;
+	/**
+	 * The stuck-action dispatch SEAM (task
+	 * `apply-resolve-reset-flag-discards-work-branch`, spec
+	 * `surface-stuck-as-questions-and-retire-stuck-lock-state`): the
+	 * deterministic answer-driven runner-action handler the apply rung invokes
+	 * BEFORE the fall-through persist when an answered `kind: 'stuck'` entry
+	 * (the shape the bounce-surface path stamps) is detected. Production wires
+	 * {@link performStuckAction} (drives the shared
+	 * `deleteRemoteWorkBranchIfPresent` primitive on `reset`); tests inject a
+	 * stub so they assert on the apply-rung's `keep | reset | refused | cancel`
+	 * routing WITHOUT touching a real arbiter. The deterministic sibling of
+	 * {@link mergeAction} for the `kind: 'stuck'` axis.
+	 */
+	stuckAction?: StuckActionHandler;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
 }
@@ -1035,6 +1055,26 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
 		return mergeRoute;
 	}
 
+	// RUNNER-ACTION KIND-CHECK for `kind: 'stuck'` (task
+	// `apply-resolve-reset-flag-discards-work-branch`, spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #6): a
+	// bounced TASK surfaces as a `kind: 'stuck'` question; the human's plain
+	// `keep | reset | cancel` answer drives one of the three deterministic
+	// verbs. The DIRECT SIBLING of `maybeRunMergeAction` above (there is NO
+	// agentic decider on the TASK apply path — `runAgenticDecision` fires only
+	// for observations — so a bounced task's answer MUST be sourced from a
+	// deterministic parse+dispatch, not a widened decider). `keep` and `reset`
+	// fall through to the normal fall-through persist (with the branch
+	// pre-deleted on `reset` via the SHARED
+	// `deleteRemoteWorkBranchIfPresent`); `cancel` dispatches through
+	// `applyAnsweredQuestions`' `dispose` option (task →
+	// `tasks/cancelled/`); `refused` short-circuits with the sidecar left in
+	// place for a re-answer.
+	const stuckRoute = await maybeRunStuckAction(input, itemPath);
+	if (stuckRoute !== undefined) {
+		return stuckRoute;
+	}
+
 	// AGENTIC APPLY for an answered OBSERVATION (the subsumed triage rung): run the
 	// shared decision engine over the answer(s) + source, route the verdict. A
 	// caller-supplied follow-up batch (`applyFollowups`) bypasses the decision and
@@ -1224,6 +1264,113 @@ async function maybeRunMergeAction(
 	const apply = context.applyPersist ?? applyAnsweredQuestions;
 	try {
 		const applied = apply({cwd, item, itemPath, note});
+		const mapped: AdvanceOutcome =
+			applied.outcome === 'repaused'
+				? 'no-op'
+				: applied.outcome === 'vanished'
+					? 'vanished'
+					: 'advanced';
+		return {
+			exitCode: 0,
+			outcome: mapped,
+			message: `${result.message} ${applied.message}`,
+		};
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			message: `apply ${item}: ${detail}`,
+		};
+	}
+}
+
+/**
+ * Dispatch an answered STUCK-QUESTION (a sidecar entry stamped `kind: 'stuck'`
+ * by the bounce-surface path) through the deterministic
+ * {@link performStuckAction} sibling. The DIRECT SIBLING of
+ * {@link maybeRunMergeAction} for the `kind: 'stuck'` axis (task
+ * `apply-resolve-reset-flag-discards-work-branch`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state` decision #6):
+ *
+ *   - `keep`   -> fall through to today's normal `applyAnsweredQuestions`
+ *                 resolve (branch untouched; continue-from-WIP);
+ *   - `reset`  -> the SHARED `deleteRemoteWorkBranchIfPresent` primitive
+ *                 discards the remote `work/task-<slug>` FIRST, then the
+ *                 normal fall-through persist clears `needsAnswers`. Safely
+ *                 IDEMPOTENT when no branch exists (an item never built) —
+ *                 an `already-gone` push is tolerated as a no-op;
+ *   - `cancel` -> fall through to the normal persist with the `dispose`
+ *                 option (`git mv -> tasks/cancelled/`), the answer text
+ *                 recorded as the human's reason;
+ *   - `refused` -> a REAL push-delete failure aborted the discard;
+ *                  SHORT-CIRCUIT with the sidecar left in place so the human
+ *                  sees the failure and re-answers (matches the
+ *                  `requeue --reset` abort-on-failed-delete contract).
+ *
+ * Returns `undefined` when no answered `kind: 'stuck'` entry is present (the
+ * apply rung then proceeds to the existing path — an unrelated content
+ * question falls through to the normal `applyAnsweredQuestions` /
+ * agentic-decider path).
+ */
+async function maybeRunStuckAction(
+	input: RungExecInput,
+	itemPath: string,
+): Promise<RungExecResult | undefined> {
+	const {item, context} = input;
+	const cwd = context.cwd;
+	const note = context.note ?? (() => {});
+
+	const detected = detectAnsweredStuckAction(cwd, item);
+	if (detected === undefined) return undefined;
+
+	const handler = context.stuckAction ?? performStuckAction;
+
+	let result: StuckActionResult;
+	try {
+		result = await handler({
+			action: detected,
+			item,
+			slug: input.slug,
+			cwd,
+			arbiter: context.arbiter ?? DEFAULT_ARBITER,
+			note,
+		});
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		const message =
+			`apply ${item}: answered stuck-question dispatch raised (${detail}); NOT ` +
+			`clearing needsAnswers; the sidecar stays surfaced.`;
+		note(message);
+		return {exitCode: 1, outcome: 'usage-error', message};
+	}
+
+	if (result.outcome === 'refused') {
+		// The arbiter delete FAILED (not `already-gone`); we MUST NOT clear
+		// needsAnswers, because that would leave the item claimable while still
+		// carrying the WIP branch we meant to discard — the very stale-continue
+		// trap the `requeue --reset` path guards against. Leave the sidecar in
+		// place for a re-answer.
+		note(result.message);
+		return {exitCode: 1, outcome: 'usage-error', message: result.message};
+	}
+
+	note(result.message);
+	const apply = context.applyPersist ?? applyAnsweredQuestions;
+	try {
+		const applyOptions: ApplyAnsweredQuestionsOptions = {
+			cwd,
+			item,
+			itemPath,
+			note,
+		};
+		if (result.outcome === 'cancel') {
+			// The human's answer text is the dispose reason (verbatim), so the
+			// terminal `tasks/cancelled/` body records WHY — the same reason
+			// contract the agentic `dispose` verdict uses.
+			applyOptions.dispose = {reason: detected.entry.answer.trim()};
+		}
+		const applied = apply(applyOptions);
 		const mapped: AdvanceOutcome =
 			applied.outcome === 'repaused'
 				? 'no-op'
@@ -1735,6 +1882,10 @@ export async function performAdvance(
 				verify: options.verify,
 				strictMergeApproval: options.strictMergeApproval,
 				mergeAction: options.mergeAction,
+				// The answered-stuck-question dispatch context (task
+				// `apply-resolve-reset-flag-discards-work-branch`): threaded into the
+				// apply rung's kind-check for a `kind: 'stuck'` runner-action.
+				stuckAction: options.stuckAction,
 				note,
 			},
 		});
