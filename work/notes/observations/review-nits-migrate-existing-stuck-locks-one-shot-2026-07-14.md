@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'migrate-existing-stuck-locks-one-shot'
 date: 2026-07-14
 status: open
 reviewOf: migrate-existing-stuck-locks-one-shot
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
