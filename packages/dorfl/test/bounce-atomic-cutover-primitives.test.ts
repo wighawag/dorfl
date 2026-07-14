@@ -405,10 +405,11 @@ describe('additive recovery predicate — resumeItemLock converges the crash-orp
 		expect(after).toBeUndefined();
 	});
 
-	it('resumeItemLock on a genuinely-active hold (NOT surfaced) still returns `wrong-state` (the stuck-based path is untouched)', async () => {
-		// The 84-assertion invariant PR-2a preserves: an active-but-unsurfaced
-		// resume stays `wrong-state`, so nothing outside the crash-orphan case
-		// changes semantics.
+	it('resumeItemLock on a genuinely-active hold (NOT surfaced) is a no-op (post retire-stuck-lock-state: `not-held` — nothing to resume)', async () => {
+		// Post-`retire-stuck-lock-state`: the `stuck` state is gone; resume now
+		// only handles the crash-window orphan (active + surfaced-on-main). A
+		// healthy in-flight active hold reports `not-held` ("a healthy build —
+		// nothing to resume") rather than the retired `wrong-state`.
 		const {repo} = await seedWithActiveLock('alpha');
 		const r = await resumeItemLock({
 			item: 'task:alpha',
@@ -416,7 +417,7 @@ describe('additive recovery predicate — resumeItemLock converges the crash-orp
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(r.outcome).toBe('wrong-state');
+		expect(r.outcome).toBe('not-held');
 	});
 });
 

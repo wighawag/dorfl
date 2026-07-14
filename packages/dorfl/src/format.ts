@@ -117,40 +117,20 @@ function cwdDivergenceLine(
  * consistency rule): the two reads have different freshness + storage models.
  */
 /**
- * Render ONE held per-item lock entry (action × state + reason/questions) as
- * indented lines, the SHARED renderer for the in-flight lock surface on BOTH the
- * registry view (`formatStatus`) and the cwd section (`formatCwdSection`), so the
- * two substrates present a held/stuck item identically (NOT a forked renderer). An
- * `active` hold reads as `in-progress`; a `stuck` hold as `needs-attention` and
- * carries its (possibly multi-line) reason + any surfaced questions.
+ * Render ONE held per-item lock entry as an indented line, the SHARED renderer
+ * for the in-flight lock surface on BOTH the registry view (`formatStatus`) and
+ * the cwd section (`formatCwdSection`). Post-`retire-stuck-lock-state` the
+ * lock state is degenerate (`active` only) — a held lock is always an
+ * in-progress hold; a parked item is a `needsAnswers:true` pool item on `main`
+ * with a sidecar, rendered by the pool categoriser (NOT here).
  */
 export function formatLockEntryLines(
 	entry: LockEntry,
 	indent: string,
 ): string[] {
-	const lines: string[] = [];
-	const view = entry.state === 'stuck' ? 'needs-attention' : 'in-progress';
-	lines.push(
-		`${indent}${entry.entry}   (${entry.action}/${entry.state} = ${view})`,
-	);
-	if (entry.state === 'stuck') {
-		const reason =
-			entry.reason && entry.reason !== ''
-				? entry.reason
-				: '(no reason recorded)';
-		const reasonLines = reason.split('\n');
-		lines.push(`${indent}  reason: ${reasonLines[0]}`);
-		for (const extra of reasonLines.slice(1)) {
-			lines.push(`${indent}    ${extra}`);
-		}
-		if (entry.questions && entry.questions.length > 0) {
-			lines.push(`${indent}  questions:`);
-			for (const q of entry.questions) {
-				lines.push(`${indent}    - ${q}`);
-			}
-		}
-	}
-	return lines;
+	return [
+		`${indent}${entry.entry}   (${entry.action}/${entry.state} = in-progress)`,
+	];
 }
 
 export function formatCwdSection(section: CwdSection): string[] {
@@ -214,7 +194,7 @@ export function formatCwdSection(section: CwdSection): string[] {
 	const lockHeld = section.repo.lockHeld ?? [];
 	if (lockHeld.length > 0) {
 		lines.push('');
-		lines.push('    In progress / stuck (lock held — refs/dorfl/lock/*):');
+		lines.push('    In progress (lock held — refs/dorfl/lock/*):');
 		for (const entry of lockHeld) {
 			lines.push(...formatLockEntryLines(entry, '      '));
 		}

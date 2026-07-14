@@ -11,6 +11,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -239,7 +240,7 @@ describe('requeue-safe — default keep+continue degrades to fresh when the arbi
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
+		expect(heldLockOnArbiter(repo, 'eta')).toBe(true);
 		// Remove the continue-branch from the arbiter (the local one survives, which
 		// is exactly why the guard must check the ARBITER ref, not the local one).
 		gitIn(['push', '-q', ARBITER, '--delete', 'work/task-eta'], repo);

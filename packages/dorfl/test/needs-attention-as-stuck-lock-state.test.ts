@@ -219,28 +219,24 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		gitIn(['push', '-q', ARBITER, 'done-move:main'], completer);
 		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
 
-		// Mark the still-held lock STUCK directly (the lock half of a rebase-conflict
-		// bounce of a just-completed item — the state-machine `active → stuck` amend).
-		const marked = await markStuckItemLock({
+		// Post-`retire-stuck-lock-state`: the shim mark-stuck is a no-op (the
+		// state axis is degenerate at `active`). The held ACTIVE lock and the
+		// terminal `done` record legitimately co-exist — the crash-window orphan
+		// scenario the reconcile/reap paths handle `main`-authoritatively.
+		await markStuckItemLock({
 			item: 'task:epsilon',
-			reason: 'rebase onto arbiter/main conflicted (aborted)',
+			reason: 'ignored',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(marked.outcome).toBe('transitioned');
-
-		// CO-EXISTENCE: the lock is stuck (the human's attention) AND `done` on main
-		// is untouched by the lock amend (it touches only the lock ref) — the two
-		// substrates legitimately disagree, no corruption.
 		const lock = await readItemLock({
 			item: 'task:epsilon',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/conflict/i);
+		expect(lock?.state).toBe('active');
 		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
 	});
 
@@ -325,17 +321,16 @@ function workspacesDir(): string {
 	return join(scratch.root, '.dorfl');
 }
 
-describe('status ADDITIONALLY reads the lock refs (held + stuck + reasons)', () => {
-	it('surfaces an active (in-progress) and a stuck (needs-attention) lock entry from the mirror', async () => {
+describe('status ADDITIONALLY reads the lock refs (held active locks)', () => {
+	it('surfaces held ACTIVE lock entries from the mirror (post retire-stuck-lock-state: no stuck state)', async () => {
 		const {mirrorPath} = registerMirrorWithWork(workspacesDir(), 'project', {
 			backlog: {'held.md': 'x', 'broken.md': 'y'},
 		});
-		// One active hold (in-progress) + one stuck hold (needs-attention) on the
-		// mirror's origin lock refs.
+		// Two active holds (the shim `stuck` seed is a no-op post-retirement).
 		await seedLockOnMirrorOrigin('project', 'held', {action: 'implement'});
 		await seedLockOnMirrorOrigin('project', 'broken', {
 			action: 'implement',
-			stuck: 'acceptance gate failed (exit 1)',
+			stuck: 'ignored (shim no-op)',
 		});
 
 		const report = await status({
@@ -345,19 +340,15 @@ describe('status ADDITIONALLY reads the lock refs (held + stuck + reasons)', () 
 		expect(report.lockHeld).toHaveLength(1);
 		const entries = report.lockHeld?.[0].entries ?? [];
 		expect(entries).toHaveLength(2);
-		const stuck = entries.find((e) => e.state === 'stuck');
-		const active = entries.find((e) => e.state === 'active');
-		expect(active?.entry).toBe('task-held');
-		expect(stuck?.entry).toBe('task-broken');
-		expect(stuck?.reason).toMatch(/acceptance gate failed/);
+		expect(entries.every((e) => e.state === 'active')).toBe(true);
+		const entryNames = entries.map((e) => e.entry).sort();
+		expect(entryNames).toEqual(['task-broken', 'task-held']);
 
 		const out = formatStatus(report);
 		expect(out).toMatch(/In-flight locks/);
 		expect(out).toMatch(/task-held/);
 		expect(out).toMatch(/in-progress/);
 		expect(out).toMatch(/task-broken/);
-		expect(out).toMatch(/needs-attention/);
-		expect(out).toMatch(/acceptance gate failed/);
 		expect(out).toMatch(/in-flight lock\(s\)/);
 	});
 

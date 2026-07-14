@@ -9,7 +9,9 @@ import {
 	listItemLocks,
 	itemLockRef,
 	LOCK_REF_PREFIX,
+	type LockState,
 } from '../src/item-lock.js';
+import type {SidecarKind} from '../src/sidecar.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -23,17 +25,21 @@ import {
 import {run} from '../src/git.js';
 
 /**
- * The lock-entry two-axis STATE MACHINE (task
- * `lock-entry-state-machine-and-invariants`; design trail "The C8 lock-entry STATE
- * MACHINE"). These tests sit ON TOP of the unified lock module's primitives
- * (acquire/release) and drive the interior transitions (mark-stuck / resume /
- * requeue) + the complete transition's lock half, asserting EVERY legal move and
- * REJECTING the illegal ones, plus the three invariants:
- *   - at most ONE entry per item (issue-3 exclusion; a held item loses acquire);
- *   - `reason` PRESENT iff `state: stuck`;
- *   - `done` on `main` + a `stuck` lock may legitimately CO-EXIST.
- * Everything runs on a `--bare file://` arbiter (`seedRepoWithArbiter`), writing
- * only into its own temp fixtures.
+ * Post-`retire-stuck-lock-state` (spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`) the lock-entry
+ * two-axis state machine collapses: `LockState` admits `active` only, a bounce
+ * SURFACES + RELEASES (never marks stuck), and a parked item is a
+ * `needsAnswers:true` pool item on `main` \u2014 NOT a stuck lock. These tests pin
+ * the CONTRACT after the collapse:
+ *   - the type `LockState` admits `'active'` only (compile-time);
+ *   - the SidecarKind `'stuck'` member SURVIVES (compile-time; it is the
+ *     surfaced-bounce sidecar's kind, NOT a lock state);
+ *   - `markStuckItemLock` is a shim no-op (does NOT actually mark stuck);
+ *   - the `active` CAS mutual-exclusion still holds (same-item second acquire
+ *     loses; same-item resume race resolves cleanly);
+ *   - the durable `main` record + a held `active` lock may co-exist without
+ *     corruption (crash-window recovery is `main`-authoritative, tested in
+ *     the reconcile/reap suites).
  */
 
 let scratch: Scratch;
@@ -75,11 +81,24 @@ function lockCommitParentless(cwd: string, entry: string): boolean {
 	);
 }
 
-describe('lock state machine — the full legal lifecycle (every transition)', () => {
-	it('acquire → mark-stuck → resume → release walks active↔stuck and back to rest', async () => {
-		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+describe('lock state machine — degenerate `active`-only state (post retire-stuck-lock-state)', () => {
+	it('LockState admits `active` only (compile-time)', () => {
+		// The assignment compiles iff `LockState` is `'active'`. A `'stuck'`
+		// assignment used to compile pre-retirement; if this line ever compiled
+		// with a `'stuck'` literal again, the retirement would be reverted.
+		const s: LockState = 'active';
+		expect(s).toBe('active');
+	});
 
-		// 1. acquire: (absent) → [implement, active]
+	it('SidecarKind still admits `stuck` (the surfaced-bounce kind, NOT a lock state)', () => {
+		// PROTECTED: `SidecarKind` `'stuck'` is a DIFFERENT concept (spec CONTRACT
+		// step scope fence) — retirement of the lock state must NOT touch it.
+		const k: SidecarKind = 'stuck';
+		expect(k).toBe('stuck');
+	});
+
+	it('acquire → release round-trips cleanly; the lock is `active` throughout', async () => {
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const acq = await acquireItemLock({
 			item: 'task:alpha',
 			action: 'implement',
@@ -88,47 +107,15 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 			env: gitEnv(),
 		});
 		expect(acq.outcome).toBe('acquired');
-
-		// 2. mark-stuck: [implement, active] → [implement, stuck] + reason
-		const stuck = await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'gate red on lint',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(stuck.outcome).toBe('transitioned');
-		const stuckEntry = await readItemLock({
+		const entry = await readItemLock({
 			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(stuckEntry?.action).toBe('implement'); // action unchanged
-		expect(stuckEntry?.state).toBe('stuck');
-		expect(stuckEntry?.reason).toBe('gate red on lint');
-		// the amended commit is still parentless.
+		expect(entry?.state).toBe('active');
 		expect(lockCommitParentless(repo, 'task-alpha')).toBe(true);
 
-		// 3. resume: [implement, stuck] → [implement, active] (reason cleared)
-		const resumed = await resumeItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(resumed.outcome).toBe('transitioned');
-		const activeAgain = await readItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(activeAgain?.state).toBe('active');
-		expect(activeAgain?.action).toBe('implement');
-		expect(activeAgain?.reason).toBeUndefined();
-
-		// 6. release: [implement, active] → (absent)
 		const rel = await releaseItemLock({
 			item: 'task:alpha',
 			cwd: repo,
@@ -139,77 +126,36 @@ describe('lock state machine — the full legal lifecycle (every transition)', (
 		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
 	});
 
-	it('requeue (transition 4): [action, stuck] → (absent) returns the item to the pool', async () => {
-		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'giving up for now',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-
-		const req = await requeueItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(req.outcome).toBe('transitioned');
-		// The lock is gone…
-		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
-		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
-		// …and the body NEVER moved: it is still resting in backlog/ on main.
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
-		// After requeue the item is freely re-acquirable.
-		const reacq = await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(reacq.outcome).toBe('acquired');
-	});
-
-	it('complete (transition 5, lock half): release AFTER the durable main move', async () => {
-		// The main move (backlog → done) is owned by the complete task; here we
-		// model "done landed on main" then exercise THIS task's half: release.
-		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
-		const {repo, arbiter} = seeded;
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		// durable main move (owned elsewhere) lands done on main.
-		seedDoneOnArbiter(seeded, 'alpha');
-		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
-		// the lock half: release after.
-		const rel = await releaseItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(rel.outcome).toBe('released');
-		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
-	});
-});
-
-describe('lock state machine — illegal transitions are rejected (not coerced)', () => {
-	it('mark-stuck / resume / requeue on an ABSENT entry are not-held', async () => {
+	it('markStuckItemLock is a shim no-op: a held lock STAYS `active`', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		expect(
+		await acquireItemLock({
+			item: 'task:alpha',
+			action: 'implement',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		const shim = await markStuckItemLock({
+			item: 'task:alpha',
+			reason: 'ignored',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		// The shim reports success (a held entry is present) but does NOT flip state.
+		expect(shim.outcome).toBe('transitioned');
+		const entry = await readItemLock({
+			item: 'task:alpha',
+			cwd: repo,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(entry?.state).toBe('active');
+	});
+
+	it('markStuckItemLock / resumeItemLock / requeueItemLock on an ABSENT entry are `not-held`', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		for (const outcome of [
 			(
 				await markStuckItemLock({
 					item: 'task:alpha',
@@ -219,8 +165,6 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 					env: gitEnv(),
 				})
 			).outcome,
-		).toBe('not-held');
-		expect(
 			(
 				await resumeItemLock({
 					item: 'task:alpha',
@@ -229,8 +173,6 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 					env: gitEnv(),
 				})
 			).outcome,
-		).toBe('not-held');
-		expect(
 			(
 				await requeueItemLock({
 					item: 'task:alpha',
@@ -239,54 +181,12 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 					env: gitEnv(),
 				})
 			).outcome,
-		).toBe('not-held');
+		]) {
+			expect(outcome).toBe('not-held');
+		}
 	});
 
-	it('resume on an ACTIVE entry is wrong-state (active is reachable from stuck only)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		const r = await resumeItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(r.outcome).toBe('wrong-state');
-	});
-
-	it('mark-stuck on an already-STUCK entry is wrong-state', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'first',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		const again = await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'second',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(again.outcome).toBe('wrong-state');
-	});
-
-	it('requeue on an ACTIVE entry is wrong-state (abort an active hold via release)', async () => {
+	it('requeue on a held ACTIVE entry releases the lock (no `stuck` guard any more)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireItemLock({
 			item: 'task:alpha',
@@ -301,89 +201,24 @@ describe('lock state machine — illegal transitions are rejected (not coerced)'
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(r.outcome).toBe('wrong-state');
-		// the active hold is untouched.
-		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
-	});
-});
-
-describe('lock state machine — invariant: reason iff stuck', () => {
-	it('mark-stuck with an empty reason is rejected (a stuck entry MUST carry a reason)', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
+		expect(r.outcome).toBe('transitioned');
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
+		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
+		// The body never moved: it is still resting in backlog/ on main.
+		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
+		// After requeue the item is freely re-acquirable.
+		const reacq = await acquireItemLock({
 			item: 'task:alpha',
 			action: 'implement',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		for (const reason of ['', '   ']) {
-			const r = await markStuckItemLock({
-				item: 'task:alpha',
-				reason,
-				cwd: repo,
-				arbiter: 'arbiter',
-				env: gitEnv(),
-			});
-			expect(r.outcome).toBe('error');
-		}
-		// the entry stays active (the bad mark-stuck did not mutate it).
-		const e = await readItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(e?.state).toBe('active');
-		expect(e?.reason).toBeUndefined();
-	});
-
-	it('an active entry never carries a reason; resume CLEARS the stuck reason', async () => {
-		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		// active: no reason.
-		expect(
-			(
-				await readItemLock({
-					item: 'task:alpha',
-					cwd: repo,
-					arbiter: 'arbiter',
-					env: gitEnv(),
-				})
-			)?.reason,
-		).toBeUndefined();
-		await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'has a reason while stuck',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		await resumeItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		// back to active: reason must be gone again.
-		const e = await readItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(e?.state).toBe('active');
-		expect(e?.reason).toBeUndefined();
+		expect(reacq.outcome).toBe('acquired');
 	});
 });
 
-describe('lock state machine — invariant: at most one entry per item (issue-3 exclusion)', () => {
+describe('lock state machine — the `active` CAS mutual-exclusion is INTACT', () => {
 	it('a SECOND action (advance) on an implement-held item loses the SAME CAS', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const first = await acquireItemLock({
@@ -413,61 +248,37 @@ describe('lock state machine — invariant: at most one entry per item (issue-3 
 		expect(e?.action).toBe('implement');
 	});
 
-	it('two racers for the SAME stuck entry: only ONE resume wins (leased CAS)', async () => {
-		// mark-stuck via the seed clone, then race two resumes on distinct clones.
+	it('two racers acquiring the SAME item: only ONE wins the leased CAS', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'stuck for the race',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-
 		const a = raceClone(seeded, 'A');
 		const b = raceClone(seeded, 'B');
 		const [ra, rb] = await Promise.all([
-			resumeItemLock({
+			acquireItemLock({
 				item: 'task:alpha',
+				action: 'implement',
 				cwd: a,
 				arbiter: 'arbiter',
 				holder: 'A',
 				env: racerEnv('A'),
 			}),
-			resumeItemLock({
+			acquireItemLock({
 				item: 'task:alpha',
+				action: 'implement',
 				cwd: b,
 				arbiter: 'arbiter',
 				holder: 'B',
 				env: racerEnv('B'),
 			}),
 		]);
-		// EXACTLY ONE wins the leased CAS; the loser either lost the lease (`lost`)
-		// or fetched after the winner already flipped state out of `stuck`
-		// (`wrong-state`) — never two winners.
-		const winners = [ra, rb].filter((r) => r.outcome === 'transitioned');
+		const winners = [ra, rb].filter((r) => r.outcome === 'acquired');
 		expect(winners.length).toBe(1);
-		const loser = [ra, rb].find((r) => r.outcome !== 'transitioned');
-		expect(['lost', 'wrong-state']).toContain(loser?.outcome);
-		const e = await readItemLock({
-			item: 'task:alpha',
-			cwd: seeded.repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(e?.state).toBe('active');
+		const loser = [ra, rb].find((r) => r.outcome !== 'acquired');
+		expect(loser?.outcome).toBe('lost');
 	});
 });
 
-describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST', () => {
-	it('a just-completed (done on main) item can ALSO carry a stuck lock; the two disagree without corruption', async () => {
+describe('lock state machine — durable `main` record + held `active` lock co-exist', () => {
+	it('a just-completed (done on main) item + a held active lock is a stale orphan (not corruption)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const {repo, arbiter} = seeded;
 		await acquireItemLock({
@@ -480,29 +291,15 @@ describe('lock state machine — invariant: done on main + a stuck lock CO-EXIST
 		// The durable main move lands `done` on main (owned by the complete task).
 		seedDoneOnArbiter(seeded, 'alpha');
 		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
-
-		// A rebase-conflict bounce marks the JUST-COMPLETED item stuck (Amendment 2):
-		// done-on-main and a stuck lock legitimately co-exist.
-		const stuck = await markStuckItemLock({
-			item: 'task:alpha',
-			reason: 'rebase conflict on bounce after done landed',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(stuck.outcome).toBe('transitioned');
-
-		// Both records are observable and disagree, with NO error:
-		//  - the `main` durable record wins for dependency resolution (it is `done`);
-		//  - the stuck lock wins for the human's attention.
-		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(true);
+		// The `active` lock still exists (a crash before release); recovery is
+		// `main`-authoritative, tested in the reconcile/reap suites.
+		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(true);
 		const lock = await readItemLock({
 			item: 'task:alpha',
 			cwd: repo,
 			arbiter: 'arbiter',
 			env: gitEnv(),
 		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toBe('rebase conflict on bounce after done landed');
+		expect(lock?.state).toBe('active');
 	});
 });

@@ -106,43 +106,34 @@ describe('item-lock — entry serialise/parse round-trip', () => {
 		expect(back?.reason).toBeUndefined();
 	});
 
-	it('a stuck entry round-trips WITH its reason (the two-axis state)', () => {
-		const e: LockEntry = {
-			entry: 'prd-autotask',
-			action: 'task',
-			state: 'stuck',
-			holder: 'tester',
-			since: '2026-06-18T00:00:00.000Z',
-			reason: 'rebase conflict',
-		};
-		const back = parseLockEntry(serialiseLockEntry(e));
-		expect(back).toEqual(e);
-		expect(back?.state).toBe('stuck');
-		expect(back?.reason).toBe('rebase conflict');
-	});
-
-	it('a stuck entry round-trips RICH multi-line reason prose + surfaced questions', () => {
-		// Task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`
-		// (decision i+): the lock entry is the SOLE stuck record, so it must carry the
-		// FULL reason prose (not a one-line field) AND any agent-surfaced questions, in
-		// a shape a future advance-surface rung can render.
-		const e: LockEntry = {
-			entry: 'task-alpha',
-			action: 'implement',
-			state: 'stuck',
-			holder: 'tester',
-			since: '2026-06-18T00:00:00.000Z',
-			reason:
-				'acceptance gate failed (exit 1).\nThe lint step rejected two files.\nA human must look.',
-			questions: [
-				'Should the lint rule be relaxed, or the code fixed?',
-				'Is the `foo` API stable enough to depend on?',
-			],
-		};
-		const back = parseLockEntry(serialiseLockEntry(e));
-		expect(back).toEqual(e);
-		expect(back?.reason).toContain('A human must look.');
-		expect(back?.questions).toHaveLength(2);
+	it('a legacy `state: stuck` entry parses as `active` (post retire-stuck-lock-state coerce)', () => {
+		// A lock ref written by an older binary (before the state was retired)
+		// may still exist on the arbiter. The reader COERCES its state to
+		// `active` (the only admitted value) rather than surfacing a second live
+		// state; the recovery/reap paths clear the lingering ref from `main`.
+		const legacyBody = [
+			'---',
+			'entry: task-legacy',
+			'action: implement',
+			'state: stuck',
+			'holder: tester',
+			'since: 2026-06-18T00:00:00.000Z',
+			'---',
+			'',
+			'Lock held for `task-legacy` (implement/stuck).',
+			'',
+			'## Reason',
+			'',
+			'a legacy reason that must NOT resurface on the entry',
+			'',
+		].join('\n');
+		const back = parseLockEntry(legacyBody);
+		expect(back?.state).toBe('active');
+		// The retired `reason`/`questions` fields are gone from the entry shape.
+		expect((back as unknown as {reason?: string}).reason).toBeUndefined();
+		expect(
+			(back as unknown as {questions?: string[]}).questions,
+		).toBeUndefined();
 	});
 });
 

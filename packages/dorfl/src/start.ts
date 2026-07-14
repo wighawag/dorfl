@@ -263,11 +263,11 @@ async function dispatchFolder(
 	if (!inPool) {
 		return folder;
 	}
-	// In the pool/staging: claimed-ness + stuck-ness are the per-item lock, not the folder.
+	// In the pool/staging: claimed-ness is the per-item lock (not the folder).
+	// Post-`retire-stuck-lock-state` there is no `stuck` state — a parked item is
+	// a `needsAnswers:true` pool item on `main` (rendered by status/scan and
+	// drained by the apply rung), NEVER a lock re-key.
 	const lock = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
-	if (lock && lock.state === 'stuck') {
-		return 'needs-attention';
-	}
 	if (lock && lock.state === 'active') {
 		return 'in-progress';
 	}
@@ -466,42 +466,17 @@ async function startFromNeedsAttention(params: {
 }): Promise<StartResult> {
 	const {slug, arbiter, cwd, env, note} = params;
 
-	// Surface the recorded reason for the human, read from the STUCK LOCK ENTRY
-	// (task `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: the lock
-	// is the sole stuck record — no `needs-attention/` folder file). The full reason
-	// prose + any surfaced questions ride on the lock entry body.
-	const stuck = await readItemLock({item: `task:${slug}`, cwd, arbiter, env});
-	if (stuck?.reason) {
-		note(`'${slug}' is stuck (needs-attention): ${stuck.reason}`);
-	} else {
-		note(`'${slug}' is stuck (needs-attention) — picking it up.`);
-	}
-	if (stuck?.questions && stuck.questions.length > 0) {
-		note('Surfaced questions:');
-		for (const q of stuck.questions) {
-			note(`  - ${q}`);
-		}
-	}
+	// Post-`retire-stuck-lock-state`: the `stuck` lock state is gone; a parked
+	// item is a `needsAnswers:true` pool item on `main` drained by the apply
+	// rung (answer the sidecar). This branch fires only when a LEGACY
+	// `needs-attention/` folder body still exists on `<arbiter>/main` (no
+	// live path lands one). Onboard the human onto the kept work branch — no
+	// lock amend, no reason/questions read from the lock (those live on the
+	// surfaced sidecar now).
+	note(
+		`'${slug}' is in the legacy needs-attention/ folder — onboarding onto its work branch; answer any question sidecar on main to drain it.`,
+	);
 
-	// Resume the lock `stuck → active` THROUGH the write seam (a pure lock amend, NO
-	// `main` write, NO temp checkout — the body already rests in `backlog/` and the
-	// work stays on the kept `work/<slug>` branch), then onboard onto work/<slug>.
-	const resolved = await ledgerWrite.applyResolveNeedsAttentionTransition({
-		cwd,
-		slug,
-		arbiter,
-		env,
-		note,
-	});
-	if (!resolved.moved) {
-		throw new StartUsageError(
-			resolved.reasonNotMoved ??
-				`could not resolve '${slug}' from needs-attention.`,
-		);
-	}
-
-	// The lock is back to active (the human owns it). Onboard onto the work branch:
-	// CONTINUE from a kept arbiter work/<slug> when present, else fresh off main.
 	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
 	if (switched.rebaseConflict) {
 		return continueConflictResult({slug, arbiter, cwd, env, note});

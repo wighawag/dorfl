@@ -239,7 +239,7 @@ describe('resolveCwdSection — in-flight/stuck SURFACE (held item is not invisi
 		expect(section.repo?.lockHeld?.[0].state).toBe('active');
 	});
 
-	it('surfaces a STUCK cwd item with its reason (the apply-rung-merge-disposition shape)', async () => {
+	it('renders a held (active) cwd item in the in-flight block (post retire-stuck-lock-state: no `stuck` state, no reason on the entry)', async () => {
 		const {repo} = seedCwdRepo({
 			'apply-rung-merge-disposition.md': task('apply-rung-merge-disposition'),
 		});
@@ -249,33 +249,30 @@ describe('resolveCwdSection — in-flight/stuck SURFACE (held item is not invisi
 			cwd: repo,
 			arbiter: 'arbiter',
 		});
-		const stuck = await markStuckItemLock({
+		// The shim `markStuckItemLock` no-ops post-retirement (kept for source
+		// compat of tests that used to seed a stuck lock). The lock stays active.
+		const shim = await markStuckItemLock({
 			item: 'task:apply-rung-merge-disposition',
-			reason: 'gate red\nverify failed',
+			reason: 'ignored',
 			cwd: repo,
 			arbiter: 'arbiter',
 		});
-		expect(stuck.outcome).toBe('transitioned');
+		expect(shim.outcome).toBe('transitioned');
 
 		const section = await resolveCwdSection({
 			cwd: repo,
 			config: config(),
 			lockArbiterRemote: 'arbiter',
 		});
-		// The slug is NOT in the eligible pool (subtracted) — but it is no longer
-		// invisible: it is on the in-flight surface as stuck + reason.
 		expect(section.repo?.items).toEqual([]);
 		const entry = section.repo?.lockHeld?.[0];
 		expect(entry?.entry).toBe('task-apply-rung-merge-disposition');
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toContain('gate red');
+		expect(entry?.state).toBe('active');
 
-		// The human cwd formatter renders the in-flight block (no longer a blind spot).
 		const out = formatCwd(section).join('\n');
-		expect(out).toContain('In progress / stuck (lock held');
+		expect(out).toContain('In progress (lock held');
 		expect(out).toContain('task-apply-rung-merge-disposition');
-		expect(out).toContain('needs-attention');
-		expect(out).toContain('gate red');
+		expect(out).toContain('in-progress');
 	});
 
 	it('omits lockHeld when no lock is held (no empty block on a calm repo)', async () => {
@@ -286,7 +283,9 @@ describe('resolveCwdSection — in-flight/stuck SURFACE (held item is not invisi
 			lockArbiterRemote: 'arbiter',
 		});
 		expect(section.repo?.lockHeld).toBeUndefined();
-		expect(formatCwd(section).join('\n')).not.toContain('In progress / stuck');
+		expect(formatCwd(section).join('\n')).not.toContain(
+			'In progress (lock held',
+		);
 	});
 });
 

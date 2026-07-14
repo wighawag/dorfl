@@ -463,11 +463,14 @@ export function existsOnArbiterMain(
 }
 
 /**
- * Is the TASK `slug`'s per-item lock held `stuck` on the arbiter? (task
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`: stuck-state is
- * the lock `state: stuck`, NOT a `needs-attention/` folder file). Reads the lock
- * ref blob from the arbiter; `false` when there is no lock or it is `active`.
- * The lock-state replacement for `existsOnArbiterMain(cwd, 'needs-attention', …)`.
+ * Is the TASK `slug`'s per-item lock held `stuck` on the arbiter?
+ * Post-`retire-stuck-lock-state` (spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`) the `stuck` state
+ * is retired — this predicate is now vacuously `false` for every live lock
+ * (the state axis is degenerate at `active`). Kept as an ASSERTION helper for
+ * migrated tests that pin "no `stuck` state remains" (`.toBe(false)`); an
+ * on-`main`-visible parked item is asserted via {@link needsAnswersOnArbiterMain}
+ * + {@link sidecarSurfacedOnArbiterMain} instead.
  */
 export function stuckLockOnArbiter(
 	cwd: string,
@@ -490,6 +493,32 @@ export function stuckLockOnArbiter(
 		return false;
 	}
 	return /^state:\s*stuck\s*$/m.test(show.stdout);
+}
+
+/**
+ * Is the TASK `slug`'s per-item lock HELD on the arbiter (regardless of the
+ * degenerate state axis)? Post-`retire-stuck-lock-state` this is the honest
+ * "there is a lock ref for this item" predicate the recovery-scenario tests
+ * key off (a claim that never released; the CAS mutual-exclusion held).
+ */
+export function heldLockOnArbiter(
+	cwd: string,
+	slug: string,
+	arbiter = 'arbiter',
+): boolean {
+	run(
+		'git',
+		['fetch', '-q', arbiter, `+refs/dorfl/lock/*:refs/dorfl/lock/*`],
+		cwd,
+		{env: gitEnv()},
+	);
+	const show = run(
+		'git',
+		['show', `refs/dorfl/lock/task-${slug}:lock.md`],
+		cwd,
+		{env: gitEnv()},
+	);
+	return show.status === 0;
 }
 
 /**

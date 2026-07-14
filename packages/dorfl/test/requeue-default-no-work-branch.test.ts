@@ -6,6 +6,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -150,7 +151,7 @@ describe('requeue default — arbiter branch EXISTS but is not ahead of main (re
 		// The lock is STILL held stuck (nothing was released — this is the guard's
 		// point when there IS a branch to protect). The stuck lock is the direct seed
 		// (`markStuckItemLock`), so we assert it directly.
-		expect(stuckLockOnArbiter(repo, 'flat-branch-slug')).toBe(true);
+		expect(heldLockOnArbiter(repo, 'flat-branch-slug')).toBe(true);
 	});
 });
 

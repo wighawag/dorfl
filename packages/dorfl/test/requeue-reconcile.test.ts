@@ -9,6 +9,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -185,7 +186,7 @@ describe('requeue --reconcile — genuine content conflict after mirror re-sync'
 		expect(idxReset).toBeGreaterThan(idxDeferred);
 		// The lock is STILL held stuck (seeded directly via `markStuckItemLock`; a
 		// failed `--reconcile` never releases it).
-		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(true);
+		expect(heldLockOnArbiter(repo, 'bravo')).toBe(true);
 		// The branch is UNTOUCHED on the arbiter (nothing deleted, tip unchanged).
 		expect(arbiterRef(seeded, 'refs/heads/work/task-bravo')).toBe(priorTip);
 	});

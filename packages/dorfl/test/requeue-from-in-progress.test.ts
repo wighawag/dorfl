@@ -8,6 +8,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -71,7 +72,7 @@ async function stuckInProgress(
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
+	expect(heldLockOnArbiter(repo, slug)).toBe(true);
 	// Leave the cwd on a clean main (NOT the work branch): the requeue must resolve
 	// the lock state from the arbiter, not the cwd tree.
 	gitIn(['fetch', '-q', ARBITER], repo);
@@ -110,7 +111,7 @@ describe('requeue recovers a task stuck on its per-item lock (releases the lock)
 		// This suite seeds the stuck lock DIRECTLY via `markStuckItemLock` (see
 		// `stuckInProgress` — PR-2b retired the bounce's `active → stuck` amend), so
 		// the stuck lock is the direct seed and we assert it directly.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(heldLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 
 		const result = await returnToBacklog({
