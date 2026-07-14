@@ -19,6 +19,8 @@ import {
 	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -304,7 +306,13 @@ describe('runLoop — over the real registry (default tick = runOnce, multi-repo
 		expect(summary.ticks[0].needsAttention).toBe(1);
 		// It is STUCK on its per-item lock (the stuck-state surface); the body rests
 		// in backlog/ but the held stuck lock makes it ineligible.
-		expect(stuckLockOnArbiter(seeded.repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, 'feat')).toBe(true);
 		// NOT infinite-retried: once surfaced (out of backlog), the later ticks find
 		// it ineligible — they do NOT re-claim it. So the item is failed AT MOST once.
 		const totalFailed = summary.failed;

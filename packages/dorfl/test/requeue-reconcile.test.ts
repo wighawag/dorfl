@@ -2,10 +2,9 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performStart} from '../src/start.js';
-import {readItemLock} from '../src/item-lock.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -15,6 +14,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -75,15 +76,14 @@ async function stuckWithKeptBranch(
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Seed a STUCK lock directly (PR-2b retired the bounce's `active → stuck` amend).
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 
 	if (opts.mainMoves) {
 		const mover = seeded.clone('mover');
@@ -183,7 +183,8 @@ describe('requeue --reconcile — genuine content conflict after mirror re-sync'
 		expect(idxReset).toBeGreaterThan(-1);
 		expect(idxDeferred).toBeGreaterThan(-1);
 		expect(idxReset).toBeGreaterThan(idxDeferred);
-		// The lock is STILL held (item stays stuck).
+		// The lock is STILL held stuck (seeded directly via `markStuckItemLock`; a
+		// failed `--reconcile` never releases it).
 		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(true);
 		// The branch is UNTOUCHED on the arbiter (nothing deleted, tip unchanged).
 		expect(arbiterRef(seeded, 'refs/heads/work/task-bravo')).toBe(priorTip);
@@ -201,15 +202,14 @@ describe('requeue default (no flag) — regression: no work branch still succeed
 			env: gitEnv(),
 		});
 		expect(claim.exitCode).toBe(0);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'charlie',
+		// Seed a STUCK lock directly (PR-2b retired the bounce's `active → stuck` amend).
+		await markStuckItemLock({
+			item: 'task:charlie',
 			reason: 'gate red before any push',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 		// No work branch on the arbiter (never pushed).
 		expect(arbiterRef(seeded, 'refs/heads/work/task-charlie')).toBe('');
 
@@ -247,15 +247,17 @@ describe('do --isolated continue-conflict message — LEADS with --reconcile and
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
 		gitIn(['push', '-q', ARBITER, 'work/task-delta:work/task-delta'], repo);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'delta',
+		// Seed a STUCK lock directly + requeue: (PR-2b retired the bounce's
+		// `active → stuck` amend, so we drive the stuck state manually to give the
+		// requeue something to recover). The requeue below is what returns the item
+		// to backlog, keeping the branch, so the continue-conflict scenario replays.
+		await markStuckItemLock({
+			item: 'task:delta',
 			reason: 'red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 		await returnToBacklog({
 			cwd: repo,
 			slug: 'delta',
@@ -282,17 +284,16 @@ describe('do --isolated continue-conflict message — LEADS with --reconcile and
 		});
 		expect(started.exitCode).toBe(1);
 		expect(started.outcome).toBe('needs-attention');
-		// The reason recorded on the stuck lock LEADS with the non-destructive
+		// The reason recorded on the SURFACED sidecar LEADS with the non-destructive
 		// recovery (`--reconcile`) and only mentions `--reset` LAST as the
-		// destructive last resort.
-		const lock = await readItemLock({
-			item: 'task:delta',
-			cwd: fresh,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock).toBeDefined();
-		const reason = lock?.reason ?? '';
+		// destructive last resort. PR-2b: post-bounce the reason lives on the
+		// `<arbiter>/main` sidecar (the `stuck`-kind envelope's `context`), not on
+		// the released lock — read the sidecar off the arbiter.
+		gitIn(['fetch', '-q', ARBITER], fresh);
+		const reason = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-delta.md`],
+			fresh,
+		);
 		expect(reason).toMatch(/requeue --reconcile/);
 		expect(reason).toMatch(/requeue --reset/);
 		const idxReconcile = reason.indexOf('requeue --reconcile');

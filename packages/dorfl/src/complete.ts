@@ -526,11 +526,13 @@ async function surfaceAutonomousStrand(params: {
 	});
 	if (surfaced.moved) {
 		const message =
-			`'${slug}' refused (${reason}); marked stuck on its per-item lock ` +
-			`(published on ${arbiter}) so the next autonomous tick does NOT re-claim it.`;
+			`'${slug}' refused (${reason}); surfaced on ${arbiter}/main as a stuck ` +
+			'question (needsAnswers) so the next autonomous tick does NOT re-claim it.';
 		note(message);
+		// PR-2b D3: a clean surface is GREEN (exitCode 0). The autonomous strand
+		// surface is one of the cleanly-surfaced bounce sites this policy applies to.
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'strand-surfaced',
 			routedToNeedsAttention: true,
 			message,
@@ -919,9 +921,19 @@ async function runComplete(
 
 	// The FAILURE outcomes map 1:1 onto `complete`'s — the core already note()'d
 	// the reason and did any routing; the tail never runs for them.
+	// PR-2b exit-code policy (spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state`, decision #4 / D3):
+	// a cleanly-surfaced bounce is GREEN (`exitCode: 0`) iff its surface transition
+	// SUCCEEDED (`routedToNeedsAttention: true`); a FAILED surface stays non-zero
+	// (retry/resolve). Applies to `prepare-failed`/`gate-failed`/`review-blocked`/
+	// `review-unparseable`/`rebase-conflict`. The empty-diff backstop is owned by
+	// task `empty-diff-bounce-surfaces-dispose-defaulted-question` and is NOT
+	// reached here.
+	const surfaceExit = (routed: boolean | undefined): 0 | 1 =>
+		routed === true ? 0 : 1;
 	if (core.outcome === 'prepare-failed') {
 		return {
-			exitCode: 1,
+			exitCode: surfaceExit(core.routedToNeedsAttention),
 			outcome: 'prepare-failed',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
@@ -930,7 +942,7 @@ async function runComplete(
 	}
 	if (core.outcome === 'gate-failed') {
 		return {
-			exitCode: 1,
+			exitCode: surfaceExit(core.routedToNeedsAttention),
 			outcome: 'gate-failed',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
@@ -939,7 +951,7 @@ async function runComplete(
 	}
 	if (core.outcome === 'review-blocked') {
 		return {
-			exitCode: 1,
+			exitCode: surfaceExit(core.routedToNeedsAttention),
 			outcome: 'review-blocked',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
@@ -953,7 +965,7 @@ async function runComplete(
 		// `do`/`run` tail re-labels its cause `transient-infra` (NOT a reviewer block) off
 		// the parse-failure phrase in `core.reason`.
 		return {
-			exitCode: 1,
+			exitCode: surfaceExit(core.routedToNeedsAttention),
 			outcome: 'review-unparseable',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
@@ -962,7 +974,7 @@ async function runComplete(
 	}
 	if (core.outcome === 'rebase-conflict') {
 		return {
-			exitCode: 1,
+			exitCode: surfaceExit(core.routedToNeedsAttention),
 			outcome: 'rebase-conflict',
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,

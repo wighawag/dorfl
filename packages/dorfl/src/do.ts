@@ -1504,8 +1504,10 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// (`runRemotePipeline`) uses, so `advance task:<slug>` (via the default
 		// `doDriver = performDo`) agrees with the remote path on the caller-visible
 		// label.
+		//
+		// PR-2b D3: a clean surface (routedToNeedsAttention:true) is GREEN.
 		return {
-			exitCode: 1,
+			exitCode: completed.routedToNeedsAttention ? 0 : 1,
 			outcome: 'needs-attention',
 			slug,
 			branch,
@@ -1714,8 +1716,10 @@ async function saveAgentFailure(params: {
 		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
 			`mark '${slug}' stuck (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
+	// PR-2b D3: a cleanly-surfaced bounce is GREEN (exitCode 0); a FAILED surface
+	// stays non-zero.
 	return {
-		exitCode: 1,
+		exitCode: routed.moved ? 0 : 1,
 		outcome: failureCauseToDoOutcome(cause),
 		slug,
 		branch,
@@ -1886,8 +1890,11 @@ async function saveAgentStop(params: {
 		: `The agent STOPPED building '${slug}' but it could not be marked stuck ` +
 			`(${routed.reasonNotMoved ?? 'unknown'}). Reason: ${reason}`;
 	note(message);
+	// PR-2b D3: agent-stopped (sentinel) on a clean surface is GREEN (exitCode 0);
+	// a FAILED surface stays non-zero. The empty-diff branch above is UNCHANGED
+	// (owned by `empty-diff-bounce-surfaces-dispose-defaulted-question`).
 	return {
-		exitCode: 1,
+		exitCode: routed.moved ? 0 : 1,
 		outcome: 'agent-stopped',
 		slug,
 		branch,
@@ -2963,8 +2970,9 @@ async function saveRemoteAgentFailure(params: {
 		: `Agent run failed building '${slug}' [${cause}] (${detail}); could not ` +
 			`mark '${slug}' stuck (${routed.reasonNotMoved ?? 'unknown'}).`;
 	note(message);
+	// PR-2b D3: cleanly-surfaced remote agent failure is GREEN.
 	return {
-		exitCode: 1,
+		exitCode: routed.moved ? 0 : 1,
 		outcome: failureCauseToDoOutcome(cause),
 		slug,
 		branch,

@@ -17,6 +17,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -398,7 +400,13 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'delta.md'))).toBe(
 			false,
 		);
-		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'delta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'delta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'delta')).toBe(false);
 	});
 });
@@ -430,15 +438,20 @@ describe('integration-core — review block ⇒ review-blocked + routed', () => 
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'epsilon.md'))).toBe(
 			false,
 		);
-		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
-		// The blocking findings are recorded on the lock entry (the SOLE stuck record).
-		const lock = await readItemLock({
-			item: 'task:epsilon',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/does not reach the task goal/);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'epsilon')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'epsilon')).toBe(true);
+		// PR-2b: reason lives on the surfaced sidecar (`<arbiter>/main`), not the
+		// released lock.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-epsilon.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/does not reach the task goal/);
 	});
 });
 
@@ -494,7 +507,13 @@ describe('integration-core — Gate-2 UNPARSEABLE verdict ⇒ review-unparseable
 		expect(core.integration).toBeUndefined();
 		// The STRAND is provably GONE: the work branch is PUSHED + the item SURFACED.
 		expect(workBranchPushedToArbiter(seeded, 'upsilon')).toBe(true);
-		expect(stuckLockOnArbiter(repo, 'upsilon')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'upsilon')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'upsilon')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'upsilon')).toBe(true);
 		// Never reached done/ (never integrated).
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'upsilon.md'))).toBe(
 			false,
@@ -526,7 +545,13 @@ describe('integration-core — Gate-2 UNPARSEABLE verdict ⇒ review-unparseable
 		// The fresh-worktree path strands the SAME way without the in-function catch —
 		// assert it is covered: branch pushed + item surfaced.
 		expect(workBranchPushedToArbiter(seeded, 'phi')).toBe(true);
-		expect(stuckLockOnArbiter(repo, 'phi')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'phi')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'phi')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'phi')).toBe(true);
 	});
 });
 
@@ -566,14 +591,20 @@ describe('integration-core — rebase conflict ⇒ rebase-conflict + routed', ()
 		expect(existsSync(join(repo, '.git', 'rebase-apply'))).toBe(false);
 		// The stuck state is the per-item lock (the conflict reason rides on it); no
 		// needs-attention/ folder is written.
-		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
-		const lock = await readItemLock({
-			item: 'task:theta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/conflict/i);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'theta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'theta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'theta')).toBe(true);
+		// PR-2b: reason lives on the surfaced sidecar (post-bounce the lock is
+		// released).
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-theta.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/conflict/i);
 		// Nothing landed on arbiter main (the body still rests in backlog/).
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'theta')).toBe(true);
@@ -703,7 +734,13 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
 		// The loser's stuck state is its per-item lock (no needs-attention/ folder).
-		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, loser)).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, loser)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
 			false,
 		);
@@ -792,7 +829,13 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		const loser = a.outcome === 'completed' ? 'xb' : 'xa';
 		expect(existsOnArbiterMain(seeded.repo, 'done', winner)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'done', loser)).toBe(false);
-		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, loser)).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, loser)).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, loser)).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'needs-attention', loser)).toBe(
 			false,
 		);
@@ -1057,7 +1100,13 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// A code conflict is NEVER auto-resolved: sa routes to needs-attention.
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'sa')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'sa')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'sa')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'sa')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(false);
 	});
 
@@ -1093,7 +1142,13 @@ describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation
 		// Own-ledger conflict is NOT a sibling-ledger reconcile: it routes.
 		expect(core.outcome).toBe('rebase-conflict');
 		expect(existsOnArbiterMain(repo, 'done', 'sa')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'sa')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'sa')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'sa')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'sa')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'sa')).toBe(false);
 	});
 });

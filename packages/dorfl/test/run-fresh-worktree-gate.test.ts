@@ -12,6 +12,8 @@ import {
 	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -97,7 +99,13 @@ describe('run-fleet conditional — perRepoMax === 1 uses the FRESH rebased-tip 
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 });
 
@@ -122,7 +130,13 @@ describe('run-fleet — perRepoMax > 1 ALSO uses the FRESH rebased-tip gate (the
 		expect(result.items[0].status).toBe('tests-failed');
 		expect(result.claimedAndDone).toBe(0);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 	});
 });
 

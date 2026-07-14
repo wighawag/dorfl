@@ -839,16 +839,25 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 		// No guessed tasks emitted (neither staged nor in the pool).
 		expect(onArbiter(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiter(repo, 'work/tasks/ready/child.md')).toBe(false);
-		// The prd's per-item lock is held STUCK, carrying the questions as the reason.
-		// MIGRATE step: the tasking path keys the stuck lock as `spec:<slug>` now.
+		// PR-2b (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`): the
+		// tasking bounce SURFACES the spec on `<arbiter>/main` (stuck-kind sidecar
+		// + `needsAnswers:true` on the spec body in ONE commit) THEN RELEASES the
+		// tasking lock. The reason + questions live on the sidecar.
 		const entry = await readItemLock({
 			item: 'spec:it',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toMatch(/should this be split across two PRDs\?/);
+		expect(entry).toBeUndefined();
+		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
+		const sidecar = run(
+			'git',
+			['show', `${ARBITER}/main:work/questions/spec-it.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(sidecar).toMatch(/should this be split across two PRDs\?/);
 	});
 
 	it('M>1 runs the loop in fresh contexts (the loop seam is invoked per execution)', async () => {

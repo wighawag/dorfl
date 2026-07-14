@@ -163,7 +163,7 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 		expect(lockRefOnArbiter(arbiter, 'task-beta')).toBe(true);
 	});
 
-	it('a FAILED gate does NOT release the lock (the item is still in flight, routed stuck)', async () => {
+	it('a FAILED gate SURFACES on <arbiter>/main then RELEASES the lock (PR-2b: bounce = surface-then-release)', async () => {
 		const {repo, arbiter} = await claimAndBranch('gamma');
 		agentEdits(repo);
 
@@ -172,16 +172,21 @@ describe('complete — cross-substrate crash-safety (hold → durable main move 
 			cwd: repo,
 			arbiter: ARBITER,
 			verify: 'exit 1',
+			surfaceArbiter: ARBITER,
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		// PR-2b D3: a clean-surface bounce is GREEN (exit 0). The durable done-move
+		// did NOT happen. Post-PR-2b (spec
+		// `surface-stuck-as-questions-and-retire-stuck-lock-state`), a gate-failed
+		// bounce SURFACES the item on `<arbiter>/main` (sidecar + `needsAnswers:true`
+		// in ONE commit) THEN RELEASES the per-item lock, so the item rests as a
+		// `needsAnswers:true` pool item (`eligible:false`) rather than a held stuck
+		// lock.
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('gate-failed');
-		// The durable done-move did NOT happen, and complete did NOT release the
-		// lock on the failure path — the needs-attention seam owns the lock's
-		// state (mark-stuck), the item is still in flight.
 		expect(existsOnArbiterMain(repo, 'done', 'gamma')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'task-gamma')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-gamma')).toBe(false);
 	});
 });
 

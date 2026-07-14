@@ -1,9 +1,6 @@
 import {runAsync, type RunResult} from './git.js';
-import {
-	acquireItemLock,
-	releaseItemLock,
-	markStuckItemLock,
-} from './item-lock.js';
+import {acquireItemLock, releaseItemLock, readItemLock} from './item-lock.js';
+import {surfaceStuckToNeedsAttention} from './needs-attention.js';
 import {workItemRel} from './work-layout.js';
 
 /**
@@ -326,33 +323,51 @@ async function runRelease(
 		);
 	}
 
-	// DECOMPOSITION-UNCLEAR / TASK-GATE BLOCK: amend the lock `active → stuck` with
-	// the reason on the entry (the tasking needs-attention surface), NOT delete it.
-	// The spec body stays in `work/specs/ready/`; the stuck lock keeps it out of the
-	// taskable pool until a human resolves it (`release-lock`/`resume`).
+	// DECOMPOSITION-UNCLEAR / TASK-GATE BLOCK: surface the spec as a `stuck`-kind
+	// sidecar + `needsAnswers:true` on the spec body in ONE commit on
+	// `<arbiter>/main`, THEN release the tasking lock (PR-2b, spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state`, decision #1). The
+	// spec body stays in `work/specs/ready/` (or `work/specs/proposed/` — the D1
+	// probe finds it); the surfaced question keeps the spec out of the taskable
+	// pool via `needsAnswers:true` (eligibility `false`) until a human answers.
 	if (options.routeToNeedsAttention !== undefined) {
-		// MIGRATE: EMIT `spec:<slug>` (keyed to the `spec-<slug>` lock entry).
-		const stuck = await markStuckItemLock({
-			item: `spec:${slug}`,
-			reason: options.routeToNeedsAttention.reason,
-			cwd,
-			arbiter,
-			env,
-		});
-		if (stuck.outcome === 'transitioned' || stuck.outcome === 'wrong-state') {
-			// `wrong-state` (already stuck) is a tolerated idempotent re-surface.
-			const message = `Routed the tasking of '${slug}' to needs-attention (per-item lock marked stuck).`;
-			note(message);
-			return {exitCode: 0, outcome: 'released', message};
-		}
-		if (stuck.outcome === 'not-held') {
-			const message = `'${slug}' is not locked for tasking — nothing to mark stuck.`;
+		const item = `spec:${slug}`;
+		// Detect a genuinely NOT-HELD lock BEFORE the surface (so a bounce of an
+		// unlocked spec still returns the exit-2 `lost` contract). The surface itself
+		// is idempotent, but without this pre-check a not-held spec would surface
+		// silently on main with no lock to release — losing the caller-visible
+		// "nothing to route" signal.
+		const held = await readItemLock({item, cwd, arbiter, env});
+		if (held === undefined) {
+			const message = `'${slug}' is not locked for tasking — nothing to route to needs-attention.`;
 			note(message);
 			return {exitCode: 2, outcome: 'lost', message};
 		}
-		const message = `could not mark the per-item lock for '${slug}' stuck (${stuck.outcome}: ${stuck.message}).`;
-		note(message);
-		return {exitCode: 1, outcome: 'usage-error', message};
+		try {
+			const surfaced = await surfaceStuckToNeedsAttention({
+				cwd,
+				slug,
+				item,
+				reason: options.routeToNeedsAttention.reason,
+				arbiter,
+				env,
+				note,
+			});
+			if (surfaced.surfaced || surfaced.bodyAbsent) {
+				const message = surfaced.surfaced
+					? `Routed the tasking of '${slug}' to needs-attention (surfaced on ${arbiter}/main; tasking lock released).`
+					: `Routed the tasking of '${slug}' to needs-attention (no spec body on ${arbiter}/main — clean no-op surface; tasking lock released).`;
+				note(message);
+				return {exitCode: 0, outcome: 'released', message};
+			}
+			const message = `could not surface '${item}' on ${arbiter}/main (${surfaced.reasonNotSurfaced ?? 'unknown'}).`;
+			note(message);
+			return {exitCode: 1, outcome: 'usage-error', message};
+		} catch (err) {
+			const message = `could not surface '${item}' on ${arbiter}/main (${err instanceof Error ? err.message : String(err)}).`;
+			note(message);
+			return {exitCode: 1, outcome: 'usage-error', message};
+		}
 	}
 
 	// NORMAL release: delete the lock ref (idempotent).

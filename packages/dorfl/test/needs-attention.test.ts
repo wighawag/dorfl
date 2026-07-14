@@ -17,6 +17,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 import type {Config} from '../src/config.js';
 
@@ -132,8 +134,8 @@ describe('routeToNeedsAttention — saves wip + pushes the branch (no folder mov
 	});
 });
 
-describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
-	it('marks the held lock stuck + reason + questions; NO main write', async () => {
+describe('the seam bounce surfaces the stuck item on <arbiter>/main (the SOLE stuck record)', () => {
+	it('surfaces the sidecar + needsAnswers:true then RELEASES the lock; the body stays in the pool', async () => {
 		const {repo} = await claimAndBranch('beta');
 		agentEdits(repo);
 
@@ -150,26 +152,33 @@ describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
 		});
 		expect(r.moved).toBe(true);
 
-		const lock = await readItemLock({
-			item: 'task:beta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/too ambiguous to build/);
-		expect(lock?.questions).toContain(
-			'Which schema version is the source of truth?',
+		// PR-2b (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + `needsAnswers:true` on `<arbiter>/main` in ONE
+		// commit, THEN RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
+		// The reason + surfaced questions live on the sidecar body.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-beta.md`],
+			repo,
 		);
-		expect(lock?.questions).toContain('Should retries be idempotent?');
-		// NO main write: the body stays in backlog/, no needs-attention/ folder.
+		expect(sidecar).toMatch(/too ambiguous to build/);
+		expect(sidecar).toMatch(/Which schema version is the source of truth\?/);
+		expect(sidecar).toMatch(/Should retries be idempotent\?/);
+		// Body still rests in `tasks/ready/` (post-bounce it is a `needsAnswers:true`
+		// pool item, `eligible:false`, not a `needs-attention/` folder file).
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
 	});
 
-	it('reports moved:false when there is no held lock to mark', async () => {
+	it('a body-absent slug is a clean no-op surface (moved:true) — never a dead-end held lock', async () => {
 		const {repo} = await claimAndBranch('gamma');
-		// Release the lock so there is nothing to mark stuck.
+		// PR-2b D1 probe: a bounce for an item whose body is not on `<arbiter>/main`
+		// (nothing to surface into) is a CLEAN NO-OP surface that STILL releases the
+		// lock (moved:true). The seam never leaves a dead-end held lock over a
+		// body-absent item.
 		const result = await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'nonexistent',
@@ -177,9 +186,7 @@ describe('the seam bounce marks the lock stuck (the SOLE stuck record)', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/no held lock/i);
-		void repo;
+		expect(result.moved).toBe(true);
 	});
 });
 
@@ -219,7 +226,8 @@ describe('returnToBacklog (requeue) — releases the stuck lock (body stays in p
 	it('releases the lock so the item is claimable again; NO needs-attention/ read', async () => {
 		const {repo} = await claimAndBranch('eta');
 		agentEdits(repo);
-		// Bounce: save wip + push branch + mark the lock stuck.
+		// Bounce (PR-2b): surfaces on `<arbiter>/main` THEN releases the lock; the
+		// body already rests in `tasks/ready/`.
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'eta',
@@ -227,19 +235,23 @@ describe('returnToBacklog (requeue) — releases the stuck lock (body stays in p
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuckLockOnArbiter(repo, 'eta')).toBe(true);
-		// Move back to a clean main so the requeue reads the arbiter, not the cwd.
+		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'eta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'eta')).toBe(true);
+		// No lock to release — a follow-up `returnToBacklog` is a no-op (the lock is
+		// already released and the body already rests in the pool). It refuses
+		// cleanly with the "no held per-item lock" reason, and everything about the
+		// pool state is UNCHANGED.
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-
 		const result = await returnToBacklog({
 			cwd: repo,
 			slug: 'eta',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(result.moved).toBe(true);
-		// The lock is released; the body already rests in backlog/ (claimable again).
+		expect(result.moved).toBe(false);
+		expect(result.reasonNotMoved).toMatch(/no held per-item lock/i);
 		expect(stuckLockOnArbiter(repo, 'eta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'backlog', 'eta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'eta')).toBe(false);
@@ -248,18 +260,11 @@ describe('returnToBacklog (requeue) — releases the stuck lock (body stays in p
 	it('a returned item is once again claimable by scan/eligibility', async () => {
 		const {repo} = await claimAndBranch('theta');
 		agentEdits(repo);
+		// PR-2b bounce releases the lock: the item is already back in the pool.
 		await ledgerWrite.applyNeedsAttentionTransition({
 			cwd: repo,
 			slug: 'theta',
 			reason: 'transient failure',
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		gitIn(['fetch', '-q', ARBITER], repo);
-		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		await returnToBacklog({
-			cwd: repo,
-			slug: 'theta',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});

@@ -2,8 +2,8 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, readFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -53,15 +53,24 @@ async function stuckInProgress(
 	gitIn(['fetch', '-q', ARBITER], repo);
 	gitIn(['switch', '-q', '-c', `work/task-${slug}`, `${ARBITER}/main`], repo);
 	writeFileSync(join(repo, 'prior.txt'), 'prior attempt work\n');
-	const bounced = await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	gitIn(['add', '-A'], repo);
+	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
+	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
+	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
+	// Directly seed a STUCK per-item lock so `returnToBacklog` (requeue) has a
+	// stuck lock to recover. PR-2b (spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state`) retired the
+	// bounce's `active → stuck` amend — a bounce now surfaces + RELEASES the lock,
+	// so we cannot drive a stuck lock through the seam any more. `markStuckItemLock`
+	// is the direct primitive for the state; requeue's recovery path is what this
+	// suite exercises.
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'killed mid-run',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	expect(bounced.moved).toBe(true);
-	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 	expect(stuckLockOnArbiter(repo, slug)).toBe(true);
 	// Leave the cwd on a clean main (NOT the work branch): the requeue must resolve
 	// the lock state from the arbiter, not the cwd tree.
@@ -98,6 +107,9 @@ describe('requeue recovers a task stuck on its per-item lock (releases the lock)
 	it('releases the stuck lock WITHOUT a cwd checkout of the item; body stays in backlog/', async () => {
 		const {repo} = await stuckInProgress('alpha');
 		// Precondition: the item is stuck (the lock), body rests in backlog/.
+		// This suite seeds the stuck lock DIRECTLY via `markStuckItemLock` (see
+		// `stuckInProgress` — PR-2b retired the bounce's `active → stuck` amend), so
+		// the stuck lock is the direct seed and we assert it directly.
 		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 

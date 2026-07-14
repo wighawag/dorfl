@@ -14,6 +14,7 @@ import {performDoRemote, type DoDorfl} from '../src/do.js';
 import {performClaim} from '../src/claim-cas.js';
 import {returnToBacklog} from '../src/needs-attention.js';
 import {ledgerWrite} from '../src/ledger-write.js';
+import {releaseItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	isolatePiAgentDir,
@@ -24,6 +25,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -77,22 +80,18 @@ async function stuckThenRequeued(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work (green, approved)'], repo);
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
+	// PR-2b retired the bounce's `active → stuck` amend (bounce = surface + release
+	// now), so we cannot drive a stuck lock via the seam. Release the lock
+	// directly (the requeued state a continuer sees: kept work branch on the
+	// arbiter, item in the pool, no lock held).
+	await releaseItemLock({
+		item: `task:${slug}`,
 		cwd: repo,
-		slug,
-		reason: 'gate red on the first attempt',
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-	const result = await returnToBacklog({
-		cwd: repo,
-		slug,
-		arbiter: ARBITER,
-		env: gitEnv(),
-	});
-	expect(result.moved).toBe(true);
+	void ledgerWrite;
+	void returnToBacklog;
 	// The item is now back in BACKLOG on the arbiter with its kept work/<slug>
 	// branch still present (the requeue durable artifact). The `start`/`isolation`
 	// continue paths assume the item is already IN-PROGRESS (they onboard AFTER
@@ -459,7 +458,13 @@ describe('Part A — start.ts continueFromKeptBranch: continue push via the help
 		// STUCK on its per-item lock (NOT silently in-progress).
 		expect(started.outcome).toBe('needs-attention');
 		expect(started.exitCode).toBe(1);
-		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(fresh, 'zeta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(fresh, 'zeta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(fresh, 'zeta')).toBe(true);
 		// RECOVERABLE: the kept work branch is still on the arbiter.
 		expect(arbiterWorkTip(seeded.arbiter, 'work/task-zeta')).not.toBe('');
 	});
@@ -543,7 +548,13 @@ describe('Part B — after-commit push failure surfaces to needs-attention (job-
 		expect(agentRan).toBe(false);
 		// The item is STUCK on its per-item lock and is NO LONGER in-progress (the
 		// observed silent-strand bug, now closed on the incident's own path).
-		expect(stuckLockOnArbiter(seeded.repo, 'theta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, 'theta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, 'theta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, 'theta')).toBe(true);
 		expect(existsOnArbiterMain(seeded.repo, 'in-progress', 'theta')).toBe(
 			false,
 		);

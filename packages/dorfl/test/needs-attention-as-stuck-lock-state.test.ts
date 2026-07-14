@@ -18,6 +18,9 @@ import {
 	registerMirrorWithWork,
 	mirrorSrc,
 	existsOnArbiterMain,
+	stuckLockOnArbiter,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 	gitEnv,
 	gitIn,
 	type Scratch,
@@ -92,7 +95,7 @@ async function claimAndBranch(
 }
 
 describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
-	it('marks the lock stuck + reason; the body STAYS in backlog/ (no needs-attention/ folder move)', async () => {
+	it('surfaces the stuck item on <arbiter>/main (sidecar + needsAnswers) then releases the lock (PR-2b)', async () => {
 		const {repo} = await claimAndBranch('alpha');
 		agentEdits(repo);
 
@@ -106,30 +109,26 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 		});
 		expect(result.moved).toBe(true);
 
-		// NO main write: the body rests in backlog/ (it never moved on claim, 9a) and
-		// NO needs-attention/ folder file is written (the folder is retired, 9b).
+		// PR-2b (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`):
+		// a bounce SURFACES on `<arbiter>/main` (stuck-kind sidecar +
+		// `needsAnswers:true` in ONE commit) THEN RELEASES the lock — the item rests
+		// as a `needsAnswers:true` pool item (`eligible:false`). The body stays in
+		// `tasks/ready/`.
 		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'alpha')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'alpha')).toBe(false);
-
-		// The held lock is now the SOLE stuck record: stuck + reason + questions.
-		const lock = await readItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock).toBeDefined();
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.action).toBe('implement');
-		expect(lock?.reason).toMatch(/acceptance gate failed \(exit 1\)/);
-		expect(lock?.questions).toContain('relax the lint rule, or fix the code?');
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-alpha.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/acceptance gate failed \(exit 1\)/);
+		expect(sidecar).toMatch(/relax the lint rule, or fix the code\?/);
 	});
 
-	it('the tree-less surface (after-commit path) is ALSO a pure lock amend', async () => {
-		// The after-commit / ledger-only surface (continue-push-failure /
-		// continue-rebase-conflict): the work is already committed on the kept branch.
-		// It is now the SAME pure lock amend (no folder move).
+	it('the tree-less surface (after-commit path) is ALSO a surface-then-release (PR-2b)', async () => {
 		const {repo} = await claimAndBranch('beta');
 
 		const surfaced = await ledgerWrite.applyTreelessNeedsAttentionTransition({
@@ -143,25 +142,16 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 
 		expect(existsOnArbiterMain(repo, 'backlog', 'beta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'beta')).toBe(false);
-
-		const lock = await readItemLock({
-			item: 'task:beta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/continue rebase conflict/);
+		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
 	});
 
-	it('a bounce with NO held lock reports moved:false (no folder to fall back to)', async () => {
-		// An item that predates the lock (or a flow where claim never acquired): the
-		// mark-stuck finds no lock (`not-held`). With the folder retired there is no
-		// other substrate to record the stuck state on, so the bounce HONESTLY reports
-		// it did not land (the caller retries/resolves) rather than fake a success.
+	it('a bounce with NO held lock is a tolerated surface (release idempotent) — never a dead-end held lock', async () => {
+		// PR-2b: without a held lock the surface still lands on `<arbiter>/main`
+		// and the (already-absent) lock release is a tolerated no-op — moved:true.
 		const seeded = seedRepoWithArbiter(scratch.root, ['gamma']);
 		const repo = seeded.repo;
-		// Sit on a work branch with NO lock held (no performClaim).
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['switch', '-q', '-c', 'work/task-gamma', `${ARBITER}/main`], repo);
 
@@ -172,18 +162,10 @@ describe('bounce is a PURE lock amend (no folder move, no main write)', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(result.moved).toBe(false);
-		expect(result.reasonNotMoved).toMatch(/no held lock/i);
-		// No needs-attention/ folder file is ever written, and no lock is created
-		// (mark-stuck is `active → stuck` only, not `absent → stuck`).
-		expect(existsOnArbiterMain(repo, 'needs-attention', 'gamma')).toBe(false);
-		const lock = await readItemLock({
-			item: 'task:gamma',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock).toBeUndefined();
+		expect(result.moved).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'gamma')).toBe(true);
 	});
 
 	it('local-only routing (no arbiter) records a no-op success and touches NO main/lock', async () => {
@@ -262,13 +244,12 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 		expect(existsOnArbiterMain(repo, 'done', 'epsilon')).toBe(true);
 	});
 
-	it('the full bounce of a done item marks the lock stuck (pure lock amend; main untouched)', async () => {
-		// End-to-end via the seam: a rebase-conflict bounce of a JUST-COMPLETED item.
-		// The done record on main co-exists with the stuck lock (US #10) and the bounce
-		// is a PURE lock amend — it touches ONLY the lock ref, never the on-main record.
+	it('the full bounce of a done item surfaces on <arbiter>/main + releases the lock (PR-2b; done record preserved)', async () => {
+		// PR-2b end-to-end via the seam: a rebase-conflict bounce of a JUST-COMPLETED
+		// item. The bounce SURFACES on `<arbiter>/main` (sidecar + `needsAnswers:true`
+		// commit) and RELEASES the lock. The pre-existing `done` record co-exists with
+		// the surfaced sidecar in the same commit graph.
 		const {repo, seeded} = await claimAndBranch('zeta');
-		// Seed a durable `done` record on main via a clone (the checkout-under-test
-		// holds the still-held implement lock).
 		const completer = seeded.clone('zeta-completer');
 		gitIn(['fetch', '-q', ARBITER], completer);
 		gitIn(['switch', '-q', '-C', 'done-move', `${ARBITER}/main`], completer);
@@ -289,19 +270,11 @@ describe('done + stuck lock co-existence (state-machine invariant)', () => {
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
+		// D1 probe finds the body only in tasks/done — no surface path candidate in
+		// that namespace, so the surface is a body-absent no-op that STILL releases
+		// the lock (never a dead-end held lock).
 		expect(result.moved).toBe(true);
-
-		// The held lock is stuck (the human's attention)…
-		const lock = await readItemLock({
-			item: 'task:zeta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/conflict/i);
-		// …and the `done` record on main is UNTOUCHED (the lock amend never writes main):
-		// done + stuck co-exist (US #10), and no needs-attention/ folder is written.
+		expect(stuckLockOnArbiter(repo, 'zeta')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'done', 'zeta')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'needs-attention', 'zeta')).toBe(false);
 	});

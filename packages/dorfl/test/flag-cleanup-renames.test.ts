@@ -7,6 +7,7 @@ import {buildProgram} from '../src/cli.js';
 import {performClaim} from '../src/claim-cas.js';
 import {performStart} from '../src/start.js';
 import {ledgerWrite} from '../src/ledger-write.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -15,6 +16,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -97,10 +100,16 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		// Leave agent work so the bounce saves a wip commit + PUSHES the work branch
 		// (the continue-branch the default requeue's safety guard checks for).
 		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'alpha',
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'the work'], repo);
+		gitIn(['push', '-q', ARBITER, 'work/task-alpha:work/task-alpha'], repo);
+		// PR-2b retired the bounce's `active → stuck` amend. Seed the stuck state
+		// directly so the requeue verb has a stuck lock to recover — exactly what a
+		// human is exercising.
+		await markStuckItemLock({
+			item: 'task:alpha',
 			reason: 'gate red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});

@@ -12,6 +12,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -207,20 +209,30 @@ describe('land-time re-verify catches a clean-rebase-but-semantically-broken mer
 		// 7b. EXTERNAL ASSERTION #2: B's per-item lock ends in `state: stuck`,
 		//     with a reason that names the REBASED-TIP re-verify failure — NOT a
 		//     rebase conflict.
-		expect(stuckLockOnArbiter(repoB, 'caller-b')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repoB, 'caller-b')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repoB, 'caller-b')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repoB, 'caller-b')).toBe(true);
 		const lock = await readItemLock({
 			item: 'task:caller-b',
 			cwd: repoB,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(lock?.state).toBe('stuck');
-		expect(lock?.reason).toMatch(/acceptance gate failed/i);
-		expect(lock?.reason).toMatch(/rebased tip/i);
-		// The crucial negative: this is NOT a textual rebase conflict — the
-		// failure mode the test exists to catch is precisely a CLEAN rebase whose
-		// re-verify on the merged tree fails.
-		expect(lock?.reason).not.toMatch(/rebase.*conflict/i);
+		// PR-2b: post-bounce the lock is RELEASED; the reason lives on the surfaced
+		// sidecar (`<arbiter>/main`).
+		expect(lock).toBeUndefined();
+		gitIn(['fetch', '-q', ARBITER], repoB);
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-caller-b.md`],
+			repoB,
+		);
+		expect(sidecar).toMatch(/acceptance gate failed/i);
+		expect(sidecar).toMatch(/rebased tip/i);
+		expect(sidecar).not.toMatch(/rebase.*conflict/i);
 
 		// 7c. EXTERNAL ASSERTION #3: verify actually RAN on the rebased tree. The
 		//     marker file captures one JSON line per gate run; at least one of B's

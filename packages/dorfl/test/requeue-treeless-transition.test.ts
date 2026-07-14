@@ -2,8 +2,8 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync, readFileSync, existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -50,10 +50,15 @@ async function stuckOnArbiterOnly(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Seed a STUCK lock directly. PR-2b retired the bounce's `active → stuck`
+	// amend (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`): a
+	// bounce now surfaces + RELEASES the lock, so we cannot drive a stuck lock
+	// through the seam any more. `markStuckItemLock` is the direct primitive; this
+	// suite exercises requeue's stuck-recovery path, not the bounce itself.
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});

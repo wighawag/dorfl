@@ -14,6 +14,8 @@ import {
 	stuckLockOnArbiter,
 	gitEnv,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -116,7 +118,13 @@ describe('runOnce — a thrown CORE wiring/config error is config-error, NOT age
 
 		// Work preserved + SURFACED on the arbiter (the work-preserving needs-attention
 		// seam ran), never reaching done.
-		expect(stuckLockOnArbiter(repo, 'feat')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'feat')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'feat')).toBe(true);
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 		expect(existsOnArbiterMain(repo, 'in-progress', 'feat')).toBe(false);
 	});

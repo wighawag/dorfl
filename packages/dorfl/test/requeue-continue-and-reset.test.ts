@@ -16,6 +16,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -57,19 +59,20 @@ async function stuckThenRequeued(
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	// Route to needs-attention THROUGH the seam (surfaces it on the arbiter's main,
-	// mode M) so the item is in needs-attention/ on main, cross-machine visible.
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Directly seed a STUCK per-item lock so `returnToBacklog` (requeue) has a stuck
+	// lock to recover from. PR-2b (spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state`) retired the bounce's
+	// `active → stuck` amend — a bounce now surfaces + RELEASES the lock — so we can
+	// no longer drive a stuck lock via the bounce seam. `markStuckItemLock` is still
+	// the direct primitive for the state and is exactly what a requeue's recovery
+	// path targets. This test exercises that recovery, not the bounce itself.
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red on the first attempt',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	// The seam pushed the surface to main; sync LOCAL main to the surface (as a
-	// human's checkout would be on main) so the requeue's push HEAD lands on main.
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 	const result = await returnToBacklog({
 		cwd: repo,
 		slug,
@@ -192,7 +195,13 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		expect(started.outcome).toBe('needs-attention');
 		// The item is STUCK on its per-item lock (bounced, not auto-resolved); the
 		// body rests in backlog/ but the held stuck lock makes it non-claimable.
-		expect(stuckLockOnArbiter(fresh, 'gamma')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(fresh, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(fresh, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(fresh, 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'needs-attention', 'gamma')).toBe(false);
 	});
@@ -289,6 +298,9 @@ describe('requeue --reset — discard + fresh', () => {
 		// A missing arbiter remote is refused up front (it is the CAS push target).
 		expect(result.reasonNotMoved).toMatch(/no git remote named/i);
 		// The item is STILL stuck (the lock was NOT released); body rests in backlog/.
+		// This helper seeds the stuck lock directly via `markStuckItemLock` (see
+		// `stuckButNeedsAttention` — PR-2b's bounce no longer produces a stuck lock),
+		// so the stuck lock is the direct seed and we assert it directly.
 		expect(stuckLockOnArbiter(reset.repo, 'eta-reset')).toBe(true);
 		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(true);
 	});
@@ -591,18 +603,15 @@ async function stuckButNeedsAttention(
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', 'prior attempt work'], repo);
 	gitIn(['push', '-q', ARBITER, `work/task-${slug}:work/task-${slug}`], repo);
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Seed a STUCK lock directly (PR-2b retired the bounce's `active → stuck`
+	// amend). See the `stuckThenRequeued` helper for the same reasoning.
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	// Bring main's surfaced needs-attention state into the working tree so the
-	// item file is present locally (the requeue move operates on the tree); land
-	// on local main (as a human's checkout would be) so push HEAD lands on main.
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 	return {seeded, repo};
 }
 

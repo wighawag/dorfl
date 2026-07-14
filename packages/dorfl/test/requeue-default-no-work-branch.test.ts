@@ -1,7 +1,7 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {returnToBacklog} from '../src/needs-attention.js';
-import {ledgerWrite} from '../src/ledger-write.js';
 import {performClaim} from '../src/claim-cas.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -62,15 +62,15 @@ async function stuckWithNoArbiterBranch(
 		env: gitEnv(),
 	});
 	expect(claim.exitCode).toBe(0);
-	await ledgerWrite.applyNeedsAttentionTransition({
-		cwd: repo,
-		slug,
+	// Seed a STUCK lock directly (PR-2b retired the bounce's `active → stuck`
+	// amend; a bounce now surfaces + RELEASES the lock).
+	await markStuckItemLock({
+		item: `task:${slug}`,
 		reason: 'gate red before any push',
+		cwd: repo,
 		arbiter: ARBITER,
 		env: gitEnv(),
 	});
-	gitIn(['fetch', '-q', ARBITER], repo);
-	gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
 	return {seeded, repo};
 }
 
@@ -148,7 +148,8 @@ describe('requeue default — arbiter branch EXISTS but is not ahead of main (re
 			/isn't on arbiter.*push it first, or `requeue --reset`/s,
 		);
 		// The lock is STILL held stuck (nothing was released — this is the guard's
-		// point when there IS a branch to protect).
+		// point when there IS a branch to protect). The stuck lock is the direct seed
+		// (`markStuckItemLock`), so we assert it directly.
 		expect(stuckLockOnArbiter(repo, 'flat-branch-slug')).toBe(true);
 	});
 });

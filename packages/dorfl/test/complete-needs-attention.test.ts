@@ -12,6 +12,8 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 let scratch: Scratch;
@@ -78,8 +80,8 @@ describe('complete — failed gate routes to needs-attention', () => {
 			env: gitEnv(),
 		});
 
-		// Exit 1 (the work did not complete) and the gate-failed outcome stands.
-		expect(result.exitCode).toBe(1);
+		// PR-2b D3: a clean-surface `gate-failed` bounce is GREEN (exitCode 0).
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('gate-failed');
 		expect(result.routedToNeedsAttention).toBe(true);
 
@@ -88,16 +90,21 @@ describe('complete — failed gate routes to needs-attention', () => {
 		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
 			false,
 		);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 
-		// The reason is recorded on the stuck lock entry (the SOLE stuck record).
-		const lock = await readItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/gate failed/i);
+		// PR-2b: post-bounce the reason lives on the surfaced sidecar's envelope
+		// context (not the released lock). Read it off `<arbiter>/main`.
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-alpha.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/gate failed/i);
 	});
 
 	it('no partial state: aborted work saved (wip) + move-only tip, clean tree', async () => {
@@ -172,7 +179,8 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 			env: gitEnv(),
 		});
 
-		expect(result.exitCode).toBe(1);
+		// PR-2b D3: a clean-surface `rebase-conflict` bounce is GREEN (exitCode 0).
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('rebase-conflict');
 		expect(result.routedToNeedsAttention).toBe(true);
 
@@ -182,19 +190,23 @@ describe('complete — rebase conflict routes to needs-attention', () => {
 
 		// The stuck state is the lock; nothing landed on the arbiter's done/ (the
 		// done-move happened on the BRANCH tree but never reached main).
-		expect(stuckLockOnArbiter(repo, 'theta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'theta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'theta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'theta')).toBe(true);
 
 		// Nothing landed on arbiter main.
 		expect(existsOnArbiterMain(repo, 'done', 'theta')).toBe(false);
 
-		// Surfaced with the conflict reason on the lock entry.
-		const lock = await readItemLock({
-			item: 'task:theta',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(lock?.reason).toMatch(/conflict/i);
+		// PR-2b: reason on the surfaced sidecar (not the released lock).
+		const sidecar = gitIn(
+			['show', `${ARBITER}/main:work/questions/task-theta.md`],
+			repo,
+		);
+		expect(sidecar).toMatch(/conflict/i);
 	});
 
 	it('no partial state on conflict: clean tree, still on the work branch', async () => {

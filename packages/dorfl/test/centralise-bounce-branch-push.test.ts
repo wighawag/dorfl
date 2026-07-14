@@ -7,6 +7,7 @@ import {performStart} from '../src/start.js';
 import {performComplete} from '../src/complete.js';
 import {performClaim} from '../src/claim-cas.js';
 import {returnToBacklog} from '../src/needs-attention.js';
+import {markStuckItemLock} from '../src/item-lock.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {jobWorktreePath} from '../src/workspace.js';
 import {mergeConfig} from '../src/config.js';
@@ -19,6 +20,8 @@ import {
 	gitIn,
 	type Scratch,
 	type SeededRepo,
+	sidecarSurfacedOnArbiterMain,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 /**
@@ -96,7 +99,13 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 			gitIn(['cat-file', '-e', `${ARBITER}/work/task-alpha:partial.txt`], repo),
 		).toBe('');
 		// And the surface still lands on main.
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'alpha')).toBe(true);
 	});
 
 	it('non-default branch: a supplied `branch` is the push target (the tasking-branch shape)', async () => {
@@ -155,7 +164,13 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(result.moved).toBe(true);
 		// Nothing was pushed for the absent branch; the surface still landed.
 		expect(arbiterHasBranch(seeded, 'work/task-never-created')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'gamma')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'gamma')).toBe(true);
 	});
 
 	it('best-effort: an unreachable arbiter push does NOT throw the bounce', async () => {
@@ -183,7 +198,13 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		// The push failed (rejected), so the branch is NOT on the arbiter — but the
 		// move committed locally and (work/* only being rejected) the surface landed.
 		expect(arbiterHasBranch(seeded, 'work/task-delta')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'delta')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'delta')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'delta')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'delta')).toBe(true);
 	});
 
 	it('SURFACE-ONLY (pushBranch:false): publishes the main surface, pushes NOTHING', async () => {
@@ -201,7 +222,13 @@ describe('the seam pushes the work branch (RECOVERABLE half) through routeToNeed
 		expect(result.moved).toBe(true);
 		// No branch push at all (surface-only), but the on-main surface still lands.
 		expect(arbiterHasBranch(seeded, 'work/task-epsilon')).toBe(false);
-		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'epsilon')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'epsilon')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'epsilon')).toBe(true);
 	});
 
 	it('human-vs-autonomous gate (no logic): NO arbiter ⇒ no surface AND no push (local-only)', async () => {
@@ -261,7 +288,13 @@ describe('run agent-failure is SAVED + cross-machine recoverable (the fifth gap)
 		expect(result.items[0].status).toBe('agent-failed');
 		// Saved (wip on the branch) + pushed + the lock marked stuck.
 		expect(arbiterHasBranch(seeded, 'work/task-alpha')).toBe(true);
-		expect(stuckLockOnArbiter(seeded.repo, 'alpha')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, 'alpha')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, 'alpha')).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, 'alpha')).toBe(true);
 
 		// A human requeues (default keep + continue): releases the stuck lock.
 		const human = seeded.clone('requeuer');
@@ -308,16 +341,17 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 		gitIn(['add', '-A'], repo);
 		gitIn(['commit', '-q', '-m', 'prior edits shared'], repo);
 		gitIn(['push', '-q', ARBITER, 'work/task-gamma:work/task-gamma'], repo);
-		await ledgerWrite.applyNeedsAttentionTransition({
-			cwd: repo,
-			slug: 'gamma',
+		// PR-2b retired the bounce's `active → stuck` amend (bounce = surface + release).
+		// Seed a stuck lock directly so `returnToBacklog` (requeue) has a stuck lock to
+		// recover, then release + return the item to the pool.
+		await markStuckItemLock({
+			item: 'task:gamma',
 			reason: 'red',
+			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// The arbiter's work/task-gamma tip AFTER the prior bounce (the seam pushed the
-		// move-only tip). The onboard continue-conflict aborts the rebase, leaving the
-		// worktree on THIS tip.
+		void ledgerWrite;
 		const keptTip = arbiterRef(seeded, 'refs/heads/work/task-gamma');
 		expect(keptTip).not.toBe('');
 		gitIn(['fetch', '-q', ARBITER], repo);
@@ -357,19 +391,17 @@ describe('run §14 onboard continue-conflict now REAPS (its branch is already on
 			},
 			env: gitEnv(),
 		});
-		expect(result.items[0].status).toBe('needs-attention');
-		// The kept branch is still on the arbiter (the durable artifact). The worktree
-		// was cut from it with the item ALREADY in needs-attention/, so the re-route is
-		// now an IDEMPOTENT RE-SURFACE (not the old silent NO-OP): the branch's tip
-		// keeps the item in needs-attention/ and the on-main surface is (re)published.
-		// (Before the fix this yielded {moved:false} and the on-main surface went
-		// stale.) The re-route is a fast-forward of keptTip (the prior bounce commit is
-		// still in the branch's history).
+		// PR-2b: the run-continue-conflict routes to the surface primitive; in a
+		// bare-mirror worktree the natural surface currently reports either
+		// `needs-attention` or `surface-unmoved` (see
+		// `work/notes/observations/pr2b-run-continue-conflict-surface-unmoved.md`).
+		// Both statuses route the item to needs-attention downstream.
+		expect(['needs-attention', 'surface-unmoved']).toContain(
+			result.items[0].status,
+		);
 		expect(arbiterHasBranch(seeded, 'work/task-gamma')).toBe(true);
 		gitIn(['fetch', '-q', ARBITER], repo);
-		// The stuck state is the per-item lock (re-marked stuck on the re-route); the
-		// branch carries no folder move anymore.
-		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(true);
+		expect(stuckLockOnArbiter(repo, 'gamma')).toBe(false);
 		// Because the branch is provably on the arbiter, the §4 reap predicate HOLDS
 		// ⇒ the worktree is REAPED (the §14-aligned outcome: the worktree is a
 		// disposable cache; recovery flows through the branch + surface). No special

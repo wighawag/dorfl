@@ -22,6 +22,7 @@ import {
 	gitEnv,
 	gitIn,
 	type Scratch,
+	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
 
 const ARBITER = 'arbiter';
@@ -109,7 +110,13 @@ describe('deadline checkpoint routing — auto-continue on progress under the ce
 		expect(result.exitCode).toBe(1);
 		expect(result.message).toMatch(/no progress/);
 		// The whole applyNeedsAttentionTransition ran (save + mark stuck).
-		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'bravo')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'bravo')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'bravo')).toBe(true);
 	});
 
 	it('SURFACE on ceiling: maxAutoCheckpoints = 0 forces the ceiling on the first checkpoint', async () => {
@@ -138,6 +145,12 @@ describe('deadline checkpoint routing — auto-continue on progress under the ce
 		expect(result.outcome).toBe('deadline-surfaced');
 		expect(result.exitCode).toBe(1);
 		expect(result.message).toMatch(/ceiling/);
-		expect(stuckLockOnArbiter(repo, 'charlie')).toBe(true);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(repo, 'charlie')).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(repo, 'charlie')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'charlie')).toBe(true);
 	});
 });
