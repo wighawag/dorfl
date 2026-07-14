@@ -1,5 +1,6 @@
 ---
 promotedFrom: observation:review-nits-migrate-existing-stuck-locks-one-shot-2026-07-14
+needsAnswers: true
 ---
 
 ## What to build
