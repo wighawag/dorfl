@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Decisions: `apply-resolve-reset-flag-discards-work-branch`
 
 Date: 2026-07-14
