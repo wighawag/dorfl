@@ -4,7 +4,7 @@ slug: apply-resolve-reset-flag-discards-work-branch
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic, empty-diff-bounce-surfaces-dispose-defaulted-question, bounce-migrate-stuck-assertions-and-flip-exit-codes]
 covers: [2]
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## Re-scope 2026-07-13 (after a Gate-2 BLOCK on the first attempt)
