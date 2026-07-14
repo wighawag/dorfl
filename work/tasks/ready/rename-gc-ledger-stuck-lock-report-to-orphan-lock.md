@@ -1,6 +1,6 @@
 ---
 promotedFrom: observation:review-nits-reconcile-ledger-lock-spec-adr-stuck-retirement-2026-07-14
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -49,3 +49,9 @@ Acceptance.
 > Do NOT touch `CONTEXT.md`, do NOT rename any ADR/spec/task slug, do NOT amend any ADR — this is a scoped doc coherence rename.
 >
 > Acceptance: `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green; `diff -r skills/setup/protocol work/protocol` clean apart from `VERSION`; `grep -n "stuck-lock" skills/setup/protocol/WORK-CONTRACT.md work/protocol/WORK-CONTRACT.md` empty in the resolve/return prose; `grep -n "orphan-lock" ...` shows the new label in both mirrored files.
+
+## Applied answers 2026-07-14
+
+### q1: 'task:rename-gc-ledger-stuck-lock-report-to-orphan-lock' was bounced — how should we proceed?
+
+Resolve, CONTINUE (keep the work branch). This bounce was NOT a defect in this task: the acceptance gate failed on a PRE-EXISTING `prd->spec` leak-scan failure on `main` (an un-backticked `slice-*/prd-` token in the auto-generated `backfill-where-it-runs-decision-migrate-stuck-locks-done-record` task body, line 20). The agent correctly diagnosed this and left the observation `word-cutover-leak-scan-red-on-backfill-task-2026-07-14`. That leak is now FIXED on main (backticked, leak-scan green). This task's own work is sound and complete: it renames the gc/ledger "stuck-lock report" -> "orphan-lock report" in `WORK-CONTRACT.md` (both protocol mirrors, byte-identical) + one test describe label, matching the task exactly. Keep the branch and re-gate on the now-green main; it should pass cleanly.
