@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'reconcile-ledger-lock-spec-adr-stuck-r
 date: 2026-07-14
 status: open
 reviewOf: reconcile-ledger-lock-spec-adr-stuck-retirement
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
