@@ -114,6 +114,7 @@ import {
 	type PrdToSpecResult,
 	type DataLeak,
 } from './prd-to-spec.js';
+import {resyncProtocol, type ResyncResult} from './resync-protocol.js';
 import {sweepRemoteMergedBranches} from './reap-branches.js';
 import {sweepOrphanSidecars} from './orphan-sidecar.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
@@ -908,6 +909,91 @@ function printLeak(leak: DataLeak): void {
 	console.error(
 		`  [${leak.lens}] ${leak.where}: '${leak.token}' — ${leak.why}`,
 	);
+}
+
+/**
+ * A minimal interactive yes/no confirmation (default NO). Prompts on stderr
+ * (stdout stays reserved for machine/report output) and reads one line from
+ * stdin. Callers only reach this on an interactive (TTY) session — a non-TTY
+ * path decides WITHOUT prompting (so a scripted run never hangs). Returns true
+ * only for an explicit `y`/`yes`.
+ */
+function confirmYesNo(message: string): Promise<boolean> {
+	return new Promise((resolvePrompt) => {
+		const rl = createInterface({input: process.stdin, output: process.stderr});
+		rl.question(`${message} [y/N] `, (answer) => {
+			rl.close();
+			const a = answer.trim().toLowerCase();
+			resolvePrompt(a === 'y' || a === 'yes');
+		});
+	});
+}
+
+interface SyncFlags {
+	/** The repo working-tree root to sync (default: cwd). */
+	repo?: string;
+	/** Report what WOULD change, touching nothing. */
+	dryRun?: boolean;
+	/**
+	 * ALSO (re-)install the packaged dorfl skills into the operator's own harness
+	 * dir(s), NON-INTERACTIVELY. This flag IS the confirmation: it BYPASSES the
+	 * interactive ask. Without it, an interactive (TTY) session PROMPTS once
+	 * before installing, and a non-TTY session skips the skills step entirely
+	 * (so a scripted `sync` never hangs). Either way, the protocol re-sync half
+	 * always runs.
+	 */
+	addSkills?: boolean;
+	/** With `--add-skills` (or a confirmed prompt): scope the skills install to <cwd>/.agents/skills/ instead of the global default. */
+	local?: boolean;
+	json?: boolean;
+}
+
+/**
+ * Human-readable report for the deterministic protocol re-sync half of
+ * `dorfl sync`. Groups the docs into changed / unchanged / skipped and names the
+ * VERSION file. `dryRun` reframes it as "WOULD" so a preview reads honestly.
+ * A SKIPPED doc (unresolvable source) is surfaced LOUDLY — the contract in the
+ * target repo is incomplete for that doc.
+ */
+export function formatSyncReport(
+	result: ResyncResult,
+	dryRun: boolean,
+): string {
+	const lines: string[] = [];
+	const changed = result.docs.filter((d) => !d.unchanged && !d.skipped);
+	const unchanged = result.docs.filter((d) => d.unchanged);
+	const skipped = result.docs.filter((d) => d.skipped);
+	const verb = dryRun ? 'WOULD sync' : 'Synced';
+	lines.push(
+		dryRun
+			? '=== dorfl sync (DRY RUN — nothing written) ==='
+			: '=== dorfl sync ===',
+	);
+	lines.push(
+		`Protocol: ${verb} ${result.docs.length} doc(s) — ` +
+			`${changed.length} changed, ${unchanged.length} unchanged, ` +
+			`${skipped.length} skipped.`,
+	);
+	for (const d of changed) {
+		lines.push(`  ~ ${d.dest}`);
+	}
+	for (const d of skipped) {
+		lines.push(
+			`  !! ${d.name}: SOURCE could not be resolved — NOT copied ` +
+				'(the contract doc is missing in the package).',
+		);
+	}
+	if (changed.length > 0 || skipped.length === result.docs.length) {
+		lines.push(
+			`VERSION: ${dryRun ? 'WOULD bump' : 'bumped'} ${result.versionPath}` +
+				(skipped.length === result.docs.length
+					? ' (no doc synced — no bump)'
+					: '.'),
+		);
+	} else {
+		lines.push(`VERSION: unchanged (${result.versionPath} — already current).`);
+	}
+	return lines.join('\n');
 }
 
 interface StatusFlags {
@@ -3539,6 +3625,77 @@ export function buildProgram(): Command {
 			console.log(
 				`Summary: ${result.reaped.length} reaped, ${result.retained.length} retained.`,
 			);
+		});
+
+	// `dorfl sync`: bring an already-onboarded repo up to the CURRENT protocol.
+	// Always re-syncs `work/protocol/*` + bumps VERSION (the deterministic slice of
+	// `setup`, shared with `prd-to-spec` via `resync-protocol.ts`). `--add-skills`
+	// ADDITIONALLY (re-)installs the packaged skills into the operator's harness
+	// dir(s), NON-INTERACTIVELY (the flag IS the confirmation); without it an
+	// interactive session PROMPTS once and a non-TTY session skips skills.
+	program
+		.command('sync')
+		.helpGroup(HEADLINE_GROUP)
+		.description(
+			"Bring THIS repo up to the current dorfl protocol: re-sync work/protocol/* from the package's canonical contract docs and bump work/protocol/VERSION (idempotent — a no-op when already current). This is how a repo that adopted an older protocol picks up the latest. Optionally ALSO (re-)installs the packaged dorfl skills into your own harness: pass --add-skills to do it non-interactively (the flag bypasses the ask), otherwise an interactive run prompts once (a non-TTY run skips skills). Runs IN-PLACE (no git commit/push — the human commits the result).",
+		)
+		.option('--repo <dir>', 'the repo working-tree root to sync (default: cwd)')
+		.option(
+			'--dry-run',
+			'REPORT what the protocol re-sync WOULD change, touching nothing (no writes; skills are never installed under --dry-run)',
+		)
+		.option(
+			'--add-skills',
+			'ALSO (re-)install the packaged dorfl skills into your own harness dir(s), non-interactively. This flag IS the confirmation — it bypasses the interactive ask.',
+		)
+		.option(
+			'--local',
+			'with skills install: scope to <cwd>/.agents/skills/ instead of the global ~/.agents/skills/ default',
+		)
+		.option('--json', 'output the raw protocol re-sync result as JSON')
+		.action(async (flags: SyncFlags) => {
+			const repoPath = flags.repo ?? process.cwd();
+			const dryRun = flags.dryRun === true;
+
+			// 1. The deterministic protocol re-sync (always runs).
+			const resync = resyncProtocol(repoPath, {
+				dryRun,
+				sourceCommit: 'dorfl sync',
+			});
+			if (flags.json) {
+				console.log(JSON.stringify(resync, null, 2));
+			} else {
+				console.log(formatSyncReport(resync, dryRun));
+			}
+
+			// A doc whose source could not be resolved is a broken package — exit
+			// non-zero so a scripted `sync` notices the incomplete contract.
+			const anySkipped = resync.docs.some((d) => d.skipped);
+
+			// 2. The OPTIONAL skills install. Never under --dry-run (a preview writes
+			//    nothing). `--add-skills` authorises it directly (bypasses the ask);
+			//    otherwise an interactive TTY prompts once, and a non-TTY skips.
+			if (!dryRun) {
+				let doSkills = flags.addSkills === true;
+				if (!doSkills && process.stdin.isTTY) {
+					const scope = flags.local === true ? 'project-local' : 'global';
+					doSkills = await confirmYesNo(
+						`Also (re-)install the packaged dorfl skills into your ${scope} harness dir(s)?`,
+					);
+				}
+				if (doSkills) {
+					const result = installSkills({global: flags.local !== true});
+					console.log(formatSkillsAddReport(result, flags.local === true));
+				} else if (flags.addSkills !== true && !process.stdin.isTTY) {
+					console.error(
+						'>> Skills not installed (non-interactive run; pass --add-skills to install them).',
+					);
+				}
+			}
+
+			if (anySkipped) {
+				process.exit(1);
+			}
 		});
 
 	program
