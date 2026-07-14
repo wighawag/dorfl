@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # `prd-word-cutover-leak-scan` test is red on main (pre-existing) — 2026-07-14
 
 Test `packages/dorfl/test/prd-word-cutover-leak-scan.test.ts` fails on a clean
