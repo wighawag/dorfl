@@ -3,8 +3,8 @@ import {Command, Option} from 'commander';
 import type {Command as Commander} from 'commander';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
-import {realpathSync, mkdirSync, rmSync} from 'node:fs';
-import {join as joinPath} from 'node:path';
+import {realpathSync, mkdirSync, rmSync, readFileSync} from 'node:fs';
+import {join as joinPath, dirname} from 'node:path';
 import {git} from './git.js';
 import {
 	loadConfig,
@@ -1168,12 +1168,45 @@ const ADVANCED_GROUP = 'Advanced / plumbing:';
 /** Help group for the de-emphasised plumbing FLAGS named in ADR §7. */
 const ADVANCED_OPT_GROUP = 'Advanced / plumbing options:';
 
+/**
+ * The CLI's own version, read at runtime from the package's `package.json`
+ * (the SINGLE source of truth changesets bumps on release) rather than a
+ * compiled-in literal that would silently drift on the next version bump.
+ *
+ * Resolved relative to THIS module (`dist/cli.js` → `../package.json`), so it
+ * works regardless of the cwd `dorfl` is invoked from. Best-effort: an
+ * unreadable/malformed `package.json` yields `'unknown'` rather than crashing
+ * the whole CLI over a `--version` niggle.
+ */
+function resolvePackageVersion(): string {
+	try {
+		const here = dirname(fileURLToPath(import.meta.url));
+		const pkgPath = joinPath(here, '..', 'package.json');
+		const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
+			version?: string;
+		};
+		return typeof pkg.version === 'string' && pkg.version.trim() !== ''
+			? pkg.version
+			: 'unknown';
+	} catch {
+		return 'unknown';
+	}
+}
+
 export function buildProgram(): Command {
 	const program = new Command();
 
 	program
 		.name(brand.bin)
-		.description('Autonomous parallel agents over file-based work/ queues.');
+		.description('Autonomous parallel agents over file-based work/ queues.')
+		// `-v`/`--version` print the installed CLI version (read from package.json).
+		// commander's default flags are `-V, --version`; we ALSO accept lower-case
+		// `-v` since that is what most users reach for.
+		.version(
+			resolvePackageVersion(),
+			'-v, --version',
+			'print the dorfl version',
+		);
 
 	// `dorfl config --json` (spec `graceful-pre-timeout-wip-checkpoint` — step 5):
 	// print the RESOLVED per-repo config as JSON, so BOTH the advance-lifecycle
