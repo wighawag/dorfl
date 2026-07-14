@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'retire-stuck-lock-state' (Gate 2 appro
 date: 2026-07-14
 status: open
 reviewOf: retire-stuck-lock-state
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
