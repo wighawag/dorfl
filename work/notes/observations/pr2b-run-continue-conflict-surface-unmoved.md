@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # PR-2b: run continue-conflict surface reports `surface-unmoved` in a bare-mirror worktree
 
 Date: 2026-07-13

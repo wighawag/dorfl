@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # graceful-pre-timeout-checkpoint test: regex expects `${{ needs… }}`, source emits `${{ fromJson(needs…) }}`
 
 Date: 2026-07-13
