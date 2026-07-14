@@ -2,6 +2,7 @@
 date: 2026-07-14
 task: retire-stuck-lock-state
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
+needsAnswers: true
 ---
 
 # `retire-stuck-lock-state` — in-scope decisions worth surfacing
