@@ -3,7 +3,7 @@ title: `ENOTEMPTY: rmdir '.../.git'` on parallel test-fixture teardown flakily f
 type: observation
 status: open
 spotted: 2026-07-12
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What was seen
@@ -80,3 +80,13 @@ ROOT-CAUSE FIX (attacks the cause, not the symptom): disable git auto-maintenanc
 ## Update 2026-07-13 (2): a SIBLING flake — 5s test-TIMEOUT under full-suite load (not just ENOTEMPTY)
 
 Verifying PR #356 (`surface-short-circuit`) locally, the full-suite gate failed on `complete-self-renaming-folder-task.test.ts` with `Test timed out in 5000ms` — NOT ENOTEMPTY. In isolation that same test passes 3/3 in ~3.7s. So it is the SAME ROOT CLASS (fixture tests that spawn real git repos + agents flaking under full-suite PARALLEL pressure) with a DIFFERENT SYMPTOM: a test that needs >5s of wall-clock when it does not get a CPU slice under a 5-min heavily-parallel run, vs the ENOTEMPTY teardown race. The gc-auto-off + rmrf fixes addressed the ENOTEMPTY variant; this timeout variant is unaddressed. Candidate fixes to weigh (not yet done): raise the per-test `testTimeout` for the git-spawning suites, or mark the heaviest real-git/agent-spawning files `sequential`/`poolOptions` so they are not starved by the parallel pool. Low urgency (it is a false-red that requeue clears), but it is the SECOND instance of "full-suite parallelism starves a real-fixture test" — worth a bounded hardening pass on test concurrency for the spawn-heavy files.
+
+## Applied answers 2026-07-14
+
+### q1: Should the ENOTEMPTY teardown-race fix be folded into the existing task 'harden-run-test-claimed-done-flaky-under-full-suite' (whose scope was already widened on 2026-07-12 to cover this class of teardown race), or promoted as its own dedicated task?
+
+Moot / resolve: the fix has since LANDED in the shared test-helper (the least-invasive option this question anticipated), so there is no longer a fold-vs-promote choice to make. A retry-hardened `rmrf(path)` now backs `Scratch.cleanup()` and git auto-gc is disabled in the fixture env, killing the ENOTEMPTY teardown race at the root (commits `7eefb8e7`, `4fb7d87d`, `02d18ce8`; `packages/dorfl/test/helpers/gitRepo.ts:181,206`). Keep this note on record as the durable rationale the `rmrf` docstring and `rmrf-teardown.test.ts` cite; do not delete it (that would dangle a live-source reference).
+
+### q2: Should the SECOND flake noted here — the CAS/mergeRetries count-assertion flake in cross-job-concurrent-land.test.ts and merge-retries-external.test.ts ('expected 2 to be 1' / 'expected 2 to be <= 1' on job 86686290527) — be split off into its own observation now, or left as a side-note until it recurs?
+
+Do NOT mint a new observation. This CAS/mergeRetries count-assertion flake (`cross-job-concurrent-land.test.ts`, `merge-retries-external.test.ts`: `expected 2 to be 1` / `expected 2 to be <= 1`) is the SAME flake family already captured by `observation:integration-core-serialisation-load-bearing-flake-2026-07-13` (a scheduling-sensitive assertion on the same concurrent-merge / CAS-retry machinery under full-suite parallel load). Fold it there: widen that note to name these two test files alongside `integration-core.test.ts` as one flake family, so the signal is preserved when this ENOTEMPTY note resolves. Treat this Q2 as duplicate -> `integration-core-serialisation-load-bearing-flake-2026-07-13`.
