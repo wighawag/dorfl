@@ -167,3 +167,86 @@ attention)" to "stuck + non-terminal (genuine human attention)"; the previously-
   migration renames the pre-cutover entries.
 - Distinct from the reaper `no-lock` mislabel (`reaper-no-lock-outcome-benign-not-lost`, now a
   task) — same reaper surface, different classification bug; NOT conflated here.
+
+## Addendum 2026-07-14 — the `stuck` LOCK STATE is retired (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`)
+
+The two-axis lock-entry state machine originally recorded above — `action: implement|task|advance` ×
+**`state: active | stuck`** (+ reason iff stuck), with `needs-attention` == `state: stuck` — has been
+COLLAPSED to a SINGLE state. Per spec `surface-stuck-as-questions-and-retire-stuck-lock-state`
+(task `retire-stuck-lock-state`, LANDED), `LockState` is now `'active'` only. A bounced / needs-
+attention item no longer parks on the lock; it is surfaced on `main` as `needsAnswers: true` +
+a `stuck`-kind question sidecar (drained by the existing apply rung) and the lock is RELEASED.
+
+### What changes
+
+- The lock is now the **in-flight ACTIVE HOLD only** — real CAS mutual-exclusion for a running
+  claim / build / task / advance. It is always released at the end of a leg (success OR bounce);
+  no lock ever outlives its leg except a genuine crash-orphan.
+- "Resting, needs a human" moves off the lock and onto `main`: `needsAnswers: true` on the item body
+  + a sidecar (`sidecar.ts`, `kind: 'stuck'`) under `work/questions/<type>-<slug>.md`, atomically.
+  Human-visible in a normal `ls` / `git clone`, drained by the existing surface→apply loop.
+- The `reason iff stuck` invariant, the `mark-stuck` transition, and the `wrong-state` verdict are
+  RETIRED with the state (`item-lock.ts`). `done` + `stuck` co-existence (the original US #10 case)
+  no longer arises — a just-completed item that bounces on a rebase-conflict surfaces a sidecar
+  and releases; the lock is not left `stuck`.
+- `mark-stuck` remains as a no-op COMPATIBILITY SHIM at the lock module boundary (returns a
+  wrong-state / already-released outcome) so callers not yet migrated do not throw; the shim's
+  message points at the new model.
+- The 2026-07-10 addendum's `cleared-stuck-terminal` / `kept-stuck` reaper split is IMPLICITLY
+  MOOT going forward: with no new `stuck` locks minted, the auto-reaper's `stuck`-axis branches
+  only trigger on pre-existing entries, and those are drained one-shot by the migration task
+  `migrate-existing-stuck-locks-one-shot` (`stuck → surface-on-main + release`). The addendum is
+  KEPT for the historical record; it is not the current mint path.
+
+### Why (the pointer, not the re-argument)
+
+Two mechanisms for "an item is parked" (the on-`main` `needsAnswers` sidecar for human ANSWERS,
+and the hidden `state: stuck` lock for BOUNCED items) rotted `stuck`-parked items: the hidden ref
+was drained by nothing, and `advance-drivers.ts` subtracted every held slug from every pool, so a
+stuck item was invisible to the loop forever unless a human ran `requeue` by hand (verified live on
+lifecycle run `29206312575`). Collapsing to ONE parked-item mechanism (`needsAnswers` + sidecar on
+`main`) drains bounced items through the existing question loop and additionally makes a healthy
+refusal (stale premise / empty diff / surfaced collision) VISIBLY DISTINCT from a real gate
+failure. Full reasoning + the six resolved decisions live in the spec
+`surface-stuck-as-questions-and-retire-stuck-lock-state`.
+
+### Coherence with the original decision
+
+- **The lock PRIMITIVE is unchanged.** Per-item refs, create-only / leased CAS,
+  self-arbitrating, no retry budget, `main`-authoritative over a stale lock — all preserved. Only
+  the STATE AXIS is retired; the ACTION axis (`implement | task | advance`) still discriminates
+  what the hold is FOR, and cross-action exclusion is still atomic (defect #3 above).
+- **`main` is still authoritative** over a crash-orphaned `active` lock — now the ONLY orphan
+  class the reaper needs to handle.
+- **Sequencing of the durable move + release is unchanged.** "Hold lock → land durable `main`
+  move → release" (US #9); a bounce now uses the SAME ordering to surface the sidecar-on-`main`
+  FIRST, release SECOND (`main`-authoritative on recovery), reusing the `runTreelessLedgerMove`
+  CAS loop for the tree-less path.
+
+### Pinning the two `stuck` meanings (do not re-muddle)
+
+After this retirement the word `stuck` still appears in the codebase, but now with ONE meaning,
+not two:
+
+- `stuck` as a LOCK STATE — **retired**. `LockState` is `'active'` only. Any live doc or code
+  reading `state: stuck` is historical.
+- `stuck` as a **`SidecarKind`** (`sidecar.ts`, `SidecarKind = 'merge' | 'stuck' | 'triage' |
+  'spec'`) — **kept**. It is the dispatch kind the surfaced-bounce sidecar is filed under so the
+  apply rung can route it. This is a DIFFERENT axis (the sidecar's dispatch label) from the
+  retired lock state; the shared English word is a documented distinction, NOT a re-mint of the
+  old lock state.
+
+### Cross-refs
+
+- Spec: `work/specs/tasked/surface-stuck-as-questions-and-retire-stuck-lock-state.md` (the six
+  resolved decisions, the atomicity/ordering rule, the migration + reconciliation tasks).
+- Sibling reconciliation task: `reconcile-ledger-lock-spec-adr-stuck-retirement` (this addendum
+  is its ADR deliverable; the sibling spec `ledger-status-per-item-lock-refs` + `CONTEXT.md`
+  glossary are reconciled in the same pass).
+- Amend-vs-supersede: **AMENDED in place** rather than superseded, because the core decision
+  (transient status on per-item lock refs; `main` holds content + durable resting records) is
+  UNCHANGED — only the state-axis sub-detail collapses. This follows the same pattern the
+  2026-07-10 addendum used for the reaper's `stuck-terminal` orphan loosening and keeps the
+  ledger-lock decision trail contiguous in one file, per `ADR-FORMAT.md` ("Status frontmatter
+  useful when decisions are revisited" — the ADR stays `proposed`; the retirement is a scoped
+  amend, not a new decision superseding the substrate).
