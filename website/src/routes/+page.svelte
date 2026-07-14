@@ -249,8 +249,8 @@
 							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
 							>setup</code
 						>
-						(an existing repo). Runner-agnostic — nothing to install globally;
-						the skills go in via
+						(an existing repo). Runner-agnostic — nothing to install globally; the
+						skills go in via
 						<code
 							class="rounded bg-visor-inset px-1.5 py-0.5 font-mono text-sm text-clay-light"
 							>npx dorfl</code
