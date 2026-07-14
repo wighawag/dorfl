@@ -55,3 +55,7 @@ The existing lenses are numbered and end in the destination check. Both new lens
 ## Requeue 2026-07-12
 
 Requeued after fix 7be9bd2d: the prd-word leak-scan failure was caused by two unswept task bodies (promote-rename-cutover-lessons + sweep-prose-prd-colon), now fixed on main. This item failed only on the shared rebased tip, not its own content.
+
+## Requeue 2026-07-14
+
+Requeued --reset 2026-07-14: released a pre-cutover stuck lock orphan (implement/stuck, from 2026-07-13) that had NO live surface after needs-attention/ was retired, so it stranded silently and was never re-picked. Deleting the stale pre-retire-stuck-lock-state branch; rebuild fresh against current main.
