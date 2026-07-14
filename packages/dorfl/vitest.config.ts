@@ -130,6 +130,15 @@ const RACE_SENSITIVE = [
 	// keep them out of file-parallel pressure for the same deterministic
 	// claim/main-CAS reasoning as bounce-surface-primitive.test.ts.
 	'test/bounce-atomic-cutover-primitives.test.ts',
+	// The ONE-SHOT rollout migration for pre-existing `stuck` per-item lock refs
+	// (task `migrate-existing-stuck-locks-one-shot`, spec
+	// `surface-stuck-as-questions-and-retire-stuck-lock-state`, resolved decision
+	// #3): drives real git against a --bare arbiter through the shared
+	// `runTreelessLedgerMove` CAS loop AND writes main (the surface commit per
+	// migrated ref) + releases the lock ref; keep it out of file-parallel pressure
+	// for the same deterministic claim/main-CAS reasoning as
+	// bounce-surface-primitive.test.ts.
+	'test/migrate-stuck-locks.test.ts',
 	// The after-commit CONTINUE-site tree-less surface tests (`moved:false` →
 	// `surface-unmoved`): drive real git against a --bare arbiter AND write main
 	// via the surface-on-main CAS publish; the `moved:false` assertion flakes under
