@@ -130,6 +130,11 @@ import {
 	reapReportNeedsAttention,
 } from './item-lock.js';
 import {
+	migrateStuckLocks,
+	formatMigrateStuckLocksReport,
+	migrateStuckLocksNeedsAttention,
+} from './migrate-stuck-locks.js';
+import {
 	promoteFromPreBacklog,
 	promoteFromPreSpec,
 	listPromotable,
@@ -3899,6 +3904,50 @@ export function buildProgram(): Command {
 			}
 			console.error(`error: ${result.message}`);
 			process.exit(1);
+		});
+
+	// `migrate-stuck-locks` (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`,
+	// resolved decision #3, user story 5; task `migrate-existing-stuck-locks-one-shot`):
+	// the ONE-SHOT ROLLOUT migration that converts every pre-existing `stuck` lock
+	// ref (an item bounced under the OLD model, before `retire-stuck-lock-state`)
+	// into the new resting shape (`needsAnswers:true` + `stuck`-kind sidecar on
+	// `<arbiter>/main` + lock released) via the SAME surface-first-release-second
+	// transition the new bounce uses. Idempotent (a re-run finds no legacy stuck
+	// ref → clean no-op) and bare-arbiter-safe (a ref is a ref). Its own verb (not
+	// folded into `gc --ledger`) because it is a one-shot rollout event with WRITE
+	// semantics on `main`, distinct from `gc`'s report-oriented + terminal-orphan
+	// reap surface — the two are different natures and their exit-code contracts
+	// stay separate.
+	program
+		.command('migrate-stuck-locks')
+		.helpGroup(ADVANCED_GROUP)
+		.description(
+			'ONE-SHOT rollout migration: convert every pre-existing `stuck` per-item lock ref (`refs/dorfl/lock/<entry>` written under the retired `stuck` lock state) into the new resting shape — a `needsAnswers:true` item body + a `stuck`-kind `work/questions/<entry>.md` sidecar on `<arbiter>/main`, with the lock ref released — via the SAME surface-first-release-second transition a fresh bounce uses. Idempotent: re-running finds no legacy `stuck` ref (the current lock module never writes `state: stuck`) and is a clean no-op. Bare-arbiter safe (a ref is a ref). Skips a pre-cutover `slice-*` / `prd-*` entry with no current item-form (clear those via `release-lock --entry <literal>`) and NEVER --force-deletes a lock. Exits non-zero only when a surface CAS lost the race or a read/plumbing fault prevented migration.',
+		)
+		.option(
+			'--cwd <dir>',
+			'the local repo/clone whose --arbiter remote the lock refs are read + mutated on (default: cwd); the working tree is never touched (the surface transition is tree-less)',
+		)
+		.option(
+			'--arbiter <remote>',
+			'the arbiter git remote the migration reads + mutates (default: origin)',
+		)
+		.action(async (flags: {cwd?: string; arbiter?: string}) => {
+			const cwd = flags.cwd ?? process.cwd();
+			const arbiter = flags.arbiter ?? 'origin';
+			const note = (message: string) => console.error(`>> ${message}`);
+			const report = await migrateStuckLocks({
+				cwd,
+				arbiter,
+				env: process.env,
+				note,
+			});
+			for (const line of formatMigrateStuckLocksReport(report)) {
+				console.log(line);
+			}
+			if (migrateStuckLocksNeedsAttention(report)) {
+				process.exit(1);
+			}
 		});
 
 	// `drop <slug>` (spec `agentic-question-resolution-retire-disposition-vocabulary`,
