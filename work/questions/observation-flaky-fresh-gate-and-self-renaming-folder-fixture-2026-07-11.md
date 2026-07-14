@@ -11,3 +11,5 @@ Item: [`observation:flaky-fresh-gate-and-self-renaming-folder-fixture-2026-07-11
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+Resolve (keep the note on record as a fingerprint). This matches the disposition already recorded in the note body's 'Applied answers 2026-07-12' section: a single unreproduced occurrence with no live signal, so do not mint an investigation task, but the failure mode ('m.oldName is not a function' + 'No projects found') is a specific enough fingerprint to keep. Note also that the underlying `/tmp` fixture teardown race class has since been hardened (retry-hardened `rmrf` + git auto-gc-off in `packages/dorfl/test/helpers/gitRepo.ts`), which makes recurrence less likely; re-open / promote only if it recurs anyway.
