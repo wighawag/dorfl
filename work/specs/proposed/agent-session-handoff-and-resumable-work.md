@@ -67,13 +67,13 @@ The net user-visible effect: a genuinely-over-cap task that drains across N sess
 
 ### The harness seam (layer 2)
 
-- `agentCmd` parses as EITHER a string (today, unchanged; the string IS `run`) OR `{run: string, continue?: string, interactive?: string, sessionFrom?: <capture spec>}`. Missing `continue` ⇒ `continueSession` is a clean no-op for that harness.
+- `agentCmd` parses as EITHER a string (today, unchanged; the string IS `run`) OR `{run: string, continue?: string, interactive?: string, sessionFrom?: <capture spec>}`. Missing `continue` ⇒ `continueSession` is a clean no-op for that harness. For the BARE-STRING form the other operations fall back: `continue` ⇒ no-op (today's degrade), `interactive` ⇒ run-fresh where applicable. The `interactive?` member maps to the existing `launchInteractive` seam (`harness.ts`), so a shell agent with a distinct interactive invocation can express it too; it is optional and orthogonal to the handoff path (which uses only `run`/`continue`).
 - Placeholder vocabulary extends `{model}` with `{session}`; the prompt stays on STDIN (not a placeholder), matching today. Generalise `substituteModel` into a `substitutePlaceholders` that handles both and FAILS LOUD on a present-but-unresolved placeholder (e.g. `{session}` in `continue` with no capture strategy), the same discipline `substituteModel` already uses for `{model}`.
 - Session CAPTURE, two strategies in preference order, both recorded into `HarnessRecord.session`:
   - (preferred) INJECT-A-KNOWN-ID: dorfl generates an id, injects it as `{session}` into `run` and `continue`, records it. No parsing; dorfl controls the id exactly as pi does today.
   - (fallback) `sessionFrom` EXTRACTOR, kept MINIMAL: `{ stdout: "<regex with one capture group>" }` OR `{ file: "<path the agent writes>" }`. The adapter runs the extraction after launch and records the result.
   - Neither configured ⇒ `HarnessRecord.session` stays unset ⇒ `continueSession` no-ops (the documented degrade).
-- `{session}` is treated as an OPAQUE string dorfl round-trips (a path for pi, whatever `--resume` wants for a shell agent).
+- `{session}` is treated as an OPAQUE string dorfl round-trips (a path for pi, whatever `--resume`/`--session` wants for a shell agent). This is a RESOLVED decision, not an open question: the id-vs-path meaning is the ADAPTER's to interpret; dorfl never parses it, it only generates/captures and hands it back verbatim on `continueSession`. (The pi adapter already treats it as a path; a shell adapter treats it as whatever its `continue` template consumes.)
 
 ### Resolved cross-task decisions (the two backlog tasks left these open; this spec RESOLVES them, does not defer)
 
