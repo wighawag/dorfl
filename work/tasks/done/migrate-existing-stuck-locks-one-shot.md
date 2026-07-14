@@ -41,3 +41,18 @@ Thin vertical: enumerate the live `stuck` lock refs on the arbiter → for each,
 > Where to look (by concept): the lock-ref enumeration/read path (how held/stuck locks are listed on the arbiter); the keystone surface-on-main + release transition to reuse per item; the sidecar writer. Seams to test at: seed a repo with N `stuck` locks (each with a reason), run the migration, assert N surfaced `needsAnswers` items + zero `stuck` refs; re-run and assert a clean no-op; assert reason/questions round-trip into the sidecar. Use the `gitRepo` test fixtures (with the `rmrf` teardown helper).
 >
 > Where this runs (a decision to make + record): whether the migration is a dedicated CLI verb, a step folded into `gc --ledger`, or a one-shot script — pick the smallest coherent home and record why. Done = the migration converts + is idempotent + bare-arbiter-safe, tests pass, gate green. RECORD the where-it-runs decision durably, linked from the done record.
+
+## Decisions
+
+### Where-it-runs: dedicated CLI verb `dorfl migrate-stuck-locks` (Advanced/plumbing group)
+
+The migration ships as its own top-level CLI verb, `dorfl migrate-stuck-locks`, registered in the Advanced/plumbing help group — NOT folded into `gc --ledger` and NOT shipped as an out-of-tree one-shot script. The inline source-of-truth for this choice is the JSDoc-style block comment at `packages/dorfl/src/cli.ts:3909-3920` (immediately above the `program.command('migrate-stuck-locks')` registration); this `## Decisions` entry is the durable back-reference the original task prompt required.
+
+Rationale:
+
+- **One-shot rollout event with WRITE semantics on `main`.** The migration exists purely to drain pre-existing `stuck` lock refs at the retirement of the `stuck` lock state (spec `surface-stuck-as-questions-and-retire-stuck-lock-state`, resolved decision #3, user story 5). It writes item bodies + `stuck`-kind sidecars on `<arbiter>/main` and releases lock refs via the SAME surface-first-release-second transition a fresh bounce uses. That is a fundamentally different nature from `gc`, whose surface is report-oriented (`--ledger`) plus terminal-orphan reap; folding a WRITE-on-main rollout migration into `gc` would muddle `gc`'s contract and force its exit-code shape to grow a second meaning.
+- **Exit-code contracts stay separate.** `migrate-stuck-locks` exits non-zero only when a surface CAS lost the race or a read/plumbing fault prevented migration; `gc`'s exit-code contract is its own. Keeping them in separate verbs keeps each contract narrow and testable, and lets the migration be removed cleanly once the rollout window closes without perturbing `gc`.
+- **Not an out-of-tree script.** A script would not benefit from the in-repo CLI's arbiter/cwd plumbing, help/discovery, or the shared surface-transition code path — and would be harder to invoke uniformly across environments than `dorfl migrate-stuck-locks`.
+- **Advanced/plumbing group, not the top-level surface.** Operators run it once at rollout; after that it is a clean no-op (the current lock module never writes `state: stuck`). Advanced/plumbing is the right discoverability tier for a one-shot rollout tool.
+
+Alternatives considered and rejected: (a) `gc --ledger` step — rejected for the contract-muddling + exit-code reasons above; (b) standalone one-shot script — rejected because it duplicates CLI plumbing and is harder to invoke uniformly.
