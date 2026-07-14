@@ -3,7 +3,7 @@ title: `ENOTEMPTY: rmdir '.../.git'` on parallel test-fixture teardown flakily f
 type: observation
 status: open
 spotted: 2026-07-12
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
