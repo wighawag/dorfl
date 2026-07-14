@@ -572,7 +572,8 @@ export type {RunVerifyOptions, RunVerifyResult} from './verify.js';
 export {
 	runVerify,
 	resolveVerifyCommands,
-	DEFAULT_VERIFY_COMMAND,
+	VerifyNotConfiguredError,
+	VERIFY_NOT_CONFIGURED_MESSAGE,
 } from './verify.js';
 
 export type {

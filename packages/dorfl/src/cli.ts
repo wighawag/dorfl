@@ -1547,7 +1547,15 @@ export function buildProgram(): Command {
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.action(async (flags: VerifyFlags) => {
-			const config = resolveGlobalConfig(loadConfig(flags.config), {});
+			// Resolve the gate through the SAME per-repo chain the runner uses
+			// (flag > env > per-repo `dorfl.json` > global > default): the standalone
+			// `verify` command must honour the repo's COMMITTED `verify`, exactly as
+			// its help text ("the repo's declared acceptance gate (per-repo `verify`
+			// config)") promises. Reading only the GLOBAL config here silently ran the
+			// old built-in default in every repo whose gate lived in `dorfl.json`.
+			const cwd = process.cwd();
+			const global = loadConfig(flags.config);
+			const config = resolveRepoConfig({repoPath: cwd, global}).config;
 			// DELIBERATELY verify-ONLY: the standalone `verify` command does NOT run the
 			// `prepare` env-prep step first. `verify` is the PURE acceptance gate (env-
 			// ready is a separate concern); a human invoking it prepares their own
@@ -1555,9 +1563,12 @@ export function buildProgram(): Command {
 			// (`do`/`run`/`complete` → `performIntegration`), where a fresh job worktree
 			// off the hub mirror genuinely needs deps before the gate can be trusted.
 			const result = await runVerify({
-				cwd: process.cwd(),
+				cwd,
 				verify: config.verify,
 			});
+			// An unconfigured gate already streamed its precise message to stderr via
+			// runVerify; exit non-zero so a human `dorfl verify` fails LOUD (never a
+			// vacuous green) with a clear next step, not a stack trace.
 			process.exit(result.exitCode);
 		});
 

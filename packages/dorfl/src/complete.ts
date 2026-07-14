@@ -853,10 +853,13 @@ async function runComplete(
 	// precondition to check). Gated on `freshWorktreeGate === true` for THIS
 	// invocation: when OFF, the gate runs in the CURRENT checkout (which carries
 	// its deps), so the throwaway-worktree reasoning does not apply.
+	// ALSO fails fast when `verify` is unset/all-blank (a MODE-INDEPENDENT stop —
+	// Dorfl has no default gate). Bypassed by --skip-verify (no gate to check).
 	if (options.skipVerify !== true) {
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: options.freshWorktreeGate,
 			prepare: options.prepare,
+			verify: options.verify,
 			lockfile: detectLockfileOnDisk(cwd),
 		});
 		if (guard !== undefined) {

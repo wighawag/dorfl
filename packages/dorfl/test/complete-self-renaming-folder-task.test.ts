@@ -128,6 +128,7 @@ describe('complete — self-renaming-folder task (record placed in a RENAMED don
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			verify: 'exit 0',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -174,6 +175,7 @@ describe('complete — self-renaming-folder task (record placed in a RENAMED don
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			verify: 'exit 0',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -239,6 +241,7 @@ describe('complete — self-renaming-folder task (record placed in a RENAMED don
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			verify: 'exit 0',
 			env: gitEnv(),
 			note: () => {},
 		});

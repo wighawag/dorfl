@@ -107,6 +107,9 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			// Trivial green gate: the scratch repo has no `verify` declared and Dorfl
+			// has no default gate, so a real gate would refuse (not-configured).
+			verify: 'true',
 			env: gitEnv(),
 			note: (m) => notes.push(m),
 		});
@@ -146,6 +149,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			verify: 'true',
 			// Keep the operator ON the work branch so the re-run sees the SAME tip
 			// (the tail otherwise switches to main + deletes the branch).
 			noSwitch: true,
@@ -170,6 +174,7 @@ describe('autonomous integrate path — auto-recovers a stranded already-complet
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			verify: 'true',
 			noSwitch: true,
 			env: gitEnv(),
 			note: (m) => notes.push(m),

@@ -105,7 +105,7 @@ describe('do --remote — reads the per-repo .dorfl.json from the arbiter main',
 		);
 	});
 
-	it('the repo-declared verify gate takes effect (not DEFAULT_VERIFY_COMMAND)', () => {
+	it('the repo-declared verify gate takes effect (and there is no default to fall back to)', () => {
 		const gate = 'pnpm format:check && pnpm build && pnpm test';
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha'], {
 			repoConfig: {verify: gate},

@@ -361,7 +361,11 @@ const STUB_TASKER_AGENT_CMD =
 
 /** Write a per-repo `.dorfl.json` (the `tasksLandIn` default under test) + push it. */
 function writeRepoConfig(repo: string, config: Record<string, unknown>): void {
-	writeFileSync(join(repo, '.dorfl.json'), JSON.stringify(config, null, 2));
+	// Dorfl has NO default acceptance gate, so any repo the runner touches must
+	// declare a `verify`. These tests exercise the tasking PLACEMENT wire, not the
+	// gate, so seed a trivial green gate unless the caller sets its own.
+	const withVerify = {verify: 'true', ...config};
+	writeFileSync(join(repo, '.dorfl.json'), JSON.stringify(withVerify, null, 2));
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
 	run('git', ['commit', '-q', '-m', 'config'], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});

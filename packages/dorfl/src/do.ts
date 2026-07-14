@@ -1062,13 +1062,14 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     the build agent, instead of wasting a whole `do` run and (worse) routing
 	//     correct work to needs-attention as if the task were at fault. A repo with
 	//     NO lockfile is the intentional dep-free case (the design point preserved)
-	//     and proceeds. There is NO verify-unset case — `resolveVerifyCommands`
-	//     substitutes the default gate when verify is unset/all-blank, so verify is
-	//     never statically unrunnable-because-unset (the guard is deps-only).
+	//     and proceeds. The guard ALSO fails fast when `verify` is unset/all-blank
+	//     (a MODE-INDEPENDENT stop — Dorfl has no default gate, so an unconfigured
+	//     `verify` can never pass in any mode).
 	{
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: options.freshWorktreeGate,
 			prepare: options.prepare,
+			verify: options.verify,
 			lockfile: detectLockfileOnDisk(cwd),
 		});
 		if (guard !== undefined) {
@@ -2284,12 +2285,14 @@ export async function performDoRemote(
 	//     throwaway worktree the gate runs in will have no installed deps, so the
 	//     gate cannot run. Probe the bare mirror's main tree (`git ls-tree main`)
 	//     so the guard fires BEFORE the throwaway claim clone is even cut. A repo
-	//     with NO lockfile is the intentional dep-free case and proceeds. Deps-only
-	//     (verify-unset is impossible — `resolveVerifyCommands` defaults the gate).
+	//     with NO lockfile is the intentional dep-free case and proceeds. The guard
+	//     ALSO fails fast when `verify` is unset/all-blank (a MODE-INDEPENDENT stop —
+	//     Dorfl has no default gate, so an unconfigured `verify` never passes).
 	{
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: options.freshWorktreeGate,
 			prepare: options.prepare,
+			verify: options.verify,
 			lockfile: detectLockfileOnMirrorMain(mirror.path, env),
 		});
 		if (guard !== undefined) {

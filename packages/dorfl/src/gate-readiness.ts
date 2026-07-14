@@ -2,6 +2,11 @@ import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {run} from './git.js';
 import {resolvePrepareCommands, type PrepareConfig} from './prepare.js';
+import {
+	resolveVerifyCommands,
+	VerifyNotConfiguredError,
+	type VerifyConfig,
+} from './verify.js';
 
 /**
  * Pre-claim / pre-build startup GUARD for the fresh-worktree acceptance gate
@@ -21,12 +26,15 @@ import {resolvePrepareCommands, type PrepareConfig} from './prepare.js';
  * the guard KEYS off LOCKFILE-PRESENT evidence — never off `prepare`-unset
  * alone — and a genuinely dep-free repo (no lockfile) PROCEEDS unchanged.
  *
- * There is NO "verify unset" case: {@link resolveVerifyCommands} substitutes
- * `DEFAULT_VERIFY_COMMAND` when `verify` is unset OR all-blank, so `verify` is
- * NEVER statically unrunnable-because-unset. A "verify unset → STOP" guard
- * would be dead code (or fire wrongly on the default). The guard is deps-only.
+ * VERIFY-UNSET is ALSO a static stop, and — unlike the deps case — it is
+ * MODE-INDEPENDENT: Dorfl has no default gate, so a repo with no `verify`
+ * declared can never pass an acceptance gate in ANY mode (fresh-worktree or
+ * in-place). {@link resolveVerifyCommands} throws {@link VerifyNotConfiguredError}
+ * when `verify` is unset / empty / all-blank; the guard detects that at second
+ * zero and STOPS before a wasted claim + build. This check runs regardless of
+ * `freshWorktreeGate`.
  *
- * The guard is also gated on `freshWorktreeGate === true` for THIS invocation:
+ * The DEPS guard below is also gated on `freshWorktreeGate === true` for THIS invocation:
  * when the gate is OFF (`--no-fresh-worktree-gate`) the acceptance gate runs in
  * the agent's BUILD worktree (which HAS deps), so the throwaway-worktree
  * reasoning does not apply.
@@ -93,6 +101,12 @@ export interface GatePreconditionInput {
 	/** The resolved `prepare` config (unset / string / list). */
 	prepare?: PrepareConfig;
 	/**
+	 * The resolved `verify` config (unset / string / list). When this is unset
+	 * (or all-blank) there is NO gate to run — a MODE-INDEPENDENT static stop,
+	 * checked before the deps guard.
+	 */
+	verify?: VerifyConfig;
+	/**
 	 * The lockfile basename probed for this repo (one of
 	 * {@link LOCKFILE_BASENAMES}), or `undefined` for the intentional dep-free
 	 * case. The caller picks the probe ({@link detectLockfileOnDisk} for the
@@ -103,9 +117,13 @@ export interface GatePreconditionInput {
 }
 
 export interface GatePreconditionFailure {
-	/** The lockfile basename (from {@link LOCKFILE_BASENAMES}) that tripped the guard. */
-	lockfile: string;
-	/** A precise, actionable error message naming the lockfile and the two ways out. */
+	/**
+	 * The lockfile basename (from {@link LOCKFILE_BASENAMES}) that tripped the
+	 * DEPS guard, or `undefined` for the verify-unset failure (which is not tied
+	 * to any lockfile).
+	 */
+	lockfile?: string;
+	/** A precise, actionable error message naming the cause and the way(s) out. */
 	message: string;
 }
 
@@ -119,6 +137,17 @@ export interface GatePreconditionFailure {
 export function checkGatePreconditions(
 	input: GatePreconditionInput,
 ): GatePreconditionFailure | undefined {
+	// VERIFY-UNSET — MODE-INDEPENDENT (checked FIRST, before the fresh-worktree
+	// short-circuit): Dorfl has no default gate, so an unconfigured `verify` can
+	// never pass in ANY mode. `resolveVerifyCommands` throws when unset/all-blank.
+	try {
+		resolveVerifyCommands(input.verify);
+	} catch (err) {
+		if (err instanceof VerifyNotConfiguredError) {
+			return {message: err.message};
+		}
+		throw err;
+	}
 	// Gate OFF for THIS invocation ⇒ no throwaway worktree ⇒ the deps reasoning
 	// does not apply. (The default is ON; the guard fires when ON.)
 	if (input.freshWorktreeGate !== true) {

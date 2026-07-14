@@ -630,8 +630,9 @@ async function runOneItem(
 	//     same `config-error` axis the PR-intent guard above uses (a wiring/config
 	//     fault, not a task fault). The repo discovery is either a working checkout
 	//     (in-place tests) OR a BARE hub mirror (production fleet); detect the
-	//     lockfile from whichever shape `repoPath` is. Deps-only — there is no
-	//     verify-unset case (the gate substitutes `DEFAULT_VERIFY_COMMAND`).
+	//     lockfile from whichever shape `repoPath` is. ALSO fails fast when
+	//     `verify` is unset/all-blank (a MODE-INDEPENDENT stop — Dorfl has no
+	//     default gate, so an unconfigured `verify` can never pass in any mode).
 	{
 		const lockfile =
 			detectLockfileOnDisk(repoPath) ??
@@ -639,6 +640,7 @@ async function runOneItem(
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: config.freshWorktreeGate,
 			prepare: config.prepare,
+			verify: config.verify,
 			lockfile,
 		});
 		if (guard !== undefined) {

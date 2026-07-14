@@ -12,43 +12,77 @@ import {spawn} from 'node:child_process';
  *
  * It is read-only with respect to `work/`: it runs the declared check and never
  * moves or commits anything.
+ *
+ * There is NO default gate. A repo MUST declare its own `verify`; an unset gate
+ * is a loud failure (`notConfigured`), never a silent `pnpm -r …` fallback that
+ * could run the wrong check or pass vacuously.
  */
 
 /**
  * The per-repo gate, as declared in config. A single shell command, or an
  * ordered list of commands run in sequence (each must pass for the gate to
- * pass). `undefined` (unset) ⇒ {@link DEFAULT_VERIFY_COMMAND} is used.
+ * pass). `undefined` (unset) is NOT valid: there is NO default gate — a repo
+ * MUST declare its own `verify` (see {@link VerifyNotConfiguredError}).
  */
 export type VerifyConfig = string | string[];
 
 /**
- * The sensible default when no `verify` is configured: build, then test, then
- * check formatting across the workspace. Deterministic, auditable, no model.
+ * The precise, actionable message emitted whenever a `verify` gate is required
+ * but the repo declares none (unset, empty string, or an all-blank list). There
+ * is deliberately NO default gate: a silent `pnpm -r build && …` fallback runs
+ * the WRONG check in a repo whose real gate is something else (and passes
+ * vacuously in a repo pnpm knows nothing about — e.g. `pnpm -r` printing
+ * "No projects found" and exiting 0, a FALSE green). Failing loud here forces
+ * the repo to declare the gate it actually means.
  */
-export const DEFAULT_VERIFY_COMMAND =
-	'pnpm -r build && pnpm -r test && pnpm -r format:check';
+export const VERIFY_NOT_CONFIGURED_MESSAGE =
+	'no `verify` gate is configured for this repo. Dorfl has no default ' +
+	'acceptance gate: declare the exact command(s) in `dorfl.json` ' +
+	'(e.g. "verify": "pnpm -r build && pnpm -r test && pnpm format:check"), ' +
+	'as a single string or an ordered list of commands.';
+
+/**
+ * Thrown by {@link resolveVerifyCommands} when a gate is required but none is
+ * declared. A typed error (not a bare `Error`) so callers that must translate
+ * an unconfigured gate into a routed gate-FAILURE (rather than an uncaught
+ * crash) can detect it precisely — see {@link runVerify}, which catches it and
+ * returns a failing {@link RunVerifyResult} with `notConfigured: true`.
+ */
+export class VerifyNotConfiguredError extends Error {
+	constructor(message: string = VERIFY_NOT_CONFIGURED_MESSAGE) {
+		super(message);
+		this.name = 'VerifyNotConfiguredError';
+	}
+}
 
 /**
  * Resolve the declared gate into an ordered, non-empty list of shell commands.
- * Unset ⇒ the default. A string ⇒ a single command. A list ⇒ the list, with
- * blank/whitespace-only entries dropped (and the default substituted if that
- * leaves nothing). Each command is run in sequence; all must pass.
+ * A string ⇒ a single command. A list ⇒ the list, with blank/whitespace-only
+ * entries dropped. Each command is run in sequence; all must pass.
+ *
+ * There is NO default: unset, an empty string, or a list that is empty/all-blank
+ * THROWS {@link VerifyNotConfiguredError}. Dorfl never invents an acceptance
+ * gate — a repo must declare the exact check it means, so the gate can never
+ * silently run the wrong command (or pass vacuously).
  */
 export function resolveVerifyCommands(
 	verify: VerifyConfig | undefined,
 ): string[] {
 	if (verify === undefined) {
-		return [DEFAULT_VERIFY_COMMAND];
+		throw new VerifyNotConfiguredError();
 	}
 	const list = Array.isArray(verify) ? verify : [verify];
 	const commands = list.filter((command) => command.trim() !== '');
-	return commands.length > 0 ? commands : [DEFAULT_VERIFY_COMMAND];
+	if (commands.length === 0) {
+		throw new VerifyNotConfiguredError();
+	}
+	return commands;
 }
 
 export interface RunVerifyOptions {
 	/** The repo to run the gate in (its working directory). */
 	cwd: string;
-	/** The declared gate (string | list). Unset ⇒ the default command. */
+	/** The declared gate (string | list). Unset/blank ⇒ a failing, not-configured result. */
 	verify?: VerifyConfig;
 	/** Environment for the gate's child processes. */
 	env?: NodeJS.ProcessEnv;
@@ -61,10 +95,17 @@ export interface RunVerifyOptions {
 export interface RunVerifyResult {
 	/** The exit code of the gate: 0 iff every command passed. */
 	exitCode: number;
-	/** The ordered commands that were run (resolved from config). */
+	/** The ordered commands that were run (resolved from config). Empty when not configured. */
 	commands: string[];
 	/** Whether the gate passed (exitCode === 0). */
 	passed: boolean;
+	/**
+	 * True iff the gate could not run because NO `verify` is declared (unset /
+	 * empty / all-blank). A distinct, always-failing outcome (`passed: false`)
+	 * so runner callers route it as a normal gate FAILURE with a clear reason
+	 * rather than crashing on the thrown {@link VerifyNotConfiguredError}.
+	 */
+	notConfigured?: boolean;
 }
 
 /**
@@ -73,11 +114,28 @@ export interface RunVerifyResult {
  * the first non-zero exit short-circuits the rest and becomes the result
  * (mirroring `&&` semantics). Each command is run through `bash -c` so that
  * shell operators in the declared gate (`&&`, pipes, etc.) behave as written.
+ *
+ * A repo with NO `verify` declared yields a failing result with
+ * `notConfigured: true` (never throws): the shared runner call sites
+ * (`do`/`run`/`complete` → `performIntegration`) already route a non-passing
+ * gate to needs-attention, so an unconfigured gate surfaces the same way with a
+ * precise reason instead of an uncaught crash.
  */
 export async function runVerify(
 	options: RunVerifyOptions,
 ): Promise<RunVerifyResult> {
-	const commands = resolveVerifyCommands(options.verify);
+	let commands: string[];
+	try {
+		commands = resolveVerifyCommands(options.verify);
+	} catch (err) {
+		if (err instanceof VerifyNotConfiguredError) {
+			const onStderr =
+				options.onStderr ?? ((chunk: string) => process.stderr.write(chunk));
+			onStderr(`${err.message}\n`);
+			return {exitCode: 1, commands: [], passed: false, notConfigured: true};
+		}
+		throw err;
+	}
 	const onStdout =
 		options.onStdout ?? ((chunk: string) => process.stdout.write(chunk));
 	const onStderr =

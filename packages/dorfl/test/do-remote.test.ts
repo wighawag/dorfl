@@ -309,6 +309,9 @@ describe('do --remote — slug resolution parity with do-in-place', () => {
 			workspacesDir: ws,
 			// autoTask deliberately OMITTED (defaults off) — explicit naming authorizes.
 			integration: 'merge',
+			// Dorfl has no default gate; a trivial green `verify` keeps the pre-claim
+			// gate-readiness guard from refusing for an unset gate.
+			verify: PASS,
 			dorfl: ({cwd}) => {
 				agentRan = true;
 				const dir = join(cwd, 'work', 'tasks', 'ready');

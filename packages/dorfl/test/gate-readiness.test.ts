@@ -25,11 +25,13 @@ import {
  * evaluate any work. A pre-claim startup guard converts that wasted build into
  * an instant, actionable error.
  *
- * The guard is DEPS-only: there is NO "verify unset" case — `resolveVerifyCommands`
- * substitutes `DEFAULT_VERIFY_COMMAND` when `verify` is unset or all-blank, so
- * verify is NEVER statically unrunnable-because-unset. Adding a "verify unset"
- * guard would be dead code (it could never fire on a real config); these tests
- * pin the deps-only shape.
+ * The guard has TWO axes: (1) the DEPS axis (fresh gate ON + no `prepare` +
+ * lockfile present ⇒ the throwaway worktree cannot install), and (2) the
+ * VERIFY-UNSET axis — Dorfl has NO default gate, so a repo with no `verify`
+ * declared can never pass an acceptance gate in ANY mode; that is a
+ * MODE-INDEPENDENT static stop checked before the deps axis. These tests pin
+ * both shapes. (The deps-axis tests below therefore always pass a valid
+ * `verify` so they isolate the deps behaviour.)
  *
  * House style: a throwaway checkout + a local `--bare` arbiter + a STUBBED
  * agent that records whether it was reached (the guard must STOP before any
@@ -76,11 +78,16 @@ function onWorkBranchWithBody(repo: string, slug: string): void {
 	gitIn(['commit', '-q', '-m', 'agent work'], repo);
 }
 
-describe('unit — checkGatePreconditions (deps-only, never verify-presence)', () => {
+// A valid gate the deps-axis tests use so an unset `verify` never trips the
+// (higher-priority) verify-unset stop and masks the deps behaviour.
+const VALID_VERIFY = 'pnpm -r build && pnpm -r test';
+
+describe('unit — checkGatePreconditions (deps axis)', () => {
 	it('fires when fresh gate ON + prepare unset + lockfile present', () => {
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: undefined,
+			verify: VALID_VERIFY,
 			lockfile: 'pnpm-lock.yaml',
 		});
 		expect(guard).toBeDefined();
@@ -98,6 +105,7 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: ['   ', '\t', ''],
+			verify: VALID_VERIFY,
 			lockfile: 'pnpm-lock.yaml',
 		});
 		expect(guard).toBeDefined();
@@ -110,6 +118,7 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: undefined,
+			verify: VALID_VERIFY,
 			lockfile: undefined,
 		});
 		expect(guard).toBeUndefined();
@@ -119,6 +128,7 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: 'pnpm install --frozen-lockfile',
+			verify: VALID_VERIFY,
 			lockfile: 'pnpm-lock.yaml',
 		});
 		expect(guard).toBeUndefined();
@@ -128,31 +138,74 @@ describe('unit — checkGatePreconditions (deps-only, never verify-presence)', (
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: false,
 			prepare: undefined,
+			verify: VALID_VERIFY,
 			lockfile: 'pnpm-lock.yaml',
 		});
 		expect(guard).toBeUndefined();
 	});
 
-	it('does NOT fire when fresh gate is undefined (treated like OFF for the guard — matches integration-core)', () => {
+	it('does NOT fire when fresh gate is undefined (treated like OFF for the deps axis — matches integration-core)', () => {
 		// `integration-core.ts` reads `input.freshWorktreeGate === true` to gate the
 		// throwaway worktree; the guard mirrors that.
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: undefined,
 			prepare: undefined,
+			verify: VALID_VERIFY,
 			lockfile: 'pnpm-lock.yaml',
 		});
 		expect(guard).toBeUndefined();
 	});
+});
 
-	it('there is NO verify-presence case — the helper takes no `verify` arg (deps-only)', () => {
-		// COMPILE-TIME witness: `GatePreconditionInput` has `freshWorktreeGate`,
-		// `prepare`, `lockfile` — and nothing about `verify`. The runtime call below
-		// passes ONLY those three keys; if a verify-presence branch ever existed it
-		// would force a fourth arg here. Documents the deps-only shape per the task.
+describe('unit — checkGatePreconditions (verify-unset axis, MODE-INDEPENDENT)', () => {
+	it('fires when verify is unset, regardless of the fresh-worktree gate', () => {
+		for (const freshWorktreeGate of [true, false, undefined]) {
+			const guard = checkGatePreconditions({
+				freshWorktreeGate,
+				prepare: 'pnpm install',
+				verify: undefined,
+				lockfile: undefined,
+			});
+			expect(
+				guard,
+				`freshWorktreeGate=${String(freshWorktreeGate)}`,
+			).toBeDefined();
+			expect(guard!.message).toMatch(/no `verify` gate is configured/);
+			// Not a lockfile failure — the verify-unset failure names no lockfile.
+			expect(guard!.lockfile).toBeUndefined();
+		}
+	});
+
+	it('fires when verify is an all-blank list (no vacuous default)', () => {
 		const guard = checkGatePreconditions({
 			freshWorktreeGate: true,
 			prepare: 'pnpm install',
+			verify: ['', '   '],
 			lockfile: 'pnpm-lock.yaml',
+		});
+		expect(guard).toBeDefined();
+		expect(guard!.message).toMatch(/no `verify` gate is configured/);
+	});
+
+	it('takes PRIORITY over the deps axis (verify-unset is reported first)', () => {
+		// Both axes would fire (fresh gate ON + no prepare + lockfile AND verify
+		// unset); the verify-unset stop is checked first, so its message wins.
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: true,
+			prepare: undefined,
+			verify: undefined,
+			lockfile: 'pnpm-lock.yaml',
+		});
+		expect(guard).toBeDefined();
+		expect(guard!.message).toMatch(/no `verify` gate is configured/);
+	});
+
+	it('does NOT fire when a valid verify is declared', () => {
+		const guard = checkGatePreconditions({
+			freshWorktreeGate: false,
+			prepare: 'pnpm install',
+			verify: VALID_VERIFY,
+			lockfile: undefined,
 		});
 		expect(guard).toBeUndefined();
 	});
@@ -200,8 +253,8 @@ describe('end-to-end — in-place `do` STOPS before claim when the gate is stati
 			// Fresh-worktree gate ON; NO `prepare` configured. With a lockfile present,
 			// this is the statically-unrunnable case the guard must catch.
 			freshWorktreeGate: true,
-			// `verify` is irrelevant to the guard (deps-only); supply a passing one so
-			// we are unambiguously testing the prepare-guard, not a verify failure.
+			// Supply a valid `verify` so we are unambiguously testing the deps/prepare
+			// axis, not the (higher-priority) verify-unset stop.
 			verify: 'exit 0',
 			dorfl: () => {
 				agentRan = true;

@@ -276,6 +276,9 @@ describe('autonomous integrate path — source-strand refusal SURFACES, never st
 			cwd: repo,
 			arbiter: ARBITER,
 			integration: 'merge',
+			// Trivial green gate (scratch repo declares no `verify`; there is no
+			// default gate) so the front gate passes and reaches the mocked core.
+			verify: 'true',
 			surfaceArbiter: ARBITER,
 			ignoreDivergedMain: true,
 			env: gitEnv(),

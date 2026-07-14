@@ -13,14 +13,17 @@ import {join} from 'node:path';
 import {
 	runVerify,
 	resolveVerifyCommands,
-	DEFAULT_VERIFY_COMMAND,
+	VerifyNotConfiguredError,
+	VERIFY_NOT_CONFIGURED_MESSAGE,
 } from '../src/verify.js';
 
 describe('resolveVerifyCommands', () => {
-	it('uses the sensible pnpm -r default when unset', () => {
-		expect(resolveVerifyCommands(undefined)).toEqual([DEFAULT_VERIFY_COMMAND]);
-		expect(DEFAULT_VERIFY_COMMAND).toBe(
-			'pnpm -r build && pnpm -r test && pnpm -r format:check',
+	it('THROWS VerifyNotConfiguredError when unset (there is NO default gate)', () => {
+		expect(() => resolveVerifyCommands(undefined)).toThrow(
+			VerifyNotConfiguredError,
+		);
+		expect(() => resolveVerifyCommands(undefined)).toThrow(
+			VERIFY_NOT_CONFIGURED_MESSAGE,
 		);
 	});
 
@@ -32,11 +35,12 @@ describe('resolveVerifyCommands', () => {
 		expect(resolveVerifyCommands(['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
 	});
 
-	it('drops blank entries and falls back to the default if nothing remains', () => {
-		expect(resolveVerifyCommands(['', '   '])).toEqual([
-			DEFAULT_VERIFY_COMMAND,
-		]);
-		expect(resolveVerifyCommands('')).toEqual([DEFAULT_VERIFY_COMMAND]);
+	it('THROWS when the config is empty / all-blank (no silent default fallback)', () => {
+		expect(() => resolveVerifyCommands(['', '   '])).toThrow(
+			VerifyNotConfiguredError,
+		);
+		expect(() => resolveVerifyCommands('')).toThrow(VerifyNotConfiguredError);
+		expect(() => resolveVerifyCommands([])).toThrow(VerifyNotConfiguredError);
 	});
 });
 
@@ -84,22 +88,33 @@ describe('runVerify — gate status propagation', () => {
 		expect(readFileSync(marker, 'utf8').trim()).toBe('configured');
 	});
 
-	it('runs the default gate when verify is unset (and reports the default command)', async () => {
-		// Stub `pnpm` on PATH so the default `pnpm -r ...` gate runs without a
-		// real workspace; the point is that "unset" resolves to the default.
-		const binDir = join(dir, 'bin');
-		mkdirSync(binDir);
-		const pnpm = join(binDir, 'pnpm');
-		writeFileSync(pnpm, '#!/usr/bin/env bash\nexit 0\n', {mode: 0o755});
+	it('returns a FAILING notConfigured result when verify is unset (never runs a default, never throws)', async () => {
+		let err = '';
 		const result = await runVerify({
 			cwd: dir,
 			verify: undefined,
-			env: {...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}`},
+			onStdout: () => {},
+			onStderr: (chunk) => {
+				err += chunk;
+			},
+		});
+		expect(result.passed).toBe(false);
+		expect(result.exitCode).toBe(1);
+		expect(result.notConfigured).toBe(true);
+		expect(result.commands).toEqual([]);
+		// The precise, actionable reason is streamed to stderr for the human.
+		expect(err).toContain('no `verify` gate is configured');
+	});
+
+	it('returns notConfigured for an all-blank list too (no vacuous green)', async () => {
+		const result = await runVerify({
+			cwd: dir,
+			verify: ['', '   '],
 			onStdout: () => {},
 			onStderr: () => {},
 		});
-		expect(result.commands).toEqual([DEFAULT_VERIFY_COMMAND]);
-		expect(result.exitCode).toBe(0);
+		expect(result.passed).toBe(false);
+		expect(result.notConfigured).toBe(true);
 	});
 
 	it('runs an ordered list in sequence and short-circuits on the first failure', async () => {

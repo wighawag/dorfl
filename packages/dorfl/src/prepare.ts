@@ -16,10 +16,12 @@ import type {VerifyConfig} from './verify.js';
  * cheaply-re-runnable acceptance check and make every gate run pay the install
  * cost). `prepare` is where install belongs; `verify` stays the gate.
  *
- * Unlike `verify`, `prepare` has NO default command: an unset `prepare` is a
- * genuine NO-OP (a repo with no deps needs no install — we never invent a
- * default that would run `pnpm install` in a repo that has no lockfile). This is
- * the one shape difference from `verify` (whose unset ⇒ a sensible default gate).
+ * Like `verify`, `prepare` has NO default command — but the two differ in what
+ * "unset" MEANS. An unset `prepare` is a genuine NO-OP (a repo with no deps
+ * needs no install — we never invent a default that would run `pnpm install` in
+ * a repo that has no lockfile). An unset `verify`, by contrast, is a hard error
+ * (a repo MUST declare its acceptance gate; there is no gate to invent). So both
+ * are default-free, but unset-prepare passes vacuously while unset-verify FAILS.
  *
  * Like `verify` it is a DECLARED, deterministic shell step (a single command or
  * an ordered list, all must pass) — no model in the loop. It is read-only with
@@ -40,6 +42,9 @@ export type PrepareConfig = VerifyConfig;
  * difference from {@link resolveVerifyCommands}). A string ⇒ a single command. A
  * list ⇒ the list, with blank/whitespace-only entries dropped (which can leave
  * an empty list ⇒ still a no-op). Each command is run in sequence; all must pass.
+ *
+ * Contrast {@link resolveVerifyCommands}, which THROWS on the unset/all-blank
+ * case (there is no default gate) rather than resolving to a no-op.
  */
 export function resolvePrepareCommands(
 	prepare: PrepareConfig | undefined,
