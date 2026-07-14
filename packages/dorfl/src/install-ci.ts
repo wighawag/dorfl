@@ -300,11 +300,11 @@ export async function installCI(
 	log("CI autonomy is OFF by default (the engine's strict default).");
 	log(
 		'The emitted advance workflow sets NO DORFL_* gate env, so your\n' +
-			'  committed .dorfl.json wins (precedence: flag > env > per-repo > global > default).',
+			'  committed dorfl.json wins (precedence: flag > env > per-repo > global > default).',
 	);
 	log('To enable CI autonomy, EITHER:');
 	log(
-		'  - set the gate(s) in `.dorfl.json` (applies everywhere), e.g.\n' +
+		'  - set the gate(s) in `dorfl.json` (applies everywhere), e.g.\n' +
 			'      { "autoBuild": true, "autoTask": true }',
 	);
 	log(

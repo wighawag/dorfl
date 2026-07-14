@@ -27,7 +27,7 @@ import {encodeRepoKey} from '../src/repo-key.js';
  * The per-machine config override layer (ADR
  * `per-machine-config-override-layer`): a single file at
  * `<configDir>/config.override.json` (sibling of `config.json`) that overrides
- * the committed per-repo `.dorfl.json` but is itself overridden by env
+ * the committed per-repo `dorfl.json` but is itself overridden by env
  * and flags. The reader takes an INJECTABLE path so tests never touch the real
  * `~/.config/dorfl/`; the resolution layers ingest a map directly so
  * tests can also bypass disk entirely.
@@ -342,7 +342,7 @@ describe('resolveRepoConfig \u2014 working-tree path resolves the arbiter URL it
 		expect(resolved.config.integration).toBe('merge');
 	});
 
-	it('honours a per-repo `.dorfl.json` BENEATH the override (precedence)', () => {
+	it('honours a per-repo `dorfl.json` BENEATH the override (precedence)', () => {
 		writeFileSync(
 			join(repo, REPO_CONFIG_FILENAME),
 			JSON.stringify({integration: 'propose', autoBuild: true}),

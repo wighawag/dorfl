@@ -2,7 +2,7 @@
  * Task `prompt-guidance-testfirst-setup-adoption-question`: setup's adoption
  * conversation gains ONE nudge question, FOLDED into the existing A-phase round
  * (not a new round), that on YES merges `promptGuidance.testFirst: true` into
- * the target repo's `.dorfl.json` per A1's merge-don't-clobber rule, and
+ * the target repo's `dorfl.json` per A1's merge-don't-clobber rule, and
  * on NO / skip / don't-know writes NOTHING (omission = the runtime default
  * `false`). AGENTS.md MUST NOT be written by this nudge.
  *
@@ -32,7 +32,7 @@ describe('setup SKILL.md — the test-first nudge question (A-phase, folded in)'
 		const text = skillText();
 		// The key surfaces in three places by design: the nudge bullet itself,
 		// the A4 plan bullet that re-summarises it for confirmation, and the
-		// `.dorfl.json` template. That's intentional — the test just guards
+		// `dorfl.json` template. That's intentional — the test just guards
 		// the key NAME is consistent with the rest of the codebase.
 		expect(text).toContain('promptGuidance.testFirst');
 		expect(text).toContain('"promptGuidance"');
@@ -100,7 +100,7 @@ describe('setup SKILL.md — the test-first nudge question (A-phase, folded in)'
 		);
 	});
 
-	it('the `.dorfl.json` template documents `promptGuidance` with the omit-if-no rule', () => {
+	it('the `dorfl.json` template documents `promptGuidance` with the omit-if-no rule', () => {
 		const text = skillText();
 		// Both the example block and the surrounding gloss should call out
 		// `promptGuidance` and that the WHOLE object is OMITTED on a negative
@@ -120,7 +120,7 @@ describe('setup SKILL.md — the test-first nudge question (A-phase, folded in)'
 describe('integration handoff: a config produced by setup\u2019s YES path strengthens the worker prompt', () => {
 	it('YES path \u2014 `{ "promptGuidance": { "testFirst": true } }` resolves on and the wrapper carries the strengthened test-first text', () => {
 		const root = mkdtempSync(join(tmpdir(), 'dorfl-setup-pg-yes-'));
-		const cfgPath = join(root, '.dorfl.json');
+		const cfgPath = join(root, 'dorfl.json');
 		writeFileSync(
 			cfgPath,
 			JSON.stringify({
@@ -140,9 +140,9 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 		expect(w).not.toContain('TDD where the task asks for it');
 	});
 
-	it('NO path (omitted, the doctrine) \u2014 a `.dorfl.json` without `promptGuidance` resolves to OFF, wrapper carries the soft historic line', () => {
+	it('NO path (omitted, the doctrine) \u2014 a `dorfl.json` without `promptGuidance` resolves to OFF, wrapper carries the soft historic line', () => {
 		const root = mkdtempSync(join(tmpdir(), 'dorfl-setup-pg-no-'));
-		const cfgPath = join(root, '.dorfl.json');
+		const cfgPath = join(root, 'dorfl.json');
 		writeFileSync(
 			cfgPath,
 			JSON.stringify({
@@ -176,7 +176,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 			// declared (forward-compat) \u2014 setup must NOT wipe it.
 			promptGuidance: {someFutureNudge: true},
 		};
-		const path = join(root, '.dorfl.json');
+		const path = join(root, 'dorfl.json');
 		writeFileSync(path, JSON.stringify(pre, null, 2));
 
 		// The merge: read, set the ONE key, write back. (This is the operation
@@ -215,7 +215,7 @@ describe('integration handoff: a config produced by setup\u2019s YES path streng
 		expect(resolvePromptGuidance(loadConfig(path)).testFirst).toBe(true);
 	});
 
-	it('isolation: this suite did NOT write to the real `~/.dorfl.json` (HOME hygiene)', () => {
+	it('isolation: this suite did NOT write to the real `~/dorfl.json` (HOME hygiene)', () => {
 		// We never touch HOME. This is a positive proof rather than a negative:
 		// our temp-dir mkdtemp roots all writes under `tmpdir()`, and no test in
 		// this file resolves a path against `os.homedir()`. (The global

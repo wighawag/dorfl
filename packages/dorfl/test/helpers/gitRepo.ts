@@ -268,7 +268,7 @@ export function seedRepoWithArbiter(
 		/** Spec slugs to seed under `work/prds/ready/<slug>.md` (for the tasking lock). */
 		specs?: string[];
 		/**
-		 * Commit a `.dorfl.json` at the repo root (so it travels onto
+		 * Commit a `dorfl.json` at the repo root (so it travels onto
 		 * `<arbiter>/main`) — the per-repo config the no-checkout `do --remote` reads
 		 * from the arbiter. The object is JSON-stringified verbatim, so a test can
 		 * seed BOTH allowed keys (`harness`/`verify`/…) and rejected host-only keys
@@ -302,7 +302,7 @@ export function seedRepoWithArbiter(
 	}
 	if (opts.repoConfig) {
 		writeFileSync(
-			join(repo, '.dorfl.json'),
+			join(repo, 'dorfl.json'),
 			JSON.stringify(opts.repoConfig, null, 2) + '\n',
 		);
 	}
@@ -633,7 +633,7 @@ export function registerMirrorWithWork(
 		observations?: Record<string, string>;
 		/** Sidecars committed under `work/questions/` (`<type>-<slug>.md`). */
 		questions?: Record<string, string>;
-		/** A `.dorfl.json` committed at the repo root (travels onto the mirror's `main`). */
+		/** A `dorfl.json` committed at the repo root (travels onto the mirror's `main`). */
 		repoConfig?: Record<string, unknown>;
 	},
 ): RegisteredMirrorFixture {
@@ -666,7 +666,7 @@ export function registerMirrorWithWork(
 	writeAll('questions', work.questions);
 	if (work.repoConfig) {
 		writeFileSync(
-			join(src, '.dorfl.json'),
+			join(src, 'dorfl.json'),
 			JSON.stringify(work.repoConfig, null, 2) + '\n',
 		);
 	}

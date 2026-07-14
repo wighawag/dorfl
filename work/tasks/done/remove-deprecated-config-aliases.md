@@ -23,7 +23,7 @@ This is a DESIGN STANCE for the repo, not just this alias: while there are no ex
 
 ## Acceptance criteria
 
-- [ ] `allowAgents` is fully removed: no `CONFIG_KEY_ALIASES` entry, no `--allow-agents`/`--no-allow-agents` flags, no `DORFL_ALLOW_AGENTS` env handling. Only `autoBuild` (`--auto-build`, `DORFL_AUTO_BUILD`, the `.dorfl.json` key) remains.
+- [ ] `allowAgents` is fully removed: no `CONFIG_KEY_ALIASES` entry, no `--allow-agents`/`--no-allow-agents` flags, no `DORFL_ALLOW_AGENTS` env handling. Only `autoBuild` (`--auto-build`, `DORFL_AUTO_BUILD`, the `dorfl.json` key) remains.
 - [ ] Any machinery that becomes DEAD once the last alias is gone (`applyConfigKeyAliases`, `aliasDeprecationMessage`, `coercionForAlias`, `legacyEnvVarName`, and the `CONFIG_KEY_ALIASES`-iterating loops) is removed, NOT left as unused code. If the whole `config-alias.ts` module becomes empty, delete it and its imports. (Cleanup-vs-behaviour: confirm nothing else still depends on these before deleting.)
 - [ ] Tests that asserted the deprecated-alias behaviour are removed (not skipped); no test still references `allowAgents`/`DORFL_ALLOW_AGENTS`/`--allow-agents`.
 - [ ] A config file or env using `allowAgents` now does whatever an UNKNOWN key does (it is no longer specially handled), confirm that is the existing unknown-key behaviour (ignored or rejected per the repo's contract), not a crash.

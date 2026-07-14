@@ -10,7 +10,7 @@ import {resolveRepoConfig, REPO_CONFIG_FILENAME} from '../src/repo-config.js';
 /**
  * The integration mode `complete` resolves AT COMPLETION TIME, highest first:
  *
- *   --merge/--propose flag > per-repo .dorfl.json > global > default
+ *   --merge/--propose flag > per-repo dorfl.json > global > default
  *
  * The flag layer is mapped by {@link integrationFromFlags} (mutually exclusive);
  * the rest is the shared {@link resolveRepoConfig} chain the autonomous runner

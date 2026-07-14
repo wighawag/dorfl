@@ -41,9 +41,9 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
      to `main`).
 
    The `--propose`/`--merge` flag sits at the TOP of `advance`'s precedence chain
-   (flag > per-repo `.dorfl.json` `integration` > global > default), so the
+   (flag > per-repo `dorfl.json` `integration` > global > default), so the
    workflow mode always wins over a repo's config default. (You may still pin
-   `integration` in `.dorfl.json` as the default for un-dispatched runs, but
+   `integration` in `dorfl.json` as the default for un-dispatched runs, but
    the workflow leg always passes the explicit flag matching its shape.)
 
 ## The two CI shapes (US #27)
@@ -54,7 +54,7 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 | `merge`           | a MATRIX of independent jobs (parallel build/gate/review; LAND serialised by the engine) | `advance <item> --merge` | merge-mode items land on `main` via rebase (ADR §10). Build/gate/review fan out per item; the cross-job land tail is serialised by the engine's `mergeRetries` CAS-retry loop — the git-alone floor — NOT by this workflow's job shape (per SPEC `land-time-reverify-and-parallel-merge-ceiling`). |
 
 **One word, one meaning.** The dispatch input is `integrationMode` — the SAME
-vocabulary as `.dorfl.json`'s `integration` and `advance --propose`/
+vocabulary as `dorfl.json`'s `integration` and `advance --propose`/
 `--merge`. It is NOT a separate "job-shape" knob: the shape is DERIVED from the
 mode, and the SAME value is passed to `advance` as `--propose`/`--merge`. So the
 shape the legs run in and the integration mode they actually use can never desync

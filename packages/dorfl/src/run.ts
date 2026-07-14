@@ -294,7 +294,7 @@ export interface RunOnceOptions {
 	/** Override agent-id generation (tests). Retained for API compat; unused for branch naming. */
 	agentId?: () => string;
 	/**
-	 * Sink for non-fatal warnings (e.g. a repo's `.dorfl.json` naming
+	 * Sink for non-fatal warnings (e.g. a repo's `dorfl.json` naming
 	 * runner/host-only keys that were ignored). Defaults to a no-op so the core
 	 * stays pure; the CLI wires this to stderr.
 	 */
@@ -537,7 +537,7 @@ async function runOneItem(
 	const {slug, repoPath} = candidate;
 	const base: ItemResult = {repoPath, slug, status: 'lost-race'};
 
-	// Resolve THIS repo's effective config against its own `.dorfl.json`
+	// Resolve THIS repo's effective config against its own `dorfl.json`
 	// layered over the global config (flag > per-repo > global > default). Each
 	// repo gets its own integration mode / arbiter, so repo A can be `merge`
 	// while repo B is `propose` in one tick.

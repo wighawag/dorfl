@@ -21,7 +21,7 @@ Config is a distinct file cluster from batch 2, so this is largely file-orthogon
 - [ ] `repo-config.ts` makes `specsLandIn` the canonical key (resolution + JSDoc); the `prdsLandIn` alias STILL resolves (expand added it; contract removes it); config-override tests updated in this task.
 - [ ] `intake.ts` emits/uses the `'spec'` artifact type + `spec`-worded outcome as primary; the `'spec'` type still valid (alias); `intake.test.ts` + trigger-template tests updated in this task.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green.
-- [ ] NO hard rejection of `prdsLandIn`/`'spec'` here (contract task); `.dorfl.json` schema/example primary spelling is `specsLandIn` (the migration command rewrites a downstream repo's actual key — not this task).
+- [ ] NO hard rejection of `prdsLandIn`/`'spec'` here (contract task); `dorfl.json` schema/example primary spelling is `specsLandIn` (the migration command rewrites a downstream repo's actual key — not this task).
 
 ## Blocked by
 
@@ -33,7 +33,7 @@ Config is a distinct file cluster from batch 2, so this is largely file-orthogon
 >
 > Domain vocabulary: `prdsLandIn` is the per-repo placement default (staging vs pool) for tasked specs; `intake` turns an issue into a `task` or a `spec` artifact (or refuses); the outcome enum names those.
 >
-> Where to look: `repo-config.ts`, `intake.ts` + `intake.test.ts`, `intake-trigger-template.ts` + its test, `config-override.test.ts`. Update docs/fixtures that name `prdsLandIn`. Do NOT rewrite a real downstream `.dorfl.json` — the migration command does that; here you change the code + the schema/docs.
+> Where to look: `repo-config.ts`, `intake.ts` + `intake.test.ts`, `intake-trigger-template.ts` + its test, `config-override.test.ts`. Update docs/fixtures that name `prdsLandIn`. Do NOT rewrite a real downstream `dorfl.json` — the migration command does that; here you change the code + the schema/docs.
 >
 > Done means: config + intake speak `spec`, coupled tests updated, full gate green.
 >

@@ -631,7 +631,7 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		// observationTriage: 'off', surfaceBlockers: false) and CI claims nothing.
 		// That posture would be surprising without a heads-up; `install-ci` calls
 		// the existing `log()` sink after writing artifacts to explain it AND name
-		// the two enable paths (config key in .dorfl.json OR the CI-only
+		// the two enable paths (config key in dorfl.json OR the CI-only
 		// DORFL_* env override).
 		const ctx = new MemoryCIProviderContext({
 			workDir: work,
@@ -655,7 +655,7 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 			/flag\s*>\s*env\s*>\s*per-repo\s*>\s*global\s*>\s*default/.test(joined),
 		).toBe(true);
 		// Names both enable paths: the per-repo config keys AND the CI-only env.
-		expect(/\.dorfl\.json/.test(joined)).toBe(true);
+		expect(/dorfl\.json/.test(joined)).toBe(true);
 		expect(/"autoBuild":\s*true/.test(joined)).toBe(true);
 		expect(/"autoTask":\s*true/.test(joined)).toBe(true);
 		expect(/DORFL_AUTO_BUILD:\s*'true'/.test(joined)).toBe(true);

@@ -104,19 +104,16 @@ function cfg(over: Partial<Config> = {}): Config {
 	return mergeConfig({autoBuild: true, autoTask: true, ...over});
 }
 
-describe('advance (auto-pick) — applies the per-machine override over the committed .dorfl.json', () => {
+describe('advance (auto-pick) — applies the per-machine override over the committed dorfl.json', () => {
 	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
 	// advance autopick path resolves its pool through `scanRepoPaths` and must
-	// apply the per-machine override on top of the committed `.dorfl.json`.
+	// apply the per-machine override on top of the committed `dorfl.json`.
 	// Committed `autoBuild: false` (task ineligible) vs override `"*":
 	// {autoBuild: true}` (eligible) ⇒ the task MUST advance. Before `override`
 	// was threaded into `performAdvanceAuto`, the committed `false` stood.
 	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (task advances)', async () => {
 		seedTask('alpha');
-		writeFileSync(
-			join(repo, '.dorfl.json'),
-			JSON.stringify({autoBuild: false}),
-		);
+		writeFileSync(join(repo, 'dorfl.json'), JSON.stringify({autoBuild: false}));
 		const override: ConfigOverrideMap = {'*': {autoBuild: true}};
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
@@ -133,10 +130,7 @@ describe('advance (auto-pick) — applies the per-machine override over the comm
 	// nothing advances.
 	it('control: WITHOUT the override the committed autoBuild:false stands (nothing advances)', async () => {
 		seedTask('alpha');
-		writeFileSync(
-			join(repo, '.dorfl.json'),
-			JSON.stringify({autoBuild: false}),
-		);
+		writeFileSync(join(repo, 'dorfl.json'), JSON.stringify({autoBuild: false}));
 		const {run, args} = recordingRunner();
 		const result = await performAdvanceAuto({
 			cwd: repo,

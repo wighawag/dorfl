@@ -116,7 +116,7 @@ export interface LifecyclePoolGates {
 	 *    `LifecyclePoolGates`. Placement acknowledged above; ratified as intentional
 	 *    so the gate colocates with its sibling create-side gates.
 	 * 4. **`surfaceStaging` in `REPO_ALLOWED_KEYS` is intentional** so a repo's
-	 *    `.dorfl.json` can flip it via the normal resolution chain.
+	 *    `dorfl.json` can flip it via the normal resolution chain.
 	 */
 	surfaceStaging?: boolean;
 }

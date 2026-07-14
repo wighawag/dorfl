@@ -17,7 +17,7 @@ It is authored for the ONE cutover that exists (`prd → spec`), not pre-general
 Run the purpose-named migration command; it owns everything deterministic and gated. Do NOT re-implement its layers in the skill — the skill CALLS the command and reads its report.
 
 1. **Preview first:** run `dorfl prd-to-spec --dry-run`. It reports exactly what each layer WOULD do, touching nothing. Read the report; proceed only if it looks right.
-2. **Apply:** run `dorfl prd-to-spec`. In ONE command it: checks quiescence (refuses loudly on a dirty tree / a held per-item lock / an in-progress work-branch, NAMING the offender); re-syncs the repo's `work/protocol/*` contract from the package-canonical source (never the target's old copy) and bumps `work/protocol/VERSION`; converts the DATA — the `work/**` folders (via `git mv`), the item frontmatter + inert path/token refs across ALL items INCLUDING terminal history (`work/tasks/done/`, `work/specs/tasked/`), the `.dorfl.json` config keys, and the inert git refs (lock refs + work-branches); and then runs its OWN forward+reverse leak scan over the converted tree as the command's acceptance gate.
+2. **Apply:** run `dorfl prd-to-spec`. In ONE command it: checks quiescence (refuses loudly on a dirty tree / a held per-item lock / an in-progress work-branch, NAMING the offender); re-syncs the repo's `work/protocol/*` contract from the package-canonical source (never the target's old copy) and bumps `work/protocol/VERSION`; converts the DATA — the `work/**` folders (via `git mv`), the item frontmatter + inert path/token refs across ALL items INCLUDING terminal history (`work/tasks/done/`, `work/specs/tasked/`), the `dorfl.json` config keys, and the inert git refs (lock refs + work-branches); and then runs its OWN forward+reverse leak scan over the converted tree as the command's acceptance gate.
 3. **Gate on green:** only proceed to Half 2 when the command reports a clean/green result (no quiescence refusal, no leaks). If it refused, resolve the named offender (commit/stash, release the lock, land/prune the branch) and re-run. The command is idempotent: a second run on an already-migrated repo is a no-op.
 
 ### Half 2 — judgement: sweep the prose the command SKIPS
@@ -46,7 +46,7 @@ The command is the FAST PATH, not a hard dependency (adopt/convert is a runner-a
 2. `resyncProtocol` — copy the canonical `work/protocol/*` contract and bump `VERSION`.
 3. `migrateFolders` — `git mv` the `work/**` lifecycle folders to the new spelling.
 4. `migrateItemContent` — rewrite the frontmatter field key + inert path/token refs across every item (including terminal history).
-5. `migrateConfig` — rename the `.dorfl.json` config keys, preserving their values.
+5. `migrateConfig` — rename the `dorfl.json` config keys, preserving their values.
 6. `migrateRefs` — rename the inert lock refs + work-branches.
 7. `scanForLeaks` — run the forward+reverse gate over the converted tree.
 

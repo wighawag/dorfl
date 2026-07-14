@@ -352,20 +352,20 @@ describe('STEP A — the agent cannot self-place into the pool (pool-placement f
  */
 // A trivial tasker the NULL harness shells (`bash -c <agentCmd>` in the worktree):
 // it writes ONE staged task under `work/tasks/backlog/`. `agentCmd` is a HOST-ONLY
-// key (a repo's `.dorfl.json` may NOT dictate the command the runner
+// key (a repo's `dorfl.json` may NOT dictate the command the runner
 // shells out to), so it is passed via the `--agent-cmd` FLAG, not the repo config.
 const STUB_TASKER_AGENT_CMD =
 	"mkdir -p work/tasks/backlog && printf '%s\\n' '---' 'title: child' " +
 	"'slug: child' 'prd: it' '---' '' '## Prompt' '' '> build it' " +
 	'> work/tasks/backlog/child.md';
 
-/** Write a per-repo `.dorfl.json` (the `tasksLandIn` default under test) + push it. */
+/** Write a per-repo `dorfl.json` (the `tasksLandIn` default under test) + push it. */
 function writeRepoConfig(repo: string, config: Record<string, unknown>): void {
 	// Dorfl has NO default acceptance gate, so any repo the runner touches must
 	// declare a `verify`. These tests exercise the tasking PLACEMENT wire, not the
 	// gate, so seed a trivial green gate unless the caller sets its own.
 	const withVerify = {verify: 'true', ...config};
-	writeFileSync(join(repo, '.dorfl.json'), JSON.stringify(withVerify, null, 2));
+	writeFileSync(join(repo, 'dorfl.json'), JSON.stringify(withVerify, null, 2));
 	run('git', ['add', '-A'], repo, {env: gitEnv()});
 	run('git', ['commit', '-q', '-m', 'config'], repo, {env: gitEnv()});
 	run('git', ['push', '-q', ARBITER, 'main'], repo, {env: gitEnv()});

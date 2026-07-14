@@ -299,7 +299,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		// The task `install-ci-emits-no-gate-env-let-config-decide`: the workflow
 		// must NOT carry any of the four gate-family env assignments as an ACTIVE
 		// line. The previous baked-in env block forced the env layer to shadow the
-		// repo's own `.dorfl.json`. Now CI resolves gates from config like
+		// repo's own `dorfl.json`. Now CI resolves gates from config like
 		// any other consumer (flag > env > per-repo > global > default).
 		const text = generateAdvanceLifecycleWorkflow(config);
 		// `operative` = the non-comment lines (the explanatory header comment may

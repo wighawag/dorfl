@@ -13,7 +13,7 @@ Add an **environment-variable layer** to config resolution so a CI job (or any p
 New resolution chain (highest wins):
 
 ```
-flag  >  ENV (DORFL_*)  >  per-repo .dorfl.json  >  global ~/.config/dorfl/config.json  >  built-in default
+flag  >  ENV (DORFL_*)  >  per-repo dorfl.json  >  global ~/.config/dorfl/config.json  >  built-in default
 ```
 
 Key design (decided — do not relitigate):

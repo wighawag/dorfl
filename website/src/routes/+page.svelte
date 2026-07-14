@@ -325,7 +325,7 @@
   <span class="text-amber">protocol/</span>   <span class="text-bone-muted"
 									># vendored WORK-CONTRACT.md, ADR-FORMAT.md, templates</span
 								>
-<span class="text-amber">.dorfl.json</span>   <span class="text-bone-muted"
+<span class="text-amber">dorfl.json</span>   <span class="text-bone-muted"
 									># the per-repo acceptance gate (verify / prepare)</span
 								></code
 							></pre>

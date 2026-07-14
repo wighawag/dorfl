@@ -295,9 +295,9 @@ env:
   # ── The engine GATE FAMILY, surfaced as the DORFL_* env block ─────────
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME .dorfl.json the laptop uses applies here; this env
+  # > default. The SAME dorfl.json the laptop uses applies here; this env
   # block is the optional CI-only override. Change behaviour by editing these
-  # values (or a GitHub repo variable / .dorfl.json key) — NOT by re-running
+  # values (or a GitHub repo variable / dorfl.json key) — NOT by re-running
   # install-ci (ADR §6: install-ci is one-time).
   #
   # \`intake\` itself is GATE-FREE (the explicit invocation is its own

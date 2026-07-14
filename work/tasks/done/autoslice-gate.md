@@ -10,7 +10,7 @@ covers: [2, 3]
 
 The pure decision layer for auto-slicing, one level up from the build gate:
 
-- A new per-repo policy key **`autoSlice`** in config/repo-config — _may an agent auto-slice undeclared PRDs in this repo?_ Default `false`, resolved through the full chain (now including the landed env layer): **flag > `DORFL_*` env > per-repo `.dorfl.json` > global > built-in default `false`** — exactly mirroring `allowAgents`/`integration`. (So `autoSlice` gets env support for free.)
+- A new per-repo policy key **`autoSlice`** in config/repo-config — _may an agent auto-slice undeclared PRDs in this repo?_ Default `false`, resolved through the full chain (now including the landed env layer): **flag > `DORFL_*` env > per-repo `dorfl.json` > global > built-in default `false`** — exactly mirroring `allowAgents`/`integration`. (So `autoSlice` gets env support for free.)
 - The pure **slicing-eligibility predicate**: a SPEC is agent-sliceable iff `needsAnswers !== true && humanOnly !== true && autoSlice` (the same shape as the build gate, applied to the SPEC's two axes + the repo policy). A human is never bound by it.
 - The pure **`sliceAfter` resolution**: given a SPEC's `sliceAfter: [other-spec]` list, resolve it against the **`sliced:` marker** of those PRDs (NOT `done/`) — agent-sliceable only when every listed SPEC is already sliced. (A human may override.)
 

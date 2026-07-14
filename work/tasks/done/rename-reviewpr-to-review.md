@@ -32,7 +32,7 @@ Rename the review-gate on/off toggle from **`reviewPr` → `review`** across the
 ## Acceptance criteria
 
 - [ ] `--review` / `--no-review` work on `do` AND `complete`; `--review-pr` / `--no-review-pr` are GONE (no longer accepted).
-- [ ] Config key is `review` (per-repo `.dorfl.json`, global config); env is `DORFL_REVIEW`; resolution precedence + default-off unchanged.
+- [ ] Config key is `review` (per-repo `dorfl.json`, global config); env is `DORFL_REVIEW`; resolution precedence + default-off unchanged.
 - [ ] No `reviewPr` identifier remains in `src/` (grep clean) — including the `DoOptions`/`CompleteOptions` field, `do-config.ts` flag mapping, and `repo-config.ts` allowed keys.
 - [ ] Sibling keys `reviewModel`/`reviewMaxRounds`/`autoMerge` are untouched and still resolve as before.
 - [ ] Behaviour is byte-for-byte identical (a renamed-flag run does exactly what the old flag did): the review gate runs after verify on both merge and propose; approve→integrate, block→needs-attention; autoMerge downgrade intact.

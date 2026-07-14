@@ -119,20 +119,17 @@ function base(run: DoRunner) {
 	return {cwd: repo, run} satisfies Partial<DoOptions> & {run: DoRunner};
 }
 
-describe('do (auto-pick) — applies the per-machine override over the committed .dorfl.json', () => {
+describe('do (auto-pick) — applies the per-machine override over the committed dorfl.json', () => {
 	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
 	// autopick path resolves the pool through `scanRepoPaths`, which must apply the
-	// per-machine override on top of the committed `.dorfl.json`. Committed
+	// per-machine override on top of the committed `dorfl.json`. Committed
 	// `autoBuild: false` (task ineligible) vs override `"*": {autoBuild: true}`
 	// (task eligible). The override is per-machine and beats the committed file,
 	// so the seeded task MUST be auto-picked. Before the override was threaded
 	// into `performDoAuto`, the committed `false` stood and nothing ran.
 	it('the override ("*") flips autoBuild ON over a committed autoBuild:false (task is auto-picked)', async () => {
 		seedTask('alpha');
-		writeFileSync(
-			join(repo, '.dorfl.json'),
-			JSON.stringify({autoBuild: false}),
-		);
+		writeFileSync(join(repo, 'dorfl.json'), JSON.stringify({autoBuild: false}));
 		const override: ConfigOverrideMap = {'*': {autoBuild: true}};
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
@@ -149,10 +146,7 @@ describe('do (auto-pick) — applies the per-machine override over the committed
 	// so the task is ineligible and nothing is auto-picked.
 	it('control: WITHOUT the override the committed autoBuild:false stands (nothing auto-picked)', async () => {
 		seedTask('alpha');
-		writeFileSync(
-			join(repo, '.dorfl.json'),
-			JSON.stringify({autoBuild: false}),
-		);
+		writeFileSync(join(repo, 'dorfl.json'), JSON.stringify({autoBuild: false}));
 		const {run, args} = recordingRunner();
 		const result = await performDoAuto({
 			...base(run),

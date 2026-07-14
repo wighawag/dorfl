@@ -19,7 +19,7 @@ This rung is sequenced AFTER `advance-rung-apply` to serialize the shared rung-e
   - **`autoTriage` exception (high bar):** if `autoTriage` is on AND the case is a no-question one (exact-duplicate → suggest delete; unambiguous map onto an existing item), auto-disposition it WITHOUT a question. NEVER auto-delete a non-duplicate; NEVER auto-promote a judgement call.
 - **Promote → CAS-create a new backlog stub (US #24):** an answered "promote" drafts a new `work/backlog/<new-slug>.md` routed THROUGH the CAS keyed on the NEW item's identity (reuse the new-item-creation helper from `advancing-lock-borrow`), records the triage, and deletes the sidecar.
 - **Keep / delete:** "keep" → `triaged:keep` marker, drops out of the pool (shared with the apply rung's keep handling); "delete" → recommend deletion (the HUMAN deletes per the capture-bucket contract — the agent never auto-deletes a non-duplicate signal).
-- **Add the `autoTriage` repo-config key** (default off) to `repo-config.ts`'s allowed keys, resolved through the SAME chain as `allowAgents`/`autoSlice` (`flag > DORFL_* env > .dorfl.json > global > default false`). The triage rung RESPECTS it; surface + apply stay always-allowed.
+- **Add the `autoTriage` repo-config key** (default off) to `repo-config.ts`'s allowed keys, resolved through the SAME chain as `allowAgents`/`autoSlice` (`flag > DORFL_* env > dorfl.json > global > default false`). The triage rung RESPECTS it; surface + apply stay always-allowed.
 
 ## Acceptance criteria
 

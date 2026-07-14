@@ -93,7 +93,7 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	/**
 	 * The per-machine {@link ConfigOverrideMap}. Threaded into the in-place pool
 	 * scan (`scanRepoPaths`) so the per-machine override applies to advance
-	 * autopick eligibility — WITHOUT it the committed `.dorfl.json` silently
+	 * autopick eligibility — WITHOUT it the committed `dorfl.json` silently
 	 * beats the override on this path (the in-place advance autopick mirror of the
 	 * `do` autopick defect).
 	 */

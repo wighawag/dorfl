@@ -10,7 +10,7 @@ covers: []
 
 Add ONE new **per-machine override layer**, sourced from the global config dir as
 `<configDir>/config.override.json` (sibling of `config.json`), that overrides the
-COMMITTED per-repo `.dorfl.json` but is itself overridden by env and flags.
+COMMITTED per-repo `dorfl.json` but is itself overridden by env and flags.
 This gives the laptop a stable, high-precedence per-machine lever symmetric to
 CI's `DORFL_*` env, fixing "I cannot make this checkout override what the
 repo committed without an env var whose setting depends on where I invoke from."
@@ -135,7 +135,7 @@ itself — env already sits above it.
 
 ## Acceptance criteria
 
-- [ ] `<configDir>/config.override.json` is read; a specific hub-key entry overrides the committed `.dorfl.json`, and `"*"` overrides it for repos with no specific entry. A specific entry beats `"*"`.
+- [ ] `<configDir>/config.override.json` is read; a specific hub-key entry overrides the committed `dorfl.json`, and `"*"` overrides it for repos with no specific entry. A specific entry beats `"*"`.
 - [ ] ALL THREE resolution paths apply the override: working-tree (`resolveRepoConfig`), no-checkout mirror (`resolveRepoConfigFromMirror`, the scan/CI path), and `do --remote` (`resolveRemoteRepoConfig`). Each supplies the hub-key URL from its own source (checkout `git remote get-url <arbiter>`; mirror `origin` URL; `--remote` the passed URL). Verified the override applies in the scan/mirror path specifically (a regression here is silent).
 - [ ] The override reader takes an INJECTABLE path (not a hard-coded `homedir()`); tests use a temp/scratch override file and assert the real `~/.config/dorfl/` is never read or written. No test touches the real config dir.
 - [ ] Sparse merge verified: an override that sets only one field leaves all other fields resolving through the rest of the chain.

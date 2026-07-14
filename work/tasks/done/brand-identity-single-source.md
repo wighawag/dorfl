@@ -14,7 +14,7 @@ Make the **load-bearing protocol identity** of dorfl derive from a SINGLE source
 Centralize ONLY the **protocol/contract surface** — the strings that are a contract with the user / filesystem / CI and that BREAK if inconsistent — derived from one base identity (`dorfl`) via the standard case transforms:
 
 - the **`DORFL_` env-var prefix** (constantCase of the base + `_`) — today built/spread across `env-config.ts` / `repo-config.ts` / `harness.ts`;
-- the **`.dorfl.json` per-repo config filename** (`REPO_CONFIG_FILENAME` in `repo-config.ts`);
+- the **`dorfl.json` per-repo config filename** (`REPO_CONFIG_FILENAME` in `repo-config.ts`);
 - the **`~/.dorfl/` workspaces dir default** — hardcoded in `workspace.ts`, `work-on.ts`, `gc.ts`;
 - the **binary / package name** (`dorfl`) where referenced from code (not the `package.json` `name`/`bin` themselves — those are renamed by the tool below, not indirected through a runtime constant).
 
@@ -25,7 +25,7 @@ A new identity module exposes the base name + its derived forms (e.g. `BRAND` / 
 ## Acceptance criteria
 
 - [ ] A single identity module is the source of truth for the base name and its derived protocol forms (env prefix, repo-config filename, workspaces-dir name, bin name).
-- [ ] The `DORFL_` env prefix, `.dorfl.json` filename, and `~/.dorfl/` default are all DERIVED from that module (no remaining hardcoded literals of these at the derivation sites in `src/`).
+- [ ] The `DORFL_` env prefix, `dorfl.json` filename, and `~/.dorfl/` default are all DERIVED from that module (no remaining hardcoded literals of these at the derivation sites in `src/`).
 - [ ] Changing ONLY the base string in the module changes every derived protocol surface consistently (a test demonstrates this: e.g. derive with a different base and assert prefix/filename/workdir all change in lockstep).
 - [ ] Behaviour is byte-identical with the current base name: existing config/env/workspace/gc/work-on tests pass UNCHANGED (the derived strings equal today's literals).
 - [ ] Cosmetic doc/prose mentions are NOT touched; `package.json` `name`/`bin` are NOT indirected through a runtime constant (left for `change-name`).
@@ -39,7 +39,7 @@ A new identity module exposes the base name + its derived forms (e.g. `BRAND` / 
 
 > Centralize dorfl's **protocol/brand identity** behind a single source-of-truth module so a future rename is one change, not a scattered (and silently-breakable) find/replace. PURE REFACTOR — observable behaviour must be byte-identical (the derived strings equal today's literals).
 >
-> READ FIRST: `src/env-config.ts` + `src/repo-config.ts` (the `DORFL_*` env prefix + `REPO_CONFIG_FILENAME = '.dorfl.json'`), `src/workspace.ts` / `src/work-on.ts` / `src/gc.ts` (the `~/.dorfl` workspaces-dir default), `src/harness.ts` (an `DORFL_MODEL` mention), and `packages/dorfl/ package.json` (`name`/`bin` = `dorfl`). Also `skills/to-slices/WORK- CONTRACT.md` (this is a contract-sanctioned SPEC-less chore slice).
+> READ FIRST: `src/env-config.ts` + `src/repo-config.ts` (the `DORFL_*` env prefix + `REPO_CONFIG_FILENAME = 'dorfl.json'`), `src/workspace.ts` / `src/work-on.ts` / `src/gc.ts` (the `~/.dorfl` workspaces-dir default), `src/harness.ts` (an `DORFL_MODEL` mention), and `packages/dorfl/ package.json` (`name`/`bin` = `dorfl`). Also `skills/to-slices/WORK- CONTRACT.md` (this is a contract-sanctioned SPEC-less chore slice).
 >
 > Create one identity module exposing a BASE name and its derived protocol forms (env-var prefix = constantCase + `_`; repo-config filename `.{base}.json`; workspaces-dir name `.{base}`; bin/package name) computed from the single base string, using the case conventions the `change-name` tool understands (camelCase/constantCase/paramCase/etc — https://github.com/wighawag/change-name). Replace the scattered literals at the DERIVATION SITES in `src/` with imports from it. Add a test proving that changing only the base string flips every derived surface in lockstep, and that with the current base the derived strings equal today's literals.
 >

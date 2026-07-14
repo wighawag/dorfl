@@ -181,7 +181,7 @@ SLICE: surface (→ sidecar, stays backlog) / pending NO-OP / apply (append-or-c
 | SURFACE a question (write sidecar) | none — ALWAYS allowed | — |
 | APPLY a human's answer | none — ALWAYS allowed | — |
 
-Resolved like the existing gates: `flag > DORFL_* env > .dorfl.json > global > default false`. Advance RESPECTS these; it never bypasses them.
+Resolved like the existing gates: `flag > DORFL_* env > dorfl.json > global > default false`. Advance RESPECTS these; it never bypasses them.
 
 ### batch-qa → surface-questions
 
@@ -195,7 +195,7 @@ Refocus the `batch-qa` skill into **`surface-questions`**: GATHER-only (formulat
 
 ### The `allowAgents` → `autoBuild` rename (SEQUENCED LAST)
 
-A clean, isolated, breaking config migration (touches `.dorfl.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT) with an alias/deprecation window — DONE AFTER the advance family lands, so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Precedent: `rename-reviewpr-to-review`. Build the advance work with `allowAgents` named as-is; rename alone afterwards.
+A clean, isolated, breaking config migration (touches `dorfl.json`, `config.ts`/`env-config.ts`/`repo-config.ts`, docs, WORK-CONTRACT) with an alias/deprecation window — DONE AFTER the advance family lands, so the family is symmetric (`autoBuild`/`autoSlice`/`autoTriage`). Precedent: `rename-reviewpr-to-review`. Build the advance work with `allowAgents` named as-is; rename alone afterwards.
 
 ## Testing Decisions
 

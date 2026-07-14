@@ -26,13 +26,13 @@ import {doFlagOverrides} from '../src/do-config.js';
 /**
  * `do --remote` per-repo config tests (task
  * `remote-do-reads-per-repo-config-from-arbiter-main`). The no-checkout
- * `do --remote` path now reads the target repo's COMMITTED `.dorfl.json`
+ * `do --remote` path now reads the target repo's COMMITTED `dorfl.json`
  * from `<arbiter>/main` (via the hub mirror) and layers ONLY the whitelisted
  * `REPO_ALLOWED_KEYS` into resolution — restoring `flag > env > per-repo >
  * global > default` parity with in-place `do`.
  *
  * House style: a throwaway project + a local `--bare` arbiter whose `main`
- * carries a `.dorfl.json` (with BOTH allowed + rejected keys), a temp
+ * carries a `dorfl.json` (with BOTH allowed + rejected keys), a temp
  * `workspacesDir` (the agents' area), `isolatePiAgentDir`, and real shared dirs
  * untouched. These tests exercise the SAME machinery the CLI's
  * `resolveRemoteRepoConfig` composes: source the bytes from the arbiter main
@@ -59,7 +59,7 @@ function remoteUrl(arbiter: string): string {
 	return `file://${arbiter}`;
 }
 
-describe('do --remote — reads the per-repo .dorfl.json from the arbiter main', () => {
+describe('do --remote — reads the per-repo dorfl.json from the arbiter main', () => {
 	/** Source + filter + layer, exactly as the CLI composes it (no global file). */
 	function resolve(opts: {
 		arbiter: string;
@@ -206,7 +206,7 @@ describe('do --remote — reads the per-repo .dorfl.json from the arbiter main',
 	});
 
 	it('a config-less repo resolves to global+default (byte-identical to today)', () => {
-		// No `repoConfig` → no `.dorfl.json` committed on main.
+		// No `repoConfig` → no `dorfl.json` committed on main.
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const resolved = resolve({arbiter});
 		// Nothing layered: rejected empty, no message, and the resolved config is
@@ -238,7 +238,7 @@ describe('readRepoConfigFromMirrorMain — sources the committed bytes from <arb
 		expect(parsed.verify).toBe('echo ok');
 	});
 
-	it('returns undefined when the repo has NO .dorfl.json on main', () => {
+	it('returns undefined when the repo has NO dorfl.json on main', () => {
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const env = gitEnv();
 		const mirror = ensureMirror({

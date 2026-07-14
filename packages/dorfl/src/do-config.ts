@@ -539,7 +539,7 @@ export function doNeedsAgentCmd(config: Config): boolean {
  */
 export const NO_AGENT_CMD_MESSAGE =
 	'no harness configured and no agentCmd set — nothing would run. Pass ' +
-	'--harness pi (or set harness/agentCmd in .dorfl.json or global config).';
+	'--harness pi (or set harness/agentCmd in dorfl.json or global config).';
 
 /**
  * The shared up-front message for the PR-INTENT pre-flight refusal: a `propose`

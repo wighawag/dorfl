@@ -23,7 +23,7 @@
 #
 # ONE WORD, ONE MEANING — `integrationMode` drives BOTH (US #27). The dispatch
 # input is the INTEGRATION MODE (propose | merge, the same vocabulary as
-# `.dorfl.json`'s `integration` and `advance --propose`/`--merge`). The job
+# `dorfl.json`'s `integration` and `advance --propose`/`--merge`). The job
 # SHAPE is DERIVED from it — it is NOT a second, independent knob. So the shape the
 # legs run in and the integration mode they pass to `advance` can NEVER desync:
 #
@@ -70,7 +70,7 @@
 #
 # Pick the mode with the `integrationMode` dispatch input (default below). It rides
 # `advance` as `--propose`/`--merge`, which sits at the TOP of the precedence chain
-# (flag > per-repo `.dorfl.json` `integration` > global > default), so the
+# (flag > per-repo `dorfl.json` `integration` > global > default), so the
 # WORKFLOW mode always wins over a repo's config default — they cannot disagree.
 # Only the job for the chosen mode runs; the other is skipped by its `if:` guard.
 
@@ -260,7 +260,7 @@ jobs:
       - name: advance one item (propose ⇒ opens a PR)
         # `--propose` ties the integration mode to THIS (matrix) shape: it sits at
         # the top of the precedence chain, so the workflow mode always wins over the
-        # repo's `.dorfl.json` default and a leg can NEVER merge to main.
+        # repo's `dorfl.json` default and a leg can NEVER merge to main.
         # `--propose` shells `gh` to open the PR, which reads `GH_TOKEN` from the env
         # (a workflow PERMISSION is not a credential). Prefer a dedicated
         # `DORFL_GH_TOKEN` secret (a PAT / App token) so PRs carry YOUR
@@ -320,7 +320,7 @@ jobs:
       - name: advance one item (merge ⇒ rebase + CAS land on main)
         # `--merge` ties the integration mode to THIS (matrix) shape: it sits at
         # the top of the precedence chain, so the workflow mode always wins over
-        # the repo's `.dorfl.json` default. Cross-job land safety comes from the
+        # the repo's `dorfl.json` default. Cross-job land safety comes from the
         # engine's CAS-retry loop, not from this workflow's job shape.
         # `gh` (merge / PR housekeeping) reads `GH_TOKEN` from the env.
         env:

@@ -138,7 +138,7 @@ describe('runOnce — settled-slot fallback maps an uncaught worker throw to cla
 		// ItemResult); `runOnce`'s `settled.map` defensive fallback maps a captured
 		// `{error}` slot to `status: 'claim-error'` with the message in `detail`. To
 		// force a GENUINE uncaught worker throw with NO production change, commit a
-		// MALFORMED `.dorfl.json` at the repo root: `runOneItem`'s FIRST
+		// MALFORMED `dorfl.json` at the repo root: `runOneItem`'s FIRST
 		// statement is `resolveRepoConfig(...)` (BEFORE any try/catch and before the
 		// claim), which `JSON.parse`s the per-repo file and THROWS "Invalid JSON in
 		// <path>: ..." on bad bytes. That throw escapes the worker, is captured as a
@@ -153,13 +153,13 @@ describe('runOnce — settled-slot fallback maps an uncaught worker throw to cla
 		const report: ScanReport = scanProject(config);
 
 		// Now make the WORKER's `resolveRepoConfig` throw — the realistic cause is a
-		// malformed committed `.dorfl.json` (`JSON.parse` → "Invalid JSON in
+		// malformed committed `dorfl.json` (`JSON.parse` → "Invalid JSON in
 		// <path>"). Stubbing it here forces that uncaught throw INSIDE `runOneItem`
 		// (BEFORE its per-item try/catch + before the claim), so it escapes the worker
 		// exactly as the real misconfig would, exercising `runOnce`'s settled-slot
 		// `.map` fallback. Test-only seam (no production change).
 		const thrown = new Error(
-			`Invalid JSON in ${join(repo, '.dorfl.json')}: Expected property name`,
+			`Invalid JSON in ${join(repo, 'dorfl.json')}: Expected property name`,
 		);
 		vi.spyOn(repoConfigModule, 'resolveRepoConfig').mockImplementation(() => {
 			throw thrown;

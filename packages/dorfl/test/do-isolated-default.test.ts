@@ -148,7 +148,7 @@ describe('do <slug> — DEFAULT dispatch reaches the isolated no-checkout path (
 
 		// Hit the isolated pipeline's missing-agentCmd guard (proof the DEFAULT
 		// dispatched to the no-checkout path — the in-place path resolves agentCmd
-		// off the cwd `.dorfl.json`, not the arbiter-main read, so the guard's
+		// off the cwd `dorfl.json`, not the arbiter-main read, so the guard's
 		// message is emitted regardless — but the KEY observation is: no branch
 		// switch / no dirty tree left behind, i.e. the cwd was NOT taken over).
 		expect(code).toBe(1);
@@ -270,11 +270,11 @@ describe('do <slug> — contradictory form flags are rejected loudly (not silent
 describe('do <slug> — DEFAULT reads per-repo config from <arbiter>/main (D1)', () => {
 	// D1 (already established by `remote-do-reads-per-repo-config-from-arbiter-main`
 	// and the shared `resolveRemoteRepoConfig`): the isolated path layers the
-	// committed `.dorfl.json` from `<arbiter>/main` (whitelisted keys only). Since
+	// committed `dorfl.json` from `<arbiter>/main` (whitelisted keys only). Since
 	// the DEFAULT now takes that same path, this must hold for bare `do <slug>`
 	// too — a repo declaring e.g. `harness: pi` must resolve to `pi` under the
 	// default, NEVER silently the null adapter. We assert this at the CLI seam by
-	// running `do <slug>` under a repo whose committed `.dorfl.json` sets
+	// running `do <slug>` under a repo whose committed `dorfl.json` sets
 	// `harness: pi` and observing the launch reaches the pi adapter (which
 	// fails-fast when `pi` is not on PATH here — the KEY signal is that the
 	// null-adapter's "agentCmd required" refusal does NOT fire).

@@ -21,11 +21,11 @@ for ONE repo iteration are resolved by DIFFERENT config readers:
 - **autoBuild** (`scan.ts` ~L368): `resolveRepoConfig({repoPath: mirror.path, ...})`
   — the WORKING-TREE reader, pointed at a BARE mirror path.
 - **autoSlice** (`scan.ts` ~L397): `resolveRepoConfigFromMirror({mirrorPath: mirror.path, ...})`
-  — the MIRROR-REF reader (reads the committed `.dorfl.json` from the mirror's
+  — the MIRROR-REF reader (reads the committed `dorfl.json` from the mirror's
   refs).
 
 Because the two gates read the per-repo config through two different mechanisms, a
-repo that carries a COMMITTED per-repo `.dorfl.json` override can have its
+repo that carries a COMMITTED per-repo `dorfl.json` override can have its
 `autoBuild` and `autoSlice` gates resolved from DIFFERENT views of that config — the
 working-tree reader pointed at a bare mirror path may not see what the mirror-ref
 reader sees. So within a single repo iteration the slice pool gate and the SPEC pool
@@ -46,7 +46,7 @@ gate can disagree.
 Make both gates resolve through the SAME reader for a bare-mirror scan — most likely
 `resolveRepoConfigFromMirror` for BOTH (the mirror-ref reader is the right one for a
 bare mirror that has no working tree), so `autoBuild` and `autoSlice` always agree on
-the committed per-repo config. Add a test: a mirror whose committed `.dorfl.json`
+the committed per-repo config. Add a test: a mirror whose committed `dorfl.json`
 overrides one gate asserts both pool gates observe that same committed view.
 
 ## Refs
@@ -60,7 +60,7 @@ overrides one gate asserts both pool gates observe that same committed view.
 
 ### q1: Triage disposition for this observation: promote to a slice that unifies both pool gates onto the mirror-ref reader, keep as a recorded observation for later, or drop?
 
-promote-slice. Verified live divergence: the autoBuild gate uses the working-tree reader against the bare mirror (which cannot read a committed `.dorfl.json` → falls back to global/default), while the autoSlice + lifecycle gates use the mirror-ref reader (which CAN read the committed value). So a repo with a committed per-repo override of both gates gets disagreeing gates within one iteration. Fix: point the autoBuild gate at `resolveRepoConfigFromMirror` in the bare-mirror branch + test that a committed override is observed by both. Narrow (read-only scan, degrades to global fallback, never corrupts) but a real correctness divergence. Disposition: promote-slice.
+promote-slice. Verified live divergence: the autoBuild gate uses the working-tree reader against the bare mirror (which cannot read a committed `dorfl.json` → falls back to global/default), while the autoSlice + lifecycle gates use the mirror-ref reader (which CAN read the committed value). So a repo with a committed per-repo override of both gates gets disagreeing gates within one iteration. Fix: point the autoBuild gate at `resolveRepoConfigFromMirror` in the bare-mirror branch + test that a committed override is observed by both. Narrow (read-only scan, degrades to global fallback, never corrupts) but a real correctness divergence. Disposition: promote-slice.
 
 ## Triaged: promoted
 
@@ -79,8 +79,8 @@ Reason: Observation already triaged 2026-06-22 with explicit 'Triaged: promoted'
 
 CORRECTION: contrary to the footer above, the promoted carrier task was DELETED in commit `d4fd53db` ("repair 12 promptless promoted tasks", GROUP A) as an un-buildable promptless stub; the intended re-mint from this observation never happened, so `work/tasks/ready/scan-autobuild-...md` no longer exists. Its question sidecar (5 questions) was answered by a human and lived nowhere else; recovered verbatim below before the orphaned sidecar is removed. Carry these into any re-minted task.
 
-- **Q1 (the fix):** Unify both bare-mirror `scan()` gates onto `resolveRepoConfigFromMirror` (the mirror-ref reader), per the applied triage answer. The mirror-ref reader is correct for a bare mirror (no checked-out `.dorfl.json`); the `autoBuild` gate currently silently falls back to global, which is the bug. Leave the working-tree `scanRepoPaths()` sibling unchanged (it operates on real checkouts where `resolveRepoConfig` is correct).
+- **Q1 (the fix):** Unify both bare-mirror `scan()` gates onto `resolveRepoConfigFromMirror` (the mirror-ref reader), per the applied triage answer. The mirror-ref reader is correct for a bare mirror (no checked-out `dorfl.json`); the `autoBuild` gate currently silently falls back to global, which is the bug. Leave the working-tree `scanRepoPaths()` sibling unchanged (it operates on real checkouts where `resolveRepoConfig` is correct).
 - **Q2 (scope):** Scope = the registry `scan()` bare-mirror path only; explicitly leave `scanRepoPaths()` on `resolveRepoConfig`. But AUDIT the other `autoBuild` reads inside `scan()` (the re-read near ~L530 and the `scoreItems` consumer) and move any that also read the bare mirror, so no divergent reader is left behind. Acceptance must state "no bare-mirror gate still reads via `resolveRepoConfig`."
-- **Q3 (regression test):** Fixture: a bare hub mirror whose committed `main:.dorfl.json` sets `autoBuild` to a value differing from the global default; assert the `scan()` report's eligibility reflects the COMMITTED `autoBuild` value (proving the mirror-ref reader is now used), mirroring how `autoTask` is already read. Overriding `autoBuild` ALONE is the sharpest regression test; no need to also override `autoTask`/`autoSlice`.
+- **Q3 (regression test):** Fixture: a bare hub mirror whose committed `main:dorfl.json` sets `autoBuild` to a value differing from the global default; assert the `scan()` report's eligibility reflects the COMMITTED `autoBuild` value (proving the mirror-ref reader is now used), mirroring how `autoTask` is already read. Overriding `autoBuild` ALONE is the sharpest regression test; no need to also override `autoTask`/`autoSlice`.
 - **Q4 (task body):** Yes, flesh the task body out from the observation before it can advance: inline the mechanism (the two readers + the bare-mirror divergence), the fix shape (unify on `resolveRepoConfigFromMirror`), acceptance criteria (the Q3 regression test + verify-green), and a self-contained `## Prompt` with the drift-check. List scoping questions under `## Open questions`. The observation is a deletable capture bucket, so the task must carry the signal itself (self-contained, not a back-pointer).
 - **Q5 (referencing):** Reference by symbol/concept, not brittle line numbers: "the `autoBuild` pool gate inside the registry `scan()` (`packages/dorfl/src/scan.ts`), currently resolved via `resolveRepoConfig`, vs the `autoTask`/lifecycle gates resolved via `resolveRepoConfigFromMirror`." Instruct the builder to re-confirm exact sites at build time. The divergence is verified still real; this is a stale-reference correction, not a premise invalidation.

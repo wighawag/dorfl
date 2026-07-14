@@ -30,7 +30,7 @@ Because the original slice's commit/PR body had no `## Decisions` block, ratify 
 1. **Split default is intentional.** `LifecyclePoolGates.surfaceStaging` defaults `false` at the library boundary; `Config.surfaceStaging` defaults `true` at the user-visible layer. The calm library default is load-bearing for any direct caller of `gatherLifecycle*` that doesn't thread CLI gates.
 2. **Four new public methods on `LedgerReadStrategy` are intentional** (`resolveLocalTaskStaging`, `resolveLocalBriefStaging`, `resolveMirrorTaskStaging`, `resolveMirrorBriefStaging`), rather than overloading `resolveLocalState` / `resolveMirrorState` with a flag. Keeps the state vs. staging axes orthogonal at the interface.
 3. **The `surfaceStaging` gate is consumed by the GATHER, not by pure `buildLifecyclePools`,** even though the field lives on `LifecyclePoolGates`. Placement acknowledged in the existing doc comment; ratified here as intentional.
-4. **`surfaceStaging` in `REPO_ALLOWED_KEYS` is intentional** so a repo's `.dorfl.json` can flip it via the normal resolution chain.
+4. **`surfaceStaging` in `REPO_ALLOWED_KEYS` is intentional** so a repo's `dorfl.json` can flip it via the normal resolution chain.
 
 ### 3. Document the create-vs-consume edge (small doc touch)
 

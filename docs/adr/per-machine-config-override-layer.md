@@ -32,7 +32,7 @@ The existing precedence chain (recorded in `execution-substrate-decisions.md` §
 and stated identically in `config.ts`/`repo-config.ts`/`env-config.ts`) is:
 
 ```
-flag > ENV (DORFL_*) > per-repo committed (.dorfl.json) > global > built-in default
+flag > ENV (DORFL_*) > per-repo committed (dorfl.json) > global > built-in default
 ```
 
 ### Why the existing ordering is RIGHT and is NOT reversed by this ADR

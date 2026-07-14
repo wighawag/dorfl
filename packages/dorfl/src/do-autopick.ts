@@ -52,7 +52,7 @@ export interface PerformDoMultiOptions extends SharedDoOptions {
 	 * The per-machine {@link ConfigOverrideMap}. Threaded into the in-place pool
 	 * scan (`scanRepoPaths`) so the override applies to autopick eligibility just
 	 * as it does to the single-`do` resolution — WITHOUT it the committed
-	 * `.dorfl.json` silently beats the per-machine override on this path.
+	 * `dorfl.json` silently beats the per-machine override on this path.
 	 */
 	override?: ConfigOverrideMap;
 	/**

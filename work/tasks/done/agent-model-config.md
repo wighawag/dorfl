@@ -26,7 +26,7 @@ NOT in scope: per-ROLE models (build/slice/review) — staged per future capabil
 
 ## Acceptance criteria
 
-- [ ] `config.model` resolves flag (`--model`) > per-repo `.dorfl.json` > global > default (unset); `model` + `harness` are honoured per-repo, `piBin` is rejected per-repo (reported), `agentCmd` stays rejected.
+- [ ] `config.model` resolves flag (`--model`) > per-repo `dorfl.json` > global > default (unset); `model` + `harness` are honoured per-repo, `piBin` is rejected per-repo (reported), `agentCmd` stays rejected.
 - [ ] pi adapter, with `model` set, invokes pi with `--model <model>` (verified against the stubbed `piBin`); with `model` unset, no `--model` is passed.
 - [ ] null/shell adapter substitutes `{model}` in `agentCmd`; errors clearly when `{model}` is present but no model is configured; runs as-is when `{model}` is absent.
 - [ ] `LaunchInput.model` flows from `config.model` through `run` to both adapters.

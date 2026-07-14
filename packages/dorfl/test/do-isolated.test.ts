@@ -448,7 +448,7 @@ describe('do --isolated -n — SEQUENTIAL-REFETCH FRESHNESS drain (item N rebase
 			['alpha', 'beta'],
 			{
 				// `autoBuild` must travel onto `<arbiter>/main` so the MIRROR scan (which
-				// layers the committed `.dorfl.json`) enumerates the two tasks as
+				// layers the committed `dorfl.json`) enumerates the two tasks as
 				// eligible — exactly as an in-place checkout would resolve it.
 				repoConfig: {autoBuild: true},
 			},

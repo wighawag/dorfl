@@ -123,9 +123,9 @@ describe('scanMirrorPool — enumerates eligible tasks + taskable PRDs from a BA
 		expect(permissive.specs.map((p) => p.slug)).toEqual(['taskme']);
 	});
 
-	it('layers the COMMITTED per-repo .dorfl.json from the mirror main (parity with the working checkout that reads it)', async () => {
+	it('layers the COMMITTED per-repo dorfl.json from the mirror main (parity with the working checkout that reads it)', async () => {
 		// Global is strict; the committed per-repo file opts in — the mirror scan reads
-		// it from `main:.dorfl.json` (the `do --remote` per-repo seam), so the
+		// it from `main:dorfl.json` (the `do --remote` per-repo seam), so the
 		// task/PRD become eligible exactly as an in-place checkout would resolve them.
 		const {mirrorPath} = registerMirrorWithWork(ws, 'repo', {
 			backlog: {'ready.md': task({slug: 'ready'})},

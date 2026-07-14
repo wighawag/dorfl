@@ -562,12 +562,12 @@ describe('runOnce — integration modes', () => {
 });
 
 describe('runOnce — per-repo config (multi-repo aware)', () => {
-	it('honours a repo-local .dorfl.json integration over the global', async () => {
+	it('honours a repo-local dorfl.json integration over the global', async () => {
 		// Global says `merge`, but the repo commits `propose` in its own file →
 		// the run must integrate THIS repo as propose (per-repo > global).
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		writeFileSync(
-			join(repo, '.dorfl.json'),
+			join(repo, 'dorfl.json'),
 			JSON.stringify({integration: 'propose'}),
 		);
 		const config = configFor(scratch.root, {integration: 'merge'});
@@ -592,14 +592,14 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
-	it('FULL CHAIN: a per-repo .dorfl.json promptGuidance.testFirst:true reaches the autonomous run worker prompt', async () => {
+	it('FULL CHAIN: a per-repo dorfl.json promptGuidance.testFirst:true reaches the autonomous run worker prompt', async () => {
 		// REGRESSION (prompt-guidance-testfirst Gate-2 block): the `run` daemon
 		// resolves per-repo config (incl. promptGuidance) and MUST thread the nudge
 		// into the worker prompt. End-to-end: committed config opts in → the
 		// strengthened test-first line (from CLAIM-PROTOCOL.md) reaches the agent.
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		writeFileSync(
-			join(repo, '.dorfl.json'),
+			join(repo, 'dorfl.json'),
 			JSON.stringify({promptGuidance: {testFirst: true}}),
 		);
 		let seen: string | undefined;
@@ -658,7 +658,7 @@ describe('runOnce — per-repo config (multi-repo aware)', () => {
 		const a = seedRepoWithArbiter(join(scratch.root, 'a'), ['fa']);
 		const b = seedRepoWithArbiter(join(scratch.root, 'b'), ['fb']);
 		writeFileSync(
-			join(b.repo, '.dorfl.json'),
+			join(b.repo, 'dorfl.json'),
 			JSON.stringify({integration: 'propose'}),
 		);
 		const config = mergeConfig({

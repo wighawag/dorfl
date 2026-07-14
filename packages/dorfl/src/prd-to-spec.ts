@@ -41,7 +41,7 @@ import {repoConfigPath} from './repo-config.js';
  *      (a) FOLDERS `work/prds/{proposed,ready,tasked,dropped}/ → work/specs/…`
  *      via `git mv`; (b) FRONTMATTER/body `prd: → spec:` + inert path/token refs
  *      across ALL items INCLUDING `work/tasks/done/` and `work/specs/tasked/`;
- *      (c) CONFIG `.dorfl.json` (`prdsLandIn → specsLandIn`, keep-case);
+ *      (c) CONFIG `dorfl.json` (`prdsLandIn → specsLandIn`, keep-case);
  *      (d) LIVE GIT REFS (inert lock-refs `refs/dorfl/lock/prd-<slug>` and
  *      work-branches `work/prd-<slug>` — the quiescence gate guarantees none are
  *      held/in-flight, so this renames only INERT refs).
@@ -86,7 +86,7 @@ import {repoConfigPath} from './repo-config.js';
  * A single vocabulary cutover the engine enacts: the retired word `from` (all
  * three case variants) → the new word `to`. The `prd → spec` migration pins
  * {@link MIGRATION}; a future cutover supplies a different value and reuses the
- * same engine (user story 9). `configKeys` are the exact `.dorfl.json` keys that
+ * same engine (user story 9). `configKeys` are the exact `dorfl.json` keys that
  * carry the `from` word (their VALUES are preserved — only the key renames).
  */
 export interface VocabularyMigration {
@@ -653,7 +653,7 @@ export function migrateAllItemContent(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Layer 3c: the CONFIG key rewrite (.dorfl.json).
+// Layer 3c: the CONFIG key rewrite (dorfl.json).
 // ───────────────────────────────────────────────────────────────────────────
 
 /** One config key the rewrite renamed (or would rename). */
@@ -663,12 +663,12 @@ export interface ConfigRewrite {
 }
 
 /**
- * Rewrite the retired config KEYS in `.dorfl.json` (`prdsLandIn → specsLandIn`),
+ * Rewrite the retired config KEYS in `dorfl.json` (`prdsLandIn → specsLandIn`),
  * preserving each key's VALUE and the file's surrounding formatting — a TEXTUAL
  * key rename on the raw JSON, NOT a parse+reserialise (which would drop unknown
  * keys / reflow the file). Only renames a key that is actually present, so it is
  * idempotent (a config already on `specsLandIn` changes nothing) and safe on a
- * repo with no `.dorfl.json`. Returns the keys renamed. `dryRun` reports without
+ * repo with no `dorfl.json`. Returns the keys renamed. `dryRun` reports without
  * writing.
  */
 export function migrateConfig(
@@ -677,7 +677,7 @@ export function migrateConfig(
 	options: {dryRun?: boolean} = {},
 ): ConfigRewrite[] {
 	// Resolve the repo's actual config file (prefers `dorfl.json`, falls back to
-	// the legacy `.dorfl.json`), so the key rewrite finds it under either name.
+	// the legacy `dorfl.json`), so the key rewrite finds it under either name.
 	const configAbs = repoConfigPath(repoPath);
 	if (!existsSync(configAbs)) {
 		return [];
@@ -806,7 +806,7 @@ export interface DataLeak {
  * command's OUTPUT (ADR §7e: the leak scan is exhaustive-by-construction). This
  * is the DATA analogue of the source-part `prd-to-spec-leak-scan.test.ts`
  * (which scans `src/`/`skills/`/`docs/`): here it walks the CONVERTED `work/`
- * tree + `.dorfl.json` + the git refs.
+ * tree + `dorfl.json` + the git refs.
  *
  *   - **FORWARD:** fails on any surviving retired word (`prd`/`Prd`/`PRD`) in a
  *     data STRUCTURE position — a frontmatter `prd:` KEY, a `work/prds/…` folder
@@ -926,7 +926,7 @@ export function scanForLeaks(
 		}
 	}
 	// The config file (the key layer) — under either the preferred `dorfl.json`
-	// or the legacy `.dorfl.json`.
+	// or the legacy `dorfl.json`.
 	const configAbs = repoConfigPath(repoPath);
 	if (existsSync(configAbs)) {
 		scanText(

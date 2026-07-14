@@ -176,7 +176,7 @@ on:
       # Override an engine gate for THIS manual run only, riding the env layer of
       # flag > env > per-repo > global > default. Modelled as \`type: choice\` with a
       # BLANK first option (not \`type: boolean\`, which cannot represent "unset"):
-      # blank ⇒ emit NOTHING (the committed .dorfl.json wins, today's
+      # blank ⇒ emit NOTHING (the committed dorfl.json wins, today's
       # behaviour); a non-blank choice ⇒ export the matching DORFL_* for this
       # run. The blank is load-bearing: env-config coercion THROWS on an empty
       # string, so the per-job step below only writes when the input is non-blank.
@@ -247,11 +247,11 @@ env:
   # ── The engine GATE FAMILY is resolved FROM CONFIG, not carried here ─────────
   # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
   # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME .dorfl.json the laptop uses applies here. This
+  # > default. The SAME dorfl.json the laptop uses applies here. This
   # workflow emits NO DORFL_AUTO_BUILD / DORFL_AUTO_TASK /
   # DORFL_OBSERVATION_TRIAGE / DORFL_SURFACE_BLOCKERS line on a
   # SCHEDULE/PUSH tick, so the env layer carries NO defaults there — your committed
-  # .dorfl.json wins (then the global config, then the strict built-in
+  # dorfl.json wins (then the global config, then the strict built-in
   # defaults autoBuild:false / autoTask:false / observationTriage:'off' /
   # surfaceBlockers:false). The ONE exception is a manual \`workflow_dispatch\` where
   # you fill a gate override input (above): the per-job step then exports that ONE
@@ -260,7 +260,7 @@ env:
   # \`enumerate\` scan (it gates the matrix pools via observationTriage/surfaceBlockers
   # /autoTask/autoBuild), not just the agent-running jobs — or the override is inert
   # for the very pools it targets. To enable CI autonomy durably, set the gate(s) in
-  # .dorfl.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
+  # dorfl.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
   # install-ci is one-time).
 
 jobs:
@@ -477,7 +477,7 @@ jobs:
       - name: advance one item in-place (merge ⇒ rebase + CAS land on main)
         # In-place (no --isolated/--remote). \`--merge\` ties the integration mode
         # to THIS (matrix) shape: it sits at the top of the precedence chain, so
-        # the workflow mode always wins over the repo's \`.dorfl.json\` default.
+        # the workflow mode always wins over the repo's \`dorfl.json\` default.
         # Cross-job land safety comes from the engine's CAS-retry loop, not from
         # this workflow's job shape. \`gh\` (merge / PR housekeeping) reads
         # \`GH_TOKEN\` from the env.
@@ -644,7 +644,7 @@ export function validateAdvanceLifecycleWorkflow(
 	// The workflow emits NO active gate env line for any of AUTO_BUILD / AUTO_TASK
 	// / OBSERVATION_TRIAGE / SURFACE_BLOCKERS: the env layer is the OPTIONAL CI-only
 	// override layer, NOT the carrier of defaults. Emitting any of them would FORCE
-	// env to win over the repo's own .dorfl.json (the precedence is
+	// env to win over the repo's own dorfl.json (the precedence is
 	// flag > env > per-repo > global > default), silently shadowing per-repo gate
 	// config in CI — exactly the bug this task closes. A user who genuinely wants a
 	// CI-SPECIFIC override adds the env var themselves (the opt-in CI override the

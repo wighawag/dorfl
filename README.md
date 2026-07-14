@@ -37,7 +37,7 @@ setup       # existing repo: onboard onto the work/ contract
 
 **2. The `work/` contract, versioned with your code.** What adoption scaffolds into
 your repo: one markdown file per item, status is the folder it lives in, plus a
-`.dorfl.json` acceptance gate. This is the durable substrate the CLI later consumes
+`dorfl.json` acceptance gate. This is the durable substrate the CLI later consumes
 (see [The `work/` contract](#the-work-contract) below for the full layout).
 
 **3. Execute (the CLI) & CI.** Once the contract is in place, install the runner and

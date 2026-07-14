@@ -152,7 +152,7 @@ describe('surfaceStaging:true (default) — staged needsAnswers items appear in 
 		// Repo-level config opt-in to the SURFACE create-gate; surfaceStaging default
 		// `true` widens it into staging via lifecycleGatesFrom.
 		writeFileSync(
-			join(repo, '.dorfl.json'),
+			join(repo, 'dorfl.json'),
 			JSON.stringify({surfaceBlockers: true}, null, 2),
 		);
 		seedStagedTask('staged-task', {needsAnswers: true});
@@ -182,7 +182,7 @@ describe('surfaceStaging:false — staging is NOT inspected (legacy pool-only)',
 
 	it('scan --json `lifecycle.surface[]` is empty for staged-only items when the gate is off', () => {
 		writeFileSync(
-			join(repo, '.dorfl.json'),
+			join(repo, 'dorfl.json'),
 			JSON.stringify({surfaceBlockers: true, surfaceStaging: false}, null, 2),
 		);
 		seedStagedTask('staged-task', {needsAnswers: true});

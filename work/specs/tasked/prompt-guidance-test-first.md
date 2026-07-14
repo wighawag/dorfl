@@ -18,7 +18,7 @@ Add a **NUDGE category** to the config and frontmatter, `promptGuidance`, whose 
 From the maintainer's perspective:
 
 - During `setup`'s adoption chat, they are asked once (phrased AS a nudge) whether AFK builds here should default to test-first.
-- If yes, it is recorded as `promptGuidance.testFirst: true` in `.dorfl.json`.
+- If yes, it is recorded as `promptGuidance.testFirst: true` in `dorfl.json`.
 - When the runner assembles the worker's prompt, the existing soft "TDD where the task asks for it" line is STRENGTHENED in-band to a test-first nudge ("at the agreed seam, write the failing test before the code; this is guidance, acceptance is still the verify gate"), reaching the worker reliably and portably.
 - The `verify` gate still decides pass/fail. Nothing about enforcement changes.
 - A single task or brief can override the repo default in its frontmatter (this task is exploratory, so skip; or this task, so force on), exactly like `humanOnly` / `autoBuild`.
@@ -27,7 +27,7 @@ This sits entirely inside doctrines the codebase already states: **in-band-for-p
 
 ## User Stories
 
-1. As a maintainer, I want to declare `promptGuidance.testFirst: true` once in `.dorfl.json`, so every AFK build in this repo is nudged to write the failing test first, without my having to repeat it per task.
+1. As a maintainer, I want to declare `promptGuidance.testFirst: true` once in `dorfl.json`, so every AFK build in this repo is nudged to write the failing test first, without my having to repeat it per task.
 2. As a maintainer, I want the flag named `promptGuidance.*` (not `testFirst` at top level, not in the gate family), so it is OBVIOUS this is a prompt nudge and not an enforced acceptance criterion the runner guarantees.
 3. As the runner, I want the nudge resolved like the other policies (`flag > env > per-repo > global > default:false`), so it composes with the existing config-resolution machinery rather than introducing a new one.
 4. As the runner, I want the nudge injected IN-BAND into the worker's prompt (strengthening the existing CLAIM-PROTOCOL "TDD where the task asks for it" line), so it reaches the AFK worker reliably and portably, not via AGENTS.md, which the runner cannot assume exists.
@@ -42,11 +42,11 @@ Omit both `humanOnly` and `needsAnswers`. This brief is resolved and straightfor
 
 ## Implementation Decisions
 
-- **New config key `promptGuidance` (object) in `.dorfl.json`**, first member `testFirst: boolean`. NOT under the gate family; a distinct namespace whose name says "nudge". Default off (omitted = false).
+- **New config key `promptGuidance` (object) in `dorfl.json`**, first member `testFirst: boolean`. NOT under the gate family; a distinct namespace whose name says "nudge". Default off (omitted = false).
 - **Resolution** mirrors the existing policy chain: `CLI flag > env > per-repo config > global config > default (false)`. Reuse the resolver pattern the gate family already uses; do not invent a parallel one.
 - **Per-item override**: slice/brief frontmatter may carry `promptGuidance.testFirst` (true/false) to override the repo default for that item, same precedence idea as `humanOnly`/`autoBuild` at the item level.
 - **Prompt assembly** (`prompt.ts` plus the CLAIM-PROTOCOL wrapper): when the resolved nudge is on, the worker prompt's existing soft test-first line is strengthened in-band. The wrapper TEMPLATE owns the canonical text (single source of truth, per the existing "wrapper is read verbatim from CLAIM-PROTOCOL" rule), so the strengthened line, and its conditional inclusion, must be expressible from the protocol doc plus the resolved flag, NOT hardcoded in TS prose. Confirm the cleanest seam: a conditional fragment in CLAIM-PROTOCOL, or a flag-gated wrapper variant.
-- **setup**: add ONE adoption-chat question (fold into the existing A-phase question round, do NOT add a separate round), phrased as a nudge. On "yes", write `promptGuidance.testFirst: true` into `.dorfl.json` (merge-in, never clobber, per setup's A1 rule). setup MUST NOT write AGENTS.md (host-owned, now an explicit invariant per `methodology-and-skills.md`).
+- **setup**: add ONE adoption-chat question (fold into the existing A-phase question round, do NOT add a separate round), phrased as a nudge. On "yes", write `promptGuidance.testFirst: true` into `dorfl.json` (merge-in, never clobber, per setup's A1 rule). setup MUST NOT write AGENTS.md (host-owned, now an explicit invariant per `methodology-and-skills.md`).
 - **AGENTS.md is untouched** by this feature end-to-end. The human-facing statement, if any, is the maintainer's to add to their own host config; the runner's load-bearing channel is the in-band prompt.
 
 ## Testing Decisions

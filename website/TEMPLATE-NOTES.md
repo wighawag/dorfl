@@ -154,7 +154,7 @@ template-backport candidates.
   stacked panels under the same heading: (1) **Adopt the contract** —
   `dorfl skills add` + `from-idea` / `setup` skills, (2) the **`work/` contract**
   substrate that adoption yields (`work/tasks|specs|notes|protocol/` +
-  `.dorfl.json`), (3) **Execute** — `dorfl do` / `run` / `intake`.
+  `dorfl.json`), (3) **Execute** — `dorfl do` / `run` / `intake`.
 - **Why:** `CONTEXT.md` states the invariant _adopt = skill, execute = command_.
   The old page led with the runner and never mentioned skills, which put layer
   one (adopt, runner-agnostic) behind layer three (execute). Skill-first

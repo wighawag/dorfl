@@ -13,7 +13,7 @@ The core tracer for `promptGuidance.testFirst`: a thin end-to-end path through s
 
 End-to-end behaviour:
 
-1. `.dorfl.json` accepts a new top-level object `promptGuidance` whose first member is `testFirst: boolean`. It is its OWN namespace, deliberately NOT inside the gate family (`verify`/`autoBuild`/`humanOnly`), so the name itself signals "nudge, not guarantee". Omitted ⇒ `false`. The namespace is shaped so adding sibling nudges later (e.g. `preferSmallDiffs`) is a same-pattern addition, not a refactor.
+1. `dorfl.json` accepts a new top-level object `promptGuidance` whose first member is `testFirst: boolean`. It is its OWN namespace, deliberately NOT inside the gate family (`verify`/`autoBuild`/`humanOnly`), so the name itself signals "nudge, not guarantee". Omitted ⇒ `false`. The namespace is shaped so adding sibling nudges later (e.g. `preferSmallDiffs`) is a same-pattern addition, not a refactor.
 2. The resolved value is computed via the SAME precedence chain the gate family already uses: `CLI flag > env (DORFL_PROMPT_GUIDANCE_TEST_FIRST or whatever matches existing naming) > per-repo config > global config > built-in default (false)`. Reuse the existing resolver pattern in `packages/dorfl/src/config.ts` (the same shape as `autoBuild`/`autoSlice`), do NOT invent a parallel mechanism.
 3. When the runner assembles the worker prompt (`prompt.ts` + the CLAIM-PROTOCOL wrapper), the existing soft line — currently `"Implement it to satisfy every Acceptance criterion. TDD where the task asks for it; match the repo's house style."` in `skills/setup/protocol/CLAIM-PROTOCOL.md` (and the mirrored `work/protocol/CLAIM-PROTOCOL.md`) — is STRENGTHENED in-band when the nudge resolves to `true`, to something equivalent to: _"at the agreed seam, write the failing test BEFORE the production code; this is guidance, not a gate — the `verify` step still decides pass/fail."_ When the nudge resolves to `false`, the wrapper is byte-identical to today.
 4. The canonical strengthened text lives in the PROTOCOL DOC (`CLAIM-PROTOCOL.md`), NOT as a TS string literal — per the existing "wrapper text is read verbatim from CLAIM-PROTOCOL.md" rule. Whatever mechanism is chosen (see Open question), the text source-of-truth stays in the markdown.
@@ -38,7 +38,7 @@ A secondary question that may need the same decision: does the strengthened text
 
 ## Acceptance criteria
 
-- [ ] `.dorfl.json` parses `promptGuidance.testFirst: true|false` without warning; unknown keys under `promptGuidance` are tolerated/warned per the existing config-tolerance pattern, with `testFirst` the only declared member.
+- [ ] `dorfl.json` parses `promptGuidance.testFirst: true|false` without warning; unknown keys under `promptGuidance` are tolerated/warned per the existing config-tolerance pattern, with `testFirst` the only declared member.
 - [ ] Resolution precedence is identical in shape to `autoBuild`/`autoSlice`: CLI flag > env > per-repo > global > default `false`. Tests mirror the existing gate-family resolution tests in `packages/dorfl/test/config.test.ts`.
 - [ ] With the nudge resolved `false`, the assembled worker prompt is BYTE-IDENTICAL to today's (a snapshot/text equality test guards this — the existing prompt tests in `packages/dorfl/test/prompt.test.ts` are the model).
 - [ ] With the nudge resolved `true`, the assembled worker prompt contains the strengthened test-first line (assert on the visible string at the prompt-assembly seam), and the original soft phrasing is gone (or supplemented, per the decision above).

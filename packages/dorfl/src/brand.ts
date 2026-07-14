@@ -8,7 +8,7 @@
  *
  *   - the `DORFL_` env-var prefix (a missed one is read as "unset" — the
  *     worst kind of failure: silent);
- *   - the `.dorfl.json` per-repo config filename;
+ *   - the `dorfl.json` per-repo config filename;
  *   - the `~/.dorfl/` workspaces-dir default + the `dorfl` config
  *     dir name;
  *   - the `.dorfl-job.json` per-job record filename;

@@ -14,13 +14,13 @@ The `allowAgents` → `autoBuild` config rename — a clean, ISOLATED breaking-c
 
 ### Precise scope
 
-- Rename the config key `allowAgents` → `autoBuild` across the config surface: `.dorfl.json` (the per-repo file), `config.ts` / `env-config.ts` / `repo-config.ts` (the `REPO_ALLOWED_KEYS` entry, the resolution chain, the `DORFL_*` env var, the CLI flag `--allow-agents`/`--no-allow-agents` → `--auto-build`/`--no-auto-build`), and the docs / WORK-CONTRACT references.
+- Rename the config key `allowAgents` → `autoBuild` across the config surface: `dorfl.json` (the per-repo file), `config.ts` / `env-config.ts` / `repo-config.ts` (the `REPO_ALLOWED_KEYS` entry, the resolution chain, the `DORFL_*` env var, the CLI flag `--allow-agents`/`--no-allow-agents` → `--auto-build`/`--no-auto-build`), and the docs / WORK-CONTRACT references.
 - **Alias/deprecation window:** the OLD `allowAgents` key/flag/env still WORKS for a deprecation window (mapped to `autoBuild` with a deprecation warning), so existing repo configs don't break on upgrade. Mirror the precedent migration (`rename-reviewpr-to-review`) for the exact alias/warning shape.
 - After this, the gate family reads symmetrically: `autoBuild` (build a ready slice) / `autoSlice` (slice a ready SPEC) / `autoTriage` (auto-disposition an observation) — all default off, all resolved through the same chain.
 
 ## Acceptance criteria
 
-- [ ] `autoBuild` is the new name across `.dorfl.json`, `config.ts` / `env-config.ts` / `repo-config.ts` (allowed keys, resolution chain, env var, CLI flag), docs, and WORK-CONTRACT.
+- [ ] `autoBuild` is the new name across `dorfl.json`, `config.ts` / `env-config.ts` / `repo-config.ts` (allowed keys, resolution chain, env var, CLI flag), docs, and WORK-CONTRACT.
 - [ ] The OLD `allowAgents` key/flag/env still works for a deprecation window (aliased to `autoBuild` with a deprecation warning) — existing configs don't break on upgrade.
 - [ ] The gate family is symmetric: `autoBuild`/`autoSlice`/`autoTriage`, all default off, all resolved through the same chain.
 - [ ] Tests: `autoBuild` resolves through flag/env/per-repo/global/default; the old `allowAgents` alias still resolves (with a deprecation signal); the existing gate-composition tests pass under the new name. House config-resolution test style; no shared/global location touched.

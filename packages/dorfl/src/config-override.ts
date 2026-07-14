@@ -6,7 +6,7 @@ import {defaultConfigPath, type PartialConfig} from './config.js';
  * The **per-machine config override layer** (ADR
  * `per-machine-config-override-layer`): a single file at
  * `<configDir>/config.override.json` (sibling of `config.json`) that overrides
- * the COMMITTED per-repo `.dorfl.json` but is itself overridden by env
+ * the COMMITTED per-repo `dorfl.json` but is itself overridden by env
  * and flags. It gives the laptop a stable, file-based, high-precedence per-
  * machine lever symmetric to CI's `DORFL_*` env, fixing "I can't make
  * this checkout override what the repo committed without an env var whose

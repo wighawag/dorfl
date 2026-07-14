@@ -76,7 +76,7 @@ export interface IdentityProviders {
  * A configured runner identity (a bot). The WHOLE block is optional — absent ⇒
  * fully ambient (today's behaviour, byte-for-byte). When present, `auth` is
  * MANDATORY (both transports stated); `name`/`email` default in; `providers` is
- * optional. HOST-ONLY: rejected in a per-repo `.dorfl.json` (it carries
+ * optional. HOST-ONLY: rejected in a per-repo `dorfl.json` (it carries
  * secrets and is per-machine), so it lives only in the global config.
  */
 export interface Identity {

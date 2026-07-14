@@ -383,11 +383,11 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 	it('reads eligibility from a working checkout and honours per-repo autoBuild', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
 		writeFileSync(
-			join(root, 'repo', '.dorfl.json'),
+			join(root, 'repo', 'dorfl.json'),
 			JSON.stringify({autoBuild: true}),
 		);
 		// Global is strict, but the per-repo file opts in ⇒ eligible (the working-tree
-		// scan CAN read a checked-out .dorfl.json; the mirror scan cannot).
+		// scan CAN read a checked-out dorfl.json; the mirror scan cannot).
 		const report = scanRepoPaths(
 			[join(root, 'repo')],
 			mergeConfig({autoBuild: false}),
@@ -397,16 +397,16 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 
 	// REGRESSION (per-machine-config-override-layer Gate-2 block): the in-place
 	// scan MUST apply the per-machine override on top of the committed
-	// `.dorfl.json`. Both files set the SAME key, in OPPOSITE directions:
+	// `dorfl.json`. Both files set the SAME key, in OPPOSITE directions:
 	// committed `autoBuild: true`, override `"*": {autoBuild: false}`. The override
 	// is per-machine and beats the committed file, so the item must be INELIGIBLE.
 	// Using the `"*"` bucket means no git remote / hub-key resolution is needed,
 	// so this isolates the threading defect (override dropped at the call site)
 	// from URL resolution.
-	it('applies the per-machine override ("*" bucket) OVER the committed .dorfl.json', () => {
+	it('applies the per-machine override ("*" bucket) OVER the committed dorfl.json', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
 		writeFileSync(
-			join(root, 'repo', '.dorfl.json'),
+			join(root, 'repo', 'dorfl.json'),
 			JSON.stringify({autoBuild: true}),
 		);
 		const override: ConfigOverrideMap = {'*': {autoBuild: false}};
@@ -426,7 +426,7 @@ describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 	it('control: WITHOUT the override the committed autoBuild:true stands (eligible)', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});
 		writeFileSync(
-			join(root, 'repo', '.dorfl.json'),
+			join(root, 'repo', 'dorfl.json'),
 			JSON.stringify({autoBuild: true}),
 		);
 		const report = scanRepoPaths(
@@ -507,10 +507,10 @@ describe('scanRepoPaths — taskable-prd pool (`prds[]`)', () => {
 		expect(ready.eligibility.eligible).toBe(false);
 	});
 
-	it('honours the per-repo `.dorfl.json` autoTask override (off globally, on per-repo)', () => {
+	it('honours the per-repo `dorfl.json` autoTask override (off globally, on per-repo)', () => {
 		writePrd('repo', 'prd', 'ready.md', {slug: 'ready'});
 		writeFileSync(
-			join(root, 'repo', '.dorfl.json'),
+			join(root, 'repo', 'dorfl.json'),
 			JSON.stringify({autoTask: true}),
 		);
 		const report = scanRepoPaths(
@@ -595,7 +595,7 @@ describe('scan (registry) — taskable-prd pool (`prds[]`)', () => {
 		expect(by.get('asks')!.eligibility.eligible).toBe(false);
 	});
 
-	it('honours the COMMITTED per-repo `.dorfl.json` autoTask override on the mirror', async () => {
+	it('honours the COMMITTED per-repo `dorfl.json` autoTask override on the mirror', async () => {
 		registerMirrorWithWork(workspacesDir(), 'repo', {
 			prd: {'ready.md': `---\nslug: ready\n---\n# PRD`},
 			repoConfig: {autoTask: true},
@@ -830,10 +830,10 @@ describe('scanRepoPaths — lifecycle pool (in-place working tree)', () => {
 		expect(repo.lifecycle.triage.map((t) => t.slug)).toEqual(['obs-x']);
 	});
 
-	it('honours the per-repo `.dorfl.json` gate overrides (off globally, on per-repo)', () => {
+	it('honours the per-repo `dorfl.json` gate overrides (off globally, on per-repo)', () => {
 		writeObservation('repo', 'obs-a');
 		writeFileSync(
-			join(root, 'repo', '.dorfl.json'),
+			join(root, 'repo', 'dorfl.json'),
 			JSON.stringify({observationTriage: 'ask'}),
 		);
 		// Global is calm; the per-repo file opts triage in.

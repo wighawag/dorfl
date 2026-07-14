@@ -47,7 +47,7 @@ import {heldTaskSlugs} from './item-lock.js';
  *     over the mirror's `work/specs/ready` + `work/specs/tasked` read via the mirror-ref
  *     {@link LedgerReadStrategy.resolveMirrorSpecPool}.
  *
- * Per-repo policy parity: a bare mirror has no checked-out `.dorfl.json`,
+ * Per-repo policy parity: a bare mirror has no checked-out `dorfl.json`,
  * but the COMMITTED one is reachable on `main` (the `do --remote` per-repo seam).
  * We layer it via {@link resolveRepoConfigFromMirror} so the same logical `work/`
  * state yields the SAME `autoBuild`/`autoTask` decision an in-place checkout
@@ -59,7 +59,7 @@ export interface ScanMirrorPoolOptions {
 	/** The bare hub mirror directory (`<workspacesDir>/repos/<key>.git`). */
 	mirrorPath: string;
 	/**
-	 * The global + default config layer. The repo's COMMITTED `.dorfl.json`
+	 * The global + default config layer. The repo's COMMITTED `dorfl.json`
 	 * (read from the mirror's `main`) is layered on top, so `autoBuild`/`autoTask`
 	 * resolve per-repo exactly as the in-place scan resolves them from the checkout.
 	 */
@@ -146,7 +146,7 @@ export async function scanMirrorPool(
 	const read = options.read ?? ledgerRead;
 	const warn = options.warn;
 
-	// Per-repo policy parity: layer the COMMITTED `.dorfl.json` from the
+	// Per-repo policy parity: layer the COMMITTED `dorfl.json` from the
 	// mirror's `main` (the `do --remote` per-repo seam) onto global. Never fatal —
 	// a config-less repo or a read fault falls back to global + default.
 	let repoConfig: Config;

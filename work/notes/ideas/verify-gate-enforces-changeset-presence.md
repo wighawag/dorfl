@@ -21,7 +21,7 @@ There is no changeset check. So a `work/<slug>` branch that IMPLEMENTS code unde
 
 ## The pattern to adopt (proven in `anon-pi`)
 
-`~/dev/github/wighawag/anon-pi` already solves this. Its `.dorfl.json` `verify` wires the changeset status check straight into the gate:
+`~/dev/github/wighawag/anon-pi` already solves this. Its `dorfl.json` `verify` wires the changeset status check straight into the gate:
 
 ```
 pnpm format:check && pnpm changeset status --since=main && pnpm -r build && pnpm -r test

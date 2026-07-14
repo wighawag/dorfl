@@ -66,7 +66,7 @@ A sharp boundary, NOT two flavours of one thing:
       1. **No-arbiter is a loud ERROR, not a silent degrade to in-place (D2).** A repo with no configured arbiter cannot isolate; `do <slug>` fails with guidance (configure an arbiter or pass `--in-place`) rather than quietly reintroducing the entanglement risk under the pre-flip name.
       2. **The task must be on the arbiter (D4).** Isolated builds off `<arbiter>/main`, so a local-only / un-pushed task (or dependency) is invisible to the default — consistent with the arbiter-as-source-of-truth direction (`drive-tasks` already lives with this: push-first, never fall back to in-place). The `--in-place` opt-out covers the edit-locally-then-build loop.
 
-      Per-repo config (`harness` / `verify` / `provider`) is honoured on the isolated default via the SAME `resolveRemoteRepoConfig` read `--isolated` and `--remote` already use (`.dorfl.json` from `<arbiter>/main`), so a repo declaring e.g. `harness: pi` still gets that harness under the default (D1).
+      Per-repo config (`harness` / `verify` / `provider`) is honoured on the isolated default via the SAME `resolveRemoteRepoConfig` read `--isolated` and `--remote` already use (`dorfl.json` from `<arbiter>/main`), so a repo declaring e.g. `harness: pi` still gets that harness under the default (D1).
   - **Auto-task priority within a tick:** eligible **tasks first, then specs to task** (drain ready work before creating more), with a per-repo toggle to flip it.
 
 CI uses **`do`** AND **`advance`** (wired by the future `install-ci`), never `run --once` — which verb is the §3b routing rule.

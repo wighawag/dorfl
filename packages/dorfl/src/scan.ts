@@ -384,7 +384,7 @@ export function scoreItems(
  * primitive; the per-repo `work/` read goes through the seam's mirror-ref method.
  *
  * The autonomy gate's `autoBuild` policy is resolved PER REPO. NOTE: a bare
- * mirror has no checked-out `.dorfl.json`, so the per-repo file cannot be
+ * mirror has no checked-out `dorfl.json`, so the per-repo file cannot be
  * read from it — the global/env-resolved policy applies (the per-repo override is
  * a working-checkout concern, served by {@link scanRepoPaths}).
  */
@@ -450,7 +450,7 @@ export async function scan(
 		);
 		// Spec pool — the TASKABLE-SPEC companion of the task pool above
 		// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`). Resolve
-		// `autoTask` PER REPO from the mirror's COMMITTED `.dorfl.json`
+		// `autoTask` PER REPO from the mirror's COMMITTED `dorfl.json`
 		// (exactly as the mirror-side pool scan does — NOT forked); a read fault is
 		// non-fatal (warn + global fall-back), since `scan` is read-only and must
 		// degrade gracefully (ADR §5/§6).
@@ -476,7 +476,7 @@ export async function scan(
 		const specs = scoreSpecs(mirror.path, specPool, repoAutoTask);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this mirror's question-surfacing config (resolved from its committed
-		// `.dorfl.json`, with the same non-fatal global fall-back as `autoTask`
+		// `dorfl.json`, with the same non-fatal global fall-back as `autoTask`
 		// above) and computed by REUSING `gatherLifecycleMirror` → `buildLifecyclePools`
 		// (NOT a forked predicate), so it AGREES with the `run` selection.
 		let repoLifecycleConfig = {
@@ -536,7 +536,7 @@ export async function scan(
  * checkout IS the local state); the fetch-first contract (ADR §5/§6) applies to
  * the REGISTRY `scan` above, which refreshes each bare mirror before reading.
  * Reads each repo's `work/` via the read seam's local-tree method and honours its
- * per-repo `.dorfl.json` `autoBuild`. The registry `scan` above is the
+ * per-repo `dorfl.json` `autoBuild`. The registry `scan` above is the
  * mirror-ref counterpart; this is its working-tree sibling.
  */
 export function scanRepoPaths(
@@ -579,7 +579,7 @@ export function scanRepoPaths(
 			override,
 		}).config;
 		// Spec pool — the TASKABLE-SPEC companion of the task pool. Resolve
-		// `autoTask` PER REPO from the working-tree `.dorfl.json` (the same
+		// `autoTask` PER REPO from the working-tree `dorfl.json` (the same
 		// way `autoBuild` is resolved); `taskableSpecs` (the SAME `autoslice-gate`
 		// predicate the autopick paths run) decides what is taskable — no forked
 		// predicate. This is what makes the propose-mode CI matrix enumerate `spec:`

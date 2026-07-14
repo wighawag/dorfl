@@ -70,7 +70,7 @@ function porcelain(repo: string): string {
 /**
  * Build a fixture repo carrying ALL FOUR data layers under the LEGACY `prd`
  * vocabulary: a `prds/*` item in every lifecycle folder (proposed/ready/tasked),
- * a task with `prd:` frontmatter INCLUDING a `done/` item, a `.dorfl.json` with
+ * a task with `prd:` frontmatter INCLUDING a `done/` item, a `dorfl.json` with
  * `prdsLandIn`, and an inert (merged) `work/prd-<slug>` branch. Committed clean.
  */
 function buildFixture(root: string): string {
@@ -110,7 +110,7 @@ function buildFixture(root: string): string {
 	// (c) CONFIG — `prdsLandIn`.
 	writeFile(
 		repo,
-		'.dorfl.json',
+		'dorfl.json',
 		'{\n  "verify": "x",\n  "prdsLandIn": "ready"\n}\n',
 	);
 
@@ -245,19 +245,19 @@ describe('migrateItemContent — frontmatter + inert refs (pure)', () => {
 describe('migrateConfig — the config key rename (textual, value-preserving)', () => {
 	it('renames prdsLandIn -> specsLandIn preserving the value + formatting', () => {
 		const repo = mkdtempSync(join(scratch, 'cfg-'));
-		writeFile(repo, '.dorfl.json', '{\n  "prdsLandIn": "ready"\n}\n');
+		writeFile(repo, 'dorfl.json', '{\n  "prdsLandIn": "ready"\n}\n');
 		const renamed = migrateConfig(repo);
 		expect(renamed).toEqual([{from: 'prdsLandIn', to: 'specsLandIn'}]);
-		expect(read(repo, '.dorfl.json')).toBe('{\n  "specsLandIn": "ready"\n}\n');
+		expect(read(repo, 'dorfl.json')).toBe('{\n  "specsLandIn": "ready"\n}\n');
 	});
 
 	it('is a no-op on an already-migrated config', () => {
 		const repo = mkdtempSync(join(scratch, 'cfg2-'));
-		writeFile(repo, '.dorfl.json', '{\n  "specsLandIn": "ready"\n}\n');
+		writeFile(repo, 'dorfl.json', '{\n  "specsLandIn": "ready"\n}\n');
 		expect(migrateConfig(repo)).toEqual([]);
 	});
 
-	it('is safe on a repo with no .dorfl.json', () => {
+	it('is safe on a repo with no dorfl.json', () => {
 		const repo = mkdtempSync(join(scratch, 'cfg3-'));
 		expect(migrateConfig(repo)).toEqual([]);
 	});
@@ -294,8 +294,8 @@ describe('runPrdToSpec — deterministic four-layer conversion', () => {
 		expect(read(repo, 'work/tasks/ready/t2.md')).toContain('spec: my-feature');
 
 		// (c) CONFIG key renamed (value preserved).
-		expect(read(repo, '.dorfl.json')).toContain('"specsLandIn": "ready"');
-		expect(read(repo, '.dorfl.json')).not.toContain('prdsLandIn');
+		expect(read(repo, 'dorfl.json')).toContain('"specsLandIn": "ready"');
+		expect(read(repo, 'dorfl.json')).not.toContain('prdsLandIn');
 
 		// (d) inert REFS renamed.
 		const branches = run(
@@ -324,7 +324,7 @@ describe('runPrdToSpec — deterministic four-layer conversion', () => {
 		for (const rel of [
 			'work/specs/ready/my-feature.md',
 			'work/tasks/done/t1.md',
-			'.dorfl.json',
+			'dorfl.json',
 		]) {
 			expect(read(a, rel)).toBe(read(b, rel));
 		}
@@ -352,7 +352,7 @@ describe('runPrdToSpec — --dry-run writes nothing', () => {
 		expect(porcelain(repo)).toBe(before);
 		expect(existsSync(join(repo, 'work/prds/ready/my-feature.md'))).toBe(true);
 		expect(existsSync(join(repo, 'work/specs'))).toBe(false);
-		expect(read(repo, '.dorfl.json')).toContain('prdsLandIn');
+		expect(read(repo, 'dorfl.json')).toContain('prdsLandIn');
 		expect(
 			run(
 				'git',

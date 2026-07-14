@@ -232,7 +232,7 @@ function loadGlobalAndOverride(configPath: string | undefined): {
 
 /**
  * Resolve the effective config for a `do --remote <r>` run, layering the target
- * repo's COMMITTED `.dorfl.json` (read from `<arbiter>/main` via the hub
+ * repo's COMMITTED `dorfl.json` (read from `<arbiter>/main` via the hub
  * mirror) into the SAME `flag > env > per-repo > global > default` chain in-place
  * `do` uses. This is the no-checkout analogue of {@link resolveRepoConfig}: there
  * is no working tree, so the bytes come from the arbiter's `main` instead of the
@@ -247,7 +247,7 @@ function loadGlobalAndOverride(configPath: string | undefined): {
  * the arbiter was momentarily offline.
  *
  * The config read uses {@link ensureMirrorMain} (main-only, NO-prune), NOT the
- * all-heads pruning {@link ensureMirror}: `git show main:.dorfl.json` only
+ * all-heads pruning {@link ensureMirror}: `git show main:dorfl.json` only
  * needs `main`, and the all-heads `+refs/heads/*:refs/heads/*` fetch would let a
  * `work/<slug>` branch CHECKED OUT in some stale job worktree block it (git
  * refuses to fetch into a checked-out branch), throwing the read into its
@@ -493,7 +493,7 @@ function resolveDefaultArbiterForCwd(
 	// The SAME per-repo config read in-place `do` uses (`resolveRepoConfig` on the
 	// cwd), so `--isolated` resolves the arbiter remote NAME (`defaultArbiter`)
 	// through the identical `flag > env > per-repo > global > default` chain. An
-	// absent `.dorfl.json` falls back to the global/default (`origin`).
+	// absent `dorfl.json` falls back to the global/default (`origin`).
 	return resolveRepoConfig({repoPath: cwd, global, flags, override}).config
 		.defaultArbiter;
 }
@@ -1893,7 +1893,7 @@ export function buildProgram(): Command {
 			const slug = resolveTaskOnlySlug(rawSlug);
 			// Resolve the `promptGuidance` NUDGE namespace through the SAME chain the
 			// gate family uses (env > per-repo > global > default), so e.g. a
-			// `promptGuidance.testFirst:true` in `.dorfl.json` strengthens the
+			// `promptGuidance.testFirst:true` in `dorfl.json` strengthens the
 			// wrapper line for `dorfl prompt` exactly as it would in `do`/`run`.
 			const cwd = process.cwd();
 			const global = loadConfig();
@@ -2052,7 +2052,7 @@ export function buildProgram(): Command {
 			}
 
 			// Resolve the integration mode at completion time, highest first:
-			//   --merge/--propose flag > per-repo .dorfl.json > global > default.
+			//   --merge/--propose flag > per-repo dorfl.json > global > default.
 			// The flag sits at the TOP of the same chain the autonomous runner uses
 			// (per-repo > global > default), so human and autonomous paths agree.
 			const flagMode = integrationFromFlags(flags);
@@ -2296,7 +2296,7 @@ export function buildProgram(): Command {
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
 			// Resolve the integration mode at integrate-time, highest first:
-			//   --merge/--propose flag > per-repo .dorfl.json > global > default.
+			//   --merge/--propose flag > per-repo dorfl.json > global > default.
 			// (Same chain `complete` uses — `do` is the autonomous twin.)
 			let flagMode;
 			try {
@@ -2320,7 +2320,7 @@ export function buildProgram(): Command {
 			// ORTHOGONAL: `--isolated` + `--remote` is REDUNDANT (a foreign `--remote` is
 			// already isolated), so we accept it and `--remote` WINS (see `## Decisions`).
 			//
-			// In BOTH cases the repo's COMMITTED `.dorfl.json` is reachable on
+			// In BOTH cases the repo's COMMITTED `dorfl.json` is reachable on
 			// `<arbiter>/main` (the mirror), so we layer it — `flag > env > per-repo >
 			// global > default` parity with in-place `do` (task
 			// `remote-do-reads-per-repo-config-from-arbiter-main`). Only the whitelisted
@@ -2440,7 +2440,7 @@ export function buildProgram(): Command {
 				// mirror fetch runs under). These are host-only by definition (rejected
 				// per-repo), so reading them from global+flags first is correct and stable.
 				const bootstrap = resolveGlobalConfig(global, remoteFlags);
-				// Source the committed `.dorfl.json` from `<arbiter>/main` via the
+				// Source the committed `dorfl.json` from `<arbiter>/main` via the
 				// hub mirror, then layer ONLY its whitelisted keys through the EXISTING
 				// per-repo machinery. The read refreshes ONLY `main` (no-prune), so a
 				// `work/<slug>` branch checked out in a stale worktree can never block it,
@@ -2495,7 +2495,7 @@ export function buildProgram(): Command {
 					// Single-job build path: gate the REBASED tip (the default) unconditionally.
 					freshWorktreeGate: remoteConfig.freshWorktreeGate,
 					// Cross-job merge-serialiser CAS-retry cap (resolved through the per-repo
-					// chain on the arbiter-side `.dorfl.json` too) — spec
+					// chain on the arbiter-side `dorfl.json` too) — spec
 					// `land-time-reverify-and-parallel-merge-ceiling` Story 5.
 					mergeRetries: remoteConfig.mergeRetries,
 					noPR: remoteConfig.noPR,
@@ -2895,7 +2895,7 @@ export function buildProgram(): Command {
 			const cwd = process.cwd();
 			const {global, override} = loadGlobalAndOverride(flags.config);
 			// Resolve the integration mode this invocation asks for, highest first:
-			//   --merge/--propose flag > per-repo .dorfl.json > global > default.
+			//   --merge/--propose flag > per-repo dorfl.json > global > default.
 			// The SAME chain `do`/`complete` use (via `integrationFromFlags`), so the
 			// human, the autonomous runner, and the CI workflow all resolve the SAME
 			// order. This is what ties the CI dispatch `integrationMode` to the actual
@@ -2959,7 +2959,7 @@ export function buildProgram(): Command {
 					);
 					process.exit(1);
 				}
-				// Source the arbiter's COMMITTED `.dorfl.json` from `<arbiter>/main`
+				// Source the arbiter's COMMITTED `dorfl.json` from `<arbiter>/main`
 				// via the hub mirror + layer ONLY its whitelisted keys — the SAME
 				// resolution `do --isolated` uses, so the gate family (autoBuild/autoTask/
 				// observationTriage/surfaceBlockers) + selectionOrder + integration resolve

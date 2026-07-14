@@ -15,7 +15,7 @@ The Dorfl landing site (`website/src/routes/+page.svelte`) sells dorfl purely as
 Rewrite the getting-started / install section to present dorfl as THREE layers, in this order, so the reader starts where they actually should:
 
 1. **Adopt (a skill).** The front door. Install the dorfl skills (`dorfl skills add`, from the sibling spec) and point your agent at `from-idea` (from scratch) or `setup` (existing repo). Runner-agnostic; no `dorfl` runtime needed to adopt the contract.
-2. **The `work/` contract + protocol side-car.** What adoption gives you: the `work/` tree, the vendored `work/protocol/` docs, the `.dorfl.json` gate — the durable, file-based substrate the CLI later consumes.
+2. **The `work/` contract + protocol side-car.** What adoption gives you: the `work/` tree, the vendored `work/protocol/` docs, the `dorfl.json` gate — the durable, file-based substrate the CLI later consumes.
 3. **Execute (the CLI) + CI capabilities.** `dorfl do` / `run`, and the CI capabilities including the UNIQUE ones like `intake` (the issue → spec/task front door). This is today's whole site, repositioned as the last of three.
 
 The current "npm install -g dorfl / remote add / do" panel is NOT deleted — it is demoted to layer three, with a new skill-install panel promoted to the top. The hero/brand can stay; only the "Get started" flow is re-ordered and expanded.
@@ -25,7 +25,7 @@ The current "npm install -g dorfl / remote add / do" panel is NOT deleted — it
 1. As a newcomer landing on the site, I want the first getting-started step to be "install the skills and invoke `from-idea` / `setup`", so that I start at the real front door instead of installing a CLI I don't yet need.
 2. As someone with an existing repo, I want the site to show `setup` as the adopt-an-existing-project path, so that I see dorfl works on my current code, not just greenfield.
 3. As someone starting from scratch, I want the site to show `from-idea` as the from-zero path, so that I understand the idea-to-spec on-ramp.
-4. As a reader, I want the site to then explain what adoption GIVES me (the `work/` contract + the `work/protocol/` side-car docs + `.dorfl.json`), so that the substrate the CLI consumes is legible before the CLI is introduced.
+4. As a reader, I want the site to then explain what adoption GIVES me (the `work/` contract + the `work/protocol/` side-car docs + `dorfl.json`), so that the substrate the CLI consumes is legible before the CLI is introduced.
 5. As a reader ready to automate, I want the CLI + CI section (including the distinctive `intake` capability) presented as the execute layer AFTER adoption, so that the two-layer "adopt then execute" model is clear.
 6. As a reader, I want the skill-install step to point at a REAL command (`dorfl skills add`), so that the getting-started copy is actionable, not aspirational.
 7. As a maintainer, I want the copy to stay faithful to the repo's own framing (`CONTEXT.md`, `work/protocol/WORK-CONTRACT.md`), so that the site does not drift from the product.

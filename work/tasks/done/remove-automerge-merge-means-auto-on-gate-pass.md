@@ -49,7 +49,7 @@ This repo has NO external users (same basis as the `observationTriage` clean rep
 - [ ] Every existing test referencing `autoMerge` / `--auto-merge` is updated or removed: `integration-core.test.ts`, `do.test.ts`, `review-gate-pr.test.ts`, `run-integration-core.test.ts`, `review-gate.test.ts`, `watch-review-session.test.ts`, `run.test.ts`, `review-gate-pr-comment.test.ts`, `review-nits-observation.test.ts`. The downgrade-specific tests are deleted (the behaviour they pinned is gone); the merge-on-approve tests are kept/adjusted to the new single behaviour.
 - [ ] The SPEC `work/spec-sliced/review.md` is updated to Model P (review auto-lands iff `integration: merge`; `propose` = human merges) — its `autoMerge`-as-separate-knob language is removed. The ADR `docs/adr/ci-config-policy-and-gate-family.md` `autoMerge` reference is updated/removed to match.
 - [ ] The finding `work/findings/automerge-concept-collision-merge-vs-propose.md` is marked RESOLVED (or deleted) citing this slice.
-- [ ] `.dorfl.json` in THIS repo no longer needs the `autoMerge` key (it is inert after removal); the slice may note it but the human owns editing the live repo config.
+- [ ] `dorfl.json` in THIS repo no longer needs the `autoMerge` key (it is inert after removal); the slice may note it but the human owns editing the live repo config.
 - [ ] `pnpm format` then `pnpm -r build && pnpm -r test && pnpm format:check` green.
 
 ## Blocked by

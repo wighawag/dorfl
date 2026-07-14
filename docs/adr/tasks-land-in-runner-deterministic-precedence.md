@@ -35,7 +35,7 @@ A per-repo default landing for the tasker's emitted tasks, resolved EXACTLY like
 the existing `taskingIntegration`/`integration` precedence:
 
     flag (`--tasks-land-in`) > env (`DORFL_TASKS_LAND_IN`) > per-repo
-      `.dorfl.json` > global config > built-in default (`'pre-backlog'`)
+      `dorfl.json` > global config > built-in default (`'pre-backlog'`)
 
 Spelling rationale:
 
@@ -113,7 +113,7 @@ would silently change the safety story; one ADR keeps them legible together.
 
 ## Consequences
 
-- A repo's `.dorfl.json` may carry `tasksLandIn: 'todo'` (the
+- A repo's `dorfl.json` may carry `tasksLandIn: 'todo'` (the
   trusted-fast-path landing) or `'pre-backlog'` (the staging default); both land
   through the same resolver, with the same untrusted-origin force overlaid.
 - The runner-deterministic placement is THE seam (`src/placement.ts`); a future

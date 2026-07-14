@@ -13,7 +13,7 @@
  *
  * The workflow is deliberately thin: it wires the same composite setup action
  * the other capabilities use, then runs `dorfl verify` — the deterministic shell
- * gate the repo declares in `.dorfl.json`. No agent, no provider secrets, no
+ * gate the repo declares in `dorfl.json`. No agent, no provider secrets, no
  * `gh` mutation; it is read-only with respect to `work/`.
  *
  * `merge_group` is present (with no extra wiring) so a follow-on Tier-2 task

@@ -22,7 +22,7 @@ Steps (human-driven):
 
 ## Acceptance criteria
 
-- [ ] `dorfl spec-to-spec` run on dorfl converts `work/specs/* → work/specs/*`, all `prd:` frontmatter → `spec:` (incl. `work/tasks/done/` + `work/specs/tasked/`), `.dorfl.json` keys, and inert `prd-*` refs.
+- [ ] `dorfl spec-to-spec` run on dorfl converts `work/specs/* → work/specs/*`, all `prd:` frontmatter → `spec:` (incl. `work/tasks/done/` + `work/specs/tasked/`), `dorfl.json` keys, and inert `prd-*` refs.
 - [ ] `pnpm -r build && pnpm -r test && pnpm format:check` green after migration; forward+reverse leak scans clean on dorfl (the downstream trust signal).
 - [ ] A second run is a verified no-op (idempotency on the real repo).
 - [ ] The parent spec itself now resides at `work/specs/{ready|tasked}/prd-to-spec-vocabulary-cutover-and-migration-command.md` (it migrated itself — the fitting provenance).

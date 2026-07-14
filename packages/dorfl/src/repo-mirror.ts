@@ -151,7 +151,7 @@ export function ensureMirror(options: EnsureMirrorOptions): EnsureMirrorResult {
  * but on REUSE refreshes via {@link fetchMirrorMain} (main-only, no-prune).
  *
  * This is the MIRROR-ENSURE for the no-checkout CONFIG READ (`do --remote`/
- * `do --isolated` per-repo `.dorfl.json`): `git show main:.dorfl.json`
+ * `do --isolated` per-repo `dorfl.json`): `git show main:dorfl.json`
  * only needs `main`, and using the pruning all-heads fetch here would let a
  * `work/<slug>` branch CHECKED OUT in some other (stale) job worktree block the
  * fetch (`git refuses to fetch into branch … checked out`), throwing the config
@@ -226,12 +226,12 @@ export function fetchMirrorMain(
 }
 
 /**
- * Read the target repo's COMMITTED `.dorfl.json` from the bare hub
- * mirror's `main` (`git show main:.dorfl.json`) — the per-repo config
+ * Read the target repo's COMMITTED `dorfl.json` from the bare hub
+ * mirror's `main` (`git show main:dorfl.json`) — the per-repo config
  * layer for the NO-CHECKOUT paths (`do --remote`). The committed file is a
  * tracked file on `<arbiter>/main`, so it is reachable from the mirror without a
  * worktree. Returns the raw file CONTENT, or `undefined` when the repo has no
- * `.dorfl.json` on `main` (a config-less repo — the caller then resolves to
+ * `dorfl.json` on `main` (a config-less repo — the caller then resolves to
  * exactly global + default, byte-identical to before this layer existed).
  *
  * This is the task's ONE genuinely-new seam: sourcing the bytes from the arbiter
@@ -248,7 +248,7 @@ export function readRepoConfigFromMirrorMain(
 	mirrorDir: string,
 	env?: NodeJS.ProcessEnv,
 ): string | undefined {
-	// Prefer the plain `dorfl.json`; fall back to the legacy `.dorfl.json` when the
+	// Prefer the plain `dorfl.json`; fall back to the legacy `dorfl.json` when the
 	// preferred name is absent on `main` (a repo that committed the dotfile before
 	// dual-support). A genuine read fault on the FIRST attempt propagates; a
 	// path-missing on the first falls through to the legacy attempt.
@@ -293,7 +293,7 @@ function showConfigOnMain(
 
 /**
  * Resolve a repo's effective {@link Config} for a NO-CHECKOUT path by layering its
- * COMMITTED `.dorfl.json` (read from the bare hub mirror's `main` via
+ * COMMITTED `dorfl.json` (read from the bare hub mirror's `main` via
  * {@link readRepoConfigFromMirrorMain}) into the SAME
  * `flag > env > per-repo > global > default` chain a working checkout uses
  * ({@link resolveRepoConfigFromLoaded}). This is the reusable core of `do
@@ -308,7 +308,7 @@ function showConfigOnMain(
  * global + flags itself.
  */
 export function resolveRepoConfigFromMirror(options: {
-	/** The bare hub mirror directory whose `main:.dorfl.json` to read. */
+	/** The bare hub mirror directory whose `main:dorfl.json` to read. */
 	mirrorPath: string;
 	/** The global + default config layer (from `loadConfig`/`mergeConfig`). */
 	global: Config;

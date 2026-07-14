@@ -107,7 +107,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 	it('uses ONE word (integrationMode) for the dispatch input that drives BOTH flag and shape', () => {
 		const text = loadAdvanceCiTemplate();
 		// Vocabulary reconciliation: the dispatch input is `integrationMode` (the same
-		// vocabulary as `.dorfl.json`'s `integration` and `advance --propose`/
+		// vocabulary as `dorfl.json`'s `integration` and `advance --propose`/
 		// `--merge`), driving BOTH the flag the legs pass and the derived job shape —
 		// not a second, independent `mode` knob that could disagree with the flag.
 		expect(text).toContain('integrationMode:');

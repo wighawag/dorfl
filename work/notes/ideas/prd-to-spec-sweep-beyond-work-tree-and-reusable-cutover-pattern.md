@@ -11,7 +11,7 @@ status: incubating
 
 ## The gap
 
-`dorfl prd-to-spec`'s DATA migration (`migrateItemContent` + `migrateFolders` + `migrateConfig` + `migrateRefs`) is deliberately scoped to `work/**` bodies, `.dorfl.json`, and inert git refs. Layer 2 (`resyncProtocol`) also correctly re-syncs `work/protocol/*` (VERIFIED: it copies the package-canonical contract, never the target's old copy, and bumps `VERSION` — so a downstream repo DOES pick up the corrected `spec` contract, incl. the removed "`prd:` still read as back-compat" claim, which is byte-identical in `dist/protocol/`).
+`dorfl prd-to-spec`'s DATA migration (`migrateItemContent` + `migrateFolders` + `migrateConfig` + `migrateRefs`) is deliberately scoped to `work/**` bodies, `dorfl.json`, and inert git refs. Layer 2 (`resyncProtocol`) also correctly re-syncs `work/protocol/*` (VERIFIED: it copies the package-canonical contract, never the target's old copy, and bumps `VERSION` — so a downstream repo DOES pick up the corrected `spec` contract, incl. the removed "`prd:` still read as back-compat" claim, which is byte-identical in `dist/protocol/`).
 
 What it does NOT touch: `CONTEXT.md`, `README.md`, `AGENTS.md`, `docs/**` (incl. ADRs), and any SOURCE prose / comments / strings. In dorfl those were the bulk of the residue and had to be swept by hand across ~40 files + two commits. A downstream repo running `prd-to-spec` today gets a converted `work/` tree but is left with a `CONTEXT.md` / README / source that still says `prd`.
 

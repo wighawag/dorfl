@@ -31,7 +31,7 @@ This is the unlock for a trustworthy `do <slug> --merge` (and, once `do-autopick
 
 Add to the per-repo config surface (`src/repo-config.ts` `REPO_CONFIG_KEYS` + `ResolvedRepoConfig`, alongside `integration`/`allowAgents`/`model`):
 
-- **`review`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved **flag (`--review`/`--no-review`) > per-repo `.dorfl.json` > global > default false** — the SAME chain `integration`/`allowAgents` use.
+- **`review`** (bool, default **OFF**) — run Gate 2 on `do`/`complete`. Resolved **flag (`--review`/`--no-review`) > per-repo `dorfl.json` > global > default false** — the SAME chain `integration`/`allowAgents` use.
 - **`autoMerge`** (bool, default **OFF**) — on an `approve`, allow the resolved `merge` integration to proceed autonomously. Same precedence chain. **Repo policy only.** A non-`approve` verdict NEVER auto-merges regardless. (If `autoMerge` is off but `review` is on, review still runs and blocks/approves, but a human does the merge — i.e. review is advisory-but-blocking; `--propose` still applies.)
 - **`reviewModel`** (string, optional) — the model the REVIEW agent runs on (de-correlation from the builder). Resolved like `model` (flag > env > per-repo > global > default = unset → no forced model). Distinct from the builder's `model`.
 - **`reviewMaxRounds`** (number, default a small N e.g. 2) — bound the revise↔review loop. On exhaustion, **ERROR OUT** and force `needs-attention/` (never silently merge or loop), per the maintainer decision.

@@ -7,7 +7,7 @@ import {brand, constantCase} from './brand.js';
  * A per-machine context (a CI job, a developer's shell) can set ANY {@link Config}
  * key via an `DORFL_*` environment variable WITHOUT committing a file —
  * including the host-only keys (`piBin`, `agentCmd`, …) that the per-repo
- * `.dorfl.json` deliberately rejects.
+ * `dorfl.json` deliberately rejects.
  *
  * Env is a legitimate *per-machine source* — exactly like a CLI flag or the
  * global `~/.config/dorfl/config.json` — so it is NOT subject to the

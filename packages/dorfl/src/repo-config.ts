@@ -16,7 +16,7 @@ import {run} from './git.js';
 /**
  * The per-repo config layer.
  *
- * A repo may commit a `.dorfl.json` at its root. It travels WITH the repo
+ * A repo may commit a `dorfl.json` at its root. It travels WITH the repo
  * (it is committed) and overrides the global `~/.config/dorfl/config.json`
  * FOR THAT REPO ONLY — so repo-local properties (how this repo integrates, its
  * acceptance `verify` gate, which remote arbitrates its claims) are agreed by all
@@ -28,7 +28,7 @@ import {run} from './git.js';
  *   global > built-in default
  *
  * The mechanism is multi-repo aware: each repo resolves against its OWN
- * `.dorfl.json`, so repo A can be `merge` while repo B is `propose` in the
+ * `dorfl.json`, so repo A can be `merge` while repo B is `propose` in the
  * SAME run (see {@link resolveRepoConfig}).
  *
  * Only keys that are genuinely repo properties are honoured in the COMMITTED
@@ -44,7 +44,7 @@ import {run} from './git.js';
  * the global file / a flag) may set ANY key, host-only included (see
  * {@link envOverrides}).
  *
- * A repo with no `.dorfl.json` resolves to exactly the global config —
+ * A repo with no `dorfl.json` resolves to exactly the global config —
  * behaviour is unchanged from before this layer existed.
  */
 
@@ -57,7 +57,7 @@ export const REPO_CONFIG_FILENAME = brand.repoConfigFilename;
 
 /**
  * Config keys that are genuinely repo properties and so are honoured in a
- * per-repo `.dorfl.json`. Deliberately a subset of {@link Config};
+ * per-repo `dorfl.json`. Deliberately a subset of {@link Config};
  * extend this list as more keys become legitimately repo-scoped.
  */
 export const REPO_ALLOWED_KEYS = [
@@ -306,7 +306,7 @@ export function repoConfigPath(repoPath: string): string {
 	return resolveRepoConfigPath(repoPath);
 }
 
-/** The result of reading (and filtering) a repo's `.dorfl.json`. */
+/** The result of reading (and filtering) a repo's `dorfl.json`. */
 export interface LoadedRepoConfig {
 	/** Where we looked (whether or not the file exists). */
 	path: string;
@@ -328,7 +328,7 @@ export interface LoadedRepoConfig {
 }
 
 /**
- * Read a repo's `.dorfl.json` and split it into the honoured subset and
+ * Read a repo's `dorfl.json` and split it into the honoured subset and
  * the rejected runner/host-only keys. A missing file is not an error (the repo
  * simply resolves to the global config); invalid JSON is. Unknown keys are
  * silently dropped (neither honoured nor reported as rejected). Only keys in
@@ -352,8 +352,8 @@ export function loadRepoConfig(repoPath: string): LoadedRepoConfig {
 
 /**
  * The content-based half of {@link loadRepoConfig}: parse + apply the SAME
- * allow/reject split to ALREADY-READ `.dorfl.json` bytes, labelling the
- * source as `sourceLabel` (a path, or e.g. `<arbiter>/main:.dorfl.json`)
+ * allow/reject split to ALREADY-READ `dorfl.json` bytes, labelling the
+ * source as `sourceLabel` (a path, or e.g. `<arbiter>/main:dorfl.json`)
  * in the rejected-key message. Used wherever the committed repo file is sourced
  * from somewhere OTHER than a working-tree path — notably `do --remote`, which
  * reads it from the arbiter's `main` (`git show`) since there is no checkout.
@@ -413,7 +413,7 @@ function isRejectedKey(key: string): boolean {
 
 /** Inputs to {@link resolveRepoConfig}. */
 export interface ResolveRepoConfigOptions {
-	/** Absolute path to the repo root (where `.dorfl.json` would live). */
+	/** Absolute path to the repo root (where `dorfl.json` would live). */
 	repoPath: string;
 	/**
 	 * The fully-resolved GLOBAL config (already merged over built-in defaults,
@@ -491,7 +491,7 @@ export interface ResolvedRepoConfig {
 /**
  * Resolve the effective config for ONE repo by layering, per key:
  *
- *   flag > ENV (DORFL_*) > per-repo `.dorfl.json` > global >
+ *   flag > ENV (DORFL_*) > per-repo `dorfl.json` > global >
  *   built-in default
  *
  * The `global` argument already carries the global + default layers (it is the
@@ -502,7 +502,7 @@ export interface ResolvedRepoConfig {
  * in a multi-repo run yields INDEPENDENT results — repo A can be `merge` while
  * repo B is `propose` in the same run.
  *
- * A repo with no `.dorfl.json` (and no env) resolves to exactly `global`
+ * A repo with no `dorfl.json` (and no env) resolves to exactly `global`
  * (unchanged behaviour).
  */
 export function resolveRepoConfig(

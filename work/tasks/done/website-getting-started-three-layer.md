@@ -13,7 +13,7 @@ Rewrite the getting-started / install section of the Dorfl landing page so it pr
 Replace the single "Install" / `#install` section with three panels, top to bottom:
 
 1. **Adopt (a skill).** The front door. Install the dorfl skills with `dorfl skills add`, then point your agent at `from-idea` (from scratch) or `setup` (existing repo). Runner-agnostic; no `dorfl` runtime needed to adopt the contract.
-2. **The `work/` contract + protocol side-car.** What adoption gives you: the `work/` tree, the vendored `work/protocol/` docs, the `.dorfl.json` gate — the file-based substrate the CLI later consumes.
+2. **The `work/` contract + protocol side-car.** What adoption gives you: the `work/` tree, the vendored `work/protocol/` docs, the `dorfl.json` gate — the file-based substrate the CLI later consumes.
 3. **Execute (the CLI) + CI capabilities.** `dorfl do` / `run`, plus the distinctive CI capabilities — call out `intake` (the issue → spec/task front door) by name. This is today's whole install section, repositioned last.
 
 Keep the existing `# install (placeholder)` demoted/updated: layer one uses the real `dorfl skills add`; layer three keeps an accurate CLI install. Reuse the page's existing section/pillar/step component patterns and brand tokens (clay/bone/slate) — re-order and add content only, do NOT restyle or rebrand. Map the existing `#install` nav anchor onto the new flow (rename its label to "Get started" if clearer).
@@ -22,7 +22,7 @@ Keep the existing `# install (placeholder)` demoted/updated: layer one uses the 
 
 - [ ] The getting-started section presents the three layers in order (adopt-skill → work/ contract → CLI+CI), replacing the current CLI-first single install section.
 - [ ] Layer one shows `dorfl skills add` and names `from-idea` (from scratch) and `setup` (existing repo) as the adopt paths; it is clear no `dorfl` install is needed to adopt.
-- [ ] Layer two explains what adoption yields (the `work/` tree, `work/protocol/` docs, `.dorfl.json` gate).
+- [ ] Layer two explains what adoption yields (the `work/` tree, `work/protocol/` docs, `dorfl.json` gate).
 - [ ] Layer three presents the CLI (`do`/`run`) and CI capabilities, mentioning `intake` explicitly as the issue → spec/task front door; the CLI install command is accurate (not a placeholder).
 - [ ] The nav anchor/link that pointed at `#install` still resolves to the new section (anchor kept or link updated); no dead in-page links.
 - [ ] Styling is unchanged (existing brand tokens + component patterns reused); no new pages, no rebrand.
