@@ -11,3 +11,5 @@ Item: [`observation:review-nits-migrate-existing-stuck-locks-one-shot-2026-07-14
 <!-- q1 fields: id=q1 -->
 
 **Your answer** (write below this line):
+
+resolve, with one carve-out. Ratify nits 2-4 (skipped-no-item-form leaves `slice-*`/`prd-` legacy refs reported-but-in-place at exit 0; exit 1 only on lost/errors with body-absent drain as exit 0; the body-absent + skipped-no-item-form test-coverage gap is acceptable given small branches reusing tested primitives) and keep this note on record as their durable home. But FIRST split off nit 1 as a promote: mint a small task to backfill the where-it-runs decision into `work/tasks/done/migrate-existing-stuck-locks-one-shot.md` (a `## Decisions` block or an ADR link), because the prompt explicitly required "RECORD the where-it-runs decision durably, linked from the done record" and it currently lives only as an inline code comment in cli.ts (lines 3909-3920); the done record has no Decisions block and no link. Once that task is minted, resolve this note.
