@@ -4,7 +4,7 @@ slug: apply-resolve-reset-flag-discards-work-branch
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic, empty-diff-bounce-surfaces-dispose-defaulted-question, bounce-migrate-stuck-assertions-and-flip-exit-codes]
 covers: [2]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## Re-scope 2026-07-13 (after a Gate-2 BLOCK on the first attempt)
@@ -97,3 +97,13 @@ Resolve, and RESET (rebuild fresh). This bounce was a TRANSIENT infrastructure f
 The rebuild guidance from the prior resolve still holds in full (the task body + re-scope carry it): keep the correct mechanism shape (`resolveReset?: boolean` on `DecisionVerdict` + its parser; the shared `deleteRemoteWorkBranchIfPresent` primitive), thread `verdict.resolveReset` AND `arbiter` through the REAL `resolve` dispatch site in `advance.ts` (~line 1498, which today calls `apply({cwd, item, itemPath, note})` with neither), add an END-TO-END test through the rung dispatcher, record the delete-first ordering in a `## Decisions` block linked from the done record, and address the branch-delete-failure refusal shape. Do NOT widen the observation-only `runAgenticDecision` gate.
 
 Note (transient re-surface): this is the SECOND non-content bounce of this item (Gate-2 block, then this stream drop). If a THIRD transient failure re-surfaces it, that is a flakiness signal worth capturing rather than just re-answering — the build has not yet reached the edit phase on its own merits.
+
+## Applied answers 2026-07-14
+
+### q1: 'task:apply-resolve-reset-flag-discards-work-branch' was bounced — how should we proceed?
+
+Resolve, CONTINUE. This bounce is CORRECT and valuable: the agent found a real, load-bearing contradiction in the re-scope (there is no `DecisionVerdict` on the TASK apply-persist path, so there is nothing to source `resolveReset` from without widening the observation-only gate the re-scope forbids), and proposed the right fix. Adopt the agent's recommended option (b), now folded into the task body as `## Re-scope 2026-07-14`.
+
+DECISION (the missing flag source, TASK path): add a deterministic `detectAnsweredStuckAction(cwd, item)` — a direct sibling of the EXISTING `detectAnsweredMergeAction` (`apply-merge-action.ts`) — that reads the answered `kind: 'stuck'` sidecar entry and parses its answer text into a `keep | reset | cancel` verb (mirror `parseMergeAnswer`'s first-whole-word, undefined-on-anything-else discipline: `keep` → continue, `reset` → branch-discard, `cancel` → dispose; undefined → fall through to today's plain persist, never guess). The TASK persist path in `applyRung` (`advance.ts:~1051`) invokes it BEFORE the fall-through `applyAnsweredQuestions` call — EXACTLY analogous to how `maybeRunMergeAction` (`advance.ts:~1033`, `advance.ts:~1117`) pre-dispatches `kind: 'merge'` today, via the same injectable-seam shape (a `context.stuckAction` handler defaulting to production, so the end-to-end test has a real driver). This does NOT widen `runAgenticDecision` (the `namespace === 'observation'` gate stays untouched) and keeps the reusable pieces from the discarded WIP (the `resolveReset?: boolean` verdict channel + the shared `deleteRemoteWorkBranchIfPresent` primitive) intact — `reset` sets `resolveReset:true` + passes `arbiter` into the persist; `keep` is today's continue; `cancel` routes to the existing `dispose` path.
+
+Keep the existing branch if its investigation notes are useful, or reset if cleaner — either is fine since the corrected re-scope is now unambiguous. The end-to-end test the prior answer demanded is now WRITABLE: drive a bounced-task `kind:'stuck'` sidecar answered `reset` through the rung dispatcher and assert the remote `work/<slug>` branch is deleted then `needsAnswers` cleared; `keep` leaves the branch; a no-branch `reset` is a harmless no-op.
