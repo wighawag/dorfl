@@ -1,6 +1,6 @@
 ---
 promotedFrom: observation:review-nits-migrate-existing-stuck-locks-one-shot-2026-07-14
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -20,3 +20,9 @@ Out of scope: nits 2-4 from the review-gate observation (skipped-no-item-form po
 > Do NOT touch the other nits from the review (skipped-no-item-form policy, exit-code contract on body-absent drain, test-coverage gap for `slice-*`/`prd-` and body-absent paths). Those were ratified in the review-gate observation and are staying on record there; they are out of scope for this task.
 >
 > Acceptance gate: `pnpm -r build && pnpm -r test && pnpm format:check` still passes (this is a docs-only change so build/test should be untouched, but format:check must be clean). The done record `work/tasks/done/migrate-existing-stuck-locks-one-shot.md` must, after your change, either contain the decision inline (`## Decisions` block) or link to an ADR that contains it. Follow the standard git etiquette in `AGENTS.md`: you do not stage/commit/push and you do not move files between `work/` folders — the runner owns those transitions.
+
+## Applied answers 2026-07-14
+
+### q1: 'task:backfill-where-it-runs-decision-migrate-stuck-locks-done-record' was bounced — how should we proceed?
+
+Resolve, CONTINUE (keep the work branch). The bounce was the PRE-EXISTING `prd->spec` leak-scan failure on `main`, not a defect in the built work: this task's OWN body (line 20, `slice-*/prd-`) carried the un-backticked token that tripped the tree-wide scan and turned it RED for the whole pool. That leak is now FIXED on main (the token is backticked; leak-scan green). The branch's actual deliverable is sound and complete: it adds a thorough `## Decisions` block to `work/tasks/done/migrate-existing-stuck-locks-one-shot.md` recording the where-it-runs choice (dedicated `dorfl migrate-stuck-locks` verb) with rationale and the `cli.ts:3909-3920` back-reference — exactly what the task asked for, and its own added text is clean (no bare `prd`). Keep the branch; on re-claim it rebases onto the fixed main (inheriting the backticked body) and should re-gate green.
