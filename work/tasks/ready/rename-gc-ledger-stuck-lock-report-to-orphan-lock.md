@@ -1,5 +1,6 @@
 ---
 promotedFrom: observation:review-nits-reconcile-ledger-lock-spec-adr-stuck-retirement-2026-07-14
+needsAnswers: true
 ---
 
 ## What to build
