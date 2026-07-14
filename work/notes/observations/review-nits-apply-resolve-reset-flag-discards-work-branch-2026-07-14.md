@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'apply-resolve-reset-flag-discards-work
 date: 2026-07-14
 status: open
 reviewOf: apply-resolve-reset-flag-discards-work-branch
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
