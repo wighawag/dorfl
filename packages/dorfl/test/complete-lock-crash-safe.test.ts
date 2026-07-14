@@ -265,7 +265,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 		expect(lockRefOnArbiter(arbiter, 'spec-zeta')).toBe(false);
 	});
 
-	it('CLEARS a STUCK lock that has become a crash-orphan over a terminal-on-main item (task `reaper-reap-terminal-stuck-lock-orphans`; ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10)', async () => {
+	it('CLEARS an ACTIVE lock over a terminal-on-main item (post retire-stuck-lock-state: the `main` record is authoritative)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['eta']);
 		await acquireItemLock({
 			item: 'task:eta',
@@ -274,19 +274,9 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// A rebase-conflict bounce marks a just-completed item stuck (`done` +
-		// `stuck` may LEGITIMATELY co-exist during the bounce, US #10) — but by
-		// the time we reconcile the item has reached its terminal folder on `main`
-		// (by any path: human finish, re-drive, manual fixup+merge), so the
-		// remaining stuck lock is a CRASH-ORPHAN the durable `main` record supersedes.
-		const stuck = await markStuckItemLock({
-			item: 'task:eta',
-			reason: 'rebase-conflict bounce of a just-completed item',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(stuck.outcome).toBe('transitioned');
+		// A durable main move lands the terminal record BEFORE the release ran
+		// (a crash between the two steps). The `main` record is authoritative:
+		// reconcile clears the stale active lock via the shared leased delete.
 		seedTerminalOnArbiter(arbiter, 'done', 'eta');
 
 		const rec = await reconcileItemLockAgainstMain({
@@ -296,17 +286,12 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			env: gitEnv(),
 		});
 
-		// The `main` record is authoritative over an ORPHAN lock: reconcile
-		// clears the stuck-terminal orphan via the SAME leased delete
-		// `release-lock` / the recovery use for `cleared-stale`. The narrow
-		// invariant preserved is that stuck + NON-terminal STILL keeps (see the
-		// dedicated pin below).
-		expect(rec.outcome).toBe('cleared-stuck-terminal');
+		expect(rec.outcome).toBe('cleared-stale');
 		expect(rec.terminalOnMain).toBe(true);
 		expect(lockRefOnArbiter(arbiter, 'task-eta')).toBe(false);
 	});
 
-	it('KEEPS a STUCK lock over a NON-terminal item — the genuine human-attention case (contract fence for `reaper-reap-terminal-stuck-lock-orphans`)', async () => {
+	it('KEEPS a held ACTIVE lock over a NON-terminal + NOT-surfaced item — the normal in-flight state', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['eta2']);
 		await acquireItemLock({
 			item: 'task:eta2',
@@ -315,15 +300,8 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		const stuck = await markStuckItemLock({
-			item: 'task:eta2',
-			reason: 'genuine build failure requiring human attention',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(stuck.outcome).toBe('transitioned');
-		// NO terminal record on main — the item is genuinely in flight and stuck.
+		// NO terminal record on main and NOT surfaced (needsAnswers not set) —
+		// this is a healthy in-flight hold; recovery leaves it alone.
 
 		const rec = await reconcileItemLockAgainstMain({
 			item: 'task:eta2',
@@ -332,9 +310,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			env: gitEnv(),
 		});
 
-		// Non-terminal + stuck STILL keeps — the invariant the contract loosening
-		// MUST preserve. Never auto-cleared.
-		expect(rec.outcome).toBe('kept-stuck');
+		expect(rec.outcome).toBe('kept-in-flight');
 		expect(rec.terminalOnMain).toBe(false);
 		expect(lockRefOnArbiter(arbiter, 'task-eta2')).toBe(true);
 		const entry = await readItemLock({
@@ -343,8 +319,7 @@ describe('reconcileItemLockAgainstMain — the main record is authoritative over
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toContain('genuine build failure');
+		expect(entry?.state).toBe('active');
 	});
 
 	it('leaves a held lock untouched when main is NOT terminal (the normal in-flight state)', async () => {

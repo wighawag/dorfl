@@ -12,6 +12,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -115,7 +116,7 @@ describe('requeue behaves as `return` did — return-to-backlog via the ledger s
 		});
 		gitIn(['fetch', '-q', ARBITER], repo);
 		gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
-		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(true);
+		expect(heldLockOnArbiter(repo, 'alpha')).toBe(true);
 
 		// Drive the renamed verb through the actual CLI program (the same wiring the
 		// `return` verb had — only the verb name changed).

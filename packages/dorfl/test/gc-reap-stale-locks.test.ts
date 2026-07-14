@@ -10,6 +10,7 @@ import {
 	listItemLocks,
 	itemLockRef,
 } from '../src/item-lock.js';
+import {surfaceStuckToNeedsAttention} from '../src/needs-attention.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -109,7 +110,7 @@ describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes
 		expect(reapReportNeedsAttention(reap)).toBe(false);
 	});
 
-	it('REAPS a stuck-terminal crash-orphan lock (contract change: task `reaper-reap-terminal-stuck-lock-orphans`; ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10)', async () => {
+	it('REAPS a crash-window orphan lock (active + surfaced-on-main via needsAnswers + sidecar)', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['bounced']);
 		await acquireItemLock({
 			item: 'task:bounced',
@@ -118,65 +119,36 @@ describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		await markStuckItemLock({
-			item: 'task:bounced',
-			reason: 'rebase-conflict bounce of a just-completed item',
+		// Post-`retire-stuck-lock-state`: the ordered bounce transition surfaces
+		// (`needsAnswers:true` + sidecar on `<arbiter>/main`) BEFORE releasing the
+		// lock; a crash between the two leaves an active lock + a surfaced-on-main
+		// state that the reap recovery treats as `cleared-stale`,
+		// `main`-authoritative. To simulate the crash we surface + release, then
+		// re-acquire the lock — the arbiter ends in the same state.
+		const surface = await surfaceStuckToNeedsAttention({
 			cwd: repo,
+			slug: 'bounced',
+			itemPath: 'work/tasks/ready/bounced.md',
+			reason: 'ordered transition',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		// done + stuck co-existed during the bounce (US #10); the item then
-		// reached its terminal folder on main by ANY path (human finish, re-drive,
-		// manual fixup+merge), so the remaining stuck lock is a crash-orphan the
-		// durable main record supersedes — auto-reapable.
-		seedTerminalOnArbiter(arbiter, 'done', 'bounced');
-
-		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
-
-		expect(reap.reaped).toBe(0);
-		expect(reap.reapedStuckTerminal).toBe(1);
-		expect(reap.entries).toHaveLength(1);
-		expect(reap.entries[0].outcome).toBe('reaped-stuck-terminal');
-		// SWEPT: the leased delete removed the ref.
-		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(false);
-		// A clean sweep does NOT need attention (exit 0) — the orphan is cleared.
-		expect(reapReportNeedsAttention(reap)).toBe(false);
-		const text = formatReapReport(reap).join('\n');
-		expect(text).toMatch(/\[reaped-stuck-terminal\]/);
-		expect(text).toMatch(/stuck-terminal crash-orphan/);
-	});
-
-	it('NEVER reaps a STUCK + NON-terminal lock (`kept-stuck` — the genuine human-attention case; contract fence for `reaper-reap-terminal-stuck-lock-orphans`)', async () => {
-		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['stuck-live']);
+		expect(surface.surfaced).toBe(true);
 		await acquireItemLock({
-			item: 'task:stuck-live',
+			item: 'task:bounced',
 			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		await markStuckItemLock({
-			item: 'task:stuck-live',
-			reason: 'genuine build failure requiring human attention',
-			cwd: repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		// NO terminal record on main — the item is genuinely in flight and stuck.
-		// This is the invariant the contract loosening MUST preserve: a stuck
-		// lock that genuinely needs human attention must NEVER be auto-reaped.
 
 		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
 
-		expect(reap.reaped).toBe(0);
-		expect(reap.reapedStuckTerminal).toBe(0);
-		expect(reap.kept).toBe(1);
+		expect(reap.reaped).toBe(1);
 		expect(reap.entries).toHaveLength(1);
-		expect(reap.entries[0].outcome).toBe('kept-stuck');
-		// UNTOUCHED — the stuck lock wins the human's attention.
-		expect(lockRefOnArbiter(arbiter, 'task-stuck-live')).toBe(true);
-		// A stuck non-terminal lock that survives the sweep still needs attention.
-		expect(reapReportNeedsAttention(reap)).toBe(true);
+		expect(reap.entries[0].outcome).toBe('reaped');
+		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(false);
+		expect(reapReportNeedsAttention(reap)).toBe(false);
 	});
 
 	it('NEVER reaps a kept-in-flight lock (active + non-terminal), even with the flag', async () => {
@@ -201,14 +173,13 @@ describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes
 		expect(reapReportNeedsAttention(reap)).toBe(false);
 	});
 
-	it('sweeps a MIX: reaps stale + stuck-terminal, keeps stuck-non-terminal + in-flight in one pass', async () => {
+	it('sweeps a MIX: reaps terminal orphans + crash-window orphans, keeps healthy in-flight in one pass', async () => {
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, [
 			'stale',
-			'stuck-term',
-			'stuck-live',
+			'bounced',
 			'flight',
 		]);
-		for (const slug of ['stale', 'stuck-term', 'stuck-live', 'flight']) {
+		for (const slug of ['stale', 'bounced', 'flight']) {
 			await acquireItemLock({
 				item: `task:${slug}`,
 				action: 'implement',
@@ -217,21 +188,21 @@ describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes
 				env: gitEnv(),
 			});
 		}
-		// stale: terminal + active. stuck-term: terminal + stuck (crash-orphan).
-		// stuck-live: non-terminal + stuck (genuine human attention). flight:
-		// active, no terminal.
+		// stale: terminal + active (stranded). bounced: active + surfaced-on-main
+		// (crash-window orphan). flight: active, no terminal, not surfaced (healthy).
 		seedTerminalOnArbiter(arbiter, 'done', 'stale');
-		await markStuckItemLock({
-			item: 'task:stuck-term',
-			reason: 'rebase-conflict bounce of a just-completed item',
+		const surface = await surfaceStuckToNeedsAttention({
 			cwd: repo,
+			slug: 'bounced',
+			itemPath: 'work/tasks/ready/bounced.md',
+			reason: 'ordered transition',
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		seedTerminalOnArbiter(arbiter, 'done', 'stuck-term');
-		await markStuckItemLock({
-			item: 'task:stuck-live',
-			reason: 'human attention please',
+		expect(surface.surfaced).toBe(true);
+		await acquireItemLock({
+			item: 'task:bounced',
+			action: 'implement',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
@@ -239,20 +210,14 @@ describe('gc --ledger --reap-stale-locks — clears both terminal-orphan classes
 
 		const reap = await reapStaleItemLocks(repo, ARBITER, gitEnv());
 
-		expect(reap.reaped).toBe(1);
-		expect(reap.reapedStuckTerminal).toBe(1);
-		expect(reap.kept).toBe(2);
-		// Both terminal orphan classes are gone; the stuck-non-terminal + the
-		// in-flight survive.
+		expect(reap.reaped).toBe(2);
+		expect(reap.kept).toBe(1);
 		expect(lockRefOnArbiter(arbiter, 'task-stale')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'task-stuck-term')).toBe(false);
-		expect(lockRefOnArbiter(arbiter, 'task-stuck-live')).toBe(true);
+		expect(lockRefOnArbiter(arbiter, 'task-bounced')).toBe(false);
 		expect(lockRefOnArbiter(arbiter, 'task-flight')).toBe(true);
-		// The surviving stuck-non-terminal lock still needs attention (exit 1).
-		expect(reapReportNeedsAttention(reap)).toBe(true);
+		expect(reapReportNeedsAttention(reap)).toBe(false);
 		const text = formatReapReport(reap).join('\n');
-		expect(text).toMatch(/reaped 1 stale/);
-		expect(text).toMatch(/reaped 1 stuck-terminal crash-orphan/);
+		expect(text).toMatch(/reaped 2 stale lock/);
 	});
 
 	it('covers all four terminals (task done/cancelled, spec tasked/dropped)', async () => {

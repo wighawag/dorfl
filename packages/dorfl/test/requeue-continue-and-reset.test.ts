@@ -11,6 +11,7 @@ import {
 	makeScratch,
 	seedRepoWithArbiter,
 	existsOnArbiterMain,
+	heldLockOnArbiter,
 	stuckLockOnArbiter,
 	gitEnv,
 	gitIn,
@@ -301,7 +302,7 @@ describe('requeue --reset — discard + fresh', () => {
 		// This helper seeds the stuck lock directly via `markStuckItemLock` (see
 		// `stuckButNeedsAttention` — PR-2b's bounce no longer produces a stuck lock),
 		// so the stuck lock is the direct seed and we assert it directly.
-		expect(stuckLockOnArbiter(reset.repo, 'eta-reset')).toBe(true);
+		expect(heldLockOnArbiter(reset.repo, 'eta-reset')).toBe(true);
 		expect(existsOnArbiterMain(reset.repo, 'backlog', 'eta-reset')).toBe(true);
 	});
 });

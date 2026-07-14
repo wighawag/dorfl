@@ -18,7 +18,6 @@ import {
 	type SurfaceToNeedsAttentionResult,
 	type BranchPushOutcome,
 } from './needs-attention.js';
-import {resumeItemLock} from './item-lock.js';
 import type {NewQuestion} from './sidecar.js';
 
 /**
@@ -741,36 +740,16 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 	 * THIS strategy; the seam's contract is only the intent "clear the surface."
 	 */
 	async applyResolveNeedsAttentionTransition(
-		input: ApplyResolveNeedsAttentionTransitionInput,
+		_input: ApplyResolveNeedsAttentionTransitionInput,
 	): Promise<ApplyResolveNeedsAttentionTransitionResult> {
-		// PURE LOCK AMEND (task
-		// `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+):
-		// resolving a stuck item is `stuck → active` on the per-item lock (a human is
-		// picking it up), NOT a `needs-attention/ → in-progress/` folder move. NO `main`
-		// write — the body already rests in `backlog/` (task 9a) and the work stays on
-		// the kept `work/<slug>` branch. Without an arbiter there is no lock ref to
-		// amend (the human-local face), so it is a recorded no-op success.
-		if (!input.arbiter) {
-			return {moved: true};
-		}
-		const r = await resumeItemLock({
-			item: `task:${input.slug}`,
-			cwd: input.cwd,
-			arbiter: input.arbiter,
-			env: input.env,
-		});
-		if (r.outcome === 'transitioned') {
-			return {moved: true};
-		}
-		// `wrong-state` (already active — not actually stuck) is tolerated as a no-op
-		// success: the item is already in-flight, the caller onboards onto it anyway.
-		if (r.outcome === 'wrong-state') {
-			return {moved: true};
-		}
-		return {
-			moved: false,
-			reasonNotMoved: `could not resume '${input.slug}' (${r.outcome}: ${r.message}).`,
-		};
+		// Post-`retire-stuck-lock-state`: the `stuck` lock state is retired, so
+		// there is no `stuck → active` lock amend to perform. A parked item is
+		// now a `needsAnswers:true` pool item on `main` with a sidecar, drained
+		// by the apply rung (answer the sidecar), not by a resolve verb. The seam
+		// is kept for source compatibility of its remaining legacy callers
+		// (start.ts's legacy `needs-attention/` folder branch), where it is a
+		// recorded no-op success.
+		return {moved: true};
 	},
 };
 

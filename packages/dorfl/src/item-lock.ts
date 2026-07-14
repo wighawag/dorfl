@@ -101,25 +101,26 @@ export function isValidLockEntryName(entry: string): boolean {
 /** WHAT holds the lock — the three mutually-exclusive actions over one item. */
 export type LockAction = 'implement' | 'task' | 'advance';
 
-/** Health of the hold: `active` (in-progress) or `stuck` (needs-attention). */
-export type LockState = 'active' | 'stuck';
+/**
+ * Health of the hold. Post-CONTRACT step (task `retire-stuck-lock-state`, spec
+ * `surface-stuck-as-questions-and-retire-stuck-lock-state`) this collapses to a
+ * single value: `active` = the in-flight hold. The formerly-second value
+ * `stuck` (needs-attention) is RETIRED — a bounce now SURFACES a question
+ * sidecar + `needsAnswers:true` on `<arbiter>/main` and RELEASES the lock, so a
+ * parked item is a `needsAnswers:true` pool item on `main`, NEVER a `stuck`
+ * lock. The `state` field is kept (single-value) so serialised entries continue
+ * to round-trip and downstream readers still see a stable shape. The `reason`
+ * and `questions` fields that USED to ride on a `stuck` entry are gone — that
+ * prose lives on the surfaced sidecar on `main`, not on the lock entry.
+ */
+export type LockState = 'active';
 
 /**
- * The two-axis lock entry. `action` and `state` are INDEPENDENT axes (so
- * "advanced-and-stuck" and "building-and-stuck" are both representable, which a
- * single action-field could not do). `reason` is present IFF `state === 'stuck'`.
- *
- * Since the lock entry is the SOLE stuck record (task
- * `cutover-needs-attention-becomes-lock-stuck-recovery-surface`, decision i+: the
- * `needs-attention/` folder is retired), `reason` is the FULL bounce prose (it may
- * span multiple lines — a red-gate excerpt, a rebase-conflict report, an agent's
- * ambiguity note), and `questions` carries any agent-surfaced questions for the
- * human. Both ride in the lock blob BODY (not a single frontmatter field) so they
- * round-trip richly, in a shape a future advance-surface rung (the
- * surface-stuck-locks-as-questions direction captured in
- * `work/notes/observations/needs-attention-may-have-no-human-visible-outcome-after-lock-cutover-surface-as-questions-2026-06-21.md`)
- * can render into a `work/questions/` sidecar. `questions` is present (non-empty) only
- * for a stuck entry that recorded them.
+ * The lock entry: `action` × `state` (the state axis is now degenerate — see
+ * {@link LockState}) plus the holder/since stamps. Post-CONTRACT step (task
+ * `retire-stuck-lock-state`) it carries NO `reason`/`questions` — the sole
+ * parked-item mechanism is the surfaced `needsAnswers:true` sidecar on
+ * `<arbiter>/main`.
  */
 export interface LockEntry {
 	entry: string;
@@ -127,8 +128,6 @@ export interface LockEntry {
 	state: LockState;
 	holder: string;
 	since: string;
-	reason?: string;
-	questions?: string[];
 }
 
 /** Outcome of an acquire attempt. `acquired` = we hold it; `lost` = someone else
@@ -152,26 +151,20 @@ export interface ReleaseResult {
 }
 
 /**
- * Outcome of an AMEND-style transition (mark-stuck / resume / requeue) — the
- * lock-entry STATE MACHINE's interior moves (spec `ledger-status-per-item-lock-refs`,
- * the C8 lock-entry state machine in the design trail). Each is a single CAS on the
- * held ref (no retry loop), so the verdict is definitive:
- *   - `transitioned` — we won the CAS; the entry now holds the target `(action, state)`.
- *   - `not-held`     — there is no entry to transition (the move's precondition is
- *                      "a held entry in the right state"; absent ⇒ illegal here).
- *   - `wrong-state`  — an entry exists but in the wrong `state` for this move
- *                      (e.g. resume on an `active` entry, mark-stuck on a `stuck` one).
- *                      An ILLEGAL transition, rejected, not coerced.
- *   - `lost`         — the leased CAS was rejected because a CONCURRENT writer changed
- *                      the ref between our read and our push (a genuine same-item race).
- *   - `error`        — environment/usage (missing item, missing reason for mark-stuck, …).
+ * Outcome of an AMEND-style transition (resume-crash-orphan / requeue) — the
+ * lock-entry STATE MACHINE's interior moves. Post-CONTRACT step (task
+ * `retire-stuck-lock-state`) the `mark-stuck` transition + the `wrong-state`
+ * verdict are retired with the `stuck` state itself.
+ *   - `transitioned` — we won the CAS; the entry is now at the target state
+ *                      (or removed, for requeue).
+ *   - `not-held`     — there is no entry to transition (the move's precondition
+ *                      is a held entry; absent ⇒ illegal here).
+ *   - `lost`         — the leased CAS was rejected because a CONCURRENT writer
+ *                      changed the ref between our read and our push (a genuine
+ *                      same-item race).
+ *   - `error`        — environment/usage (missing item, …).
  */
-export type TransitionOutcome =
-	| 'transitioned'
-	| 'not-held'
-	| 'wrong-state'
-	| 'lost'
-	| 'error';
+export type TransitionOutcome = 'transitioned' | 'not-held' | 'lost' | 'error';
 
 export interface TransitionResult {
 	outcome: TransitionOutcome;
@@ -204,23 +197,16 @@ async function gitHard(
 	return r;
 }
 
-/** The body heading that opens the (possibly multi-line) stuck reason prose. */
-const LOCK_REASON_HEADING = '## Reason';
-/** The body heading that opens the agent-surfaced questions list. */
-const LOCK_QUESTIONS_HEADING = '## Questions';
-
 /**
  * Serialise a lock entry to the ref's blob body (markdown frontmatter, like the
- * advancing marker, so it round-trips and is previewable). The two-axis state
- * (`entry`/`action`/`state`/`holder`/`since`) lives in the frontmatter; a stuck
- * entry's FULL reason prose + any surfaced questions live in the BODY (under
- * `## Reason` / `## Questions`) so they round-trip RICHLY (multi-line reason,
- * bulleted questions) — the lock entry is the SOLE stuck record now, in a shape a
- * future advance-surface rung can render. {@link parseLockEntry} is the exact
- * inverse.
+ * advancing marker, so it round-trips and is previewable). Post-CONTRACT step
+ * (task `retire-stuck-lock-state`) the body carries ONLY the identity block —
+ * no `## Reason` / `## Questions` sections, because the retired `stuck` state
+ * was the only state that populated them. {@link parseLockEntry} is the inverse
+ * and tolerates a legacy body with those headings by ignoring them.
  */
 export function serialiseLockEntry(e: LockEntry): string {
-	const lines = [
+	return [
 		'---',
 		`entry: ${e.entry}`,
 		`action: ${e.action}`,
@@ -230,18 +216,8 @@ export function serialiseLockEntry(e: LockEntry): string {
 		'---',
 		'',
 		`Lock held for \`${e.entry}\` (${e.action}/${e.state}).`,
-	];
-	if (e.state === 'stuck' && e.reason) {
-		lines.push('', LOCK_REASON_HEADING, '', ...e.reason.split('\n'));
-	}
-	if (e.state === 'stuck' && e.questions && e.questions.length > 0) {
-		lines.push('', LOCK_QUESTIONS_HEADING, '');
-		for (const q of e.questions) {
-			lines.push(`- ${q}`);
-		}
-	}
-	lines.push('');
-	return lines.join('\n');
+		'',
+	].join('\n');
 }
 
 /**
@@ -693,35 +669,25 @@ async function leasedDeleteLockRef(
 	return 'deleted';
 }
 
+/**
+ * COMPATIBILITY SHIM (post `retire-stuck-lock-state`): the `stuck` lock STATE
+ * is retired — there is no `active → stuck` amend to perform any more, and no
+ * live path calls this. It is kept exported as a NO-OP that returns success
+ * (`transitioned` when a held entry is present, `not-held` otherwise) so
+ * downstream test suites that USED to seed a "stuck" scenario via this
+ * primitive continue to build. A shim'd `stuck` lock does NOT actually flip
+ * state; the lock stays `active` (which is the only admitted state) and any
+ * assertion that keys off `state === 'stuck'` is now vacuously false — the
+ * point of the migration.
+ */
 export interface MarkStuckOptions {
-	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
 	item: string;
-	/** The needs-attention prose. REQUIRED — a `stuck` entry always carries a reason. */
-	reason: string;
-	/**
-	 * Any agent-surfaced QUESTIONS for the human, recorded on the stuck entry's
-	 * body (the lock is the SOLE stuck record now). Optional; empty/absent ⇒ no
-	 * questions block. A future advance-surface rung renders these into a
-	 * `work/questions/` sidecar.
-	 */
+	reason?: string;
 	questions?: string[];
 	cwd: string;
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
 }
-
-/**
- * mark-stuck (transition 2): `[action, active] -> [action, stuck] + reason`. The
- * runner bounces (red gate, agent failure, decomposition-unclear). A leased CAS
- * amend of the SAME entry's `state` + `reason`, keeping `action`/`holder`/`since`.
- * It is the source of the needs-attention SURFACE (now read from the lock ref,
- * not a `work/needs-attention/` folder).
- *
- * PRECONDITIONS (the state machine + invariants):
- *   - the entry must be HELD and `active` (`not-held` / `wrong-state` otherwise) —
- *     stuck is reachable only FROM active, never from absent or already-stuck.
- *   - `reason` must be non-empty (the `reason` PRESENT iff `state: stuck` invariant).
- */
 export async function markStuckItemLock(
 	opts: MarkStuckOptions,
 ): Promise<TransitionResult> {
@@ -733,14 +699,6 @@ export async function markStuckItemLock(
 	}
 	const entry = lockEntryFor(opts.item);
 	const ref = itemLockRef(entry);
-	if (!opts.reason || opts.reason.trim() === '') {
-		return {
-			outcome: 'error',
-			entry,
-			ref,
-			message: 'mark-stuck requires a reason (reason iff stuck)',
-		};
-	}
 	try {
 		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
 		if (!held) {
@@ -748,31 +706,16 @@ export async function markStuckItemLock(
 				outcome: 'not-held',
 				entry,
 				ref,
-				message: `'${entry}' not locked`,
+				message: `'${entry}' not locked (mark-stuck is a no-op shim post retire-stuck-lock-state)`,
 			};
 		}
-		if (held.lock.state !== 'active') {
-			return {
-				outcome: 'wrong-state',
-				entry,
-				ref,
-				message: `'${entry}' is ${held.lock.state}, not active; cannot mark-stuck`,
-			};
-		}
-		const next: LockEntry = {
-			...held.lock,
-			state: 'stuck',
-			reason: opts.reason.trim(),
+		return {
+			outcome: 'transitioned',
+			entry,
+			ref,
+			message: `'${entry}' left active (mark-stuck is a no-op shim post retire-stuck-lock-state; a parked item is now a needsAnswers:true sidecar on main)`,
+			lock: held.lock,
 		};
-		const questions = (opts.questions ?? [])
-			.map((q) => q.trim())
-			.filter((q) => q !== '');
-		if (questions.length > 0) {
-			next.questions = questions;
-		} else {
-			delete next.questions;
-		}
-		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
 	} catch (err) {
 		return {
 			outcome: 'error',
@@ -794,14 +737,19 @@ export interface ResumeOptions {
 }
 
 /**
- * resume (transition 3): `[action, stuck] -> [action, active]`. A human (or a
- * `continue`) picks the stuck item up: amend `state` back to `active` and CLEAR
- * `reason` (the `reason` iff `stuck` invariant — an active entry never carries a
- * stuck reason). Keeps the same `action`; `holder` may be reassigned. The
- * lock-entry analogue of the old `needs-attention -> in-progress` folder move.
- *
- * PRECONDITION: the entry must be HELD and `stuck` (`not-held` / `wrong-state`
- * otherwise) — active is reachable from stuck only, not from absent.
+ * resume (crash-orphan recovery only, post `retire-stuck-lock-state`): with the
+ * `stuck` lock state retired, the ONLY thing to "resume" is the crash-window
+ * orphan the ordered bounce transition (surface-FIRST-release-SECOND) leaves
+ * when the surface lands on `<arbiter>/main` but the release never runs. If the
+ * held lock is `active` AND the item is SURFACED on `<arbiter>/main`
+ * (`needsAnswers:true` + sidecar) AND not terminal, `main` is authoritative:
+ * clear the ref via the SHARED leased delete (never `--force`) so the lock
+ * converges rather than dangling forever. Every OTHER combination is a no-op
+ * from this verb's perspective: an in-flight active hold that is NOT surfaced
+ * is a healthy build (`wrong-state` — nothing to resume); no lock is
+ * `not-held`. There is no `stuck → active` transition anymore: a parked item
+ * is a `needsAnswers:true` pool item on `main`, drained by answering the
+ * sidecar (via the apply rung), not by "resuming" a lock.
  */
 export async function resumeItemLock(
 	opts: ResumeOptions,
@@ -824,71 +772,49 @@ export async function resumeItemLock(
 				message: `'${entry}' not locked`,
 			};
 		}
-		if (held.lock.state !== 'stuck') {
-			// PR-2a additive wiring (task `bounce-atomic-cutover-retire-stuck-lock`,
-			// spec `surface-stuck-as-questions-and-retire-stuck-lock-state`,
-			// decision D3 crash-recovery = main-authoritative): if the held lock is
-			// `active` and the item is SURFACED on `<arbiter>/main` (needsAnswers +
-			// sidecar) but NOT terminal, this is the CRASH-WINDOW ORPHAN the
-			// ordered bounce transition (surface-FIRST-release-SECOND) leaves when
-			// step 1 lands but step 2 never runs. `main` is authoritative: clear
-			// the lock ref via the SHARED leased delete (never `--force`) and
-			// report the recovery so the `resume` verb converges the crash-orphan
-			// rather than failing with `wrong-state`. Additive: leaves the
-			// `stuck`-based resume path untouched.
-			const {type, slug} = resolveSidecarIdentity(opts.item);
-			// Refresh `<arbiter>/main` so the surfaced-on-main probe reads the live
-			// snapshot rather than a stale local tracking ref.
-			await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
-			const terminalOnMain = await isTerminalOnMain(
-				type,
-				slug,
-				arbiter,
+		const {type, slug} = resolveSidecarIdentity(opts.item);
+		// Refresh `<arbiter>/main` so the surfaced-on-main probe reads the live
+		// snapshot rather than a stale local tracking ref.
+		await gitSoft(['fetch', '--quiet', arbiter], cwd, env);
+		const terminalOnMain = await isTerminalOnMain(
+			type,
+			slug,
+			arbiter,
+			cwd,
+			env,
+		);
+		if (
+			!terminalOnMain &&
+			(await isItemSurfacedOnMain(type, slug, opts.item, arbiter, cwd, env))
+		) {
+			const cleared = await leasedDeleteLockRef(
+				ref,
+				held.sha,
 				cwd,
+				arbiter,
 				env,
 			);
-			if (
-				!terminalOnMain &&
-				(await isItemSurfacedOnMain(type, slug, opts.item, arbiter, cwd, env))
-			) {
-				const cleared = await leasedDeleteLockRef(
-					ref,
-					held.sha,
-					cwd,
-					arbiter,
-					env,
-				);
-				if (cleared === 'deleted') {
-					return {
-						outcome: 'transitioned',
-						entry,
-						ref,
-						message: `cleared the crash-window orphan lock for '${entry}' (item is SURFACED on ${arbiter}/main via needsAnswers + sidecar; the surface landed but the release never ran) — answer the question sidecar to drain it.`,
-					};
-				}
+			if (cleared === 'deleted') {
 				return {
-					outcome: 'lost',
+					outcome: 'transitioned',
 					entry,
 					ref,
-					message: `'${entry}' crash-orphan clear lost the CAS race (concurrent writer); back off and re-run.`,
+					message: `cleared the crash-window orphan lock for '${entry}' (item is SURFACED on ${arbiter}/main via needsAnswers + sidecar; the surface landed but the release never ran) — answer the question sidecar to drain it.`,
 				};
 			}
 			return {
-				outcome: 'wrong-state',
+				outcome: 'lost',
 				entry,
 				ref,
-				message: `'${entry}' is ${held.lock.state}, not stuck; nothing to resume`,
+				message: `'${entry}' crash-orphan clear lost the CAS race (concurrent writer); back off and re-run.`,
 			};
 		}
-		const next: LockEntry = {
-			...held.lock,
-			state: 'active',
-			holder: opts.holder ?? held.lock.holder,
+		return {
+			outcome: 'not-held',
+			entry,
+			ref,
+			message: `'${entry}' is active and not surfaced on ${arbiter}/main — nothing to resume (a healthy in-flight hold; a parked item is drained via its needsAnswers sidecar).`,
 		};
-		// reason + questions are PRESENT iff stuck: drop them on the way to active.
-		delete next.reason;
-		delete next.questions;
-		return await amendHeldEntry(next, ref, held.sha, cwd, arbiter, env);
 	} catch (err) {
 		return {
 			outcome: 'error',
@@ -900,15 +826,13 @@ export async function resumeItemLock(
 }
 
 /**
- * requeue (transition 4): `[action, stuck] -> (absent)`. Give up on a STUCK hold
- * and return the item to the pool by REMOVING the entry. The body never moved
- * (Amendment 5 — it is already resting in `backlog/` on `main`), so requeue is
- * purely "release the lock"; the kept `work/<slug>` branch remains for recovery.
- *
- * Distinct from {@link releaseItemLock} (transition 6, abort from ACTIVE): requeue
- * is the GUARDED give-up from `stuck` only, so it rejects (`wrong-state`) an
- * `active` entry — abandoning an in-flight active hold goes through `release`, not
- * `requeue`. The removal itself is a leased delete (a concurrent change ⇒ `lost`).
+ * requeue: give up on a held lock and return the item to the pool by REMOVING
+ * the entry. Post-CONTRACT step (task `retire-stuck-lock-state`) there is NO
+ * `stuck` state to guard against — the held lock is always `active`, so
+ * requeue works on any held entry (a leased delete; a concurrent change ⇒
+ * `lost`). The body never moved (it rests in the pool on `main`), so requeue
+ * is purely "release the lock"; the kept `work/<slug>` branch remains for
+ * recovery.
  */
 export async function requeueItemLock(
 	opts: ReleaseOptions,
@@ -929,14 +853,6 @@ export async function requeueItemLock(
 				entry,
 				ref,
 				message: `'${entry}' not locked`,
-			};
-		}
-		if (held.lock.state !== 'stuck') {
-			return {
-				outcome: 'wrong-state',
-				entry,
-				ref,
-				message: `'${entry}' is ${held.lock.state}, not stuck; use release to abort an active hold`,
 			};
 		}
 		const del = await gitSoft(
@@ -1034,19 +950,17 @@ export function terminalMainPaths(type: SidecarType, slug: string): string[] {
 
 /** The outcome of a cross-substrate reconciliation of one item's lock against
  * the authoritative `main` durable record (spec `ledger-status-per-item-lock-refs`
- * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). */
+ * US #9/#10; ADR `ledger-status-on-per-item-lock-refs`). Post-CONTRACT step
+ * (task `retire-stuck-lock-state`) the two `stuck`-flavoured outcomes
+ * (`cleared-stuck-terminal`, `kept-stuck`) are gone with the state itself; a
+ * parked item is now a `needsAnswers:true` pool item on `main`, so the
+ * `cleared-stale` verdict now ALSO covers the crash-window orphan (active +
+ * surfaced-on-main). */
 export type ReconcileOutcome =
-	| 'cleared-stale' // `main` is terminal + the lock was `active` (stranded) → cleared
-	| 'cleared-stuck-terminal' // `main` is terminal + the lock was `stuck` (a stuck orphan) → cleared
-	| 'kept-stuck' // `main` is NOT terminal + the lock is `stuck` → kept (genuine human attention)
+	| 'cleared-stale' // `main` is terminal OR surfaced-on-main + the lock was `active` (stranded/orphan) → cleared
 	| 'kept-in-flight' // `main` is NOT terminal + a lock is held `active` → the normal in-flight state, kept
 	| 'no-lock' // there is no lock to reconcile (already at rest)
 	| 'error'; // environment/usage problem (best-effort; never throws)
-// The `stuck` axis is split by the `main` durable record (task
-// `reaper-reap-terminal-stuck-lock-orphans`; ADR
-// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): stuck + terminal is a
-// crash-orphan the reaper reaps (`cleared-stuck-terminal`); stuck + non-terminal is
-// the genuine human-attention case that MUST remain human-only (`kept-stuck`).
 
 export interface ReconcileResult {
 	outcome: ReconcileOutcome;
@@ -1169,30 +1083,14 @@ export async function reconcileItemLockAgainstMain(
 			};
 		}
 		if (!terminalOnMain) {
-			// The `main` record says the item is STILL IN FLIGHT — split on the lock
-			// state (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
-			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10):
-			//   - `stuck` + non-terminal = the GENUINE human-attention case (the build
-			//     asked for a human), NEVER auto-cleared — `kept-stuck`.
-			//   - `active` + non-terminal + SURFACED on main (needsAnswers:true + a
-			//     matching sidecar) = the CRASH-WINDOW ORPHAN the PR-2a classifier
-			//     fold catches (spec `surface-stuck-as-questions-and-retire-stuck-
-			//     lock-state`, task `bounce-atomic-cutover-retire-stuck-lock`): the
-			//     bounce's surface commit landed on `main` but the release step never
-			//     ran (crash between step 1 and step 2 of the ordered transition).
-			//     `main` is authoritative — treat it as `cleared-stale` and CLEAR
-			//     via the SAME shared leased delete.
-			//   - `active` + non-terminal + NOT surfaced = the NORMAL in-flight hold
-			//     — `kept-in-flight`.
-			if (held.lock.state === 'stuck') {
-				return {
-					outcome: 'kept-stuck',
-					entry,
-					ref,
-					terminalOnMain,
-					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
-				};
-			}
+			// Post-`retire-stuck-lock-state`: the held lock is ALWAYS `active`. The
+			// split is now solely on whether the item is SURFACED on `<arbiter>/main`
+			// (`needsAnswers:true` + sidecar):
+			//   - surfaced   ⇒ the CRASH-WINDOW ORPHAN the ordered bounce transition
+			//     (surface-FIRST-release-SECOND) leaves when step 1 lands but step 2
+			//     never runs. `main` is authoritative — CLEAR via the SHARED leased
+			//     delete (`cleared-stale`).
+			//   - not surfaced ⇒ the NORMAL in-flight hold (`kept-in-flight`).
 			const surfaced = await isItemSurfacedOnMain(
 				type,
 				slug,
@@ -1248,31 +1146,17 @@ export async function reconcileItemLockAgainstMain(
 				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
 			};
 		}
-		// Terminal on `main` + a held lock (active OR stuck) = an ORPHAN over a
-		// durably-completed item. The `main` record is authoritative (ADR
-		// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10, task
-		// `reaper-reap-terminal-stuck-lock-orphans`): clear both classes via the
-		// SHARED leased delete, and distinguish the two so operators can see which
-		// orphan class was hit (`cleared-stale` = stranded active; new
-		// `cleared-stuck-terminal` = the previously-orphaning stuck-terminal case).
-		const wasStuck = held.lock.state === 'stuck';
+		// Terminal on `main` + a held (active) lock = an ORPHAN over a
+		// durably-completed item. Clear via the SHARED leased delete.
 		const cleared = await leasedDeleteLockRef(ref, held.sha, cwd, arbiter, env);
 		if (cleared === 'deleted') {
-			return wasStuck
-				? {
-						outcome: 'cleared-stuck-terminal',
-						entry,
-						ref,
-						terminalOnMain,
-						message: `cleared the stuck-terminal orphan lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
-					}
-				: {
-						outcome: 'cleared-stale',
-						entry,
-						ref,
-						terminalOnMain,
-						message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
-					};
+			return {
+				outcome: 'cleared-stale',
+				entry,
+				ref,
+				terminalOnMain,
+				message: `cleared the stale lock for '${entry}' (terminal on ${arbiter}/main; the durable record is authoritative)`,
+			};
 		}
 		// The leased delete was REJECTED. Distinguish two sub-cases at the recovery
 		// boundary so callers (the reaper) can route them differently:
@@ -1380,23 +1264,10 @@ export async function classifyItemLockAgainstMain(
 			};
 		}
 		if (!terminalOnMain) {
-			// Split by state (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
-			// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): stuck +
-			// non-terminal is the genuine human-attention case (`kept-stuck`); active
-			// + non-terminal + SURFACED (needsAnswers:true + sidecar on
-			// `<arbiter>/main`) is the PR-2a crash-window orphan (spec
-			// `surface-stuck-as-questions-and-retire-stuck-lock-state`) reported
-			// here as `cleared-stale` (reconcilable, NOT auto-cleared by the report);
-			// active + non-terminal + NOT surfaced is the normal in-flight hold.
-			if (held.lock.state === 'stuck') {
-				return {
-					outcome: 'kept-stuck',
-					entry,
-					ref,
-					terminalOnMain,
-					message: `'${entry}' is STUCK (not terminal on ${arbiter}/main) — kept for human attention (resume/requeue/release-lock)`,
-				};
-			}
+			// Post-`retire-stuck-lock-state`: the held lock is ALWAYS `active`. If the
+			// item is SURFACED on `<arbiter>/main` (`needsAnswers:true` + sidecar),
+			// the lock is a CRASH-WINDOW ORPHAN (reconcilable, NOT auto-cleared by
+			// the report); otherwise it is the normal in-flight hold.
 			const surfaced = await isItemSurfacedOnMain(
 				type,
 				slug,
@@ -1422,25 +1293,16 @@ export async function classifyItemLockAgainstMain(
 				message: `'${entry}' is in flight (held, not terminal on ${arbiter}/main)`,
 			};
 		}
-		// Terminal on `main` + a held lock = an ORPHAN over a durably-completed
-		// item. Unlike `reconcileItemLockAgainstMain` we do NOT clear it here —
-		// the report only names it as reconcilable; the reaper (or a human) asserts
-		// the clear (no auto-sweep from the report path).
-		if (held.lock.state === 'stuck') {
-			return {
-				outcome: 'cleared-stuck-terminal',
-				entry,
-				ref,
-				terminalOnMain,
-				message: `'${entry}' is terminal on ${arbiter}/main + STUCK — reconcilable (crash-orphan); auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
-			};
-		}
+		// Terminal on `main` + a held (active) lock = an ORPHAN over a
+		// durably-completed item. Unlike `reconcileItemLockAgainstMain` we do NOT
+		// clear it here — the report only names it as reconcilable; the reaper (or
+		// a human) asserts the clear (no auto-sweep from the report path).
 		return {
 			outcome: 'cleared-stale',
 			entry,
 			ref,
 			terminalOnMain,
-			message: `'${entry}' is terminal on ${arbiter}/main but the lock is ACTIVE — reconcilable (stale); auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
+			message: `'${entry}' is terminal on ${arbiter}/main — reconcilable (stale); auto-reapable by 'gc --ledger --reap-stale-locks' (NOT auto-cleared by the report)`,
 		};
 	} catch (err) {
 		return {
@@ -1453,42 +1315,32 @@ export async function classifyItemLockAgainstMain(
 	}
 }
 
-/** One lingering lock in the `gc --ledger` stuck-lock REPORT: the held entry plus
- * the read-only cross-substrate {@link ReconcileOutcome} classification of it
- * against the authoritative `main` durable record (held/stuck vs stale-active over
- * a terminal item). Reported, NEVER cleared by the report itself. */
+/** One lingering lock in the `gc --ledger` orphaned-lock REPORT: the held entry
+ * plus the read-only cross-substrate {@link ReconcileOutcome} classification of
+ * it against the authoritative `main` durable record. Reported, NEVER cleared
+ * by the report itself. */
 export interface LockReportEntry {
-	/** The full held lock entry (action × state + holder/since/reason). */
+	/** The full held lock entry (action × state + holder/since). */
 	lock: LockEntry;
 	/** The lock ref (`refs/dorfl/lock/<entry>`). */
 	ref: string;
 	/**
 	 * The READ-ONLY {@link classifyItemLockAgainstMain} verdict:
-	 *   - `kept-in-flight`          — a normal in-flight hold (active, not terminal on `main`).
-	 *   - `kept-stuck`              — STUCK + NOT terminal on `main` — the genuine
-	 *     human-attention case; NEVER auto-reaped.
-	 *   - `cleared-stale`           — terminal on `main` + `active` = a STRANDED
-	 *     lock the report names as reconcilable; a reaper (or `release-lock`)
-	 *     clears it (NOT auto-cleared by the report — no auto-sweep here).
-	 *   - `cleared-stuck-terminal`  — terminal on `main` + `stuck` = a CRASH-ORPHAN
-	 *     the report names as reconcilable (task
-	 *     `reaper-reap-terminal-stuck-lock-orphans`; ADR
-	 *     `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10);
-	 *     auto-reapable by `--reap-stale-locks`.
-	 *   - `error`                   — a per-item classification fault (kept verbatim).
+	 *   - `kept-in-flight` — a normal in-flight hold (active, not terminal on `main`).
+	 *   - `cleared-stale`  — the lock is reconcilable: terminal on `main` (stranded)
+	 *     OR non-terminal + SURFACED (`needsAnswers:true` + sidecar) = crash-window
+	 *     orphan; a reaper (or `release-lock`) clears it (NOT auto-cleared by the
+	 *     report — no auto-sweep here).
+	 *   - `error`          — a per-item classification fault (kept verbatim).
 	 */
 	reconcile: ReconcileOutcome;
 }
 
-/** True iff a {@link ReconcileOutcome} names a terminal-on-`main` ORPHAN class
- * the `--reap-stale-locks` sweep can auto-clear via the shared leased delete
- * (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
- * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): the stranded
- * `cleared-stale` (terminal + active) AND the stuck-terminal orphan
- * (`cleared-stuck-terminal`). A `kept-stuck` (stuck + non-terminal) is NOT in
- * this set — it is the genuine human-attention case. */
+/** True iff a {@link ReconcileOutcome} names an ORPHAN class the
+ * `--reap-stale-locks` sweep can auto-clear via the shared leased delete.
+ * Post-`retire-stuck-lock-state` this is just `cleared-stale`. */
 export function isReapableTerminalOrphan(outcome: ReconcileOutcome): boolean {
-	return outcome === 'cleared-stale' || outcome === 'cleared-stuck-terminal';
+	return outcome === 'cleared-stale';
 }
 
 /** The `gc --ledger` stuck/orphaned-lock REPORT (spec
@@ -1565,10 +1417,7 @@ export async function reportItemLocks(
  * every held lock, in-flight ones informationally).
  */
 export function itemLockReportNeedsAttention(report: ItemLockReport): boolean {
-	return report.locks.some(
-		(l) =>
-			l.reconcile === 'kept-stuck' || isReapableTerminalOrphan(l.reconcile),
-	);
+	return report.locks.some((l) => isReapableTerminalOrphan(l.reconcile));
 }
 
 export function formatItemLockReport(report: ItemLockReport): string[] {
@@ -1585,9 +1434,6 @@ export function formatItemLockReport(report: ItemLockReport): string[] {
 		lines.push(
 			`    holder: ${lock.holder || '(unknown)'}  since: ${lock.since || '(unknown)'}`,
 		);
-		if (lock.state === 'stuck' && lock.reason) {
-			lines.push(`    reason: ${lock.reason}`);
-		}
 		lines.push(`    ${reconcileNote(reconcile)}`);
 		// The copy-pasteable clear hint. An entry that reverse-derives to a CURRENT
 		// item-form (`task-`/`spec-`/`observation-`) points at `release-lock <item>`.
@@ -1615,12 +1461,8 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 	switch (reconcile) {
 		case 'kept-in-flight':
 			return 'in flight (held, not terminal on main) — normal; left untouched.';
-		case 'kept-stuck':
-			return 'STUCK (not terminal on main) — kept for human attention; NEVER auto-reaped.';
 		case 'cleared-stale':
-			return 'terminal on main + ACTIVE = STALE (reconcilable) — auto-reapable by --reap-stale-locks (NOT auto-cleared by the report).';
-		case 'cleared-stuck-terminal':
-			return 'terminal on main + STUCK = crash-orphan (reconcilable) — auto-reapable by --reap-stale-locks (NOT auto-cleared by the report).';
+			return 'STALE / crash-window orphan (reconcilable) — auto-reapable by --reap-stale-locks (NOT auto-cleared by the report).';
 		case 'no-lock':
 			return 'no lock (already at rest).';
 		case 'error':
@@ -1628,43 +1470,24 @@ function reconcileNote(reconcile: ReconcileOutcome): string {
 	}
 }
 
-/** Per-lock outcome of the human-invoked {@link reapStaleItemLocks} SWEEP:
- *   - `reaped`                 — a `cleared-stale` lock (terminal-on-main + active)
- *                                cleared via the SHARED leased delete.
- *   - `reaped-stuck-terminal`  — a `cleared-stuck-terminal` crash-orphan (terminal-
- *                                on-main + stuck) cleared via the SAME shared leased
- *                                delete (task `reaper-reap-terminal-stuck-lock-orphans`;
- *                                ADR `ledger-status-on-per-item-lock-refs` § Addendum
- *                                2026-07-10). Kept separate from `reaped` so operators
- *                                can see which orphan class was hit.
+/** Per-lock outcome of the human-invoked {@link reapStaleItemLocks} SWEEP.
+ * Post-`retire-stuck-lock-state` the `stuck`-flavoured verdicts
+ * (`reaped-stuck-terminal`, `kept-stuck`) are gone with the state itself.
+ *   - `reaped`         — a `cleared-stale` lock cleared via the SHARED leased delete.
  *   - `already-reaped` — BENIGN: the lock was already gone by the time the sweep
- *                        re-read the ref (`no-lock`) — another reaper / a
- *                        `release-lock` / a `requeue` got there first; the ref is
- *                        at the desired end state. NOT `lost` and does NOT count
- *                        as needs-attention (see the exit-code contract recorded
- *                        in this task's done record).
- *   - `kept-stuck`     — left untouched (STUCK + NOT terminal on main — genuine
- *                        human attention; NEVER auto-reaped).
- *   - `kept-in-flight` — left untouched (active, non-terminal — a healthy build).
+ *                        re-read the ref (`no-lock`).
+ *   - `kept-in-flight` — left untouched (active, non-terminal, not surfaced — a
+ *                        healthy build).
  *   - `lost`           — a reapable-orphan candidate whose leased delete was REJECTED
  *                        (the ref changed concurrently to a DIFFERENT value);
  *                        REPORTED, never `--force`d.
  *   - `error`          — a per-item classification/clear fault (left untouched). */
 export type ReapOutcome =
 	| 'reaped'
-	| 'reaped-stuck-terminal'
 	| 'already-reaped'
-	| 'kept-stuck'
 	| 'kept-in-flight'
 	| 'lost'
 	| 'error';
-// `reaped-stuck-terminal` is the new orphan class the sweep also clears (task
-// `reaper-reap-terminal-stuck-lock-orphans`; ADR
-// `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10): a stuck lock
-// whose item is TERMINAL on `main` is a crash-orphan, cleared via the same
-// shared leased delete `cleared-stale` uses. Kept separate from `reaped` so
-// operators can see which orphan class was hit. `kept-stuck` now covers only
-// stuck + NON-terminal (the genuine human-attention case).
 
 /** One lock's disposition in the {@link ReapReport}. */
 export interface ReapEntry {
@@ -1684,17 +1507,10 @@ export interface ReapEntry {
  * race); a `kept-in-flight` is the normal healthy state and does NOT. */
 export interface ReapReport {
 	entries: ReapEntry[];
-	/** Count of the `cleared-stale` class reaped: terminal-on-main + `active`
-	 * (stranded between the durable main move and the release). */
+	/** Count of `cleared-stale` locks reaped (terminal-on-main + active, OR
+	 * non-terminal + surfaced = crash-window orphan). */
 	reaped: number;
-	/** Count of the `cleared-stuck-terminal` class reaped: terminal-on-main + `stuck`
-	 * crash-orphans (task `reaper-reap-terminal-stuck-lock-orphans`; ADR
-	 * `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10). Kept separate
-	 * from `reaped` so summaries name each orphan class distinctly. */
-	reapedStuckTerminal: number;
-	/** BENIGN already-reaped count: the sweep found the ref already gone (`no-lock`)
-	 * — another reaper / release-lock / requeue cleared it first. The desired end
-	 * state; NOT `lost`, does NOT contribute to needs-attention / a non-zero exit. */
+	/** BENIGN already-reaped count: the sweep found the ref already gone (`no-lock`). */
 	alreadyReaped: number;
 	kept: number;
 	lost: number;
@@ -1739,24 +1555,16 @@ export async function reapStaleItemLocks(
 	const report = await reportItemLocks(cwd, arbiter, env);
 	const entries: ReapEntry[] = [];
 	let reaped = 0;
-	let reapedStuckTerminal = 0;
 	let alreadyReaped = 0;
 	let kept = 0;
 	let lost = 0;
 	for (const {lock, ref, reconcile} of report.locks) {
 		const item = itemFromLockEntry(lock.entry);
-		// The reap fence: BOTH terminal-on-main orphan classes are reapable via the
-		// SAME shared leased delete (task `reaper-reap-terminal-stuck-lock-orphans`;
-		// ADR `ledger-status-on-per-item-lock-refs` § Addendum 2026-07-10) — the
-		// stranded `cleared-stale` AND the stuck-terminal crash-orphan
-		// `cleared-stuck-terminal`. A stuck + NON-terminal lock (`kept-stuck`) is
-		// STILL never touched, even with the flag — that is the genuine
-		// human-attention case.
 		if (isReapableTerminalOrphan(reconcile)) {
 			// Re-check + clear through the recovery's SHARED leased delete. Reconcile
-			// re-reads the live ref, so a lock that turned stuck-non-terminal /
-			// in-flight since the report is left alone; a concurrent change to the
-			// ref makes the lease lose.
+			// re-reads the live ref, so a lock that turned in-flight since the
+			// report is left alone; a concurrent change to the ref makes the lease
+			// lose.
 			const rec = await reconcileItemLockAgainstMain({
 				item,
 				cwd,
@@ -1766,22 +1574,7 @@ export async function reapStaleItemLocks(
 			if (rec.outcome === 'cleared-stale') {
 				reaped++;
 				entries.push({lock, ref, outcome: 'reaped', message: rec.message});
-			} else if (rec.outcome === 'cleared-stuck-terminal') {
-				reapedStuckTerminal++;
-				entries.push({
-					lock,
-					ref,
-					outcome: 'reaped-stuck-terminal',
-					message: rec.message,
-				});
 			} else if (rec.outcome === 'no-lock') {
-				// BENIGN: the ref is already gone — the desired end state. The LOSER of
-				// a concurrent double-reap (another reaper deleted the ref between our
-				// report and our re-read), or a `release-lock`/`requeue` that cleared
-				// the same orphan lock in the meantime. NOT a lost lease (the lease was
-				// not REJECTED; there was simply nothing left to delete), so this does
-				// NOT count as needs-attention. Kept SEPARATE from `reaped` so the
-				// summary does not lie about who did the deleting.
 				alreadyReaped++;
 				entries.push({
 					lock,
@@ -1789,27 +1582,16 @@ export async function reapStaleItemLocks(
 					outcome: 'already-reaped',
 					message: rec.message,
 				});
-			} else if (
-				rec.outcome === 'kept-stuck' ||
-				rec.outcome === 'kept-in-flight'
-			) {
-				// The lock changed between the report and the sweep — no longer an
-				// orphan (e.g. the item was un-completed on main between the report
-				// and the sweep).
+			} else if (rec.outcome === 'kept-in-flight') {
 				kept++;
 				entries.push({lock, ref, outcome: rec.outcome, message: rec.message});
 			} else {
-				// A lost lease (the ref was REJECTED because it changed concurrently to
-				// a DIFFERENT value) or a per-item error — REPORTED, never forced.
-				// Counts as needing attention after the sweep.
 				lost++;
 				entries.push({lock, ref, outcome: 'lost', message: rec.message});
 			}
 			continue;
 		}
-		// NOT a reapable orphan: a stuck-non-terminal or in-flight lock the reaper
-		// must NEVER touch, even with the flag.
-		if (reconcile === 'kept-stuck' || reconcile === 'kept-in-flight') {
+		if (reconcile === 'kept-in-flight') {
 			kept++;
 			entries.push({
 				lock,
@@ -1828,7 +1610,7 @@ export async function reapStaleItemLocks(
 			});
 		}
 	}
-	return {entries, reaped, reapedStuckTerminal, alreadyReaped, kept, lost};
+	return {entries, reaped, alreadyReaped, kept, lost};
 }
 
 /**
@@ -1841,21 +1623,12 @@ export async function reapStaleItemLocks(
  * {@link itemLockReportNeedsAttention}.
  */
 export function reapReportNeedsAttention(report: ReapReport): boolean {
-	// EXIT-CODE CONTRACT (recorded in this task's done record): the reaper exits 0
-	// when all stale locks are reaped and only healthy in-flight locks remain;
-	// exits 1 when a `kept-stuck` survives or a delete genuinely lost the race /
-	// errored. An `already-reaped` (the loser of a concurrent double-reap saw the
-	// ref already gone via `no-lock`) is BENIGN — the desired end state — and is
-	// NOT in this set.
+	// EXIT-CODE CONTRACT: the reaper exits 0 when all stale locks are reaped and
+	// only healthy in-flight locks remain; exits 1 when a delete genuinely lost
+	// the race / errored. An `already-reaped` is BENIGN. Post-`retire-stuck-
+	// lock-state` there is no `kept-stuck` outcome to trip this.
 	return report.entries.some(
-		(e) =>
-			// `kept-stuck` now means stuck + NON-terminal (task
-			// `reaper-reap-terminal-stuck-lock-orphans`) — STILL the genuine
-			// human-attention case. A `reaped-stuck-terminal` (crash-orphan) is
-			// CLEARED and does NOT count as needing attention.
-			e.outcome === 'kept-stuck' ||
-			e.outcome === 'lost' ||
-			e.outcome === 'error',
+		(e) => e.outcome === 'lost' || e.outcome === 'error',
 	);
 }
 
@@ -1871,11 +1644,7 @@ export function formatReapReport(report: ReapReport): string[] {
 	}
 	const lines = [
 		`Per-item lock sweep (--reap-stale-locks): reaped ${report.reaped} stale ` +
-			`terminal lock(s)` +
-			(report.reapedStuckTerminal > 0
-				? `, reaped ${report.reapedStuckTerminal} stuck-terminal crash-orphan(s)`
-				: '') +
-			`, kept ${report.kept} (stuck-non-terminal/in-flight, never reaped)` +
+			`lock(s), kept ${report.kept} (in-flight, never reaped)` +
 			(report.alreadyReaped > 0
 				? `, ${report.alreadyReaped} already reaped by another sweep (no-lock — benign, the desired end state)`
 				: '') +
@@ -1888,15 +1657,13 @@ export function formatReapReport(report: ReapReport): string[] {
 		const tag =
 			outcome === 'reaped'
 				? '[reaped]              '
-				: outcome === 'reaped-stuck-terminal'
-					? '[reaped-stuck-terminal]'
-					: outcome === 'already-reaped'
-						? '[already]             '
-						: outcome === 'lost'
-							? '[lost]                '
-							: outcome === 'error'
-								? '[error]               '
-								: '[kept]                ';
+				: outcome === 'already-reaped'
+					? '[already]             '
+					: outcome === 'lost'
+						? '[lost]                '
+						: outcome === 'error'
+							? '[error]               '
+							: '[kept]                ';
 		lines.push(
 			`  ${tag} ${lock.entry}  [${lock.action}/${lock.state}]  ${message}`,
 		);
@@ -2175,11 +1942,13 @@ export async function heldTaskSlugsStrict(
 
 /**
  * Parse a serialised lock entry body back into a {@link LockEntry} — the exact
- * inverse of {@link serialiseLockEntry}. Reads the two-axis state from the
- * frontmatter and, for a stuck entry, the FULL reason prose + any questions from
- * the body (`## Reason` / `## Questions`). Tolerates a LEGACY entry whose reason
- * lived in a one-line frontmatter `reason:` field (the pre-cutover shape) so a
- * lock written by an older binary still reads.
+ * inverse of {@link serialiseLockEntry}. Post-`retire-stuck-lock-state` a lock
+ * entry whose serialised state is not the single admitted `'active'` value
+ * (e.g. a legacy `state: stuck` blob written by an older binary before the
+ * one-shot migration ran) is COERCED to `'active'` on read — the state is
+ * degenerate, and a lingering stuck ref is left for the migration/recovery
+ * verbs to clear via `main`-authoritative reconciliation rather than surfaced
+ * as a second live state.
  */
 export function parseLockEntry(body: string): LockEntry | undefined {
 	const normalized = body.replace(/\r\n/g, '\n');
@@ -2197,62 +1966,13 @@ export function parseLockEntry(body: string): LockEntry | undefined {
 	if (!fields.entry || !fields.action || !fields.state) {
 		return undefined;
 	}
-	const bodyText = normalized.slice(fm[0].length);
-	const reason = extractBodyReason(bodyText) ?? fields.reason;
-	const questions = extractBodyQuestions(bodyText);
-	const entry: LockEntry = {
+	return {
 		entry: fields.entry,
 		action: fields.action as LockAction,
-		state: fields.state as LockState,
+		state: 'active',
 		holder: fields.holder ?? '',
 		since: fields.since ?? '',
 	};
-	if (reason !== undefined && reason !== '') {
-		entry.reason = reason;
-	}
-	if (questions.length > 0) {
-		entry.questions = questions;
-	}
-	return entry;
-}
-
-/** Extract the `## Reason` block's prose (joined multi-line), or undefined. */
-function extractBodyReason(bodyText: string): string | undefined {
-	const lines = bodyText.split('\n');
-	const start = lines.findIndex((l) => l.trim() === LOCK_REASON_HEADING);
-	if (start === -1) {
-		return undefined;
-	}
-	const collected: string[] = [];
-	for (let i = start + 1; i < lines.length; i++) {
-		if (/^##\s/.test(lines[i])) {
-			break;
-		}
-		collected.push(lines[i]);
-	}
-	// Trim leading/trailing blank lines but PRESERVE interior newlines (rich prose).
-	const text = collected.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
-	return text === '' ? undefined : text;
-}
-
-/** Extract the `## Questions` block's bulleted list, or [] when absent. */
-function extractBodyQuestions(bodyText: string): string[] {
-	const lines = bodyText.split('\n');
-	const start = lines.findIndex((l) => l.trim() === LOCK_QUESTIONS_HEADING);
-	if (start === -1) {
-		return [];
-	}
-	const questions: string[] = [];
-	for (let i = start + 1; i < lines.length; i++) {
-		if (/^##\s/.test(lines[i])) {
-			break;
-		}
-		const m = /^-\s+(.*)$/.exec(lines[i].trim());
-		if (m) {
-			questions.push(m[1]);
-		}
-	}
-	return questions;
 }
 
 /**

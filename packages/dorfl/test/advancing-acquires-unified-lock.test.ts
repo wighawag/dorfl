@@ -384,8 +384,8 @@ describe('performAdvance wires the unified lock PER RUNG (the isTreeLessRung pol
 	});
 });
 
-describe('a tree-less advance hold can reach the stuck state', () => {
-	it('mark-stuck moves the advance hold to advance/stuck carrying its reason', async () => {
+describe('a tree-less advance hold stays `active` (post retire-stuck-lock-state)', () => {
+	it('mark-stuck is a shim no-op: the advance hold stays advance/active', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		await acquireAdvancingLock({
 			item: 'task:alpha',
@@ -394,14 +394,14 @@ describe('a tree-less advance hold can reach the stuck state', () => {
 			acquireUnified: true,
 			env: gitEnv(),
 		});
-		const stuck = await markStuckItemLock({
+		const shim = await markStuckItemLock({
 			item: 'task:alpha',
-			reason: 'surface rung needs a human decision',
+			reason: 'ignored',
 			cwd: repo,
 			arbiter: ARBITER,
 			env: gitEnv(),
 		});
-		expect(stuck.outcome).toBe('transitioned');
+		expect(shim.outcome).toBe('transitioned');
 		const entry = await readItemLock({
 			item: 'task:alpha',
 			cwd: repo,
@@ -409,7 +409,6 @@ describe('a tree-less advance hold can reach the stuck state', () => {
 			env: gitEnv(),
 		});
 		expect(entry?.action).toBe('advance');
-		expect(entry?.state).toBe('stuck');
-		expect(entry?.reason).toBe('surface rung needs a human decision');
+		expect(entry?.state).toBe('active');
 	});
 });
