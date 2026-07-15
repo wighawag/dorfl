@@ -34,6 +34,13 @@ const SOURCE = resolve(REPO, 'skills', 'setup', 'protocol');
 const MIRROR = resolve(REPO, 'work', 'protocol');
 const VENDORED = resolve(HERE, '..', 'dist', 'protocol');
 const SKILL = resolve(REPO, 'skills', 'to-task', 'SKILL.md');
+const TO_SPEC_SKILL = resolve(REPO, 'skills', 'to-spec', 'SKILL.md');
+const ADR_ATOMIC = resolve(
+	REPO,
+	'docs',
+	'adr',
+	'tasking-is-atomic-or-split-no-partial-tasked-state.md',
+);
 const TASKING_SRC = resolve(REPO, 'packages', 'dorfl', 'src', 'tasking.ts');
 
 describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => {
@@ -73,6 +80,15 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		// The placement rule \u2014 staging vs pool.
 		expect(doc).toMatch(/work\/tasks\/backlog/);
 		expect(doc).toMatch(/work\/tasks\/ready/);
+		// The ATOMIC-OR-SPLIT rule (ADR
+		// `tasking-is-atomic-or-split-no-partial-tasked-state`): a spec is tasked
+		// whole or not at all; a partially-taskable spec is mis-scoped and gets split.
+		expect(doc).toMatch(/ATOMICALLY/);
+		expect(doc).toMatch(/completeness check/i);
+		expect(doc).toMatch(/MIS-SCOPED/);
+		expect(doc).toMatch(/SPLIT/);
+		// No "partially tasked" state \u2014 the binary taxonomy is preserved.
+		expect(doc).toMatch(/partially tasked/i);
 	});
 
 	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
@@ -250,6 +266,17 @@ describe('buildTaskingSpec \u2014 in-band reference + no re-inlined discipline p
 		// Points the agent at the to-task skill as the user-invoked pointer.
 		expect(builderBody).toMatch(/skills\/to-task\/SKILL\.md/);
 	});
+
+	it('carries the ATOMIC-OR-SPLIT completeness rule (the auto-tasker refuses a partial task, never emits a subset)', () => {
+		// ADR `tasking-is-atomic-or-split-no-partial-tasked-state`: the spawned
+		// tasker must task the WHOLE spec or route it to needs-attention (to be
+		// split) \u2014 it must NEVER emit tasks for a confident subset.
+		expect(builderBody).toMatch(/ATOMICALLY/);
+		expect(builderBody).toMatch(/COMPLETENESS CHECK/);
+		expect(builderBody).toMatch(/MIS-SCOPED/);
+		expect(builderBody).toMatch(/SPLIT/);
+		expect(builderBody).toMatch(/subset/);
+	});
 });
 
 describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointer', () => {
@@ -279,5 +306,41 @@ describe('skills/to-task/SKILL.md \u2014 a thin USER-invoked human-facing pointe
 		expect(skill).not.toMatch(/TASK `humanOnly` IS NARROW/);
 		expect(skill).not.toMatch(/file-orthogonal/i);
 		expect(skill).not.toMatch(/`taskedAfter` \(cross-prd order\)/);
+	});
+
+	it('points at the atomic-or-split completeness check (§2a) as the tasking precondition', () => {
+		// The human `to-task` path is UNBOUND by the auto-tasker gate, so the
+		// skill must point the human at the §2a completeness check: task the whole
+		// spec or split it \u2014 never a subset (ADR
+		// `tasking-is-atomic-or-split-no-partial-tasked-state`).
+		expect(skill).toMatch(/atomic-or-split|ATOMIC/i);
+		expect(skill).toMatch(/§2a/);
+		expect(skill).toMatch(/split/i);
+	});
+});
+
+describe('atomic-or-split: the authoring nudge + the decision record have teeth', () => {
+	it('the ADR records the atomic-or-split decision and forbids a partially-tasked state', () => {
+		expect(existsSync(ADR_ATOMIC)).toBe(true);
+		const adr = readFileSync(ADR_ATOMIC, 'utf8');
+		expect(adr).toMatch(/ATOMICALLY/);
+		expect(adr).toMatch(/MIS-SCOPED/);
+		expect(adr).toMatch(/SPLIT/);
+		// The taxonomy stays BINARY \u2014 no `specs/partially-tasked/` state.
+		expect(adr).toMatch(/partially tasked/i);
+		expect(adr).toMatch(/BINARY/);
+		// The browser.md shape is called out as the canonical anti-pattern.
+		expect(adr).toMatch(/anti-pattern/i);
+	});
+
+	it('to-spec nudges authoring one confidence tier per spec (split up front)', () => {
+		const toSpec = readFileSync(TO_SPEC_SKILL, 'utf8');
+		expect(toSpec).toMatch(/confidence tier/i);
+		expect(toSpec).toMatch(/split/i);
+		// Points at the same ADR / rule so the authoring nudge and the tasking
+		// rule cannot drift apart.
+		expect(toSpec).toMatch(
+			/tasking-is-atomic-or-split-no-partial-tasked-state/,
+		);
 	});
 });

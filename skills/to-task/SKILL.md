@@ -13,7 +13,7 @@ This skill stays **user-invoked** (`disable-model-invocation: true`): unlike `re
 ## How to use
 
 1. Read `work/protocol/TASKING-PROTOCOL.md` in the repo you are working in.
-2. Apply its discipline to the source `work/specs/ready/<slug>.md` (or design doc / plan): explore the codebase, draft the vertical tasks, quiz the user (or do the confidence check if no human is present), and write the task files under `work/tasks/backlog/`.
-3. Trim the spec to its durable framing and move it `work/specs/ready/ → work/specs/tasked/` (the one-time hand-off transition the doc describes).
+2. Apply its discipline to the source `work/specs/ready/<slug>.md` (or design doc / plan): explore the codebase, run the **atomic-or-split completeness check** (§2a — task the WHOLE spec or none of it; if any story is gated/deferred/unanswered, STOP and split rather than tasking a subset), draft the vertical tasks, quiz the user (or do the confidence check if no human is present), and write the task files under `work/tasks/backlog/`.
+3. Trim the spec to its durable framing and move it `work/specs/ready/ → work/specs/tasked/` (the one-time hand-off transition the doc describes). Only move a spec that was tasked ATOMICALLY — `specs/tasked/` residence means the WHOLE spec was tasked (§2a).
 
 > Why the standard lives in `work/protocol/`: a discipline the autonomous runner invokes BY NAME (the `do spec:<slug>` tasking path reads it via `resolveProtocolDoc`) must be in-band in every set-up repo, not host-installed. Operator skills (this file) are human-facing and not copied.
