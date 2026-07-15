@@ -1,0 +1,7 @@
+---
+'dorfl': minor
+---
+
+Tasking is now atomic-or-split-or-explore: a spec is tasked ATOMICALLY (every user story becomes a task, or none does) — there is no "partially tasked" state. The tasker decision procedure has three exhaustive branches: (1) all stories build-taskable now → task the whole spec; (2) mixed confidence / part gated → SPLIT into a fully-taskable spec plus a separate spec for the gated remainder; (3) the whole thing too big/uncertain to build-task → REFRAME as an EXPLORATION spec whose "done" is confidence + a de-risked, sliced build plan (the capability build becomes a follow-on spec, ordered via `taskedAfter:`).
+
+This forbids partially-tasking a spec (the human `to-task` path is now symmetric with the auto-tasker's whole-spec gate) and introduces a first-class spec KIND distinguished by its definition of DONE (build spec vs exploration spec), without adding any new folder or state — an exploration spec is still just a spec, tasked atomically, and its spikes reuse the existing `prototype` vocabulary. The `do spec:` auto-tasker prompt now routes a mis-scoped or too-big/uncertain spec to needs-attention (to be split or reframed) instead of emitting a confident subset or fictional build tasks. Recorded in ADRs `tasking-is-atomic-or-split-no-partial-tasked-state` and `exploration-vs-build-spec-kinds`; the `TASKING-PROTOCOL.md` protocol doc (source + `work/` mirror + vendored `dist/`) and the `to-spec`/`to-task` skills carry the rule.
