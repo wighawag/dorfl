@@ -41,6 +41,12 @@ const ADR_ATOMIC = resolve(
 	'adr',
 	'tasking-is-atomic-or-split-no-partial-tasked-state.md',
 );
+const ADR_EXPLORATION = resolve(
+	REPO,
+	'docs',
+	'adr',
+	'exploration-vs-build-spec-kinds.md',
+);
 const TASKING_SRC = resolve(REPO, 'packages', 'dorfl', 'src', 'tasking.ts');
 
 describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => {
@@ -84,11 +90,20 @@ describe('TASKING-PROTOCOL.md \u2014 the in-band tasking discipline doc', () => 
 		// `tasking-is-atomic-or-split-no-partial-tasked-state`): a spec is tasked
 		// whole or not at all; a partially-taskable spec is mis-scoped and gets split.
 		expect(doc).toMatch(/ATOMICALLY/);
-		expect(doc).toMatch(/completeness check/i);
+		expect(doc).toMatch(/decision procedure/i);
 		expect(doc).toMatch(/MIS-SCOPED/);
 		expect(doc).toMatch(/SPLIT/);
 		// No "partially tasked" state \u2014 the binary taxonomy is preserved.
 		expect(doc).toMatch(/partially tasked/i);
+		// The EXPLORATION escape valve (ADR `exploration-vs-build-spec-kinds`): the
+		// third branch of the decision procedure \u2014 a too-big/uncertain spec is
+		// reframed as an exploration whose done is confidence + a build plan.
+		expect(doc).toMatch(/EXPLORATION/);
+		expect(doc).toMatch(/build spec/i);
+		expect(doc).toMatch(/build plan/i);
+		// Reuses the existing prototype/spike vocabulary rather than a parallel one.
+		expect(doc).toMatch(/prototype/i);
+		expect(doc).toMatch(/spike/i);
 	});
 
 	it('`setup` propagation: `work/protocol/VERSION` is bumped past the pre-task value', () => {
@@ -267,15 +282,20 @@ describe('buildTaskingSpec \u2014 in-band reference + no re-inlined discipline p
 		expect(builderBody).toMatch(/skills\/to-task\/SKILL\.md/);
 	});
 
-	it('carries the ATOMIC-OR-SPLIT completeness rule (the auto-tasker refuses a partial task, never emits a subset)', () => {
-		// ADR `tasking-is-atomic-or-split-no-partial-tasked-state`: the spawned
-		// tasker must task the WHOLE spec or route it to needs-attention (to be
-		// split) \u2014 it must NEVER emit tasks for a confident subset.
+	it('carries the ATOMIC-OR-SPLIT-OR-EXPLORE decision procedure (never a subset, never fictional build tasks)', () => {
+		// ADRs `tasking-is-atomic-or-split-no-partial-tasked-state` +
+		// `exploration-vs-build-spec-kinds`: the spawned tasker must task the WHOLE
+		// spec, or route it to needs-attention to be SPLIT (branch 2) / REFRAMED as
+		// an EXPLORATION spec (branch 3) \u2014 never a confident subset, never fictional
+		// build tasks for an unproven approach.
 		expect(builderBody).toMatch(/ATOMICALLY/);
 		expect(builderBody).toMatch(/COMPLETENESS CHECK/);
 		expect(builderBody).toMatch(/MIS-SCOPED/);
 		expect(builderBody).toMatch(/SPLIT/);
 		expect(builderBody).toMatch(/subset/);
+		expect(builderBody).toMatch(/EXPLORATION/);
+		expect(builderBody).toMatch(/FICTIONAL/);
+		expect(builderBody).toMatch(/build plan/);
 	});
 });
 
@@ -342,5 +362,33 @@ describe('atomic-or-split: the authoring nudge + the decision record have teeth'
 		expect(toSpec).toMatch(
 			/tasking-is-atomic-or-split-no-partial-tasked-state/,
 		);
+	});
+
+	it('the exploration ADR records the build-vs-exploration spec KIND (done = confidence + plan; no new folder/state)', () => {
+		expect(existsSync(ADR_EXPLORATION)).toBe(true);
+		const adr = readFileSync(ADR_EXPLORATION, 'utf8');
+		expect(adr).toMatch(/EXPLORATION/);
+		expect(adr).toMatch(/build spec/i);
+		// Done = confidence + a de-risked plan (not a shipped capability).
+		expect(adr).toMatch(/confidence/i);
+		expect(adr).toMatch(/build plan/i);
+		// Reuses the prototype skill; invents no parallel spike vocabulary.
+		expect(adr).toMatch(/prototype/i);
+		// No new folder / state \u2014 an exploration spec is still just a spec.
+		expect(adr).toMatch(/no new folder|still just a spec/i);
+	});
+
+	it('to-spec nudges authoring an EXPLORATION spec when the ambition is too big/uncertain', () => {
+		const toSpec = readFileSync(TO_SPEC_SKILL, 'utf8');
+		expect(toSpec).toMatch(/EXPLORATION/);
+		expect(toSpec).toMatch(/exploration-vs-build-spec-kinds/);
+		// Reuses the prototype vocabulary for spikes.
+		expect(toSpec).toMatch(/prototype/i);
+	});
+
+	it('to-task points at the three-branch procedure (split OR explore, never a subset)', () => {
+		const skill = readFileSync(SKILL, 'utf8');
+		expect(skill).toMatch(/EXPLORATION/);
+		expect(skill).toMatch(/build plan/i);
 	});
 });
