@@ -1539,10 +1539,19 @@ export function buildProgram(): Command {
 			}
 			const workspace = flags.workspace ?? config.workspacesDir;
 			// Gate 2 (PR/code review): wire the PRODUCTION harness-backed gate ONLY when
-			// `config.review` resolves on (mirror the `do`/`complete` commands). The
-			// per-repo review flags are resolved per-item inside `runOneItem`; only the
-			// gate SEAM is threaded here. Off ⇒ undefined ⇒ no review (the default).
-			const reviewGate = config.review ? harnessReviewGate() : undefined;
+			// `config.review` resolves on (mirror the `do` command). The per-repo review
+			// flags are resolved per-item inside `runOneItem`; only the gate SEAM is
+			// threaded here. Off ⇒ undefined ⇒ no review (the default). The harness is
+			// resolved + threaded exactly as `do` does so a `run --review` daemon under
+			// `harness: pi` uses the pi-backed gate (NOT the NullHarness + empty agentCmd
+			// default, which would throw "empty agentCmd — nothing would run").
+			const harness = createHarness({
+				harness: config.harness,
+				piBin: config.piBin,
+			});
+			const reviewGate = config.review
+				? harnessReviewGate({harness, agentCmd: config.agentCmd})
+				: undefined;
 			const onWarn = (message: string) => console.error(`>> ${message}`);
 
 			// Plain `run` (no flag) NOW drives the REGISTRY-SET ADVANCE tick as its
@@ -2188,7 +2197,18 @@ export function buildProgram(): Command {
 				review: config.review,
 				reviewModel: config.reviewModel,
 				reviewMaxRounds: config.reviewMaxRounds,
-				reviewGate: config.review ? harnessReviewGate() : undefined,
+				// Resolve + thread the harness exactly as `do` does so `complete --review`
+				// under `harness: pi` builds the pi-backed gate (NOT the NullHarness + empty
+				// agentCmd default, which throws "empty agentCmd — nothing would run").
+				reviewGate: config.review
+					? harnessReviewGate({
+							harness: createHarness({
+								harness: config.harness,
+								piBin: config.piBin,
+							}),
+							agentCmd: config.agentCmd,
+						})
+					: undefined,
 				// Run the acceptance gate against the REBASED tip in a clean throwaway
 				// worktree (the tree that integrates) when ON (the default). `complete` is
 				// a single-job path, so the resolved flag is passed UNCONDITIONALLY (no
