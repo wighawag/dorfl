@@ -3,7 +3,7 @@ title: `complete --review` (and `run`) wire `harnessReviewGate()` with NO harnes
 type: observation
 status: spotted
 spotted: 2026-07-19
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What was seen
