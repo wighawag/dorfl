@@ -411,6 +411,64 @@ describe('integration-core — red gate ⇒ gate-failed + routed', () => {
 	});
 });
 
+describe('integration-core — co-located task sidecar ⇒ sidecar-violation (HARD BLOCK at land)', () => {
+	it('a task carrying a work/tasks/ready/<slug>/ sidecar is a HARD BLOCK before the done-move, routed to needs-attention with an actionable relocate reason', async () => {
+		const {repo} = await claimAndBranch('sidecar-task');
+		// The build agent (wrongly) put a durable artifact in a co-located sidecar
+		// folder beside the flowing task, instead of docs/spikes/<slug>/.
+		const sidecarDir = join(repo, 'work', 'tasks', 'ready', 'sidecar-task');
+		mkdirSync(sidecarDir, {recursive: true});
+		writeFileSync(join(sidecarDir, 'fix.patch'), 'a rebased patch\n');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'sidecar-task',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'propose',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('sidecar-violation');
+		expect(core.routedToNeedsAttention).toBe(true);
+		expect(core.branch).toBe('work/task-sidecar-task');
+		// The actionable relocate message names the correct destination + the rule.
+		expect(core.reason).toMatch(/docs\/spikes\/sidecar-task\//);
+		expect(core.reason).toMatch(/only notes\/\* may carry a sidecar/);
+		expect(core.reason).toMatch(/WORK-CONTRACT rule 8/);
+		// HARD BLOCK: nothing integrated, no done-move (the body NEVER reached done/).
+		expect(core.integration).toBeUndefined();
+		expect(
+			existsSync(join(repo, 'work', 'tasks', 'done', 'sidecar-task.md')),
+		).toBe(false);
+		// Surfaced on the arbiter like every other bounce (the A1 triple).
+		expect(sidecarSurfacedOnArbiterMain(repo, 'sidecar-task')).toBe(true);
+		expect(needsAnswersOnArbiterMain(repo, 'sidecar-task')).toBe(true);
+	});
+
+	it('a task with NO co-located sidecar completes normally (the guard does not fire)', async () => {
+		const {repo} = await claimAndBranch('clean-task');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'clean-task',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'propose',
+			surfaceArbiter: ARBITER,
+			env: gitEnv(),
+		});
+
+		expect(core.outcome).toBe('completed');
+		expect(core.routedToNeedsAttention).toBe(false);
+	});
+});
+
 describe('integration-core — review block ⇒ review-blocked + routed', () => {
 	it('a green gate then a BLOCK verdict routes to needs-attention, never integrates', async () => {
 		const {repo} = await claimAndBranch('epsilon');

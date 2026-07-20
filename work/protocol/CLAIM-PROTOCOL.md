@@ -183,6 +183,16 @@ transition (the durable main-moves AND the per-item lock acquire/release/amend).
 (Your TESTS may freely create and operate on their OWN throwaway git repos — that
 is expected.)
 
+If this task produces a DURABLE, REUSABLE artifact — a patch, a build/measurement
+script, a captured measurement, a diagram — write it to docs/spikes/<slug>/ (a
+STABLE path that does NOT move when the task lands) and REFERENCE it from the task
+record / finding / ADR. Do NOT create a <slug>/ sidecar folder next to a task or
+spec (work/tasks/<slug>/, work/specs/<slug>/): only notes/* items may carry a
+co-located sidecar, because tasks and specs FLOW through status folders and a
+co-located sidecar gets STRANDED on the ready→done move (one item split across two
+folders — WORK-CONTRACT rule 8). Transient BUILD SCRATCH (source trees, GBs of
+objects) belongs OUTSIDE the repo entirely.
+
 Leave a CLEAN working tree — only the changes this task intends. The runner
 commits everything untracked (`git add -A`), so any scratch, debug, or
 runtime-artifact file you or your tools created would otherwise be swept into the

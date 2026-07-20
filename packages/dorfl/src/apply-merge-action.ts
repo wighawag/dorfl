@@ -518,7 +518,7 @@ export async function performMergeAction(
 			};
 		}
 		// gate-failed / prepare-failed / review-blocked / review-unparseable /
-		// rebase-conflict / invariant-violation: the land was REFUSED;
+		// rebase-conflict / sidecar-violation / invariant-violation: the land was REFUSED;
 		// performIntegration routed the bounce per its own shared seam (gated by
 		// `surfaceArbiter`), so `main` never received a failing tree.
 		return {

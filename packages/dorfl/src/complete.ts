@@ -107,6 +107,7 @@ export type CompleteOutcome =
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'review-unparseable' // Gate 2 ran but its verdict JSON was malformed/unparseable — work-preserving route, classified `transient-infra` (NOT a reviewer block)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
+	| 'sidecar-violation' // a co-located <slug>/ sidecar sits beside a flowing task/spec item (WORK-CONTRACT rule 8) — routed to needs-attention before the durable move
 	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
 	| 'strand-surfaced' // autonomous source-strand refusal (or empty-staged) surfaced to needs-attention on the arbiter (parity with run's never-strand-in-in-progress posture)
 	| 'surface-unmoved' // autonomous source-strand surface tried but did NOT land on the arbiter — the item is HONESTLY still in-progress (CAS contention / no arbiter); never a fake success
@@ -982,6 +983,20 @@ async function runComplete(
 			routedToNeedsAttention: core.routedToNeedsAttention,
 			branch: core.branch,
 			commitMessage: core.commitMessage,
+			message: core.reason ?? '',
+		};
+	}
+	if (core.outcome === 'sidecar-violation') {
+		// A co-located `<slug>/` sidecar sits beside a FLOWING task/spec item
+		// (WORK-CONTRACT rule 8): a HARD BLOCK before the durable move (the sidecar
+		// would strand on `ready → done`). Routed to needs-attention by the same
+		// seam the red gate / review block use; the actionable relocate-to-
+		// `docs/spikes/<slug>/` reason rides `core.reason`.
+		return {
+			exitCode: surfaceExit(core.routedToNeedsAttention),
+			outcome: 'sidecar-violation',
+			routedToNeedsAttention: core.routedToNeedsAttention,
+			branch: core.branch,
 			message: core.reason ?? '',
 		};
 	}

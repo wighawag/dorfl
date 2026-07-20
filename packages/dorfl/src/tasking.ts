@@ -758,6 +758,39 @@ export async function performTask(
 					`marked the per-item lock stuck (needs attention; no tasks landed).`,
 			};
 		}
+		if (core.outcome === 'sidecar-violation') {
+			// A co-located `<slug>/` asset sidecar sits beside the FLOWING spec item
+			// (WORK-CONTRACT.md rule 8): the tasking transition would `git mv`
+			// `specs/ready → specs/tasked` and STRAND the sidecar. The core HARD-BLOCKED
+			// before the stage/integrate; route the held spec to needs-attention through
+			// the SAME `spec:<slug>` lock-release seam the block path uses (no tasks land),
+			// carrying the actionable relocate-to-`docs/spikes/<slug>/` reason.
+			const reason =
+				`The spec '${slug}' carries a co-located asset sidecar: ` +
+				`${core.reviewBlockReason ?? core.reason ?? ''}`;
+			const routed = await lock.release({
+				slug,
+				cwd,
+				arbiter,
+				lockedBlob,
+				routeToNeedsAttention: {reason},
+				env,
+				note,
+			});
+			if (routed.outcome !== 'released') {
+				return releaseFailureToResult(routed, slug);
+			}
+			note(reason);
+			return {
+				exitCode: 1,
+				outcome: 'needs-attention',
+				slug,
+				message:
+					`The spec '${slug}' carries a co-located asset sidecar (WORK-CONTRACT ` +
+					`rule 8); marked the per-item lock stuck (needs attention; no tasks ` +
+					`landed; relocate it to docs/spikes/${slug}/ and reference by path).`,
+			};
+		}
 		if (core.outcome === 'review-unparseable') {
 			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
 			// JSON). Route the held spec to needs-attention through the SAME lock-release

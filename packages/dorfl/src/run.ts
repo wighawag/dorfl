@@ -1059,8 +1059,14 @@ async function runOneItem(
 			core.outcome === 'prepare-failed' ||
 			core.outcome === 'review-blocked' ||
 			core.outcome === 'rebase-conflict' ||
+			core.outcome === 'sidecar-violation' ||
 			core.outcome === 'invariant-violation'
 		) {
+			// `sidecar-violation`: a co-located `<slug>/` sidecar sits beside a FLOWING
+			// task/spec item (WORK-CONTRACT rule 8) — a HARD BLOCK before the durable
+			// move (it would strand on `ready → done`). The core routed it to
+			// needs-attention with an actionable relocate-to-`docs/spikes/<slug>/`
+			// reason; the least-supervised caller MUST NOT fall through to success.
 			// `prepare-failed`: the env-prep (install) step was red, so the env could
 			// not be made ready and `verify` was NOT run — distinct from a `tests-failed`
 			// red gate. Route it to needs-attention like the others (a human fixes the

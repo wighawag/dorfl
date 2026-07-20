@@ -36,6 +36,10 @@ import {git, run, runAsync, type RunResult} from './git.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
+import {
+	detectColocatedSidecars,
+	formatSidecarGuardReason,
+} from './sidecar-guard.js';
 
 /**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
@@ -92,6 +96,7 @@ export type IntegrationCoreOutcome =
 	| 'review-blocked' // Gate 2 (PR/code review) returned `block` (or exhausted rounds)
 	| 'review-unparseable' // Gate 2 ran but its verdict JSON could not be parsed (malformed output) — work-preserving route, transient-infra cause (NOT a reviewer block)
 	| 'rebase-conflict' // rebase onto arbiter/main conflicted (aborted; human resolves)
+	| 'sidecar-violation' // a co-located <slug>/ sidecar sits beside a flowing task/spec item (WORK-CONTRACT rule 8) — HARD BLOCK before the durable move
 	| 'invariant-violation' // one-slug-one-folder would break (slug in two folders on the arbiter)
 	| 'already-integrated'; // committed-recovery: the kept tip is already on <arbiter>/main (clean no-op)
 
@@ -931,6 +936,61 @@ export async function performIntegration(
 			findings: reviewOutcome.verdict?.findings ?? [],
 			note,
 		});
+	}
+
+	// 1c. CO-LOCATED SIDECAR GUARD (WORK-CONTRACT.md rule 8). A `<slug>/` asset
+	//     sidecar co-located with a FLOWING task/spec item strands on the
+	//     `ready → done` / `ready → tasked` `git mv` (the `<slug>.md` moves, the
+	//     `<slug>/` folder is left behind — one item split across two status folders,
+	//     the SAME one-slug-one-folder invariant `ledger-lint`/the integration core
+	//     enforce). So this is a HARD BLOCK at LAND, BEFORE the durable move: a
+	//     detected sidecar routes the item to needs-attention via the SAME
+	//     `applyNeedsAttentionTransition` seam the red gate / review block use, with
+	//     an ACTIONABLE relocate-to-`docs/spikes/<slug>/` reason. A `notes/*` sidecar
+	//     is NOT scanned (notes do not flow), and the `work/questions/*`
+	//     status-mechanism file is not an item sidecar — so neither false-positives.
+	//     Runs for BOTH the build and the tasking (`lifecycle`) transitions: either
+	//     way a flowing item is about to be `git mv`'d and would strand a sidecar.
+	//     ROUTING: the BUILD path routes here (the task lock the `applyNeedsAttention
+	//     Transition` seam keys on — `task:<slug>` — is the one `claim` holds); the
+	//     TASKING (`lifecycle`) path does its OWN spec-lock routing in `tasking.ts`
+	//     from `reviewBlockReason` (exactly as the review-blocked tasking path does),
+	//     so here it only RETURNS the reason without touching a `task:` lock that a
+	//     tasking run never held.
+	const colocatedSidecars = detectColocatedSidecars(cwd, slug);
+	if (colocatedSidecars.length > 0) {
+		const reason = formatSidecarGuardReason(colocatedSidecars);
+		if (lifecycle) {
+			return {
+				outcome: 'sidecar-violation',
+				routedToNeedsAttention: false,
+				branch,
+				reason:
+					`Co-located sidecar detected for '${slug}'; not completing the ` +
+					`transition. ${reason}`,
+				reviewBlockReason: reason,
+			};
+		}
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			arbiter: input.surfaceArbiter,
+			env,
+			note,
+		});
+		return {
+			outcome: 'sidecar-violation',
+			routedToNeedsAttention: routed.moved,
+			branch,
+			reason: routed.moved
+				? `Co-located task/spec sidecar detected for '${slug}'; marked it stuck ` +
+					`on its per-item lock (a flowing item's <slug>/ sidecar strands on ` +
+					`the durable move). ${reason}`
+				: `Co-located task/spec sidecar detected for '${slug}'; not completing ` +
+					`it. ${reason}`,
+			reviewBlockReason: reason,
+		};
 	}
 
 	// Read the title now, BEFORE the move, for the default commit summary AND the
