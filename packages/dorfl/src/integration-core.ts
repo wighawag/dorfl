@@ -42,6 +42,43 @@ import {
 } from './sidecar-guard.js';
 
 /**
+ * Build the human-facing CONTEXT tail appended to an `acceptance gate failed`
+ * reason — the load-bearing fix for the opaque `acceptance gate failed (exit N)`
+ * bounce message (a maintainer could not tell WHICH command failed or WHY without
+ * re-running the whole gate). Given the failed command + its output tail (both
+ * from {@link RunVerifyResult}), it produces a compact, deterministic block:
+ *
+ *   - names the FAILED command (`the failing step was: \`<cmd>\``), so a
+ *     multi-command gate (`build && test && format:check`) points at the culprit;
+ *   - quotes the last lines of that command's output (the ACTUAL error, e.g.
+ *     "no changesets were found"), so the answer surface carries real signal;
+ *   - when neither is known (an older result / a prepare failure) it returns the
+ *     empty string — the caller's base reason is unchanged (graceful degrade).
+ *
+ * PURE + seam-free (string in, string out) so it is unit-testable and reused by
+ * every gate-failure site (front gate, rebased-tip fresh gate, committed
+ * recovery). The output is bounded by {@link RunVerifyResult.outputTail}'s own
+ * cap, so it can never bloat the surfaced sidecar.
+ */
+export function formatGateFailureContext(params: {
+	failedCommand?: string;
+	outputTail?: string;
+}): string {
+	const {failedCommand, outputTail} = params;
+	const parts: string[] = [];
+	if (failedCommand !== undefined && failedCommand.trim() !== '') {
+		parts.push(`the failing step was: \`${failedCommand.trim()}\``);
+	}
+	if (outputTail !== undefined && outputTail.trim() !== '') {
+		parts.push(`its last output was:\n\n${outputTail.trimEnd()}`);
+	}
+	if (parts.length === 0) {
+		return '';
+	}
+	return ` — ${parts.join('; ')}`;
+}
+
+/**
  * **The shared gate→integrate BACK-HALF** of the per-item pipeline, extracted out
  * of `performComplete` (`complete.ts`) so BOTH the human `do`/`complete` path and
  * (a later task) the autonomous `run` path share ONE implementation of the
@@ -859,7 +896,15 @@ export async function performIntegration(
 			// reason on the lock entry, no `in-progress/ → needs-attention/` folder
 			// move) plus saving the agent's uncommitted work as a wip commit. No
 			// partial state.
-			const reason = `acceptance gate failed (exit ${gate.exitCode})`;
+			// Enrich the surfaced reason with WHICH gate command failed + the tail of
+			// its output (the actual error), so the needs-attention question is
+			// actionable instead of a bare exit code.
+			const reason =
+				`acceptance gate failed (exit ${gate.exitCode})` +
+				formatGateFailureContext({
+					failedCommand: gate.failedCommand,
+					outputTail: gate.outputTail,
+				});
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
@@ -1374,10 +1419,21 @@ export async function performIntegration(
 					gated.kind === 'prepare'
 						? `Env-prep (prepare) failed (exit ${gated.exitCode})`
 						: `Acceptance gate failed (exit ${gated.exitCode})`;
+				// The gate-failure CONTEXT (which command failed + its output tail) is
+				// meaningful only for a `verify` failure; a prepare failure names its
+				// single command already. Enrich the surfaced reason so the question is
+				// actionable rather than an opaque exit code.
+				const context =
+					gated.kind === 'prepare'
+						? ''
+						: formatGateFailureContext({
+								failedCommand: gated.failedCommand,
+								outputTail: gated.outputTail,
+							});
 				const reason =
 					gated.kind === 'prepare'
 						? `prepare (env-prep) failed (exit ${gated.exitCode}) on the rebased tip`
-						: `acceptance gate failed (exit ${gated.exitCode}) on the rebased tip`;
+						: `acceptance gate failed (exit ${gated.exitCode}) on the rebased tip${context}`;
 				const routed = await ledgerWrite.applyNeedsAttentionTransition({
 					cwd,
 					slug,
@@ -1958,10 +2014,17 @@ async function recoverAlreadyCommitted(params: {
 				gated.kind === 'prepare'
 					? `Env-prep (prepare) failed (exit ${gated.exitCode})`
 					: `Acceptance gate failed (exit ${gated.exitCode})`;
+			const context =
+				gated.kind === 'prepare'
+					? ''
+					: formatGateFailureContext({
+							failedCommand: gated.failedCommand,
+							outputTail: gated.outputTail,
+						});
 			const reason =
 				gated.kind === 'prepare'
 					? `prepare (env-prep) failed (exit ${gated.exitCode}) on the rebased tip`
-					: `acceptance gate failed (exit ${gated.exitCode}) on the rebased tip`;
+					: `acceptance gate failed (exit ${gated.exitCode}) on the rebased tip${context}`;
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
@@ -3116,6 +3179,19 @@ interface FreshGateResult {
 	/** The non-zero exit code of the failing step (when `!passed`). */
 	exitCode?: number;
 	/**
+	 * The EXACT gate command that failed (`verify` kind only) — threaded from
+	 * {@link RunVerifyResult.failedCommand} so the surfaced reason names WHICH step
+	 * of a multi-command gate failed. Absent for a `prepare` failure (the prepare
+	 * command is single + already named).
+	 */
+	failedCommand?: string;
+	/**
+	 * The TAIL of the failed gate command's output (`verify` kind only) — threaded
+	 * from {@link RunVerifyResult.outputTail} so the surfaced question carries the
+	 * actual error text.
+	 */
+	outputTail?: string;
+	/**
 	 * The Gate-2 REVIEW outcome, present ONLY when a review gate was supplied to the
 	 * fresh gate AND `verify` passed (so the review ran AFTER it on the rebased tip).
 	 * The caller routes a `blocked` and acts on an `approved` (carry the verdict,
@@ -3204,7 +3280,13 @@ async function runFreshWorktreeGate(params: {
 			env,
 		});
 		if (!gate.passed) {
-			return {passed: false, kind: 'verify', exitCode: gate.exitCode};
+			return {
+				passed: false,
+				kind: 'verify',
+				exitCode: gate.exitCode,
+				failedCommand: gate.failedCommand,
+				outputTail: gate.outputTail,
+			};
 		}
 		// GATE-2 REVIEW on the rebased tip, AFTER the green verify (verify-then-review
 		// on the SAME merged tree). Runs while the worktree is still live (the review

@@ -100,6 +100,22 @@ export interface RunVerifyResult {
 	/** Whether the gate passed (exitCode === 0). */
 	passed: boolean;
 	/**
+	 * The EXACT command that failed (the first non-zero exit — `&&`-short-circuit
+	 * semantics), verbatim from the resolved gate list. Present ONLY on a failing
+	 * result with a configured gate. This is the load-bearing context a bare `exit
+	 * N` throws away: in a multi-command gate (`build && test && format:check`) it
+	 * tells the human WHICH step failed without re-running the whole gate.
+	 */
+	failedCommand?: string;
+	/**
+	 * The TAIL of the failed command's combined stdout+stderr (last
+	 * {@link VERIFY_OUTPUT_TAIL_LINES} non-empty lines), so the surfaced
+	 * needs-attention question carries the ACTUAL error text (e.g. "no changesets
+	 * were found") rather than an opaque exit code. Bounded so a noisy gate cannot
+	 * bloat the sidecar. Present ONLY on a failing result with a configured gate.
+	 */
+	outputTail?: string;
+	/**
 	 * True iff the gate could not run because NO `verify` is declared (unset /
 	 * empty / all-blank). A distinct, always-failing outcome (`passed: false`)
 	 * so runner callers route it as a normal gate FAILURE with a clear reason
@@ -107,6 +123,15 @@ export interface RunVerifyResult {
 	 */
 	notConfigured?: boolean;
 }
+
+/**
+ * How many trailing non-empty output lines of the FAILED gate command are kept
+ * in {@link RunVerifyResult.outputTail}. Small enough to keep the surfaced
+ * question readable, large enough to carry the actual error (most tool errors
+ * are 1–3 lines). The tail is captured per-command and reset on each command so
+ * only the failing command's output is retained.
+ */
+export const VERIFY_OUTPUT_TAIL_LINES = 20;
 
 /**
  * Run the resolved gate command(s) in `cwd`, streaming output, and resolve with
@@ -142,15 +167,60 @@ export async function runVerify(
 		options.onStderr ?? ((chunk: string) => process.stderr.write(chunk));
 
 	for (const command of commands) {
+		// Capture a bounded ring of this command's combined output so a FAILURE can
+		// carry the actual error text (not just an exit code). Reset per command so
+		// only the failing command's tail is retained. The captured chunks still
+		// stream through the sinks unchanged (the console/log is unaffected).
+		const tail: string[] = [];
+		const capture = (chunk: string) => {
+			for (const line of chunk.split('\n')) {
+				tail.push(line);
+			}
+			// Keep a little slack over the reported budget; trimmed to the exact budget
+			// (non-empty lines only) when a failure surfaces.
+			const maxRing = VERIFY_OUTPUT_TAIL_LINES * 4;
+			if (tail.length > maxRing) {
+				tail.splice(0, tail.length - maxRing);
+			}
+		};
 		const exitCode = await runOne(command, options.cwd, options.env, {
-			onStdout,
-			onStderr,
+			onStdout: (chunk) => {
+				capture(chunk);
+				onStdout(chunk);
+			},
+			onStderr: (chunk) => {
+				capture(chunk);
+				onStderr(chunk);
+			},
 		});
 		if (exitCode !== 0) {
-			return {exitCode, commands, passed: false};
+			return {
+				exitCode,
+				commands,
+				passed: false,
+				failedCommand: command,
+				outputTail: lastNonEmptyLines(tail, VERIFY_OUTPUT_TAIL_LINES),
+			};
 		}
 	}
 	return {exitCode: 0, commands, passed: true};
+}
+
+/**
+ * Join the last `n` NON-EMPTY lines of a captured output ring into a single
+ * string (newline-separated), preserving order. Blank lines are dropped so the
+ * tail is dense signal (tool errors, not the trailing whitespace many gates
+ * emit). Returns `undefined` when nothing was captured, so callers can omit the
+ * context cleanly rather than surfacing an empty block.
+ */
+function lastNonEmptyLines(lines: string[], n: number): string | undefined {
+	const dense = lines
+		.map((line) => line.trimEnd())
+		.filter((line) => line !== '');
+	if (dense.length === 0) {
+		return undefined;
+	}
+	return dense.slice(-n).join('\n');
 }
 
 /** Spawn one command via `bash -c`, streaming its output, resolving its code. */
