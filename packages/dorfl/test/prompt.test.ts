@@ -209,6 +209,20 @@ describe('canonical wrapper — read from the contract, not a divergent copy', (
 		// It must NOT block the build (record, proceed).
 		expect(emitted).toMatch(/does NOT stop\s+the build/i);
 	});
+
+	it('points the agent at the repo conventions doc for STANDING per-change rules (the changeset-bounce fix)', () => {
+		const emitted = wrapper('example', 'my-spec');
+		// The wrapper must steer the build agent to READ the repo's conventions doc
+		// and satisfy standing per-change rules, so a gate-enforced convention (e.g.
+		// a required changeset) is not silently skipped — which otherwise bounces the
+		// item at LAND time even though the task's own code is correct.
+		expect(emitted).toMatch(/STANDING per-change conventions/);
+		expect(emitted).toContain('CONTEXT.md');
+		// It names the enforcement mechanism (the land-time bounce) and the classic
+		// changeset case, generically — not as a hardcoded rule.
+		expect(emitted).toMatch(/changeset/);
+		expect(emitted).toMatch(/verify. gate|LAND time|bounce/);
+	});
 });
 
 describe('resolveProtocolDoc — packaged-CLI-safe resolution order', () => {

@@ -201,6 +201,16 @@ commit. Before you stop, delete such stray untracked files, or add them to
 untracked file or editing .gitignore is producing clean WORK, like writing source
 — the "no git" rule above (no stage/commit/push/move) still holds.
 
+This repo may declare STANDING per-change conventions — things EVERY change must do
+regardless of the task (e.g. add a release/changelog entry, regenerate a file,
+update a manifest). They live in the repo's conventions doc: read CONTEXT.md (its
+`## Conventions` section) and, if present, AGENTS.md, and satisfy any that apply to
+your change. Several are ENFORCED by the `verify` gate, so skipping one makes the
+gate go red at LAND time — a bounce — even though your task's own code is correct.
+The classic case: a change that touched a package but added no changeset entry
+(the gate reports the changed package has no changeset). When in doubt, follow the
+conventions doc; it is the repo's source of truth for these standing rules.
+
 When the acceptance criteria are met and the repo's build/test/format checks are
 green, STOP and report what you did. The runner handles the durable `git mv` of the
 body tasks/ready/ -> work/tasks/done/, the completion commit, the lock release, and
