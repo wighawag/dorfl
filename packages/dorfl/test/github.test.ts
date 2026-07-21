@@ -258,6 +258,148 @@ describe('GitHubProvider.openRequest — gh pr create (stubbed)', () => {
 	});
 });
 
+/**
+ * A `gh` stub for the CLOSE / REOPEN flows (task
+ * `tasking-disapprove-closes-existing-pr-keeps-branch`). It dispatches on
+ * `pr view` (returning `<url> <STATE>` for the `--json url,state` probe), `pr
+ * close`, `pr reopen`, `pr create`, `pr edit`. `state` sets what `pr view`
+ * reports; `viewExit` non-zero simulates "no PR for this branch". Every argv is
+ * appended to `argsFile` (newline-joined, `---`-separated) so a test can assert
+ * which sub-commands ran.
+ */
+function writeGhCloseReopenStub(opts: {
+	url?: string;
+	state?: 'OPEN' | 'CLOSED' | 'MERGED';
+	viewExit?: number;
+}): {bin: string; argsFile: string} {
+	const bin = join(scratch.root, 'gh-close-reopen.sh');
+	const argsFile = join(scratch.root, 'gh-close-reopen-args.txt');
+	const url = opts.url ?? 'https://github.com/o/r/pull/357';
+	const state = opts.state ?? 'OPEN';
+	const viewExit = opts.viewExit ?? 0;
+	const script = [
+		'#!/usr/bin/env bash',
+		`{ printf '%s\\n' "$@"; printf -- '---\\n'; } >> ${JSON.stringify(argsFile)}`,
+		'sub="$2"',
+		'case "$1 $sub" in',
+		// `pr view --json url,state --jq '.url + " " + .state'` ⇒ "<url> <STATE>".
+		`  'pr view')   printf '%s\\n' ${JSON.stringify(`${url} ${state}`)}; exit ${viewExit} ;;`,
+		"  'pr close')  exit 0 ;;",
+		"  'pr reopen') exit 0 ;;",
+		`  'pr create') printf '%s\\n' ${JSON.stringify(url)}; exit 0 ;;`,
+		"  'pr edit')   exit 0 ;;",
+		"  'auth status') exit 0 ;;",
+		'  *) exit 0 ;;',
+		'esac',
+	].join('\n');
+	writeFileSync(bin, script + '\n');
+	chmodSync(bin, 0o755);
+	return {bin, argsFile};
+}
+
+describe('GitHubProvider.closeRequestOnBranch — close the stale PR, KEEP the branch (stubbed)', () => {
+	it('closes an OPEN PR with the review as the closing comment and NEVER passes --delete-branch', async () => {
+		const stub = writeGhCloseReopenStub({
+			url: 'https://github.com/o/r/pull/357',
+			state: 'OPEN',
+		});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.closeRequestOnBranch({
+			cwd: scratch.root,
+			branch: 'work/spec-thing',
+			arbiter: 'origin',
+			comment: 'DISAPPROVED: the decomposition is unclear.',
+		});
+		expect(result.closed).toBe(true);
+		expect(result.instruction).toMatch(/closed|branch kept/i);
+
+		const calls = readFileSync(stub.argsFile, 'utf8');
+		// It resolved the PR (view), then closed it with the review as --comment.
+		expect(calls).toMatch(/^view$/m);
+		expect(calls).toMatch(/^close$/m);
+		expect(calls).toMatch(/^--comment$/m);
+		expect(calls).toContain('DISAPPROVED: the decomposition is unclear.');
+		// The branch is the recovery point — it must survive for a later reopen.
+		expect(calls).not.toMatch(/--delete-branch/);
+	});
+
+	it('is a clean no-op (closed:false) when there is NO OPEN PR — never opens one to close it', async () => {
+		// A CLOSED PR (or none) ⇒ nothing to close; we must not create/open one.
+		const stub = writeGhCloseReopenStub({state: 'CLOSED'});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.closeRequestOnBranch({
+			cwd: scratch.root,
+			branch: 'work/spec-thing',
+			arbiter: 'origin',
+			comment: 'DISAPPROVED.',
+		});
+		expect(result.closed).toBe(false);
+		expect(result.instruction).toMatch(/no open pr|branch is kept/i);
+		const calls = readFileSync(stub.argsFile, 'utf8');
+		expect(calls).toMatch(/^view$/m);
+		expect(calls).not.toMatch(/^close$/m); // did NOT close anything
+		expect(calls).not.toMatch(/^create$/m); // did NOT open one to close it
+	});
+
+	it('degrades (closed:false, branch kept) when gh is missing — surfaces the review text', async () => {
+		const provider = new GitHubProvider({ghBin: missingGhBin()});
+		const result = await provider.closeRequestOnBranch({
+			cwd: scratch.root,
+			branch: 'work/spec-thing',
+			arbiter: 'origin',
+			comment: 'DISAPPROVED prose.',
+		});
+		expect(result.closed).toBe(false);
+		expect(result.instruction).toContain('DISAPPROVED prose.');
+	});
+});
+
+describe('GitHubProvider.openRequest — REOPENS a previously-closed PR instead of opening a duplicate (stubbed)', () => {
+	it('a branch with a CLOSED PR ⇒ reopen + refresh, returns opened+url, and does NOT create a new PR', async () => {
+		const stub = writeGhCloseReopenStub({
+			url: 'https://github.com/o/r/pull/357',
+			state: 'CLOSED',
+		});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/spec-thing',
+			arbiter: 'origin',
+			title: 'tasking(thing): the set',
+			body: 'Refreshed body after an approving re-task.',
+		});
+		expect(result.opened).toBe(true);
+		expect(result.url).toBe('https://github.com/o/r/pull/357');
+		expect(result.instruction).toMatch(/reopened/i);
+
+		const calls = readFileSync(stub.argsFile, 'utf8');
+		expect(calls).toMatch(/^view$/m); // resolved state
+		expect(calls).toMatch(/^reopen$/m); // reopened the SAME PR
+		expect(calls).toMatch(/^edit$/m); // refreshed title/body
+		expect(calls).not.toMatch(/^create$/m); // did NOT open a duplicate
+	});
+
+	it('a branch with an OPEN PR still takes the update-existing path (no reopen, no duplicate)', async () => {
+		// state OPEN: the reopen pre-check sees OPEN (not CLOSED) and skips reopen;
+		// `gh pr create` then reports the same url as the resolved existing PR.
+		const stub = writeGhCloseReopenStub({
+			url: 'https://github.com/o/r/pull/357',
+			state: 'OPEN',
+		});
+		const provider = new GitHubProvider({ghBin: stub.bin});
+		const result = await provider.openRequest({
+			cwd: scratch.root,
+			branch: 'work/spec-thing',
+			arbiter: 'origin',
+			title: 'tasking(thing): the set',
+			body: 'body',
+		});
+		expect(result.opened).toBe(true);
+		const calls = readFileSync(stub.argsFile, 'utf8');
+		expect(calls).not.toMatch(/^reopen$/m); // an OPEN PR is never reopened
+	});
+});
+
 describe('GitHubProvider — availability check (stubbed)', () => {
 	it('reports available when gh auth status exits 0', () => {
 		const stub = writeGhStub({exitCode: 0});

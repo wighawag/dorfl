@@ -10,6 +10,8 @@ import {
 	type PostPRCommentInput,
 	type PostPRCommentOnBranchInput,
 	type PostPRCommentResult,
+	type CloseRequestOnBranchInput,
+	type CloseRequestOnBranchResult,
 } from './integrator.js';
 
 /**
@@ -185,6 +187,27 @@ export class GitHubProvider implements ReviewProvider {
 	 * record / `status`).
 	 */
 	async openRequest(input: OpenRequestInput): Promise<OpenRequestResult> {
+		// REOPEN a CLOSED PR before trying to CREATE one (task
+		// `tasking-disapprove-closes-existing-pr-keeps-branch`): a spec whose earlier
+		// tasking review DISAPPROVED had its PR CLOSED (branch kept). A later re-task
+		// that now APPROVES must REOPEN that SAME PR (preserving its history +
+		// closing-comment thread) rather than leaving a new duplicate. `gh pr create`
+		// on a branch with a closed PR would open a SECOND PR, so we reopen first.
+		// Best-effort + never-throw; a failed reopen falls through to the normal
+		// create path (the branch is already pushed, so the work is safe).
+		const existingForReopen = this.resolvePrForBranch(
+			input.branch,
+			input.cwd,
+			input.env,
+		);
+		if (existingForReopen?.state === 'CLOSED') {
+			const reopened = this.reopenExistingRequest(input, existingForReopen.url);
+			if (reopened !== undefined) {
+				return reopened;
+			}
+			// Could not reopen (transient `gh` failure) — fall through to create.
+		}
+
 		const args = [
 			'pr',
 			'create',
@@ -304,6 +327,93 @@ export class GitHubProvider implements ReviewProvider {
 			opened: true,
 			url,
 			instruction: `Updated the existing GitHub PR for ${input.branch}: ${url}`,
+		};
+	}
+
+	/**
+	 * REOPEN a previously-CLOSED PR for the branch (task
+	 * `tasking-disapprove-closes-existing-pr-keeps-branch`): `gh pr reopen <url>`,
+	 * then refresh its title/body (reusing {@link updateExistingRequest}'s edit so
+	 * the reopened PR carries this run's content). Returns `{opened: true, url}` on
+	 * a successful reopen, or `undefined` when the reopen itself failed (the caller
+	 * then falls through to `gh pr create`). Best-effort edit — a failed refresh
+	 * still returns the reopened PR. NEVER throws.
+	 */
+	private reopenExistingRequest(
+		input: OpenRequestInput,
+		url: string,
+	): OpenRequestResult | undefined {
+		const reopen = this.runGh(['pr', 'reopen', url], input.cwd, input.env);
+		if (reopen === undefined || reopen.status !== 0) {
+			return undefined;
+		}
+		// Refresh title/body on the reopened PR (best-effort; only when supplied).
+		if (input.title !== undefined || input.body !== undefined) {
+			const editArgs = ['pr', 'edit', url];
+			if (input.title !== undefined) {
+				editArgs.push('--title', input.title);
+			}
+			if (input.body !== undefined) {
+				editArgs.push('--body', input.body);
+			}
+			this.runGh(editArgs, input.cwd, input.env);
+		}
+		return {
+			opened: true,
+			url,
+			instruction: `Reopened the existing GitHub PR for ${input.branch}: ${url}`,
+		};
+	}
+
+	/**
+	 * CLOSE the branch's OPEN PR (keeping the branch) with the disapproving review
+	 * as the closing comment — the disapprove artefact-cleanup path (task
+	 * `tasking-disapprove-closes-existing-pr-keeps-branch`). Resolves the PR from
+	 * the branch; when there is NO OPEN PR (none at all, already closed/merged, or
+	 * `gh` missing) it is a clean no-op (`closed: false`) — we never OPEN a PR just
+	 * to close it. `gh pr close <url> --comment <review>` (NO `--delete-branch`, so
+	 * the branch — the recovery point — survives for a later approving re-task to
+	 * REOPEN). NEVER throws, NEVER `--force`s (ADR §6).
+	 */
+	async closeRequestOnBranch(
+		input: CloseRequestOnBranchInput,
+	): Promise<CloseRequestOnBranchResult> {
+		const existing = this.resolvePrForBranch(
+			input.branch,
+			input.cwd,
+			input.env,
+		);
+		if (existing === undefined || existing.state !== 'OPEN') {
+			// No OPEN PR to close (none, already closed/merged, or gh unavailable):
+			// honest no-op AFTER trying. Surface the review so it is never lost.
+			return {
+				closed: false,
+				instruction:
+					`No open PR to close for ${input.branch} (the branch is kept). ` +
+					`The disapproving review:\n${input.comment}`,
+			};
+		}
+		const closed = this.runGh(
+			['pr', 'close', existing.url, '--comment', input.comment],
+			input.cwd,
+			input.env,
+		);
+		if (closed === undefined || closed.status !== 0) {
+			// The close failed (transient) — the branch + PR are untouched; surface
+			// the review text and report no-close. The item is still surfaced to
+			// needs-attention by the caller regardless.
+			return {
+				closed: false,
+				instruction:
+					`Could not close the PR for ${input.branch} (the branch is kept). ` +
+					`The disapproving review:\n${input.comment}`,
+			};
+		}
+		return {
+			closed: true,
+			instruction:
+				`Closed the stale PR for ${input.branch} with the disapproving ` +
+				`review as its closing comment (branch kept): ${existing.url}`,
 		};
 	}
 
@@ -427,6 +537,45 @@ export class GitHubProvider implements ReviewProvider {
 			return undefined; // no PR for the branch, or gh missing/unauthenticated
 		}
 		return parsePrUrl(result.stdout);
+	}
+
+	/**
+	 * Resolve the branch's PR url AND state (`OPEN` / `CLOSED` / `MERGED`) via
+	 * `gh pr view <branch> --json url,state`, or `undefined` when no PR exists /
+	 * `gh` is missing. Needed by {@link openRequest} to REOPEN a CLOSED PR (the
+	 * disapprove-close artefact — a later approving re-task reopens the SAME PR
+	 * instead of leaving a new one) and by {@link closeRequestOnBranch} to no-op
+	 * when there is no OPEN PR to close. `gh pr view <branch>` reports the most
+	 * recent PR for the branch, including a closed one. Read-only.
+	 */
+	private resolvePrForBranch(
+		branch: string,
+		cwd: string,
+		env: NodeJS.ProcessEnv | undefined,
+	): {url: string; state: string} | undefined {
+		const result = this.runGh(
+			[
+				'pr',
+				'view',
+				branch,
+				'--json',
+				'url,state',
+				'--jq',
+				'.url + " " + .state',
+			],
+			cwd,
+			env,
+		);
+		if (result === undefined || result.status !== 0) {
+			return undefined;
+		}
+		const url = parsePrUrl(result.stdout);
+		if (url === undefined) {
+			return undefined;
+		}
+		// The `--jq` prints `<url> <STATE>`; the state is the last whitespace token.
+		const state = result.stdout.trim().split(/\s+/).pop() ?? '';
+		return {url, state};
 	}
 
 	/**

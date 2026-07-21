@@ -2256,6 +2256,16 @@ function bridgeProvider(
 					req.body,
 			};
 		},
+		// The legacy bridge has no PR-close capability — a clean no-op (keep the
+		// branch), surfacing the disapproving review text.
+		async closeRequestOnBranch(req) {
+			return {
+				closed: false,
+				instruction:
+					'The legacy review bridge cannot close a PR (branch kept); the ' +
+					`disapproving review:\n${req.comment}`,
+			};
+		},
 	};
 }
 

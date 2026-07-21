@@ -827,11 +827,14 @@ describe('performTask — the tasker review→edit→converge loop', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
-		expect(result.exitCode).toBe(1);
-		// The needs-attention surface is the per-item lock `state: stuck` now (task
-		// `cutover-...-trim-folder-sets`), NOT a folder move: the prd body STAYS in
-		// work/specs/ready/ (it never moved under the lock), and NO needs-attention/ or
-		// tasking/ folder file is written.
+		// A clean park-for-human (surface the open questions, no guessed tasks) is a
+		// SUCCESS terminal of the loop contract — exit 0 (green CI leg), not a failure
+		// (fix `tasking-review-block-surfaces-needs-attention-but-exits-nonzero`).
+		expect(result.exitCode).toBe(0);
+		// The needs-attention surface parks the spec as a `needsAnswers:true` body +
+		// a question sidecar on main (the lock is RELEASED, not held); the prd body
+		// STAYS in work/specs/ready/, and NO needs-attention/ or tasking/ folder file
+		// is written.
 		expect(onArbiter(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiter(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiter(repo, 'work/specs/tasked/it.md')).toBe(false);

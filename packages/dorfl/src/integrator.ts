@@ -81,6 +81,52 @@ export interface ReviewProvider {
 	 * review — ADR §6).
 	 */
 	postPRCommentOnBranch(input: PostPRCommentOnBranchInput): PostPRCommentResult;
+	/**
+	 * CLOSE the PR opened for an already-pushed `work/<slug>` BRANCH — WITHOUT
+	 * deleting the branch — posting {@link CloseRequestOnBranchInput.comment} (the
+	 * review that disapproved) as the closing comment. RESOLVES the PR from the
+	 * branch (the disapprove path holds the branch, not the PR url).
+	 *
+	 * Used when a tasking review DISAPPROVES a spec whose PR is already open (the
+	 * multi-run artefact): the stale PR is closed with the review as its closing
+	 * comment (so the reason is visible ON the PR), while the branch is KEPT — the
+	 * safety-bearing recovery point — so a later re-task that APPROVES can REOPEN
+	 * the same PR (via {@link openRequest}, which reopens an existing-closed PR).
+	 *
+	 * ONLY-IF-EXISTS: a real provider first resolves the branch's PR and, when
+	 * there is NO open PR to close, cleanly no-ops (`closed: false`) — the disapprove
+	 * path never OPENS a PR just to close it.
+	 *
+	 * ADVISORY — it gates nothing; like the other PR-text methods it must NEVER
+	 * throw (a missing/unauthenticated `gh`, the `none` provider, or no resolvable
+	 * open PR all DEGRADE: surface the text in the result, close nothing, keep the
+	 * branch — ADR §6).
+	 */
+	closeRequestOnBranch(
+		input: CloseRequestOnBranchInput,
+	): Promise<CloseRequestOnBranchResult>;
+}
+
+export interface CloseRequestOnBranchInput {
+	cwd: string;
+	/**
+	 * The pushed `work/<slug>` branch whose OPEN PR to close (keeping the branch).
+	 * The GitHub provider resolves the PR via `gh pr view <branch>` and closes it
+	 * with `gh pr close <branch>` (NO `--delete-branch`).
+	 */
+	branch: string;
+	/** The arbiter remote the branch was pushed to. */
+	arbiter: string;
+	/** The closing comment — the disapproving review prose (JSON block stripped). */
+	comment: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface CloseRequestOnBranchResult {
+	/** True iff an open PR was actually resolved from the branch AND closed. */
+	closed: boolean;
+	/** Human-readable confirmation / fallback (the review text on degrade/no-op). */
+	instruction: string;
 }
 
 export interface PostPRCommentInput {
@@ -214,6 +260,22 @@ export class NoneProvider implements ReviewProvider {
 			instruction:
 				'No review provider configured — the review was not posted as a PR ' +
 				`comment. The review:\n${input.body}`,
+		};
+	}
+
+	/**
+	 * No API to resolve/close a PR (a local `--bare` arbiter has no review
+	 * concept), so DEGRADE: close nothing, keep the branch, surface the review
+	 * text, never throw. A clean no-op for the PR.
+	 */
+	async closeRequestOnBranch(
+		input: CloseRequestOnBranchInput,
+	): Promise<CloseRequestOnBranchResult> {
+		return {
+			closed: false,
+			instruction:
+				'No review provider configured — no PR was closed (the branch is ' +
+				`kept). The disapproving review:\n${input.comment}`,
 		};
 	}
 }

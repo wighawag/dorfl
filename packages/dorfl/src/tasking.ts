@@ -435,6 +435,11 @@ export async function performTask(
 	//    with no contention may task on `main` directly WITHOUT the lock.
 	let lockedBlob: string | undefined;
 	const useLock = doer === 'agent';
+	// The integrate mode resolved ONCE (`--merge`/`--propose` > default `propose`),
+	// used to decide BOTH the tasking lock's lifetime (release on `merge`, HOLD
+	// across the PR on `propose`) AND whether a not-landed surface should close a
+	// stale open PR (propose only).
+	const resolvedMode = options.integration ?? 'propose';
 	if (useLock) {
 		const acquired = await lock.acquire({slug, cwd, arbiter, env, note});
 		if (acquired.outcome === 'lost') {
@@ -545,22 +550,25 @@ export async function performTask(
 				loopDisposition.specQuestions,
 			);
 			if (useLock) {
-				const routed = await lock.release({
+				return await surfaceTaskingBlock({
 					slug,
 					cwd,
 					arbiter,
+					reason,
+					message: loopDisposition.message,
 					lockedBlob,
-					routeToNeedsAttention: {reason},
+					release: lock.release,
+					mode: resolvedMode,
+					provider: options.providerInstance,
 					env,
 					note,
 				});
-				if (routed.outcome !== 'released') {
-					return releaseFailureToResult(routed, slug);
-				}
 			}
 			note(loopDisposition.message);
+			// Human, no-lock path: nothing to release/surface via the seam; a clean
+			// park-for-human is still a success terminal (exit 0).
 			return {
-				exitCode: 1,
+				exitCode: 0,
 				outcome: 'needs-attention',
 				slug,
 				message: loopDisposition.message,
@@ -612,12 +620,6 @@ export async function performTask(
 			: loopDisposition?.outcome === 'uncertain-tasks'
 				? 'uncertain-tasks'
 				: undefined;
-
-	// The integrate mode resolved ONCE (`--merge`/`--propose` > default `propose`),
-	// used BOTH as the `mode:` passed into the shared integrate core AND to decide
-	// the tasking lock's lifetime below (release on `merge`, HOLD across the PR on
-	// `propose`).
-	const resolvedMode = options.integration ?? 'propose';
 
 	if (useLock) {
 		// READ-STABILITY BACKSTOP (the lock's content-identity check, now owned at the
@@ -742,27 +744,22 @@ export async function performTask(
 		// needs-attention THROUGH the lock release — the set never lands.
 		if (core.outcome === 'review-blocked') {
 			const reason = taskGateBlockedReason(slug, core.reviewBlockReason);
-			const routed = await lock.release({
+			return await surfaceTaskingBlock({
 				slug,
 				cwd,
 				arbiter,
+				reason,
+				message:
+					`The task acceptance gate disapproved the set produced for '${slug}'; ` +
+					`parked it for your attention (no tasks landed). ` +
+					`Resolve the findings, then re-task.`,
 				lockedBlob,
-				routeToNeedsAttention: {reason},
+				release: lock.release,
+				mode: resolvedMode,
+				provider: options.providerInstance,
 				env,
 				note,
 			});
-			if (routed.outcome !== 'released') {
-				return releaseFailureToResult(routed, slug);
-			}
-			note(reason);
-			return {
-				exitCode: 1,
-				outcome: 'needs-attention',
-				slug,
-				message:
-					`The task acceptance gate blocked the set produced for '${slug}'; ` +
-					`marked the per-item lock stuck (needs attention; no tasks landed).`,
-			};
 		}
 		if (core.outcome === 'sidecar-violation') {
 			// A co-located `<slug>/` asset sidecar sits beside the FLOWING spec item
@@ -774,28 +771,22 @@ export async function performTask(
 			const reason =
 				`The spec '${slug}' carries a co-located asset sidecar: ` +
 				`${core.reviewBlockReason ?? core.reason ?? ''}`;
-			const routed = await lock.release({
+			return await surfaceTaskingBlock({
 				slug,
 				cwd,
 				arbiter,
+				reason,
+				message:
+					`The spec '${slug}' carries a co-located asset sidecar (WORK-CONTRACT ` +
+					`rule 8); parked it for your attention (no tasks landed; relocate it ` +
+					`to docs/spikes/${slug}/ and reference by path).`,
 				lockedBlob,
-				routeToNeedsAttention: {reason},
+				release: lock.release,
+				mode: resolvedMode,
+				provider: options.providerInstance,
 				env,
 				note,
 			});
-			if (routed.outcome !== 'released') {
-				return releaseFailureToResult(routed, slug);
-			}
-			note(reason);
-			return {
-				exitCode: 1,
-				outcome: 'needs-attention',
-				slug,
-				message:
-					`The spec '${slug}' carries a co-located asset sidecar (WORK-CONTRACT ` +
-					`rule 8); marked the per-item lock stuck (needs attention; no tasks ` +
-					`landed; relocate it to docs/spikes/${slug}/ and reference by path).`,
-			};
 		}
 		if (core.outcome === 'review-unparseable') {
 			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
@@ -807,27 +798,21 @@ export async function performTask(
 			const reason =
 				`The task acceptance gate for '${slug}' produced an UNPARSEABLE verdict ` +
 				`(re-run — transient): ${core.reason ?? ''}`;
-			const routed = await lock.release({
+			return await surfaceTaskingBlock({
 				slug,
 				cwd,
 				arbiter,
+				reason,
+				message:
+					`The task acceptance gate produced an unparseable verdict for '${slug}'; ` +
+					`parked it for your attention (no tasks landed; re-run).`,
 				lockedBlob,
-				routeToNeedsAttention: {reason},
+				release: lock.release,
+				mode: resolvedMode,
+				provider: options.providerInstance,
 				env,
 				note,
 			});
-			if (routed.outcome !== 'released') {
-				return releaseFailureToResult(routed, slug);
-			}
-			note(reason);
-			return {
-				exitCode: 1,
-				outcome: 'needs-attention',
-				slug,
-				message:
-					`The task acceptance gate produced an unparseable verdict for '${slug}'; ` +
-					`marked the per-item lock stuck (needs attention; no tasks landed; re-run).`,
-			};
 		}
 		if (core.outcome === 'completed') {
 			// LOCK LIFETIME IS MODE-DEPENDENT (fix
@@ -1220,21 +1205,101 @@ function taskGateBlockedReason(
 ): string {
 	const head =
 		`The task acceptance gate (fresh-context review of the produced SET) blocked ` +
-		`'${slug}'. The spec is routed to needs-attention with no tasks landed; a human ` +
-		`must resolve the blocking findings, then re-task.`;
+		`'${slug}'. The spec is parked for your attention with no tasks landed; ` +
+		`resolve the blocking findings, then re-task.`;
 	return findingsReason ? `${head}\n\n${findingsReason}` : head;
 }
 
 /**
+ * Shared terminal for a tasking transition that DID NOT land — a disapproving
+ * task-set review, a co-located sidecar violation, an unparseable verdict, or a
+ * decomposition-unclear loop exhaustion. It:
+ *
+ *   1. (propose mode + a provider) CLOSES the spec's OPEN PR — if one already
+ *      exists (the multi-run artefact) — with the disapproving `reason` as the
+ *      CLOSING COMMENT, KEEPING the branch (task
+ *      `tasking-disapprove-closes-existing-pr-keeps-branch`). A later approving
+ *      re-task REOPENs the same PR via `openRequest`. Only-if-exists: we never
+ *      OPEN a PR just to close it, and merge mode has no PR to close.
+ *   2. RELEASES the spec's per-item lock and SURFACES the item for the human as a
+ *      `needsAnswers: true` body + a question sidecar on `<arbiter>/main` (via the
+ *      release's `routeToNeedsAttention` redirect). The lock is RELEASED, not
+ *      held — this is a parked question, not a lock the human must clear.
+ *
+ * A clean surface is a SUCCESSFUL terminal of the loop's "drain toward done OR
+ * surface a question and idle" contract, so it returns `exitCode: 0` (the CI leg
+ * is GREEN — a park-for-human is not a failure). Only a surface that FAILED to
+ * publish maps to a non-zero {@link releaseFailureToResult}.
+ */
+async function surfaceTaskingBlock(params: {
+	slug: string;
+	cwd: string;
+	arbiter: string;
+	reason: string;
+	message: string;
+	lockedBlob: string | undefined;
+	release: TaskingLockSeam['release'];
+	mode: 'propose' | 'merge';
+	provider: ReviewProvider | undefined;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<TaskResult> {
+	const {
+		slug,
+		cwd,
+		arbiter,
+		reason,
+		message,
+		lockedBlob,
+		release,
+		mode,
+		provider,
+		env,
+		note,
+	} = params;
+
+	// 1. Close a stale OPEN PR (propose only, only-if-exists) with the review as
+	//    the closing comment; keep the branch for a later approving re-task to
+	//    reopen. Advisory + never-throw — a close failure never blocks the surface.
+	if (mode === 'propose' && provider !== undefined) {
+		const closed = await provider.closeRequestOnBranch({
+			cwd,
+			branch: workBranchRef('spec', slug),
+			arbiter,
+			comment: reason,
+			env,
+		});
+		note(closed.instruction);
+	}
+
+	// 2. Release the lock + surface the parked question on main.
+	const routed = await release({
+		slug,
+		cwd,
+		arbiter,
+		lockedBlob,
+		routeToNeedsAttention: {reason},
+		env,
+		note,
+	});
+	if (routed.outcome !== 'released') {
+		return releaseFailureToResult(routed, slug);
+	}
+	note(reason);
+	// exit 0: a clean park-for-human is a successful loop terminal, not a failure.
+	return {exitCode: 0, outcome: 'needs-attention', slug, message};
+}
+
+/**
  * Build the needs-attention REASON for a decomposition-unclear loop verdict (the
- * spec is marked stuck on its per-item lock with these open questions, no guessed
- * tasks). Prose only — recorded as the spec's stuck-lock reason.
+ * spec is parked for the human with these open questions + a question sidecar on
+ * main, no guessed tasks). Prose only — recorded as the parked question's reason.
  */
 function decompositionUnclearReason(slug: string, questions: string[]): string {
 	const head =
 		`The tasker review→edit loop could not converge on a sound decomposition of ` +
-		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The spec is routed ` +
-		`to needs-attention with no guessed tasks; a human must resolve:`;
+		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The spec is parked ` +
+		`for your attention with no guessed tasks; resolve:`;
 	const body =
 		questions.length > 0
 			? questions.map((q) => `- ${q}`).join('\n')

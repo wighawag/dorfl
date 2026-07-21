@@ -10,6 +10,7 @@ import {
 } from '../src/review-gate.js';
 import type {TaskReviewGate} from '../src/tasker-review-loop.js';
 import {readItemLock} from '../src/item-lock.js';
+import type {ReviewProvider} from '../src/integrator.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -220,7 +221,7 @@ describe('task acceptance gate — --no-review skips it (mirror the build Gate-2
 });
 
 describe('task acceptance gate — BLOCK routes the set to needs-attention (not integrated)', () => {
-	it('review on + BLOCK ⇒ needs-attention, NO tasks land, exit 1, findings in the body', async () => {
+	it('review on + BLOCK ⇒ needs-attention, NO tasks land, exit 0 (a clean park-for-human is a success terminal), findings in the body', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK);
@@ -235,7 +236,11 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
-		expect(result.exitCode).toBe(1);
+		// A disapprove that cleanly surfaces the spec for the human is a SUCCESSFUL
+		// terminal of the loop's "drain OR surface+idle" contract — exit 0 (the CI
+		// leg is GREEN), not a failure (fix
+		// `tasking-review-block-surfaces-needs-attention-but-exits-nonzero`).
+		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('needs-attention');
 		expect(gate.calls).toBe(1);
 		// The task-path block route is a per-item lock `active → stuck` amend now
@@ -266,10 +271,32 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 		expect(sidecar).toMatch(/coverage gap in the PRD goal/);
 	});
 
-	it('a BLOCK on the --propose path also routes to needs-attention (no PR of a blocked set)', async () => {
+	it('a BLOCK on the --propose path routes to needs-attention (no PR of a blocked set), exits 0, and CLOSES a stale open PR with the review as the comment (keeping the branch)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it');
 		const gate = stubGate(BLOCK);
+		// A recording provider: on a disapprove the tasking path must ask it to CLOSE
+		// the (multi-run) stale PR — with the disapproving review as the comment —
+		// while KEEPING the branch. openRequest is never called on a block.
+		const closeCalls: {branch: string; comment: string}[] = [];
+		let openCalled = false;
+		const provider: ReviewProvider = {
+			name: 'recording',
+			async openRequest() {
+				openCalled = true;
+				return {opened: true, instruction: 'opened'};
+			},
+			postPRComment() {
+				return {posted: false, instruction: ''};
+			},
+			postPRCommentOnBranch() {
+				return {posted: false, instruction: ''};
+			},
+			async closeRequestOnBranch(input) {
+				closeCalls.push({branch: input.branch, comment: input.comment});
+				return {closed: true, instruction: 'closed (branch kept)'};
+			},
+		};
 		const result = await performTask({
 			slug: 'it',
 			cwd: repo,
@@ -278,16 +305,25 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 			integration: 'propose',
 			review: true,
 			reviewGate: gate,
+			providerInstance: provider,
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('needs-attention');
-		// The block route is the stuck lock; the prd body stays in prd/, no PR opened.
+		// A clean disapprove-surface is a SUCCESS terminal — exit 0 (green CI leg).
+		expect(result.exitCode).toBe(0);
+		// The disapprove asked the provider to CLOSE the stale PR for the spec's
+		// branch, carrying the disapproving review as the closing comment; it never
+		// OPENED a PR (never open-just-to-close).
+		expect(openCalled).toBe(false);
+		expect(closeCalls).toHaveLength(1);
+		expect(closeCalls[0].branch).toBe('work/spec-it');
+		expect(closeCalls[0].comment).toMatch(/disapproved|blocked|coverage gap/i);
+		// The block route surfaces + releases the lock; the prd body stays in prd/,
+		// no blocked-set PR is opened.
 		expect(onArbiterMain(repo, 'work/needs-attention/it.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/specs/ready/it.md')).toBe(true);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
-		// PR-2b: tasking bounce surfaces + releases the lock (see companion assertion
-		// above for the sidecar's contents).
 		const entry = await readItemLock({
 			item: 'spec:it',
 			cwd: repo,
@@ -295,6 +331,45 @@ describe('task acceptance gate — BLOCK routes the set to needs-attention (not 
 			env: gitEnv(),
 		});
 		expect(entry).toBeUndefined();
+	});
+
+	it('a BLOCK on the --merge path does NOT attempt to close a PR (merge has no PR)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const gate = stubGate(BLOCK);
+		let closeCalled = false;
+		const provider: ReviewProvider = {
+			name: 'recording',
+			async openRequest() {
+				return {opened: true, instruction: 'opened'};
+			},
+			postPRComment() {
+				return {posted: false, instruction: ''};
+			},
+			postPRCommentOnBranch() {
+				return {posted: false, instruction: ''};
+			},
+			async closeRequestOnBranch() {
+				closeCalled = true;
+				return {closed: false, instruction: ''};
+			},
+		};
+		const result = await performTask({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoTask: true,
+			integration: 'merge',
+			review: true,
+			reviewGate: gate,
+			providerInstance: provider,
+			dorfl: taskingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('needs-attention');
+		expect(result.exitCode).toBe(0);
+		// Merge mode has no PR — the close seam is never consulted.
+		expect(closeCalled).toBe(false);
 	});
 });
 
