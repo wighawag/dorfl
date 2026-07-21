@@ -3,6 +3,7 @@ title: A tasking (spec:) review-block correctly surfaces to needs-attention (nee
 type: observation
 status: spotted
 spotted: 2026-07-21
+needsAnswers: true
 ---
 
 ## What was seen
