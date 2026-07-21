@@ -55,16 +55,19 @@ The design is deliberately **minimal** (the decisions below were made 2026-07-21
    after a one-line **stderr** notice. When NO `dorflCmd` is declared (the onboarding
    case — `setup`/`install-ci` run in a repo with no pin yet), the bootstrap runs
    ITSELF, so onboarding is never chicken-and-egg. A `dorflCmd` whose target does NOT
-   EXIST YET DEGRADES to the bootstrap (NOT an error): this is REQUIRED because the JS
-   `node_modules/.bin/dorfl` form does not exist until the repo's `prepare` (`pnpm
-   install`) has run, and `prepare` is run BY dorfl (`do`/`run`) — so the bootstrap must be
-   able to run on a fresh checkout to install the deps that later make the pin exist
-   (mirroring the existing `install-ci` shim's `if [ -x node_modules/.bin/dorfl ]` check).
-   The consequence, accepted + documented: the ONE invocation that runs `prepare` on a
-   fresh checkout uses the bootstrap, not the pin (`npx dorfl@<v>` / a vendored
-   `./bin/dorfl` avoid this — self-fetching / committed). A `dorflCmd` that is PRESENT but
-   exec-FAILS (a real binary that spawn-errors) IS a clear error naming the command +
-   `dorfl.json` path — never a silent fall-through to a skewed global.
+   EXIST YET DEGRADES to the bootstrap (NOT an error), because the JS
+   `node_modules/.bin/dorfl` form does not exist until the repo's dependencies are
+   installed (mirroring the existing `install-ci` shim's `if [ -x node_modules/.bin/dorfl ]`
+   check). NOTE the mechanism precisely: dorfl does NOT install its own pin — dorfl's
+   `prepare` is worktree-gate env-prep run inside build commands (often in a throwaway
+   worktree; read-only commands run none), so it does not reliably populate
+   `node_modules/.bin/dorfl`. The REPO's own install populates it (CI's `install-ci`
+   project-setup hook runs the install before the dorfl steps; locally the user runs `pnpm
+   install`). The degrade exists only so the bootstrap can RUN in the window before that
+   install and for install-free commands (`npx dorfl@<v>` / a vendored `./bin/dorfl` avoid
+   the window — self-fetching / committed). A `dorflCmd` that is PRESENT but exec-FAILS (a
+   real binary that spawn-errors) IS a clear error naming the command + `dorfl.json` path
+   — never a silent fall-through to a skewed global.
 
 3. **NO trust gate.** `dorflCmd` is honoured verbatim from the repo's committed
    `dorfl.json`, at the SAME trust level dorfl already grants the committed `verify`
