@@ -131,9 +131,13 @@ The mechanism is deliberately minimal. Do NOT expect a version manager:
 
 ## Relationship to the CI shim
 
-`install-ci`'s `dorfl-setup` step historically installs `dorfl` globally
-(`npm install -g dorfl`) and prefers a project-local `node_modules/.bin/dorfl` via a
-`$PATH` shim. Once bare `dorfl` self-forwards from `dorfl.json`, CI's global `dorfl`
+`install-ci`'s `dorfl-setup` step historically installed `dorfl` globally
+(`npm install -g dorfl`) and then preferred a project-local `node_modules/.bin/dorfl`
+via a bespoke, CI-only, JS-specific `$PATH` shim. Now that bare `dorfl`
+self-forwards from `dorfl.json`, that shim has been REMOVED: CI's global `dorfl`
 forwards to the repo's declared `dorflCmd` by the SAME generic mechanism the laptop
-uses — one code path, JS and non-JS alike — so the bespoke shim is no longer the
-only pinning path. See [`docs/ci/README.md`](../ci/README.md).
+uses — one code path, JS and non-JS alike. A JS repo that pinned via a devDep simply
+declares `dorflCmd: "node_modules/.bin/dorfl"` (`setup` nudges it) to get the pin in
+CI via the forward; a repo with no `dorflCmd` runs the global bootstrap identically
+on CI and the laptop. See [`docs/ci/README.md`](../ci/README.md) and the task
+`install-ci-shim-converges-on-dorfl-cmd`.
