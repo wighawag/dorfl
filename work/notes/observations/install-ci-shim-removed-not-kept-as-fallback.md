@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Decision (2026-07-21): install-ci CI resolver shim REMOVED entirely, not kept as a no-`dorflCmd` JS fallback
 
 Task `install-ci-shim-converges-on-dorfl-cmd` (spec `dorfl-self-version-pinning-and-bootstrap-forward` §6 / story 4) required choosing, at build time, between two options for the bespoke `node_modules/.bin/dorfl` `$PATH` shim in the emitted `dorfl-setup` composite action:
