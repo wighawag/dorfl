@@ -149,6 +149,7 @@ import {
 	SlugResolutionError,
 } from './slug-namespace.js';
 import {brand} from './brand.js';
+import {maybeForward} from './bootstrap-forward.js';
 import {installCI, type WizardPrompts} from './install-ci.js';
 import {GitHubCIContext} from './install-ci-github.js';
 import {loadCapabilityRegistry} from './install-ci-core.js';
@@ -4894,11 +4895,30 @@ function promptMultiSelect(repos: string[]): Promise<string[]> {
  * so tests can build + introspect/parse the program WITHOUT triggering a real
  * argv parse + `process.exit` on import (the module-level bootstrap below only
  * fires when this file is the process entry point).
+ *
+ * BEFORE any command dispatch it runs the bootstrap SELF-FORWARD hook
+ * ({@link maybeForward}): if the nearest repo `dorfl.json` declares a `dorflCmd`
+ * (and we are not already the forwarded child / opted out), it execs that command
+ * with the ORIGINAL argv + env inherited and exits with the child's code
+ * (transparent passthrough). A declared-but-unusable `dorflCmd` FAILS LOUD. On
+ * the run-self branch (no `dorflCmd`, opted out, or the forwarded child) it parses
+ * the (opt-out-stripped) argv in-process, exactly as before. See
+ * `bootstrap-forward.ts` for the full model + the injectable seam.
  */
 export async function runCli(argv: string[] = process.argv): Promise<void> {
+	const outcome = maybeForward({argv});
+	if (outcome.kind === 'forwarded') {
+		process.exit(outcome.exitCode);
+	}
+	if (outcome.kind === 'error') {
+		console.error(outcome.message);
+		process.exit(outcome.exitCode);
+	}
+	// run-self: parse the argv commander sees (with any `--no-forward` stripped,
+	// since commander does not declare that bootstrap-level flag).
 	const program = buildProgram();
 	try {
-		await program.parseAsync(argv);
+		await program.parseAsync(outcome.argv);
 	} catch (err: unknown) {
 		console.error(err instanceof Error ? err.message : String(err));
 		process.exit(1);

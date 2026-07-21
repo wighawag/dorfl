@@ -35,6 +35,30 @@ export {
 	resolveRepoConfig,
 } from './repo-config.js';
 
+export type {
+	ForwardDecision,
+	ForwardOutcome,
+	ForwardSpawn,
+	ForwardSpawnResult,
+	RepoCmdReader,
+} from './bootstrap-forward.js';
+export {
+	FORWARDED_ENV_MARKER,
+	NO_FORWARD_ENV,
+	NO_FORWARD_FLAG,
+	decideForward,
+	performForward,
+	maybeForward,
+	defaultRepoCmdReader,
+	defaultForwardSpawn,
+	forwardNotice,
+	forwardFailureMessage,
+	argvHasNoForward,
+	envHasNoForward,
+	envIsForwarded,
+	stripNoForwardFlag,
+} from './bootstrap-forward.js';
+
 export type {ConfigOverrideMap} from './config-override.js';
 export {
 	defaultConfigOverridePath,
