@@ -613,6 +613,12 @@ export async function performTask(
 				? 'uncertain-tasks'
 				: undefined;
 
+	// The integrate mode resolved ONCE (`--merge`/`--propose` > default `propose`),
+	// used BOTH as the `mode:` passed into the shared integrate core AND to decide
+	// the tasking lock's lifetime below (release on `merge`, HOLD across the PR on
+	// `propose`).
+	const resolvedMode = options.integration ?? 'propose';
+
 	if (useLock) {
 		// READ-STABILITY BACKSTOP (the lock's content-identity check, now owned at the
 		// integrate seam): the OUTPUT no longer rides the lock release, so the band
@@ -687,7 +693,7 @@ export async function performTask(
 			// `merge` IS the auto-land mode, so a resolved `merge` is never downgraded.
 			// The task gate family is `--review`/`--no-review`/`--review-model` only
 			// (spec US #6).
-			mode: options.integration ?? 'propose',
+			mode: resolvedMode,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
 			// PROPOSE-MODE PR BODY (task `slicing-pr-body-summary-threading`): mirror the
@@ -824,18 +830,33 @@ export async function performTask(
 			};
 		}
 		if (core.outcome === 'completed') {
-			// The durable `specs/ready → specs/tasked` `main` move landed through the shared integrate
-			// core (the body moved straight from `work/specs/ready/` — no transient `tasking/`
-			// marker). The completing commit is owned by the integrate band, NOT
-			// `releaseTaskingLock`, so the unified per-item lock that `acquireTaskingLock`
-			// took is released HERE (delete the ref). A
-			// `propose` (`mode: 'propose'`) is ALSO `completed` (the PR opened, the lock's
-			// hold over the in-flight tasking is done); the eventual hold-across-the-PR
-			// crash-safe ordering is the capstone task #7's concern, not this interim
-			// half. Best-effort + idempotent (`not-held` is fine).
-			// MIGRATE step: release under the `spec:<slug>` identity (keyed to the
-			// `spec-<slug>` lock entry the acquire now takes). Idempotent.
-			if (useLock) {
+			// LOCK LIFETIME IS MODE-DEPENDENT (fix
+			// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`;
+			// the "hold-across-the-PR" capstone the older interim half deferred).
+			//
+			// `merge`: the durable `specs/ready → specs/tasked` `main` move HAS landed, so
+			// residence-in-`specs/tasked/` on `main` now carries tasked-ness and the lock
+			// has done its job — RELEASE it (delete the ref). Best-effort + idempotent
+			// (`not-held` is fine).
+			//
+			// `propose`: the move lives ONLY on the pushed work branch / open PR — `main`
+			// still holds the spec in `work/specs/ready/`, so residence does NOT yet signal
+			// tasked-ness. If we released here, the next in-place scan would see the spec
+			// eligible again (ready + not-tasked + lock free) and re-task it EVERY tick,
+			// force-recreating the branch (`git switch -C`) and force-pushing the SAME PR —
+			// regenerating its review forever until a human merges/closes it. So we KEEP
+			// the `spec:<slug>` lock HELD across the open PR: the held lock IS the
+			// "in-flight tasking" marker, and `scoreSpecs`/`taskableSpecs` subtract held
+			// specs from the taskable pool (symmetric to the task-pool held-slug
+			// subtraction). The lock is reaped when the PR resolves: a MERGE lands the
+			// durable move (which now carries tasked-ness on its own) and the reap/gc path
+			// deletes the merged branch + its lock; a human CLOSING the PR unmerged is a
+			// recovery the human owns via `release-lock` (the same model as any other
+			// abandoned in-flight item — no liveness heartbeat/auto-steal).
+			//
+			// MIGRATE step: the ref is keyed under the `spec:<slug>` identity (the
+			// `spec-<slug>` lock entry the acquire took).
+			if (useLock && resolvedMode === 'merge') {
 				await releaseItemLock({item: `spec:${slug}`, cwd, arbiter, env});
 			}
 		}

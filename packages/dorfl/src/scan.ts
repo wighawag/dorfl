@@ -252,16 +252,30 @@ export function scoreSpecs(
 	repoPath: string,
 	pool: LedgerSpecPool,
 	autoTask: boolean,
+	/**
+	 * The held-SPEC set to SUBTRACT from the taskable pool (fix
+	 * `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`):
+	 * a spec whose `refs/dorfl/lock/spec-<slug>` is HELD is IN-FLIGHT (a propose-mode
+	 * tasking PR is open, or a merge tasking is mid-flight) and must NOT be enumerated
+	 * as taskable — otherwise CI re-tasks it every tick, force-pushing the open PR.
+	 * Symmetric to {@link scoreItems}'s task held-slug subtraction (specs took NONE
+	 * before this fix). Defaults empty (offline read — the caller supplies the set,
+	 * fail-CLOSED for selection via {@link heldSpecSlugsStrict}, graceful for the
+	 * surface).
+	 */
+	heldSpecSlugs: Set<string> = new Set(),
 ): ScannedSpec[] {
 	const taskable = new Set(
 		taskableSpecs({
-			candidates: pool.specs.map((p) => ({
-				repoPath,
-				slug: p.slug,
-				humanOnly: p.humanOnly,
-				needsAnswers: p.needsAnswers,
-				taskedAfter: p.taskedAfter,
-			})),
+			candidates: pool.specs
+				.filter((p) => !heldSpecSlugs.has(p.slug))
+				.map((p) => ({
+					repoPath,
+					slug: p.slug,
+					humanOnly: p.humanOnly,
+					needsAnswers: p.needsAnswers,
+					taskedAfter: p.taskedAfter,
+				})),
 			taskedSlugs: pool.taskedSlugs,
 			autoTask,
 		}).map((p) => p.slug),
@@ -567,6 +581,16 @@ export function scanRepoPaths(
 	 * empty (no override).
 	 */
 	override?: ConfigOverrideMap,
+	/**
+	 * The held-SPEC set to SUBTRACT from each repo's TASKABLE-spec pool (fix
+	 * `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`):
+	 * passed into {@link scoreSpecs} so a spec whose per-item lock is HELD (a
+	 * propose-mode tasking PR is open, or a merge tasking is mid-flight) never leaks
+	 * into the propose matrix's `spec:` legs — the SPEC counterpart of the `heldSlugs`
+	 * task subtraction. Supplied by the in-place caller (offline scan has no arbiter
+	 * handle); DEFAULTS empty.
+	 */
+	heldSpecSlugs: Set<string> = new Set(),
 ): ScanReport {
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
@@ -585,7 +609,7 @@ export function scanRepoPaths(
 		// predicate. This is what makes the propose-mode CI matrix enumerate `spec:`
 		// legs (see `ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).
 		const specPool = ledgerRead.resolveSpecPool({repoPath: path});
-		const specs = scoreSpecs(path, specPool, resolved.autoTask);
+		const specs = scoreSpecs(path, specPool, resolved.autoTask, heldSpecSlugs);
 		// The per-repo LIFECYCLE pool (`ci-propose-matrix-enumerates-lifecycle-items`),
 		// gated by this working tree's `observationTriage` / `surfaceBlockers` (resolved
 		// the same way as `autoBuild`/`autoTask`) and computed by REUSING

@@ -10,7 +10,7 @@ import {
 	TREELESS_RUNGS,
 } from './advance-treeless-publish.js';
 import {scanRepoPaths} from './scan.js';
-import {heldTaskSlugs} from './item-lock.js';
+import {heldTaskSlugs, heldSpecSlugs} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
@@ -177,6 +177,13 @@ export async function performAdvanceAuto(
 	// runs. `heldTaskSlugs` is the GRACEFUL variant (empty set on any read fault):
 	// the follow-on claim CAS is still the load-bearing safety net locally.
 	const heldSlugs = await heldTaskSlugs(cwd, options.arbiter);
+	// The held-SPEC set (fix
+	// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`):
+	// a spec whose `spec-<slug>` lock is held has an in-flight tasking PR (propose keeps
+	// the lock across the open PR), so it must NOT be re-selected into the task rung.
+	// GRACEFUL variant (empty on read fault) — the tasking-lock CAS is the local safety
+	// net, matching `heldTaskSlugs` above.
+	const heldSpecs = await heldSpecSlugs(cwd, options.arbiter);
 
 	// Pool 1 — eligible TASKS via the EXISTING scan/select path. `scoreItems`
 	// inside `scanRepoPaths` gates eligibility on `autoBuild` (the build gate), so
@@ -193,13 +200,15 @@ export async function performAdvanceAuto(
 	// `autoTask`). With `autoTask` off NO spec is selected — the task rung is
 	// never reached by the bare/`-n` selection.
 	const pool = read.resolveSpecPool({repoPath: cwd});
-	const specCandidates: SpecCandidate[] = pool.specs.map((spec) => ({
-		repoPath: cwd,
-		slug: spec.slug,
-		humanOnly: spec.humanOnly,
-		needsAnswers: spec.needsAnswers,
-		taskedAfter: spec.taskedAfter,
-	}));
+	const specCandidates: SpecCandidate[] = pool.specs
+		.filter((spec) => !heldSpecs.has(spec.slug))
+		.map((spec) => ({
+			repoPath: cwd,
+			slug: spec.slug,
+			humanOnly: spec.humanOnly,
+			needsAnswers: spec.needsAnswers,
+			taskedAfter: spec.taskedAfter,
+		}));
 	const eligibleSpecs = taskableSpecs({
 		candidates: specCandidates,
 		taskedSlugs: pool.taskedSlugs,

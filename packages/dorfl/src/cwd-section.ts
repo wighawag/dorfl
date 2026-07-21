@@ -4,7 +4,11 @@ import {scanRepoPaths, type RepoReport} from './scan.js';
 import {arbiterStatus} from './arbiter.js';
 import {listMirrors} from './registry.js';
 import {encodeRepoKey, mirrorPath} from './repo-mirror.js';
-import {heldTaskSlugsStrict, listItemLockEntries} from './item-lock.js';
+import {
+	heldTaskSlugsStrict,
+	heldSpecSlugsStrict,
+	listItemLockEntries,
+} from './item-lock.js';
 import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
@@ -260,12 +264,27 @@ export async function resolveCwdSection(
 	const heldSlugs = hasLockRemote
 		? await heldTaskSlugsStrict(cwd, lockRemote, env)
 		: new Set<string>();
+	// The held-SPEC set (fix
+	// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`):
+	// a spec whose `spec-<slug>` lock is held has an in-flight tasking PR (propose keeps
+	// the lock across the open PR). SUBTRACT it from the taskable pool so CI does not
+	// re-task it every tick. Read fail-CLOSED from the SAME coordination remote as the
+	// task held set (SELECTION must not enumerate an untrusted pool).
+	const heldSpecSlugs = hasLockRemote
+		? await heldSpecSlugsStrict(cwd, lockRemote, env)
+		: new Set<string>();
 
 	// 3. The cwd's `work/` lifecycle from the LOCAL WORKING TREE (not a mirror ref),
 	//    with the arbiter-read held set SUBTRACTED so in-flight (lock-held) items are
 	//    not reported eligible. Thread the per-machine override so the cwd section's
 	//    eligibility matches what `do`/`advance` autopick will actually select.
-	const localReport = scanRepoPaths([cwd], config, heldSlugs, options.override);
+	const localReport = scanRepoPaths(
+		[cwd],
+		config,
+		heldSlugs,
+		options.override,
+		heldSpecSlugs,
+	);
 	const repo = localReport.repos[0];
 
 	// 3b. The PER-ITEM LOCK in-flight SURFACE for the cwd (spec

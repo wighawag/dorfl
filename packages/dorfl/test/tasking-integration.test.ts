@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {mkdirSync, writeFileSync, readFileSync, chmodSync} from 'node:fs';
 import {performTask, type TaskDorfl} from '../src/tasking.js';
 import {GitHubProvider} from '../src/github.js';
+import {listItemLocks} from '../src/item-lock.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -251,6 +252,16 @@ describe('do prd: output through performIntegration — --propose opens a PR, ma
 		expect(args).toMatch(/^create$/m);
 		expect(args).toMatch(/^--title$/m);
 		expect(args).toContain('tasking(it)');
+
+		// THE `spec:it` LOCK IS STILL HELD across the open PR (fix
+		// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`).
+		// In propose mode the durable `specs/ready → specs/tasked` move lives ONLY on
+		// the pushed branch — `main` still holds the spec in `ready/`, so residence
+		// does NOT yet signal tasked-ness. Keeping the lock held is what stops the
+		// next scan from re-tasking the spec + force-pushing this PR every tick; the
+		// held-spec pool subtraction reads exactly this ref. Reaped when the PR merges
+		// (or a human closes it + `release-lock`s).
+		expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual(['spec-it']);
 	});
 });
 
@@ -300,6 +311,16 @@ describe('do prd: arg parity with do task: (the SAME integrate-time args resolve
 					onArbiterBranch(repo, 'work/spec-it', 'work/tasks/backlog/child.md'),
 				).toBe(true);
 			}
+
+			// LOCK LIFETIME IS MODE-DEPENDENT (fix
+			// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`):
+			// MERGE landed the durable `specs/ready → specs/tasked` move on `main`
+			// (residence now carries tasked-ness), so the lock is RELEASED. PROPOSE
+			// left that move only on the branch, so the lock is HELD across the open PR
+			// to keep the spec out of the taskable pool (else it re-tasks every tick).
+			expect(await listItemLocks(repo, ARBITER, gitEnv())).toEqual(
+				row.landsOnMain ? [] : ['spec-it'],
+			);
 		});
 	}
 });

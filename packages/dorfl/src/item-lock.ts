@@ -1941,6 +1941,56 @@ export async function heldTaskSlugsStrict(
 }
 
 /**
+ * List the SPEC slugs currently lock-held on the arbiter — the held-SPEC set the
+ * TASKABLE-spec pool readers SUBTRACT (fix
+ * `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`).
+ * The SPEC analogue of {@link heldTaskSlugsStrict}: enumerates {@link listItemLocks}
+ * and keeps only the `spec-<slug>` entries (a task/observation lock does not gate
+ * the SPEC pool), mapping each to its bare `<slug>`.
+ *
+ * LOAD-BEARING for the propose-mode tasking loop: an `advance spec:<slug> --propose`
+ * that opens a PR now KEEPS the `spec:<slug>` lock HELD across the open PR (the
+ * durable `specs/ready → specs/tasked` move lives only on the branch, so `main`
+ * residence does NOT yet signal tasked-ness). This held-spec set is the ONLY thing
+ * that keeps such an in-flight spec out of the taskable pool — WITHOUT it the spec
+ * is re-tasked every tick and its PR force-pushed. Symmetric to the task-pool
+ * subtraction; the same fail-open/fail-closed split applies (see
+ * {@link heldSpecSlugs} vs this strict twin).
+ */
+export async function heldSpecSlugsStrict(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<Set<string>> {
+	const entries = await listItemLocks(cwd, arbiter, env);
+	const prefix = 'spec-';
+	return new Set(
+		entries
+			.filter((e) => e.startsWith(prefix))
+			.map((e) => e.slice(prefix.length)),
+	);
+}
+
+/**
+ * GRACEFUL (fail-OPEN) twin of {@link heldSpecSlugsStrict} for read-only SURFACE
+ * paths and the local autopick driver: a fetch fault yields an EMPTY set rather
+ * than throwing (the follow-on tasking-lock CAS is the load-bearing safety net
+ * locally, exactly as {@link heldTaskSlugs} relies on the claim CAS). The SELECTION
+ * path that must refuse an untrusted pool uses the strict twin.
+ */
+export async function heldSpecSlugs(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<Set<string>> {
+	try {
+		return await heldSpecSlugsStrict(cwd, arbiter, env);
+	} catch {
+		return new Set();
+	}
+}
+
+/**
  * Parse a serialised lock entry body back into a {@link LockEntry} — the exact
  * inverse of {@link serialiseLockEntry}. Post-`retire-stuck-lock-state` a lock
  * entry whose serialised state is not the single admitted `'active'` value
