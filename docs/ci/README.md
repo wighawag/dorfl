@@ -30,7 +30,10 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
    `.github/actions/dorfl-setup` (installs Node + `dorfl` + the
    agent harness, configures git identity + provider auth). Its auth/secrets shape
    is the separate `runner-in-ci` spec's concern — this template only assumes such a
-   setup step exists and INVOKES the driver.
+   setup step exists and INVOKES the driver. (If the repo pins its dorfl via
+   **`dorflCmd`** in `dorfl.json`, CI's bare `dorfl` self-forwards to that pin by the
+   same mechanism the laptop uses, so CI and local run the same version — see
+   [`docs/dorfl-cmd/README.md`](../dorfl-cmd/README.md).)
 
 3. Pick the integration mode with the `workflow_dispatch` `integrationMode` input
    (default `propose`). This ONE value drives BOTH the job shape AND the

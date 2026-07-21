@@ -56,6 +56,28 @@ dorfl run                 # the cross-repo parallel daemon
 See the [website](https://wighawag.github.io/dorfl/) for the same walkthrough with
 more context.
 
+## Pin the dorfl version (`dorflCmd`)
+
+dorfl is a TOOL like `prettier`/`tsc`: the globally-installed `dorfl` is a thin
+BOOTSTRAP, a repo declares which dorfl it runs via **`dorflCmd`** in `dorfl.json`,
+and bare `dorfl` self-forwards to it (announced on stderr; opt out with
+`--no-forward` / `DORFL_NO_FORWARD=1`). Agents keep typing bare `dorfl`; the repo
+decides the version, so builds are reproducible instead of floating with whatever
+`dorfl` a machine has installed:
+
+```jsonc
+// dorfl.json
+{
+  "dorflCmd": "npx dorfl@0.7.0" // or node_modules/.bin/dorfl, ./bin/dorfl, mise exec dorfl@0.7.0 --
+}
+```
+
+See [`docs/dorfl-cmd/README.md`](docs/dorfl-cmd/README.md) for the per-ecosystem
+declaration examples, the upgrade ritual (bump `dorflCmd` → `dorfl sync` →
+`install-ci` only if templates changed), and the explicit non-goals (no version
+resolution/cache — use `npx dorfl@<version>`; no trust gate — same trust as
+`verify`).
+
 ## The idea in one breath
 
 - **Status is the folder, never a field.** Every work item is one markdown file, and

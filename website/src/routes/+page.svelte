@@ -326,7 +326,7 @@
 									># vendored WORK-CONTRACT.md, ADR-FORMAT.md, templates</span
 								>
 <span class="text-amber">dorfl.json</span>   <span class="text-bone-muted"
-									># the per-repo acceptance gate (verify / prepare)</span
+									># the per-repo acceptance gate (verify / prepare) + the pinned dorfl (dorflCmd)</span
 								></code
 							></pre>
 					</div>
