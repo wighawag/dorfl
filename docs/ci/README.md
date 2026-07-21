@@ -140,6 +140,87 @@ NOT mint a new mirror-pool JSON CLI surface (that enumeration lives in
 `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a separate
 concern, not this template's).
 
+## Writing a CI-safe `verify` gate (the toolchain-boundary pitfalls)
+
+`dorfl-setup` provisions ONLY what dorfl itself needs — Node, `dorfl`, the agent
+harness, git identity, provider auth. It deliberately does **not** provision the
+PROJECT's toolchain (its package manager, its own Node version, its dependency
+install, rust, system packages). This is the **project-toolchain boundary**
+(ADR `install-ci-project-provisioning-native-passthrough`): the boundary is
+**documented, not detected** — dorfl never guesses your stack. Two concrete
+consequences bite a real repo's `verify` gate if the gate is not self-sufficient,
+and both fail the GitHub `verify` check while a repo's `merge`-mode work still
+lands (because dorfl's own fresh-worktree merge-gate DOES run `prepare` — see
+below), so they are easy to miss.
+
+**Pitfall 1 — `dorfl verify` does NOT run `prepare`.** The standalone `dorfl
+verify` command is the PURE acceptance gate: it runs your declared `verify`
+command and nothing else. It does **not** run the repo's `prepare` step first
+(that only runs in the runner's fresh-worktree lifecycle — `do`/`run`/`advance` →
+`performIntegration`, where a fresh job worktree genuinely needs deps). So in the
+GitHub `verify` job, whatever your gate assumes is installed (a package manager on
+`PATH`, `node_modules/`, generated files) must be provisioned by YOU, before
+`dorfl verify` runs. A gate like `pnpm build && pnpm test` dies at `pnpm: command
+not found` (exit 127), or later on missing deps, if nothing installed pnpm +
+ran `pnpm install` first.
+
+**Pitfall 2 — git-history-dependent gate steps on a detached PR checkout.** A gate
+step that inspects git history relative to `main` — the classic case is
+`changeset status --since=main` (Changesets) — fails on a PR checkout, which is a
+**detached HEAD with only `origin/main`**, no local `main` branch. Changesets
+reports `Failed to find where HEAD diverged from "main"`. The gate needs a local
+`main` ref (and often full history, `fetch-depth: 0`).
+
+**The fix: provision the project toolchain via the project-setup hook.** Put your
+package-manager setup + dependency install (and any history fixup) as the FIRST
+steps of `dorfl-setup`, before dorfl-install. This is exactly what the `install-ci`
+project-setup hook (`projectSetup.<provider>`) splices in verbatim; on GitHub it is
+native Actions step YAML. A GitHub `pnpm` example:
+
+```yaml
+# in .github/actions/dorfl-setup/action.yml, FIRST under runs.steps:
+- name: Setup pnpm
+  uses: pnpm/action-setup@v4
+  with: { version: 10.28.1 }
+- name: Setup Node.js
+  uses: actions/setup-node@v5
+  with: { node-version: '22', cache: pnpm }
+- name: Install project dependencies
+  shell: bash
+  run: pnpm install --frozen-lockfile
+# Pitfall 2: give `changeset status --since=main` a local main to diff against
+- name: Ensure a local main branch
+  shell: bash
+  run: |
+    git fetch origin main --quiet || true
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+      git branch --force main origin/main
+    fi
+```
+
+(Requires the workflow's `actions/checkout` to use `fetch-depth: 0`.)
+
+**Pitfall 3 — a gate step that cannot pass on the changesets Version PR.** If your
+gate asserts "every changed package has a changeset" (`changeset status
+--since=main`), it can NEVER be green on the changesets **Version PR**
+(`changeset-release/main`), whose whole job is to CONSUME the changesets (delete
+them + bump versions). Guard that one step to skip on that branch, e.g. in the
+`verify` command:
+
+```jsonc
+"verify": "pnpm format:check && { [ \"$GITHUB_HEAD_REF\" = \"changeset-release/main\" ] && echo 'skip changeset status on the Version PR' || pnpm changeset status --since=main; } && pnpm build && pnpm test"
+```
+
+The guard keys on `GITHUB_HEAD_REF` (set only on `pull_request` events), so the
+check still runs on every feature PR and in dorfl's own (env-var-unset) merge-gate.
+
+**Why a `merge`-mode repo can hit these late.** With `integration: merge`, feature
+work lands on `main` via dorfl's OWN fresh-worktree gate (which runs `prepare` in
+a clean worktree), NOT the GitHub `verify` PR check. So the GitHub `verify` check
+can be red for one of the pitfalls above while work still lands — the check only
+blocks human/`propose` PRs and the Version PR's mergeability. Fix the gate anyway:
+a perpetually-red required check trains everyone to ignore it.
+
 ## Branch protection and the tree-less answer-loop (a required-check caveat)
 
 The answer-loop's tree-less rungs (`surface` / `apply` / `triage-observation`) publish their ledger writes (a question sidecar, a `triaged:` marker, an applied answer) by a **direct `git push HEAD:main`** of a freshly-made commit. This is deliberate: `integrationMode` governs how CODE integrates (build/slice branches → PR or merge), it does NOT govern the question ledger, so tree-less writes go straight to `main` in BOTH modes (SPEC `ci-advance-surfaces-questions-not-only-builds`).
