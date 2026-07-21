@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'dorfl-cmd-docs-and-upgrade-ritual' (Ga
 date: 2026-07-21
 status: open
 reviewOf: dorfl-cmd-docs-and-upgrade-ritual
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
