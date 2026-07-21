@@ -407,6 +407,36 @@ export interface Config {
 	 */
 	noPR: boolean;
 	/**
+	 * **The repo-declared dorfl COMMAND** (spec
+	 * `dorfl-self-version-pinning-and-bootstrap-forward` Solution §1/§3): the single
+	 * command string a repo's committed `dorfl.json` declares so that bare
+	 * `dorfl` (a thin bootstrap) can self-forward to the EXACT dorfl that repo runs
+	 * with — e.g. `"node_modules/.bin/dorfl"`, `"npx dorfl@0.7.0"`, `"./bin/dorfl"`,
+	 * `"mise exec dorfl@0.7.0 --"`. It is honoured VERBATIM: dorfl does NOT parse a
+	 * version, resolve/download/cache one, or shell-split the command here (a version
+	 * is expressed by the user writing `npx dorfl@<version>` themselves; the FORWARD
+	 * task, `dorfl-bootstrap-self-forward`, owns exec semantics). Optional with NO
+	 * default so "unset" is meaningful: unset/empty/whitespace-only ⇒ absent (the
+	 * bootstrap runs itself — never an error), so onboarding (`setup`/`install-ci` in
+	 * a repo with no pin yet) is never chicken-and-egg. Leading/trailing whitespace is
+	 * trimmed; a non-string value FAILS LOUD at config load
+	 * ({@link validateDorflCmdConfig}).
+	 *
+	 * **Deliberate host-only EXCEPTION (ADR
+	 * `dorfl-cmd-repo-settable-exception-to-host-only`).** `dorflCmd` names which
+	 * executable runs — definitionally the same class as the machine-command keys
+	 * `agentCmd`/`piBin`/`sessionsDir` that ADR §13 (see
+	 * `execution-substrate-decisions.md`) keeps HOST-ONLY (`REPO_REJECTED_KEYS`: a
+	 * committed repo file must not redirect where the host runs). `dorflCmd` REVERSES
+	 * that rule for this ONE key — it is in `REPO_ALLOWED_KEYS`, repo-settable — because
+	 * its purpose is repo-declared REPRODUCIBILITY, it carries no more trust than the
+	 * committed `verify` command the repo already runs, and the forward is ANNOUNCED on
+	 * stderr (unlike a silent `piBin`). There is NO trust gate. See the ADR for the full
+	 * why. Resolved per-repo like `integration`/`verify`: flag > env (`DORFL_DORFL_CMD`)
+	 * > per-repo > global > default (unset).
+	 */
+	dorflCmd?: string;
+	/**
 	 * The command the runner shells out to for one task. The runner appends the
 	 * built prompt on stdin; the command does NO git ops on the repo (the runner
 	 * owns those). Empty string ⇒ no agent configured (run will refuse). Consumed
@@ -900,6 +930,47 @@ export function validateDeadlineConfig(config: Config): void {
 	}
 }
 
+/**
+ * Validate + NORMALISE the repo-declared `dorflCmd` (spec
+ * `dorfl-self-version-pinning-and-bootstrap-forward` §1/§3; ADR
+ * `dorfl-cmd-repo-settable-exception-to-host-only`). Called at the SAME two
+ * resolution FINAL points as {@link validateDeadlineConfig} (`loadConfig` for the
+ * global chain; `resolveRepoConfigFromLoaded` for the per-repo chain), so a
+ * malformed value from ANY layer (flag / env / per-repo / global) surfaces the
+ * same way. Mutates `config` in place:
+ *
+ *   - a NON-STRING value (number/array/object/boolean/null) FAILS LOUD with a
+ *     clear message naming the field — the config layer's existing fail-loud
+ *     error path (mirrors {@link validateDeadlineConfig} / the identity check),
+ *     never a crash;
+ *   - a string is TRIMMED (leading/trailing whitespace removed) and carried
+ *     VERBATIM otherwise (no shell-splitting — the forward task owns exec);
+ *   - an empty / whitespace-only string resolves to UNSET (the field is deleted),
+ *     so "absent" and "the bootstrap runs itself" are the same state — never an
+ *     error.
+ */
+export function validateDorflCmdConfig(config: Config): void {
+	const value = config.dorflCmd;
+	if (value === undefined) {
+		return;
+	}
+	if (typeof value !== 'string') {
+		throw new Error(
+			`dorflCmd must be a string (got ${typeof value}). It is the exact dorfl ` +
+				`COMMAND this repo runs with, forwarded verbatim by the bootstrap ` +
+				`(e.g. "node_modules/.bin/dorfl", "npx dorfl@0.7.0", "./bin/dorfl"). ` +
+				`Leave it unset to run the bootstrap dorfl itself.`,
+		);
+	}
+	const trimmed = value.trim();
+	if (trimmed === '') {
+		// Empty / whitespace-only ⇒ UNSET (never an error): the bootstrap runs itself.
+		delete config.dorflCmd;
+		return;
+	}
+	config.dorflCmd = trimmed;
+}
+
 /** The conventional config location (`~/.config/dorfl/config.json`). */
 export function defaultConfigPath(): string {
 	return join(homedir(), '.config', brand.configDirName, 'config.json');
@@ -973,5 +1044,9 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 	}
 	const merged = mergeConfig(parsed);
 	validateDeadlineConfig(merged);
+	// Validate + normalise (trim; empty ⇒ unset; non-string ⇒ fail-loud) the
+	// repo-declared dorfl command from the global chain (ADR
+	// `dorfl-cmd-repo-settable-exception-to-host-only`).
+	validateDorflCmdConfig(merged);
 	return merged;
 }

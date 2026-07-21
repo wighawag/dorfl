@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {
 	mergeConfig,
 	validateDeadlineConfig,
+	validateDorflCmdConfig,
 	warnDeprecatedConfigKeys,
 	type Config,
 	type PartialConfig,
@@ -110,6 +111,20 @@ export const REPO_ALLOWED_KEYS = [
 	// through the SAME chain as `verify`. Install belongs HERE, never baked into
 	// `verify`.
 	'prepare',
+	// `dorflCmd` (the repo-declared dorfl COMMAND bare `dorfl` self-forwards to —
+	// spec `dorfl-self-version-pinning-and-bootstrap-forward` §1/§3) is a genuine
+	// repo property exactly like `verify`/`prepare`: WHICH dorfl this repo builds/
+	// advances/intakes with is agreed by all collaborators + travels with the repo,
+	// for reproducibility. It is the DELIBERATE, ADR-recorded EXCEPTION to ADR §13's
+	// host-only rule: a machine-command key (same class as the REJECTED
+	// `agentCmd`/`piBin`/`sessionsDir` below) that IS repo-settable, because its
+	// purpose is repo-declared reproducibility, it carries no more trust than the
+	// committed `verify` command the repo already runs, and the forward is ANNOUNCED
+	// on stderr (unlike a silent `piBin`). There is NO trust gate. See ADR
+	// `dorfl-cmd-repo-settable-exception-to-host-only` for the full why + the
+	// reversal of §13 for this one key. Resolved per-repo through the SAME chain as
+	// `verify` (flag > env `DORFL_DORFL_CMD` > per-repo > global > default unset).
+	'dorflCmd',
 	'defaultArbiter',
 	// `autoBuild` (may an agent auto-BUILD undeclared, not-`humanOnly` tasks in
 	// this repo?) is a genuine repo property — the build member of the symmetric
@@ -591,6 +606,11 @@ export function resolveRepoConfigFromLoaded(
 	// (flag / env / per-repo / global) throws with a clear message naming the
 	// field + range — NEVER silently clamped.
 	validateDeadlineConfig(config);
+	// Validate + normalise the repo-declared dorfl command (trim; empty ⇒ unset;
+	// non-string ⇒ fail-loud) after layering, so a malformed value from ANY layer
+	// (flag / env / per-repo / global) surfaces the same clear error (ADR
+	// `dorfl-cmd-repo-settable-exception-to-host-only`).
+	validateDorflCmdConfig(config);
 	return {
 		config,
 		rejected: repo.rejected,

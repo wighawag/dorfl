@@ -121,6 +121,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// with a deprecation warning — see `envOverrides`).
 	noPR: 'boolean',
 	agentCmd: 'string',
+	// `dorflCmd` (the repo-declared dorfl COMMAND bare `dorfl` self-forwards to —
+	// spec `dorfl-self-version-pinning-and-bootstrap-forward`) coerces as a STRING
+	// (carried verbatim, no shell-splitting), so `DORFL_DORFL_CMD="npx dorfl@0.7.0"`
+	// works. Unlike `piBin`/`agentCmd` (host-only) it is ALSO repo-settable (ADR
+	// `dorfl-cmd-repo-settable-exception-to-host-only`); env is simply the
+	// per-machine layer above the committed file in the shared precedence chain.
+	// A non-string / empty value is normalised at load (`validateDorflCmdConfig`).
+	dorflCmd: 'string',
 	model: 'string',
 	harness: {enum: ['null', 'pi']},
 	piBin: 'string',
