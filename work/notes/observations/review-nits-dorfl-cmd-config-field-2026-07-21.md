@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'dorfl-cmd-config-field' (Gate 2 approv
 date: 2026-07-21
 status: open
 reviewOf: dorfl-cmd-config-field
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
