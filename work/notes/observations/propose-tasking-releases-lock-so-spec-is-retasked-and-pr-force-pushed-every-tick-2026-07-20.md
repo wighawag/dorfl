@@ -3,6 +3,7 @@ title: Propose-mode tasking releases the per-item lock on `completed`, so the sp
 type: observation
 status: spotted
 spotted: 2026-07-20
+needsAnswers: true
 ---
 
 ## What was seen
