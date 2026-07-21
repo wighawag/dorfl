@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'install-ci-shim-converges-on-dorfl-cmd
 date: 2026-07-21
 status: open
 reviewOf: install-ci-shim-converges-on-dorfl-cmd
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
