@@ -3,6 +3,7 @@ title: dorflCmd forward must degrade (not fail-loud) when the target is not inst
 type: observation
 status: spotted
 spotted: 2026-07-21
+needsAnswers: true
 ---
 
 ## What was seen
