@@ -9,3 +9,7 @@ release the published changelog will name a placeholder (`dorflBin`) that never
 existed. Noticed while documenting `dorflCmd` (task `dorfl-cmd-docs-and-upgrade-ritual`,
 which updated the setup nudge itself to `dorflCmd`). Left unchanged here — editing
 another task's changeset is outside this task's scope.
+
+## Update (2026-07-21, resolved)
+
+Fixed: `.changeset/setup-nudges-dorfl-version-pin.md` no longer says "a future `dorflBin` pin field" — reworded to reference the shipped `dorflCmd` field. The published changelog will now name the real field.
