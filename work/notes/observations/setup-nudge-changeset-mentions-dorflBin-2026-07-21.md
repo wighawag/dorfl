@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Pending changeset still mentions the placeholder `dorflBin`
 
 2026-07-21 — `.changeset/setup-nudges-dorfl-version-pin.md` (from the done task
