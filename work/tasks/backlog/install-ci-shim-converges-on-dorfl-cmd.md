@@ -2,7 +2,6 @@
 title: Converge the install-ci resolver shim onto the generic `dorflCmd` bootstrap forward
 slug: install-ci-shim-converges-on-dorfl-cmd
 spec: dorfl-self-version-pinning-and-bootstrap-forward
-humanOnly: true
 blockedBy: [dorfl-bootstrap-self-forward]
 covers: [4]
 ---
@@ -47,10 +46,14 @@ the laptop use ONE code path (JS and non-JS alike):
 
 ## Prompt
 
-> `humanOnly`: this task edits CI auth/setup scaffolding (the `install-ci`-emitted
-> `dorfl-setup` composite action + workflow templates) that provisions the runner's
-> environment and sits next to secret/branch-protection wiring — by nature a human should
-> drive it (WORK-CONTRACT `humanOnly` = never-for-agents-by-nature: release/CI/secrets).
+> This is AGENT-BUILDABLE (not `humanOnly`): it only changes the STRING-TEMPLATING that
+> emits the `dorfl-setup` resolver shim + the tests asserting that emitted YAML. It touches
+> NO secrets, auth, branch-protection, or release pipeline (the `verify` required-check
+> name, git identity, and harness install are all UNCHANGED). Proximity to CI scaffolding
+> is not the same as handling secrets — WORK-CONTRACT `humanOnly` is reserved for
+> never-by-nature (secrets/release/security), and review-first-ness is the STAGING
+> position's job, not this flag's. (An earlier draft wrongly marked it `humanOnly`; the
+> classification was corrected 2026-07-21.)
 >
 > Goal: converge the CI resolver shim onto the generic `dorflCmd` bootstrap forward added
 > by `dorfl-bootstrap-self-forward`, so CI and the laptop pin dorfl by the SAME mechanism.
