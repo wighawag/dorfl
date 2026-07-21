@@ -1603,7 +1603,9 @@ function collectEmittedTasks(
  * Sections (all suppressed when empty, so the body stays honest):
  *   1. A lead line naming the source spec + emitted task count.
  *   2. **Tasks** — one bullet per task: `slug — title`, plus `covers:` (which
- *      spec user stories it maps to), `blockedBy:`, and `needsAnswers` if set.
+ *      spec user stories it maps to, as `US-<n>` so GitHub does not autolink
+ *      the index as an issue/PR reference), `blockedBy:`, and `needsAnswers`
+ *      if set.
  *   3. **Dependency graph** — the KEYSTONE(S) (tasks whose `blockedBy` names no
  *      other task in this set, so they land first) and the `blockedBy` edges.
  *   4. **Needs answers** — any open questions the tasker review→edit loop
@@ -1637,7 +1639,12 @@ export function composeTaskingProposeBody(
 	for (const t of tasks) {
 		lines.push(`- **${t.slug}** — ${t.title}`);
 		if (t.covers.length > 0) {
-			lines.push(`  - covers: ${t.covers.map((c) => `US #${c}`).join(', ')}`);
+			// User-story ids are rendered as `US-<n>` (NOT `US #<n>`): a bare
+			// `#<n>` in a GitHub PR body autolinks to issue/PR #<n>, which is a
+			// confusing false reference (the number is a spec user-story index,
+			// not an issue). The hyphenated form carries the same meaning without
+			// tripping GitHub's autolinker.
+			lines.push(`  - covers: ${t.covers.map((c) => `US-${c}`).join(', ')}`);
 		}
 		if (t.blockedBy.length > 0) {
 			lines.push(`  - blockedBy: ${t.blockedBy.join(', ')}`);

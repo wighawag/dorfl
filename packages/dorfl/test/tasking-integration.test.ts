@@ -450,10 +450,14 @@ describe('do prd: threads a slice-set SUMMARY as the propose-mode PR body (task 
 		expect(args).toContain('**gamma**');
 		expect(args).toContain('gamma — deferred seam');
 
-		// Coverage map (which prd user stories each task covers).
-		expect(args).toContain('covers: US #1');
-		expect(args).toContain('covers: US #1, US #2');
-		expect(args).toContain('covers: US #3');
+		// Coverage map (which prd user stories each task covers). Rendered as
+		// `US-<n>`, NOT `US #<n>` — a bare `#<n>` in a GitHub PR body autolinks
+		// to issue/PR #<n> (a confusing false reference).
+		expect(args).toContain('covers: US-1');
+		expect(args).toContain('covers: US-1, US-2');
+		expect(args).toContain('covers: US-3');
+		// And it must NOT emit the autolinking `US #<n>` form.
+		expect(args).not.toMatch(/covers: US #\d/);
 
 		// Dependency graph (keystone + `blockedBy` edges within the set).
 		expect(args).toMatch(/Keystones?: .*alpha/);
