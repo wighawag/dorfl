@@ -1,5 +1,68 @@
 # dorfl
 
+## 0.8.0
+
+### Minor Changes
+
+- 11b63b8: Make the global `dorfl` a thin bootstrap that self-forwards to the repo-declared `dorflCmd`.
+
+  On startup, BEFORE any command dispatch, `dorfl` reads the nearest repo `dorfl.json`; if it declares `dorflCmd` (added by `dorfl-cmd-config-field`) and we are not already the forwarded process, it `exec`s that command with the ORIGINAL argv + env inherited — after a one-line **stderr** notice — and exits with the child's exit code (transparent passthrough). This makes the taught, project-independent `dorfl` command reproducible + repo-owned instead of floating with whatever global dorfl a machine happens to have. This is the forward half of the `dorfl-self-version-pinning-and-bootstrap-forward` spec (stories 1, 4, 5).
+
+  Guards, all covered end-to-end:
+  - **Onboarding-safe:** NO `dorflCmd` ⇒ the bootstrap runs itself (`setup`/`install-ci` in a not-yet-pinned repo just work — never chicken-and-egg).
+  - **Loop-safe:** the forwarded child runs with a `DORFL_FORWARDED=1` env marker, so a forwarded dorfl reading the SAME `dorfl.json` runs in-process instead of forwarding again (a single hop).
+  - **Fail loud, never silent degrade:** a declared `dorflCmd` whose target does not resolve (e.g. `node_modules/.bin/dorfl` before the repo's dependency install) — or a present binary that spawn-errors — errors clearly, naming the `dorflCmd` value + the `dorfl.json` path + the fix (run the dependency install first) + the `--no-forward`/`DORFL_NO_FORWARD` bypass, with a non-zero exit. A working forward whose COMMAND merely exits non-zero (e.g. `verify` red) is passed through transparently, not treated as broken.
+  - **Non-recursive by design:** the forward decision fires ONCE, at bare-`dorfl` startup, in the checkout root. The gate worktree that runs `prepare`/`verify` is prepared by the already-running dorfl via `spawn('bash', ['-c', cmd])` — it never launches a new `dorfl`, so a fresh worktree's empty `node_modules` never re-triggers the forward.
+  - **Announced + opt-outable:** the notice goes to **stderr** only (stdout stays clean for `--json`); `DORFL_NO_FORWARD=1` OR `--no-forward` each disable AND silence the forward, honoured before dispatch (the `--no-forward` token is stripped before commander parses).
+
+  `dorflCmd` is honoured verbatim (no trust gate — the same trust as the committed `verify` command). The forward is an injectable seam (`bootstrap-forward.ts`: `decideForward` + `performForward` + `maybeForward`), unit-tested without re-execing a real second dorfl or hitting the network.
+
+- c7033c7: Add the optional `dorflCmd` config field — the repo-declared dorfl COMMAND.
+
+  A repo's committed `dorfl.json` may now declare `dorflCmd`: the exact dorfl command that repo runs with (e.g. `"node_modules/.bin/dorfl"`, `"npx dorfl@0.7.0"`, `"./bin/dorfl"`, `"mise exec dorfl@0.7.0 --"`). This is the config half of the `dorfl-self-version-pinning-and-bootstrap-forward` spec: a later task makes bare `dorfl` (a thin bootstrap) self-forward to it, so the taught, project-independent `dorfl` command becomes reproducible + repo-owned instead of floating with whatever global dorfl a machine happens to have. This task adds ONLY the field — parse, validate, and expose it through the config-resolution chain; the forwarding/announce/opt-out land in `dorfl-bootstrap-self-forward`.
+
+  The field is honoured verbatim (no version parsing, no download/resolution, no shell-splitting — a version is expressed by writing `npx dorfl@<version>` yourself). It is optional with no default: unset/empty/whitespace-only ⇒ absent (the bootstrap runs itself, never an error); leading/trailing whitespace is trimmed; a non-string value fails loud at config load. It resolves per-repo through the standard chain (flag > env `DORFL_DORFL_CMD` > per-repo `dorfl.json` > global > default unset).
+
+  Unlike the host-only machine-command keys `agentCmd`/`piBin`/`sessionsDir` (kept in `REPO_REJECTED_KEYS` per `execution-substrate-decisions.md` §13 — a committed repo file must not redirect where the host runs), `dorflCmd` IS repo-settable (added to `REPO_ALLOWED_KEYS`). This deliberate reversal of the host-only rule for one key — because its purpose is repo-declared reproducibility, it carries no more trust than the committed `verify` command the repo already runs, and the forward is announced, not silent — is recorded in a new ADR (`dorfl-cmd-repo-settable-exception-to-host-only.md`), cross-referenced from the field's JSDoc and from ADR §13. There is no trust gate.
+
+### Patch Changes
+
+- 37230fb: Document the `dorflCmd` pin model + the version-upgrade ritual (docs-only).
+
+  New reference page `docs/dorfl-cmd/README.md` explains the shipped pin model: dorfl is a TOOL like `prettier`/`tsc`, the globally-installed `dorfl` is a thin BOOTSTRAP, a repo declares which dorfl it runs via `dorflCmd` in `dorfl.json`, and bare `dorfl` self-forwards to it (announced on stderr; opt out with `--no-forward` / `DORFL_NO_FORWARD=1`). It covers the per-ecosystem declaration examples (JS devDep `node_modules/.bin/dorfl`, `npx dorfl@<version>`, a vendored `./bin/dorfl`, a `mise`/`asdf` shim), the fail-loud-on-broken-pin behaviour, the upgrade ritual (bump `dorflCmd` → `dorfl sync` → re-run `install-ci` only if the workflow templates changed), and the explicit non-goals (no version resolution/download/cache — write `npx dorfl@<version>` yourself; no trust gate — same trust as the committed `verify` command).
+
+  Cross-references added: the README `Pin the dorfl version (dorflCmd)` section, the website `dorfl.json` card, a `CONTEXT.md` glossary entry (distinguishing `dorflCmd` — the pinned EXECUTABLE — from `dorfl sync` — the `work/protocol/` DOCS), and the `docs/ci/README.md` shim note. The `setup` skill's version-pin nudge now points at the shipped `dorflCmd` field (and this page) instead of a placeholder `dorflBin`. No runtime behaviour changes.
+
+- 6c488c5: Converge the `install-ci` CI resolver shim onto the generic `dorflCmd` bootstrap forward.
+
+  The emitted `dorfl-setup` composite action historically installed the global `dorfl` (`npm install -g dorfl`) and then wrote a bespoke `$PATH` shim that preferred a project-local `node_modules/.bin/dorfl` over the global (task `install-ci-prefer-project-local-dorfl`). That shim was CI-only AND JS-specific (it hardcoded `node_modules/.bin`).
+
+  Now that the global bootstrap `dorfl` self-forwards to the repo-declared `dorflCmd` on its own (task `dorfl-bootstrap-self-forward`), that shim is redundant. This change REMOVES it entirely: CI's `npm install -g dorfl` leaves the bootstrap on `$PATH`, and the bootstrap forwards to the repo's declared `dorflCmd` by the SAME generic mechanism the laptop uses — one code path, JS and non-JS alike (spec `dorfl-self-version-pinning-and-bootstrap-forward` §6 / story 4).
+
+  A JS repo that pinned via a devDep declares `dorflCmd: "node_modules/.bin/dorfl"` (one line; `setup` nudges it) and gets the pin in CI via the forward; a repo with no `dorflCmd` runs the global bootstrap identically on CI and the laptop (onboarding-safe). Keeping a JS-only no-`dorflCmd` fallback was deliberately rejected — it would re-introduce the JS-specific CI-only special case the convergence removes, and a repo declaring both the devDep and `dorflCmd` would double-resolve (shim execs the local bin which then forwards again).
+
+  Everything else in the emitted CI is UNCHANGED: the `verify` required-check name, the `dorfl[bot]` git identity, the harness install, and the `--fake` snapshot mode. Only the dorfl-resolution step changed.
+
+- 2d4b35c: Harden the Gate-2 review-gate wiring regression test against transient CI `spawnSync` fork failures.
+
+  `cli-complete-run-review-gate-wiring.test.ts` proves a `harness: pi` gate does NOT trip the null-adapter empty-`agentCmd` guard by stubbing `piBin: 'true'` and asserting the launch fails DOWNSTREAM as a `ReviewParseError` (empty verdict). Under a heavily-loaded CI runner `spawnSync` can instead fail the FORK itself with a transient `EAGAIN` ("failed to spawn pi …") — an environment flake, not the empty-`agentCmd` guard and not a wiring regression. The core invariant (the surfaced error is NEVER about `agentCmd`) is now asserted unconditionally, and the stronger `ReviewParseError` assertion is skipped only when the message is a transient spawn failure, so a fork hiccup no longer reddens the suite.
+
+- 8e5d237: `setup` now nudges the user to PIN the dorfl version a repo runs with (reproducibility).
+
+  Agents are taught to invoke bare `dorfl` so the workflow stays project-independent, but bare `dorfl` then runs whatever version is globally installed — which drifts (a laptop on one version, CI floating to latest via `npm install -g dorfl`, a repo reasoned-about under a third). The `setup` skill's adoption conversation now includes a language-agnostic nudge, in the same style as its per-change-convention and `testFirst` nudges (folded into the plan, no extra question round): it asks once whether to pin the dorfl version, and records it the language-appropriate way — a root `package.json` devDependency for a JS repo (the `install-ci` CI shim already prefers a project-local `node_modules/.bin/dorfl`), or a vendored `./bin/dorfl` / `npx dorfl@<version>` / `mise` / `asdf` shim for a non-JS repo (never inventing a JS dependency). The scaffolded `CONTEXT.md` `## Conventions` stub carries a matching reminder. Complements the `dorflCmd` pin field in `dorfl.json` (spec `dorfl-self-version-pinning-and-bootstrap-forward`): a repo that declares `dorflCmd` has bare `dorfl` self-forward to the pinned command.
+
+- 1f37af5: A tasking (`spec:`) review that DISAPPROVES now exits 0 (green CI leg) and, in propose mode, CLOSES a stale open PR with the review as the closing comment while keeping the branch.
+
+  Two coupled fixes to the tasking disapprove path:
+  - **A clean park-for-human is a SUCCESS, not a failure.** When a tasking review disapproves the produced task SET (or the tasker loop can't converge, or a co-located sidecar / unparseable verdict blocks), `performTask` cleanly surfaces the spec for the human (`needsAnswers: true` body + a question sidecar on `main`, lock RELEASED) and now returns exit 0 instead of exit 1 — so the `advance-propose` CI leg is GREEN, matching the build path (which already treats a clean-surface bounce as exit 0). This stops a normal "I've surfaced a question, over to you" outcome from reddening CI every time and training operators to ignore red. The surface messaging was reworded to say the item is "parked for your attention" rather than the misleading "marked the per-item lock stuck" (the stuck lock state is retired; the lock is released, not held).
+  - **Disapprove closes the stale PR (keeps the branch); a later approving re-task reopens it.** Because the earlier multi-run bug could already have opened a tasking PR, a disapprove now closes that PR — with the disapproving review as the closing comment (so the reason is visible ON the PR) — while KEEPING the branch as the recovery point. Only-if-exists: it never opens a PR just to close it, and merge mode (no PR) never consults the seam. A new advisory, never-throw `ReviewProvider.closeRequestOnBranch` (GitHub: `gh pr close <branch> --comment` with NO `--delete-branch`) does the close; `openRequest` now REOPENS a previously-closed PR (`gh pr reopen`) instead of opening a duplicate, so an approving re-task lands back on the same PR with its history and closing-comment thread intact.
+
+- df96cd9: Hold the spec lock across the propose PR so CI stops re-tasking a spec (and force-pushing its open PR) on every tick.
+
+  In propose mode `performTask` released the `spec:<slug>` per-item lock as soon as the tasking PR opened, but the durable `specs/ready → specs/tasked` move lives only on the pushed PR branch — `main` still holds the spec in `ready/`. So the next in-place scan saw the spec eligible again (ready + not-tasked + lock free) and re-tasked it, force-recreating the `work/spec-<slug>` branch (`git switch -C`) and force-pushing the SAME PR, which regenerated its review every scheduled tick until a human merged or closed it.
+
+  The tasking path now mirrors the already-correct build path (`propose-keep-lock-until-pr-merge`): the `spec:<slug>` lock is released only when the work is durably on `main` (merge mode); on propose it stays HELD across the open PR — the held lock is the in-flight-tasking marker. `scoreSpecs`/`scanRepoPaths` and the local autopick driver now subtract held-spec slugs from the taskable pool (a new `heldSpecSlugs`/`heldSpecSlugsStrict`, the spec analogue of the existing held-task-slug subtraction), so an in-flight spec never leaks back into the propose matrix. The lock is reaped when the PR merges (or via `release-lock` if a human closes it unmerged).
+
 ## 0.7.0
 
 ### Minor Changes
