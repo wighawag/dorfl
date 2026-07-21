@@ -958,7 +958,15 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			expect(existsOnArbiterMain(seeded.repo, 'done', slugs[i])).toBe(true);
 			expect(stuckLockOnArbiter(seeded.repo, slugs[i])).toBe(false);
 		}
-	});
+		// Generous explicit timeout: this drives N=7 REAL concurrent git
+		// integrations against a --bare file:// arbiter. It passes in ~4-5s in
+		// isolation but under full-suite CPU/IO load the herd-serialised merges can
+		// exceed the default 5s per-test timeout — an intermittent RED that made the
+		// acceptance gate flaky (see work/notes/observations/
+		// integration-core-mergeretries-disabled-n7-test-times-out-2026-07-20.md).
+		// The 30s ceiling is the same generous budget stale-lease-all-push-sites uses
+		// for its heavy git test; it removes the flake without masking a real hang.
+	}, 30000);
 
 	// Control for the test above: with the re-rebase-and-retry mechanism DISABLED
 	// (`mergeRetries: 0`), the SAME high-fan-out promotion does NOT all land. Every
@@ -1025,7 +1033,12 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		// re-rebased onto the winner's advanced main.
 		expect(landed.length).toBeLessThan(N);
 		expect(settled).toHaveLength(N);
-	});
+		// Generous explicit timeout, same reasoning as the N=7 ALL-land test above:
+		// N=7 REAL concurrent git integrations against a --bare file:// arbiter pass
+		// in ~4-5s in isolation but can exceed the default 5s under full-suite load,
+		// which reds the acceptance gate intermittently (see work/notes/observations/
+		// integration-core-mergeretries-disabled-n7-test-times-out-2026-07-20.md).
+	}, 30000);
 });
 
 describe('integration-core — Race 2: sibling-slug ledger rebase reconciliation', () => {
