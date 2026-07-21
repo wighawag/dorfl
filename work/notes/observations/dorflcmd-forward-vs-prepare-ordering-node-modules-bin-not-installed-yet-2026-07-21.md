@@ -64,39 +64,58 @@ degrade, NOT an error. The `dorfl-setup` action also orders a project `pnpm inst
 BEFORE the resolver shim goes on PATH (comment: "the shim runs AFTER the install"), so the
 window is small in CI; the `-x` check covers it regardless.
 
-## The distinction the bootstrap forward MUST make
+## The recursion-safety fact that decides it (traced)
 
-Two different "cannot run" cases, opposite handling:
+The question "if we fail on an absent `dorflCmd`, won't the fresh gate worktree (no
+`node_modules`) also fail?" resolves to NO, because **the forward is a once-at-startup,
+checkout-root-only decision — it is NOT recursive:**
 
-- **Target ABSENT** (the path/command does not resolve yet — `node_modules/.bin/dorfl`
-  before the repo's OWN install step; an `npx`/`mise` cache miss is NOT this — those
-  self-fetch): DEGRADE to the bootstrap/global dorfl so the command still RUNS. It is NOT
-  dorfl's job to install the pin (see the CORRECTION above — the repo's install
-  step/hook/user does that); the degrade just avoids bricking the window before the pin
-  exists AND covers commands that install nothing. NOT an error.
-- **Target PRESENT but exec FAILED** (spawn error, non-zero from a real binary): fail loud
-  (the pin is genuinely broken).
+- The gate worktree is created by the ALREADY-RUNNING dorfl (`git worktree add` in
+  `integration-core.ts`), and its `prepare`/`verify` run via `spawn('bash', ['-c', cmd],
+  {cwd: worktreeDir})` (`prepare.ts`/`verify.ts`) — they execute the repo's `pnpm install` /
+  build DIRECTLY as bash, NEVER by launching a new `dorfl`.
+- So a fresh worktree's empty `node_modules` NEVER triggers a second forward. `dorflCmd`
+  is consulted only at the top-level entry, once, in the checkout root.
 
-Consequence to accept + document: any `dorfl` invocation BEFORE the repo's install step has
-populated `node_modules/.bin/dorfl` uses the BOOTSTRAP dorfl, not the pin — a window that
-the repo closes by installing deps early (in CI, the `install-ci` project-setup hook runs
-the install BEFORE dorfl steps; the `-x`/absent check covers any residual window). The
-`npx dorfl@<version>` / vendored-`./bin/dorfl` forms do NOT have this window (npx
-self-fetches; a vendored binary is committed), so a repo that
-wants the pin honoured even for the prepare-running invocation should prefer those.
+The worktree needs `prepare` so `verify` (build/test) has the repo's deps IN THAT
+WORKTREE — nothing to do with installing the dorfl CLI (the outer dorfl is already running).
+
+## The decision (option B — FAIL LOUD on declared-but-absent)
+
+Maintainer decision 2026-07-21: a DECLARED `dorflCmd` whose target does not resolve FAILS
+LOUD, it does NOT silently degrade. Rationale:
+
+- The repo's dependency install is a hard PRECONDITION of invoking dorfl (CI's
+  `install-ci` project-setup hook runs it before the dorfl steps; a user runs `pnpm
+  install`). If `node_modules/.bin/dorfl` is absent at the top-level entry, the install
+  almost certainly did not run — a MISCONFIGURATION.
+- Silently degrading to the global would run the WRONG version, the exact drift the pin
+  exists to prevent — worse than a clear error.
+- Onboarding is unaffected: `setup`/`install-ci` run before `dorflCmd` is declared, so they
+  hit the no-`dorflCmd`-run-self branch, never the declared-but-absent one.
+- The rare legitimate pre-install read-only invocation (a pinned repo running `dorfl
+  status` before installing) uses the `--no-forward` / `DORFL_NO_FORWARD=1` bypass.
+
+So BOTH "declared-but-absent" and "present-but-exec-failed" fail loud with a clear message
+(value + `dorfl.json` path + the fix + the bypass). `npx dorfl@<version>` / a vendored
+`./bin/dorfl` avoid the absent case entirely (self-fetching / committed).
 
 ## Fix applied
 
-- `dorfl-bootstrap-self-forward` acceptance criteria + prompt: replace "missing binary =
-  fail loud" with the ABSENT-degrades / PRESENT-but-failed-fails-loud distinction, mirror
-  the shim's `-x` existence check, and add a test for "dorflCmd target absent ⇒ run
-  bootstrap (prepare can still run), not an error."
-- Spec Solution §2/§4: record the degrade-when-absent rule + the one-invocation
-  bootstrap-runs-prepare skew for the `node_modules/.bin` form.
+- `dorfl-bootstrap-self-forward` acceptance criteria + prompt: declared-but-absent FAILS
+  LOUD (not degrade); add the once-at-startup / non-recursive framing + a test proving the
+  gate-worktree `prepare` runs via bash (no new `dorfl`, so an un-installed worktree does
+  not re-trigger the forward).
+- Spec Solution §2: record fail-loud-on-absent + the recursion-safety rationale.
 
 ## Refs
 
-- `packages/dorfl/src/install-ci-core.ts` — PREFER-LOCAL RESOLVER shim (`-x` check).
-- `packages/dorfl/src/do.ts` — `prepare` runs via dorfl (`ensurePrepared`/strategy.prepare).
+- `packages/dorfl/src/install-ci-core.ts` — PREFER-LOCAL RESOLVER shim (`-x` check; the CI
+  shim degrades, but dorfl-the-bootstrap fails loud because — unlike a dumb bash shim — it
+  can distinguish no-`dorflCmd`-declared (onboarding) from declared-but-absent (misconfig)).
+- `packages/dorfl/src/prepare.ts` / `verify.ts` — `runPrepare`/`runVerify` execute the
+  repo command via `spawn('bash', ['-c', cmd], {cwd})`, NEVER a recursive `dorfl` (the
+  fact that makes fail-loud safe).
+- `packages/dorfl/src/integration-core.ts` — the throwaway gate worktree + `ensurePrepared({cwd: worktreeDir})`.
 - Task `work/tasks/backlog/dorfl-bootstrap-self-forward.md`; spec
   `work/specs/tasked/dorfl-self-version-pinning-and-bootstrap-forward.md`.

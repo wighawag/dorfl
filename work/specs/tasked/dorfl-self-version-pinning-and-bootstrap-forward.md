@@ -54,20 +54,21 @@ The design is deliberately **minimal** (the decisions below were made 2026-07-21
    command is not THIS running process, it `exec`s the command (inheriting argv + env),
    after a one-line **stderr** notice. When NO `dorflCmd` is declared (the onboarding
    case — `setup`/`install-ci` run in a repo with no pin yet), the bootstrap runs
-   ITSELF, so onboarding is never chicken-and-egg. A `dorflCmd` whose target does NOT
-   EXIST YET DEGRADES to the bootstrap (NOT an error), because the JS
-   `node_modules/.bin/dorfl` form does not exist until the repo's dependencies are
-   installed (mirroring the existing `install-ci` shim's `if [ -x node_modules/.bin/dorfl ]`
-   check). NOTE the mechanism precisely: dorfl does NOT install its own pin — dorfl's
-   `prepare` is worktree-gate env-prep run inside build commands (often in a throwaway
-   worktree; read-only commands run none), so it does not reliably populate
-   `node_modules/.bin/dorfl`. The REPO's own install populates it (CI's `install-ci`
-   project-setup hook runs the install before the dorfl steps; locally the user runs `pnpm
-   install`). The degrade exists only so the bootstrap can RUN in the window before that
-   install and for install-free commands (`npx dorfl@<v>` / a vendored `./bin/dorfl` avoid
-   the window — self-fetching / committed). A `dorflCmd` that is PRESENT but exec-FAILS (a
-   real binary that spawn-errors) IS a clear error naming the command + `dorfl.json` path
-   — never a silent fall-through to a skewed global.
+   ITSELF, so onboarding is never chicken-and-egg. A `dorflCmd` that is DECLARED but whose
+   target does not resolve FAILS LOUD (decision 2026-07-21, option B) — a clear error
+   naming the value + `dorfl.json` path + the fix (run the dependency install) + the
+   `--no-forward`/`DORFL_NO_FORWARD` bypass — NOT a silent degrade to the global, which
+   would run the WRONG version and defeat the pin. This is SAFE because the forward is a
+   ONCE-AT-STARTUP, checkout-root-only decision, NOT recursive: the gate worktree that
+   needs `prepare` is created + prepared by the ALREADY-RUNNING dorfl, which runs the
+   repo's `prepare`/`verify` via `spawn('bash', ['-c', cmd])` in the worktree — it never
+   launches a new `dorfl`, so a fresh worktree's empty `node_modules` never re-triggers the
+   forward. The pin is populated by the REPO's own install (CI `install-ci` project-setup
+   hook, or the user's `pnpm install`); dorfl does NOT install its own pin (`prepare` is
+   worktree-gate env-prep, not a CLI install). `setup`/`install-ci` are unaffected — they
+   run before `dorflCmd` is declared, hitting the run-self branch. A PRESENT-but-exec-FAILS
+   `dorflCmd` (a real binary that spawn-errors) is the same clear error. `npx dorfl@<v>` /
+   a vendored `./bin/dorfl` avoid the absent case (self-fetching / committed).
 
 3. **NO trust gate.** `dorflCmd` is honoured verbatim from the repo's committed
    `dorfl.json`, at the SAME trust level dorfl already grants the committed `verify`

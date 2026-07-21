@@ -22,26 +22,27 @@ Guards, all end-to-end in this one vertical task:
 - **Loop-safe:** the forwarded dorfl reads the SAME `dorfl.json` and must NOT forward
   again forever. Detect "this command IS me / already forwarded" and run in-process
   rather than re-exec (e.g. an env marker set on the child, and/or a same-target check).
-- **Absent-target DEGRADES (not an error) — the install ordering.** A `dorflCmd`
-  pointing at a path that does NOT EXIST YET (the JS `node_modules/.bin/dorfl` form before
-  the repo's dependencies are installed) DEGRADES to the bootstrap/global dorfl — NOT a
-  fail-loud error. Mirror the existing `install-ci` CI shim, which forwards only
-  `if [ -x node_modules/.bin/dorfl ]` and else falls back to the global. IMPORTANT (do NOT
-  repeat the earlier mistake): it is NOT dorfl's job to install its own pin — dorfl's
-  `prepare` is worktree-gate env-prep run deep inside build commands, often in a throwaway
-  worktree, and read-only commands run no prepare at all, so "the bootstrap runs prepare"
-  does NOT reliably create `node_modules/.bin/dorfl`. The repo's OWN dependency install
-  populates it: in CI the `install-ci` project-setup hook runs the install BEFORE the
-  dorfl steps; locally the user runs `pnpm install`. The degrade exists so the bootstrap
-  can RUN in the window before that install (and for commands that install nothing) — not
-  to bootstrap the pin. See observation
-  `dorflcmd-forward-vs-prepare-ordering-node-modules-bin-not-installed-yet` for the traced
-  mechanism. `npx dorfl@<version>` / a vendored `./bin/dorfl` have no such window
-  (self-fetching / committed).
-- **Fail-loud only when the target is PRESENT but the exec FAILS** (a real binary that
-  spawn-errors or exits non-zero for a non-forwarding reason) — a CLEAR error naming the
-  command + the `dorfl.json` path + how to bypass. A target that simply does not resolve
-  yet is the DEGRADE case above, never fail-loud.
+- **The forward decision fires ONCE, at bare-`dorfl` startup, in the CHECKOUT ROOT — it is
+  NOT recursive.** This is the load-bearing fact that makes fail-loud safe. The gate
+  worktree that runs `prepare`/`verify` does NOT launch a new `dorfl`: the already-running
+  dorfl creates the worktree and runs the repo's `prepare`/`verify` commands via
+  `spawn('bash', ['-c', cmd], {cwd: worktreeDir})` (see `prepare.ts`/`verify.ts`). So a
+  fresh worktree's empty `node_modules` NEVER triggers a second forward. `dorflCmd` is
+  consulted only at the top-level entry, once.
+- **Declared-but-ABSENT `dorflCmd` FAILS LOUD** (decision 2026-07-21, option B). If
+  `dorflCmd` is declared but its target does not resolve (e.g. `node_modules/.bin/dorfl`
+  before the repo's deps are installed), that is almost always a MISCONFIGURATION (the
+  repo's install step did not run) — silently degrading to the global would run the WRONG
+  version and defeat the whole point of pinning. Emit a CLEAR error naming the `dorflCmd`
+  value + the `dorfl.json` path + the fix (run the dependency install first, e.g. `pnpm
+  install` / the CI project-setup hook) + the `--no-forward` / `DORFL_NO_FORWARD=1` bypass.
+  Onboarding is NOT affected: `setup`/`install-ci` run in a repo that has NOT declared
+  `dorflCmd` yet, so they hit the no-`dorflCmd`-run-self branch, never this one. The rare
+  legitimate case (a pinned repo running a read-only `dorfl status` before installing) uses
+  the `--no-forward` bypass.
+- **PRESENT but exec FAILS** (a real binary that spawn-errors / exits non-zero for a
+  non-forwarding reason): also a CLEAR error (the pin is genuinely broken), same shape as
+  the absent case.
 - **Announced:** one line to **stderr** (never stdout — must not corrupt `--json`),
   e.g. `dorfl: forwarding to `<cmd>` (from <path>/dorfl.json)`.
 - **Opt-out (both forms):** `DORFL_NO_FORWARD=1` OR a CLI flag `--no-forward` DISABLES
@@ -56,17 +57,18 @@ Guards, all end-to-end in this one vertical task:
       behaviour) — a test proves no forward path is taken.
 - [ ] Re-entrancy: the forwarded process does not forward again (no infinite loop) — a
       test drives a `dorflCmd` that points back at dorfl and asserts a single hop.
-- [ ] A `dorflCmd` whose target does NOT EXIST YET (e.g. `node_modules/.bin/dorfl` before
-      the repo's own dependency install) DEGRADES to the bootstrap/global dorfl and runs
-      normally — NOT an error (so a fresh checkout still runs in the window before the
-      repo's install step populates the pin, and read-only commands that never install
-      anything still work). A test drives an absent `dorflCmd` path and asserts the
-      bootstrap runs, no error. (Note: dorfl does NOT install the pin itself — the repo's
-      install step / CI project-setup hook / user does.)
+- [ ] A declared `dorflCmd` whose target does NOT resolve (absent — e.g.
+      `node_modules/.bin/dorfl` before the repo's dependency install) FAILS LOUD: a clear,
+      actionable error naming the `dorflCmd` value + `dorfl.json` path + the fix (run the
+      dependency install first) + the `--no-forward`/`DORFL_NO_FORWARD` bypass, and a
+      non-zero exit — NOT a silent degrade to the global (which would run the wrong
+      version). A test drives an absent `dorflCmd` and asserts the loud error.
 - [ ] A `dorflCmd` that is PRESENT but exec-fails (a real binary that spawn-errors / exits
-      non-zero for a non-forwarding reason) yields a clear, actionable error (names the
-      command + `dorfl.json` path + the `--no-forward`/`DORFL_NO_FORWARD` bypass) and a
-      non-zero exit. A test distinguishes this from the absent-degrades case.
+      non-zero) yields the same clear, actionable error. Tests cover both absent and
+      present-but-failed.
+- [ ] The forward is NOT recursive: a test proves the gate-worktree `prepare` path runs
+      the repo command via bash (not a new `dorfl`), so an un-installed worktree does not
+      re-trigger the forward (the forward hook runs once, at entry).
 - [ ] The notice goes to STDERR only; a `--json`-producing command's STDOUT is uncorrupted
       when a forward happens (assert stdout is exactly the forwarded stdout).
 - [ ] `DORFL_NO_FORWARD=1` and `--no-forward` each disable forwarding + suppress the
@@ -97,20 +99,25 @@ Guards, all end-to-end in this one vertical task:
 > second dorfl or hitting the network — mirror how the codebase already injects git/agent
 > seams in tests. Cover, end to end: forward-happens, no-`dorflCmd`-runs-self,
 > re-entrancy-single-hop (set an env marker on the child so the forwarded dorfl reading the
-> same `dorfl.json` runs in-process instead of forwarding again), ABSENT-target-DEGRADES
-> (a `dorflCmd` path that does not exist yet — the `node_modules/.bin/dorfl`-before-prepare
-> case — runs the bootstrap, NOT an error; mirror the existing `install-ci` shim's
-> `if [ -x ... ]` existence check in `install-ci-core.ts`), PRESENT-but-exec-fails-fails-
-> loud, stderr-only-notice (stdout uncorrupted for `--json`), and BOTH opt-outs
+> same `dorfl.json` runs in-process instead of forwarding again), ABSENT-target-FAILS-LOUD
+> (a declared `dorflCmd` whose target does not resolve — the `node_modules/.bin/dorfl`-
+> before-install case — errors clearly, NOT a silent degrade), PRESENT-but-exec-fails-
+> fails-loud, stderr-only-notice (stdout uncorrupted for `--json`), and BOTH opt-outs
 > (`DORFL_NO_FORWARD=1` env + `--no-forward` flag) disabling + silencing the forward.
 >
-> The absent-degrades rule is LOAD-BEARING but for a PRECISE reason — do NOT restate the
-> wrong version: it is NOT that dorfl runs `prepare` to install its own pin (traced false:
-> dorfl's `prepare` is worktree-gate env-prep, often in a throwaway tree, and read-only
-> commands run none). The pin is populated by the REPO's own dependency install (CI's
-> `install-ci` project-setup hook, or the user's `pnpm install`). The degrade just lets the
-> bootstrap RUN in the window before that install and for install-free commands —
-> forwarding to an absent pin would brick a fresh checkout. See the observation
+> Absent-handling is FAIL LOUD (decision 2026-07-21, option B), and it is SAFE because the
+> forward is a ONCE-AT-STARTUP, checkout-root-only decision — NOT recursive. Trace it to be
+> sure: the gate worktree that needs `prepare` is created + prepared by the ALREADY-RUNNING
+> dorfl, which runs the repo's `prepare`/`verify` via `spawn('bash', ['-c', cmd], {cwd:
+> worktreeDir})` (`prepare.ts`/`verify.ts`) — it NEVER launches a new `dorfl`, so a fresh
+> worktree's empty `node_modules` never re-triggers the forward. Therefore a
+> declared-but-absent `dorflCmd` at the top level is almost always a misconfiguration (the
+> repo's install did not run); fail loud with the fix (run the dependency install) + the
+> `--no-forward`/`DORFL_NO_FORWARD` bypass, rather than silently running the wrong version.
+> The pin is populated by the REPO's own install (CI `install-ci` project-setup hook, or
+> the user's `pnpm install`) — dorfl does NOT install its own pin (`prepare` is
+> worktree-gate env-prep, not a CLI install). `setup`/`install-ci` are unaffected (they run
+> before `dorflCmd` is declared → the run-self branch). See the observation
 > `dorflcmd-forward-vs-prepare-ordering-node-modules-bin-not-installed-yet` for the full
 > trace.
 >
