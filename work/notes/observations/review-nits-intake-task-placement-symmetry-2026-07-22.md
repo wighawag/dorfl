@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'intake-task-placement-symmetry' (Gate 
 date: 2026-07-22
 status: open
 reviewOf: intake-task-placement-symmetry
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
