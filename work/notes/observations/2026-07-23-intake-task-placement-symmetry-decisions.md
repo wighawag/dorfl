@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # intake-task-placement-symmetry — in-scope decisions (2026-07-23)
 
 Decisions made while implementing task `intake-task-placement-symmetry` (route the intake TASK emit through `resolvePlacement` + the origin-trust stamp, parity with the intake SPEC emit). Recorded per the ADR/decision gate so a reviewer/human can ratify. Governing ADR: `docs/adr/untrusted-origin-carries-via-stamp-not-forced-staging.md`.
