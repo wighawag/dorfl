@@ -47,10 +47,12 @@ import {
  * issues → task/PRD) + insertion point E (surface the review verdict into the
  * issue thread). CI SCHEDULES `intake <N>` (four-outcome dispatch), maps a CREATED
  * `issue_comment` onto the (re-)evaluation trigger (Decision 2: no edit-detection),
- * DERIVES the per-outcome merge-vs-propose flags from gate-state COMPOSED with
- * author-trust (Decision 1: untrusted ⇒ `--propose-task`, PRDs still mergeable),
- * and surfaces the review verdict back into the issue thread via the provider
- * comment seam.
+ * DERIVES the per-outcome file-emit modes from the gate-state (author-trust NO
+ * LONGER composes into the mode; ADR
+ * untrusted-origin-carries-via-stamp-not-forced-staging) and derives the
+ * `--origin-trust` STAMP from author-trust (which carries the placement + build-PR
+ * consequence), and surfaces the review verdict back into the issue thread via the
+ * provider comment seam.
  *
  * SEAMS: the workflow is generated into the `--fake` scratch dir with a STUBBED
  * `GitHubCIContext` ({@link MemoryCIProviderContext}: `setSecret` records to
@@ -87,8 +89,8 @@ afterEach(() => {
 
 // ─── the AUTHOR-TRUST → per-outcome-flags DERIVATION (CI's POLICY) ────────────
 
-describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 1)', () => {
-	it('TRUSTED author + both gates OFF ⇒ merge BOTH (the human acts next; permissive)', () => {
+describe('deriveIntakeFlags — file-emit mode is GATE-derived; author-trust drives only the stamp + placement (ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
+	it('TRUSTED author + both gates OFF ⇒ merge BOTH (permissive gate-derived default)', () => {
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: false},
@@ -97,25 +99,31 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		).toEqual({spec: 'merge', task: 'merge', originTrust: 'trusted'});
 	});
 
-	it('UNTRUSTED author forces --propose-task REGARDLESS of autoBuild, but --merge-spec STAYS allowed', () => {
-		// Both gates off: a trusted author would merge both; an untrusted author
-		// must still PROPOSE the task, while the PRD stays mergeable (a human
-		// tasks it before anything autonomous acts — the checkpoint is intact).
+	it('UNTRUSTED author + both gates OFF ⇒ STILL merge BOTH; author-trust changes only the stamp (the DOCUMENT is not force-PR’d)', () => {
+		// The task DOCUMENT now MERGES for an untrusted author exactly like a
+		// trusted one (gate off); the only difference is the origin-trust STAMP,
+		// which carries the placement + build-PR safety (ADR core move).
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: false},
 				authorTrusted: false,
 			}),
-		).toEqual({spec: 'merge', task: 'propose', originTrust: 'untrusted'});
+		).toEqual({spec: 'merge', task: 'merge', originTrust: 'untrusted'});
 	});
 
-	it('autoBuild ON forces --propose-task even for a TRUSTED author (an agent will auto-build it)', () => {
+	it('autoBuild ON ⇒ --propose-task (gate-derived) — SAME for a trusted or untrusted author', () => {
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: true, autoTask: false},
 				authorTrusted: true,
 			}),
 		).toEqual({spec: 'merge', task: 'propose', originTrust: 'trusted'});
+		expect(
+			deriveIntakeFlags({
+				gate: {autoBuild: true, autoTask: false},
+				authorTrusted: false,
+			}),
+		).toEqual({spec: 'merge', task: 'propose', originTrust: 'untrusted'});
 	});
 
 	it('autoTask ON forces --propose-spec (an agent will auto-slice it → human PR checkpoint now)', () => {
@@ -146,28 +154,36 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		}
 	});
 
-	it('the PRD flag is gate-derived ONLY — author-trust does NOT bite a prd', () => {
-		// autoTask off ⇒ --merge-spec for BOTH a trusted and an untrusted author.
-		const trusted = deriveIntakeFlags({
-			gate: {autoBuild: true, autoTask: false},
-			authorTrusted: true,
-		});
-		const untrusted = deriveIntakeFlags({
-			gate: {autoBuild: true, autoTask: false},
-			authorTrusted: false,
-		});
-		expect(trusted.spec).toBe('merge');
-		expect(untrusted.spec).toBe('merge');
+	it('the file-emit MODE is INDEPENDENT of author-trust — both modes match for a trusted vs untrusted author at every gate combination', () => {
+		// The ADR invariant: a trusted and an untrusted author differ ONLY in the
+		// stamp, never in whether the spec/task DOCUMENT is merged or proposed.
+		for (const autoBuild of [false, true]) {
+			for (const autoTask of [false, true]) {
+				const trusted = deriveIntakeFlags({
+					gate: {autoBuild, autoTask},
+					authorTrusted: true,
+				});
+				const untrusted = deriveIntakeFlags({
+					gate: {autoBuild, autoTask},
+					authorTrusted: false,
+				});
+				expect(untrusted.spec).toBe(trusted.spec);
+				expect(untrusted.task).toBe(trusted.task);
+				// ...and only the stamp differs.
+				expect(trusted.originTrust).toBe('trusted');
+				expect(untrusted.originTrust).toBe('untrusted');
+			}
+		}
 	});
 
-	it('the only way to --merge-task is a TRUSTED author with autoBuild OFF (the conservative default keeps a human in the loop)', () => {
+	it('the task mode is GATE-derived: --merge-task iff autoBuild OFF, else --propose-task, regardless of author-trust', () => {
 		const grid: {
 			autoBuild: boolean;
 			authorTrusted: boolean;
 			task: 'merge' | 'propose';
 		}[] = [
 			{autoBuild: false, authorTrusted: true, task: 'merge'},
-			{autoBuild: false, authorTrusted: false, task: 'propose'},
+			{autoBuild: false, authorTrusted: false, task: 'merge'},
 			{autoBuild: true, authorTrusted: true, task: 'propose'},
 			{autoBuild: true, authorTrusted: false, task: 'propose'},
 		];
@@ -181,21 +197,17 @@ describe('deriveIntakeFlags — gate-state COMPOSED with author-trust (Decision 
 		}
 	});
 
-	it('the FULLY-GATELESS merge-everything path needs both gates off AND a trusted author (a loud, non-default combination)', () => {
-		// Merge both ⇒ exactly: autoTask off + autoBuild off + trusted author.
-		expect(
-			deriveIntakeFlags({
+	it('the merge-everything path is simply both gates OFF (independent of author-trust)', () => {
+		// Merge both ⇒ exactly: autoTask off + autoBuild off, for EITHER author.
+		for (const authorTrusted of [true, false]) {
+			const flags = deriveIntakeFlags({
 				gate: {autoBuild: false, autoTask: false},
-				authorTrusted: true,
-			}),
-		).toEqual({spec: 'merge', task: 'merge', originTrust: 'trusted'});
-		// Flip ANY one of the three and it is no longer merge-everything.
-		expect(
-			deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: false},
-				authorTrusted: false,
-			}).task,
-		).toBe('propose');
+				authorTrusted,
+			});
+			expect(flags.spec).toBe('merge');
+			expect(flags.task).toBe('merge');
+		}
+		// Flip either gate and that type is no longer merge (trust plays no part).
 		expect(
 			deriveIntakeFlags({
 				gate: {autoBuild: true, autoTask: false},
@@ -284,7 +296,7 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(/post a NEW comment/i.test(text)).toBe(true);
 	});
 
-	it('Decision 1: reads author_association off the payload, trust = OWNER/MEMBER/COLLABORATOR, derives all four per-outcome flags', () => {
+	it('reads author_association off the payload, trust = OWNER/MEMBER/COLLABORATOR, derives all four per-outcome file-emit flags + the origin-trust stamp', () => {
 		const text = generateIntakeWorkflow(config);
 		expect(/author_association/.test(text)).toBe(true);
 		expect(/OWNER\|MEMBER\|COLLABORATOR/.test(text)).toBe(true);
@@ -308,11 +320,14 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 			autoTask: boolean,
 			trusted: boolean,
 		): {spec: string; task: string; originTrust: string} => {
-			// PRD: --propose-spec iff autoTask true, else --merge-spec.
+			// SPEC: --propose-spec iff autoTask true, else --merge-spec (gate-derived).
 			const spec = autoTask ? '--propose-spec' : '--merge-spec';
-			// TASK: --propose-task iff autoBuild true OR not trusted.
-			const task = autoBuild || !trusted ? '--propose-task' : '--merge-task';
-			// ORIGIN-TRUST: the same `trusted` case, carried to the stamp flag.
+			// TASK: --propose-task iff autoBuild true, else --merge-task (gate-derived,
+			// SYMMETRIC with the spec). Author-trust does NOT bite the mode (ADR
+			// untrusted-origin-carries-via-stamp-not-forced-staging).
+			const task = autoBuild ? '--propose-task' : '--merge-task';
+			// ORIGIN-TRUST: the ONLY thing author-trust drives — the `trusted` case
+			// carried to the stamp flag.
 			const originTrust = trusted
 				? '--origin-trust=trusted'
 				: '--origin-trust=untrusted';
@@ -466,14 +481,14 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		);
 	});
 
-	it('flags a missing --propose-task fallback (untrusted-author path)', () => {
+	it('flags a missing --propose-task branch (the autoBuild-on gate path)', () => {
 		expectFlagged(
 			base.replace(/--propose-task/g, '--merge-task'),
 			'derives-propose-task',
 		);
 	});
 
-	it('flags a missing --merge-spec (a PRD must stay mergeable for an untrusted author)', () => {
+	it('flags a missing --merge-spec (the autoTask-off gate path)', () => {
 		expectFlagged(
 			base.replace(/--merge-spec/g, '--propose-spec'),
 			'derives-merge-spec',

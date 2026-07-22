@@ -27,14 +27,20 @@
  *     (re-)evaluation; an EDITED comment is NOT a trigger (the ID-based
  *     `seen=<ids>` watermark suffices). The "post a NEW comment to signal an edit"
  *     convention is documented in the workflow so a human knows to re-trigger.
- *   - AUTHOR-TRUST → per-outcome FLAGS (Decision 1, {@link deriveIntakeFlags}): an
- *     UNTRUSTED author (`author_association` not in OWNER/MEMBER/COLLABORATOR)
- *     forces `--propose-task` REGARDLESS of the `autoBuild` gate, while
- *     `--merge-spec` stays allowed (a human still tasks a spec before anything
- *     autonomous acts — the checkpoint is intact). A TRUSTED author gets the plain
- *     gate-derived mode for both. The fully-gateless "all gates on + merge
- *     everywhere" path is a LOUD, NON-DEFAULT opt-in — the default is conservative
- *     (propose / human-in-the-loop).
+ *   - AUTHOR-TRUST → PLACEMENT + the STAMP, never the file-emit MODE (ADR
+ *     `untrusted-origin-carries-via-stamp-not-forced-staging`; {@link
+ *     deriveIntakeFlags}): author-trust NO LONGER derives the task/spec
+ *     merge-vs-propose file-emit mode. It feeds exactly (1) the `--origin-trust`
+ *     STAMP (`author_association` not in OWNER/MEMBER/COLLABORATOR ⇒ `untrusted`)
+ *     and (2) — via that stamp, read by `intake`'s dispatch — which PLACEMENT
+ *     default (`untrusted*LandIn` vs `*LandIn`) the emitted document lands in. The
+ *     file-emit MODE is now GATE-DERIVED for BOTH types (`--merge-*` iff the
+ *     matching auto-gate is OFF, else `--propose-*`), symmetric and
+ *     trust-independent. Untrusted safety is the CARRIED stamp (it forces the
+ *     BUILD transition to a code PR) plus the placement default, NOT a forced
+ *     document PR. A document therefore merges to `main` regardless of who filed
+ *     the issue; whether it is later reviewed-as-a-PR is the operator's
+ *     per-transition config, not a trust consequence.
  *   - INSERTION POINT E (the issue-thread review surface): the review verdict over
  *     intake's generated specs/tasks is surfaced into the ISSUE THREAD via the
  *     `IssueProvider.postIssueComment` seam (issue thread, by NUMBER — NOT the PR
@@ -98,30 +104,54 @@ export const TRUSTED_AUTHOR_ASSOCIATIONS = [
  * The per-outcome integration flags CI passes to `intake <N>` — the GRANULAR
  * per-type pair (the aggregates `--merge`/`--propose` are not needed because CI
  * always resolves BOTH types explicitly). Each is `'merge'` or `'propose'`.
+ *
+ * Both modes are GATE-DERIVED and trust-INDEPENDENT (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`): author-trust NO
+ * LONGER composes into the task file-emit mode. The trust signal rides only
+ * {@link originTrust} (the stamp), which `intake`'s dispatch reads to select the
+ * untrusted-side PLACEMENT default. So `spec`/`task` here answer "does the
+ * DOCUMENT merge or open a PR", derived purely from the operator/config gates —
+ * never from who filed the issue.
  */
 export interface IntakeIntegrationFlags {
-	/** The spec outcome's mode → `--merge-spec` / `--propose-spec`. */
+	/**
+	 * The spec outcome's mode → `--merge-spec` / `--propose-spec`. GATE-DERIVED:
+	 * `merge` iff `autoTask` is OFF, else `propose`.
+	 */
 	spec: 'merge' | 'propose';
-	/** The task outcome's mode → `--merge-task` / `--propose-task`. */
+	/**
+	 * The task outcome's mode → `--merge-task` / `--propose-task`. GATE-DERIVED:
+	 * `merge` iff `autoBuild` is OFF, else `propose` — SYMMETRIC with {@link spec}
+	 * (ADR `untrusted-origin-carries-via-stamp-not-forced-staging`). Author-trust
+	 * no longer forces this to `propose`; an untrusted author's task DOCUMENT now
+	 * merges to `main` (the untrusted safety is the carried {@link originTrust}
+	 * stamp — which forces the BUILD to a code PR — plus the placement default,
+	 * NOT a forced document PR).
+	 */
 	task: 'merge' | 'propose';
 	/**
 	 * The ORIGIN-TRUST verdict CI passes to `intake <N>` via `--origin-trust`
 	 * (task `untrusted-origin-forces-build-propose`) so the emitted spec/task is
-	 * STAMPED with how it was born. Derived from the SAME `author_association` case
-	 * as the integration flags (it IS `authorTrusted` collapsed to the wire value),
-	 * so the stamp and the integration mode CANNOT desync. `intake.ts` writes it
-	 * verbatim onto the frontmatter — it never re-resolves trust (the `intake.ts`
-	 * ~L296 boundary: author-trust is CI's POLICY, passed IN, not resolved here).
+	 * STAMPED with how it was born. This is now the SOLE thing author-trust drives
+	 * on the wire: `intake`'s dispatch reads this stamp to (1) select the
+	 * untrusted-side PLACEMENT default (`untrusted*LandIn`) and (2) force the later
+	 * BUILD transition of an untrusted task to a code PR. Derived from the SAME
+	 * `author_association` case the (gate-derived) modes above see, so it cannot
+	 * desync. `intake.ts` writes it verbatim onto the frontmatter — it never
+	 * re-resolves trust (the `intake.ts` ~L296 boundary: author-trust is CI's
+	 * POLICY, passed IN, not resolved here).
 	 */
 	originTrust: 'trusted' | 'untrusted';
 }
 
-/** The gate state CI composes with author-trust to derive the per-outcome flags. */
+/** The gate state CI reads to derive the per-outcome file-emit modes. */
 export interface IntakeGateState {
 	/**
 	 * `autoBuild` — whether an agent will AUTO-BUILD an undeclared task next. ON ⇒
-	 * a task needs a human PR checkpoint NOW (`--propose-task`); OFF ⇒ a human
-	 * must build it, so it may `--merge-task` (when the author is also trusted).
+	 * a task DOCUMENT needs a human PR checkpoint NOW (`--propose-task`); OFF ⇒ a
+	 * human must build it, so it may `--merge-task`. GATE-derived only —
+	 * author-trust no longer composes into this decision (ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`).
 	 */
 	autoBuild: boolean;
 	/**
@@ -133,42 +163,51 @@ export interface IntakeGateState {
 }
 
 /**
- * DERIVE the per-outcome merge-vs-propose flags from the gate state COMPOSED with
- * author-trust — CI's merge-vs-propose POLICY (spec "merge-vs-propose POLICY" +
- * "Composed with AUTHOR-TRUST"; task Decision 1). This is the load-bearing pure
- * logic the workflow encodes at runtime (it reads `author_association` off the
- * event payload and sets the flags accordingly):
+ * DERIVE the per-outcome file-emit modes + the origin-trust stamp — CI's intake
+ * POLICY (ADR `untrusted-origin-carries-via-stamp-not-forced-staging`; spec
+ * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+ * US #3/#13). This is the load-bearing pure logic the workflow encodes at runtime
+ * (it reads `author_association` off the event payload for the STAMP, and the
+ * gate env block for the MODES):
  *
- *   - **SPEC** — gate-derived ONLY (author-trust does NOT bite): `--merge-spec` iff
- *     `autoTask` is OFF (a human must task the spec before anything autonomous
- *     acts on it — the human checkpoint stays AHEAD even for an untrusted author),
- *     else `--propose-spec`.
- *   - **TASK** — `--propose-task` iff (`autoBuild` ON) OR (author UNTRUSTED);
- *     `--merge-task` ONLY iff (`autoBuild` OFF AND author TRUSTED). An untrusted
- *     author can never auto-merge a task from a public-front-door issue.
+ *   - **SPEC mode** — gate-derived: `--merge-spec` iff `autoTask` is OFF (a human
+ *     must task the spec before anything autonomous acts on it), else
+ *     `--propose-spec`.
+ *   - **TASK mode** — gate-derived, SYMMETRIC with the spec: `--merge-task` iff
+ *     `autoBuild` is OFF, else `--propose-task`. Author-trust NO LONGER bites the
+ *     mode: an untrusted author's task DOCUMENT merges to `main` exactly like a
+ *     trusted one when the gate is off.
+ *   - **ORIGIN-TRUST stamp** — the ONLY thing author-trust drives: `untrusted`
+ *     iff the author is not trusted, else `trusted`. `intake`'s dispatch reads
+ *     this stamp to select the untrusted-side PLACEMENT default and to force the
+ *     later BUILD transition of an untrusted task to a code PR.
  *
- * So the only way to `--merge-task` is a TRUSTED author with `autoBuild` OFF —
- * and the fully-gateless "merge everything" path additionally needs `autoTask`
- * OFF; both gates off + a trusted author is the LOUD, NON-DEFAULT opt-in. The
- * conservative case (untrusted author, or any gate on) keeps a human in the loop.
+ * So author-trust changes ONLY (a) which folder the document lands in (via the
+ * stamp → `untrusted*LandIn`) and (b) the carried stamp — NEVER whether the
+ * DOCUMENT is a PR. Whether a document merges or is proposed is now purely the
+ * operator/config gates; "merge everything" is just both gates OFF, independent of
+ * who filed the issue. The untrusted safety is the stamp (the build-time code PR)
+ * plus the placement default, not a forced document PR (the ADR's core move).
  */
 export function deriveIntakeFlags(options: {
 	gate: IntakeGateState;
 	authorTrusted: boolean;
 }): IntakeIntegrationFlags {
 	const {gate, authorTrusted} = options;
-	// SPEC: gate-derived only — a human-tasks-it checkpoint stays ahead regardless
-	// of author-trust, so an untrusted author may still --merge-spec.
+	// SPEC mode: gate-derived — --merge-spec iff autoTask OFF, else --propose-spec.
 	const spec: 'merge' | 'propose' = gate.autoTask ? 'propose' : 'merge';
-	// TASK: propose if the agent will auto-build it (gate ON) OR the author is
-	// untrusted; merge ONLY when both are safe (gate OFF AND author trusted).
-	const task: 'merge' | 'propose' =
-		gate.autoBuild || !authorTrusted ? 'propose' : 'merge';
-	// ORIGIN-TRUST stamp (task `untrusted-origin-forces-build-propose`): the SAME
-	// author-trust verdict, collapsed to the wire value `intake` stamps onto the
-	// emitted artifact. Derived HERE — next to the integration flags, off the SAME
-	// `authorTrusted` input — so the stamp and the task/spec modes cannot desync.
-	// It is NOT a re-resolution of trust (CI already resolved it); it is the verdict
+	// TASK mode: gate-derived and SYMMETRIC with the spec — --merge-task iff
+	// autoBuild OFF, else --propose-task. Author-trust NO LONGER forces propose
+	// here (ADR untrusted-origin-carries-via-stamp-not-forced-staging): the
+	// untrusted safety is the carried stamp + the placement default, not a forced
+	// DOCUMENT PR. The document merges regardless of author-trust.
+	const task: 'merge' | 'propose' = gate.autoBuild ? 'propose' : 'merge';
+	// ORIGIN-TRUST stamp — the SOLE thing author-trust drives on the wire (task
+	// `untrusted-origin-forces-build-propose`): the author-trust verdict collapsed
+	// to the value `intake` stamps onto the emitted artifact. `intake`'s dispatch
+	// reads it to (1) select the untrusted-side placement default (`untrusted*LandIn`)
+	// and (2) force the later BUILD transition of an untrusted task to a code PR. It
+	// is NOT a re-resolution of trust (CI already resolved it); it is the verdict
 	// being CARRIED so it survives the spec/task merge boundary (the becomes-code
 	// checkpoint is not laundered when the file lands on main).
 	const originTrust: 'trusted' | 'untrusted' = authorTrusted
@@ -204,9 +243,10 @@ export function isAuthorTrusted(
  * shape itself is config-independent.
  *
  * The per-outcome FLAGS are DERIVED AT RUNTIME by a `bash` step that mirrors
- * {@link deriveIntakeFlags}: it reads the gate env block + the event's
- * `author_association` and sets `--merge-spec`/`--propose-spec` +
- * `--merge-task`/`--propose-task` accordingly. The same rule that
+ * {@link deriveIntakeFlags}: it reads the gate env block to set the (gate-derived)
+ * `--merge-spec`/`--propose-spec` + `--merge-task`/`--propose-task` modes, and the
+ * event's `author_association` to set ONLY the `--origin-trust` STAMP (which
+ * carries the placement + build-PR consequence). The same rule that
  * {@link deriveIntakeFlags} unit-tests is what the workflow executes — they cannot
  * desync because the test asserts the SHELL derivation matches the function.
  */
@@ -237,15 +277,17 @@ export function generateIntakeWorkflow(config: ResolvedCIConfig): string {
 # re-evaluation (a fresh id the watermark catches). There is NO edit-detection /
 # \`updated_at\` / body-hash tracking.
 #
-# AUTHOR-TRUST → per-outcome FLAGS (the merge-vs-propose POLICY): because ANYBODY
-# can file an issue, the merge decision composes with WHO authored it. An UNTRUSTED
-# author (\`author_association\` not OWNER/MEMBER/COLLABORATOR) forces
-# \`--propose-task\` REGARDLESS of the \`autoBuild\` gate — a task from a public
-# front-door issue can never auto-merge — while \`--merge-spec\` stays allowed (a
-# human must still task a spec before anything autonomous acts on it, so the human
-# checkpoint is intact). A TRUSTED author gets the plain gate-derived mode. The
-# fully-gateless "merge everything" path (both gates off + a trusted author) is a
-# LOUD, NON-DEFAULT opt-in; the default is conservative (propose).
+# AUTHOR-TRUST → PLACEMENT + the STAMP, never the file-emit MODE: because ANYBODY
+# can file an issue, WHO authored it matters — but it drives only (1) the
+# \`--origin-trust\` STAMP on the emitted document and (2), via that stamp read by
+# \`intake\`'s dispatch, which PLACEMENT default the document lands in. It does NOT
+# decide merge-vs-propose for the DOCUMENT (ADR
+# untrusted-origin-carries-via-stamp-not-forced-staging). The file-emit MODE is
+# GATE-DERIVED for BOTH types: \`--merge-*\` iff the matching auto-gate is OFF, else
+# \`--propose-*\`. So an untrusted author's task DOCUMENT MERGES to \`main\` just
+# like a trusted one; the untrusted safety is the CARRIED stamp (it forces the
+# later BUILD to a code PR) plus the placement default, not a forced document PR.
+# "Merge everything" is simply both gates off, independent of who filed the issue.
 #
 # CI runs IN-PLACE (the CI container IS the isolation): NO --isolated/--remote/
 # registry (laptop-only affordances). The PER-ISSUE concurrency group below
@@ -322,16 +364,22 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
 
-      - name: derive the per-outcome merge-vs-propose flags (gate × author-trust)
+      - name: derive the per-outcome file-emit modes (gate) + the origin-trust stamp (author-trust)
         id: policy
-        # The merge-vs-propose POLICY, executed at runtime — the SAME rule
+        # The intake POLICY, executed at runtime — the SAME rule
         # \`deriveIntakeFlags\` unit-tests (they cannot desync; the test asserts this
-        # shell matches the function):
-        #   * SPEC — gate-derived ONLY: --merge-spec iff autoTask OFF (a human
-        #            tasks it before anything autonomous acts — the checkpoint
-        #            stays ahead even for an UNTRUSTED author), else --propose-spec.
-        #   * TASK  — --propose-task iff (autoBuild ON) OR (author UNTRUSTED);
-        #            --merge-task ONLY iff (autoBuild OFF AND author TRUSTED).
+        # shell matches the function). Author-trust drives ONLY the stamp +
+        # placement, NEVER the file-emit mode (ADR
+        # untrusted-origin-carries-via-stamp-not-forced-staging):
+        #   * SPEC mode — gate-derived: --merge-spec iff autoTask OFF (a human tasks
+        #            it before anything autonomous acts), else --propose-spec.
+        #   * TASK mode — gate-derived, SYMMETRIC: --merge-task iff autoBuild OFF,
+        #            else --propose-task. Author-trust does NOT bite it — an
+        #            untrusted author's task DOCUMENT merges just like a trusted one.
+        #   * ORIGIN-TRUST stamp — the ONLY thing author-trust drives: --origin-trust
+        #            untrusted iff the author is not OWNER/MEMBER/COLLABORATOR, which
+        #            \`intake\`'s dispatch reads to select the untrusted PLACEMENT
+        #            default and to force the later BUILD to a code PR.
         # author_association comes from the COMMENT on an \`issue_comment\` event,
         # else the ISSUE on an \`issues\` event — read straight off the payload, no
         # extra API call.
@@ -347,30 +395,34 @@ jobs:
             spec_flag="--merge-spec"
           fi
 
-          # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
-          # collaborator — the whole signal). Anything else (incl. empty) is
-          # UNTRUSTED → the conservative, human-in-the-loop path.
-          trusted="false"
-          case "\${AUTHOR_ASSOCIATION:-}" in
-            OWNER|MEMBER|COLLABORATOR) trusted="true" ;;
-          esac
-
-          # TASK flag: propose if the agent will auto-build it (gate ON) OR the
-          # author is untrusted; merge ONLY when both are safe.
-          if [ "\${DORFL_AUTO_BUILD}" = "true" ] || [ "\${trusted}" != "true" ]; then
+          # TASK flag: gate-derived, SYMMETRIC with the spec above — --merge-task
+          # iff autoBuild OFF, else --propose-task. Author-trust does NOT bite the
+          # mode (ADR untrusted-origin-carries-via-stamp-not-forced-staging): an
+          # untrusted author's task DOCUMENT merges just like a trusted one; the
+          # untrusted safety is the stamp + placement below, not a document PR.
+          if [ "\${DORFL_AUTO_BUILD}" = "true" ]; then
             task_flag="--propose-task"
           else
             task_flag="--merge-task"
           fi
 
-          # ORIGIN-TRUST stamp (task untrusted-origin-forces-build-propose):
-          # derived from the SAME \${trusted} case above (one author-trust read,
-          # two consumers — the task/spec modes AND the stamp — so they cannot
-          # desync). \`intake\` STAMPS this onto the emitted spec/task frontmatter
-          # (origin: issue + originTrust: <value>); it does NOT re-resolve trust
-          # (that is CI's policy, passed IN). The stamp SURVIVES the merge boundary
-          # so a later auto-task/auto-build of an untrusted-origin artifact still
-          # forces a human becomes-code checkpoint (the laundering gap is closed).
+          # Author-trust: TRUSTED iff OWNER/MEMBER/COLLABORATOR (admin / write-
+          # collaborator — the whole signal). Anything else (incl. empty) is
+          # UNTRUSTED. It drives ONLY the origin-trust stamp below (NOT the modes).
+          trusted="false"
+          case "\${AUTHOR_ASSOCIATION:-}" in
+            OWNER|MEMBER|COLLABORATOR) trusted="true" ;;
+          esac
+
+          # ORIGIN-TRUST stamp — the SOLE thing author-trust drives on the wire
+          # (task untrusted-origin-forces-build-propose). \`intake\` STAMPS this
+          # onto the emitted spec/task frontmatter (origin: issue + originTrust:
+          # <value>); its dispatch reads the stamp to (1) select the untrusted-side
+          # PLACEMENT default (\`untrusted*LandIn\`) and (2) force the later BUILD of
+          # an untrusted task to a code PR. It does NOT re-resolve trust (that is
+          # CI's policy, passed IN). The stamp SURVIVES the merge boundary so a
+          # later auto-task/auto-build of an untrusted-origin artifact still forces
+          # a human becomes-code checkpoint (the laundering gap is closed).
           if [ "\${trusted}" = "true" ]; then
             origin_trust_flag="--origin-trust=trusted"
           else
@@ -385,7 +437,9 @@ jobs:
       - name: intake the issue (four-outcome dispatch; surfaces the review verdict into the thread)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. EXPLICIT \`intake <N>\`, never a bare slug. The per-outcome
-        # flags carry the merge-vs-propose POLICY derived above. \`intake\` runs the
+        # flags carry the (gate-derived) file-emit modes + the origin-trust stamp
+        # derived above (author-trust drives only the stamp + placement, not the
+        # document merge-vs-propose). \`intake\` runs the
         # lone-task review/edit loop and posts its findings as questions back into
         # THIS issue thread (insertion point E) through the issue-comment seam —
         # CI surfaces E by invoking intake; it adds no new review mechanism.
@@ -498,22 +552,22 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		text,
 	), 'author-trust must be OWNER/MEMBER/COLLABORATOR (admin / write-collaborator ' +
 		'— the whole signal; Decision 1).');
-	// An untrusted author forces --propose-task; the derivation must emit both
-	// task modes (so the untrusted path can reach propose and the trusted-safe
-	// path can reach merge).
+	// The task mode is GATE-DERIVED (author-trust no longer bites it; ADR
+	// untrusted-origin-carries-via-stamp-not-forced-staging): the derivation must
+	// emit both task modes (propose iff autoBuild ON, else merge).
 	require('derives-propose-task', /--propose-task\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--propose-task` (the ' +
-		'untrusted-author / autoBuild-on fallback).');
+		'autoBuild-on path).');
 	require('derives-merge-task', /--merge-task\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--merge-task` (the ' +
-		'trusted-author + autoBuild-off path).');
-	// --merge-spec stays allowed even for an untrusted author (spec checkpoint ahead).
+		'autoBuild-off path; a task DOCUMENT merges regardless of author-trust).');
+	// --merge-spec is emitted when autoTask is OFF (author-trust does not bite it).
 	require('derives-merge-spec', /--merge-spec\b/.test(
 		operative,
-	), 'the policy derivation must be able to emit `--merge-spec` (a spec stays ' +
-		'mergeable even for an untrusted author — the human-tasks-it checkpoint).');
+	), 'the policy derivation must be able to emit `--merge-spec` (autoTask off ' +
+		'— the human-tasks-it checkpoint stays ahead).');
 	require('derives-propose-spec', /--propose-spec\b/.test(
 		operative,
 	), 'the policy derivation must be able to emit `--propose-spec` (autoTask on).');
