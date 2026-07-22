@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'config-untrusted-landin-keys' (Gate 2 
 date: 2026-07-22
 status: open
 reviewOf: config-untrusted-landin-keys
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
