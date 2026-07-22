@@ -392,6 +392,45 @@ export interface Config {
 	 */
 	specsLandIn: SpecsLandIn;
 	/**
+	 * **Per-repo DEFAULT landing for an UNTRUSTED-origin TASK** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #5/#6, governing ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). The exact TWIN of
+	 * {@link tasksLandIn} for items whose `originTrust` stamp is `untrusted`:
+	 * SAME value shape ({@link TasksLandIn}), SAME resolution chain (flag
+	 * `--untrusted-tasks-land-in` > env `DORFL_UNTRUSTED_TASKS_LAND_IN` >
+	 * per-repo > global > built-in `'backlog'`). The ADR removes the
+	 * untrusted-forces-staging RUNG from the placement resolver; instead the
+	 * CALLER reads the stamp and selects THIS key (vs the trusted
+	 * {@link tasksLandIn}) as the configured-default rung. Governs EVERY
+	 * untrusted-stamped task — intake-authored directly from an issue OR emitted
+	 * by the tasker from an untrusted-origin spec (decision X: one policy, both
+	 * call sites; no third knob). DEFAULTS to STAGING (`'backlog'`), the
+	 * conservative human-admission landing: safety for an untrusted item that
+	 * opts into the pool (`'ready'`) is then the carried build STAMP (a code PR),
+	 * not the folder. NO call site consumes it yet — the resolver + intake/tasker
+	 * wiring are later tasks.
+	 */
+	untrustedTasksLandIn: TasksLandIn;
+	/**
+	 * **Per-repo DEFAULT landing for an UNTRUSTED-origin intake SPEC** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #7, governing ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). The exact TWIN of
+	 * {@link specsLandIn} for untrusted-stamped intake specs: SAME value shape
+	 * ({@link SpecsLandIn} — `pre-proposed` staging vs `ready` pool), SAME
+	 * resolution chain (flag `--untrusted-specs-land-in` > env
+	 * `DORFL_UNTRUSTED_SPECS_LAND_IN` > per-repo > global > built-in
+	 * `'pre-proposed'`). The caller reads the `originTrust` stamp and selects THIS
+	 * key (vs the trusted {@link specsLandIn}) as the placement resolver's
+	 * configured-default rung. DEFAULTS to STAGING (`'pre-proposed'`) — the
+	 * conservative human-admission landing, preserving today's effective
+	 * behaviour for a repo that configures nothing; a repo opts an untrusted spec
+	 * into the pool (`'ready'`) explicitly, safety then via the carried stamp. NO
+	 * call site consumes it yet — the resolver + intake wiring are later tasks.
+	 */
+	untrustedSpecsLandIn: SpecsLandIn;
+	/**
 	 * **The PR-INTENT axis** (ADR §6): on the `propose` path, do NOT open a review
 	 * request even on a GitHub arbiter with auth — push the branch (the
 	 * safety-bearing recovery point) but SKIP `openRequest`. `true` ⇒ deliberately
@@ -833,6 +872,18 @@ export const DEFAULT_CONFIG: Config = {
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	specsLandIn: 'pre-proposed',
+	// The untrusted-side placement TWINS default to STAGING (`backlog` /
+	// `pre-proposed`) — the conservative human-admission landing (ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`). A repo that trusts
+	// its stamp-based pipeline opts an untrusted item into the pool (`ready`)
+	// explicitly; safety is then the carried build STAMP (a code PR), not the
+	// folder. Unset ⇒ both resolve to staging, so a repo configuring nothing keeps
+	// today's effective behaviour. NO call site consumes these yet (resolver +
+	// intake/tasker wiring are later tasks); resolved flag > env
+	// (`DORFL_UNTRUSTED_TASKS_LAND_IN` / `DORFL_UNTRUSTED_SPECS_LAND_IN`) > per-repo
+	// > global > built-in, exactly like their trusted twins.
+	untrustedTasksLandIn: 'backlog',
+	untrustedSpecsLandIn: 'pre-proposed',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically

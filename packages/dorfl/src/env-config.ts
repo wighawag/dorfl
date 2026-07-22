@@ -115,6 +115,20 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// The legacy `prdsLandIn` key / `DORFL_PRDS_LAND_IN` env are GONE after the
 	// ''prd'' → `spec` hard cutover (clean break).
 	specsLandIn: {enum: ['pre-proposed', 'ready']},
+	// `untrustedTasksLandIn` (the UNTRUSTED-side TWIN of `tasksLandIn` — spec
+	// `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	// US #5/#6, ADR `untrusted-origin-carries-via-stamp-not-forced-staging`)
+	// coerces as the SAME `backlog`/`ready` enum as `tasksLandIn`, so
+	// `DORFL_UNTRUSTED_TASKS_LAND_IN=ready` works and a typo FAILS LOUDLY. Same
+	// precedence chain (flag > env > per-repo > global > built-in `backlog`); the
+	// caller selects it (over the trusted `tasksLandIn`) by reading the
+	// `originTrust` stamp before feeding the placement resolver.
+	untrustedTasksLandIn: {enum: ['backlog', 'ready']},
+	// `untrustedSpecsLandIn` (the UNTRUSTED-side TWIN of `specsLandIn` — same spec
+	// US #7) coerces as the SAME `pre-proposed`/`ready` enum as `specsLandIn`, so
+	// `DORFL_UNTRUSTED_SPECS_LAND_IN=ready` works and a typo FAILS LOUDLY. Same
+	// precedence chain (flag > env > per-repo > global > built-in `pre-proposed`).
+	untrustedSpecsLandIn: {enum: ['pre-proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `DORFL_PROVIDER` is ignored

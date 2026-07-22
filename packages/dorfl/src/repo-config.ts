@@ -96,6 +96,25 @@ export const REPO_ALLOWED_KEYS = [
 	// (`src/placement.ts`). The sole spec-placement key after the ''prd'' → `spec` HARD
 	// CUTOVER (the legacy `prdsLandIn` key is GONE — clean break, no accepted alias).
 	'specsLandIn',
+	// `untrustedTasksLandIn` (the UNTRUSTED-side TWIN of `tasksLandIn` — spec
+	// `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	// US #5/#6, ADR `untrusted-origin-carries-via-stamp-not-forced-staging`) is a
+	// genuine repo property exactly like `tasksLandIn`: whether THIS repo's
+	// untrusted-origin tasks land STAGED (`tasks/backlog/`, human promotion) or in
+	// the agent POOL (`tasks/ready/`, claimable — safety then via the carried build
+	// STAMP) is a repo-wide policy agreed by all collaborators + travels with the
+	// repo. Resolved per-repo through the SAME chain as `tasksLandIn` (flag
+	// `--untrusted-tasks-land-in` > env `DORFL_UNTRUSTED_TASKS_LAND_IN` > per-repo >
+	// global > built-in `backlog`). The caller selects it over the trusted twin by
+	// reading the `originTrust` stamp before the placement resolver.
+	'untrustedTasksLandIn',
+	// `untrustedSpecsLandIn` (the UNTRUSTED-side TWIN of `specsLandIn` — same spec
+	// US #7) is a genuine repo property exactly like `specsLandIn`: whether THIS
+	// repo's untrusted intake specs land STAGED (`specs/proposed/`) or in the
+	// auto-tasking POOL (`specs/ready/`) is a repo-wide policy. Resolved per-repo
+	// through the SAME chain (flag `--untrusted-specs-land-in` > env
+	// `DORFL_UNTRUSTED_SPECS_LAND_IN` > per-repo > global > built-in `pre-proposed`).
+	'untrustedSpecsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this
 	// repo's propose runs open a PR is agreed by all collaborators + travels with

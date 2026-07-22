@@ -240,6 +240,22 @@ describe('envOverrides — enum coercion', () => {
 		expect(envOverrides({DORFL_SPECS_LAND_IN: 'ready'})).toEqual({
 			specsLandIn: 'ready',
 		});
+		// The UNTRUSTED-side TWINS (spec
+		// `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`,
+		// ADR `untrusted-origin-carries-via-stamp-not-forced-staging`) coerce the
+		// SAME enums as their trusted twins on the SAME chain.
+		expect(envOverrides({DORFL_UNTRUSTED_TASKS_LAND_IN: 'ready'})).toEqual({
+			untrustedTasksLandIn: 'ready',
+		});
+		expect(envOverrides({DORFL_UNTRUSTED_TASKS_LAND_IN: 'backlog'})).toEqual({
+			untrustedTasksLandIn: 'backlog',
+		});
+		expect(envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'ready'})).toEqual({
+			untrustedSpecsLandIn: 'ready',
+		});
+		expect(
+			envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'pre-proposed'}),
+		).toEqual({untrustedSpecsLandIn: 'pre-proposed'});
 		// The dead `DORFL_PRDS_LAND_IN` env is not coerced into any config key.
 		expect(envOverrides({DORFL_PRDS_LAND_IN: 'pre-proposed'})).toEqual({});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
@@ -274,6 +290,20 @@ describe('envOverrides — enum coercion', () => {
 		);
 		expect(() => envOverrides({DORFL_OBSERVATION_TRIAGE: 'false'})).toThrow(
 			/DORFL_OBSERVATION_TRIAGE/,
+		);
+		// The untrusted-side placement TWINS FAIL LOUDLY on a bad value exactly like
+		// their trusted twins, naming the offending variable + the valid options.
+		expect(() => envOverrides({DORFL_UNTRUSTED_TASKS_LAND_IN: 'nope'})).toThrow(
+			/DORFL_UNTRUSTED_TASKS_LAND_IN/,
+		);
+		expect(() => envOverrides({DORFL_UNTRUSTED_TASKS_LAND_IN: 'nope'})).toThrow(
+			/backlog.*ready|ready.*backlog/,
+		);
+		expect(() => envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'nope'})).toThrow(
+			/DORFL_UNTRUSTED_SPECS_LAND_IN/,
+		);
+		expect(() => envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'nope'})).toThrow(
+			/pre-proposed.*ready|ready.*pre-proposed/,
 		);
 	});
 });

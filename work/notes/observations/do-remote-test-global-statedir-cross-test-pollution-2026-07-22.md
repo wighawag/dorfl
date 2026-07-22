@@ -1,0 +1,3 @@
+# do-remote.test.ts global state-dir snapshot flakes under the full parallel run (2026-07-22)
+
+`test/do-remote.test.ts:514` (`expect(listAllFiles(realDorfl)).toEqual(before.dorfl)`) FAILS only in the full `vitest run` (all 230 files parallel), not in isolation (`vitest run test/do-remote.test.ts` passes). The diff shows a `richelieu.git/worktrees/tip/*` worktree leaking into the shared global `~/.dorfl`/workspaces snapshot — i.e. another concurrently-running test mutates the same real global state dir this test snapshots. Cross-test isolation issue against a shared real state dir, unrelated to the change being made in this observation's task. Captured while working `config-untrusted-landin-keys`; not fixed here (out of scope).

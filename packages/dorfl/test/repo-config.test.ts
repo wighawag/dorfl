@@ -529,6 +529,88 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('ready');
 	});
 
+	// The UNTRUSTED-side placement TWINS (spec
+	// `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	// US #5/#6/#7/#8, ADR `untrusted-origin-carries-via-stamp-not-forced-staging`)
+	// are resolved EXACTLY like their trusted twins, DEFAULT to STAGING, and are
+	// per-repo allowed. No call site consumes them yet (resolver + intake/tasker
+	// wiring are later tasks); here we pin the config-resolution half.
+	it('`untrustedTasksLandIn` / `untrustedSpecsLandIn` are per-repo allowed keys', () => {
+		expect(REPO_ALLOWED_KEYS).toContain('untrustedTasksLandIn');
+		expect(REPO_ALLOWED_KEYS).toContain('untrustedSpecsLandIn');
+	});
+
+	it('unset ⇒ both untrusted twins resolve to STAGING (`backlog` / `pre-proposed`) — zero behaviour change for a repo configuring nothing', () => {
+		const bare = mergeConfig({});
+		const resolved = resolveRepoConfig({
+			repoPath: repo,
+			global: bare,
+			env: {},
+		}).config;
+		expect(resolved.untrustedTasksLandIn).toBe('backlog');
+		expect(resolved.untrustedSpecsLandIn).toBe('pre-proposed');
+	});
+
+	it('resolves `untrustedTasksLandIn` flag > env > per-repo > global > built-in (`backlog`)', () => {
+		const global = mergeConfig({untrustedTasksLandIn: 'ready'});
+		// global override wins over the built-in floor.
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.untrustedTasksLandIn,
+		).toBe('ready');
+		// per-repo file overrides the global.
+		writeRepoConfig(repo, {untrustedTasksLandIn: 'backlog'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.untrustedTasksLandIn,
+		).toBe('backlog');
+		// env beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_UNTRUSTED_TASKS_LAND_IN: 'ready'},
+			}).config.untrustedTasksLandIn,
+		).toBe('ready');
+		// a flag beats env.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_UNTRUSTED_TASKS_LAND_IN: 'ready'},
+				flags: {untrustedTasksLandIn: 'backlog'},
+			}).config.untrustedTasksLandIn,
+		).toBe('backlog');
+	});
+
+	it('resolves `untrustedSpecsLandIn` flag > env > per-repo > global > built-in (`pre-proposed`)', () => {
+		const global = mergeConfig({untrustedSpecsLandIn: 'ready'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.untrustedSpecsLandIn,
+		).toBe('ready');
+		writeRepoConfig(repo, {untrustedSpecsLandIn: 'pre-proposed'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.untrustedSpecsLandIn,
+		).toBe('pre-proposed');
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_UNTRUSTED_SPECS_LAND_IN: 'ready'},
+			}).config.untrustedSpecsLandIn,
+		).toBe('ready');
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_UNTRUSTED_SPECS_LAND_IN: 'ready'},
+				flags: {untrustedSpecsLandIn: 'pre-proposed'},
+			}).config.untrustedSpecsLandIn,
+		).toBe('pre-proposed');
+	});
+
 	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {
 		// default false; global false; per-repo opts in ⇒ per-repo wins.
 		writeRepoConfig(repo, {autoBuild: true});
