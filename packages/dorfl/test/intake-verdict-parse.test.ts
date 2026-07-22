@@ -271,7 +271,10 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.emittedSlug).toBe('add-quiet-flag');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		// DEFAULT placement stages the task in `tasks/backlog/` (nothing configured;
+		// parity with the spec emit — ADR
+		// `untrusted-origin-carries-via-stamp-not-forced-staging`).
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 
 		// PROPOSE (default): the task rides the work/<slug> branch; main untouched.
 		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(false);
@@ -279,7 +282,7 @@ describe('intake <N> — the PRODUCTION verdict wire (stubbed harness, no inject
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);

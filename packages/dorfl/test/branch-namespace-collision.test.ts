@@ -116,11 +116,17 @@ describe('intake then do task:<slug> on the same slug + checkout — no collisio
 			decide: async () => verdict,
 			reviewTask: async () => ({verdict: 'approve', findings: []}),
 			integration: {task: 'merge', spec: 'merge'},
+			// Land the task in the CLAIMABLE pool so the build step below can claim it
+			// (intake now routes the task through the placement resolver, defaulting to
+			// the `tasks/backlog/` staging slot; this collision regression needs a
+			// ready, claimable task, so opt into the pool explicitly).
+			tasksLandIn: 'ready',
 			env: gitEnv(),
 		});
 		expect(intake.exitCode).toBe(0);
 		expect(intake.outcome).toBe('tasked');
-		// The task is on the arbiter's backlog (merge landed it).
+		// The task is on the arbiter's ready pool (merge landed it). (`'backlog'` maps
+		// to `work/tasks/ready/` in this helper's legacy fixture vocabulary.)
 		expect(existsOnArbiterMain(repo, 'backlog', slug)).toBe(true);
 
 		// The intake branch is the INTAKE-namespaced ref — distinct from the build

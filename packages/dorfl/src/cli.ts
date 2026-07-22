@@ -804,6 +804,8 @@ interface IntakeFlags {
 	originTrust?: string;
 	/** `--specs-land-in <pre-proposed|ready>`: the explicit operator spec-placement override (top of the precedence). Resolves into the `specsLandIn` config key. */
 	specsLandIn?: string;
+	/** `--tasks-land-in <backlog|ready>`: the explicit operator TASK-placement override for a DIRECT-from-issue task emit (top of the precedence). The task twin of `--specs-land-in`. Resolves into the `tasksLandIn` config key. */
+	tasksLandIn?: string;
 	agentCmd?: string;
 	model?: string;
 	harness?: string;
@@ -4286,6 +4288,10 @@ export function buildProgram(): Command {
 			'--specs-land-in <where>',
 			'where an intake-authored spec lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > specsLandIn default > built-in). Resolved flag > env (DORFL_SPECS_LAND_IN) > per-repo > global > built-in.',
 		)
+		.option(
+			'--tasks-land-in <where>',
+			'where an intake-authored TASK (emitted DIRECTLY from an issue) lands: `backlog` (staged, not agent-eligible) or `ready` (the agent POOL). The task twin of --specs-land-in: the EXPLICIT operator override at the top of the placement precedence (explicit flag > configured default > built-in staging; the caller selects the trusted-vs-untrusted default from the origin-trust stamp). Resolved flag > env (DORFL_TASKS_LAND_IN) > per-repo > global > built-in.',
+		)
 		.option('--agent-cmd <cmd>', 'command to run the decision agent')
 		.option(
 			'--model <id>',
@@ -4383,6 +4389,19 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+			// The OPERATOR's EXPLICIT task-placement override (`--tasks-land-in`), the
+			// TOP of the placement precedence for a DIRECT-from-issue task emit — the
+			// task twin of `explicitSpecsLandIn` above (reuses the same `do`-path
+			// helper). Fails loudly on a bad value.
+			let explicitTasksLandIn: 'backlog' | 'ready' | undefined;
+			try {
+				explicitTasksLandIn = explicitTasksLandInFromFlag(flags.tasksLandIn);
+			} catch (err) {
+				console.error(
+					`error: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				process.exit(1);
+			}
 			const result = await performIntake({
 				issueNumber,
 				cwd,
@@ -4408,6 +4427,15 @@ export function buildProgram(): Command {
 				specsLandIn: config.specsLandIn,
 				untrustedSpecsLandIn: config.untrustedSpecsLandIn,
 				explicitSpecsLandIn,
+				// TASK-PLACEMENT (parity with the spec-placement block above; ADR
+				// `untrusted-origin-carries-via-stamp-not-forced-staging`): the
+				// TRUSTED-side default (`tasksLandIn`) + the UNTRUSTED-side twin
+				// (`untrustedTasksLandIn`, selected in `dispatchTask` when the stamp is
+				// untrusted) + the EXPLICIT `--tasks-land-in` override. Replaces the old
+				// hardcoded `tasks-ready` path; the resolver picks backlog vs ready.
+				tasksLandIn: config.tasksLandIn,
+				untrustedTasksLandIn: config.untrustedTasksLandIn,
+				explicitTasksLandIn,
 				harness,
 				agentCmd: config.agentCmd,
 				model: config.model,

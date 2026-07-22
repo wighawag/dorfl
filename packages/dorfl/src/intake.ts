@@ -1,7 +1,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
-import {workFolderRel, workFolderPrefix, workItemRel} from './work-layout.js';
+import {workFolderRel, workFolderPrefix} from './work-layout.js';
 import {paramCase} from './brand.js';
 import {
 	performIntegration,
@@ -9,8 +9,9 @@ import {
 } from './integration-core.js';
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
-import type {IntegrationMode, SpecsLandIn} from './config.js';
+import type {IntegrationMode, SpecsLandIn, TasksLandIn} from './config.js';
 import type {OriginTrust} from './frontmatter.js';
+import {TASK_PLACEMENT_SLOTS, landingToSide} from './tasking.js';
 import {
 	placementFolder,
 	resolvePlacement,
@@ -284,6 +285,42 @@ export interface PerformIntakeOptions {
 	 * the PR opens normally.
 	 */
 	noPR?: boolean;
+	/**
+	 * **The per-repo TASK-PLACEMENT default, passed IN** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #2, governing ADR `untrusted-origin-carries-via-stamp-not-forced-staging`).
+	 * The resolved per-repo default landing for `intake`-authored TASKS emitted
+	 * DIRECTLY from an issue (`backlog` = staging; `ready` = the agent pool), fed
+	 * as the CONFIGURED-DEFAULT rung into the shared placement resolver
+	 * (`src/placement.ts`) via the SAME task slots + `landingToSide` mapping the
+	 * tasker (`tasking.ts`) uses — so the intake TASK emit reaches PARITY with the
+	 * intake SPEC emit (both route through the resolver, both stamp origin-trust).
+	 * Unset ⇒ the resolver's built-in floor applies (`staging` = `tasks/backlog/`,
+	 * the conservative landing). The TASK twin of {@link specsLandIn}.
+	 */
+	tasksLandIn?: TasksLandIn;
+	/**
+	 * **The per-repo UNTRUSTED-side TASK-PLACEMENT default, passed IN** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #5, governing ADR `untrusted-origin-carries-via-stamp-not-forced-staging`).
+	 * The TWIN of {@link tasksLandIn} selected when the intake stamp is
+	 * `originTrust: untrusted`: {@link dispatchTask} reads the stamp and feeds THIS
+	 * default (rather than {@link tasksLandIn}) as the configured-default rung of
+	 * the shared placement resolver. The resolver no longer has an
+	 * untrusted-forces-staging rung; DEFAULTS to staging (`backlog`), opt-in
+	 * `ready` (safety then via the task's carried stamp, not the folder). The TASK
+	 * twin of {@link untrustedSpecsLandIn}; the SAME knob the tasker consults for
+	 * an untrusted-origin spec's downstream tasks (one policy, both call sites).
+	 */
+	untrustedTasksLandIn?: TasksLandIn;
+	/**
+	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
+	 * rung). When set, the runner-deterministic resolver lands the emitted task
+	 * HERE regardless of {@link tasksLandIn} / {@link untrustedTasksLandIn} — the
+	 * TASK twin of {@link explicitSpecsLandIn}. Set ONLY when the operator typed
+	 * the explicit placement flag; never when the value came from config.
+	 */
+	explicitTasksLandIn?: TasksLandIn;
 	/**
 	 * **The per-repo SPEC-PLACEMENT default, passed IN** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5, task
@@ -871,6 +908,17 @@ async function decideAndDispatch(
 				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
 				originTrust: options.originTrust,
 				noPR: options.noPR,
+				// RUNNER-DETERMINISTIC PLACEMENT for the DIRECT-from-issue task (ADR
+				// `untrusted-origin-carries-via-stamp-not-forced-staging`): the
+				// configured-default + explicit-flag rungs, fed into the SHARED placement
+				// resolver alongside the `originTrust` stamp above — the TASK twin of the
+				// spec dispatch below. `dispatchTask` selects the untrusted-side default
+				// (`untrustedTasksLandIn`) when the stamp is `untrusted`, else
+				// `tasksLandIn`; the resolver decides `tasks/backlog/` (staging) vs
+				// `tasks/ready/` (the pool). `intake` never places itself.
+				tasksLandIn: options.tasksLandIn,
+				untrustedTasksLandIn: options.untrustedTasksLandIn,
+				explicitTasksLandIn: options.explicitTasksLandIn,
 				providerInstance: options.providerInstance,
 				issueProvider,
 				// The bounded lone-task review seam (tests inject a canned verdict;
@@ -1082,6 +1130,16 @@ async function dispatchTask(params: {
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
+	/** The per-repo TRUSTED-side TASK-PLACEMENT default (configured-default rung when the task is trusted/unset). */
+	tasksLandIn: TasksLandIn | undefined;
+	/**
+	 * The per-repo UNTRUSTED-side TASK-PLACEMENT default, selected as the
+	 * configured-default rung when `originTrust` is `untrusted` (ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`).
+	 */
+	untrustedTasksLandIn: TasksLandIn | undefined;
+	/** The OPERATOR's EXPLICIT task-placement override (the TOP rung). */
+	explicitTasksLandIn: TasksLandIn | undefined;
 	providerInstance: ReviewProvider | undefined;
 	/** The issue seam the completion comment is posted back through (runner-owned). */
 	issueProvider: IssueProvider;
@@ -1104,6 +1162,9 @@ async function dispatchTask(params: {
 		mergeRetries,
 		originTrust,
 		noPR,
+		tasksLandIn,
+		untrustedTasksLandIn,
+		explicitTasksLandIn,
 		providerInstance,
 		issueProvider,
 		reviewTask,
@@ -1124,7 +1185,33 @@ async function dispatchTask(params: {
 		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
-	const relPath = workItemRel('tasks-ready', `${slug}.md`);
+	// RUNNER-DETERMINISTIC PLACEMENT (task `intake-task-placement-symmetry`; the
+	// untrusted-forces-staging rung RETIRED by ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
+	// folder the runner writes the intake-authored task into BEFORE handing it to
+	// the shared integrate band — the SAME precedence chain, the SAME shared
+	// resolver, and (via `TASK_PLACEMENT_SLOTS` + `landingToSide` reused from
+	// `tasking.ts`) the SAME task slots the tasker uses; only the intake dispatch
+	// differs from the spec twin (`dispatchSpec`) in its lifecycle SLOTS. THIS
+	// caller selects the trusted-vs-untrusted configured default by reading the
+	// `originTrust` stamp: an untrusted task selects `untrustedTasksLandIn`
+	// (default staging; `ready` when configured), a trusted/unset task selects
+	// `tasksLandIn`. The agent (the intake decider) never influences placement.
+	// Net vs the old hardcoded `tasks-ready`: an untrusted-author task now MERGES
+	// a document to `main` in `backlog` (by default) carrying the stamp instead of
+	// opening a document PR; safety for a `ready`-landed untrusted task flows
+	// through its carried stamp at BUILD time (forces a code PR), not the folder.
+	const configuredTasksLanding =
+		originTrust === 'untrusted' ? untrustedTasksLandIn : tasksLandIn;
+	const placementDecision = resolvePlacement({
+		explicit: landingToSide(explicitTasksLandIn),
+		configuredDefault: landingToSide(configuredTasksLanding),
+	});
+	const placementDir = placementFolder(
+		TASK_PLACEMENT_SLOTS,
+		placementDecision.choice,
+	);
+	const relPath = `${placementDir}/${slug}.md`;
 
 	// BOUNDED INTERNAL REVIEW (observation
 	// `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):

@@ -172,7 +172,8 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		// Default placement stages the task in `tasks/backlog/` (nothing configured).
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 		// Exactly one review round ran (the natural terminator on the first approve).
 		expect(rounds).toBe(1);
 		// The task rode the work/<slug> branch (propose default); main untouched.
@@ -181,7 +182,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -226,7 +227,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 					// No file may exist on disk yet (no pre-emit write).
 					expect(() =>
 						readFileSync(
-							join(repo, 'work/tasks/ready/add-quiet-flag.md'),
+							join(repo, 'work/tasks/backlog/add-quiet-flag.md'),
 							'utf8',
 						),
 					).toThrow();
@@ -256,7 +257,7 @@ describe('intake <N> — the lone-task bounded internal review (stubbed review g
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);

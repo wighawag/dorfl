@@ -14,6 +14,7 @@ import {
 } from '../src/intake.js';
 import {stampIntakeMarker, parseIntakeMarker} from '../src/intake-marker.js';
 import {GitHubProvider} from '../src/github.js';
+import {performDo, type DoDorfl} from '../src/do.js';
 import {brand} from '../src/brand.js';
 import {
 	GitHubIssueProvider,
@@ -206,7 +207,7 @@ const TASK_VERDICT: IntakeVerdict = {
 };
 
 describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
-	it('a stubbed `task` verdict writes work/tasks/ready/<slug>.md (issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
+	it('a stubbed `task` verdict writes work/tasks/backlog/<slug>.md (default staging placement; issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();
 
@@ -224,7 +225,11 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
 		expect(result.emittedSlug).toBe('add-quiet-flag');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		// DEFAULT PLACEMENT: with nothing configured, the shared resolver's built-in
+		// floor stages the task in `tasks/backlog/` (parity with the spec emit; ADR
+		// `untrusted-origin-carries-via-stamp-not-forced-staging`), NOT the old
+		// hardcoded `tasks/ready/`.
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 
 		// PROPOSE (default): the task rides the work/<slug> branch on the arbiter,
 		// and main is NOT touched (no done/backlog task landed on main).
@@ -247,7 +252,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -271,7 +276,7 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -365,6 +370,139 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 		expect(onBranch).toMatch(/^originTrust: untrusted$/m);
 	});
 
+	// ── INTAKE TASK PLACEMENT SYMMETRY (task `intake-task-placement-symmetry`; ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`) ───────────────────
+	// The intake TASK emit now mirrors the intake SPEC emit: it routes the emitted
+	// task DOCUMENT through the shared placement resolver (carrying the origin-trust
+	// stamp) instead of hardcoding `tasks/ready` + forcing a document PR for an
+	// untrusted author. An untrusted-author issue therefore MERGES a task file to
+	// `main` — into `backlog` by default, or `ready` when `untrustedTasksLandIn:
+	// ready` is configured — and the sole reserved untrusted checkpoint is the
+	// carried stamp forcing the BUILD to a code PR (asserted in the last case).
+	describe('intake task emit — untrusted placement parity with the spec emit', () => {
+		// A stubbed agent for the follow-on build: edits a file so the commit is
+		// non-empty, then succeeds (mirrors `do.test.ts`'s `editingAgent`).
+		const editingAgent: DoDorfl = ({cwd}) => {
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work done\n');
+			return {ok: true};
+		};
+
+		it('untrusted issue + DEFAULT config ⇒ the task MERGES to work/tasks/backlog/ on main carrying the stamp (no document PR)', async () => {
+			const {repo} = seedRepoWithArbiter(scratch.root, []);
+			const result = await performIntake({
+				issueNumber: 42,
+				cwd: repo,
+				arbiter: ARBITER,
+				issueProvider: stubIssueProvider(),
+				decide: async () => TASK_VERDICT,
+				reviewTask: convergingReviewGate,
+				originTrust: 'untrusted',
+				// The file-emit MODE is the operator/config value now (author-trust no
+				// longer derives it): merge lands the DOCUMENT on main. Placement is
+				// unconfigured ⇒ the resolver's built-in floor stages it in backlog.
+				integration: {task: 'merge', spec: 'propose'},
+				env: gitEnv(),
+			});
+			expect(result.outcome).toBe('tasked');
+			// MERGED to main in the STAGING slot (`tasks/backlog/`), NOT a document PR.
+			// (`'pre-backlog'` = `work/tasks/backlog/` in the helper's legacy vocab.)
+			expect(existsOnArbiterMain(repo, 'pre-backlog', 'add-quiet-flag')).toBe(
+				true,
+			);
+			expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
+			gitIn(['fetch', '-q', ARBITER], repo);
+			const onMain = gitIn(
+				['show', `${ARBITER}/main:work/tasks/backlog/add-quiet-flag.md`],
+				repo,
+			);
+			expect(onMain).toMatch(/^origin: issue$/m);
+			expect(onMain).toMatch(/^originTrust: untrusted$/m);
+		});
+
+		it('untrusted issue + untrustedTasksLandIn: ready ⇒ the task MERGES to work/tasks/ready/ on main carrying the stamp', async () => {
+			const {repo} = seedRepoWithArbiter(scratch.root, []);
+			const result = await performIntake({
+				issueNumber: 42,
+				cwd: repo,
+				arbiter: ARBITER,
+				issueProvider: stubIssueProvider(),
+				decide: async () => TASK_VERDICT,
+				reviewTask: convergingReviewGate,
+				originTrust: 'untrusted',
+				integration: {task: 'merge', spec: 'propose'},
+				// Opt the UNTRUSTED landing into the pool: the caller selects this default
+				// (over `tasksLandIn`) by reading the `originTrust: untrusted` stamp.
+				untrustedTasksLandIn: 'ready',
+				env: gitEnv(),
+			});
+			expect(result.outcome).toBe('tasked');
+			// MERGED to the POOL (`tasks/ready/`) — the mode the old hard rung could not
+			// express. (`'backlog'` = `work/tasks/ready/` in the helper's legacy vocab.)
+			expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+			expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+			gitIn(['fetch', '-q', ARBITER], repo);
+			const onMain = gitIn(
+				['show', `${ARBITER}/main:work/tasks/ready/add-quiet-flag.md`],
+				repo,
+			);
+			expect(onMain).toMatch(/^origin: issue$/m);
+			expect(onMain).toMatch(/^originTrust: untrusted$/m);
+		});
+
+		it('a subsequent BUILD of the ready-landed untrusted task forces PROPOSE via the carried stamp (never merges CODE to main)', async () => {
+			const {repo} = seedRepoWithArbiter(scratch.root, []);
+			// 1) intake the untrusted issue into the POOL, merged to main.
+			const intook = await performIntake({
+				issueNumber: 42,
+				cwd: repo,
+				arbiter: ARBITER,
+				issueProvider: stubIssueProvider(),
+				decide: async () => TASK_VERDICT,
+				reviewTask: convergingReviewGate,
+				originTrust: 'untrusted',
+				integration: {task: 'merge', spec: 'propose'},
+				untrustedTasksLandIn: 'ready',
+				env: gitEnv(),
+			});
+			expect(intook.outcome).toBe('tasked');
+			// Move the local checkout onto the merged main so the ready task is present
+			// in the working tree for the build (the runner-owned checkout the build sees).
+			gitIn(['fetch', '-q', ARBITER], repo);
+			gitIn(['checkout', '-q', '-B', 'main', `${ARBITER}/main`], repo);
+
+			// 2) BUILD it with the build-transition config = merge, but NO explicit flag
+			// (the autonomous/CI shape). The carried `originTrust: untrusted` stamp forces
+			// the BUILD to propose — the sole reserved untrusted checkpoint (ADR
+			// `untrusted-origin-carries-via-stamp-not-forced-staging` § “safe in the pool
+			// is real”).
+			const built = await performDo({
+				arg: 'add-quiet-flag',
+				cwd: repo,
+				arbiter: ARBITER,
+				integration: 'merge',
+				verify: 'exit 0',
+				dorfl: editingAgent,
+				env: gitEnv(),
+			});
+			expect(built.exitCode).toBe(0);
+			expect(built.outcome).toBe('completed');
+			// PROPOSE: the built task did NOT land in done/ on main (a human reviews the
+			// code PR); the work branch was pushed as the PR source.
+			expect(existsOnArbiterMain(repo, 'done', 'add-quiet-flag')).toBe(false);
+			expect(
+				gitIn(
+					[
+						'rev-parse',
+						'--verify',
+						'--quiet',
+						`${ARBITER}/work/task-add-quiet-flag`,
+					],
+					repo,
+				).trim(),
+			).not.toBe('');
+		});
+	});
+
 	it('is GATE-FREE: it proceeds with the autonomous gates (autoBuild/autoTask) OFF', async () => {
 		// Prove `intake` does not consult the autonomous-selection gates: even with a
 		// per-repo config that turns the build gate (autoBuild) AND the task gate
@@ -389,7 +527,8 @@ describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		// Default placement stages the task in `tasks/backlog/` (nothing configured).
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 	});
 
 	it('the AGENT does no git and no seam side-effects: the runner posts nothing and the decider sees no git', async () => {
@@ -599,7 +738,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 		const onBranch = gitIn(
 			[
 				'show',
-				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/ready/add-quiet-flag.md`,
+				`${ARBITER}/work/intake-task-add-quiet-flag:work/tasks/backlog/add-quiet-flag.md`,
 			],
 			repo,
 		);
@@ -1143,7 +1282,7 @@ describe('intake <N> — the processing lock (acquire/release, back-off, degrade
 		// The run PROCEEDS (the task is emitted) without a lock — no crash, no back-off.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 		// No label op happened (the provider has none) and the degrade is SURFACED.
 		expect(issueProvider.labelOps).toEqual([]);
 		expect(notes.some((n) => /lock degraded/i.test(n))).toBe(true);
@@ -1287,10 +1426,17 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		// MERGE: the task landed on arbiter main (no PR; main advanced).
-		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+		// MERGE: the task landed on arbiter main (no PR; main advanced) — STAGED in
+		// `tasks/backlog/` by default placement (parity with the spec emit landing in
+		// `specs/proposed/`; ADR `untrusted-origin-carries-via-stamp-not-forced-staging`).
+		// The `'pre-backlog'` fixture word maps to `work/tasks/backlog/` (the staging
+		// slot); `'backlog'` maps to the `tasks/ready/` pool in this helper's legacy
+		// vocabulary, so a staged landing is asserted via `'pre-backlog'`.
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'add-quiet-flag')).toBe(
+			true,
+		);
 		const onMain = gitIn(
-			['show', `${ARBITER}/main:work/tasks/ready/add-quiet-flag.md`],
+			['show', `${ARBITER}/main:work/tasks/backlog/add-quiet-flag.md`],
 			repo,
 		);
 		// The merged task carries the `issue: N` closure link, not `Fixes #N` (which
@@ -2210,7 +2356,7 @@ describe('intake <N> — the triage gate + marker (stubbed seams)', () => {
 		// The mid-ask loop RESUMES: ask is NON-terminal, so the decision runs + tasks.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 	});
 });
 
@@ -2305,8 +2451,11 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 			env: gitEnv(),
 		});
 		expect(result.outcome).toBe('tasked');
-		// The task landed on main; the comment links that commit SHA.
-		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+		// The task landed on main (STAGED in `tasks/backlog/` by default placement);
+		// the comment links that commit SHA. `'pre-backlog'` = `work/tasks/backlog/`.
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'add-quiet-flag')).toBe(
+			true,
+		);
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const landed = gitIn(['rev-parse', `${ARBITER}/main`], repo).trim();
 		expect(issueProvider.comments).toHaveLength(1);
@@ -2441,7 +2590,7 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 		// The success outcome is UNCHANGED by the degrade.
 		expect(result.exitCode).toBe(0);
 		expect(result.outcome).toBe('tasked');
-		expect(result.emitted).toBe('work/tasks/ready/add-quiet-flag.md');
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
 		// `commented` reflects the failed post (advisory), but the run still succeeded.
 		expect(result.commented).toBe(false);
 	});

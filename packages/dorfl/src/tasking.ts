@@ -372,8 +372,14 @@ export const STAGED_TASKS_DIR = workFolderRel('tasks-backlog');
  */
 const POOL_TASKS_DIR = workFolderRel('tasks-ready');
 
-/** The placement slots for the TASK lifecycle (folder names). */
-const TASK_PLACEMENT_SLOTS = {
+/**
+ * The placement slots for the TASK lifecycle (folder names). EXPORTED so the
+ * intake TASK emit (`intake.ts` `dispatchTask`) reuses the SAME slots + resolver
+ * the tasker uses, reaching parity with the intake SPEC emit (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`) WITHOUT forking a
+ * second copy of the task folder names.
+ */
+export const TASK_PLACEMENT_SLOTS = {
 	staging: STAGED_TASKS_DIR,
 	pool: POOL_TASKS_DIR,
 } as const;
@@ -386,9 +392,11 @@ const TASK_PLACEMENT_SLOTS = {
  * are NOT accepted (clean break — the staging value was renamed
  * `'pre-backlog'` → `'backlog'`, and the pool value was renamed
  * `'backlog'` → `'todo'` → `'ready'`, ADR
- * `rename-task-pool-folder-todo-to-ready`).
+ * `rename-task-pool-folder-todo-to-ready`). EXPORTED alongside
+ * {@link TASK_PLACEMENT_SLOTS} so the intake TASK emit reuses this exact mapping
+ * (the task twin of `specLandingToSide` on the intake spec path).
  */
-function landingToSide(
+export function landingToSide(
 	landing: 'backlog' | 'ready' | undefined,
 ): 'staging' | 'pool' | undefined {
 	if (landing === 'backlog') return 'staging';
