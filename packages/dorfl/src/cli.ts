@@ -400,11 +400,13 @@ function buildRegistrySetAdvanceTick(options: {
 				// The per-TRANSITION TASKING override: the `do spec:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`.
 				taskingIntegration: config.taskingIntegration,
-				// The TASK-PLACEMENT configured default (`do spec:` tasking output:
+				// The TASK-PLACEMENT configured defaults (`do spec:` tasking output:
 				// `backlog` staged vs `ready` pool). No operator flag on this
-				// registry-driven advance context, so only the configured default rung is
-				// threaded (the resolver still layers untrusted-origin force + built-in floor).
+				// registry-driven advance context, so only the configured default rungs
+				// are threaded (trusted + the untrusted twin the tasker selects from the
+				// spec's stamp; the resolver layers the built-in floor).
 				tasksLandIn: config.tasksLandIn,
+				untrustedTasksLandIn: config.untrustedTasksLandIn,
 				prepare: config.prepare,
 				verify: config.verify,
 				// Single-job build path: gate the REBASED tip (the default) unconditionally.
@@ -2592,10 +2594,12 @@ export function buildProgram(): Command {
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION TASKING override (the `do --remote spec:` tasking path).
 					taskingIntegration: remoteConfig.taskingIntegration,
-					// TASK-PLACEMENT: the configured default + the EXPLICIT operator override
-					// (`--tasks-land-in`), the top of the placement precedence — mirrors
-					// `explicitMerge` (set only when the flag was typed).
+					// TASK-PLACEMENT: the configured defaults (trusted + the untrusted twin
+					// the tasker selects from the spec's stamp) + the EXPLICIT operator
+					// override (`--tasks-land-in`), the top of the placement precedence —
+					// mirrors `explicitMerge` (set only when the flag was typed).
 					tasksLandIn: remoteConfig.tasksLandIn,
+					untrustedTasksLandIn: remoteConfig.untrustedTasksLandIn,
 					explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
@@ -2766,12 +2770,13 @@ export function buildProgram(): Command {
 				// `taskingIntegration ?? integration`; the task-build path stays on
 				// `integration`. Unset ⇒ tasking falls back to `integration` (today's behaviour).
 				taskingIntegration: config.taskingIntegration,
-				// TASK-PLACEMENT (`do spec:` tasking output): the configured default rung +
+				// TASK-PLACEMENT (`do spec:` tasking output): the configured default rungs
+				// (trusted + the untrusted twin the tasker selects from the spec's stamp) +
 				// the EXPLICIT operator override `--tasks-land-in` (top of the precedence).
 				// `explicitTasksLandIn` is set ONLY when the flag was typed (mirrors
-				// `explicitMerge`), so an untrusted-origin staging force still wins under a
-				// config default.
+				// `explicitMerge`).
 				tasksLandIn: config.tasksLandIn,
+				untrustedTasksLandIn: config.untrustedTasksLandIn,
 				explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 				// In-place divergence guard override (mirrors --ignore-not-ready).
 				ignoreDivergedMain: flags.ignoreDivergedMain === true,
@@ -3104,9 +3109,10 @@ export function buildProgram(): Command {
 					explicitMerge: flagMode === 'merge',
 					// Per-TRANSITION TASKING override (the isolated `do --remote spec:` path).
 					taskingIntegration: remoteConfig.taskingIntegration,
-					// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
-					// (set only when typed, mirroring `explicitMerge`).
+					// TASK-PLACEMENT: configured defaults (trusted + untrusted twin) + EXPLICIT
+					// `--tasks-land-in` override (set only when typed, mirroring `explicitMerge`).
 					tasksLandIn: remoteConfig.tasksLandIn,
+					untrustedTasksLandIn: remoteConfig.untrustedTasksLandIn,
 					explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 					prepare: remoteConfig.prepare,
 					verify: remoteConfig.verify,
@@ -3247,9 +3253,10 @@ export function buildProgram(): Command {
 				// Per-TRANSITION TASKING override (the `do spec:` tasking path threads
 				// `taskingIntegration ?? integration`; the build path stays on `integration`).
 				taskingIntegration: config.taskingIntegration,
-				// TASK-PLACEMENT: configured default + EXPLICIT `--tasks-land-in` override
-				// (set only when typed, mirroring `explicitMerge`).
+				// TASK-PLACEMENT: configured defaults (trusted + untrusted twin) + EXPLICIT
+				// `--tasks-land-in` override (set only when typed, mirroring `explicitMerge`).
 				tasksLandIn: config.tasksLandIn,
+				untrustedTasksLandIn: config.untrustedTasksLandIn,
 				explicitTasksLandIn: explicitTasksLandInFromFlag(flags.tasksLandIn),
 				prepare: config.prepare,
 				verify: config.verify,
@@ -4391,10 +4398,15 @@ export function buildProgram(): Command {
 				// The origin-trust stamp the CI shell passes IN (unset ⇒ unstamped).
 				originTrust,
 				noPR: config.noPR,
-				// SPEC-PLACEMENT: the configured-default `specsLandIn` rung + the EXPLICIT
-				// `--specs-land-in` override (top of the precedence). The shared placement
-				// resolver in `intake.ts` overlays the untrusted-origin staging force.
+				// SPEC-PLACEMENT: the TRUSTED-side configured default (`specsLandIn`) +
+				// the UNTRUSTED-side twin (`untrustedSpecsLandIn`, selected in
+				// `dispatchSpec` when the stamp is untrusted) + the EXPLICIT
+				// `--specs-land-in` override (top of the precedence). The placement
+				// resolver no longer has an untrusted-forces-staging rung (ADR
+				// `untrusted-origin-carries-via-stamp-not-forced-staging`); the caller
+				// selects the trusted-vs-untrusted default from the stamp.
 				specsLandIn: config.specsLandIn,
+				untrustedSpecsLandIn: config.untrustedSpecsLandIn,
 				explicitSpecsLandIn,
 				harness,
 				agentCmd: config.agentCmd,

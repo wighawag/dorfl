@@ -9,91 +9,72 @@ import {placementFolder, resolvePlacement} from '../src/placement.js';
  * (`placement-precedence.test.ts`) drive each rung end-to-end through the
  * actual tasking path.
  *
- * The four PRECEDENCE rungs (highest wins):
+ * The PRECEDENCE rungs (highest wins), after the untrusted-forces-staging rung
+ * was RETIRED (ADR `untrusted-origin-carries-via-stamp-not-forced-staging`):
  *
- *   explicit operator flag  >  untrusted-origin \u21d2 staging  >  configured
- *     default  >  built-in (staging)
+ *   explicit operator flag  >  configured default  >  built-in (staging)
  *
- * Mirrors the existing untrusted-origin BUILD-propose rule in
- * `integration-core.ts` (a positional twin: that rule resolves MODE; this one
- * resolves POSITION). Same trust signal (`originTrust:`), same
- * "explicit-operator beats the force" shape.
+ * Author-trust is NO LONGER a rung here: the resolver is a pure precedence over
+ * caller-supplied inputs. The trusted-vs-untrusted destination is selected BY
+ * THE CALLER (it reads the `originTrust:` stamp and passes the matching
+ * `untrusted*LandIn` / `*LandIn` default as `configuredDefault`), so the two
+ * call-site tests (`placement-precedence.test.ts` for the tasker,
+ * `intake-untrusted-spec-placement.test.ts` for intake) exercise the
+ * stamp ⇒ which-default selection.
  */
 
 describe('placement.resolvePlacement: precedence chain', () => {
 	const ROWS: Array<{
 		name: string;
 		explicit?: 'staging' | 'pool';
-		originTrust?: 'trusted' | 'untrusted';
 		configuredDefault?: 'staging' | 'pool';
 		expectedChoice: 'staging' | 'pool';
-		expectedReason:
-			| 'explicit'
-			| 'untrusted-origin'
-			| 'configured-default'
-			| 'built-in';
+		expectedReason: 'explicit' | 'configured-default' | 'built-in';
 	}> = [
-		// Rung 4 (lowest): nothing set \u21d2 the built-in floor (staging) wins.
+		// Rung 3 (lowest): nothing set \u21d2 the built-in floor (staging) wins.
 		{
 			name: 'no inputs \u21d2 built-in floor (staging)',
 			expectedChoice: 'staging',
 			expectedReason: 'built-in',
 		},
-		// Rung 3: configured default wins when nothing higher overrides.
+		// Rung 2: configured default wins when nothing higher overrides. The
+		// caller already selected the trusted-vs-untrusted default from the stamp;
+		// this resolver just consumes it — so a `pool` default is honoured
+		// REGARDLESS of author-trust (that was impossible under the old rung).
 		{
-			name: 'configured default pool, trusted origin \u21d2 pool (configured)',
-			originTrust: 'trusted',
+			name: 'configured pool \u21d2 pool (configured)',
 			configuredDefault: 'pool',
 			expectedChoice: 'pool',
 			expectedReason: 'configured-default',
 		},
 		{
-			name: 'configured default staging, trusted origin \u21d2 staging (configured)',
-			originTrust: 'trusted',
+			name: 'configured staging \u21d2 staging (configured)',
 			configuredDefault: 'staging',
 			expectedChoice: 'staging',
 			expectedReason: 'configured-default',
 		},
+		// The untrusted destination is JUST a configured default now: the caller
+		// resolved `untrusted*LandIn` to a `pool` side and passed it in; the
+		// resolver returns `pool`/`configured-default`, NOT a trust rung. This is
+		// the "untrusted lands in `ready`" case the old hard rung could not express.
 		{
-			name: 'unset origin (= trusted), configured pool \u21d2 pool (configured)',
+			name: 'caller-selected untrusted default of pool \u21d2 pool (configured; no trust rung)',
 			configuredDefault: 'pool',
 			expectedChoice: 'pool',
 			expectedReason: 'configured-default',
 		},
-		// Rung 2: untrusted-origin forces STAGING even with a `pool` default.
+		// Rung 1 (top): explicit operator flag wins over the configured default
+		// (the positional analogue of `explicitMerge` in `integration-core.ts`).
 		{
-			name: 'untrusted origin + configured pool \u21d2 staging (untrusted force)',
-			originTrust: 'untrusted',
-			configuredDefault: 'pool',
-			expectedChoice: 'staging',
-			expectedReason: 'untrusted-origin',
-		},
-		{
-			name: 'untrusted origin + configured staging \u21d2 staging (untrusted force still names the rung that DECIDED)',
-			originTrust: 'untrusted',
-			configuredDefault: 'staging',
-			expectedChoice: 'staging',
-			// The untrusted-origin rung fires BEFORE configured-default, so the
-			// reason names "untrusted-origin" even though configured-default would
-			// have arrived at the same choice. That is the honest reading of the
-			// precedence chain (the higher rung is the one that decided).
-			expectedReason: 'untrusted-origin',
-		},
-		// Rung 1 (top): explicit operator flag wins over everything, including
-		// the untrusted-origin force (the positional analogue of `explicitMerge`
-		// overriding `untrusted-origin \u21d2 propose` in `integration-core.ts`).
-		{
-			name: 'explicit pool + untrusted origin \u21d2 pool (explicit beats untrusted force)',
+			name: 'explicit pool + configured staging \u21d2 pool (explicit beats configured)',
 			explicit: 'pool',
-			originTrust: 'untrusted',
 			configuredDefault: 'staging',
 			expectedChoice: 'pool',
 			expectedReason: 'explicit',
 		},
 		{
-			name: 'explicit staging + trusted origin + configured pool \u21d2 staging (explicit beats configured)',
+			name: 'explicit staging + configured pool \u21d2 staging (explicit beats configured)',
 			explicit: 'staging',
-			originTrust: 'trusted',
 			configuredDefault: 'pool',
 			expectedChoice: 'staging',
 			expectedReason: 'explicit',
@@ -104,7 +85,6 @@ describe('placement.resolvePlacement: precedence chain', () => {
 		it(row.name, () => {
 			const result = resolvePlacement({
 				explicit: row.explicit,
-				originTrust: row.originTrust,
 				configuredDefault: row.configuredDefault,
 			});
 			expect(result.choice).toBe(row.expectedChoice);

@@ -6,16 +6,21 @@
  *
  * Pure function from UNFORGEABLE inputs to a staging-vs-pool destination:
  *
- *   explicit operator flag  >  untrusted-origin forces STAGING  >
- *     configured default  >  built-in
+ *   explicit operator flag  >  configured default  >  built-in
  *
- * It is the POSITIONAL twin of the untrusted-origin BUILD-propose rule in
- * `integration-core.ts` (which decides MODE: `propose` vs `merge`): the same
- * `originTrust:` stamp + the same "explicit operator override beats the trust
- * force" shape, reused here to decide POSITION (which folder the runner lands
- * the emitted ledger files in). The agent cannot influence either — both
- * resolve runner-side from the stamped frontmatter + the resolved policy + the
- * operator's explicit flag.
+ * Author-trust is NO LONGER a rung here (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`). This resolver was
+ * once the POSITIONAL twin of the untrusted-origin BUILD-propose rule in
+ * `integration-core.ts` (an `originTrust: untrusted ⇒ staging` rung sitting
+ * above the configured default). That rung is REMOVED: it made "untrusted
+ * lands in `ready`" inexpressible, and its safety was redundant with the
+ * build-time propose rule (an untrusted item in the pool still cannot become
+ * merged CODE without human review). The trusted-vs-untrusted destination is
+ * now selected BY THE CALLER, which reads the stamp and picks the matching
+ * configured default (`untrusted*LandIn` vs `*LandIn`) BEFORE calling — so
+ * this resolver stays a pure precedence over caller-supplied inputs. The
+ * agent cannot influence placement — it resolves runner-side from the resolved
+ * policy + the operator's explicit flag.
  *
  * LIFECYCLE-GENERIC. The folder names + the configured-default value are
  * PARAMETERS (`slots`, `configuredDefault`), so the same resolver serves the
@@ -54,34 +59,37 @@ export interface PlacementSlots {
 export interface ResolvePlacementInput {
 	/**
 	 * The operator's EXPLICIT override (the TOP of the chain) — when set, it
-	 * wins over the untrusted-origin force AND the configured default. Mirrors
-	 * `integration-core.ts`'s `explicitMerge` "operator is present; CLI always
-	 * wins, no special force-key" shape (the untrusted-origin trust signal
-	 * gates pool entry, not the mode in this case). Unset (`undefined`) ⇒ this
-	 * rung is skipped and the next one applies.
+	 * wins over the configured default. Mirrors `integration-core.ts`'s
+	 * `explicitMerge` "operator is present; CLI always wins, no special
+	 * force-key" shape. Unset (`undefined`) ⇒ this rung is skipped and the next
+	 * one applies.
 	 */
 	explicit?: PlacementSide;
 	/**
-	 * The source's stamped `originTrust:` frontmatter (`trusted` | `untrusted` |
-	 * absent ⇒ trusted by default). When `untrusted`, the resolver FORCES
-	 * `staging` even on a "land in pool" repo — the positional analogue of the
-	 * existing `untrusted-origin-forces-build-propose` rule. Unset / `trusted`
-	 * ⇒ this rung is skipped (zero behaviour change for the normal path).
-	 */
-	originTrust?: 'trusted' | 'untrusted';
-	/**
-	 * The repo's resolved configured DEFAULT landing (`tasksLandIn` /
-	 * `specsLandIn`). Caller resolves it like the existing `taskingIntegration`
-	 * (flag > env > per-repo > global > built-in) and passes the result; this
-	 * resolver just consumes it.
+	 * The repo's resolved configured DEFAULT landing, ALREADY selected by the
+	 * caller for the item's author-trust: the caller reads the `originTrust:`
+	 * stamp and passes the `untrusted*LandIn` default for an untrusted item, or
+	 * the trusted `*LandIn` default otherwise (ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolved like the
+	 * existing `taskingIntegration` (flag > env > per-repo > global > built-in)
+	 * and mapped to a {@link PlacementSide}; this resolver just consumes it. Unset
+	 * ⇒ the built-in floor applies.
 	 */
 	configuredDefault?: PlacementSide;
 }
 
-/** The resolved choice + which precedence rung won (for honest reporting). */
+/**
+ * The resolved choice + which precedence rung won (for honest reporting).
+ *
+ * The `'untrusted-origin'` reason is RETIRED (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`): author-trust no
+ * longer decides POSITION inside this resolver, so an untrusted item that lands
+ * in staging now does so via `'configured-default'` (its caller selected the
+ * `untrusted*LandIn` default), not via a distinct trust rung.
+ */
 export interface PlacementResult {
 	choice: PlacementSide;
-	reason: 'explicit' | 'untrusted-origin' | 'configured-default' | 'built-in';
+	reason: 'explicit' | 'configured-default' | 'built-in';
 }
 
 /**
@@ -97,20 +105,18 @@ const BUILT_IN_FLOOR: PlacementSide = 'staging';
  * Resolve the staging-vs-pool placement from unforgeable inputs, via the fixed
  * precedence chain:
  *
- *   explicit  >  untrusted-origin ⇒ staging  >  configured default  >  built-in
+ *   explicit  >  configured default  >  built-in
  *
- * Pure: no I/O, no env reads — the caller resolves config + reads the
- * frontmatter and passes both in. Reused by every lifecycle (task + spec
- * placement + future intake variants) so a precedence change touches ONE place.
+ * Pure: no I/O, no env reads, NO trust rung — the caller resolves config
+ * (INCLUDING selecting the trusted-vs-untrusted default from the stamp) and
+ * passes the result in. Reused by every lifecycle (task + spec placement +
+ * future intake variants) so a precedence change touches ONE place.
  */
 export function resolvePlacement(
 	input: ResolvePlacementInput,
 ): PlacementResult {
 	if (input.explicit !== undefined) {
 		return {choice: input.explicit, reason: 'explicit'};
-	}
-	if (input.originTrust === 'untrusted') {
-		return {choice: 'staging', reason: 'untrusted-origin'};
 	}
 	if (input.configuredDefault !== undefined) {
 		return {choice: input.configuredDefault, reason: 'configured-default'};

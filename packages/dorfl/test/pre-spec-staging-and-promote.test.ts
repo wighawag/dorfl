@@ -35,8 +35,11 @@ import type {
  *
  *   (a) an `intake`-authored PRD lands STAGED in `work/specs/proposed/`, NOT in
  *       `work/specs/ready/`, by default (the built-in floor) AND under
- *       `originTrust: untrusted` (the untrusted-origin force) even when the
- *       repo configures `prdsLandIn: 'ready'`;
+ *       `originTrust: untrusted` with the default (unset) untrusted knob \u2014
+ *       the caller now SELECTS `untrustedSpecsLandIn` from the stamp (ADR
+ *       `untrusted-origin-carries-via-stamp-not-forced-staging`), which
+ *       defaults to staging, so the effective behaviour is unchanged; a repo
+ *       can OPT untrusted specs into the pool via `untrustedSpecsLandIn: ready`;
  *   (b) `work/specs/ready/` STILL means the auto-slice POOL: the pool reader
  *       (`createLocalLedgerReadStrategy().resolveSpecPool`) reads `work/specs/ready/`
  *       byte-for-byte unchanged and a staged PRD is NOT in the pool; the
@@ -184,7 +187,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 		);
 	});
 
-	it('originTrust: untrusted FORCES staging even when specsLandIn: ready (the untrusted-origin force)', async () => {
+	it('originTrust: untrusted selects the UNTRUSTED default (unset \u21d2 staging floor) even when the TRUSTED specsLandIn: ready \u2014 zero behaviour change vs the old forced-staging', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 7,
@@ -192,8 +195,10 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 7}}),
 			decide: async () => PRD_VERDICT,
-			// The repo says "land PRDs in the pool" \u2014 but the trust signal
-			// overrides it (PRD US #12).
+			// The repo's TRUSTED default says "land specs in the pool" \u2014 but the
+			// spec is untrusted, so the caller selects the UNTRUSTED default
+			// (`untrustedSpecsLandIn`), which is UNSET here \u21d2 the built-in floor
+			// (staging). The trusted specsLandIn does NOT apply to an untrusted spec.
 			specsLandIn: 'ready',
 			originTrust: 'untrusted',
 			env: gitEnv(),
@@ -202,7 +207,55 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 		expect(result.emitted).toBe('work/specs/proposed/shiny-new-vision.md');
 	});
 
-	it('the EXPLICIT operator flag wins over the untrusted-origin force (operator is present; CLI always wins)', async () => {
+	it('originTrust: untrusted + untrustedSpecsLandIn: ready \u2192 lands in work/specs/ready/ (the pool) \u2014 the mode the old hard rung could not express; safety is the stamp on the tasks', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 71,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 71}}),
+			decide: async () => PRD_VERDICT,
+			// The repo OPTS untrusted specs into the pool explicitly. The TRUSTED
+			// default is staging, to prove the UNTRUSTED knob is what selected the
+			// pool.
+			specsLandIn: 'pre-proposed',
+			untrustedSpecsLandIn: 'ready',
+			originTrust: 'untrusted',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('spec-written');
+		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
+		// The spec landed in the POOL but STILL carries the origin stamp (the
+		// tasker propagates it onto every emitted task, whose BUILD is then forced
+		// to a code PR). Fetch the landed file and assert the stamp.
+		landIntakeBranchOnMain(repo, 'shiny-new-vision');
+		const landed = run(
+			'git',
+			['show', `${ARBITER}/main:work/specs/ready/shiny-new-vision.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(landed).toContain('originTrust: untrusted');
+	});
+
+	it('a TRUSTED spec does NOT read the untrusted knob: untrustedSpecsLandIn: pre-proposed + specsLandIn: ready + trusted \u2192 pool', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 72,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 72}}),
+			decide: async () => PRD_VERDICT,
+			specsLandIn: 'ready',
+			untrustedSpecsLandIn: 'pre-proposed',
+			originTrust: 'trusted',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('spec-written');
+		expect(result.emitted).toBe('work/specs/ready/shiny-new-vision.md');
+	});
+
+	it('the EXPLICIT operator flag wins over the stamp-selected default (operator is present; CLI always wins)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 8,
@@ -210,9 +263,9 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			arbiter: ARBITER,
 			issueProvider: stubIssueProvider({issue: {number: 8}}),
 			decide: async () => PRD_VERDICT,
-			// Untrusted origin would force STAGING; the explicit --prds-land-in
-			// override beats it (mirrors `explicitMerge` overriding the
-			// untrusted-origin build-propose rule).
+			// The untrusted default is staging (unset \u21d2 floor); the explicit
+			// --specs-land-in override beats it (mirrors `explicitMerge` overriding
+			// the untrusted-origin build-propose rule).
 			originTrust: 'untrusted',
 			explicitSpecsLandIn: 'ready',
 			env: gitEnv(),

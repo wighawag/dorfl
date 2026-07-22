@@ -272,6 +272,25 @@ export interface PerformTaskOptions {
 	 */
 	tasksLandIn?: 'backlog' | 'ready';
 	/**
+	 * **The per-repo UNTRUSTED-side TASK-PLACEMENT default** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #6/#10, governing ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). The TWIN of
+	 * {@link tasksLandIn} selected when the SPEC being tasked carries an
+	 * `originTrust: untrusted` stamp: `performTask` reads the stamp and feeds
+	 * THIS default (rather than {@link tasksLandIn}) as the configured-default
+	 * rung of the placement resolver. This is the same knob intake uses for a
+	 * task emitted directly from an issue (decision X: one policy governs an
+	 * untrusted task's destination regardless of birth path). Resolved per-repo
+	 * like {@link tasksLandIn} (flag `--untrusted-tasks-land-in` > env
+	 * `DORFL_UNTRUSTED_TASKS_LAND_IN` > per-repo > global > built-in `backlog`).
+	 * Unset ⇒ the resolver's built-in floor (`staging`) applies. The resolver no
+	 * longer has an untrusted-forces-staging rung; safety for an untrusted task
+	 * that lands in `ready` here is the carried stamp (its BUILD is forced to a
+	 * code PR), NOT the folder.
+	 */
+	untrustedTasksLandIn?: 'backlog' | 'ready';
+	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung). When set, the runner-deterministic resolver lands the tasks HERE
 	 * regardless of `originTrust` or {@link tasksLandIn} — the positional
@@ -593,17 +612,28 @@ export async function performTask(
 	const stagedEmitted = newOrChangedStagedTasks(cwd, before);
 	const emitTasks = collectEmittedTasks(cwd, stagedEmitted);
 	// RUNNER-DETERMINISTIC PLACEMENT (task
-	// `runner-deterministic-slice-placement-policy-and-precedence`). Resolve which
+	// `runner-deterministic-slice-placement-policy-and-precedence`; the
+	// untrusted-forces-staging rung was RETIRED by ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
 	// folder the runner lands the emitted tasks in BEFORE handing them to the
-	// shared integrate band: precedence `explicit > untrusted-origin ⇒ staging >
-	// tasksLandIn > built-in (staging)`, all from unforgeable inputs (the spec's
-	// stamped `originTrust:` + the resolved per-repo default + the operator's
-	// explicit flag). The agent NEVER influences this; it always writes to
-	// `work/tasks/backlog/`, and the runner redirects at `stage()` time.
+	// shared integrate band: precedence `explicit > configured default >
+	// built-in (staging)`. THIS caller selects the trusted-vs-untrusted
+	// configured default by reading the spec's propagated `originTrust:` stamp:
+	// an untrusted-origin spec selects `untrustedTasksLandIn` (default staging;
+	// `ready` when configured), a trusted/unset spec selects `tasksLandIn`. One
+	// knob (`untrustedTasksLandIn`) governs an untrusted task's destination
+	// whether born from an issue directly (intake) or from an untrusted spec
+	// here. The agent NEVER influences this; it always writes to
+	// `work/tasks/backlog/`, and the runner redirects at `stage()` time. Safety
+	// for an untrusted task landing in `ready` is the carried stamp (its BUILD is
+	// forced to a code PR), not the folder.
+	const configuredTasksLanding =
+		specFm.originTrust === 'untrusted'
+			? options.untrustedTasksLandIn
+			: options.tasksLandIn;
 	const placementDecision = resolvePlacement({
 		explicit: landingToSide(options.explicitTasksLandIn),
-		originTrust: specFm.originTrust,
-		configuredDefault: landingToSide(options.tasksLandIn),
+		configuredDefault: landingToSide(configuredTasksLanding),
 	});
 	const placementDir = placementFolder(
 		TASK_PLACEMENT_SLOTS,
@@ -721,7 +751,6 @@ export async function performTask(
 						emitTasks,
 						poolBefore,
 						placementDir,
-						placementReason: placementDecision.reason,
 						note,
 						env,
 					}),
@@ -1033,32 +1062,19 @@ async function stageTaskingLifecycle(params: {
 	/**
 	 * The runner-resolved destination folder (task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Computed
-	 * ONCE in `performTask` via the shared {@link resolvePlacement} from the
-	 * spec's `originTrust:` stamp + the configured `tasksLandIn` default + the
-	 * operator's explicit override, then passed in here — so the call site sees
-	 * exactly where the emitted tasks landed (the placement decision is not
-	 * buried in the stage closure).
+	 * ONCE in `performTask` via the shared {@link resolvePlacement}. The caller
+	 * selects the configured default from the spec's `originTrust:` stamp
+	 * (`untrustedTasksLandIn` when untrusted, else `tasksLandIn`; ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`) and overlays the
+	 * operator's explicit override, then passes the result in here — so the call
+	 * site sees exactly where the emitted tasks landed (the placement decision is
+	 * not buried in the stage closure).
 	 */
 	placementDir: string;
-	/** Which precedence rung the resolver took (for honest reporting). */
-	placementReason:
-		| 'explicit'
-		| 'untrusted-origin'
-		| 'configured-default'
-		| 'built-in';
 	note: (message: string) => void;
 	env: NodeJS.ProcessEnv | undefined;
 }): Promise<void> {
-	const {
-		cwd,
-		slug,
-		emitTasks,
-		poolBefore,
-		placementDir,
-		placementReason,
-		note,
-		env,
-	} = params;
+	const {cwd, slug, emitTasks, poolBefore, placementDir, note, env} = params;
 	const spec = workItemRel('specs-ready', `${slug}.md`);
 	const specTasked = workItemRel('specs-tasked', `${slug}.md`);
 	// PROPAGATE the origin-trust PROVENANCE (task
@@ -1072,13 +1088,14 @@ async function stageTaskingLifecycle(params: {
 	const specProvenance = existsSync(specAbs)
 		? parseFrontmatter(readFileSync(specAbs, 'utf8'))
 		: {origin: undefined, originTrust: undefined};
-	if (placementReason === 'untrusted-origin') {
-		note(
-			`Untrusted-origin spec '${slug}': forcing the emitted tasks STAGED ` +
-				`(${placementDir}/) regardless of tasksLandIn (a human promotes ` +
-				'them into work/tasks/ready/). Pass --tasks-land-in <where> to override.',
-		);
-	}
+	// NOTE: author-trust no longer FORCES staging here (ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`). An untrusted spec's
+	// emitted tasks land per `untrustedTasksLandIn` (default staging; `ready` when
+	// configured), selected by the caller from the stamp before `resolvePlacement`;
+	// safety for a `ready` landing is the propagated `originTrust: untrusted` stamp
+	// below (its BUILD is forced to a code PR), not the folder. The placement
+	// decision itself is fully computed in `performTask`; this stage just writes to
+	// the resolved `placementDir`.
 	// Move the held spec specs/ready/ -> specs/tasked/ (the TASKED resting state — folder =
 	// source of truth, like done/ for tasks). This is the DURABLE `specs/ready → specs/tasked`
 	// success move, owned by THIS transition's commit (the lock no longer moved the

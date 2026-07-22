@@ -50,10 +50,12 @@ export type TasksLandIn = 'backlog' | 'ready';
  * auto-tasking POOL — the trusted fast-path landing, on-disk
  * `work/specs/ready/`). The same runner-deterministic placement RESOLVER
  * (`src/placement.ts`) layers on top:
- * `explicit operator flag > untrusted-origin ⇒ pre-proposed > specsLandIn
- * default > built-in (pre-proposed)`. An untrusted-origin intake spec is FORCED
- * to staging even in a `'ready'` repo (the positional analogue of the existing
- * `untrusted-origin-forces-build-propose` rule). The SPEC twin of
+ * `explicit operator flag > configured default > built-in (pre-proposed)`.
+ * Author-trust is NO LONGER a rung in the resolver (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`): the CALLER reads the
+ * `originTrust:` stamp and selects the untrusted twin `untrustedSpecsLandIn`
+ * (default `'pre-proposed'`; opt-in `'ready'`) as the configured default for an
+ * untrusted intake spec. The SPEC twin of
  * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
  * spellings mirror the live spec folders (`specs/proposed/` staging,
  * `specs/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
@@ -408,8 +410,10 @@ export interface Config {
 	 * call sites; no third knob). DEFAULTS to STAGING (`'backlog'`), the
 	 * conservative human-admission landing: safety for an untrusted item that
 	 * opts into the pool (`'ready'`) is then the carried build STAMP (a code PR),
-	 * not the folder. NO call site consumes it yet — the resolver + intake/tasker
-	 * wiring are later tasks.
+	 * not the folder. CONSUMED at both task call sites: the tasker
+	 * (`performTask`) selects it for an untrusted-origin spec's emitted tasks, and
+	 * intake's direct task emit (`dispatchTask`, a sibling task) selects it for a
+	 * task born straight from an issue.
 	 */
 	untrustedTasksLandIn: TasksLandIn;
 	/**
@@ -426,8 +430,9 @@ export interface Config {
 	 * configured-default rung. DEFAULTS to STAGING (`'pre-proposed'`) — the
 	 * conservative human-admission landing, preserving today's effective
 	 * behaviour for a repo that configures nothing; a repo opts an untrusted spec
-	 * into the pool (`'ready'`) explicitly, safety then via the carried stamp. NO
-	 * call site consumes it yet — the resolver + intake wiring are later tasks.
+	 * into the pool (`'ready'`) explicitly, safety then via the carried stamp.
+	 * CONSUMED at the intake SPEC call site (`dispatchSpec`), which selects it
+	 * over {@link specsLandIn} when the intake stamp is `originTrust: untrusted`.
 	 */
 	untrustedSpecsLandIn: SpecsLandIn;
 	/**

@@ -20,10 +20,18 @@ import {run} from '../src/git.js';
  * against a `--bare file://` arbiter (the house pattern in
  * `test/helpers/gitRepo.ts`).
  *
- * The four rungs (highest wins):
+ * The rungs (highest wins), after the untrusted-forces-staging rung was RETIRED
+ * (ADR `untrusted-origin-carries-via-stamp-not-forced-staging`):
  *
- *   explicit operator flag  >  untrusted-origin \u21d2 staging  >  tasksLandIn
- *     default  >  built-in (staging)
+ *   explicit operator flag  >  configured default  >  built-in (staging)
+ *
+ * Author-trust no longer FORCES staging inside the resolver: `performTask` reads
+ * the tasked spec's propagated `originTrust:` stamp and SELECTS which configured
+ * default applies — `untrustedTasksLandIn` for an untrusted spec (default
+ * staging; `ready` when configured), `tasksLandIn` for a trusted/unset spec —
+ * before calling the pure resolver. Safety for an untrusted task landing in
+ * `ready` is the carried stamp (its BUILD is forced to a code PR), not the
+ * folder.
  *
  * The seam under test: the agent ALWAYS writes to `work/tasks/backlog/`; the
  * RUNNER redirects the emitted files to the resolved destination at integrate-
@@ -222,10 +230,13 @@ describe('placement rung 3: tasksLandIn default \u2014 both landings verified', 
 });
 
 // --------------------------------------------------------------------------
-// RUNG 2: the UNTRUSTED-ORIGIN force.
+// RUNG 2: the STAMP-SELECTED configured default (the untrusted twin).
+// The untrusted-forces-staging rung is GONE (ADR
+// `untrusted-origin-carries-via-stamp-not-forced-staging`); an untrusted spec
+// selects `untrustedTasksLandIn` (default staging; `ready` when configured).
 // --------------------------------------------------------------------------
-describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandIn: ready repo', () => {
-	it('untrusted PRD + tasksLandIn: ready \u21d2 staged in work/tasks/backlog/ (untrusted force overrides configured default)', async () => {
+describe('placement rung 2: an untrusted-origin spec selects untrustedTasksLandIn (default staging; opt-in ready), carrying the stamp', () => {
+	it('untrusted PRD, DEFAULT untrusted knob (unset) + tasksLandIn: ready \u21d2 staged in work/tasks/backlog/ (untrusted default is staging; the trusted tasksLandIn does NOT apply to it)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performTask({
@@ -234,8 +245,10 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			// The repo's configured default would land tasks in the POOL \u2014 but
-			// the PRD is untrusted-origin, so the runner forces STAGING.
+			// The repo's TRUSTED default lands in the POOL \u2014 but the spec is
+			// untrusted, so the tasker reads the stamp and selects the UNTRUSTED
+			// knob, which is UNSET here \u21d2 the built-in floor (staging). This is
+			// the default (zero behaviour change vs the old forced-staging).
 			tasksLandIn: 'ready',
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
@@ -245,7 +258,42 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
-	it('a TRUSTED PRD on a tasksLandIn: ready repo still lands in the pool (the untrusted force only fires on untrusted; zero behaviour change for the normal path)', async () => {
+	it('untrusted PRD + untrustedTasksLandIn: ready \u21d2 lands in work/tasks/ready/ (the pool) STILL CARRYING the propagated originTrust: untrusted stamp \u2014 the mode the old hard rung could not express', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it', 'untrusted');
+		const result = await performTask({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoTask: true,
+			integration: 'merge',
+			// The repo OPTS an untrusted task into the pool explicitly; safety is
+			// then the carried stamp (a build PR), not the folder.
+			untrustedTasksLandIn: 'ready',
+			// The trusted default is irrelevant here (the spec is untrusted); set it
+			// to staging to prove the UNTRUSTED knob is what selected the pool.
+			tasksLandIn: 'backlog',
+			dorfl: taskingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(true);
+		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
+		expect(result.emitted).toEqual(['work/tasks/ready/child.md']);
+		// The task landed in the POOL but STILL carries the propagated stamp \u2014
+		// "safe in the pool" is real (the build transition reads this to force a
+		// code PR). Fetch the landed file off the arbiter and assert the stamp.
+		run('git', ['fetch', '-q', ARBITER], repo, {env: gitEnv()});
+		const landed = run(
+			'git',
+			['show', `${ARBITER}/main:work/tasks/ready/child.md`],
+			repo,
+			{env: gitEnv()},
+		).stdout;
+		expect(landed).toContain('originTrust: untrusted');
+	});
+
+	it('a TRUSTED PRD on a tasksLandIn: ready repo lands in the pool (trusted selects the trusted knob; zero behaviour change for the normal path)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'trusted');
 		const result = await performTask({
@@ -255,6 +303,8 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'ready',
+			// The untrusted knob is set to staging; a TRUSTED spec must NOT read it.
+			untrustedTasksLandIn: 'backlog',
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
@@ -263,7 +313,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 	});
 
-	it('an UNSTAMPED PRD (no origin/originTrust) follows the configured default (untrusted force does not fire; trusted-by-default)', async () => {
+	it('an UNSTAMPED PRD (no origin/originTrust) follows the TRUSTED configured default (treated as trusted-by-default; the untrusted knob does not apply)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it'); // no origin/originTrust stamp \u2014 treated as trusted
 		const result = await performTask({
@@ -273,6 +323,7 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 			autoTask: true,
 			integration: 'merge',
 			tasksLandIn: 'ready',
+			untrustedTasksLandIn: 'backlog',
 			dorfl: taskingAgent('child'),
 			env: gitEnv(),
 		});
@@ -284,8 +335,8 @@ describe('placement rung 2: untrusted-origin forces STAGING even on a tasksLandI
 // --------------------------------------------------------------------------
 // RUNG 1 (top): the EXPLICIT OPERATOR FLAG.
 // --------------------------------------------------------------------------
-describe('placement rung 1: explicit operator flag wins over the untrusted-origin force', () => {
-	it('explicit --tasks-land-in ready + untrusted PRD \u21d2 lands in work/tasks/ready/ (operator override beats the untrusted force)', async () => {
+describe('placement rung 1: explicit operator flag wins over the configured default (including an untrusted spec whose untrusted default is staging)', () => {
+	it('explicit --tasks-land-in ready + untrusted PRD (untrusted default staging) \u21d2 lands in work/tasks/ready/ (operator override beats the stamp-selected default)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performTask({
@@ -294,7 +345,7 @@ describe('placement rung 1: explicit operator flag wins over the untrusted-origi
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			// A repo whose configured default is staging \u2026
+			// The untrusted default is staging (unset \u21d2 floor) \u2026
 			tasksLandIn: 'backlog',
 			// \u2026 but the operator EXPLICITLY typed --tasks-land-in ready. The
 			// operator is present; CLI always wins (no special force-key), exactly
@@ -355,7 +406,7 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
 	});
 
-	it('a SELF-PLACING agent on an UNTRUSTED PRD lands STAGED \u2014 the agent cannot bypass the untrusted-origin force by writing into the pool', async () => {
+	it('a SELF-PLACING agent on an UNTRUSTED PRD (untrusted default staging) lands STAGED \u2014 the agent cannot self-place into the pool, and the untrusted default keeps it staged', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		seedPrd(repo, 'it', 'untrusted');
 		const result = await performTask({
@@ -364,9 +415,9 @@ describe("the agent's emitted output lands where the RUNNER's policy dictates, n
 			arbiter: ARBITER,
 			autoTask: true,
 			integration: 'merge',
-			// Even on a repo that defaults to landing in the pool, the runner
-			// FORCES staging for the untrusted origin and scrubs the agent's
-			// pool write.
+			// The TRUSTED default is the pool, but the spec is untrusted, so the
+			// tasker selects the UNTRUSTED knob (unset \u21d2 the staging floor) and
+			// scrubs the agent's pool write.
 			tasksLandIn: 'ready',
 			dorfl: selfPlacingAgent('child'),
 			env: gitEnv(),

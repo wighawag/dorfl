@@ -417,10 +417,20 @@ export interface DoOptions {
 	 */
 	tasksLandIn?: 'backlog' | 'ready';
 	/**
+	 * **The per-repo UNTRUSTED-side TASK-PLACEMENT default** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`,
+	 * ADR `untrusted-origin-carries-via-stamp-not-forced-staging`). Threaded into
+	 * {@link performTask}, which selects it (over {@link tasksLandIn}) as the
+	 * configured-default rung when the tasked spec carries an
+	 * `originTrust: untrusted` stamp. See {@link performTask}'s
+	 * `untrustedTasksLandIn`.
+	 */
+	untrustedTasksLandIn?: 'backlog' | 'ready';
+	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** (the TOP precedence
 	 * rung in the placement resolver). Set ONLY when the operator typed
 	 * `--tasks-land-in <where>` on this invocation; never when the value came
-	 * from config. Wins over `originTrust: untrusted` (the operator is present;
+	 * from config. Wins over the configured default (the operator is present;
 	 * CLI always wins, no special force-key) — the positional analogue of
 	 * `explicitMerge` overriding the untrusted-origin build-propose rule.
 	 */
@@ -705,6 +715,11 @@ export interface DoRemoteOptions extends DoAgentLaunchOptions {
 	 */
 	tasksLandIn?: 'backlog' | 'ready';
 	/**
+	 * **The per-repo UNTRUSTED-side TASK-PLACEMENT default** on the `do --remote
+	 * spec:` path. See {@link DoOptions.untrustedTasksLandIn}.
+	 */
+	untrustedTasksLandIn?: 'backlog' | 'ready';
+	/**
 	 * **The OPERATOR's EXPLICIT task-placement override** on the `do --remote
 	 * spec:` path. See {@link DoOptions.explicitTasksLandIn}.
 	 */
@@ -942,13 +957,16 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			// same per-repo cap the build path uses (task
 			// `thread-merge-retries-cross-task-and-ratify-default`).
 			mergeRetries: options.mergeRetries,
-			// The per-repo TASK-PLACEMENT default + the operator's explicit
-			// override (task `runner-deterministic-slice-placement-policy-and-
-			// precedence`). The tasker reads them as the configured-default + the
-			// top rung of the runner-deterministic placement resolver; the
-			// `originTrust: untrusted` force is read inside the tasker from the
-			// spec's stamped frontmatter.
+			// The per-repo TASK-PLACEMENT defaults (trusted + untrusted twin) + the
+			// operator's explicit override (task `runner-deterministic-slice-
+			// placement-policy-and-precedence`; ADR `untrusted-origin-carries-via-
+			// stamp-not-forced-staging`). The tasker reads the spec's stamped
+			// `originTrust:` to SELECT the trusted-vs-untrusted configured default,
+			// then feeds it (with the explicit override on top) into the
+			// runner-deterministic placement resolver (which no longer has a trust
+			// rung).
 			tasksLandIn: options.tasksLandIn,
+			untrustedTasksLandIn: options.untrustedTasksLandIn,
 			explicitTasksLandIn: options.explicitTasksLandIn,
 			noPR: options.noPR,
 			providerInstance: options.providerInstance,
@@ -2372,10 +2390,12 @@ export async function performDoRemote(
 				// threaded on the no-checkout `do --remote spec:` tasking path too,
 				// mirroring the in-place site above.
 				mergeRetries: options.mergeRetries,
-				// The per-repo TASK-PLACEMENT default + the operator's explicit
-				// override (task `runner-deterministic-slice-placement-policy-and-
-				// precedence`). Same threading as the in-place `do spec:` path.
+				// The per-repo TASK-PLACEMENT defaults (trusted + untrusted twin) + the
+				// operator's explicit override. Same stamp-selected threading as the
+				// in-place `do spec:` path (ADR `untrusted-origin-carries-via-stamp-
+				// not-forced-staging`).
 				tasksLandIn: options.tasksLandIn,
+				untrustedTasksLandIn: options.untrustedTasksLandIn,
 				explicitTasksLandIn: options.explicitTasksLandIn,
 				noPR: options.noPR,
 				providerInstance: options.providerInstance,

@@ -299,10 +299,23 @@ export interface PerformIntakeOptions {
 	 */
 	specsLandIn?: SpecsLandIn;
 	/**
+	 * **The per-repo UNTRUSTED-side SPEC-PLACEMENT default, passed IN** (spec
+	 * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
+	 * US #7, governing ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). The TWIN of
+	 * {@link specsLandIn} selected when the intake stamp is
+	 * `originTrust: untrusted`: the spec dispatch reads the stamp and feeds THIS
+	 * default (rather than {@link specsLandIn}) as the configured-default rung of
+	 * the shared placement resolver. The resolver no longer has an
+	 * untrusted-forces-staging rung; DEFAULTS to staging (`pre-proposed`), opt-in
+	 * `ready` (safety then via the tasks' carried stamp, not the folder).
+	 */
+	untrustedSpecsLandIn?: SpecsLandIn;
+	/**
 	 * **The OPERATOR's EXPLICIT spec-placement override** (the TOP precedence
 	 * rung). When set, the runner-deterministic resolver lands the spec HERE
-	 * regardless of `originTrust` or {@link specsLandIn} — the positional
-	 * analogue of `explicitMerge` overriding the untrusted-origin
+	 * regardless of {@link specsLandIn} / {@link untrustedSpecsLandIn} — the
+	 * positional analogue of `explicitMerge` overriding the untrusted-origin
 	 * build-propose rule ("the operator is present; CLI always wins, no
 	 * special force-key"). Set ONLY when the operator typed
 	 * `--specs-land-in <where>`; never when the value came from config.
@@ -893,6 +906,10 @@ async function decideAndDispatch(
 				// `specs/proposed/` (staging) vs `specs/ready/` (the tasking pool); `intake` never
 				// places itself.
 				specsLandIn: options.specsLandIn,
+				// The UNTRUSTED-side default, selected in `dispatchSpec` when the
+				// `originTrust` stamp is `untrusted` (ADR
+				// `untrusted-origin-carries-via-stamp-not-forced-staging`).
+				untrustedSpecsLandIn: options.untrustedSpecsLandIn,
 				explicitSpecsLandIn: options.explicitSpecsLandIn,
 				providerInstance: options.providerInstance,
 				issueProvider,
@@ -1267,8 +1284,14 @@ async function dispatchSpec(params: {
 	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
 	originTrust: OriginTrust | undefined;
 	noPR: boolean | undefined;
-	/** The per-repo SPEC-PLACEMENT default (configured-default rung of the placement chain). */
+	/** The per-repo TRUSTED-side SPEC-PLACEMENT default (configured-default rung when the spec is trusted/unset). */
 	specsLandIn: SpecsLandIn | undefined;
+	/**
+	 * The per-repo UNTRUSTED-side SPEC-PLACEMENT default, selected as the
+	 * configured-default rung when `originTrust` is `untrusted` (ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`).
+	 */
+	untrustedSpecsLandIn: SpecsLandIn | undefined;
 	/** The OPERATOR's EXPLICIT spec-placement override (the TOP rung). */
 	explicitSpecsLandIn: SpecsLandIn | undefined;
 	providerInstance: ReviewProvider | undefined;
@@ -1289,6 +1312,7 @@ async function dispatchSpec(params: {
 		originTrust,
 		noPR,
 		specsLandIn,
+		untrustedSpecsLandIn,
 		explicitSpecsLandIn,
 		providerInstance,
 		issueProvider,
@@ -1308,18 +1332,25 @@ async function dispatchSpec(params: {
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
 	// RUNNER-DETERMINISTIC PLACEMENT (task
-	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
-	// `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Resolve
-	// which folder the runner writes the intake-authored spec into BEFORE handing
-	// it to the shared integrate band: the SAME precedence chain the tasker uses
-	// (`explicit > untrusted-origin ⇒ staging > specsLandIn > built-in (staging)`),
-	// the SAME shared resolver — only the lifecycle SLOTS differ. The agent
+	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`; the
+	// untrusted-forces-staging rung RETIRED by ADR
+	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
+	// folder the runner writes the intake-authored spec into BEFORE handing it to
+	// the shared integrate band: the SAME precedence chain the tasker uses
+	// (`explicit > configured default > built-in (staging)`), the SAME shared
+	// resolver — only the lifecycle SLOTS differ. THIS caller selects the
+	// trusted-vs-untrusted configured default by reading the `originTrust` stamp:
+	// an untrusted spec selects `untrustedSpecsLandIn` (default staging; `ready`
+	// when configured), a trusted/unset spec selects `specsLandIn`. The agent
 	// (the intake decider) never influences placement; it returns the verdict and
-	// the runner computes the destination from unforgeable inputs.
+	// the runner computes the destination from unforgeable inputs. Safety for an
+	// untrusted spec landing in `ready` flows through its tasks' carried stamp,
+	// not the folder.
+	const configuredSpecsLanding =
+		originTrust === 'untrusted' ? untrustedSpecsLandIn : specsLandIn;
 	const placementDecision = resolvePlacement({
 		explicit: specLandingToSide(explicitSpecsLandIn),
-		originTrust,
-		configuredDefault: specLandingToSide(specsLandIn),
+		configuredDefault: specLandingToSide(configuredSpecsLanding),
 	});
 	const placementDir = placementFolder(
 		SPEC_PLACEMENT_SLOTS,
