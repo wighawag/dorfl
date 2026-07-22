@@ -4,6 +4,7 @@ date: 2026-07-22
 kind: observation
 tags: [work-contract, lint, ledger-lint, guardrail]
 source: "read @ 1f37af5f: skills/setup/protocol/WORK-CONTRACT.md, packages/dorfl/src/{work-layout,ledger-lint}.ts, while an agent driving a downstream repo (werust) made the two violations below and a human caught them"
+needsAnswers: true
 ---
 
 ## What happened
