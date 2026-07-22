@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'placement-drop-untrusted-rung' (Gate 2
 date: 2026-07-22
 status: open
 reviewOf: placement-drop-untrusted-rung
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
