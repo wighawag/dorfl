@@ -1,5 +1,5 @@
 ---
-title: issue-intake — one command (intake <N>) that transforms an issue into a slice OR a SPEC via a question/answer loop on the issue thread (clear+small → slice, clear+big → SPEC, unclear → ask, unrelated → bounce)
+title: 'issue-intake — one command (intake <N>) that transforms an issue into a slice OR a SPEC via a question/answer loop on the issue thread (clear+small → slice, clear+big → SPEC, unclear → ask, unrelated → bounce)'
 slug: issue-intake
 humanOnly: true
 sliceAfter: [auto-slice]

@@ -1,5 +1,5 @@
 ---
-title: continue-conflict-resurface-from-needs-attention — teach findSourceFolder to bounce idempotently from needs-attention/ so a continue-rebase-conflict re-route is not a NO-OP and the on-main surface never goes stale
+title: 'continue-conflict-resurface-from-needs-attention — teach findSourceFolder to bounce idempotently from needs-attention/ so a continue-rebase-conflict re-route is not a NO-OP and the on-main surface never goes stale'
 slug: continue-conflict-resurface-from-needs-attention
 covers: []
 ---

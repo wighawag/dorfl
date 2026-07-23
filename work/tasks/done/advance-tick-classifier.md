@@ -1,5 +1,5 @@
 ---
-title: advance — the pure one-item TICK classifier + the deterministic per-type state machine (two signals only, read-only, no model, no lock)
+title: 'advance — the pure one-item TICK classifier + the deterministic per-type state machine (two signals only, read-only, no model, no lock)'
 slug: advance-tick-classifier
 spec: advance-loop
 blockedBy: [advance-sidecar-contract]

@@ -1,5 +1,5 @@
 ---
-title: The work branch carries CODE (plus only the atomic →done move); MAIN owns ledger status — eliminate the on-branch needs-attention move and the bookkeeping-drop rebase mechanism it forces
+title: 'The work branch carries CODE (plus only the atomic →done move); MAIN owns ledger status — eliminate the on-branch needs-attention move and the bookkeeping-drop rebase mechanism it forces'
 slug: branch-carries-code-not-ledger-status-main-owns-status
 humanOnly: true
 reason: superseded

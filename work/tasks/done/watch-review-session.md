@@ -1,5 +1,5 @@
 ---
-title: watch-review-session — --watch should also tail the REVIEW gate's session, not just the implementation agent's
+title: 'watch-review-session — --watch should also tail the REVIEW gate''s session, not just the implementation agent''s'
 slug: watch-review-session
 spec: review
 blockedBy: []

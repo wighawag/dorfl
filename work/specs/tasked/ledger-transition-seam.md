@@ -1,5 +1,5 @@
 ---
-title: Ledger-transition seam — route the three work/ transitions through a read+write seam (pure refactor)
+title: 'Ledger-transition seam — route the three work/ transitions through a read+write seam (pure refactor)'
 slug: ledger-transition-seam
 ---
 

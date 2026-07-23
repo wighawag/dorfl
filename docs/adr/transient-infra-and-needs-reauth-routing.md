@@ -1,5 +1,5 @@
 ---
-title: Failure-cause routing — transient-infra retries, needs-reauth surfaces separately
+title: 'Failure-cause routing — transient-infra retries, needs-reauth surfaces separately'
 status: proposed
 created: 2026-07-07
 supersedes:

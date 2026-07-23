@@ -1,5 +1,5 @@
 ---
-title: reviewMaxRounds was built onto the review GATE by miscommunication — it belongs to the slicer EDIT LOOP, not the gate
+title: 'reviewMaxRounds was built onto the review GATE by miscommunication — it belongs to the slicer EDIT LOOP, not the gate'
 date: 2026-06-06
 status: open
 needsAnswers: false

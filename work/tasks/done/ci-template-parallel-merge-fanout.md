@@ -1,5 +1,5 @@
 ---
-title: CI template — parallel merge fan-out (parallel build/gate/review, serialised land)
+title: 'CI template — parallel merge fan-out (parallel build/gate/review, serialised land)'
 slug: ci-template-parallel-merge-fanout
 spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []

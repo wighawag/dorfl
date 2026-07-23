@@ -1,5 +1,5 @@
 ---
-title: intake-lone-slice-bounded-internal-review — the lone-SLICE outcome runs a bounded (3-round, hard-capped) adversarial self-review on the single drafted slice before emitting; non-converge flips SLICE→ASK carrying the draft + open question(s) in the comment body
+title: 'intake-lone-slice-bounded-internal-review — the lone-SLICE outcome runs a bounded (3-round, hard-capped) adversarial self-review on the single drafted slice before emitting; non-converge flips SLICE→ASK carrying the draft + open question(s) in the comment body'
 slug: intake-lone-slice-bounded-internal-review
 spec: issue-intake
 blockedBy: []

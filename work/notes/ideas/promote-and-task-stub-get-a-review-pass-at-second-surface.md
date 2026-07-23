@@ -1,5 +1,5 @@
 ---
-title: A promoted observation's task stub (and any thin minted task) should get a REVIEW pass — best run at its SECOND surface, so the human's first answer turns a thin stub into a STRONG, buildable task
+title: 'A promoted observation''s task stub (and any thin minted task) should get a REVIEW pass — best run at its SECOND surface, so the human''s first answer turns a thin stub into a STRONG, buildable task'
 slug: promote-and-task-stub-get-a-review-pass-at-second-surface
 type: idea
 status: incubating

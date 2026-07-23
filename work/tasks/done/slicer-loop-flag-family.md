@@ -1,5 +1,5 @@
 ---
-title: Rename the slicer improver loop to a distinct --slicer-loop* flag family (on/off, --slicer-loop-max, --slicer-loop-model) — unmistakable from the gate's --review*
+title: 'Rename the slicer improver loop to a distinct --slicer-loop* flag family (on/off, --slicer-loop-max, --slicer-loop-model) — unmistakable from the gate''s --review*'
 slug: slicer-loop-flag-family
 spec: slicing-coherence
 blockedBy: [slice-acceptance-gate]

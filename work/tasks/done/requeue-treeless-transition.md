@@ -1,5 +1,5 @@
 ---
-title: requeue performs its backlog-folder transition WITHOUT writing the cwd working tree (tree-less CAS push, like claim) so it never collides with a concurrent writer in a shared checkout
+title: 'requeue performs its backlog-folder transition WITHOUT writing the cwd working tree (tree-less CAS push, like claim) so it never collides with a concurrent writer in a shared checkout'
 slug: requeue-treeless-transition
 blockedBy: []
 ---

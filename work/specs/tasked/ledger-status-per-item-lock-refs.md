@@ -1,5 +1,5 @@
 ---
-title: Move transient ledger STATUS onto per-item lock refs (one lock per item; main = content + durable records)
+title: 'Move transient ledger STATUS onto per-item lock refs (one lock per item; main = content + durable records)'
 slug: ledger-status-per-item-lock-refs
 humanOnly: true
 ---

@@ -1,5 +1,5 @@
 ---
-title: Phase 1: mirror the rename into both protocol copies (byte-identical), rename + update the in-repo skills, update ADR paths, and make setup scaffold the new notes/tasks/briefs layout
+title: 'Phase 1: mirror the rename into both protocol copies (byte-identical), rename + update the in-repo skills, update ADR paths, and make setup scaffold the new notes/tasks/briefs layout'
 slug: protocol-docs-skills-and-setup-scaffold-new-vocabulary
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true

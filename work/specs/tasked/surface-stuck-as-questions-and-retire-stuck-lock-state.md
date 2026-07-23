@@ -1,5 +1,5 @@
 ---
-title: Surface every "needs a human" bounce as a question sidecar on main, and retire the `stuck` lock state
+title: 'Surface every "needs a human" bounce as a question sidecar on main, and retire the `stuck` lock state'
 slug: surface-stuck-as-questions-and-retire-stuck-lock-state
 humanOnly: true
 needsAnswers: false

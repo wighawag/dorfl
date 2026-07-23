@@ -1,5 +1,5 @@
 ---
-title: Prefactor — pre-isolate spec false-positive words to synonyms before any spec→spec sweep
+title: 'Prefactor — pre-isolate spec false-positive words to synonyms before any spec→spec sweep'
 slug: preisolate-spec-false-positive-words
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: []

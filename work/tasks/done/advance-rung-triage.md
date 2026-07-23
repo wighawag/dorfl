@@ -1,5 +1,5 @@
 ---
-title: advance — the observation TRIAGE rung + the NEW `autoTriage` gate: question-gated by default, conservative auto-disposition (high bar), promote-via-CAS new-item creation
+title: 'advance — the observation TRIAGE rung + the NEW `autoTriage` gate: question-gated by default, conservative auto-disposition (high bar), promote-via-CAS new-item creation'
 slug: advance-rung-triage
 spec: advance-loop
 blockedBy: [advance-rung-apply]

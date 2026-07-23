@@ -1,5 +1,5 @@
 ---
-title: Complete the intake {slice,spec} -> {task,brief} cutover (artifact-type, verdict wire contract, flags) — finish Decision 2
+title: 'Complete the intake {slice,spec} -> {task,brief} cutover (artifact-type, verdict wire contract, flags) — finish Decision 2'
 slug: complete-intake-slice-prd-to-task-brief-cutover
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-advance-rung-and-sliced-outcome-tokens]

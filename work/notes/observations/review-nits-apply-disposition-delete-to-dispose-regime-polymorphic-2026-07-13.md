@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'apply-disposition-delete-to-dispose-regime-polymorphic' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''apply-disposition-delete-to-dispose-regime-polymorphic'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: apply-disposition-delete-to-dispose-regime-polymorphic

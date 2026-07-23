@@ -1,5 +1,5 @@
 ---
-title: Untrusted origin forces the becomes-code checkpoint — fail-loud at the CLI front door, fail-safe when reading a file, and the rule follows the build wherever it retries
+title: 'Untrusted origin forces the becomes-code checkpoint — fail-loud at the CLI front door, fail-safe when reading a file, and the rule follows the build wherever it retries'
 status: accepted
 created: 2026-06-15
 decided: 2026-06-15

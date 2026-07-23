@@ -1,5 +1,5 @@
 ---
-title: run --once — claim N eligible items, run an agent in isolation, integrate
+title: 'run --once — claim N eligible items, run an agent in isolation, integrate'
 slug: run-once
 spec: dorfl
 humanOnly: true

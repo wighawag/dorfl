@@ -1,5 +1,5 @@
 ---
-title: Advance surfacer — emit MERGE-QUESTIONS for unmerged `work/*` branches (+ `gh pr list` ceiling)
+title: 'Advance surfacer — emit MERGE-QUESTIONS for unmerged `work/*` branches (+ `gh pr list` ceiling)'
 slug: merge-question-surfacer
 spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false

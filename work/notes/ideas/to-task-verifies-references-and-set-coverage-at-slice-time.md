@@ -1,5 +1,5 @@
 ---
-title: to-task verifies references and set-coverage while drafting (gated behind skill evals)
+title: 'to-task verifies references and set-coverage while drafting (gated behind skill evals)'
 slug: to-task-verifies-references-and-set-coverage-at-slice-time
 type: idea
 status: incubating

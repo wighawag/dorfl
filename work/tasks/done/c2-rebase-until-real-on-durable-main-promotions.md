@@ -1,5 +1,5 @@
 ---
-title: Apply rebase-until-real-conflict (C2) to the durable main promotions
+title: 'Apply rebase-until-real-conflict (C2) to the durable main promotions'
 slug: c2-rebase-until-real-on-durable-main-promotions
 blockedBy: []
 covers: []

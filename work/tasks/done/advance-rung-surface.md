@@ -1,5 +1,5 @@
 ---
-title: advance — the SURFACE-question rung: spawn `surface-questions` fresh-context, engine writes the sidecar CAS-atomically (always allowed)
+title: 'advance — the SURFACE-question rung: spawn `surface-questions` fresh-context, engine writes the sidecar CAS-atomically (always allowed)'
 slug: advance-rung-surface
 spec: advance-loop
 blockedBy: [advance-verb-resolver, surface-questions-skill]

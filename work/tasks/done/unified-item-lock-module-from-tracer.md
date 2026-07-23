@@ -1,5 +1,5 @@
 ---
-title: Promote the tracer to the production unified item-lock module
+title: 'Promote the tracer to the production unified item-lock module'
 slug: unified-item-lock-module-from-tracer
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

@@ -1,5 +1,5 @@
 ---
-title: Build the self-contained dorfl spec-to-spec migration command (engine + fixture test)
+title: 'Build the self-contained dorfl spec-to-spec migration command (engine + fixture test)'
 slug: build-prd-to-spec-migration-command
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [contract-spec-hard-cutover-rejection-and-leak-scan]

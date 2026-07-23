@@ -1,5 +1,5 @@
 ---
-title: arbiter management — provision/locate a local bare arbiter from a repo
+title: 'arbiter management — provision/locate a local bare arbiter from a repo'
 slug: arbiter-management
 spec: dorfl
 humanOnly: true

@@ -1,5 +1,5 @@
 ---
-title: review-comment-prose-field — post a deliberately-authored `review` prose field FROM the verdict JSON (not the agent's stream-of-consciousness); retire the verbatim-output/stripVerdictJson path
+title: 'review-comment-prose-field — post a deliberately-authored `review` prose field FROM the verdict JSON (not the agent''s stream-of-consciousness); retire the verbatim-output/stripVerdictJson path'
 slug: review-comment-prose-field
 spec: review
 blockedBy: []

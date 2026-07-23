@@ -1,5 +1,5 @@
 ---
-title: the review-edit loop's "ONE agent reviews-and-edits in a SINGLE context" (N) is an UNBUILT ASPIRATION — spec/review.md §Shape 2 is internally contradictory (single-context headline vs "apply edits to the slice FILES / each pass sees the edited slices" operative spec), and the ONLY built loop (slicer-review-loop.ts) is runner-driven PER-PASS launches + DISK accumulation
+title: 'the review-edit loop''s "ONE agent reviews-and-edits in a SINGLE context" (N) is an UNBUILT ASPIRATION — spec/review.md §Shape 2 is internally contradictory (single-context headline vs "apply edits to the slice FILES / each pass sees the edited slices" operative spec), and the ONLY built loop (slicer-review-loop.ts) is runner-driven PER-PASS launches + DISK accumulation'
 date: 2026-06-10
 slug: review-edit-loop-single-context-is-unbuilt-aspiration-vs-per-pass-disk-impl
 ---

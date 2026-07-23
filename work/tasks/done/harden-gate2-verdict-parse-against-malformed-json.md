@@ -1,5 +1,5 @@
 ---
-title: Harden the Gate-2 review-verdict parse against malformed JSON (route, repair, contract)
+title: 'Harden the Gate-2 review-verdict parse against malformed JSON (route, repair, contract)'
 slug: harden-gate2-verdict-parse-against-malformed-json
 blockedBy: [] # startable now
 covers: [] # self-contained robustness fix; no spec

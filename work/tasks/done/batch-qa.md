@@ -1,5 +1,5 @@
 ---
-title: batch-qa — author skills/batch-qa/ (the one-file, one-step human-batching review loop)
+title: 'batch-qa — author skills/batch-qa/ (the one-file, one-step human-batching review loop)'
 slug: batch-qa
 spec: batch-qa
 blockedBy: [review-skill]

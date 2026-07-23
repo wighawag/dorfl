@@ -1,5 +1,5 @@
 ---
-title: Centralize the buildable-task renderer shared by intake and triage/advance promotion
+title: 'Centralize the buildable-task renderer shared by intake and triage/advance promotion'
 slug: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Rename the SpecsLandIn value `pre-proposed → proposed` (hard cutover, no alias)
+title: 'Rename the SpecsLandIn value `pre-proposed → proposed` (hard cutover, no alias)'
 slug: specs-land-in-proposed-rename
 spec: intake-integration-knob-and-specs-land-in-proposed-rename
 blockedBy: [intake-integration-knob]

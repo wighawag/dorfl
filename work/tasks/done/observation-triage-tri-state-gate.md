@@ -1,5 +1,5 @@
 ---
-title: observationTriage - replace the autoTriage boolean with a 3-state gate (off | ask | auto), adding the "off = skip observations" state (clean replacement, NO alias)
+title: 'observationTriage - replace the autoTriage boolean with a 3-state gate (off | ask | auto), adding the "off = skip observations" state (clean replacement, NO alias)'
 slug: observation-triage-tri-state-gate
 blockedBy: [advance-autopick-lifecycle-pools, remove-deprecated-config-aliases]
 covers: []

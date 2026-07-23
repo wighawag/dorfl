@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 1 — work-layout keys/values + folder git-mv + self-renaming guard
+title: 'spec→spec batch 1 — work-layout keys/values + folder git-mv + self-renaming guard'
 slug: rename-spec-work-layout-and-folders
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [preisolate-spec-false-positive-words]

@@ -1,5 +1,5 @@
 ---
-title: Optional voice/persona for human-facing output (the golem voice), prose-only, never in code
+title: 'Optional voice/persona for human-facing output (the golem voice), prose-only, never in code'
 slug: voice-persona-for-human-facing-output
 type: idea
 status: incubating

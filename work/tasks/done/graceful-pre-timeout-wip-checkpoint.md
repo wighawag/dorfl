@@ -1,5 +1,5 @@
 ---
-title: Graceful pre-timeout WIP checkpoint — a dorfl-internal deadline that saves work before the GitHub hard kill
+title: 'Graceful pre-timeout WIP checkpoint — a dorfl-internal deadline that saves work before the GitHub hard kill'
 slug: graceful-pre-timeout-wip-checkpoint
 originTrust: trusted
 ---

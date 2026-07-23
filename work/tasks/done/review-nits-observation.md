@@ -1,5 +1,5 @@
 ---
-title: review-nits-observation — on approve-with-non-blocking-findings, the runner writes ONE per-run observation (works on all paths incl. --merge)
+title: 'review-nits-observation — on approve-with-non-blocking-findings, the runner writes ONE per-run observation (works on all paths incl. --merge)'
 slug: review-nits-observation
 spec: review
 blockedBy: []

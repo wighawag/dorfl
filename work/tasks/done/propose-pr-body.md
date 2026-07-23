@@ -1,5 +1,5 @@
 ---
-title: propose-mode PR title + body — a short title and the agent's summary, not gh --fill's run-on subject + empty description
+title: 'propose-mode PR title + body — a short title and the agent''s summary, not gh --fill''s run-on subject + empty description'
 slug: propose-pr-body
 blockedBy: []
 covers: []

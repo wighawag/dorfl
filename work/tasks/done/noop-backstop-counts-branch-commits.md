@@ -1,5 +1,5 @@
 ---
-title: The empty-diff no-op backstop must also count source COMMITS on the branch ahead of main, so a requeue continue-from-tip (already-green committed work) reaches its gate + PR instead of routing to needs-attention
+title: 'The empty-diff no-op backstop must also count source COMMITS on the branch ahead of main, so a requeue continue-from-tip (already-green committed work) reaches its gate + PR instead of routing to needs-attention'
 slug: noop-backstop-counts-branch-commits
 blockedBy: []
 covers: []

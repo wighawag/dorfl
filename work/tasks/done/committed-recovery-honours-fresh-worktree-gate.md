@@ -1,5 +1,5 @@
 ---
-title: committed-recovery tail honours freshWorktreeGate (rebase → fresh re-verify → integrate)
+title: 'committed-recovery tail honours freshWorktreeGate (rebase → fresh re-verify → integrate)'
 slug: committed-recovery-honours-fresh-worktree-gate
 spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false

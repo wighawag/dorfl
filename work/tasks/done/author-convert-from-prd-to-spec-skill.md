@@ -1,5 +1,5 @@
 ---
-title: Author the convert-from-prd-to-spec skill (drive prd-to-spec, then sweep the prose it skips)
+title: 'Author the convert-from-prd-to-spec skill (drive prd-to-spec, then sweep the prose it skips)'
 slug: author-convert-from-prd-to-spec-skill
 spec: vocabulary-cutover-prose-sweep-skill
 blockedBy: []

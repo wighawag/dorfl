@@ -1,5 +1,5 @@
 ---
-title: hub-mirror-strong-replace-guard — refuse remote add of a second arbiter for an already-registered project by default; --force allows REPLACING a mirror but still FAILS if any worktree has un-pushed work (reuse gc.ts's clean-AND-reachable per-worktree predicate)
+title: 'hub-mirror-strong-replace-guard — refuse remote add of a second arbiter for an already-registered project by default; --force allows REPLACING a mirror but still FAILS if any worktree has un-pushed work (reuse gc.ts''s clean-AND-reachable per-worktree predicate)'
 slug: hub-mirror-strong-replace-guard
 covers: []
 ---

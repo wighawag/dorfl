@@ -1,5 +1,5 @@
 ---
-title: Verify/tighten the slicer improver-loop prompt to name the review skill's whole-SET lens explicitly (graph coherence / gaps / overlap / goal-composition)
+title: 'Verify/tighten the slicer improver-loop prompt to name the review skill''s whole-SET lens explicitly (graph coherence / gaps / overlap / goal-composition)'
 slug: slicer-loop-set-lens-prompt
 spec: slicing-coherence
 blockedBy: [slicer-loop-flag-family]

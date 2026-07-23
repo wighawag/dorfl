@@ -1,5 +1,5 @@
 ---
-title: install-ci core + GitHub adapter + auth (the shared scaffolder foundation)
+title: 'install-ci core + GitHub adapter + auth (the shared scaffolder foundation)'
 slug: install-ci-core-and-github-adapter
 spec: runner-in-ci
 blockedBy: []

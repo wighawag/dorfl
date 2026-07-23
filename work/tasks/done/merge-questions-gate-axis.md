@@ -1,5 +1,5 @@
 ---
-title: Merge-questions gate axis — separate from `observationTriage`, higher default
+title: 'Merge-questions gate axis — separate from `observationTriage`, higher default'
 slug: merge-questions-gate-axis
 spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false

@@ -1,5 +1,5 @@
 ---
-title: F1 — Rename `backlog`-means-pool to `todo` in the surface/apply readers (scoped STEP-B slice)
+title: 'F1 — Rename `backlog`-means-pool to `todo` in the surface/apply readers (scoped STEP-B slice)'
 slug: f1-pool-noun-todo-in-surface-and-apply-readers
 brief: staging-surface-and-apply-promote-safety
 blockedBy: []

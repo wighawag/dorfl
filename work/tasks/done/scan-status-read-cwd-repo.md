@@ -1,5 +1,5 @@
 ---
-title: scan-status-read-cwd-repo — scan/status also report the CURRENT repo as a labelled local section (fetch-its-arbiter-first), with a self-registration empty-state hint
+title: 'scan-status-read-cwd-repo — scan/status also report the CURRENT repo as a labelled local section (fetch-its-arbiter-first), with a self-registration empty-state hint'
 slug: scan-status-read-cwd-repo
 spec: command-surface-phase-2
 blockedBy: [registry-remote, scan-status-fetch-first]

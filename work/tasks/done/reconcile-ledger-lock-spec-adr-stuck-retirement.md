@@ -1,5 +1,5 @@
 ---
-title: Reconcile the ledger-lock spec + ADR with the retired `stuck` state
+title: 'Reconcile the ledger-lock spec + ADR with the retired `stuck` state'
 slug: reconcile-ledger-lock-spec-adr-stuck-retirement
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [retire-stuck-lock-state]

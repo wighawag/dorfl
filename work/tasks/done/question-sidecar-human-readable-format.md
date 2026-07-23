@@ -1,5 +1,5 @@
 ---
-title: Reformat the question sidecar to a human-readable Markdown surface (machine fields in HTML comments)
+title: 'Reformat the question sidecar to a human-readable Markdown surface (machine fields in HTML comments)'
 slug: question-sidecar-human-readable-format
 blockedBy: []
 covers: []

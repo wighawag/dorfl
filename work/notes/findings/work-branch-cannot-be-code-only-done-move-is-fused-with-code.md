@@ -1,5 +1,5 @@
 ---
-title: The "make work branches code-only to dissolve the conflict class" root-fix alternative is IMPOSSIBLE — the done-move is FUSED into the code commit by construction (that IS the atomicity invariant), so slices 1+2 treat the right thing, not a symptom
+title: 'The "make work branches code-only to dissolve the conflict class" root-fix alternative is IMPOSSIBLE — the done-move is FUSED into the code commit by construction (that IS the atomicity invariant), so slices 1+2 treat the right thing, not a symptom'
 date: 2026-06-15
 status: verified
 ---

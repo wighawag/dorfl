@@ -1,5 +1,5 @@
 ---
-title: Ledger write seam — define applyLedgerTransition + route claim through it
+title: 'Ledger write seam — define applyLedgerTransition + route claim through it'
 slug: ledger-write-seam
 spec: ledger-transition-seam
 blockedBy: []

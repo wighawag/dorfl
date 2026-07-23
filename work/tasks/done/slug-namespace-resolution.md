@@ -1,5 +1,5 @@
 ---
-title: slug-namespace-resolution — bare = slice, slice:/prd: explicit, ERROR on collision (§3a)
+title: 'slug-namespace-resolution — bare = slice, slice:/prd: explicit, ERROR on collision (§3a)'
 slug: slug-namespace-resolution
 spec: command-surface-phase-2
 blockedBy: []

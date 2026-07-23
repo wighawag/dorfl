@@ -1,5 +1,5 @@
 ---
-title: Phase 1: regroup the notes regime under notes/ and rename the task board (pre-backlog->tasks/backlog, backlog->tasks/todo, done->tasks/done)
+title: 'Phase 1: regroup the notes regime under notes/ and rename the task board (pre-backlog->tasks/backlog, backlog->tasks/todo, done->tasks/done)'
 slug: regroup-notes-and-task-board-rename
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true

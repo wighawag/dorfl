@@ -1,5 +1,5 @@
 ---
-title: Refresh stale value spellings in the tasks-land-in-precedence ADR (amendment banner)
+title: 'Refresh stale value spellings in the tasks-land-in-precedence ADR (amendment banner)'
 slug: refresh-stale-value-spellings-in-tasks-land-in-adr
 blockedBy: []
 covers: []

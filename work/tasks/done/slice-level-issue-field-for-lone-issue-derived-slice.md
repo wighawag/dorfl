@@ -1,5 +1,5 @@
 ---
-title: slice-level-issue-field-for-lone-issue-derived-slice — add an optional slice `issue:` field (one closure path per slice; `prd:` wins if both present) and STOP intake emitting `Fixes #N`; closure becomes folder+field state read by a future CI close-job
+title: 'slice-level-issue-field-for-lone-issue-derived-slice — add an optional slice `issue:` field (one closure path per slice; `prd:` wins if both present) and STOP intake emitting `Fixes #N`; closure becomes folder+field state read by a future CI close-job'
 slug: slice-level-issue-field-for-lone-issue-derived-slice
 spec: issue-intake
 covers: [8]

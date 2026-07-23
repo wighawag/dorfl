@@ -1,5 +1,5 @@
 ---
-title: Rename config keys (slicingIntegration/slicesLandIn/prdsLandIn/autoSlice/intake {slice,spec}) to tasking vocabulary
+title: 'Rename config keys (slicingIntegration/slicesLandIn/prdsLandIn/autoSlice/intake {slice,spec}) to tasking vocabulary'
 slug: rename-config-keys-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: Serialise surface-treeless-moved-false.test.ts under parallel load (add to RACE_SENSITIVE)
+title: 'Serialise surface-treeless-moved-false.test.ts under parallel load (add to RACE_SENSITIVE)'
 slug: serialise-surface-treeless-moved-false-test-under-parallel-load
 blockedBy: []
 covers: []

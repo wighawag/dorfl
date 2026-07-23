@@ -1,5 +1,5 @@
 ---
-title: delete the DEAD + wrong-destination `emitSlices` branch in slicing-lock.ts releaseAttempt (it still does slicing/ → spec/, never spec-sliced/, and has NO live caller) so the lock release owns only the CAS + the needs-attention redirect
+title: 'delete the DEAD + wrong-destination `emitSlices` branch in slicing-lock.ts releaseAttempt (it still does slicing/ → spec/, never spec-sliced/, and has NO live caller) so the lock release owns only the CAS + the needs-attention redirect'
 slug: delete-dead-emitslices-lock-release-branch
 blockedBy: []
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: install-ci must NOT emit the redundant build-slice-tick workflow — advance-lifecycle is a strict superset (same advance verb, same gate values, same hourly cron), so two workflows run duplicate racing ticks for zero added capability
+title: 'install-ci must NOT emit the redundant build-slice-tick workflow — advance-lifecycle is a strict superset (same advance verb, same gate values, same hourly cron), so two workflows run duplicate racing ticks for zero added capability'
 slug: install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick
 blockedBy: []
 covers: []

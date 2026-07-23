@@ -1,5 +1,5 @@
 ---
-title: Route intake task emit through resolvePlacement + originTrust stamp (parity with spec emit)
+title: 'Route intake task emit through resolvePlacement + originTrust stamp (parity with spec emit)'
 slug: intake-task-placement-symmetry
 spec: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 blockedBy: [placement-drop-untrusted-rung]

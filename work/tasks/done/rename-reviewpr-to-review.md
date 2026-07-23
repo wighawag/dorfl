@@ -1,5 +1,5 @@
 ---
-title: rename reviewPr → review (flag --review, config key review, env DORFL_REVIEW) — the -pr suffix is a fossil; the gate is merge/propose-agnostic
+title: 'rename reviewPr → review (flag --review, config key review, env DORFL_REVIEW) — the -pr suffix is a fossil; the gate is merge/propose-agnostic'
 slug: rename-reviewpr-to-review
 spec: review
 blockedBy: []

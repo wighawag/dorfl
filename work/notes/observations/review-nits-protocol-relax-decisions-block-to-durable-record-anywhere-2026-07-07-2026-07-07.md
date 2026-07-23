@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07'' (Gate 2 approve)'
 date: 2026-07-07
 status: open
 reviewOf: protocol-relax-decisions-block-to-durable-record-anywhere-2026-07-07

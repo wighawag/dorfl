@@ -1,5 +1,5 @@
 ---
-title: website build intermittently fails with ldenv "local cannot be used as a mode name" under `pnpm -r build`
+title: 'website build intermittently fails with ldenv "local cannot be used as a mode name" under `pnpm -r build`'
 date: 2026-06-24
 needsAnswers: false
 triaged: keep

@@ -1,5 +1,5 @@
 ---
-title: configurable advance selection ORDER across the action pools (apply pinned first; a preset string OR an explicit pool-order list), generalizing the prdsFirst boolean
+title: 'configurable advance selection ORDER across the action pools (apply pinned first; a preset string OR an explicit pool-order list), generalizing the prdsFirst boolean'
 slug: advance-selection-order-config
 blockedBy: [advance-autopick-lifecycle-pools]
 covers: []

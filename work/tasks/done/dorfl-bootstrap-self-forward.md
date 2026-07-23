@@ -1,5 +1,5 @@
 ---
-title: Bare `dorfl` self-forwards to the repo-declared `dorflCmd` (announced, opt-outable)
+title: 'Bare `dorfl` self-forwards to the repo-declared `dorflCmd` (announced, opt-outable)'
 slug: dorfl-bootstrap-self-forward
 spec: dorfl-self-version-pinning-and-bootstrap-forward
 blockedBy: [dorfl-cmd-config-field]

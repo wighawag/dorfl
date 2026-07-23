@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'question-sidecar-human-readable-format' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''question-sidecar-human-readable-format'' (Gate 2 approve)'
 date: 2026-06-20
 status: open
 reviewOf: question-sidecar-human-readable-format

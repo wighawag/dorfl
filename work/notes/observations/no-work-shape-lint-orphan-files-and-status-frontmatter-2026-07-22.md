@@ -1,5 +1,5 @@
 ---
-title: no lint catches non-contract work/ shape (orphan top-level files, status:-frontmatter) — proposal for a work/-shape lint
+title: 'no lint catches non-contract work/ shape (orphan top-level files, status:-frontmatter) — proposal for a work/-shape lint'
 date: 2026-07-22
 kind: observation
 tags: [work-contract, lint, ledger-lint, guardrail]

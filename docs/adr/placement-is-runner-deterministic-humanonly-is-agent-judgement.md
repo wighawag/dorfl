@@ -1,5 +1,5 @@
 ---
-title: Pool placement is a RUNNER-deterministic decision; humanOnly is an AGENT non-deterministic judgement
+title: 'Pool placement is a RUNNER-deterministic decision; humanOnly is an AGENT non-deterministic judgement'
 status: proposed
 created: 2026-06-17
 supersedes:

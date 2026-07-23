@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'reap-squash-merged-remote-work-branches' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''reap-squash-merged-remote-work-branches'' (Gate 2 approve)'
 date: 2026-07-10
 status: resolved
 reviewOf: reap-squash-merged-remote-work-branches

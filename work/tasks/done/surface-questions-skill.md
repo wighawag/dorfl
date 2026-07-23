@@ -1,5 +1,5 @@
 ---
-title: advance — author the NEW `surface-questions` skill (GATHER-only, PERSIST-NEVER — mirrors `review`)
+title: 'advance — author the NEW `surface-questions` skill (GATHER-only, PERSIST-NEVER — mirrors `review`)'
 slug: surface-questions-skill
 spec: advance-loop
 blockedBy: []

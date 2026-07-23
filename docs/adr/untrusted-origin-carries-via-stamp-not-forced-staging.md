@@ -1,5 +1,5 @@
 ---
-title: Author-trust drives PLACEMENT + the build STAMP only, never the file-emit MODE — untrusted carries via the stamp, it is not force-staged
+title: 'Author-trust drives PLACEMENT + the build STAMP only, never the file-emit MODE — untrusted carries via the stamp, it is not force-staged'
 status: proposed
 created: 2026-07-22
 supersedes:

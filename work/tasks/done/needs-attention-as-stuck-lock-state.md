@@ -1,5 +1,5 @@
 ---
-title: needs-attention ALSO marks the stuck lock state, read by status/scan (interim dual-write)
+title: 'needs-attention ALSO marks the stuck lock state, read by status/scan (interim dual-write)'
 slug: needs-attention-as-stuck-lock-state
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

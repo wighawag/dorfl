@@ -1,5 +1,5 @@
 ---
-title: Stop intake.yml hardcoding DORFL_AUTO_* env; read resolved config; add anti-regression validators
+title: 'Stop intake.yml hardcoding DORFL_AUTO_* env; read resolved config; add anti-regression validators'
 slug: intake-ci-gate-resolution
 spec: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 blockedBy: [derive-intake-flags-trust-drives-placement-not-mode]

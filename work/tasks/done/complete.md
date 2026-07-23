@@ -1,5 +1,5 @@
 ---
-title: complete — gate, mark done, commit, and integrate a work item
+title: 'complete — gate, mark done, commit, and integrate a work item'
 slug: complete
 spec: dorfl
 humanOnly: true

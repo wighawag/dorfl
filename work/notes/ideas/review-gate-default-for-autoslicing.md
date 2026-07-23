@@ -1,5 +1,5 @@
 ---
-title: A review gate (a self-grilling STEP) — default-on for auto-slicing, where there is no verify floor
+title: 'A review gate (a self-grilling STEP) — default-on for auto-slicing, where there is no verify floor'
 slug: review-gate-default-for-autoslicing
 type: idea
 status: incubating

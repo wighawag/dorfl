@@ -1,5 +1,5 @@
 ---
-title: intake per-outcome integration mode resolution (the KNOBS) — granular + aggregates, granular-overrides-aggregate, default propose
+title: 'intake per-outcome integration mode resolution (the KNOBS) — granular + aggregates, granular-overrides-aggregate, default propose'
 slug: intake-per-outcome-integration-modes
 spec: issue-intake
 blockedBy: [intake-decision-prompt-and-four-outcome-dispatch]

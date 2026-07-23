@@ -1,5 +1,5 @@
 ---
-title: Staging/pool position gate + runner-deterministic placement (three-axis autonomy; de-overload humanOnly; review without a PR)
+title: 'Staging/pool position gate + runner-deterministic placement (three-axis autonomy; de-overload humanOnly; review without a PR)'
 slug: staging-pool-position-gate-and-trust-model
 humanOnly: true
 ---

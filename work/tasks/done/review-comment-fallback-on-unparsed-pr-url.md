@@ -1,5 +1,5 @@
 ---
-title: review-comment-fallback-on-unparsed-pr-url — when `gh pr create` opens a PR but its URL can't be parsed, the Gate-2 review comment is silently dropped; fall back to commenting on the branch's PR instead of no-op'ing
+title: 'review-comment-fallback-on-unparsed-pr-url — when `gh pr create` opens a PR but its URL can''t be parsed, the Gate-2 review comment is silently dropped; fall back to commenting on the branch''s PR instead of no-op''ing'
 slug: review-comment-fallback-on-unparsed-pr-url
 covers: []
 ---

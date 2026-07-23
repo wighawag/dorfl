@@ -1,5 +1,5 @@
 ---
-title: A spec has a KIND distinguished by its definition of DONE — a BUILD spec (done = capability shipped) vs an EXPLORATION spec (done = confidence + a de-risked plan); an exploration spec is the atomically-taskable escape valve for work too big/uncertain to build-task, and is still just a spec (no new folder/state)
+title: 'A spec has a KIND distinguished by its definition of DONE — a BUILD spec (done = capability shipped) vs an EXPLORATION spec (done = confidence + a de-risked plan); an exploration spec is the atomically-taskable escape valve for work too big/uncertain to build-task, and is still just a spec (no new folder/state)'
 status: accepted
 created: 2026-07-14
 supersedes:

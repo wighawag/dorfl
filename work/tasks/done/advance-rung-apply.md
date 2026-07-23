@@ -1,5 +1,5 @@
 ---
-title: advance — the APPLY-answers rung: all-answered → apply atomically (mutate item + sidecar in one commit), append-new-Qs OR clear+delete, disposition to any terminal (always allowed)
+title: 'advance — the APPLY-answers rung: all-answered → apply atomically (mutate item + sidecar in one commit), append-new-Qs OR clear+delete, disposition to any terminal (always allowed)'
 slug: advance-rung-apply
 spec: advance-loop
 blockedBy: [advance-rung-surface]

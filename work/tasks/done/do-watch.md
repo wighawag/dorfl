@@ -1,5 +1,5 @@
 ---
-title: do --watch — live-stream the agent's run by tailing the pi session log
+title: 'do --watch — live-stream the agent''s run by tailing the pi session log'
 slug: do-watch
 blockedBy: [do-in-place]
 covers: []

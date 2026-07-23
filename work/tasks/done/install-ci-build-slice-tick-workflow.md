@@ -1,5 +1,5 @@
 ---
-title: install-ci build/slice tick workflow (capabilities A + B)
+title: 'install-ci build/slice tick workflow (capabilities A + B)'
 slug: install-ci-build-slice-tick-workflow
 spec: runner-in-ci
 blockedBy: [install-ci-core-and-github-adapter]

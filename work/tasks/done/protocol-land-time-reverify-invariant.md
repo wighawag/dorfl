@@ -1,5 +1,5 @@
 ---
-title: Protocol — write the land-time re-verify invariant + human-reconcile warning (dual-write SOURCE + mirror)
+title: 'Protocol — write the land-time re-verify invariant + human-reconcile warning (dual-write SOURCE + mirror)'
 slug: protocol-land-time-reverify-invariant
 spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: [adr-land-primitive-rebase-reverify-advance]

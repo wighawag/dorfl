@@ -1,5 +1,5 @@
 ---
-title: a truly SINGLE-CONTEXT review-edit loop (one agent launch looping internally, accumulating in its own context) - the original review-edit-loop idea, deferred when the first build implemented it as multiple fresh-context per-pass launches
+title: 'a truly SINGLE-CONTEXT review-edit loop (one agent launch looping internally, accumulating in its own context) - the original review-edit-loop idea, deferred when the first build implemented it as multiple fresh-context per-pass launches'
 slug: single-context-review-edit-loop
 type: idea
 status: incubating

@@ -1,5 +1,5 @@
 ---
-title: do --watch parses the wrong event format — fix it to the pi SESSION-LOG shape (not --mode json stream)
+title: 'do --watch parses the wrong event format — fix it to the pi SESSION-LOG shape (not --mode json stream)'
 slug: do-watch-session-log-format
 blockedBy: [do-watch]
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: Document the `dorflCmd` pin model + the version-upgrade ritual
+title: 'Document the `dorflCmd` pin model + the version-upgrade ritual'
 slug: dorfl-cmd-docs-and-upgrade-ritual
 spec: dorfl-self-version-pinning-and-bootstrap-forward
 blockedBy: [dorfl-bootstrap-self-forward]

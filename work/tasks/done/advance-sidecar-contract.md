@@ -1,5 +1,5 @@
 ---
-title: advance — the question/answer SIDECAR contract (parse/serialise/atomic-apply), the genuinely-new keystone
+title: 'advance — the question/answer SIDECAR contract (parse/serialise/atomic-apply), the genuinely-new keystone'
 slug: advance-sidecar-contract
 spec: advance-loop
 blockedBy: []

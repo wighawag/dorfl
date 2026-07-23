@@ -1,5 +1,5 @@
 ---
-title: "Move every runner-invoked discipline (review, surface-questions, slicing) into work/protocol/ so spawned-agent prompts work in every set-up repo, not just dorfl's own"
+title: 'Move every runner-invoked discipline (review, surface-questions, slicing) into work/protocol/ so spawned-agent prompts work in every set-up repo, not just dorfl''s own'
 slug: runner-invoked-disciplines-into-protocol
 ---
 

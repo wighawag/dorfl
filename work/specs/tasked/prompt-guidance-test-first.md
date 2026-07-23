@@ -1,5 +1,5 @@
 ---
-title: "promptGuidance.testFirst: a per-repo, per-item NUDGE (not a gate) that strengthens the test-first line in the AFK worker's in-band prompt"
+title: 'promptGuidance.testFirst: a per-repo, per-item NUDGE (not a gate) that strengthens the test-first line in the AFK worker''s in-band prompt'
 slug: prompt-guidance-test-first
 ---
 

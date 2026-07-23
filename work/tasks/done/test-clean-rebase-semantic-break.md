@@ -1,5 +1,5 @@
 ---
-title: Test — clean-rebase-but-semantically-broken merge is caught at the rebased tip
+title: 'Test — clean-rebase-but-semantically-broken merge is caught at the rebased tip'
 slug: test-clean-rebase-semantic-break
 spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []

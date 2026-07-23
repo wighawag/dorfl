@@ -1,5 +1,5 @@
 ---
-title: do-remote — `do --remote <r>` worker against a registered repo (materialise a job worktree, harden start/complete to run against it)
+title: 'do-remote — `do --remote <r>` worker against a registered repo (materialise a job worktree, harden start/complete to run against it)'
 slug: do-remote
 spec: command-surface-phase-2
 blockedBy: [registry-remote, do-in-place]

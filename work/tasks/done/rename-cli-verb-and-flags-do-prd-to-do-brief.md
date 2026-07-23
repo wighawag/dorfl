@@ -1,5 +1,5 @@
 ---
-title: Rename CLI verb + flags (do prd: -> do brief:, --specs-land-in, --slicer-loop*) to tasking vocabulary
+title: 'Rename CLI verb + flags (do prd: -> do brief:, --specs-land-in, --slicer-loop*) to tasking vocabulary'
 slug: rename-cli-verb-and-flags-do-prd-to-do-brief
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-config-keys-slicing-to-tasking]

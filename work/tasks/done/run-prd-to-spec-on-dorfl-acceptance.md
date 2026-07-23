@@ -1,5 +1,5 @@
 ---
-title: Run dorfl spec-to-spec on dorfl itself — the end-to-end acceptance test
+title: 'Run dorfl spec-to-spec on dorfl itself — the end-to-end acceptance test'
 slug: run-prd-to-spec-on-dorfl-acceptance
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 humanOnly: true

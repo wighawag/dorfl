@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4a — ATOMIC rename of every exported Spec* symbol + all its importers (one green shot, no alias)
+title: 'spec→spec batch 4a — ATOMIC rename of every exported Spec* symbol + all its importers (one green shot, no alias)'
 slug: rename-spec-remaining-src-modules-a
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-config-and-intake]

@@ -1,5 +1,5 @@
 ---
-title: cas-create-nonce-authoritative-same-identity — make the ledger-write CAS authoritative for SAME-IDENTITY, SAME-CONTENT racers by stamping each `applyTransition` attempt with a per-attempt random nonce (so two concurrent racers can NEVER build the same commit sha), and harden the post-push verify so an "up-to-date / no change of our making" outcome is classified REJECTED, not published — at the shared write seam, so create / claim / slicing-lock / advancing-lock / needs-attention all benefit
+title: 'cas-create-nonce-authoritative-same-identity — make the ledger-write CAS authoritative for SAME-IDENTITY, SAME-CONTENT racers by stamping each `applyTransition` attempt with a per-attempt random nonce (so two concurrent racers can NEVER build the same commit sha), and harden the post-push verify so an "up-to-date / no change of our making" outcome is classified REJECTED, not published — at the shared write seam, so create / claim / slicing-lock / advancing-lock / needs-attention all benefit'
 slug: cas-create-nonce-authoritative-same-identity
 blockedBy: []
 covers: []

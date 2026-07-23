@@ -1,5 +1,5 @@
 ---
-title: an `assistant` identity (third actor beside autonomous `agent` and bare human) + a FAMILY of authenticated runner verbs (approve/commit/push/gh-write) the in-conversation agent calls instead of raw git/gh — and a skill-redirect that enforces it
+title: 'an `assistant` identity (third actor beside autonomous `agent` and bare human) + a FAMILY of authenticated runner verbs (approve/commit/push/gh-write) the in-conversation agent calls instead of raw git/gh — and a skill-redirect that enforces it'
 slug: assistant-identity-and-authenticated-verbs
 type: idea
 status: incubating

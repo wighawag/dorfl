@@ -1,5 +1,5 @@
 ---
-title: the review gate discards non-blocking findings on approve — give them a home (verbatim PR comment + one observation file per run)
+title: 'the review gate discards non-blocking findings on approve — give them a home (verbatim PR comment + one observation file per run)'
 date: 2026-06-06
 status: open
 ---

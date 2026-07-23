@@ -1,5 +1,5 @@
 ---
-title: An empty-diff / "nothing to do" bounce surfaces a dispose-defaulted (cancel-to-terminal) question
+title: 'An empty-diff / "nothing to do" bounce surfaces a dispose-defaulted (cancel-to-terminal) question'
 slug: empty-diff-bounce-surfaces-dispose-defaulted-question
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, apply-disposition-delete-to-dispose-regime-polymorphic]

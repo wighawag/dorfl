@@ -1,5 +1,5 @@
 ---
-title: Phase 1: rename the brief regime (pre-spec->briefs/proposed, spec->briefs/ready, spec-sliced->briefs/tasked) + per-regime terminals (tasks/cancelled, briefs/dropped) + migrate top-level work/dropped
+title: 'Phase 1: rename the brief regime (pre-spec->briefs/proposed, spec->briefs/ready, spec-sliced->briefs/tasked) + per-regime terminals (tasks/cancelled, briefs/dropped) + migrate top-level work/dropped'
 slug: brief-regime-rename-and-dropped-migration
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true

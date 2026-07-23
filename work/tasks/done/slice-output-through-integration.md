@@ -1,5 +1,5 @@
 ---
-title: Route do prd:<slug> slice output through performIntegration (the keystone — honor --propose/--merge, arg parity by construction)
+title: 'Route do prd:<slug> slice output through performIntegration (the keystone — honor --propose/--merge, arg parity by construction)'
 slug: slice-output-through-integration
 spec: slicing-coherence
 blockedBy: []

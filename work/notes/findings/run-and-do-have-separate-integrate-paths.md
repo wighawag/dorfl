@@ -1,5 +1,5 @@
 ---
-title: run and do have SEPARATE gate+integrate pipelines — the review gate (#11/#12) covers do/complete but NOT run
+title: 'run and do have SEPARATE gate+integrate pipelines — the review gate (#11/#12) covers do/complete but NOT run'
 date: 2026-06-06
 status: open
 ---

@@ -1,5 +1,5 @@
 ---
-title: A stale-snapshot `advance` leg (item already done/removed) exits 2 and REDS CI — a benign lost race shown as a failure; also conflated with a genuine wrong-slug
+title: 'A stale-snapshot `advance` leg (item already done/removed) exits 2 and REDS CI — a benign lost race shown as a failure; also conflated with a genuine wrong-slug'
 type: observation
 status: spotted
 spotted: 2026-06-21

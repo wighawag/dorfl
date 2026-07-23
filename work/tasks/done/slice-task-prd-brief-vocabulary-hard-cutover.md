@@ -1,5 +1,5 @@
 ---
-title: Phase 1: hard cutover of the slice->task / spec->brief vocabulary across CLI, frontmatter, and the identity/lock-ref/sidecar seam (no deprecated aliases)
+title: 'Phase 1: hard cutover of the slice->task / spec->brief vocabulary across CLI, frontmatter, and the identity/lock-ref/sidecar seam (no deprecated aliases)'
 slug: slice-task-prd-brief-vocabulary-hard-cutover
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true

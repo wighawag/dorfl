@@ -1,5 +1,5 @@
 ---
-title: Finish the spec cutover — protocol-doc work/specs→work/specs folder paths + the prd: frontmatter FIELD (docs + Frontmatter.spec→.spec code) + the resync VERSION-bump bug
+title: 'Finish the spec cutover — protocol-doc work/specs→work/specs folder paths + the prd: frontmatter FIELD (docs + Frontmatter.spec→.spec code) + the resync VERSION-bump bug'
 slug: finish-spec-cutover-protocol-folder-paths-and-frontmatter-field
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 covers: []

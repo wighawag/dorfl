@@ -1,5 +1,5 @@
 ---
-title: Guard the CI gate derivation against `dorfl config --json` failure / null (intake + advance)
+title: 'Guard the CI gate derivation against `dorfl config --json` failure / null (intake + advance)'
 slug: ci-config-json-null-guard-intake-and-advance
 blockedBy: []
 covers: []

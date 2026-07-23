@@ -1,5 +1,5 @@
 ---
-title: pi harness channels — best channel per need (output / liveness / watch)
+title: 'pi harness channels — best channel per need (output / liveness / watch)'
 type: finding
 verified: 2026-07-07
 source: pi 0.73.1 CLI + docs (`docs/json.md`, `docs/rpc.md`, `docs/session-format.md`, `docs/sdk.md` on the installed `@mariozechner/pi-coding-agent@0.73.1`), current dorfl code (`packages/dorfl/src/{pi-harness,watch-session,agent-launch,harness}.ts`)

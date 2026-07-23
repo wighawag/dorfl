@@ -1,5 +1,5 @@
 ---
-title: pi session storage contract — `--session`/`--session-dir`, header validity, listAll discovery, env overrides
+title: 'pi session storage contract — `--session`/`--session-dir`, header validity, listAll discovery, env overrides'
 type: finding
 verified: 2026-06-06
 source: pi source (pinned local checkout ~/dev/github/wighawag/pi/packages/coding-agent/src) + live tests

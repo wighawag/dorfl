@@ -1,5 +1,5 @@
 ---
-title: isolate resolveRepoConfig tests from ambient DORFL_* env (inject env:{}) so they pass on any machine
+title: 'isolate resolveRepoConfig tests from ambient DORFL_* env (inject env:{}) so they pass on any machine'
 slug: repo-config-test-env-isolation
 blockedBy: []
 covers: []

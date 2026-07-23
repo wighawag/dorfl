@@ -1,5 +1,5 @@
 ---
-title: Land-time re-verify as one mode-agnostic primitive + parallel-merge CI shape + propose PR-merge-time safety (git-alone floor, host-accelerated ceiling)
+title: 'Land-time re-verify as one mode-agnostic primitive + parallel-merge CI shape + propose PR-merge-time safety (git-alone floor, host-accelerated ceiling)'
 slug: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false
 ---

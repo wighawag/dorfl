@@ -1,5 +1,5 @@
 ---
-title: STEP A — pre-backlog/ staging folder + runner-owned promote (backlog/ stays the pool)
+title: 'STEP A — pre-backlog/ staging folder + runner-owned promote (backlog/ stays the pool)'
 slug: pre-backlog-staging-folder-and-promote-step-a
 spec: staging-pool-position-gate-and-trust-model
 blockedBy: []

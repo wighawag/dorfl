@@ -1,5 +1,5 @@
 ---
-title: intake <N> tracer bullet — issue seam read → decision prompt → dispatch the SLICE outcome through performIntegration (a runnable local one-shot)
+title: 'intake <N> tracer bullet — issue seam read → decision prompt → dispatch the SLICE outcome through performIntegration (a runnable local one-shot)'
 slug: intake-tracer-slice-outcome
 spec: issue-intake
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: install-ci project-setup hook (provider-namespaced, opaque, native-syntax pass-through)
+title: 'install-ci project-setup hook (provider-namespaced, opaque, native-syntax pass-through)'
 slug: install-ci-project-setup-hook
 spec: install-ci-project-provisioning
 blockedBy: []

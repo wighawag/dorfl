@@ -1,5 +1,5 @@
 ---
-title: Sidecar entry `kind` field (merge | stuck | triage | spec) — the dispatch signal the apply rung reads
+title: 'Sidecar entry `kind` field (merge | stuck | triage | spec) — the dispatch signal the apply rung reads'
 slug: sidecar-kind-field
 blockedBy: []
 covers: []

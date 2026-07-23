@@ -1,5 +1,5 @@
 ---
-title: Smithers (smithers.sh) is prior art / a fellow-traveller for dorfl: same "durable orchestration is the stable layer" thesis, but resolved on a SQLite ledger with a runtime guarantee rather than on a git + work/ ledger with an in-band protocol
+title: 'Smithers (smithers.sh) is prior art / a fellow-traveller for dorfl: same "durable orchestration is the stable layer" thesis, but resolved on a SQLite ledger with a runtime guarantee rather than on a git + work/ ledger with an in-band protocol'
 type: finding
 date: 2026-07-23
 verified: 2026-07-23

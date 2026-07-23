@@ -1,5 +1,5 @@
 ---
-title: Clean-break prose sweep — CONTEXT.md + ADRs + residual skills (no transition scaffolding, no old naming)
+title: 'Clean-break prose sweep — CONTEXT.md + ADRs + residual skills (no transition scaffolding, no old naming)'
 slug: clean-break-context-adr-and-skills-prose
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [fix-scan-json-brief-pool-jq-and-close-job-via, rename-advance-rung-and-sliced-outcome-tokens, complete-intake-slice-prd-to-task-brief-cutover]

@@ -1,5 +1,5 @@
 ---
-title: Expose engine gates as workflow_dispatch inputs on advance-lifecycle
+title: 'Expose engine gates as workflow_dispatch inputs on advance-lifecycle'
 slug: advance-lifecycle-dispatch-gate-inputs
 issue: 151
 origin: issue

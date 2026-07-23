@@ -1,5 +1,5 @@
 ---
-title: Rename slice/SPEC code identifiers to task/brief (the deferred code-level cutover)
+title: 'Rename slice/SPEC code identifiers to task/brief (the deferred code-level cutover)'
 slug: code-identifier-slice-prd-to-task-brief-rename
 ---
 

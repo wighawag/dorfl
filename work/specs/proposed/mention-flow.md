@@ -1,5 +1,5 @@
 ---
-title: mention-flow - an @dorfl conversational front-door (advise first, dispatch verbs later)
+title: 'mention-flow - an @dorfl conversational front-door (advise first, dispatch verbs later)'
 slug: mention-flow
 humanOnly: true
 needsAnswers: false

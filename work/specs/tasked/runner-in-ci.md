@@ -1,5 +1,5 @@
 ---
-title: runner-in-ci - scaffold a configurable, headless dorfl loop in CI (GitHub Actions first)
+title: 'runner-in-ci - scaffold a configurable, headless dorfl loop in CI (GitHub Actions first)'
 slug: runner-in-ci
 humanOnly: true
 ---

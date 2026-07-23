@@ -1,5 +1,5 @@
 ---
-title: Methodology & skills — how the work/ system relates to Matt Pocock's skills
+title: 'Methodology & skills — how the work/ system relates to Matt Pocock''s skills'
 slug: methodology-and-skills
 type: adr
 created: 2026-06-03

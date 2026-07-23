@@ -1,5 +1,5 @@
 ---
-title: complete a good needs-attention item — runner-owned needs-attention → done (re-gate, no manual git)
+title: 'complete a good needs-attention item — runner-owned needs-attention → done (re-gate, no manual git)'
 slug: complete-from-needs-attention
 blockedBy: [do-in-place]
 covers: []

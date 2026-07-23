@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4e — atomic rename of the residual exported Spec* symbols + complete the PrdsLandIn internal plumbing migration
+title: 'spec→spec batch 4e — atomic rename of the residual exported Spec* symbols + complete the PrdsLandIn internal plumbing migration'
 slug: rename-spec-residual-exported-symbols-and-prdslandIn-plumbing
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-namespace-emit-sites-and-local-unions]

@@ -1,5 +1,5 @@
 ---
-title: skills that orchestrate or copy from sibling skills should reference them as relative resources (agentskills.io), not by bare name — observed gap in from-idea -> setup/to-spec resolution
+title: 'skills that orchestrate or copy from sibling skills should reference them as relative resources (agentskills.io), not by bare name — observed gap in from-idea -> setup/to-spec resolution'
 slug: skill-cross-references-as-relative-resources
 type: idea
 status: incubating

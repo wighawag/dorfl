@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'requeue-reconcile-nondestructive-recovery-verb' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''requeue-reconcile-nondestructive-recovery-verb'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: requeue-reconcile-nondestructive-recovery-verb

@@ -1,5 +1,5 @@
 ---
-title: F3a — Apply resolves the item's CURRENT folder by identity at write-time (folder-agnostic, like the sidecar)
+title: 'F3a — Apply resolves the item''s CURRENT folder by identity at write-time (folder-agnostic, like the sidecar)'
 slug: f3a-apply-resolves-item-by-identity-at-write-time
 brief: staging-surface-and-apply-promote-safety
 blockedBy: [f1-pool-noun-todo-in-surface-and-apply-readers]

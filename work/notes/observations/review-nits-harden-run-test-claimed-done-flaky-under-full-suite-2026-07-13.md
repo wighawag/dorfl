@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'harden-run-test-claimed-done-flaky-under-full-suite' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''harden-run-test-claimed-done-flaky-under-full-suite'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: harden-run-test-claimed-done-flaky-under-full-suite

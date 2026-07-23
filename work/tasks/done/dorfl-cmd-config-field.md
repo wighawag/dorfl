@@ -1,5 +1,5 @@
 ---
-title: Add the `dorflCmd` config field (the repo-declared dorfl command)
+title: 'Add the `dorflCmd` config field (the repo-declared dorfl command)'
 slug: dorfl-cmd-config-field
 spec: dorfl-self-version-pinning-and-bootstrap-forward
 blockedBy: []

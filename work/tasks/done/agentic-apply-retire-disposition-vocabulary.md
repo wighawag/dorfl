@@ -1,5 +1,5 @@
 ---
-title: Agentic apply rung + retire the disposition vocabulary (keystone)
+title: 'Agentic apply rung + retire the disposition vocabulary (keystone)'
 slug: agentic-apply-retire-disposition-vocabulary
 spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [decision-engine-shared-decide-seam]

@@ -1,5 +1,5 @@
 ---
-title: Tidy residual slice/spec test labels + fixtures + make skill prose self-sufficient (no done-task provenance)
+title: 'Tidy residual slice/spec test labels + fixtures + make skill prose self-sufficient (no done-task provenance)'
 slug: rename-residual-slice-test-labels-and-skill-provenance
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-selection-pool-slice-keyword-to-task]

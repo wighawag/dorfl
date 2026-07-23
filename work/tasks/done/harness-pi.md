@@ -1,5 +1,5 @@
 ---
-title: harness adapter — pi (liveness + invocation)
+title: 'harness adapter — pi (liveness + invocation)'
 slug: harness-pi
 spec: dorfl
 humanOnly: true

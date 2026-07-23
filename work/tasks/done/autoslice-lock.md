@@ -1,5 +1,5 @@
 ---
-title: autoslice-lock — concurrency lock for slicing via the seam's CAS (work/slicing/)
+title: 'autoslice-lock — concurrency lock for slicing via the seam''s CAS (work/slicing/)'
 slug: autoslice-lock
 spec: auto-slice
 blockedBy: [ledger-write-seam]

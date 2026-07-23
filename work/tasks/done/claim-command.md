@@ -1,5 +1,5 @@
 ---
-title: claim command — dorfl claim, a TS reimplementation of the claim CAS
+title: 'claim command — dorfl claim, a TS reimplementation of the claim CAS'
 slug: claim-command
 spec: dorfl
 humanOnly: true

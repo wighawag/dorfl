@@ -1,5 +1,5 @@
 ---
-title: agent prompt gains a CONTINUE-context block when re-claiming work-in-progress (prior diff + needs-attention reason + requeue handoff note); fresh path unchanged
+title: 'agent prompt gains a CONTINUE-context block when re-claiming work-in-progress (prior diff + needs-attention reason + requeue handoff note); fresh path unchanged'
 slug: agent-prompt-continue-context
 spec: command-surface-phase-2
 blockedBy: [requeue-continue-and-reset]

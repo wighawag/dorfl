@@ -1,5 +1,5 @@
 ---
-title: Command surface & user journeys — the coherent two-face model (registry, run/do, human face, adopt=skill/execute=command)
+title: 'Command surface & user journeys — the coherent two-face model (registry, run/do, human face, adopt=skill/execute=command)'
 status: accepted
 created: 2026-06-05
 decided: 2026-06-05

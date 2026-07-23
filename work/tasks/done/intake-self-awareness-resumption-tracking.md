@@ -1,5 +1,5 @@
 ---
-title: intake-self-awareness-resumption-tracking — a deterministic pre-decision triage gate (read intake's own MARKER on the thread) so intake skips when it has the last word or the issue is already terminal, and only runs the prompt on genuine new human input
+title: 'intake-self-awareness-resumption-tracking — a deterministic pre-decision triage gate (read intake''s own MARKER on the thread) so intake skips when it has the last word or the issue is already terminal, and only runs the prompt on genuine new human input'
 slug: intake-self-awareness-resumption-tracking
 spec: issue-intake
 blockedBy: []

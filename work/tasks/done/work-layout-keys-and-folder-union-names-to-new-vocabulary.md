@@ -1,5 +1,5 @@
 ---
-title: Rename the work-layout symbolic KEYS and folder-union names to the new task/brief vocabulary (internal cleanup; values unchanged)
+title: 'Rename the work-layout symbolic KEYS and folder-union names to the new task/brief vocabulary (internal cleanup; values unchanged)'
 slug: work-layout-keys-and-folder-union-names-to-new-vocabulary
 blockedBy: []
 covers: []

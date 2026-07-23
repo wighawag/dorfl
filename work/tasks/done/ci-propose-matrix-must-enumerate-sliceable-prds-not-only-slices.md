@@ -1,5 +1,5 @@
 ---
-title: the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRDs (prd:<slug> legs), not only slices — today scan --json is slice-only, so DORFL_AUTO_SLICE never fires on the hourly cron and a ready ungated SPEC is never auto-sliced
+title: 'the CI advance-lifecycle PROPOSE-mode matrix must enumerate sliceable PRDs (prd:<slug> legs), not only slices — today scan --json is slice-only, so DORFL_AUTO_SLICE never fires on the hourly cron and a ready ungated SPEC is never auto-sliced'
 slug: ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices
 blockedBy: []
 covers: []

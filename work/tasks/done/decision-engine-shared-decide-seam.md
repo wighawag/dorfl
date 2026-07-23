@@ -1,5 +1,5 @@
 ---
-title: Shared decision engine — decide(input, allowedOutcomes) → verdict
+title: 'Shared decision engine — decide(input, allowedOutcomes) → verdict'
 slug: decision-engine-shared-decide-seam
 spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: []

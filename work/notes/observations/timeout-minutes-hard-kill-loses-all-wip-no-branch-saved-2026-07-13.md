@@ -1,5 +1,5 @@
 ---
-title: The per-leg `timeout-minutes` reaps a wedged leg (good) but as a HARD SIGKILL that saves NO work to a branch, so a legitimately-long task loses everything and cannot make progress across runs
+title: 'The per-leg `timeout-minutes` reaps a wedged leg (good) but as a HARD SIGKILL that saves NO work to a branch, so a legitimately-long task loses everything and cannot make progress across runs'
 type: observation
 status: open
 spotted: 2026-07-13

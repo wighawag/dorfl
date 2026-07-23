@@ -1,5 +1,5 @@
 ---
-title: Orphan-sidecar gc sweep — reap a question whose source is gone
+title: 'Orphan-sidecar gc sweep — reap a question whose source is gone'
 slug: orphan-sidecar-gc-sweep
 spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [agentic-apply-retire-disposition-vocabulary]

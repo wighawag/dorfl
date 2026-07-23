@@ -1,5 +1,5 @@
 ---
-title: Apply-rung — answered merge-question invokes the land primitive (conditional, refuses on red re-verify)
+title: 'Apply-rung — answered merge-question invokes the land primitive (conditional, refuses on red re-verify)'
 slug: apply-rung-merge-disposition
 spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false

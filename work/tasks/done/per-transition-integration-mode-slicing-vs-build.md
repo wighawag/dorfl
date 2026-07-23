@@ -1,5 +1,5 @@
 ---
-title: standing PER-TRANSITION integration mode as repo config — a NEW optional `slicingIntegration` key overrides the mode for the SPEC-slicing transition ONLY (so slice FILES can land on main directly, no PR), while the existing flat `integration` keeps governing the slice BUILD (a reviewable PR). Additive + non-breaking (NOT a type change to `integration`). Distinct from intake's per-OUTCOME `{slice, spec}`. Explicit --merge/--propose always wins.
+title: 'standing PER-TRANSITION integration mode as repo config — a NEW optional `slicingIntegration` key overrides the mode for the SPEC-slicing transition ONLY (so slice FILES can land on main directly, no PR), while the existing flat `integration` keeps governing the slice BUILD (a reviewable PR). Additive + non-breaking (NOT a type change to `integration`). Distinct from intake''s per-OUTCOME `{slice, spec}`. Explicit --merge/--propose always wins.'
 slug: per-transition-integration-mode-slicing-vs-build
 blockedBy: [remove-automerge-merge-means-auto-on-gate-pass]
 covers: []

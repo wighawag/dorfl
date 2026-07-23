@@ -1,5 +1,5 @@
 ---
-title: advance auto-pick draws the LIFECYCLE pools (untriaged observations + needsAnswers-blocked slices/PRDs) into the selection, so the gates have a pool to govern
+title: 'advance auto-pick draws the LIFECYCLE pools (untriaged observations + needsAnswers-blocked slices/PRDs) into the selection, so the gates have a pool to govern'
 slug: advance-autopick-lifecycle-pools
 blockedBy: [ledger-one-slug-one-folder-lint-and-sweep]
 covers: []

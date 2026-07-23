@@ -1,5 +1,5 @@
 ---
-title: prefix commands by ACTOR TYPE (human: / agent:) so the human-vs-autonomous split is visible IN THE COMMAND NAME — leaning toward prefixing only the HUMAN commands, since the tool's goal is agent-driven work
+title: 'prefix commands by ACTOR TYPE (human: / agent:) so the human-vs-autonomous split is visible IN THE COMMAND NAME — leaning toward prefixing only the HUMAN commands, since the tool''s goal is agent-driven work'
 slug: command-prefix-by-actor-type
 type: idea
 status: incubating

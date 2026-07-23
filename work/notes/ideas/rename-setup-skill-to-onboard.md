@@ -1,5 +1,5 @@
 ---
-title: Rename the `setup` skill to `onboard` (or `adopt`) so it reads as "put a repo on the contract", not "the universal step 1"
+title: 'Rename the `setup` skill to `onboard` (or `adopt`) so it reads as "put a repo on the contract", not "the universal step 1"'
 slug: rename-setup-skill-to-onboard
 type: idea
 status: incubating

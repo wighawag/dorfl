@@ -1,5 +1,5 @@
 ---
-title: Rewrite the website getting-started section skill-first (three layers)
+title: 'Rewrite the website getting-started section skill-first (three layers)'
 slug: website-getting-started-three-layer
 spec: website-getting-started-skill-first
 blockedBy: []

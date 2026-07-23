@@ -1,5 +1,5 @@
 ---
-title: Agent session handoff & resumable work (carry resume-CONTEXT across deadline checkpoints, harness-agnostically)
+title: 'Agent session handoff & resumable work (carry resume-CONTEXT across deadline checkpoints, harness-agnostically)'
 slug: agent-session-handoff-and-resumable-work
 ---
 

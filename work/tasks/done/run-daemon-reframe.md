@@ -1,5 +1,5 @@
 ---
-title: run-daemon-reframe — `run` = forever-looping parallel daemon; `--once` = debug tick; retire watch
+title: 'run-daemon-reframe — `run` = forever-looping parallel daemon; `--once` = debug tick; retire watch'
 slug: run-daemon-reframe
 spec: command-surface-phase-2
 blockedBy: [registry-remote]

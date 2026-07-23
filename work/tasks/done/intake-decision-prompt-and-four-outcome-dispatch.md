@@ -1,5 +1,5 @@
 ---
-title: intake decision PROMPT asset + the full four-outcome dispatcher (ask / spec / bounce branches on top of the slice tracer)
+title: 'intake decision PROMPT asset + the full four-outcome dispatcher (ask / spec / bounce branches on top of the slice tracer)'
 slug: intake-decision-prompt-and-four-outcome-dispatch
 spec: issue-intake
 blockedBy: [intake-tracer-slice-outcome]

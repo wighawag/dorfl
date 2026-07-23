@@ -1,5 +1,5 @@
 ---
-title: Direct-delete CLI helper — drop a source + its sidecar in one revertible commit
+title: 'Direct-delete CLI helper — drop a source + its sidecar in one revertible commit'
 slug: direct-delete-question-cli-helper
 spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [agentic-apply-retire-disposition-vocabulary]

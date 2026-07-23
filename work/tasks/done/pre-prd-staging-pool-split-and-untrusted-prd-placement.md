@@ -1,5 +1,5 @@
 ---
-title: STEP A for PRDs — pre-spec/ staging + runner-deterministic SPEC placement (spec/ stays the pool)
+title: 'STEP A for PRDs — pre-spec/ staging + runner-deterministic SPEC placement (spec/ stays the pool)'
 slug: pre-prd-staging-pool-split-and-untrusted-prd-placement
 spec: staging-pool-position-gate-and-trust-model
 blockedBy: [runner-deterministic-slice-placement-policy-and-precedence]

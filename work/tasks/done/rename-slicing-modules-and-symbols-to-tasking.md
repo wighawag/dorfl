@@ -1,5 +1,5 @@
 ---
-title: Rename slicing/SPEC source modules + symbols (slicing.ts, slicer-review-loop, spec-complete, UncertainSlice, etc.) to tasking vocabulary
+title: 'Rename slicing/SPEC source modules + symbols (slicing.ts, slicer-review-loop, spec-complete, UncertainSlice, etc.) to tasking vocabulary'
 slug: rename-slicing-modules-and-symbols-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-cli-verb-and-flags-do-prd-to-do-brief]

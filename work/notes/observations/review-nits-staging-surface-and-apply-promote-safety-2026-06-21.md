@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'staging-surface-and-apply-promote-safety' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''staging-surface-and-apply-promote-safety'' (Gate 2 approve)'
 date: 2026-06-21
 status: open
 reviewOf: staging-surface-and-apply-promote-safety

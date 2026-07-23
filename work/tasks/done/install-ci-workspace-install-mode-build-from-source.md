@@ -1,5 +1,5 @@
 ---
-title: install-ci should support a WORKSPACE install mode (build the CLI from source + link it onto PATH) for the self-hosting dorfl repo, instead of `npm install -g dorfl` which fails (127, command not found) because dorfl is not published — mirroring whitesmith's `dev` mode, auto-detected when generating inside the dorfl monorepo
+title: 'install-ci should support a WORKSPACE install mode (build the CLI from source + link it onto PATH) for the self-hosting dorfl repo, instead of `npm install -g dorfl` which fails (127, command not found) because dorfl is not published — mirroring whitesmith''s `dev` mode, auto-detected when generating inside the dorfl monorepo'
 slug: install-ci-workspace-install-mode-build-from-source
 blockedBy: []
 covers: []

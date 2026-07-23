@@ -1,5 +1,5 @@
 ---
-title: do/run/complete should FAIL FAST at startup when the fresh-worktree gate is statically unrunnable (fresh-worktree gate ON + prepare resolves to no commands + a lockfile present) — not spend a full claim+build to discover the env-config gap and route CORRECT work to needs-attention
+title: 'do/run/complete should FAIL FAST at startup when the fresh-worktree gate is statically unrunnable (fresh-worktree gate ON + prepare resolves to no commands + a lockfile present) — not spend a full claim+build to discover the env-config gap and route CORRECT work to needs-attention'
 slug: do-fails-fast-when-acceptance-gate-statically-unrunnable
 blockedBy: []
 covers: []

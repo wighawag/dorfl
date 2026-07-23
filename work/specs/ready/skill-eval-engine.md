@@ -1,5 +1,5 @@
 ---
-title: A reusable skill-eval engine (pi-RPC-driven, interactive-answer, invariant-graded) — with the setup skill as its first consumer
+title: 'A reusable skill-eval engine (pi-RPC-driven, interactive-answer, invariant-graded) — with the setup skill as its first consumer'
 slug: skill-eval-engine
 humanOnly: true
 ---

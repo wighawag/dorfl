@@ -1,5 +1,5 @@
 ---
-title: humanOnly gate — replace the afk field + allowUnspecifiedGate with humanOnly + allowAgents
+title: 'humanOnly gate — replace the afk field + allowUnspecifiedGate with humanOnly + allowAgents'
 slug: humanonly-gate
 spec: dorfl
 blockedBy: [scan, scan-human-dashboard, per-repo-config]

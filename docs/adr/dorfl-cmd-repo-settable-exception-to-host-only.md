@@ -1,5 +1,5 @@
 ---
-title: `dorflCmd` is repo-settable — the deliberate exception to the host-only machine-command rule (ADR §13)
+title: '`dorflCmd` is repo-settable — the deliberate exception to the host-only machine-command rule (ADR §13)'
 status: accepted
 created: 2026-07-21
 decided: 2026-07-21

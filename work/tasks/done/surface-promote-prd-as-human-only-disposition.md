@@ -1,5 +1,5 @@
 ---
-title: Surface promote-spec as a human-only disposition (never auto-picked)
+title: 'Surface promote-spec as a human-only disposition (never auto-picked)'
 slug: surface-promote-prd-as-human-only-disposition
 spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: [promote-prd-disposition-and-triage-local-cas-prd-writer]

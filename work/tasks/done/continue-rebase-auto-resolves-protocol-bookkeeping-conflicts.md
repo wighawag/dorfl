@@ -1,5 +1,5 @@
 ---
-title: the ONBOARD continue-rebase (rebaseContinuedBranchOntoMain) must drop the kept branch's own stale bookkeeping move-only commits — the same drop-mechanism the integration rebase ALREADY uses — so a single agent never self-conflicts and surfaces to a human
+title: 'the ONBOARD continue-rebase (rebaseContinuedBranchOntoMain) must drop the kept branch''s own stale bookkeeping move-only commits — the same drop-mechanism the integration rebase ALREADY uses — so a single agent never self-conflicts and surfaces to a human'
 slug: continue-rebase-auto-resolves-protocol-bookkeeping-conflicts
 blockedBy: []
 covers: []

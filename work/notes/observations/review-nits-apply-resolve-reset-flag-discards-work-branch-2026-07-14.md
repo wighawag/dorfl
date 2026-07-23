@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'apply-resolve-reset-flag-discards-work-branch' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''apply-resolve-reset-flag-discards-work-branch'' (Gate 2 approve)'
 date: 2026-07-14
 status: open
 reviewOf: apply-resolve-reset-flag-discards-work-branch

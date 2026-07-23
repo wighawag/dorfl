@@ -1,5 +1,5 @@
 ---
-title: intake's emitted commit subject + propose-PR title must carry the DRAFTED slice title — stop degrading to generic "complete work slice" / "feat(<slug>)" because integration-core reads titlePath BEFORE the dispatcher stages the output file
+title: 'intake''s emitted commit subject + propose-PR title must carry the DRAFTED slice title — stop degrading to generic "complete work slice" / "feat(<slug>)" because integration-core reads titlePath BEFORE the dispatcher stages the output file'
 slug: intake-propose-title-from-drafted-slice
 spec: issue-intake
 blockedBy: []

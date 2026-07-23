@@ -1,5 +1,5 @@
 ---
-title: advance — a question/answer protocol + a generalized "advance any work/ item one lifecycle rung" capability, driven one-shot (do/CI) AND looped (run), human-or-agent per repo-config
+title: 'advance — a question/answer protocol + a generalized "advance any work/ item one lifecycle rung" capability, driven one-shot (do/CI) AND looped (run), human-or-agent per repo-config'
 slug: advance-loop
 sliceAfter: [auto-slice, slicing-coherence]
 ---

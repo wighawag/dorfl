@@ -1,5 +1,5 @@
 ---
-title: Cut remaining protocol-doc prose + skills SKILL.md over to task/brief/tasking vocabulary
+title: 'Cut remaining protocol-doc prose + skills SKILL.md over to task/brief/tasking vocabulary'
 slug: rename-protocol-prose-and-skills-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-protocol-doc-slicing-to-tasking]

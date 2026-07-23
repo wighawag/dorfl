@@ -1,5 +1,5 @@
 ---
-title: Converge the install-ci resolver shim onto the generic `dorflCmd` bootstrap forward
+title: 'Converge the install-ci resolver shim onto the generic `dorflCmd` bootstrap forward'
 slug: install-ci-shim-converges-on-dorfl-cmd
 spec: dorfl-self-version-pinning-and-bootstrap-forward
 blockedBy: [dorfl-bootstrap-self-forward]

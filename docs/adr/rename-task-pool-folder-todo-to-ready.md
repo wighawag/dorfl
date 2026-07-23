@@ -1,5 +1,5 @@
 ---
-title: Rename the claimable task pool folder `tasks/todo/` → `tasks/ready/`
+title: 'Rename the claimable task pool folder `tasks/todo/` → `tasks/ready/`'
 status: accepted
 created: 2026-06-24
 decided: 2026-06-24

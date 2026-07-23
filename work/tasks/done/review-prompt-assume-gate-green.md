@@ -1,5 +1,5 @@
 ---
-title: review-prompt-assume-gate-green — tell the Gate-2 review agent the acceptance gate already passed, so it does NOT re-run the suite
+title: 'review-prompt-assume-gate-green — tell the Gate-2 review agent the acceptance gate already passed, so it does NOT re-run the suite'
 slug: review-prompt-assume-gate-green
 spec: review
 blockedBy: []

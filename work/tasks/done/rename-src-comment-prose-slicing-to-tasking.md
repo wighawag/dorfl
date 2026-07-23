@@ -1,5 +1,5 @@
 ---
-title: Sweep slice/SPEC/slicing free-prose comments + user-facing strings in src/ to task/brief/tasking
+title: 'Sweep slice/SPEC/slicing free-prose comments + user-facing strings in src/ to task/brief/tasking'
 slug: rename-src-comment-prose-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-slicing-modules-and-symbols-to-tasking]

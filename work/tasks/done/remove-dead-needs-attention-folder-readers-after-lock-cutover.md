@@ -1,5 +1,5 @@
 ---
-title: Remove the dead folder-based needs-attention readers/writers left by the lock cutover
+title: 'Remove the dead folder-based needs-attention readers/writers left by the lock cutover'
 slug: remove-dead-needs-attention-folder-readers-after-lock-cutover
 blockedBy: []
 covers: []

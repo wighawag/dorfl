@@ -1,5 +1,5 @@
 ---
-title: triage-cas-race-test-models-real-contention — make the two-racing-promote CAS tests DETERMINISTIC (they flake "2 winners" under full-suite parallel load) by modelling real arbiter contention, NOT by weakening the one-winner invariant — the product CAS is sound, the TEST races
+title: 'triage-cas-race-test-models-real-contention — make the two-racing-promote CAS tests DETERMINISTIC (they flake "2 winners" under full-suite parallel load) by modelling real arbiter contention, NOT by weakening the one-winner invariant — the product CAS is sound, the TEST races'
 slug: triage-cas-race-test-models-real-contention
 covers: []
 ---

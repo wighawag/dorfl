@@ -1,5 +1,5 @@
 ---
-title: requeue recovers a slice from in-progress/ too (not only needs-attention/) — arbiter-resolved current folder -> backlog/ via the same tree-less CAS, keep+continue default / --reset discards
+title: 'requeue recovers a slice from in-progress/ too (not only needs-attention/) — arbiter-resolved current folder -> backlog/ via the same tree-less CAS, keep+continue default / --reset discards'
 slug: requeue-from-in-progress
 spec: ledger-integrity
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4c — do/advance/prompt consumers + the do spec:/advance spec: verb dispatch + spec-complete.ts file rename
+title: 'spec→spec batch 4c — do/advance/prompt consumers + the do spec:/advance spec: verb dispatch + spec-complete.ts file rename'
 slug: rename-spec-remaining-src-modules-c
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-remaining-src-modules-b]

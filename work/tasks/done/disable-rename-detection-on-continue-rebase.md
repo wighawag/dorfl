@@ -1,5 +1,5 @@
 ---
-title: Disable git rename detection on the runner's continue/integration rebase
+title: 'Disable git rename detection on the runner''s continue/integration rebase'
 slug: disable-rename-detection-on-continue-rebase
 blockedBy: [] # startable now
 covers: [] # self-contained chore; no spec

@@ -1,5 +1,5 @@
 ---
-title: camelCase frontmatter + needsAnswers axis — parser/eligibility migration
+title: 'camelCase frontmatter + needsAnswers axis — parser/eligibility migration'
 slug: camelcase-frontmatter-and-needsanswers
 spec: auto-slice
 humanOnly: true

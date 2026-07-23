@@ -1,5 +1,5 @@
 ---
-title: DELETE the autoMerge knob entirely (config key, env var, CLI flags, and the merge→propose downgrade) — resolving the autoMerge concept-collision in favour of "merge means auto-merge on gate pass; propose means a human merges" (Model P). Hard delete, NO deprecation (no external users).
+title: 'DELETE the autoMerge knob entirely (config key, env var, CLI flags, and the merge→propose downgrade) — resolving the autoMerge concept-collision in favour of "merge means auto-merge on gate pass; propose means a human merges" (Model P). Hard delete, NO deprecation (no external users).'
 slug: remove-automerge-merge-means-auto-on-gate-pass
 blockedBy: []
 covers: []

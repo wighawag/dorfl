@@ -1,5 +1,5 @@
 ---
-title: a stuck advancing lock must be REAPABLE — add a human-invoked release-advancing <slug> verb (no auto-sweep) plus a gc --ledger/status REPORT that surfaces orphaned work/advancing/ markers (introduce listAdvancingMarkers())
+title: 'a stuck advancing lock must be REAPABLE — add a human-invoked release-advancing <slug> verb (no auto-sweep) plus a gc --ledger/status REPORT that surfaces orphaned work/advancing/ markers (introduce listAdvancingMarkers())'
 slug: advancing-lock-human-release-verb-and-surface
 spec: recover-autodetect-and-advancing-lock-crash-safety
 blockedBy: [advancing-lock-release-crash-safe]

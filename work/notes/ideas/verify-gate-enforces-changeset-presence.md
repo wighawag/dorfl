@@ -1,5 +1,5 @@
 ---
-title: make `verify` enforce a changeset for package changes (so autonomous agents cannot land code without a release note), adopting the anon-pi pattern
+title: 'make `verify` enforce a changeset for package changes (so autonomous agents cannot land code without a release note), adopting the anon-pi pattern'
 slug: verify-gate-enforces-changeset-presence
 type: idea
 status: incubating

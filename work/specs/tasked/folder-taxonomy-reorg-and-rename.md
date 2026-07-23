@@ -1,5 +1,5 @@
 ---
-title: Regroup work/ under regime umbrellas (notes/ tasks/ briefs/) and rename slice->task, spec->brief
+title: 'Regroup work/ under regime umbrellas (notes/ tasks/ briefs/) and rename slice->task, spec->brief'
 slug: folder-taxonomy-reorg-and-rename
 humanOnly: true
 sliceAfter: []

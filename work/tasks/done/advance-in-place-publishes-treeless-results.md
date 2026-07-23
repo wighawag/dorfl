@@ -1,5 +1,5 @@
 ---
-title: In-place advance publishes tree-less rung results to the arbiter
+title: 'In-place advance publishes tree-less rung results to the arbiter'
 slug: advance-in-place-publishes-treeless-results
 spec: ci-advance-surfaces-questions-not-only-builds
 blockedBy: []

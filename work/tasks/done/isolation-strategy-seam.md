@@ -1,5 +1,5 @@
 ---
-title: isolation-strategy-seam — in-place vs job-worktree isolation seam that `do` selects on
+title: 'isolation-strategy-seam — in-place vs job-worktree isolation seam that `do` selects on'
 slug: isolation-strategy-seam
 spec: command-surface-phase-2
 blockedBy: []

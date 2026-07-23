@@ -1,5 +1,5 @@
 ---
-title: Review verdict — the two CI-advance-surfacing slices (B foundation, A propose-matrix)
+title: 'Review verdict — the two CI-advance-surfacing slices (B foundation, A propose-matrix)'
 type: finding
 status: incubating
 source: review skill applied 2026-06-16 against work/backlog/{advance-in-place-publishes-treeless-results,ci-propose-matrix-enumerates-lifecycle-items}.md, the SPEC work/spec-sliced/ci-advance-surfaces-questions-not-only-builds.md, and packages/dorfl/src (advance.ts, advance-drivers.ts, advance-isolated.ts, advance-loop-driver.ts, advance-treeless-publish.ts, lifecycle-gather.ts, lifecycle-pools.ts, scan.ts, format.ts)

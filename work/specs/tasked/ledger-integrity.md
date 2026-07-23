@@ -1,5 +1,5 @@
 ---
-title: ledger-integrity — the work/ lifecycle ledger must be one-slug-one-folder, arbiter-is-truth, and atomic across EVERY transition (claim / integrate / recover / onboard / requeue)
+title: 'ledger-integrity — the work/ lifecycle ledger must be one-slug-one-folder, arbiter-is-truth, and atomic across EVERY transition (claim / integrate / recover / onboard / requeue)'
 slug: ledger-integrity
 blockedBy: []
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: advance — the `work/advancing/` CAS lock BORROW (one primitive, action=folder, identity=entry), type-encoded, never colliding with slicing/build
+title: 'advance — the `work/advancing/` CAS lock BORROW (one primitive, action=folder, identity=entry), type-encoded, never colliding with slicing/build'
 slug: advancing-lock-borrow
 spec: advance-loop
 blockedBy: []

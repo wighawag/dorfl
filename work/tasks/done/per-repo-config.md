@@ -1,5 +1,5 @@
 ---
-title: per-repo config — a committed repo-level config layered over global
+title: 'per-repo config — a committed repo-level config layered over global'
 slug: per-repo-config
 spec: dorfl
 humanOnly: true

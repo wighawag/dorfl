@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 3 — config keys + intake artifact type
+title: 'spec→spec batch 3 — config keys + intake artifact type'
 slug: rename-spec-config-and-intake
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-frontmatter-field-and-slug-namespace]

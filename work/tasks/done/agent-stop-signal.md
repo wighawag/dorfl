@@ -1,5 +1,5 @@
 ---
-title: agent-stop-signal — the build-agent → runner REPORTING CHANNEL: a hard STOP verdict (honored before gate/Gate-2) + a soft DECISIONS log (surfaced for review), so neither a drifted-slice STOP nor an inline design decision is lost
+title: 'agent-stop-signal — the build-agent → runner REPORTING CHANNEL: a hard STOP verdict (honored before gate/Gate-2) + a soft DECISIONS log (surfaced for review), so neither a drifted-slice STOP nor an inline design decision is lost'
 slug: agent-stop-signal
 blockedBy: [do-in-place]
 covers: []

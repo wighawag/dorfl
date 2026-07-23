@@ -1,5 +1,5 @@
 ---
-title: setup + migrate skills (adopt-the-contract); doctor is a SEPARATE, uncertain idea
+title: 'setup + migrate skills (adopt-the-contract); doctor is a SEPARATE, uncertain idea'
 slug: setup-and-migrate-skills
 type: idea
 status: incubating

@@ -1,5 +1,5 @@
 ---
-title: review-skill — author skills/review/ (a standalone, protocol-native review discipline)
+title: 'review-skill — author skills/review/ (a standalone, protocol-native review discipline)'
 slug: review-skill
 spec: review-skill
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: Command surface phase 2 — build the new surface (registry, run/do split, human face, cleanup)
+title: 'Command surface phase 2 — build the new surface (registry, run/do split, human face, cleanup)'
 slug: command-surface-phase-2
 sliceAfter: []
 ---

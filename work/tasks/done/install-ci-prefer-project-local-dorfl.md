@@ -1,5 +1,5 @@
 ---
-title: install-ci generated CI prefers a project-pinned dorfl over the global one
+title: 'install-ci generated CI prefers a project-pinned dorfl over the global one'
 slug: install-ci-prefer-project-local-dorfl
 spec: install-ci-project-provisioning
 blockedBy: [install-ci-project-setup-hook]

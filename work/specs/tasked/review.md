@@ -1,5 +1,5 @@
 ---
-title: review — a model-driven review role, as TWO complementary gates (spec review + PR/code review), each independently on/off; on approve a resolved `merge` lands automatically while `propose` always leaves the merge to a human (Model P)
+title: 'review — a model-driven review role, as TWO complementary gates (spec review + PR/code review), each independently on/off; on approve a resolved `merge` lands automatically while `propose` always leaves the merge to a human (Model P)'
 slug: review
 humanOnly: true
 sliceAfter: [auto-slice, review-skill]

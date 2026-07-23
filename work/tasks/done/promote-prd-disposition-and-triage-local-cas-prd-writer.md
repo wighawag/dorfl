@@ -1,5 +1,5 @@
 ---
-title: Add promote-spec disposition + triage-local CAS SPEC writer (observation→SPEC route)
+title: 'Add promote-spec disposition + triage-local CAS SPEC writer (observation→SPEC route)'
 slug: promote-prd-disposition-and-triage-local-cas-prd-writer
 spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: [promotion-self-contained-body-and-delete-on-promote-task-route]

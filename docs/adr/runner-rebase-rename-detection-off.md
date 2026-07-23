@@ -1,5 +1,5 @@
 ---
-title: The runner's continue/integration rebase disables git directory-rename detection (scoped `-c merge.directoryRenames=false`) — over a per-folder sentinel
+title: 'The runner''s continue/integration rebase disables git directory-rename detection (scoped `-c merge.directoryRenames=false`) — over a per-folder sentinel'
 status: accepted
 created: 2026-06-26
 decided: 2026-06-20

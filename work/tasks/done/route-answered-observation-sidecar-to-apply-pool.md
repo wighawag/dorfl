@@ -1,5 +1,5 @@
 ---
-title: An answered observation sidecar must route to the apply pool (not sit in gated-off triage)
+title: 'An answered observation sidecar must route to the apply pool (not sit in gated-off triage)'
 slug: route-answered-observation-sidecar-to-apply-pool
 covers: []
 blockedBy: []

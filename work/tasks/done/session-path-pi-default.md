@@ -1,5 +1,5 @@
 ---
-title: Pass `--session <full-path>` under pi's default sessions root (visible to the dashboard, no checkout pollution, no --watch race)
+title: 'Pass `--session <full-path>` under pi''s default sessions root (visible to the dashboard, no checkout pollution, no --watch race)'
 slug: session-path-pi-default
 spec: command-surface-phase-2
 blockedBy: []

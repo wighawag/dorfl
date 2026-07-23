@@ -1,5 +1,5 @@
 ---
-title: dorflCmd forward must degrade (not fail-loud) when the target is not installed yet — the node_modules/.bin/dorfl case depends on prepare, which dorfl itself runs (circular)
+title: 'dorflCmd forward must degrade (not fail-loud) when the target is not installed yet — the node_modules/.bin/dorfl case depends on prepare, which dorfl itself runs (circular)'
 type: observation
 status: spotted
 spotted: 2026-07-21

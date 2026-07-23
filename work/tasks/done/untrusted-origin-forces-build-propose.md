@@ -1,5 +1,5 @@
 ---
-title: a SPEC/slice born from an UNTRUSTED issue carries an origin-trust STAMP, and the build transition resolves to `propose` for untrusted-origin work even when the build `integration` is `merge` — moving the human checkpoint onto the becomes-code build. An explicit --merge still wins (the operator is present).
+title: 'a SPEC/slice born from an UNTRUSTED issue carries an origin-trust STAMP, and the build transition resolves to `propose` for untrusted-origin work even when the build `integration` is `merge` — moving the human checkpoint onto the becomes-code build. An explicit --merge still wins (the operator is present).'
 slug: untrusted-origin-forces-build-propose
 blockedBy: [per-transition-integration-mode-slicing-vs-build]
 covers: []

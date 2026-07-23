@@ -1,5 +1,5 @@
 ---
-title: advance loop driver over the REGISTRY SET with per-mirror job-worktree isolation - the substrate run's daemon needs before its per-item unit can become the advance tick
+title: 'advance loop driver over the REGISTRY SET with per-mirror job-worktree isolation - the substrate run''s daemon needs before its per-item unit can become the advance tick'
 slug: advance-loop-driver-registry-set-job-worktrees
 blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate, surface-blockers-gate]
 covers: []

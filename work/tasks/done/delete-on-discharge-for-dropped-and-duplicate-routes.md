@@ -1,5 +1,5 @@
 ---
-title: Delete-on-discharge for the dropped/delete/duplicate routes (retire resting-state machinery)
+title: 'Delete-on-discharge for the dropped/delete/duplicate routes (retire resting-state machinery)'
 slug: delete-on-discharge-for-dropped-and-duplicate-routes
 spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: []

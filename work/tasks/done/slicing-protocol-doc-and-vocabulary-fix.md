@@ -1,5 +1,5 @@
 ---
-title: SLICING-PROTOCOL.md doc + buildSlicingBrief points at it + STALE vocabulary fix (to-task, work/tasks/, work/briefs/ready/)
+title: 'SLICING-PROTOCOL.md doc + buildSlicingBrief points at it + STALE vocabulary fix (to-task, work/tasks/, work/briefs/ready/)'
 slug: slicing-protocol-doc-and-vocabulary-fix
 brief: runner-invoked-disciplines-into-protocol
 blockedBy: [surface-protocol-doc-and-prompt]

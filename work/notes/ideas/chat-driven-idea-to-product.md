@@ -1,5 +1,5 @@
 ---
-title: Chat-driven "idea → product" web app — a control + conversation surface over the advance-loop engine (server-side; browser is a thin client)
+title: 'Chat-driven "idea → product" web app — a control + conversation surface over the advance-loop engine (server-side; browser is a thin client)'
 slug: chat-driven-idea-to-product
 type: idea
 status: incubating

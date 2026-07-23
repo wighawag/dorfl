@@ -1,5 +1,5 @@
 ---
-title: The apply rung appends '## Applied answers' but leaves the now-stale '## Open questions' section AND the 'Set needsAnswers:true' autonomy note in the brief body
+title: 'The apply rung appends ''## Applied answers'' but leaves the now-stale ''## Open questions'' section AND the ''Set needsAnswers:true'' autonomy note in the brief body'
 date: 2026-06-21
 status: open
 triaged: keep

@@ -1,5 +1,5 @@
 ---
-title: intake event-classification — new-comment / issue-body-edited → re-evaluate; buried comment-edit ignored (pure control-path logic)
+title: 'intake event-classification — new-comment / issue-body-edited → re-evaluate; buried comment-edit ignored (pure control-path logic)'
 slug: intake-event-classification
 spec: issue-intake
 blockedBy: []

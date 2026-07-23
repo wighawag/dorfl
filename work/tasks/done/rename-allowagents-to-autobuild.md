@@ -1,5 +1,5 @@
 ---
-title: advance — RENAME `allowAgents` → `autoBuild` (the clean breaking-config migration, alias/deprecation window) so the gate family is symmetric (autoBuild/autoSlice/autoTriage) — SEQUENCED LAST
+title: 'advance — RENAME `allowAgents` → `autoBuild` (the clean breaking-config migration, alias/deprecation window) so the gate family is symmetric (autoBuild/autoSlice/autoTriage) — SEQUENCED LAST'
 slug: rename-allowagents-to-autobuild
 spec: advance-loop
 blockedBy: [advance-drivers-and-gates, advance-rung-triage]

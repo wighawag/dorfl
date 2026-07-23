@@ -1,5 +1,5 @@
 ---
-title: the continued-branch push retries on a stale --force-with-lease ("stale info") by re-fetching the work branch + re-rebasing, instead of failing the run with green work stranded in the job worktree
+title: 'the continued-branch push retries on a stale --force-with-lease ("stale info") by re-fetching the work branch + re-rebasing, instead of failing the run with green work stranded in the job worktree'
 slug: work-branch-push-retry-on-stale-lease
 blockedBy: []
 ---

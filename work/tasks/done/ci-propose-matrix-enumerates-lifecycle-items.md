@@ -1,5 +1,5 @@
 ---
-title: CI propose matrix enumerates lifecycle items (surface / triage / apply), not only build/slice
+title: 'CI propose matrix enumerates lifecycle items (surface / triage / apply), not only build/slice'
 slug: ci-propose-matrix-enumerates-lifecycle-items
 spec: ci-advance-surfaces-questions-not-only-builds
 humanOnly: true

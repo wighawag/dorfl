@@ -1,5 +1,5 @@
 ---
-title: Vendor incur's harness map + package the skills, exposing an installSkills engine
+title: 'Vendor incur''s harness map + package the skills, exposing an installSkills engine'
 slug: skills-add-vendor-incur-agents-map
 spec: skills-add-command
 blockedBy: []

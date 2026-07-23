@@ -1,5 +1,5 @@
 ---
-title: A spec is tasked ATOMICALLY at its own scope (every story becomes a task, or none does); a spec that can only be partially tasked is MIS-SCOPED and must be SPLIT — the folder taxonomy stays BINARY, partial tasking is FORBIDDEN
+title: 'A spec is tasked ATOMICALLY at its own scope (every story becomes a task, or none does); a spec that can only be partially tasked is MIS-SCOPED and must be SPLIT — the folder taxonomy stays BINARY, partial tasking is FORBIDDEN'
 status: accepted
 created: 2026-07-14
 supersedes:

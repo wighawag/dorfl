@@ -1,5 +1,5 @@
 ---
-title: an observation's IDENTITY must be its own filename, never a foreign slug — fix the review-nits minting (slug → reviewOf back-pointer), make the triage enumerate/resolve round-trip TOTAL, make an unresolvable lifecycle leg a benign SKIP not exit-1, and MIGRATE the 17 existing review-nits observations
+title: 'an observation''s IDENTITY must be its own filename, never a foreign slug — fix the review-nits minting (slug → reviewOf back-pointer), make the triage enumerate/resolve round-trip TOTAL, make an unresolvable lifecycle leg a benign SKIP not exit-1, and MIGRATE the 17 existing review-nits observations'
 slug: observation-identity-is-its-filename-not-a-foreign-slug
 origin: observation
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: ADVANCING acquires the unified lock for the tree-less rungs only (interim dual-write; advancing/ marker kept)
+title: 'ADVANCING acquires the unified lock for the tree-less rungs only (interim dual-write; advancing/ marker kept)'
 slug: advancing-acquires-unified-lock
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

@@ -1,5 +1,5 @@
 ---
-title: needs-attention surfacing on main via cherry-pick (built against the ledger-transition seam)
+title: 'needs-attention surfacing on main via cherry-pick (built against the ledger-transition seam)'
 slug: needs-attention-cherry-pick
 sliceAfter: [ledger-transition-seam]
 ---

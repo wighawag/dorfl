@@ -1,5 +1,5 @@
 ---
-title: advance — RETIRE the old `batch-qa` skill (its judgement survives in `surface-questions`, its orchestration is absorbed by the advance engine, its human-batching by `orchestrate`)
+title: 'advance — RETIRE the old `batch-qa` skill (its judgement survives in `surface-questions`, its orchestration is absorbed by the advance engine, its human-batching by `orchestrate`)'
 slug: retire-batch-qa-skill
 spec: advance-loop
 blockedBy: [surface-questions-skill, advance-drivers-and-gates]

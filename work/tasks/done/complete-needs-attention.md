@@ -1,5 +1,5 @@
 ---
-title: complete → needs-attention — route complete's failure paths to the stuck folder
+title: 'complete → needs-attention — route complete''s failure paths to the stuck folder'
 slug: complete-needs-attention
 spec: dorfl
 humanOnly: true

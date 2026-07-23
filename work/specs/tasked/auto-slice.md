@@ -1,5 +1,5 @@
 ---
-title: auto-slice — slice a SPEC file into backlog items as a work/-native capability
+title: 'auto-slice — slice a SPEC file into backlog items as a work/-native capability'
 slug: auto-slice
 humanOnly: true
 ---

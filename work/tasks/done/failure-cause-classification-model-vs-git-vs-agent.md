@@ -1,5 +1,5 @@
 ---
-title: Classify a stuck item's failure CAUSE (transient-infra vs agent-misbehaved vs gate-failed vs config/wiring) so the needs-attention reason + operator signal are not all undifferentiated "agent failed" — reusing the existing outcome vocabulary, and making do and run classify the SAME error the same way
+title: 'Classify a stuck item''s failure CAUSE (transient-infra vs agent-misbehaved vs gate-failed vs config/wiring) so the needs-attention reason + operator signal are not all undifferentiated "agent failed" — reusing the existing outcome vocabulary, and making do and run classify the SAME error the same way'
 slug: failure-cause-classification-model-vs-git-vs-agent
 blockedBy: []
 covers: []

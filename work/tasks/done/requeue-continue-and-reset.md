@@ -1,5 +1,5 @@
 ---
-title: requeue keeps the branch + next claim CONTINUES from its tip; --reset deletes the remote branch + starts fresh; --message threads a handoff note
+title: 'requeue keeps the branch + next claim CONTINUES from its tip; --reset deletes the remote branch + starts fresh; --message threads a handoff note'
 slug: requeue-continue-and-reset
 spec: command-surface-phase-2
 blockedBy: []

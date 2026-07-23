@@ -1,5 +1,5 @@
 ---
-title: issue-provider must surface the REAL `gh` failure cause in createLabel + postIssueComment (no more hard-coded "not found" / "unavailable or unauthenticated" misattribution)
+title: 'issue-provider must surface the REAL `gh` failure cause in createLabel + postIssueComment (no more hard-coded "not found" / "unavailable or unauthenticated" misattribution)'
 slug: issue-provider-surface-real-gh-cause
 blockedBy: []
 covers: []

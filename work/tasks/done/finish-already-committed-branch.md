@@ -1,5 +1,5 @@
 ---
-title: finish-already-committed-branch — integrate an ALREADY-committed, already-done-moved work branch (item in `work/done/` on the branch, tip not on the arbiter) by running ONLY the rebase→integrate tail (skip the done-move + commit), threaded through the shared integration core and reachable by do/run/complete
+title: 'finish-already-committed-branch — integrate an ALREADY-committed, already-done-moved work branch (item in `work/done/` on the branch, tip not on the arbiter) by running ONLY the rebase→integrate tail (skip the done-move + commit), threaded through the shared integration core and reachable by do/run/complete'
 slug: finish-already-committed-branch
 spec: ledger-integrity
 needsAnswers: false

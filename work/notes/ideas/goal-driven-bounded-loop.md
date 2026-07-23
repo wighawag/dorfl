@@ -1,5 +1,5 @@
 ---
-title: Goal-driven bounded loop — a self-reporting increment loop with stall detection + an agent-writable halt marker (inspired by Maestro's Auto Run / Goal-Driven mode)
+title: 'Goal-driven bounded loop — a self-reporting increment loop with stall detection + an agent-writable halt marker (inspired by Maestro''s Auto Run / Goal-Driven mode)'
 slug: goal-driven-bounded-loop
 type: idea
 status: incubating

@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4g — flip the intake/decision VERDICT contract onto spec (the spec outcome token in the prompt + the spec* verdict CONTENT keys)
+title: 'spec→spec batch 4g — flip the intake/decision VERDICT contract onto spec (the spec outcome token in the prompt + the spec* verdict CONTENT keys)'
 slug: rename-spec-intake-verdict-outcome-and-content-keys
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-intake-cli-flags-and-residual-prd-identifiers]

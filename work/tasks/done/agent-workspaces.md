@@ -1,5 +1,5 @@
 ---
-title: agent workspaces — hub mirrors + isolated job worktrees + seams (core)
+title: 'agent workspaces — hub mirrors + isolated job worktrees + seams (core)'
 slug: agent-workspaces
 spec: dorfl
 humanOnly: true

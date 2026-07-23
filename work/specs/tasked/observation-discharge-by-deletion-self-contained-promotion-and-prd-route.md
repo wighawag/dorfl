@@ -1,5 +1,5 @@
 ---
-title: Discharge answered observations by deletion, with self-contained promotion and an observation→SPEC route
+title: 'Discharge answered observations by deletion, with self-contained promotion and an observation→SPEC route'
 slug: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 ---
 

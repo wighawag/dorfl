@@ -1,5 +1,5 @@
 ---
-title: integration-core "retry DISABLED (mergeRetries: 0), N=7 items" test times out on a clean tree
+title: 'integration-core "retry DISABLED (mergeRetries: 0), N=7 items" test times out on a clean tree'
 type: observation
 status: resolved
 spotted: 2026-07-20

@@ -1,5 +1,5 @@
 ---
-title: human-face-verbs — resume verb + work-on cd-by-default
+title: 'human-face-verbs — resume verb + work-on cd-by-default'
 slug: human-face-verbs
 spec: command-surface-phase-2
 blockedBy: [slug-namespace-resolution]

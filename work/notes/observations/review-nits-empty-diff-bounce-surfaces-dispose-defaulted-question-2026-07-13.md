@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'empty-diff-bounce-surfaces-dispose-defaulted-question' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''empty-diff-bounce-surfaces-dispose-defaulted-question'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: empty-diff-bounce-surfaces-dispose-defaulted-question

@@ -1,5 +1,5 @@
 ---
-title: The deadline/backstop vocabulary (agentDeadlineMinutes + checkpointHeadroomMinutes) replaces the retired legTimeoutMinutes
+title: 'The deadline/backstop vocabulary (agentDeadlineMinutes + checkpointHeadroomMinutes) replaces the retired legTimeoutMinutes'
 status: accepted
 created: 2026-07-13
 decided: 2026-07-13

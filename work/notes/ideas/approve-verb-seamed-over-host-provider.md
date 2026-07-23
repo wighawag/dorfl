@@ -1,5 +1,5 @@
 ---
-title: an `approve`/`land` runner verb seamed over the git-host provider (approve-with-comment, fallback comment+merge) — so the conductor stops reaching around the runner to raw `gh`
+title: 'an `approve`/`land` runner verb seamed over the git-host provider (approve-with-comment, fallback comment+merge) — so the conductor stops reaching around the runner to raw `gh`'
 slug: approve-verb-seamed-over-host-provider
 type: idea
 status: incubating

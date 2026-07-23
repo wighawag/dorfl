@@ -1,5 +1,5 @@
 ---
-title: Rename / cutover lessons — surface classes, sub-batch routing, and atomic-symbol scope
+title: 'Rename / cutover lessons — surface classes, sub-batch routing, and atomic-symbol scope'
 date: 2026-07-12
 status: open
 ---

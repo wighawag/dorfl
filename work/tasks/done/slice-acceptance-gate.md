@@ -1,5 +1,5 @@
 ---
-title: Fresh-context acceptance gate for sliced PRDs (--review/--no-review, slice-SET prompt, one-shot, no rounds) riding performIntegration
+title: 'Fresh-context acceptance gate for sliced PRDs (--review/--no-review, slice-SET prompt, one-shot, no rounds) riding performIntegration'
 slug: slice-acceptance-gate
 spec: slicing-coherence
 blockedBy: [slice-output-through-integration]

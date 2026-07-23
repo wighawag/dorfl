@@ -1,5 +1,5 @@
 ---
-title: Rename the LockAction token 'slice' to 'task' (the last live slice code identifier)
+title: 'Rename the LockAction token ''slice'' to ''task'' (the last live slice code identifier)'
 slug: rename-lock-action-token-slice-to-task
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: do --allow-backlog — drive staged tasks in place without promoting (staging is the human-control position)
+title: 'do --allow-backlog — drive staged tasks in place without promoting (staging is the human-control position)'
 slug: do-allow-backlog-drive-staged-tasks-without-promotion
 ---
 

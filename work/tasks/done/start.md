@@ -1,5 +1,5 @@
 ---
-title: start — claim then onboard the human onto the work branch
+title: 'start — claim then onboard the human onto the work branch'
 slug: start
 spec: dorfl
 humanOnly: true

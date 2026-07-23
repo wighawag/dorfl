@@ -1,5 +1,5 @@
 ---
-title: branch deletes must be WRITE-THROUGH (delete the local tracking ref FIRST, then the arbiter) so mirror+arbiter never drift, PLUS continue-detection must be arbiter-authoritative for cross-machine deletes — a stale local work/<slug> ref resurrects a deleted branch and makes --reset a no-op
+title: 'branch deletes must be WRITE-THROUGH (delete the local tracking ref FIRST, then the arbiter) so mirror+arbiter never drift, PLUS continue-detection must be arbiter-authoritative for cross-machine deletes — a stale local work/<slug> ref resurrects a deleted branch and makes --reset a no-op'
 slug: onboard-and-reset-reconcile-mirror-to-arbiter
 blockedBy: [continue-rebase-auto-resolves-protocol-bookkeeping-conflicts]
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: converge-issue-provider-onto-gh-failure-module — make `src/gh-failure.ts` the GENUINE single source of truth by replacing issue-provider.ts's ~7 inline copies of the binary-missing literal + the two-arm `undefined ? '…' : ghFailureReason` guard with the shared `GH_BINARY_MISSING` / `ghFailureDetail` exports (github.ts already fully adopted them)
+title: 'converge-issue-provider-onto-gh-failure-module — make `src/gh-failure.ts` the GENUINE single source of truth by replacing issue-provider.ts''s ~7 inline copies of the binary-missing literal + the two-arm `undefined ? ''…'' : ghFailureReason` guard with the shared `GH_BINARY_MISSING` / `ghFailureDetail` exports (github.ts already fully adopted them)'
 slug: converge-issue-provider-onto-gh-failure-module
 blockedBy: []
 covers: []

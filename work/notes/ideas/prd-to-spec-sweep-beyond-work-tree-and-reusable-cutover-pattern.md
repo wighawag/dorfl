@@ -1,5 +1,5 @@
 ---
-title: prd-to-spec (and future vocabulary cutovers) should sweep the artifact WORD beyond work/+config; harvest the reusable ''marker'' + bi-word-scan pattern from the dorfl self-migration
+title: 'prd-to-spec (and future vocabulary cutovers) should sweep the artifact WORD beyond work/+config; harvest the reusable ''''marker'''' + bi-word-scan pattern from the dorfl self-migration'
 slug: prd-to-spec-sweep-beyond-work-tree-and-reusable-cutover-pattern
 type: idea
 status: incubating

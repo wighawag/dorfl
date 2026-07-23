@@ -1,5 +1,5 @@
 ---
-title: Untrusted-origin carries via the STAMP — intake task/spec placement symmetry, trust-selected placement knobs, and CI gate-resolution alignment
+title: 'Untrusted-origin carries via the STAMP — intake task/spec placement symmetry, trust-selected placement knobs, and CI gate-resolution alignment'
 slug: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 ---
 

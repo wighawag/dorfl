@@ -1,5 +1,5 @@
 ---
-title: run/do integrate-path convergence — one shared gate→integrate back-half (integration-core.ts) wrapped by do's in-place tail and run's worktree-reap tail
+title: 'run/do integrate-path convergence — one shared gate→integrate back-half (integration-core.ts) wrapped by do''s in-place tail and run''s worktree-reap tail'
 slug: run-do-integrate-convergence
 humanOnly: true
 sliceAfter: []

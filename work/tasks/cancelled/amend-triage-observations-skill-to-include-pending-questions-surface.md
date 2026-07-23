@@ -1,5 +1,5 @@
 ---
-title: Amend triage-observations skill to include the pending-questions surface
+title: 'Amend triage-observations skill to include the pending-questions surface'
 slug: amend-triage-observations-skill-to-include-pending-questions-surface
 reason: superseded-by-done — the primary and highest-value deliverable (step 2 INVESTIGATE also reads the item's own `work/questions/<type>-<slug>.md` sidecar + `needsAnswers` / `## Open questions` state, with the exact-item-match-required vs topical-overlap-surface distinction) already landed in `skills/triage-observations/SKILL.md` via commit 115b65af. Verified on main 2026-07-11. The only unshipped fragment was the cosmetic "leave — blocked on <question>" disposition-guidance line; too thin to carry a whole task. Drop clean per the human's instruction; if that reasoning line ever proves needed it can re-surface as a fresh observation.
 ---

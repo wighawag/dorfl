@@ -1,5 +1,5 @@
 ---
-title: Residual `slice` CODE identifiers the rename brief under-specified — the lock action token `'slice'` and the `--slices-land-in` CLI flag
+title: 'Residual `slice` CODE identifiers the rename brief under-specified — the lock action token `''slice''` and the `--slices-land-in` CLI flag'
 date: 2026-06-23
 status: open
 triaged: keep

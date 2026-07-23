@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 5 — protocol contract source + to-spec→to-spec skill (source of truth)
+title: 'spec→spec batch 5 — protocol contract source + to-spec→to-spec skill (source of truth)'
 slug: rename-spec-protocol-contract-and-to-spec-skill
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-remaining-src-modules-a, rename-spec-remaining-src-modules-b, rename-spec-remaining-src-modules-c]

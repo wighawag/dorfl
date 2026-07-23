@@ -1,5 +1,5 @@
 ---
-title: WORK-CONTRACT.md — state that staging is also the human-control position
+title: 'WORK-CONTRACT.md — state that staging is also the human-control position'
 slug: work-contract-staging-is-human-control-position
 spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: []

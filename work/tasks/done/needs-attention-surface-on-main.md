@@ -1,5 +1,5 @@
 ---
-title: Surface needs-attention on main (cherry-pick the move) + resolve via start
+title: 'Surface needs-attention on main (cherry-pick the move) + resolve via start'
 slug: needs-attention-surface-on-main
 spec: needs-attention-cherry-pick
 blockedBy: [ledger-write-seam-needs-attention]

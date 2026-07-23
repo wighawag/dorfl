@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4d — migrate the namespace EMIT sites + local union DEFINITIONS + spec:${slug} CLI-token emits onto spec
+title: 'spec→spec batch 4d — migrate the namespace EMIT sites + local union DEFINITIONS + spec:${slug} CLI-token emits onto spec'
 slug: rename-spec-namespace-emit-sites-and-local-unions
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-remaining-src-modules-c]

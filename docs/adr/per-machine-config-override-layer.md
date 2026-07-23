@@ -1,5 +1,5 @@
 ---
-title: A per-machine override layer (global config.override.json) above committed repo config — sparse, hub-keyed, with a "*" global-default bucket
+title: 'A per-machine override layer (global config.override.json) above committed repo config — sparse, hub-keyed, with a "*" global-default bucket'
 status: accepted
 created: 2026-06-20
 decided: 2026-06-20

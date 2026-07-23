@@ -1,5 +1,5 @@
 ---
-title: F3b — `promote` takes the per-item `advancing` lock for its CAS window (serialises with apply)
+title: 'F3b — `promote` takes the per-item `advancing` lock for its CAS window (serialises with apply)'
 slug: f3b-promote-takes-per-item-advancing-lock
 brief: staging-surface-and-apply-promote-safety
 blockedBy: [f1-pool-noun-todo-in-surface-and-apply-readers]

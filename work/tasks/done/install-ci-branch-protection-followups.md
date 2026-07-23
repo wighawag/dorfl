@@ -1,5 +1,5 @@
 ---
-title: install-ci branch-protection follow-ups (default-branch auto-detect + real deadlock guard)
+title: 'install-ci branch-protection follow-ups (default-branch auto-detect + real deadlock guard)'
 status: open
 sourceObservation: review-nits-install-ci-tier1-branch-protection-2026-06-26
 relates: install-ci-tier1-branch-protection (done, commit 38368f6b)

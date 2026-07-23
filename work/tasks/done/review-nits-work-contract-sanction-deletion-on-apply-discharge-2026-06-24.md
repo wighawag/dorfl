@@ -1,5 +1,5 @@
 ---
-title: Fix WORK-CONTRACT.md:70 disposition-vocabulary coherence nits
+title: 'Fix WORK-CONTRACT.md:70 disposition-vocabulary coherence nits'
 slug: review-nits-work-contract-sanction-deletion-on-apply-discharge-2026-06-24
 needsAnswers: false
 blockedBy: []

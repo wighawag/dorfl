@@ -1,5 +1,5 @@
 ---
-title: atomic done-move resolved against the arbiter's current folder + one-slug-one-folder invariant (a transition that would leave a slug in two status folders FAILS loud)
+title: 'atomic done-move resolved against the arbiter''s current folder + one-slug-one-folder invariant (a transition that would leave a slug in two status folders FAILS loud)'
 slug: atomic-done-move-one-slug-one-folder
 spec: ledger-integrity
 blockedBy: []

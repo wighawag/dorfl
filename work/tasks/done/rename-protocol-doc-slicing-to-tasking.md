@@ -1,5 +1,5 @@
 ---
-title: Rename SLICING-PROTOCOL.md to TASKING-PROTOCOL.md (+ vendor, prompt path, doc test, mirror, VERSION)
+title: 'Rename SLICING-PROTOCOL.md to TASKING-PROTOCOL.md (+ vendor, prompt path, doc test, mirror, VERSION)'
 slug: rename-protocol-doc-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-slicing-modules-and-symbols-to-tasking]

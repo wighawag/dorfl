@@ -1,5 +1,5 @@
 ---
-title: Skill install vendors incur's harness-destination map (MIT), not the framework
+title: 'Skill install vendors incur''s harness-destination map (MIT), not the framework'
 slug: skill-install-vendors-incur-agents-map
 type: adr
 created: 2026-07-13

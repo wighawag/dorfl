@@ -1,5 +1,5 @@
 ---
-title: Add the tree-less surface primitive additively (PR-1, keep `bounceToStuckLock` alive)
+title: 'Add the tree-less surface primitive additively (PR-1, keep `bounceToStuckLock` alive)'
 slug: bounce-surfaces-stuck-sidecar-and-releases-lock
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: []

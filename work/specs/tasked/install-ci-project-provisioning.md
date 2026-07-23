@@ -1,5 +1,5 @@
 ---
-title: install-ci-project-provisioning - the generated CI must build the PROJECT (its toolchain, its pinned dorfl), not just dorfl itself
+title: 'install-ci-project-provisioning - the generated CI must build the PROJECT (its toolchain, its pinned dorfl), not just dorfl itself'
 slug: install-ci-project-provisioning
 humanOnly: true
 taskedAfter: [runner-in-ci]

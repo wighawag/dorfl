@@ -1,5 +1,5 @@
 ---
-title: spec→spec CONTRACT phase — flip hard-cutover rejection + add forward/reverse leak scan
+title: 'spec→spec CONTRACT phase — flip hard-cutover rejection + add forward/reverse leak scan'
 slug: contract-spec-hard-cutover-rejection-and-leak-scan
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-protocol-contract-and-to-spec-skill, rename-spec-namespace-emit-sites-and-local-unions, rename-spec-residual-exported-symbols-and-prdslandIn-plumbing, rename-spec-intake-cli-flags-and-residual-prd-identifiers, rename-spec-intake-verdict-outcome-and-content-keys]

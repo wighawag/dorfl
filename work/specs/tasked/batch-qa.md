@@ -1,5 +1,5 @@
 ---
-title: batch-qa — gather every open question across work/ into ONE file, answer in one sitting, apply + iterate
+title: 'batch-qa — gather every open question across work/ into ONE file, answer in one sitting, apply + iterate'
 slug: batch-qa
 sliceAfter: [review-skill]
 ---

@@ -1,5 +1,5 @@
 ---
-title: remote-do-reads-per-repo-config-from-arbiter-main — make `do --remote`/`--isolated` HONOUR the target repo's committed `dorfl.json` (read it from the arbiter's main / job worktree and layer the whitelisted keys), restoring `flag > env > per-repo > global > default` parity so harness/verify/provider are not silently dropped
+title: 'remote-do-reads-per-repo-config-from-arbiter-main — make `do --remote`/`--isolated` HONOUR the target repo''s committed `dorfl.json` (read it from the arbiter''s main / job worktree and layer the whitelisted keys), restoring `flag > env > per-repo > global > default` parity so harness/verify/provider are not silently dropped'
 slug: remote-do-reads-per-repo-config-from-arbiter-main
 covers: []
 ---

@@ -1,5 +1,5 @@
 ---
-title: Agentic apply — add the mint-adr route
+title: 'Agentic apply — add the mint-adr route'
 slug: agentic-apply-mint-adr-route
 spec: agentic-question-resolution-retire-disposition-vocabulary
 blockedBy: [agentic-apply-retire-disposition-vocabulary]

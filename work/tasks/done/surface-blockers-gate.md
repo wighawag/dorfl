@@ -1,5 +1,5 @@
 ---
-title: surfaceBlockers - a gate for whether a slice/SPEC's declared needsAnswers is rendered into an answerable question sidecar, or left silently blocked
+title: 'surfaceBlockers - a gate for whether a slice/SPEC''s declared needsAnswers is rendered into an answerable question sidecar, or left silently blocked'
 slug: surface-blockers-gate
 blockedBy: [advance-autopick-lifecycle-pools, observation-triage-tri-state-gate]
 covers: []

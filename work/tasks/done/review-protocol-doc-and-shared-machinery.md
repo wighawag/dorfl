@@ -1,5 +1,5 @@
 ---
-title: REVIEW-PROTOCOL.md doc + generalised resolver/vendor/setup + review-gate de-dup (keystone)
+title: 'REVIEW-PROTOCOL.md doc + generalised resolver/vendor/setup + review-gate de-dup (keystone)'
 slug: review-protocol-doc-and-shared-machinery
 brief: runner-invoked-disciplines-into-protocol
 blockedBy: []

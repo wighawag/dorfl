@@ -1,5 +1,5 @@
 ---
-title: flag-cleanup-renames — return→requeue, drop --by, --ignore-not-ready only, advanced-tier help
+title: 'flag-cleanup-renames — return→requeue, drop --by, --ignore-not-ready only, advanced-tier help'
 slug: flag-cleanup-renames
 spec: command-surface-phase-2
 blockedBy: [registry-remote]

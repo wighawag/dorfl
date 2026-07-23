@@ -1,5 +1,5 @@
 ---
-title: scan-status-fetch-first — scan/status fetch the truth first; retire the offline-scan invariant
+title: 'scan-status-fetch-first — scan/status fetch the truth first; retire the offline-scan invariant'
 slug: scan-status-fetch-first
 spec: command-surface-phase-2
 blockedBy: [registry-remote]

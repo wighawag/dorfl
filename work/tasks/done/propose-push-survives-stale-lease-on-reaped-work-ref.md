@@ -1,5 +1,5 @@
 ---
-title: Propose integrator push survives a stale-lease ("stale info") on a concurrently moved/reaped work ref
+title: 'Propose integrator push survives a stale-lease ("stale info") on a concurrently moved/reaped work ref'
 slug: propose-push-survives-stale-lease-on-reaped-work-ref
 blockedBy: []
 covers: []

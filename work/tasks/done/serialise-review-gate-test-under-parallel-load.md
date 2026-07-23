@@ -1,5 +1,5 @@
 ---
-title: Serialise the flaky review-gate.test.ts out of file-parallel load (add it to the RACE_SENSITIVE project) so Gate-1 is deterministic now — complement to the source-fix slice, with the RACE_SENSITIVE bucket's meaning generalised
+title: 'Serialise the flaky review-gate.test.ts out of file-parallel load (add it to the RACE_SENSITIVE project) so Gate-1 is deterministic now — complement to the source-fix slice, with the RACE_SENSITIVE bucket''s meaning generalised'
 slug: serialise-review-gate-test-under-parallel-load
 blockedBy: []
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: Propose-mode tasking releases the per-item lock on `completed`, so the spec stays in the auto-task pool on main and CI re-tasks it (force-pushing the open PR) every tick
+title: 'Propose-mode tasking releases the per-item lock on `completed`, so the spec stays in the auto-task pool on main and CI re-tasks it (force-pushing the open PR) every tick'
 type: observation
 status: spotted
 spotted: 2026-07-20

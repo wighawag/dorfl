@@ -1,5 +1,5 @@
 ---
-title: Rename the SLICE-STOP agent-output sentinel to TASK-STOP
+title: 'Rename the SLICE-STOP agent-output sentinel to TASK-STOP'
 slug: rename-slice-stop-sentinel-to-task-stop
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

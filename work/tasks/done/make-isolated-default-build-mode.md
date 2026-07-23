@@ -1,5 +1,5 @@
 ---
-title: Make isolated the DEFAULT build mode for `do` (build in a job worktree off the arbiter; add an explicit `--in-place` opt-out)
+title: 'Make isolated the DEFAULT build mode for `do` (build in a job worktree off the arbiter; add an explicit `--in-place` opt-out)'
 slug: make-isolated-default-build-mode
 blockedBy: []
 covers: []

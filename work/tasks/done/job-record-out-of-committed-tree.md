@@ -1,5 +1,5 @@
 ---
-title: job-record-out-of-committed-tree — relocate the per-job state record (`.dorfl-job.json`) OUT of the checked-out worktree into a sibling control path under `workspacesDir` (`work/<work-id>.json`), so a runtime control file is never inside the committed tree — eliminating the `git add -A` leak, the continue-rebase wedge, AND the `.gitignore` dependence (no user-deletable directive)
+title: 'job-record-out-of-committed-tree — relocate the per-job state record (`.dorfl-job.json`) OUT of the checked-out worktree into a sibling control path under `workspacesDir` (`work/<work-id>.json`), so a runtime control file is never inside the committed tree — eliminating the `git add -A` leak, the continue-rebase wedge, AND the `.gitignore` dependence (no user-deletable directive)'
 slug: job-record-out-of-committed-tree
 blockedBy: []
 covers: []

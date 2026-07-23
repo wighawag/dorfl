@@ -1,5 +1,5 @@
 ---
-title: AUTO-LAND a dirty CONTINUE on an already-done-moved branch — add a source:'done' / alreadyDoneMoved contract so complete/integration-core builds + integrates the continue-agent's new work WITHOUT a second git mv (continue-build lifecycle), instead of surfacing to needs-attention
+title: 'AUTO-LAND a dirty CONTINUE on an already-done-moved branch — add a source:''done'' / alreadyDoneMoved contract so complete/integration-core builds + integrates the continue-agent''s new work WITHOUT a second git mv (continue-build lifecycle), instead of surfacing to needs-attention'
 slug: complete-builds-on-already-done-moved-continue
 spec: recover-autodetect-and-advancing-lock-crash-safety
 blockedBy: [recover-autodetect-gated-on-nothing-to-commit]

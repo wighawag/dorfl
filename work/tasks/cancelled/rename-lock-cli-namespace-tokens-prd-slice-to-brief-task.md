@@ -1,5 +1,5 @@
 ---
-title: Rename the spec:/slice: lock+CLI namespace tokens to brief:/task: (+ orphan-lock sweep)
+title: 'Rename the spec:/slice: lock+CLI namespace tokens to brief:/task: (+ orphan-lock sweep)'
 slug: rename-lock-cli-namespace-tokens-prd-slice-to-brief-task
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

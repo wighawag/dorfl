@@ -1,5 +1,5 @@
 ---
-title: advance — the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from the BARE hub mirror's main (the isolated counterpart to do-autopick's in-place scan) — ONE reusable unit
+title: 'advance — the MIRROR-SIDE eligible-pool scan: enumerate eligible slices + sliceable PRDs from the BARE hub mirror''s main (the isolated counterpart to do-autopick''s in-place scan) — ONE reusable unit'
 slug: mirror-side-eligible-pool-scan
 spec: advance-loop
 blockedBy: []

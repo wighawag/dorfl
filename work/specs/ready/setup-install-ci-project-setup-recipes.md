@@ -1,5 +1,5 @@
 ---
-title: Project-setup RECIPES — a curated library of native CI-provisioning snippets setup/install-ci offers (agnostic core, helpful when it recognises a stack)
+title: 'Project-setup RECIPES — a curated library of native CI-provisioning snippets setup/install-ci offers (agnostic core, helpful when it recognises a stack)'
 slug: setup-install-ci-project-setup-recipes
 humanOnly: true
 needsAnswers: true

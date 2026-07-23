@@ -1,5 +1,5 @@
 ---
-title: Drop the untrusted-origin rung from resolvePlacement; caller selects trusted-vs-untrusted default
+title: 'Drop the untrusted-origin rung from resolvePlacement; caller selects trusted-vs-untrusted default'
 slug: placement-drop-untrusted-rung
 spec: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 blockedBy: [config-untrusted-landin-keys]

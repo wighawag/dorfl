@@ -1,5 +1,5 @@
 ---
-title: SLICING additionally acquires the unified lock (interim dual-write; slicing/ marker kept)
+title: 'SLICING additionally acquires the unified lock (interim dual-write; slicing/ marker kept)'
 slug: slicing-acquires-unified-lock
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

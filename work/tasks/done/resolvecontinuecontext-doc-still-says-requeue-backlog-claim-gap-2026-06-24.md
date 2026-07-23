@@ -1,5 +1,5 @@
 ---
-title: Fix stale "backlog"-means-pool comment in resolveContinueContext
+title: 'Fix stale "backlog"-means-pool comment in resolveContinueContext'
 slug: resolvecontinuecontext-doc-still-says-requeue-backlog-claim-gap-2026-06-24
 needsAnswers: false
 blockedBy: []

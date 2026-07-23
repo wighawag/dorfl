@@ -1,5 +1,5 @@
 ---
-title: Retire the transient folders + remove drop-bookkeeping-rebase
+title: 'Retire the transient folders + remove drop-bookkeeping-rebase'
 slug: retire-transient-folders-and-drop-rebase
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

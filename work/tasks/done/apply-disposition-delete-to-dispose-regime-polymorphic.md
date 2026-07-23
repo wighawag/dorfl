@@ -1,5 +1,5 @@
 ---
-title: Rename the apply disposition `delete`→`dispose` and make it regime-polymorphic
+title: 'Rename the apply disposition `delete`→`dispose` and make it regime-polymorphic'
 slug: apply-disposition-delete-to-dispose-regime-polymorphic
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: []

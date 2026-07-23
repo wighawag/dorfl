@@ -1,5 +1,5 @@
 ---
-title: dorfl — autonomous parallel agents over file-based work/
+title: 'dorfl — autonomous parallel agents over file-based work/'
 slug: dorfl
 humanOnly: true
 blockedBy: []

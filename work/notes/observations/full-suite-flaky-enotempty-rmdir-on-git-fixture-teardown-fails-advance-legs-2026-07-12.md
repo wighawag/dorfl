@@ -1,5 +1,5 @@
 ---
-title: `ENOTEMPTY: rmdir '.../.git'` on parallel test-fixture teardown flakily fails the acceptance gate, red-bouncing otherwise-fine advance-propose legs
+title: '`ENOTEMPTY: rmdir ''.../.git''` on parallel test-fixture teardown flakily fails the acceptance gate, red-bouncing otherwise-fine advance-propose legs'
 type: observation
 status: open
 spotted: 2026-07-12

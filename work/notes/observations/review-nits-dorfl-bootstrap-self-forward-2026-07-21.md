@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'dorfl-bootstrap-self-forward' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''dorfl-bootstrap-self-forward'' (Gate 2 approve)'
 date: 2026-07-21
 status: open
 reviewOf: dorfl-bootstrap-self-forward

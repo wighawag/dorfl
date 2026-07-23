@@ -1,5 +1,5 @@
 ---
-title: start/claim readiness guard — refuse unmet blockedBy (warn on needsAnswers) with an override
+title: 'start/claim readiness guard — refuse unmet blockedBy (warn on needsAnswers) with an override'
 slug: start-readiness-guard
 spec: dorfl
 blockedBy: []

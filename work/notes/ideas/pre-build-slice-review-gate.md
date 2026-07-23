@@ -1,5 +1,5 @@
 ---
-title: Pre-build slice-review gate (review SPEC insertion point B) — an independent reviewer pass on a claimed slice BEFORE the agent builds it, to catch a slice that drifted between slicing and build
+title: 'Pre-build slice-review gate (review SPEC insertion point B) — an independent reviewer pass on a claimed slice BEFORE the agent builds it, to catch a slice that drifted between slicing and build'
 slug: pre-build-slice-review-gate
 type: idea
 status: incubating

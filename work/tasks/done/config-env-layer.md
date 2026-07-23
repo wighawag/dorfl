@@ -1,5 +1,5 @@
 ---
-title: config env layer — DORFL_* env vars in the resolution chain
+title: 'config env layer — DORFL_* env vars in the resolution chain'
 slug: config-env-layer
 spec: dorfl
 blockedBy: []

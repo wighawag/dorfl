@@ -1,5 +1,5 @@
 ---
-title: Crash-safe complete (hold lock, land durable main move, release)
+title: 'Crash-safe complete (hold lock, land durable main move, release)'
 slug: complete-lock-then-durable-main-move-crash-safe
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

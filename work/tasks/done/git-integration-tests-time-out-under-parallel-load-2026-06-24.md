@@ -1,5 +1,5 @@
 ---
-title: Raise testTimeout (or cap parallelism) for git-heavy integration tests
+title: 'Raise testTimeout (or cap parallelism) for git-heavy integration tests'
 slug: git-integration-tests-time-out-under-parallel-load-2026-06-24
 needsAnswers: false
 blockedBy: []

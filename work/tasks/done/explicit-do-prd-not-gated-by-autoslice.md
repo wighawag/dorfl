@@ -1,5 +1,5 @@
 ---
-title: do prd:<slug> must NOT re-gate an EXPLICITLY-named SPEC on the autoSlice policy — match the build path (the policy gates the AUTO-PICK pool only, not an explicit named target)
+title: 'do prd:<slug> must NOT re-gate an EXPLICITLY-named SPEC on the autoSlice policy — match the build path (the policy gates the AUTO-PICK pool only, not an explicit named target)'
 slug: explicit-do-prd-not-gated-by-autoslice
 blockedBy: []
 covers: []

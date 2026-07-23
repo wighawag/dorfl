@@ -1,5 +1,5 @@
 ---
-title: Introduce spec-sliced/ as the source of truth for sliced-ness (folder = truth, sliced: as derived copy), flip the readers, backfill, re-slice path, sliceAfter reads the folder — STEP A (non-breaking)
+title: 'Introduce spec-sliced/ as the source of truth for sliced-ness (folder = truth, sliced: as derived copy), flip the readers, backfill, re-slice path, sliceAfter reads the folder — STEP A (non-breaking)'
 slug: prd-sliced-folder-step-a
 spec: slicing-coherence
 blockedBy: [slice-output-through-integration, slice-acceptance-gate]

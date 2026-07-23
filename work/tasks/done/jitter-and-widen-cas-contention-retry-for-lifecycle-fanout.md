@@ -1,5 +1,5 @@
 ---
-title: Jitter + widen the CAS contention-retry so a lifecycle fan-out drains instead of exiting contended
+title: 'Jitter + widen the CAS contention-retry so a lifecycle fan-out drains instead of exiting contended'
 slug: jitter-and-widen-cas-contention-retry-for-lifecycle-fanout
 covers: []
 blockedBy: []

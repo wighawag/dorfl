@@ -1,5 +1,5 @@
 ---
-title: HARD CUTOVER — remove the LAST prd back-compat (the parseFrontmatter prd: KEY read + the dead `do prd:`/`advance prd:` verb refs); no backward compatibility
+title: 'HARD CUTOVER — remove the LAST prd back-compat (the parseFrontmatter prd: KEY read + the dead `do prd:`/`advance prd:` verb refs); no backward compatibility'
 slug: hard-cutover-remove-last-prd-back-compat-key-and-dead-verb
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 covers: []

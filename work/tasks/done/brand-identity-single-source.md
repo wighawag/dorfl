@@ -1,5 +1,5 @@
 ---
-title: Centralize the brand/protocol identity in one source (env prefix, config filename, workdir, bin)
+title: 'Centralize the brand/protocol identity in one source (env prefix, config filename, workdir, bin)'
 slug: brand-identity-single-source
 blockedBy: [config-env-layer]
 covers: []

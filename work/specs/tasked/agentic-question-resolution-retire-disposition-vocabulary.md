@@ -1,5 +1,5 @@
 ---
-title: Agentic question-resolution — retire the disposition vocabulary, generalize the decision engine
+title: 'Agentic question-resolution — retire the disposition vocabulary, generalize the decision engine'
 slug: agentic-question-resolution-retire-disposition-vocabulary
 ---
 

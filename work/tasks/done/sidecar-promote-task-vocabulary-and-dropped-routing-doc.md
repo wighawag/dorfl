@@ -1,5 +1,5 @@
 ---
-title: Sidecar disposition — rename promote-slice→promote-task and fix the stale dropped doc-comment
+title: 'Sidecar disposition — rename promote-slice→promote-task and fix the stale dropped doc-comment'
 slug: sidecar-promote-task-vocabulary-and-dropped-routing-doc
 blockedBy: []
 covers: []

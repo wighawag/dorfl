@@ -1,5 +1,5 @@
 ---
-title: scaffold — monorepo from template-typescript-lib + vendored claim.sh
+title: 'scaffold — monorepo from template-typescript-lib + vendored claim.sh'
 slug: scaffold
 spec: dorfl
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: the registry-set / loop advance driver must PERSIST its tree-less rung results (surface/apply/triage) to the arbiter - today it commits them in a per-tick re-cloned cwd that is wiped next tick, so a surfaced sidecar never reaches main
+title: 'the registry-set / loop advance driver must PERSIST its tree-less rung results (surface/apply/triage) to the arbiter - today it commits them in a per-tick re-cloned cwd that is wiped next tick, so a surfaced sidecar never reaches main'
 slug: loop-advance-persists-treeless-rungs-to-arbiter
 blockedBy: []
 covers: []

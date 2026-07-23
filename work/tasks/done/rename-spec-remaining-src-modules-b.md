@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4b — close-job/lifecycle-gather consumers + the doubly-retired brief→spec sweep
+title: 'spec→spec batch 4b — close-job/lifecycle-gather consumers + the doubly-retired brief→spec sweep'
 slug: rename-spec-remaining-src-modules-b
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-remaining-src-modules-a]

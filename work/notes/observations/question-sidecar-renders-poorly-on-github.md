@@ -1,5 +1,5 @@
 ---
-title: Question sidecar files (work/questions/<type>-<slug>.md) render as run-together unfenced noise on GitHub, not human-readable Q&A
+title: 'Question sidecar files (work/questions/<type>-<slug>.md) render as run-together unfenced noise on GitHub, not human-readable Q&A'
 type: observation
 status: spotted
 spotted: 2026-06-17

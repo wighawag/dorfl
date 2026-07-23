@@ -1,5 +1,5 @@
 ---
-title: Lock-entry two-axis state machine + invariants
+title: 'Lock-entry two-axis state machine + invariants'
 slug: lock-entry-state-machine-and-invariants
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

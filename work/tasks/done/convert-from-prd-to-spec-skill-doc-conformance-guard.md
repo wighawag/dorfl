@@ -1,5 +1,5 @@
 ---
-title: Conformance guard — the convert-from-prd-to-spec skill doc carries its load-bearing discipline
+title: 'Conformance guard — the convert-from-prd-to-spec skill doc carries its load-bearing discipline'
 slug: convert-from-prd-to-spec-skill-doc-conformance-guard
 spec: vocabulary-cutover-prose-sweep-skill
 blockedBy: [author-convert-from-prd-to-spec-skill]

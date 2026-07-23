@@ -1,5 +1,5 @@
 ---
-title: Reconcile the stale "routed to work/needs-attention/" user-facing strings to the lock state:stuck model
+title: 'Reconcile the stale "routed to work/needs-attention/" user-facing strings to the lock state:stuck model'
 slug: reconcile-stuck-notice-strings-to-lock-state-model
 blockedBy: []
 covers: []

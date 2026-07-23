@@ -1,5 +1,5 @@
 ---
-title: advance — the TWO drivers (one-shot sequential + loop) over the tick, `-n` ALWAYS sequential, the FLAT per-action gate family (build/slice/triage), isolation+chaining fall out of the seam
+title: 'advance — the TWO drivers (one-shot sequential + loop) over the tick, `-n` ALWAYS sequential, the FLAT per-action gate family (build/slice/triage), isolation+chaining fall out of the seam'
 slug: advance-drivers-and-gates
 spec: advance-loop
 blockedBy: [advance-rung-triage, mirror-side-eligible-pool-scan]

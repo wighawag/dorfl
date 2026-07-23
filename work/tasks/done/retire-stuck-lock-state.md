@@ -1,5 +1,5 @@
 ---
-title: Retire the `stuck` lock state (LockState = active hold only)
+title: 'Retire the `stuck` lock state (LockState = active hold only)'
 slug: retire-stuck-lock-state
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-migrate-stuck-assertions-and-flip-exit-codes]

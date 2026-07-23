@@ -1,5 +1,5 @@
 ---
-title: Amend WORK-CONTRACT.md to sanction deletion-on-apply as note discharge
+title: 'Amend WORK-CONTRACT.md to sanction deletion-on-apply as note discharge'
 slug: work-contract-sanction-deletion-on-apply-discharge
 spec: observation-discharge-by-deletion-self-contained-promotion-and-prd-route
 blockedBy: []

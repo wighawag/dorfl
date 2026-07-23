@@ -1,5 +1,5 @@
 ---
-title: PR-2a bounce-atomic-cutover — non-obvious in-scope decisions
+title: 'PR-2a bounce-atomic-cutover — non-obvious in-scope decisions'
 date: 2026-07-13
 needsAnswers: true
 ---

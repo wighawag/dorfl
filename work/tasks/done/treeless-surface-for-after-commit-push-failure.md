@@ -1,5 +1,5 @@
 ---
-title: treeless-surface-for-after-commit-push-failure — drive the after-commit continue-push-failure SURFACE (`in-progress/ → needs-attention/`) through the tree-less `#89` `ledgerWrite.applyTransition` CAS (the SAME no-checkout primitive `requeue` uses for `needs-attention/ → backlog/`), instead of the cwd-bound `applyNeedsAttentionTransition`, so a stuck slice surfaces with NO worktree/checkout in hand
+title: 'treeless-surface-for-after-commit-push-failure — drive the after-commit continue-push-failure SURFACE (`in-progress/ → needs-attention/`) through the tree-less `#89` `ledgerWrite.applyTransition` CAS (the SAME no-checkout primitive `requeue` uses for `needs-attention/ → backlog/`), instead of the cwd-bound `applyNeedsAttentionTransition`, so a stuck slice surfaces with NO worktree/checkout in hand'
 slug: treeless-surface-for-after-commit-push-failure
 blockedBy: []
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: advance — the CI-integration deliverable: a GitHub Actions workflow TEMPLATE (the `install-ci` notion) wiring "on cron / on-answer-committed → the right shape" (propose=matrix, merge=single-sequential)
+title: 'advance — the CI-integration deliverable: a GitHub Actions workflow TEMPLATE (the `install-ci` notion) wiring "on cron / on-answer-committed → the right shape" (propose=matrix, merge=single-sequential)'
 slug: advance-install-ci
 spec: advance-loop
 blockedBy: [advance-drivers-and-gates]

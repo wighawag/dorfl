@@ -1,5 +1,5 @@
 ---
-title: intake-posts-completion-comment-on-slice-prd-outcomes — on a successful SLICE/SPEC outcome, post an informational "slice created"/"spec created" comment on the issue (PR link or commit link), never closing it
+title: 'intake-posts-completion-comment-on-slice-prd-outcomes — on a successful SLICE/SPEC outcome, post an informational "slice created"/"spec created" comment on the issue (PR link or commit link), never closing it'
 slug: intake-posts-completion-comment-on-slice-prd-outcomes
 spec: issue-intake
 blockedBy:

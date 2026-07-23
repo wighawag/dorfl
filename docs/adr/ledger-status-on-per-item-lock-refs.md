@@ -1,5 +1,5 @@
 ---
-title: Transient ledger STATUS lives on per-item lock refs, not in main's tree
+title: 'Transient ledger STATUS lives on per-item lock refs, not in main''s tree'
 status: proposed
 created: 2026-06-17
 supersedes:

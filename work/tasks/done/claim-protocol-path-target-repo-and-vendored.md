@@ -1,5 +1,5 @@
 ---
-title: resolveClaimProtocolPath must read the TARGET REPO's work/protocol/CLAIM-PROTOCOL.md (then a VENDORED in-package copy), not a monorepo-relative skills/ path that the published CLI never ships — fixing the packaged-CLI ENOENT
+title: 'resolveClaimProtocolPath must read the TARGET REPO''s work/protocol/CLAIM-PROTOCOL.md (then a VENDORED in-package copy), not a monorepo-relative skills/ path that the published CLI never ships — fixing the packaged-CLI ENOENT'
 slug: claim-protocol-path-target-repo-and-vendored
 blockedBy: []
 covers: []

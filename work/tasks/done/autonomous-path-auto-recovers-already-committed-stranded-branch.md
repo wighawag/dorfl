@@ -1,5 +1,5 @@
 ---
-title: do/run/complete (the AUTONOMOUS integration path) AUTO-RECOVER an already-committed, already-done-moved STRANDED branch instead of crashing with "nothing to complete" — re-claiming a slug whose work branch is already built-and-done-moved but never merged must integrate the kept commit (or no-op if already integrated), not throw
+title: 'do/run/complete (the AUTONOMOUS integration path) AUTO-RECOVER an already-committed, already-done-moved STRANDED branch instead of crashing with "nothing to complete" — re-claiming a slug whose work branch is already built-and-done-moved but never merged must integrate the kept commit (or no-op if already integrated), not throw'
 slug: autonomous-path-auto-recovers-already-committed-stranded-branch
 spec: ledger-integrity
 needsAnswers: false

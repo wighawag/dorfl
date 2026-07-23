@@ -1,5 +1,5 @@
 ---
-title: `complete --review` (and `run`) wire `harnessReviewGate()` with NO harness/agentCmd → Gate 2 throws "empty agentCmd" even when `harness: pi` is configured
+title: '`complete --review` (and `run`) wire `harnessReviewGate()` with NO harness/agentCmd → Gate 2 throws "empty agentCmd" even when `harness: pi` is configured'
 type: observation
 status: spotted
 spotted: 2026-07-19

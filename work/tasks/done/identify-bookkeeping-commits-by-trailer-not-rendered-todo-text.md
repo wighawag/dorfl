@@ -1,5 +1,5 @@
 ---
-title: identify the route-to-needs-attention bookkeeping commits to DROP during a rebase by a durable commit TRAILER (stamped at creation), not by pattern-matching git's rendered rebase-todo text — the todo rendering is version-unstable and silently stopped matching on git 2.54, replaying the move-only commit and self-conflicting
+title: 'identify the route-to-needs-attention bookkeeping commits to DROP during a rebase by a durable commit TRAILER (stamped at creation), not by pattern-matching git''s rendered rebase-todo text — the todo rendering is version-unstable and silently stopped matching on git 2.54, replaying the move-only commit and self-conflicting'
 slug: identify-bookkeeping-commits-by-trailer-not-rendered-todo-text
 blockedBy: []
 covers: []

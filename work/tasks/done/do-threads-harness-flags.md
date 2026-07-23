@@ -1,5 +1,5 @@
 ---
-title: do silently ignores --harness/--agent-cmd/--pi-bin/--model — thread them into config
+title: 'do silently ignores --harness/--agent-cmd/--pi-bin/--model — thread them into config'
 slug: do-threads-harness-flags
 blockedBy: [do-in-place]
 covers: []

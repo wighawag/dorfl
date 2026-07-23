@@ -1,5 +1,5 @@
 ---
-title: per-machine config override layer — global config.override.json above committed repo config
+title: 'per-machine config override layer — global config.override.json above committed repo config'
 slug: per-machine-config-override-layer
 spec: dorfl
 blockedBy: []

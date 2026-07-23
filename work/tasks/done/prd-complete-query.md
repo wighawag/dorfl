@@ -1,5 +1,5 @@
 ---
-title: "is this SPEC complete?" read-only core query — ≥1 slice with prd:<slug> AND all such slices in work/done/ (pure work/-folder logic)
+title: '"is this SPEC complete?" read-only core query — ≥1 slice with prd:<slug> AND all such slices in work/done/ (pure work/-folder logic)'
 slug: prd-complete-query
 spec: issue-intake
 blockedBy: []

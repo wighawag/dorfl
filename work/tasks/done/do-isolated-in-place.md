@@ -1,5 +1,5 @@
 ---
-title: do-isolated-in-place — add `do --isolated <slug>`: build the slice in an ISOLATED job worktree off THIS repo's arbiter (a boolean flag, orthogonal to `--remote <url>`), so a conductor/sub-agent can isolate a build from a dirty/in-use checkout without targeting a foreign repo
+title: 'do-isolated-in-place — add `do --isolated <slug>`: build the slice in an ISOLATED job worktree off THIS repo''s arbiter (a boolean flag, orthogonal to `--remote <url>`), so a conductor/sub-agent can isolate a build from a dirty/in-use checkout without targeting a foreign repo'
 slug: do-isolated-in-place
 covers: []
 ---

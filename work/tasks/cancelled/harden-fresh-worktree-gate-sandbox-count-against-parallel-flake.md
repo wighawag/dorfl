@@ -1,5 +1,5 @@
 ---
-title: Harden fresh-worktree-gate sandbox count against parallel flake
+title: 'Harden fresh-worktree-gate sandbox count against parallel flake'
 slug: harden-fresh-worktree-gate-sandbox-count-against-parallel-flake
 reason: flake-not-reproducible — the `gateSandboxCount()` OFF-path flake this task targets did NOT surface in ~28 full `pnpm -r test` runs on 2026-07-11/12 (3 explicit back-to-back loop runs PLUS ~25 Gate-1 gate runs during the drive-tasks session that merged the rest of the pool), all green. The task's own VERIFY-BEFORE-BUILD banner said to drop it if the flake did not reproduce. There is no live signal to fix; the only current flaky-fresh-gate observation (`flaky-fresh-gate-and-self-renaming-folder-fixture-2026-07-11`) is a DIFFERENT failure (`m.oldName is not a function` / "No projects found"), not this counting race. Dropped clean per the human's instruction (2026-07-12). If the specific `gateSandboxCount()` +1 race resurfaces, mint a fresh observation with a reproducing run rather than resurrecting this task; the per-test-scoping fix sketched below stays a valid starting point.
 ---

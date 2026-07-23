@@ -1,5 +1,5 @@
 ---
-title: slicing-coherence — make do prd:<slug> a first-class do rung — integrate through performIntegration (propose/PR), mirror the build review model, and give PRDs the same folder lifecycle as slices (spec/ → slicing/ → spec-sliced/)
+title: 'slicing-coherence — make do prd:<slug> a first-class do rung — integrate through performIntegration (propose/PR), mirror the build review model, and give PRDs the same folder lifecycle as slices (spec/ → slicing/ → spec-sliced/)'
 slug: slicing-coherence
 sliceAfter: [auto-slice]
 ---

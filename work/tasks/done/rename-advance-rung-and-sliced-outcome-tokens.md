@@ -1,5 +1,5 @@
 ---
-title: Rename the advance rung tokens (build-slice/slice-spec) and the 'sliced' outcome token to tasking vocabulary
+title: 'Rename the advance rung tokens (build-slice/slice-spec) and the ''sliced'' outcome token to tasking vocabulary'
 slug: rename-advance-rung-and-sliced-outcome-tokens
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

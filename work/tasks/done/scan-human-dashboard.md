@@ -1,5 +1,5 @@
 ---
-title: scan human dashboard — group items by who-can-take-it
+title: 'scan human dashboard — group items by who-can-take-it'
 slug: scan-human-dashboard
 spec: dorfl
 blockedBy: [scan]

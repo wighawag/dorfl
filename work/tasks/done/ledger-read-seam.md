@@ -1,5 +1,5 @@
 ---
-title: Ledger read seam — unify the work/ state readers behind one resolve-state entry
+title: 'Ledger read seam — unify the work/ state readers behind one resolve-state entry'
 slug: ledger-read-seam
 spec: ledger-transition-seam
 blockedBy: []

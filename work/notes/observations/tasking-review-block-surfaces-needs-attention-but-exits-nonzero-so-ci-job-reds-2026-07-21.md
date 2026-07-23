@@ -1,5 +1,5 @@
 ---
-title: A tasking (spec:) review-block correctly surfaces to needs-attention (needsAnswers + question sidecar on main, lock released) but exits non-zero, so the CI advance-propose job goes RED on a SUCCESSFUL surfacing
+title: 'A tasking (spec:) review-block correctly surfaces to needs-attention (needsAnswers + question sidecar on main, lock released) but exits non-zero, so the CI advance-propose job goes RED on a SUCCESSFUL surfacing'
 type: observation
 status: spotted
 spotted: 2026-07-21

@@ -1,5 +1,5 @@
 ---
-title: gc — provably-safe deletion of job worktrees
+title: 'gc — provably-safe deletion of job worktrees'
 slug: gc
 spec: dorfl
 humanOnly: true

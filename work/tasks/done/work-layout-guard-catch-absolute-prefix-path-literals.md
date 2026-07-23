@@ -1,5 +1,5 @@
 ---
-title: work-layout guard, catch absolute interpolated-prefix work/ path literals
+title: 'work-layout guard, catch absolute interpolated-prefix work/ path literals'
 slug: work-layout-guard-catch-absolute-prefix-path-literals
 blockedBy: []
 covers: []

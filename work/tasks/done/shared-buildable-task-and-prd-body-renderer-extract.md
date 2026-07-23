@@ -1,5 +1,5 @@
 ---
-title: Extract ONE shared buildable-task (and SPEC-body) renderer
+title: 'Extract ONE shared buildable-task (and SPEC-body) renderer'
 slug: shared-buildable-task-and-prd-body-renderer-extract
 spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: Extend renderPrdBody with optional ## Solution + ## User Stories inputs
+title: 'Extend renderPrdBody with optional ## Solution + ## User Stories inputs'
 slug: extend-renderprdbody-with-solution-and-userstories-inputs
 spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: []

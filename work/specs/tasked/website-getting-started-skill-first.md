@@ -1,5 +1,5 @@
 ---
-title: Website getting-started rewritten skill-first (adopt-skill → work/ contract → CLI + CI/intake)
+title: 'Website getting-started rewritten skill-first (adopt-skill → work/ contract → CLI + CI/intake)'
 slug: website-getting-started-skill-first
 taskedAfter: [skills-add-command]
 ---

@@ -1,5 +1,5 @@
 ---
-title: null-harness-prompt-write-epipe-tolerant — make NullHarness's piped-prompt write robust to an early-closed child stdin so review-gate.test.ts stops flaking with spawnSync bash EPIPE under parallel load
+title: 'null-harness-prompt-write-epipe-tolerant — make NullHarness''s piped-prompt write robust to an early-closed child stdin so review-gate.test.ts stops flaking with spawnSync bash EPIPE under parallel load'
 slug: null-harness-prompt-write-epipe-tolerant
 covers: []
 ---

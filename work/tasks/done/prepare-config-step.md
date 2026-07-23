@@ -1,5 +1,5 @@
 ---
-title: prepare-config-step — add a `prepare` field to `dorfl.json` (the env-prep / install step) that the runner runs ONCE per fresh worktree/clone BEFORE the first `verify`, distinct from (and never baked into) the acceptance gate; teach `setup` to detect/provide-or-ask for it
+title: 'prepare-config-step — add a `prepare` field to `dorfl.json` (the env-prep / install step) that the runner runs ONCE per fresh worktree/clone BEFORE the first `verify`, distinct from (and never baked into) the acceptance gate; teach `setup` to detect/provide-or-ask for it'
 slug: prepare-config-step
 blockedBy: []
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: Add intakeIntegration knob; decouple intake document PR-mode from autoBuild/autoTask
+title: 'Add intakeIntegration knob; decouple intake document PR-mode from autoBuild/autoTask'
 slug: intake-integration-knob
 spec: intake-integration-knob-and-specs-land-in-proposed-rename
 blockedBy: []

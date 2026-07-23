@@ -1,5 +1,5 @@
 ---
-title: Tighten the no-flag error-string quote in drive-tasks SKILL.md
+title: 'Tighten the no-flag error-string quote in drive-tasks SKILL.md'
 slug: review-nits-drive-tasks-dispatch-allow-backlog-2026-06-24
 needsAnswers: false
 blockedBy: []

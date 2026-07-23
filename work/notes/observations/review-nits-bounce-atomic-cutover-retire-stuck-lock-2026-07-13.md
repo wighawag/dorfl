@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'bounce-atomic-cutover-retire-stuck-lock' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''bounce-atomic-cutover-retire-stuck-lock'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: bounce-atomic-cutover-retire-stuck-lock

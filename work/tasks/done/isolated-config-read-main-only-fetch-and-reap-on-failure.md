@@ -1,5 +1,5 @@
 ---
-title: isolated-config-read-main-only-fetch-and-reap-on-failure — stop a stale job worktree from poisoning the NEXT `do --isolated`/`--remote` build by (1) routing the build-path per-repo-config read through the main-only no-prune `fetchMirrorMain` (NOT `ensureMirror`'s all-heads pruning fetch, which a checked-out `work/<slug>` worktree branch BLOCKS), and (2) reaping the job worktree on the FAILURE/abort path, not only on clean completion
+title: 'isolated-config-read-main-only-fetch-and-reap-on-failure — stop a stale job worktree from poisoning the NEXT `do --isolated`/`--remote` build by (1) routing the build-path per-repo-config read through the main-only no-prune `fetchMirrorMain` (NOT `ensureMirror`''s all-heads pruning fetch, which a checked-out `work/<slug>` worktree branch BLOCKS), and (2) reaping the job worktree on the FAILURE/abort path, not only on clean completion'
 slug: isolated-config-read-main-only-fetch-and-reap-on-failure
 blockedBy: []
 covers: []

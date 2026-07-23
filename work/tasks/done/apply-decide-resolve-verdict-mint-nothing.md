@@ -1,5 +1,5 @@
 ---
-title: Add a `resolve` verdict to the apply decision agent (answered, mint nothing)
+title: 'Add a `resolve` verdict to the apply decision agent (answered, mint nothing)'
 slug: apply-decide-resolve-verdict-mint-nothing
 covers: []
 blockedBy: []

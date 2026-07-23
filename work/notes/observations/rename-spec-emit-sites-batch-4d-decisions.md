@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4d (rename-spec-namespace-emit-sites-and-local-unions) — build decisions worth ratifying
+title: 'spec→spec batch 4d (rename-spec-namespace-emit-sites-and-local-unions) — build decisions worth ratifying'
 date: 2026-07-10
 needsAnswers: true
 ---

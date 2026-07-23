@@ -1,5 +1,5 @@
 ---
-title: advance gains the same `--isolated` ergonomic `do` has — run the advance tick in an ISOLATED job worktree off this repo's arbiter (no checkout takeover), single named item AND `-n`/auto-pick/multi-arg (sequential, mirror-pool-scan), so you can run advance from a busy checkout or anywhere with a participating arbiter
+title: 'advance gains the same `--isolated` ergonomic `do` has — run the advance tick in an ISOLATED job worktree off this repo''s arbiter (no checkout takeover), single named item AND `-n`/auto-pick/multi-arg (sequential, mirror-pool-scan), so you can run advance from a busy checkout or anywhere with a participating arbiter'
 slug: advance-isolated-one-shot
 spec: advance-loop
 blockedBy: [advance-do-isolated-autopick-and-help]

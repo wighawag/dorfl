@@ -1,5 +1,5 @@
 ---
-title: spec→spec EXPAND (follow-up) — add spec beside spec in the lock/sidecar identity (SidecarType, item-lock, typeForNamespace)
+title: 'spec→spec EXPAND (follow-up) — add spec beside spec in the lock/sidecar identity (SidecarType, item-lock, typeForNamespace)'
 slug: expand-spec-lock-and-sidecar-namespace
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [expand-spec-frontmatter-and-namespace-aliases]

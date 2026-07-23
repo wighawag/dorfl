@@ -1,5 +1,5 @@
 ---
-title: status/scan LINT the ledger + a gc-style SWEEP that REPORTS (never auto-deletes) any slug present in more than one work/ status folder
+title: 'status/scan LINT the ledger + a gc-style SWEEP that REPORTS (never auto-deletes) any slug present in more than one work/ status folder'
 slug: ledger-one-slug-one-folder-lint-and-sweep
 spec: ledger-integrity
 blockedBy: [atomic-done-move-one-slug-one-folder]

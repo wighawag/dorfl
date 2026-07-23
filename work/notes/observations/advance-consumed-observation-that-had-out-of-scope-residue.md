@@ -1,5 +1,5 @@
 ---
-title: advance workflow deleted an observation whose STILL-LIVE residue was explicitly out-of-scope for the task it scaffolded
+title: 'advance workflow deleted an observation whose STILL-LIVE residue was explicitly out-of-scope for the task it scaffolded'
 date: 2026-07-07
 status: open
 severity: low

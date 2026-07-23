@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'apply-reconciles-stale-open-questions' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''apply-reconciles-stale-open-questions'' (Gate 2 approve)'
 date: 2026-06-21
 status: open
 reviewOf: apply-reconciles-stale-open-questions

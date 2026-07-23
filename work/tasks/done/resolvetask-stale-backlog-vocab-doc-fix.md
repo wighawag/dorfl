@@ -1,5 +1,5 @@
 ---
-title: Fix resolveTask stale "backlog"-means-ready doc comments
+title: 'Fix resolveTask stale "backlog"-means-ready doc comments'
 slug: resolvetask-stale-backlog-vocab-doc-fix
 spec: do-allow-backlog-drive-staged-tasks-without-promotion
 blockedBy: [do-allow-backlog-flag-resolver-claim-and-done-move]

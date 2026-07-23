@@ -1,5 +1,5 @@
 ---
-title: "Standardize the skill-composition phrasing (file-path-load), so composition reads as a deliberate, uniform pattern"
+title: 'Standardize the skill-composition phrasing (file-path-load), so composition reads as a deliberate, uniform pattern'
 slug: standardize-skill-composition-phrasing
 type: idea
 status: incubating

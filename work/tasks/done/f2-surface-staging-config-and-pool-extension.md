@@ -1,5 +1,5 @@
 ---
-title: F2 — `surfaceStaging` (default true): surface questions on STAGING too, for tasks and briefs (build/claim unchanged)
+title: 'F2 — `surfaceStaging` (default true): surface questions on STAGING too, for tasks and briefs (build/claim unchanged)'
 slug: f2-surface-staging-config-and-pool-extension
 brief: staging-surface-and-apply-promote-safety
 blockedBy:

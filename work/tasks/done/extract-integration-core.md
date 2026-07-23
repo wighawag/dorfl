@@ -1,5 +1,5 @@
 ---
-title: extract-integration-core — pull do/complete's gate→integrate back-half into src/integration-core.ts (performIntegration); zero behaviour change
+title: 'extract-integration-core — pull do/complete''s gate→integrate back-half into src/integration-core.ts (performIntegration); zero behaviour change'
 slug: extract-integration-core
 spec: run-do-integrate-convergence
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: SURFACE-PROTOCOL.md doc + buildSurfacePrompt points at it + thin surface-questions skill
+title: 'SURFACE-PROTOCOL.md doc + buildSurfacePrompt points at it + thin surface-questions skill'
 slug: surface-protocol-doc-and-prompt
 brief: runner-invoked-disciplines-into-protocol
 blockedBy: [review-protocol-doc-and-shared-machinery]

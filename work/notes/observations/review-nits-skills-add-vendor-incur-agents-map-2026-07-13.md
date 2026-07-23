@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'skills-add-vendor-incur-agents-map' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''skills-add-vendor-incur-agents-map'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: skills-add-vendor-incur-agents-map

@@ -1,5 +1,5 @@
 ---
-title: The `drop` verb and the apply `delete` outcome `git rm` a TASK instead of moving it to the `tasks/cancelled/` won't-proceed terminal
+title: 'The `drop` verb and the apply `delete` outcome `git rm` a TASK instead of moving it to the `tasks/cancelled/` won''t-proceed terminal'
 type: observation
 status: open
 spotted: 2026-07-13

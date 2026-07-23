@@ -1,5 +1,5 @@
 ---
-title: ADR — Land = rebase + re-verify + advance, one primitive with two frontends
+title: 'ADR — Land = rebase + re-verify + advance, one primitive with two frontends'
 slug: adr-land-primitive-rebase-reverify-advance
 spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []

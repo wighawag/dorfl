@@ -1,5 +1,5 @@
 ---
-title: autoslice-command — the `do prd:<slug>` slicing path (harness + runner-owns-git)
+title: 'autoslice-command — the `do prd:<slug>` slicing path (harness + runner-owns-git)'
 slug: autoslice-command
 spec: auto-slice
 blockedBy: [autoslice-gate, autoslice-lock, do-in-place]

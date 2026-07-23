@@ -1,5 +1,5 @@
 ---
-title: "Three coupled fixes from the incomplete lock+rename migration: backlog/pool vocabulary drift, surface questions on staging (safely), and the apply x promote concurrency hole"
+title: 'Three coupled fixes from the incomplete lock+rename migration: backlog/pool vocabulary drift, surface questions on staging (safely), and the apply x promote concurrency hole'
 slug: staging-surface-and-apply-promote-safety
 needsAnswers: false
 ---

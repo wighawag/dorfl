@@ -1,5 +1,5 @@
 ---
-title: spec→spec EXPAND — add spec beside spec across the non-indirected identity surface (frontmatter, namespace, config, intake) so migrate batches stay green
+title: 'spec→spec EXPAND — add spec beside spec across the non-indirected identity surface (frontmatter, namespace, config, intake) so migrate batches stay green'
 slug: expand-spec-frontmatter-and-namespace-aliases
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-work-layout-and-folders]

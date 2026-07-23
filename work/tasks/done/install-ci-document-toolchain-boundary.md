@@ -1,5 +1,5 @@
 ---
-title: install-ci documents the project-toolchain boundary (no knob, no detection)
+title: 'install-ci documents the project-toolchain boundary (no knob, no detection)'
 slug: install-ci-document-toolchain-boundary
 spec: install-ci-project-provisioning
 blockedBy: []

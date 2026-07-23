@@ -1,5 +1,5 @@
 ---
-title: install-ci must NOT hardcode the DORFL_* gate policy into the emitted workflow env — it forces the env layer to win over the repo's own dorfl.json, defeating the flag > env > per-repo > global > default precedence; stop shadowing per-repo config (let config decide) and let users add CI-only overrides themselves
+title: 'install-ci must NOT hardcode the DORFL_* gate policy into the emitted workflow env — it forces the env layer to win over the repo''s own dorfl.json, defeating the flag > env > per-repo > global > default precedence; stop shadowing per-repo config (let config decide) and let users add CI-only overrides themselves'
 slug: install-ci-emits-no-gate-env-let-config-decide
 blockedBy: [install-ci-emits-one-advance-workflow-not-redundant-build-slice-tick]
 covers: []

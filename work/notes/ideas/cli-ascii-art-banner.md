@@ -1,5 +1,5 @@
 ---
-title: CLI ASCII-art banner (figlet-style), independent of any persona work
+title: 'CLI ASCII-art banner (figlet-style), independent of any persona work'
 slug: cli-ascii-art-banner
 type: idea
 status: incubating

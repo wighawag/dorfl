@@ -1,5 +1,5 @@
 ---
-title: null-harness-empty-command-guard — add the defensive BACKSTOP throw in NullHarness.launch (empty/whitespace command ⇒ throw, never `bash -c ''`), and tidy the already-shipped up-front guard (name `--harness pi`; reuse the `doNeedsAgentCmd` helper in the `run` path)
+title: 'null-harness-empty-command-guard — add the defensive BACKSTOP throw in NullHarness.launch (empty/whitespace command ⇒ throw, never `bash -c ''''`), and tidy the already-shipped up-front guard (name `--harness pi`; reuse the `doNeedsAgentCmd` helper in the `run` path)'
 slug: null-harness-empty-command-guard
 covers: []
 ---

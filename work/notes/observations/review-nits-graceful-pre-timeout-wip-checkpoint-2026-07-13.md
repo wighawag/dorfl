@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'graceful-pre-timeout-wip-checkpoint' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''graceful-pre-timeout-wip-checkpoint'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: graceful-pre-timeout-wip-checkpoint

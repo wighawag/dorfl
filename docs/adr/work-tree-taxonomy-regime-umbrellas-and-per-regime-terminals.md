@@ -1,5 +1,5 @@
 ---
-title: The work/ tree is grouped into regime umbrellas (notes/tasks/specs) with two DISTINCT lifecycles and per-regime won't-proceed terminals; questions/ stays top-level
+title: 'The work/ tree is grouped into regime umbrellas (notes/tasks/specs) with two DISTINCT lifecycles and per-regime won''t-proceed terminals; questions/ stays top-level'
 status: proposed
 created: 2026-06-19
 supersedes:

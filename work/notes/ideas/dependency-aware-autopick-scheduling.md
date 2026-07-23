@@ -1,5 +1,5 @@
 ---
-title: Dependency-aware auto-pick (`-n`) — schedule a blocker + its dependent together in one run (topo-ordered schedulable set), so a freshly-sliced SPEC's chained slices drain in a single tick
+title: 'Dependency-aware auto-pick (`-n`) — schedule a blocker + its dependent together in one run (topo-ordered schedulable set), so a freshly-sliced SPEC''s chained slices drain in a single tick'
 slug: dependency-aware-autopick-scheduling
 type: idea
 status: incubating

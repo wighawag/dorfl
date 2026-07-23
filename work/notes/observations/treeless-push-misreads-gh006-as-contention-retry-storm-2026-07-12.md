@@ -1,5 +1,5 @@
 ---
-title: The tree-less publish misreads a GH006 protected-branch rejection as fast-forward contention and burns the whole retry ceiling; the live `main` drifted from install-ci's designed protection shape (required `verify` in classic per-push gate, not the ruleset)
+title: 'The tree-less publish misreads a GH006 protected-branch rejection as fast-forward contention and burns the whole retry ceiling; the live `main` drifted from install-ci''s designed protection shape (required `verify` in classic per-push gate, not the ruleset)'
 type: observation
 status: spotted
 spotted: 2026-07-12

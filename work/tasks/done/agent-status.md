@@ -1,5 +1,5 @@
 ---
-title: agent status — operational view of live / failed / retained jobs
+title: 'agent status — operational view of live / failed / retained jobs'
 slug: agent-status
 spec: dorfl
 humanOnly: true

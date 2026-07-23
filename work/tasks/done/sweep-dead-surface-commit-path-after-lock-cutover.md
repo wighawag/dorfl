@@ -1,5 +1,5 @@
 ---
-title: Sweep the now-dead surface-commit ledger path (post lock-cutover housekeeping)
+title: 'Sweep the now-dead surface-commit ledger path (post lock-cutover housekeeping)'
 slug: sweep-dead-surface-commit-path-after-lock-cutover
 blockedBy: []
 covers: []

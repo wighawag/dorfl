@@ -1,5 +1,5 @@
 ---
-title: integration provider — GitHub (gh) propose/PR adapter
+title: 'integration provider — GitHub (gh) propose/PR adapter'
 slug: integration-github
 spec: dorfl
 humanOnly: true

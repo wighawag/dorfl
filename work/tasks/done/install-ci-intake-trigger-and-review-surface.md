@@ -1,5 +1,5 @@
 ---
-title: install-ci intake trigger wiring + author-trust merge policy + issue-thread review surface (capability D + insertion point E)
+title: 'install-ci intake trigger wiring + author-trust merge policy + issue-thread review surface (capability D + insertion point E)'
 slug: install-ci-intake-trigger-and-review-surface
 spec: runner-in-ci
 blockedBy:

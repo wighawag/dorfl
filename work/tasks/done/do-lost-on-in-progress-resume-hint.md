@@ -1,5 +1,5 @@
 ---
-title: do-lost-on-in-progress-resume-hint — improve the claim-CAS `lost`-on-in-progress message to point a user re-running do on their OWN item at the right recovery verb (resume/work-on/requeue)
+title: 'do-lost-on-in-progress-resume-hint — improve the claim-CAS `lost`-on-in-progress message to point a user re-running do on their OWN item at the right recovery verb (resume/work-on/requeue)'
 slug: do-lost-on-in-progress-resume-hint
 covers: []
 ---

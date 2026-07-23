@@ -1,5 +1,5 @@
 ---
-title: The stranded-done auto-recover must not DISCARD a continue-agent's new work, the advancing lock must be CRASH-SAFE, and a stuck advancing lock must be REAPABLE — three coupled defects exposed by a live advance run that lost a Gate-2 fix and left a one-slug-two-folder ledger
+title: 'The stranded-done auto-recover must not DISCARD a continue-agent''s new work, the advancing lock must be CRASH-SAFE, and a stuck advancing lock must be REAPABLE — three coupled defects exposed by a live advance run that lost a Gate-2 fix and left a one-slug-two-folder ledger'
 slug: recover-autodetect-and-advancing-lock-crash-safety
 humanOnly: true
 ---

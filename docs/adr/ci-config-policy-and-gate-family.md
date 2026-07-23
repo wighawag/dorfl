@@ -1,5 +1,5 @@
 ---
-title: CI config policy = the engine gate family (always advance; install-ci is one-time; question-surfacing is two calm-default gates)
+title: 'CI config policy = the engine gate family (always advance; install-ci is one-time; question-surfacing is two calm-default gates)'
 status: accepted
 created: 2026-06-12
 decided: 2026-06-12

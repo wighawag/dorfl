@@ -1,5 +1,5 @@
 ---
-title: repo-mirror — the shared bare hub mirror primitive (ensure/locate/fetch)
+title: 'repo-mirror — the shared bare hub mirror primitive (ensure/locate/fetch)'
 slug: repo-mirror
 spec: dorfl
 humanOnly: true

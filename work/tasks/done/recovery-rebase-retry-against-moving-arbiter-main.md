@@ -1,5 +1,5 @@
 ---
-title: Recovery/integration rebase retries against a CONCURRENTLY-MOVING arbiter/main before crying conflict
+title: 'Recovery/integration rebase retries against a CONCURRENTLY-MOVING arbiter/main before crying conflict'
 slug: recovery-rebase-retry-against-moving-arbiter-main
 blockedBy: [] # startable now; see "Relationship to disable-rename-detection-on-continue-rebase" before building
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: Reaper treats an already-cleared (no-lock) reconcile as BENIGN, not `lost` — concurrent double-reap exits 0
+title: 'Reaper treats an already-cleared (no-lock) reconcile as BENIGN, not `lost` — concurrent double-reap exits 0'
 slug: reaper-no-lock-outcome-benign-not-lost
 blockedBy: []
 covers: []

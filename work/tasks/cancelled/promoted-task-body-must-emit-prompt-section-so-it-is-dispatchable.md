@@ -3,7 +3,7 @@ title: A promoted-observation task body must emit a ## Prompt section so the min
 slug: promoted-task-body-must-emit-prompt-section-so-it-is-dispatchable
 covers: []
 blockedBy: []
-reason: superseded-by-done — the promote path already emits `## Prompt`. `renderTaskBody` (buildable-body.ts:125) UNCONDITIONALLY pushes `## Prompt` (blockquoted, seeded from the mechanism prose), and its module doc narrates fixing exactly "the promptless-promotion stuck-lock bug"; delivered by the landed tasks `promotion-buildPromotedBody-uses-shared-renderer`, `promotion-self-contained-body-and-delete-on-promote-task-route`, and `promoted-task-emits-prompt-and-pre-claim-wellformedness-guard`. Verified on main 2026-07-11: a promoted task passes the `extractPromptSection`/`resolveTask` dispatchability guard. No residual scope.
+reason: 'superseded-by-done — the promote path already emits `## Prompt`. `renderTaskBody` (buildable-body.ts:125) UNCONDITIONALLY pushes `## Prompt` (blockquoted, seeded from the mechanism prose), and its module doc narrates fixing exactly "the promptless-promotion stuck-lock bug"; delivered by the landed tasks `promotion-buildPromotedBody-uses-shared-renderer`, `promotion-self-contained-body-and-delete-on-promote-task-route`, and `promoted-task-emits-prompt-and-pre-claim-wellformedness-guard`. Verified on main 2026-07-11: a promoted task passes the `extractPromptSection`/`resolveTask` dispatchability guard. No residual scope.'
 ---
 
 > **CANCELLED 2026-07-11 (ready-pool analysis).** Premise already fixed — `renderTaskBody` emits `## Prompt` unconditionally; see `reason:` above.

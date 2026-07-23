@@ -1,5 +1,5 @@
 ---
-title: intake-lock-failure-semantics-and-real-cause — surface the REAL gh cause on a lock-op failure, FAIL (don't silently degrade) when a meaningful lock is unacquirable, create the lock label on first use, and harden release-on-interruption
+title: 'intake-lock-failure-semantics-and-real-cause — surface the REAL gh cause on a lock-op failure, FAIL (don''t silently degrade) when a meaningful lock is unacquirable, create the lock label on first use, and harden release-on-interruption'
 slug: intake-lock-failure-semantics-and-real-cause
 covers: []
 ---

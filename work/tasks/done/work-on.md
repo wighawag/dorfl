@@ -1,5 +1,5 @@
 ---
-title: work-on — create a human worktree (parallel work) from current main
+title: 'work-on — create a human worktree (parallel work) from current main'
 slug: work-on
 spec: dorfl
 humanOnly: true

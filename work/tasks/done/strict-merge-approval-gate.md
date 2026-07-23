@@ -1,5 +1,5 @@
 ---
-title: strictMergeApproval config axis — opt-in re-surface of a merge-question on a changed merge-base (default OFF)
+title: 'strictMergeApproval config axis — opt-in re-surface of a merge-question on a changed merge-base (default OFF)'
 slug: strict-merge-approval-gate
 spec: land-time-reverify-and-parallel-merge-ceiling
 needsAnswers: false

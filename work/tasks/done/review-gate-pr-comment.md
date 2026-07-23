@@ -1,5 +1,5 @@
 ---
-title: review-gate-pr-comment — post the agent's VERBATIM Gate-2 review (incl. on approve) as a PR comment via a provider postComment seam
+title: 'review-gate-pr-comment — post the agent''s VERBATIM Gate-2 review (incl. on approve) as a PR comment via a provider postComment seam'
 slug: review-gate-pr-comment
 spec: review
 blockedBy: []

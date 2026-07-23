@@ -1,5 +1,5 @@
 ---
-title: Rename the SelectionPool auto-pick keyword 'slice' -> 'task' (config/CLI/env wire keyword, clean break)
+title: 'Rename the SelectionPool auto-pick keyword ''slice'' -> ''task'' (config/CLI/env wire keyword, clean break)'
 slug: rename-selection-pool-slice-keyword-to-task
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

@@ -1,5 +1,5 @@
 ---
-title: Claim ledger vs protected/propose main — introduce a ledger-transition seam
+title: 'Claim ledger vs protected/propose main — introduce a ledger-transition seam'
 status: accepted
 created: 2026-06-04
 decided: 2026-06-04

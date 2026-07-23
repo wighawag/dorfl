@@ -1,5 +1,5 @@
 ---
-title: intake processing LOCK — a provider-native GitHub label as a transient concurrency mutex (acquire/release; best-effort degrade)
+title: 'intake processing LOCK — a provider-native GitHub label as a transient concurrency mutex (acquire/release; best-effort degrade)'
 slug: intake-processing-lock
 spec: issue-intake
 blockedBy: [intake-tracer-slice-outcome]

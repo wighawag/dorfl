@@ -1,5 +1,5 @@
 ---
-title: unify-claim — retire the claim.sh wrapper; use the in-process claim everywhere
+title: 'unify-claim — retire the claim.sh wrapper; use the in-process claim everywhere'
 slug: unify-claim
 spec: dorfl
 humanOnly: true

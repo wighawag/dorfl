@@ -1,5 +1,5 @@
 ---
-title: Decisions + family cross-reference for the observation-triage already-triaged benign-skip fix
+title: 'Decisions + family cross-reference for the observation-triage already-triaged benign-skip fix'
 type: observation
 status: spotted
 spotted: 2026-07-12

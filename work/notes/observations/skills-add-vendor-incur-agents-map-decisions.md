@@ -1,5 +1,5 @@
 ---
-title: skills-add-vendor-incur-agents-map — in-scope decisions
+title: 'skills-add-vendor-incur-agents-map — in-scope decisions'
 created: 2026-07-13
 needsAnswers: true
 ---

@@ -1,5 +1,5 @@
 ---
-title: Fix stale work/observations/ path in runtime log + sweep JSDoc after notes taxonomy reorg
+title: 'Fix stale work/observations/ path in runtime log + sweep JSDoc after notes taxonomy reorg'
 slug: stale-work-observations-path-in-log-and-jsdoc-after-notes-taxonomy-reorg-2026-06-24
 needsAnswers: false
 blockedBy: []

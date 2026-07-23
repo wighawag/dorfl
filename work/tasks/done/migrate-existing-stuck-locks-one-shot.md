@@ -1,5 +1,5 @@
 ---
-title: One-shot migration of existing `stuck` locks to surface-on-main + release
+title: 'One-shot migration of existing `stuck` locks to surface-on-main + release'
 slug: migrate-existing-stuck-locks-one-shot
 spec: surface-stuck-as-questions-and-retire-stuck-lock-state
 blockedBy: [bounce-surfaces-stuck-sidecar-and-releases-lock, retire-stuck-lock-state]

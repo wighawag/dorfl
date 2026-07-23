@@ -1,5 +1,5 @@
 ---
-title: slicer-review-edit-loop — the review→edit→re-review→converge loop on the `do prd:` slicing path (Shape 2 / insertion point A); reject-as-needsAnswers on maxReview
+title: 'slicer-review-edit-loop — the review→edit→re-review→converge loop on the `do prd:` slicing path (Shape 2 / insertion point A); reject-as-needsAnswers on maxReview'
 slug: slicer-review-edit-loop
 spec: review
 blockedBy: [autoslice-command]

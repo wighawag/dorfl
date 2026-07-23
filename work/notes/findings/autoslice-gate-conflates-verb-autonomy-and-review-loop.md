@@ -1,5 +1,5 @@
 ---
-title: the auto-slice gate conflates THREE separate concerns — the VERB (do prd: = slice), the AUTONOMY policy (may an unsupervised agent PICK a SPEC to slice), and the REVIEW→EDIT loop (a quality pass) — corrected model from a 2026-06-08 grilling
+title: 'the auto-slice gate conflates THREE separate concerns — the VERB (do prd: = slice), the AUTONOMY policy (may an unsupervised agent PICK a SPEC to slice), and the REVIEW→EDIT loop (a quality pass) — corrected model from a 2026-06-08 grilling'
 date: 2026-06-08
 status: open
 ---

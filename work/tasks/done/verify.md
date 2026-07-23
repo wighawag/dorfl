@@ -1,5 +1,5 @@
 ---
-title: verify — run the per-repo acceptance gate (the shared test boundary)
+title: 'verify — run the per-repo acceptance gate (the shared test boundary)'
 slug: verify
 spec: dorfl
 humanOnly: true

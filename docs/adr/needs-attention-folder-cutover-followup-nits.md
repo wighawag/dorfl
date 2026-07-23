@@ -1,5 +1,5 @@
 ---
-title: Ratifying three unrecorded decisions from the needs-attention folder cutover (complete.ts default branch, vestigial `recovering` field, changed CompleteRefusal wording)
+title: 'Ratifying three unrecorded decisions from the needs-attention folder cutover (complete.ts default branch, vestigial `recovering` field, changed CompleteRefusal wording)'
 status: accepted
 created: 2026-07-12
 supersedes:

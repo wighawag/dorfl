@@ -1,5 +1,5 @@
 ---
-title: Land = rebase + re-verify + advance — one primitive, two frontends, with a git-alone floor and a host-accelerated ceiling
+title: 'Land = rebase + re-verify + advance — one primitive, two frontends, with a git-alone floor and a host-accelerated ceiling'
 status: accepted
 created: 2026-06-26
 decided: 2026-06-26

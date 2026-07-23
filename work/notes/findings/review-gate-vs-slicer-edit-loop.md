@@ -1,5 +1,5 @@
 ---
-title: The three distinct review concepts — gate (impl + slice) vs slicer edit-loop vs the orphaned maxRounds — framing for the review SPEC grilling pass
+title: 'The three distinct review concepts — gate (impl + slice) vs slicer edit-loop vs the orphaned maxRounds — framing for the review SPEC grilling pass'
 date: 2026-06-06
 status: open
 ---

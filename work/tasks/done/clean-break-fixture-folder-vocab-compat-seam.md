@@ -1,5 +1,5 @@
 ---
-title: Clean-break the test fixture-folder vocabulary compat-seam (drop spec/spec-sliced/pre-spec old words -> brief/briefs-tasked/pre-brief)
+title: 'Clean-break the test fixture-folder vocabulary compat-seam (drop spec/spec-sliced/pre-spec old words -> brief/briefs-tasked/pre-brief)'
 slug: clean-break-fixture-folder-vocab-compat-seam
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-residual-slice-test-labels-and-skill-provenance]

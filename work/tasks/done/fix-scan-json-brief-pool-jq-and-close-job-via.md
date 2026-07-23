@@ -1,5 +1,5 @@
 ---
-title: Fix the scan --json brief-pool jq (.specs -> .briefs, real CI bug) + close-job via 'spec' -> 'brief'
+title: 'Fix the scan --json brief-pool jq (.specs -> .briefs, real CI bug) + close-job via ''spec'' -> ''brief'''
 slug: fix-scan-json-brief-pool-jq-and-close-job-via
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

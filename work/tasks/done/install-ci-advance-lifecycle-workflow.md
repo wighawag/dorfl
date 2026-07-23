@@ -1,5 +1,5 @@
 ---
-title: install-ci advance lifecycle workflow (capability C: triage / surface / apply + answer trigger)
+title: 'install-ci advance lifecycle workflow (capability C: triage / surface / apply + answer trigger)'
 slug: install-ci-advance-lifecycle-workflow
 spec: runner-in-ci
 blockedBy:

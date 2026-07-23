@@ -1,5 +1,5 @@
 ---
-title: do-in-place — the per-repo in-place worker (the CI command); absorbs ar-run.sh
+title: 'do-in-place — the per-repo in-place worker (the CI command); absorbs ar-run.sh'
 slug: do-in-place
 spec: command-surface-phase-2
 blockedBy: [isolation-strategy-seam, slug-namespace-resolution]

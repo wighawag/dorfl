@@ -1,5 +1,5 @@
 ---
-title: Make the Gate-2 review-nits generator's triage text SKILL-AGNOSTIC — stop hardcoding "batch-qa triage" into every review-nits-*.md (batch-qa is being retired for orchestrate/surface-questions); name no skill so the generator can't keep a retired concept alive
+title: 'Make the Gate-2 review-nits generator''s triage text SKILL-AGNOSTIC — stop hardcoding "batch-qa triage" into every review-nits-*.md (batch-qa is being retired for orchestrate/surface-questions); name no skill so the generator can''t keep a retired concept alive'
 slug: gate-nit-triage-text-skill-agnostic
 blockedBy: []
 covers: []

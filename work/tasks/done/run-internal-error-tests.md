@@ -1,5 +1,5 @@
 ---
-title: run-internal-error-tests — harden two thin-coverage `run` paths with focused regression tests: (1) the claim-CAS retry's idempotent branch-reset, (2) PIN `run`'s CURRENT internal-error classification (config-error / claim-error)
+title: 'run-internal-error-tests — harden two thin-coverage `run` paths with focused regression tests: (1) the claim-CAS retry''s idempotent branch-reset, (2) PIN `run`''s CURRENT internal-error classification (config-error / claim-error)'
 slug: run-internal-error-tests
 covers: []
 ---

@@ -1,5 +1,5 @@
 ---
-title: in `scan()` the autoBuild and autoSlice pool gates are resolved by TWO DIFFERENT config readers (working-tree reader vs mirror-ref reader), so within one repo iteration they can disagree on a committed per-repo override
+title: 'in `scan()` the autoBuild and autoSlice pool gates are resolved by TWO DIFFERENT config readers (working-tree reader vs mirror-ref reader), so within one repo iteration they can disagree on a committed per-repo override'
 type: observation
 status: spotted
 spotted: 2026-06-20

@@ -1,5 +1,5 @@
 ---
-title: advance — the `advance` sibling top-level verb + the `obs:` resolver extension (no `do` subcommand, no standalone `slice` verb)
+title: 'advance — the `advance` sibling top-level verb + the `obs:` resolver extension (no `do` subcommand, no standalone `slice` verb)'
 slug: advance-verb-resolver
 spec: advance-loop
 blockedBy: [advance-tick-classifier, advancing-lock-borrow]

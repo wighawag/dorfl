@@ -1,5 +1,5 @@
 ---
-title: release-lock <item> verb + stuck-lock report in gc --ledger
+title: 'release-lock <item> verb + stuck-lock report in gc --ledger'
 slug: release-lock-verb-and-gc-stuck-report
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

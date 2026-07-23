@@ -1,5 +1,5 @@
 ---
-title: wire the PRODUCTION intake decision verdict-parse — the agent's emitted output → IntakeVerdict (close US #6's "run LOCALLY one-shot"; the dispatcher is already built)
+title: 'wire the PRODUCTION intake decision verdict-parse — the agent''s emitted output → IntakeVerdict (close US #6''s "run LOCALLY one-shot"; the dispatcher is already built)'
 slug: intake-production-verdict-parse
 spec: issue-intake
 blockedBy: [intake-decision-prompt-and-four-outcome-dispatch]

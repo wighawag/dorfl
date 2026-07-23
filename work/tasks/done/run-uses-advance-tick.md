@@ -1,5 +1,5 @@
 ---
-title: unify run onto the advance tick - point the laptop daemon's per-item unit at the registry-set advance driver (not the build-only do tick), behaviour-preserving under calm gate defaults
+title: 'unify run onto the advance tick - point the laptop daemon''s per-item unit at the registry-set advance driver (not the build-only do tick), behaviour-preserving under calm gate defaults'
 slug: run-uses-advance-tick
 blockedBy: [advance-loop-driver-registry-set-job-worktrees, atomic-done-move-one-slug-one-folder, requeue-from-in-progress]
 covers: []

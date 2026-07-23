@@ -1,5 +1,5 @@
 ---
-title: the advancing-lock release must be CRASH-SAFE across a FAILING recover/integrate — a failed advance run must NEVER leave an orphaned work/advancing/<entry>.md marker (REPRODUCE the real cause first; introduce advancingMarkerPath(entry) as the single path seam)
+title: 'the advancing-lock release must be CRASH-SAFE across a FAILING recover/integrate — a failed advance run must NEVER leave an orphaned work/advancing/<entry>.md marker (REPRODUCE the real cause first; introduce advancingMarkerPath(entry) as the single path seam)'
 slug: advancing-lock-release-crash-safe
 spec: recover-autodetect-and-advancing-lock-crash-safety
 blockedBy: []

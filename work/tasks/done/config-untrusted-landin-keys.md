@@ -1,5 +1,5 @@
 ---
-title: Add untrustedTasksLandIn / untrustedSpecsLandIn config keys (default staging)
+title: 'Add untrustedTasksLandIn / untrustedSpecsLandIn config keys (default staging)'
 slug: config-untrusted-landin-keys
 spec: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 blockedBy: []

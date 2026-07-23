@@ -1,5 +1,5 @@
 ---
-title: the autonomous GATE-FAIL path must push the work branch too (parity with agent-fail) + fix the false run.ts comment
+title: 'the autonomous GATE-FAIL path must push the work branch too (parity with agent-fail) + fix the false run.ts comment'
 slug: gate-fail-pushes-work-branch
 blockedBy: []
 covers: []

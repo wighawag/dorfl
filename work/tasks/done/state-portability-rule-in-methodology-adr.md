@@ -1,5 +1,5 @@
 ---
-title: Refine methodology-and-skills ADR §6 + state the standing rule "no spawned-agent prompt may name a skill that is not resolvable in-band"
+title: 'Refine methodology-and-skills ADR §6 + state the standing rule "no spawned-agent prompt may name a skill that is not resolvable in-band"'
 slug: state-portability-rule-in-methodology-adr
 brief: runner-invoked-disciplines-into-protocol
 blockedBy: [slicing-protocol-doc-and-vocabulary-fix]

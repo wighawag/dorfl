@@ -1,5 +1,5 @@
 ---
-title: Sweep WORK-CONTRACT.md + SURFACE-PROTOCOL.md prose slice/SPEC/slicing to task/brief/tasking (after the lock-action/flag code rename)
+title: 'Sweep WORK-CONTRACT.md + SURFACE-PROTOCOL.md prose slice/SPEC/slicing to task/brief/tasking (after the lock-action/flag code rename)'
 slug: rename-protocol-prose-workcontract-and-surface-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: [rename-lock-action-token-slice-to-task]

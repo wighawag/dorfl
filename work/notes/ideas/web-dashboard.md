@@ -1,5 +1,5 @@
 ---
-title: Web dashboard over the CLI (read-only first)
+title: 'Web dashboard over the CLI (read-only first)'
 slug: web-dashboard
 type: idea
 status: incubating

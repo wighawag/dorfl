@@ -1,5 +1,5 @@
 ---
-title: Add an opt-in `gc --ledger --reap-stale-locks` that auto-clears terminal-on-main stale locks (default stays report-only)
+title: 'Add an opt-in `gc --ledger --reap-stale-locks` that auto-clears terminal-on-main stale locks (default stays report-only)'
 slug: gc-ledger-reap-stale-locks-opt-in-flag
 blockedBy: []
 covers: []

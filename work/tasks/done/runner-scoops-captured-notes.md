@@ -1,5 +1,5 @@
 ---
-title: advance — EXTEND the agent→runner reporting channel to scoop + report agent-authored CAPTURED NOTES (observations/findings) on BOTH the slice path (`do prd:`) and the build path (`do <slice>`)
+title: 'advance — EXTEND the agent→runner reporting channel to scoop + report agent-authored CAPTURED NOTES (observations/findings) on BOTH the slice path (`do prd:`) and the build path (`do <slice>`)'
 slug: runner-scoops-captured-notes
 spec: advance-loop
 blockedBy: []

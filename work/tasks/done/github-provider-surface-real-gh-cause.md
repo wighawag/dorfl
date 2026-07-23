@@ -1,5 +1,5 @@
 ---
-title: GitHubProvider — surface the REAL `gh` failure cause in postPRComment + openRequest (drop the hard-coded "unavailable or unauthenticated" misattribution, mirroring the issue-provider fix)
+title: 'GitHubProvider — surface the REAL `gh` failure cause in postPRComment + openRequest (drop the hard-coded "unavailable or unauthenticated" misattribution, mirroring the issue-provider fix)'
 slug: github-provider-surface-real-gh-cause
 covers: []
 blockedBy: []

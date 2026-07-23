@@ -1,5 +1,5 @@
 ---
-title: Analysis — how A (enumerate) + B (treeless push) must compose to make CI surface questions, with no redundancy and correct ordering
+title: 'Analysis — how A (enumerate) + B (treeless push) must compose to make CI surface questions, with no redundancy and correct ordering'
 type: finding
 status: incubating
 source: read of packages/dorfl/src on 2026-06-16 — advance-drivers.ts, advance-loop-driver.ts, advance-isolated.ts, advance-treeless-publish.ts, advance-lifecycle-template.ts, scan.ts, lifecycle-pools.ts, select-priority.ts, select-order.ts, cli.ts (advance command), eligibility.ts

@@ -1,5 +1,5 @@
 ---
-title: An answered observation sidecar routes to APPLY even when the observation body carries a `triaged:` settled marker (answer never stranded)
+title: 'An answered observation sidecar routes to APPLY even when the observation body carries a `triaged:` settled marker (answer never stranded)'
 status: accepted
 created: 2026-07-10
 decided: 2026-07-10

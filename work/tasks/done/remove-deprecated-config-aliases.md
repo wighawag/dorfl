@@ -1,5 +1,5 @@
 ---
-title: remove the deprecated allowAgents -> autoBuild config alias and its machinery (no external users yet, so no deprecation window is owed)
+title: 'remove the deprecated allowAgents -> autoBuild config alias and its machinery (no external users yet, so no deprecation window is owed)'
 slug: remove-deprecated-config-aliases
 blockedBy: []
 covers: []

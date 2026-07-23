@@ -1,5 +1,5 @@
 ---
-title: Source intake's default scaffold from the shared renderer skeleton
+title: 'Source intake''s default scaffold from the shared renderer skeleton'
 slug: intake-default-scaffold-uses-shared-renderer
 spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: [extend-renderprdbody-with-solution-and-userstories-inputs]

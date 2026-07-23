@@ -1,5 +1,5 @@
 ---
-title: Decouple intake document PR-mode from the autonomy gates via an `intakeIntegration` knob, and rename the `SpecsLandIn` value `pre-proposed → proposed`
+title: 'Decouple intake document PR-mode from the autonomy gates via an `intakeIntegration` knob, and rename the `SpecsLandIn` value `pre-proposed → proposed`'
 slug: intake-integration-knob-and-specs-land-in-proposed-rename
 ---
 

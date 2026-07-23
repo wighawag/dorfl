@@ -1,5 +1,5 @@
 ---
-title: Repo-declared dorfl version pinning — bare `dorfl` self-forwards to the pinned build (project-independent)
+title: 'Repo-declared dorfl version pinning — bare `dorfl` self-forwards to the pinned build (project-independent)'
 slug: dorfl-self-version-pinning-and-bootstrap-forward
 humanOnly: true
 ---

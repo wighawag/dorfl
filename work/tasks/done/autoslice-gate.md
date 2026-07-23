@@ -1,5 +1,5 @@
 ---
-title: autoslice-gate — autoSlice policy + slicing-eligibility predicate (pure)
+title: 'autoslice-gate — autoSlice policy + slicing-eligibility predicate (pure)'
 slug: autoslice-gate
 spec: auto-slice
 blockedBy: [config-env-layer]

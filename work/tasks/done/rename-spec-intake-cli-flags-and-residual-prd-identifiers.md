@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 4f — clean-break rename the intake integration-mode CLI flags + FULLY PURGE all residual internal spec code identifiers
+title: 'spec→spec batch 4f — clean-break rename the intake integration-mode CLI flags + FULLY PURGE all residual internal spec code identifiers'
 slug: rename-spec-intake-cli-flags-and-residual-prd-identifiers
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 blockedBy: [rename-spec-residual-exported-symbols-and-prdslandIn-plumbing]

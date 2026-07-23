@@ -1,5 +1,5 @@
 ---
-title: Route the complete transition through the ledger write seam
+title: 'Route the complete transition through the ledger write seam'
 slug: ledger-write-seam-complete
 spec: ledger-transition-seam
 blockedBy: [ledger-write-seam]

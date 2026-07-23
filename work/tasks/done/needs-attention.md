@@ -1,5 +1,5 @@
 ---
-title: needs-attention — route stuck items to a folder, surface them, allow return
+title: 'needs-attention — route stuck items to a folder, surface them, allow return'
 slug: needs-attention
 spec: dorfl
 humanOnly: true

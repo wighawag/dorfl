@@ -1,5 +1,5 @@
 ---
-title: convert-from-prd-to-spec — a skill that drives prd-to-spec then sweeps the prose the command skips
+title: 'convert-from-prd-to-spec — a skill that drives prd-to-spec then sweeps the prose the command skips'
 slug: vocabulary-cutover-prose-sweep-skill
 ---
 

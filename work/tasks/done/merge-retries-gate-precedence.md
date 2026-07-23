@@ -1,5 +1,5 @@
 ---
-title: `mergeRetries` resolves through the gate-family precedence chain (flag > env > per-repo > global > default)
+title: '`mergeRetries` resolves through the gate-family precedence chain (flag > env > per-repo > global > default)'
 slug: merge-retries-gate-precedence
 spec: land-time-reverify-and-parallel-merge-ceiling
 blockedBy: []

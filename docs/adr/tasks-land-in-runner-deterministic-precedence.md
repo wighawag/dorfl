@@ -1,5 +1,5 @@
 ---
-title: tasksLandIn precedence — the positional twin of the untrusted-origin build-propose rule
+title: 'tasksLandIn precedence — the positional twin of the untrusted-origin build-propose rule'
 status: accepted
 created: 2026-06-17
 decided: 2026-06-17

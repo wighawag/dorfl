@@ -1,5 +1,5 @@
 ---
-title: CLAIM additionally acquires the unified lock (interim dual-write; body still moves to in-progress/)
+title: 'CLAIM additionally acquires the unified lock (interim dual-write; body still moves to in-progress/)'
 slug: claim-acquires-unified-lock-no-body-move
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

@@ -1,5 +1,5 @@
 ---
-title: review-skill — a standalone, protocol-native review discipline (thorough + easy review of slices/PRDs/code/notes); emits verdicts, callers route
+title: 'review-skill — a standalone, protocol-native review discipline (thorough + easy review of slices/PRDs/code/notes); emits verdicts, callers route'
 slug: review-skill
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: agent prompt should make the build agent responsible for a clean working tree (delete/gitignore stray artifacts before finishing)
+title: 'agent prompt should make the build agent responsible for a clean working tree (delete/gitignore stray artifacts before finishing)'
 slug: agent-prompt-tree-cleanliness
 blockedBy: []
 covers: []

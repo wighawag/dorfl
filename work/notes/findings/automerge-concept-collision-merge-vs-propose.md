@@ -1,5 +1,5 @@
 ---
-title: autoMerge means TWO different things — the SPEC's "auto-merge the --propose PR on approve" vs the code's "let a --merge proceed (else downgrade to propose)" — a concept collision to think through later
+title: 'autoMerge means TWO different things — the SPEC''s "auto-merge the --propose PR on approve" vs the code''s "let a --merge proceed (else downgrade to propose)" — a concept collision to think through later'
 date: 2026-06-07
 status: resolved
 resolvedBy: remove-automerge-merge-means-auto-on-gate-pass

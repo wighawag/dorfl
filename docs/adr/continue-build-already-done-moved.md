@@ -1,5 +1,5 @@
 ---
-title: Continue-build on an already-done-moved branch is its own lifecycle state — `source: 'done'`, skip the move, exempt the move-reconcile
+title: 'Continue-build on an already-done-moved branch is its own lifecycle state — `source: ''done''`, skip the move, exempt the move-reconcile'
 status: accepted
 created: 2026-06-17
 decided: 2026-06-17

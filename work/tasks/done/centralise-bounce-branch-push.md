@@ -1,5 +1,5 @@
 ---
-title: centralise the bounce-time work-branch push INTO the needs-attention seam (one home, transition-kind-agnostic) — and route run's agent-failure through it
+title: 'centralise the bounce-time work-branch push INTO the needs-attention seam (one home, transition-kind-agnostic) — and route run''s agent-failure through it'
 slug: centralise-bounce-branch-push
 blockedBy: [gate-fail-pushes-work-branch]
 covers: []

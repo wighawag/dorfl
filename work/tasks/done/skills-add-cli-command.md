@@ -1,5 +1,5 @@
 ---
-title: Wire the dorfl skills add command onto the install engine
+title: 'Wire the dorfl skills add command onto the install engine'
 slug: skills-add-cli-command
 spec: skills-add-command
 blockedBy: [skills-add-vendor-incur-agents-map]

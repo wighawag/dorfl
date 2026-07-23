@@ -1,5 +1,5 @@
 ---
-title: Phase 0: guard test that no .ts outside work-layout contains a raw work/<folder> literal
+title: 'Phase 0: guard test that no .ts outside work-layout contains a raw work/<folder> literal'
 slug: guard-test-no-raw-work-literal-outside-work-layout
 spec: folder-taxonomy-reorg-and-rename
 humanOnly: true

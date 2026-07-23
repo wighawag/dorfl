@@ -1,5 +1,5 @@
 ---
-title: intake-closes-issue-on-bounce — a BOUNCE is terminal, so intake CLOSES the issue (atomically, with the bounce text as the closing comment + reason "not planned"); supersedes the SPEC's "intake never closes / leave open" lines for the bounce case
+title: 'intake-closes-issue-on-bounce — a BOUNCE is terminal, so intake CLOSES the issue (atomically, with the bounce text as the closing comment + reason "not planned"); supersedes the SPEC''s "intake never closes / leave open" lines for the bounce case'
 slug: intake-closes-issue-on-bounce
 spec: issue-intake
 blockedBy: []

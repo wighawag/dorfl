@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'review-protocol-doc-and-shared-machinery' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''review-protocol-doc-and-shared-machinery'' (Gate 2 approve)'
 date: 2026-06-22
 status: open
 reviewOf: review-protocol-doc-and-shared-machinery

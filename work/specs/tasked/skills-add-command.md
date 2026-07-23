@@ -1,5 +1,5 @@
 ---
-title: A `dorfl skills add` command that installs the dorfl skills into any agent harness
+title: 'A `dorfl skills add` command that installs the dorfl skills into any agent harness'
 slug: skills-add-command
 ---
 

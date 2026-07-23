@@ -1,5 +1,5 @@
 ---
-title: Cut-over 9d — delete drop-bookkeeping-rebase; prove a plain rebase (no rename/rename ledger conflict)
+title: 'Cut-over 9d — delete drop-bookkeeping-rebase; prove a plain rebase (no rename/rename ledger conflict)'
 slug: cutover-delete-drop-bookkeeping-rebase-and-prove-plain-rebase
 spec: ledger-status-per-item-lock-refs
 humanOnly: true

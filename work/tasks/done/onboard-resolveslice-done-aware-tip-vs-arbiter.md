@@ -1,5 +1,5 @@
 ---
-title: onboard resolveSlice finds a slice in done/ on a CONTINUE (safely) — a done/ slice that is STRANDED (tip not on arbiter) is re-onboardable; a genuinely-COMPLETE one (tip reachable on arbiter) is NOT, disambiguated by tip-vs-arbiter, never folder alone
+title: 'onboard resolveSlice finds a slice in done/ on a CONTINUE (safely) — a done/ slice that is STRANDED (tip not on arbiter) is re-onboardable; a genuinely-COMPLETE one (tip reachable on arbiter) is NOT, disambiguated by tip-vs-arbiter, never folder alone'
 slug: onboard-resolveslice-done-aware-tip-vs-arbiter
 spec: ledger-integrity
 blockedBy: []

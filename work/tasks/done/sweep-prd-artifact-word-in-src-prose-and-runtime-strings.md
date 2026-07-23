@@ -1,5 +1,5 @@
 ---
-title: Sweep the `prd` artifact word + `work/prds/` in packages/dorfl/src PROSE + runtime/prompt STRINGS (the last non-identifier residual), extend the leak scan to gate src
+title: 'Sweep the `prd` artifact word + `work/prds/` in packages/dorfl/src PROSE + runtime/prompt STRINGS (the last non-identifier residual), extend the leak scan to gate src'
 slug: sweep-prd-artifact-word-in-src-prose-and-runtime-strings
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 covers: []

@@ -1,5 +1,5 @@
 ---
-title: spec → spec vocabulary cutover + a self-contained spec-to-spec migration command
+title: 'spec → spec vocabulary cutover + a self-contained spec-to-spec migration command'
 slug: prd-to-spec-vocabulary-cutover-and-migration-command
 humanOnly: true
 needsAnswers: false

@@ -1,5 +1,5 @@
 ---
-title: Rewrite deriveIntakeFlags so author-trust drives placement + stamp, not the file-emit mode
+title: 'Rewrite deriveIntakeFlags so author-trust drives placement + stamp, not the file-emit mode'
 slug: derive-intake-flags-trust-drives-placement-not-mode
 spec: untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution
 blockedBy: [intake-task-placement-symmetry]

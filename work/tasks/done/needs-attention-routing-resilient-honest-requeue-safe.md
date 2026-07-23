@@ -1,5 +1,5 @@
 ---
-title: Make needs-attention routing network-fault-tolerant + honestly-reported + requeue-safe — retry git pushes with bounded backoff, never crash the failure handler, report exactly what landed (surface / branch / PR), and refuse a keep+continue requeue when the work branch is not on the arbiter
+title: 'Make needs-attention routing network-fault-tolerant + honestly-reported + requeue-safe — retry git pushes with bounded backoff, never crash the failure handler, report exactly what landed (surface / branch / PR), and refuse a keep+continue requeue when the work branch is not on the arbiter'
 slug: needs-attention-routing-resilient-honest-requeue-safe
 blockedBy: []
 covers: []

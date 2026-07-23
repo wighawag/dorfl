@@ -1,5 +1,5 @@
 ---
-title: prompt — emit the work-agent prompt for a slice (wrapper + slice Prompt)
+title: 'prompt — emit the work-agent prompt for a slice (wrapper + slice Prompt)'
 slug: prompt
 spec: dorfl
 humanOnly: true

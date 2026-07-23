@@ -1,5 +1,5 @@
 ---
-title: review-gate non-blocking nits for 'provenance-file-basenames-widened-criterion-and-expiry-guard' (Gate 2 approve)
+title: 'review-gate non-blocking nits for ''provenance-file-basenames-widened-criterion-and-expiry-guard'' (Gate 2 approve)'
 date: 2026-07-13
 status: open
 reviewOf: provenance-file-basenames-widened-criterion-and-expiry-guard

@@ -1,5 +1,5 @@
 ---
-title: scan — cross-repo eligible-work queue (read-only)
+title: 'scan — cross-repo eligible-work queue (read-only)'
 slug: scan
 spec: dorfl
 humanOnly: true

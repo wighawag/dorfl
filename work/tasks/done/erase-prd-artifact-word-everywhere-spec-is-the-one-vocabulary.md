@@ -1,5 +1,5 @@
 ---
-title: Erase the `spec` artifact WORD everywhere it is the concept — make `spec` the one vocabulary across all trees (prose + paths), preserving slug-identities / code aliases / English
+title: 'Erase the `spec` artifact WORD everywhere it is the concept — make `spec` the one vocabulary across all trees (prose + paths), preserving slug-identities / code aliases / English'
 slug: erase-prd-artifact-word-everywhere-spec-is-the-one-vocabulary
 spec: prd-to-spec-vocabulary-cutover-and-migration-command
 covers: []

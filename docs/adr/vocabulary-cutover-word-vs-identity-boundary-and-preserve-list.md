@@ -1,5 +1,5 @@
 ---
-title: Vocabulary cutovers sweep the artifact WORD at word boundaries and preserve identities via an explicit allow-list
+title: 'Vocabulary cutovers sweep the artifact WORD at word boundaries and preserve identities via an explicit allow-list'
 status: accepted
 created: 2026-07-12
 ---

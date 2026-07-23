@@ -1,5 +1,5 @@
 ---
-title: "The apply rung must RECONCILE the resolved brief body (remove the now-stale open-questions block), not just append '## Applied answers'"
+title: 'The apply rung must RECONCILE the resolved brief body (remove the now-stale open-questions block), not just append ''## Applied answers'''
 slug: apply-reconciles-stale-open-questions
 ---
 

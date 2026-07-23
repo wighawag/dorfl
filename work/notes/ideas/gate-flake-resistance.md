@@ -1,5 +1,5 @@
 ---
-title: Make the acceptance gate flake-resistant (one green run shouldn't admit a regression)
+title: 'Make the acceptance gate flake-resistant (one green run shouldn''t admit a regression)'
 slug: gate-flake-resistance
 type: idea
 status: incubating

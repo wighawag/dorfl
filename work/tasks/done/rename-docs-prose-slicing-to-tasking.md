@@ -1,5 +1,5 @@
 ---
-title: Cut docs/ prose (ADRs + docs/ci) over to task/brief/tasking vocabulary (coherence sweep)
+title: 'Cut docs/ prose (ADRs + docs/ci) over to task/brief/tasking vocabulary (coherence sweep)'
 slug: rename-docs-prose-slicing-to-tasking
 brief: code-identifier-slice-prd-to-task-brief-rename
 blockedBy: []

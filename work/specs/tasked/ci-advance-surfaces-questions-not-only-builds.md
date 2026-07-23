@@ -1,5 +1,5 @@
 ---
-title: CI advance loop must surface questions + triage observations, not only build/slice
+title: 'CI advance loop must surface questions + triage observations, not only build/slice'
 slug: ci-advance-surfaces-questions-not-only-builds
 ---
 

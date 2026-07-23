@@ -1,5 +1,5 @@
 ---
-title: Remove the sliced: frontmatter marker entirely once spec-sliced/ is the sole source of truth — STEP B, the clean isolated breaking change (sequenced LAST)
+title: 'Remove the sliced: frontmatter marker entirely once spec-sliced/ is the sole source of truth — STEP B, the clean isolated breaking change (sequenced LAST)'
 slug: remove-sliced-marker-step-b
 spec: slicing-coherence
 blockedBy: [prd-sliced-folder-step-a]

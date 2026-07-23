@@ -1,5 +1,5 @@
 ---
-title: reap-merged-remote-work-branches — delete a propose-mode PR's remote `work/<slug>` branch once it is PROVABLY MERGED (ancestor of `<arbiter>/main`), via (a) a provider-agnostic `gc` sub-mode SWEEP guarded by the same ancestor predicate `gc` already uses, (b) an INLINE delete in auto-merge mode when WE perform the merge, and (c) install-ci wiring a scheduled trigger for the sweep (+ optionally enabling GitHub's auto-delete-head-branch) — WITHOUT ever touching an un-merged in-flight branch (the never-delete invariant protects only the PRE-merge recovery point)
+title: 'reap-merged-remote-work-branches — delete a propose-mode PR''s remote `work/<slug>` branch once it is PROVABLY MERGED (ancestor of `<arbiter>/main`), via (a) a provider-agnostic `gc` sub-mode SWEEP guarded by the same ancestor predicate `gc` already uses, (b) an INLINE delete in auto-merge mode when WE perform the merge, and (c) install-ci wiring a scheduled trigger for the sweep (+ optionally enabling GitHub''s auto-delete-head-branch) — WITHOUT ever touching an un-merged in-flight branch (the never-delete invariant protects only the PRE-merge recovery point)'
 slug: reap-merged-remote-work-branches
 blockedBy: []
 covers: []

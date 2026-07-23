@@ -1,5 +1,5 @@
 ---
-title: The per-round-launch scaffold removed from intake's lone-slice review is the M-LAYER (fresh-context second-opinion) template — revive it for M>1 ONLY after de-chaining it (independent fresh draft per M-pass), if/when a lone-slice review wants the full M×N model
+title: 'The per-round-launch scaffold removed from intake''s lone-slice review is the M-LAYER (fresh-context second-opinion) template — revive it for M>1 ONLY after de-chaining it (independent fresh draft per M-pass), if/when a lone-slice review wants the full M×N model'
 slug: lone-slice-review-fresh-context-m-layer
 type: idea
 status: incubating

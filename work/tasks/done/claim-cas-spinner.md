@@ -1,5 +1,5 @@
 ---
-title: Show a spinner animation while claim-cas runs
+title: 'Show a spinner animation while claim-cas runs'
 slug: claim-cas-spinner
 issue: 138
 origin: issue

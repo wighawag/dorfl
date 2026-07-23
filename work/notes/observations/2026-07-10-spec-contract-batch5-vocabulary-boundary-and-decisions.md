@@ -1,5 +1,5 @@
 ---
-title: spec→spec batch 5 (protocol contract + to-spec skill) — option-A vocabulary boundary + decisions for the leak scan
+title: 'spec→spec batch 5 (protocol contract + to-spec skill) — option-A vocabulary boundary + decisions for the leak scan'
 slug: 2026-07-10-spec-contract-batch5-vocabulary-boundary-and-decisions
 triaged: resolve
 ---

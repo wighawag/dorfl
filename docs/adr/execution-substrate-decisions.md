@@ -1,5 +1,5 @@
 ---
-title: Execution substrate decisions — jobs, isolation, deletion safety, seams, arbiters
+title: 'Execution substrate decisions — jobs, isolation, deletion safety, seams, arbiters'
 slug: execution-substrate-decisions
 type: finding
 created: 2026-06-03

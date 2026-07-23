@@ -1,5 +1,5 @@
 ---
-title: main-divergence guard + non-fatal local-main sync for in-place do/complete --merge
+title: 'main-divergence guard + non-fatal local-main sync for in-place do/complete --merge'
 slug: main-divergence-guard
 blockedBy: [do-in-place]
 covers: []

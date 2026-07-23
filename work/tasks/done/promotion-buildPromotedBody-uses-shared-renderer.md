@@ -1,5 +1,5 @@
 ---
-title: Rewire triage-persist.buildPromotedBody to the shared renderer (retain the pre-claim guard)
+title: 'Rewire triage-persist.buildPromotedBody to the shared renderer (retain the pre-claim guard)'
 slug: promotion-buildPromotedBody-uses-shared-renderer
 spec: centralize-buildable-task-renderer-shared-by-intake-and-promotion
 blockedBy: [shared-buildable-task-and-prd-body-renderer-extract]

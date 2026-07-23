@@ -1,5 +1,5 @@
 ---
-title: The question/answer sidecar is reformatted for human readability on GitHub (Markdown content + machine fields in HTML comments), at the cost of byte-exact round-trip
+title: 'The question/answer sidecar is reformatted for human readability on GitHub (Markdown content + machine fields in HTML comments), at the cost of byte-exact round-trip'
 status: accepted
 created: 2026-06-20
 decided: 2026-06-20
