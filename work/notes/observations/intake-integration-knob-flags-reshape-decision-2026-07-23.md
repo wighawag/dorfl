@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # Decision: how `IntakeIntegrationFlags` / `deriveIntakeFlags` were reshaped for the `intakeIntegration` knob (2026-07-23)
 
 Recorded from task `intake-integration-knob` (spec `intake-integration-knob-and-specs-land-in-proposed-rename`) so the reviewer + a human can ratify or reverse the in-scope shape choice. Linked from that task's done record.
