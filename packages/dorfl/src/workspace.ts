@@ -1,4 +1,10 @@
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+	existsSync,
+	lstatSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
 import {git} from './git.js';
 import {
@@ -440,6 +446,72 @@ export function updateJobRecord(
 	return next;
 }
 
+/**
+ * Clear a stale worktree PATH the contract-safe way, SELF-HEALING a half-set-up
+ * claim. `git worktree remove --force` is the normal path, but it REFUSES with
+ * "is not a working tree" when `dir` is a leftover that git never registered — a
+ * dangling `~/.dorfl/work/<id>` SYMLINK, or a bare directory from a run that
+ * crashed AFTER the path appeared but BEFORE `git worktree add` registered it
+ * (an early `spawn git ENOENT`, exactly the failure this whole change targets).
+ * In that case git's own removal + `worktree prune` both leave the path in place,
+ * so the NEXT `git worktree add <dir>` fails "already exists" and the claim is
+ * wedged until a human `rm`s it by hand.
+ *
+ * So: if after the git removal the path STILL EXISTS and is NOT a live
+ * registered worktree, fall back to a BOUNDED `rmSync` of that one path. This is
+ * ADR §4-safe — we only ever `rm` a path git ITSELF refused to manage and that
+ * carries no registered worktree (no durable work to lose): a broken symlink, or
+ * an orphaned dir git does not know about. A genuinely registered worktree is
+ * removed by git and never reaches the `rmSync`.
+ */
+function forceClearWorktreePath(
+	mirrorPath: string,
+	dir: string,
+	env: NodeJS.ProcessEnv | undefined,
+): void {
+	if (!pathPresent(dir)) {
+		return;
+	}
+	// Soft-remove: ignore errors (e.g. the dir is not a registered worktree).
+	try {
+		git(['worktree', 'remove', '--force', dir], mirrorPath, {env});
+	} catch {
+		// fall through to the prune + orphan-rm below
+	}
+	try {
+		git(['worktree', 'prune'], mirrorPath, {env});
+	} catch {
+		// best-effort
+	}
+	// If the path survived git's removal + prune it is an ORPHAN git will not
+	// manage (a dangling symlink / an un-registered dir). Remove that one path so
+	// the re-create's `worktree add` is not blocked. Never recurse into a
+	// registered worktree (git already handled those).
+	if (pathPresent(dir)) {
+		try {
+			rmSync(dir, {recursive: true, force: true});
+		} catch {
+			// best-effort: a genuine permission error surfaces on the next add
+		}
+	}
+}
+
+/**
+ * True iff `dir` EXISTS as a path entry — including a DANGLING symlink (whose
+ * target is gone). `existsSync` follows symlinks so it returns `false` for a
+ * broken one, which would let an orphaned `~/.dorfl/work/<id>` symlink slip past
+ * the cleanup; `lstatSync` inspects the LINK itself, so a dangling symlink is
+ * still seen (and removed).
+ */
+function pathPresent(dir: string): boolean {
+	try {
+		lstatSync(dir);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /** Remove a stale worktree dir / branch registration before re-creating. */
 function clearStale(
 	mirrorPath: string,
@@ -447,14 +519,7 @@ function clearStale(
 	branch: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): void {
-	if (existsSync(dir)) {
-		// Soft-remove: ignore errors (e.g. the dir is not a registered worktree).
-		try {
-			git(['worktree', 'remove', '--force', dir], mirrorPath, {env});
-		} catch {
-			// fall through to prune below
-		}
-	}
+	forceClearWorktreePath(mirrorPath, dir, env);
 	pruneAndDropBranch(mirrorPath, branch, env);
 }
 
@@ -469,18 +534,7 @@ function clearStaleWorktreeOnly(
 	dir: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): void {
-	if (existsSync(dir)) {
-		try {
-			git(['worktree', 'remove', '--force', dir], mirrorPath, {env});
-		} catch {
-			// fall through to prune below
-		}
-	}
-	try {
-		git(['worktree', 'prune'], mirrorPath, {env});
-	} catch {
-		// best-effort
-	}
+	forceClearWorktreePath(mirrorPath, dir, env);
 }
 
 /** Prune dangling worktree registrations + delete the work branch if present. */

@@ -1,4 +1,4 @@
-import {existsSync, readdirSync, statSync} from 'node:fs';
+import {existsSync, lstatSync, readdirSync, rmSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 import {git, run} from './git.js';
 import {
@@ -261,11 +261,29 @@ export interface GcOptions {
 	env?: NodeJS.ProcessEnv;
 }
 
+/**
+ * An ORPHAN `<workspacesDir>/work/*` entry `gc` swept: a path git never
+ * registered as a worktree and that carries NO job record — a dangling symlink,
+ * or a bare directory left by a run that crashed BEFORE `git worktree add`
+ * registered it (an early `spawn git ENOENT`). It holds no durable work, so it is
+ * always safe to remove; sweeping it self-heals a half-set-up claim instead of
+ * leaving it to wedge the next `worktree add` ("already exists") until a human
+ * `rm`s it. Reported SEPARATELY from reaped jobs (it was never a real job).
+ */
+export interface SweptOrphan {
+	/** Absolute path to the orphan entry that was removed. */
+	dir: string;
+	/** Whether the orphan was a dangling symlink or an un-registered directory. */
+	kind: 'dangling-symlink' | 'orphan-dir';
+}
+
 export interface GcResult {
 	/** The worktrees reaped this sweep (provably safe, or forced). */
 	reaped: ReapedJob[];
 	/** The worktrees retained, each with a clear reason. */
 	retained: RetainedJob[];
+	/** Record-less orphan `work/*` entries swept (dangling symlinks / orphan dirs). */
+	sweptOrphans: SweptOrphan[];
 }
 
 /**
@@ -283,6 +301,11 @@ export function gc(options: GcOptions): GcResult {
 	const env = options.env;
 	const reaped: ReapedJob[] = [];
 	const retained: RetainedJob[] = [];
+
+	// First, self-heal any record-less ORPHAN `work/*` entry (a dangling symlink
+	// or a dir git never registered) so a half-set-up claim does not linger unseen
+	// by the job loop below and wedge the next `worktree add`.
+	const sweptOrphans = sweepOrphans(options.workspacesDir, note);
 
 	for (const job of discoverJobs(options.workspacesDir)) {
 		const mirrorPath = resolveMirrorPath(options.workspacesDir, job);
@@ -310,7 +333,77 @@ export function gc(options: GcOptions): GcResult {
 		note(`Retained ${job.slug}: ${reasonText}.`);
 	}
 
-	return {reaped, retained};
+	return {reaped, retained, sweptOrphans};
+}
+
+/**
+ * Sweep record-less ORPHAN entries under `<workspacesDir>/work/*`: a DANGLING
+ * SYMLINK (its target gone) or a directory with NO job record at either the
+ * sibling or legacy in-tree location. These are the residue of a run that
+ * crashed BETWEEN creating the `work/<id>` path and registering it as a git
+ * worktree (or writing its record) — e.g. an early `spawn git ENOENT`. They hold
+ * no durable work, are invisible to {@link discoverJobs} (which requires a
+ * record), and block the next same-id `worktree add`. Removing them is a bounded
+ * `rmSync` of ONE path each (never a registered worktree — those carry a record
+ * and go through the reap predicate). Best-effort per entry.
+ */
+function sweepOrphans(
+	workspacesDir: string,
+	note: (message: string) => void,
+): SweptOrphan[] {
+	const workDir = join(workspacesDir, 'work');
+	if (!existsSync(workDir)) {
+		return [];
+	}
+	const swept: SweptOrphan[] = [];
+	for (const entry of readdirSync(workDir)) {
+		if (entry.endsWith('.json')) {
+			continue; // a sibling record file, not a work-id entry
+		}
+		const dir = join(workDir, entry);
+		let link;
+		try {
+			link = lstatSync(dir);
+		} catch {
+			continue; // vanished under us
+		}
+		const isSymlink = link.isSymbolicLink();
+		const targetExists = existsSync(dir); // follows the link; false ⇒ dangling
+		const hasRecord =
+			existsSync(jobRecordPath(dir)) ||
+			(targetExists && existsSync(join(dir, JOB_RECORD_FILENAME)));
+		// Orphan iff: a dangling symlink (target gone), OR a record-less entry that
+		// is not a live directory git could own (a stray symlink-to-elsewhere, or a
+		// dir with no record). A record-bearing entry is a real job → leave it to the
+		// reap predicate above.
+		const danglingSymlink = isSymlink && !targetExists;
+		if (hasRecord) {
+			continue;
+		}
+		if (!danglingSymlink) {
+			// A record-less real directory: only sweep it if git does not track it as a
+			// worktree here. `discoverJobs` already skips it (no record), and a
+			// registered worktree always has our record, so a record-less dir is an
+			// orphan. But be conservative: skip a NON-symlink dir that is not empty of
+			// a `.git` pointer only when it looks like a crashed pre-register dir.
+			if (isSymlink && targetExists) {
+				// symlink to a live path but no record → still an orphan link
+			} else if (!link.isDirectory()) {
+				continue; // not a dir, not a dangling link — leave alone
+			} else if (existsSync(join(dir, '.git'))) {
+				continue; // has a git pointer but no record: leave for a human (rare)
+			}
+		}
+		try {
+			rmSync(dir, {recursive: true, force: true});
+			const kind = danglingSymlink ? 'dangling-symlink' : 'orphan-dir';
+			swept.push({dir, kind});
+			note(`Swept orphan work entry ${entry} (${kind}).`);
+		} catch {
+			// best-effort: a permission error surfaces on the next add attempt
+		}
+	}
+	return swept;
 }
 
 /**

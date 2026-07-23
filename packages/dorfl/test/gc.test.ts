@@ -1,8 +1,20 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from 'node:fs';
 import {join} from 'node:path';
 import {git} from '../src/git.js';
-import {createJob, readJobRecord, type Job} from '../src/workspace.js';
+import {
+	createJob,
+	readJobRecord,
+	jobWorktreePath,
+	type Job,
+} from '../src/workspace.js';
 import {evaluateDeletionSafety, reapJob, gc, discoverJobs} from '../src/gc.js';
 import {
 	makeScratch,
@@ -433,5 +445,67 @@ describe('gc — record sanity', () => {
 		gc({workspacesDir: join(scratch.root, '.dorfl'), env: gitEnv()});
 		const record = readJobRecord(job.dir);
 		expect(record?.slug).toBe('feat');
+	});
+});
+
+describe('gc — orphan self-heal (half-set-up claim residue)', () => {
+	it('sweeps a DANGLING work/ symlink that git never registered (the manual-rm case)', () => {
+		const workspacesDir = join(scratch.root, '.dorfl');
+		const workDir = join(workspacesDir, 'work');
+		mkdirSync(workDir, {recursive: true});
+		// A dangling symlink: exactly the residue observed (`work/<id> -> claim/<id>`
+		// where the claim target is gone), invisible to discoverJobs (no record).
+		const orphan = join(workDir, 'github-com__wighawag__richelieu__');
+		symlinkSync(join(workspacesDir, 'claim', 'gone'), orphan);
+
+		const result = gc({workspacesDir, env: gitEnv()});
+		expect(result.sweptOrphans).toHaveLength(1);
+		expect(result.sweptOrphans[0].kind).toBe('dangling-symlink');
+		expect(existsSync(orphan)).toBe(false);
+	});
+
+	it('sweeps a record-less orphan DIRECTORY (crashed before worktree add / record write)', () => {
+		const workspacesDir = join(scratch.root, '.dorfl');
+		const workDir = join(workspacesDir, 'work');
+		const orphan = join(workDir, 'host__org__repo__slug');
+		mkdirSync(orphan, {recursive: true});
+		writeFileSync(join(orphan, 'leftover.txt'), 'partial\n');
+
+		const result = gc({workspacesDir, env: gitEnv()});
+		expect(result.sweptOrphans.map((o) => o.kind)).toContain('orphan-dir');
+		expect(existsSync(orphan)).toBe(false);
+	});
+
+	it('does NOT sweep a real job worktree (it carries a record) — retains un-merged work', () => {
+		const {job, workspacesDir} = setupJob('keepme');
+		commitWork(job); // un-merged → the reap predicate RETAINS it
+		const result = gc({workspacesDir, env: gitEnv()});
+		expect(result.sweptOrphans).toHaveLength(0);
+		expect(existsSync(job.dir)).toBe(true);
+	});
+});
+
+describe('createJob — self-heals a leftover path blocking worktree add', () => {
+	it('recreates over a record-less orphan DIR left by a prior crashed attempt', () => {
+		const subRoot = join(scratch.root, 'arb-recreate');
+		const {arbiter} = seedRepoWithArbiter(subRoot, ['recreate']);
+		const url = `file://${arbiter}`;
+		const workspacesDir = join(scratch.root, '.dorfl');
+		// Simulate a prior run that created the work-id DIR but crashed BEFORE
+		// `git worktree add` registered it (e.g. an early spawn git ENOENT).
+		const dir = jobWorktreePath(workspacesDir, url, 'recreate');
+		mkdirSync(dir, {recursive: true});
+		writeFileSync(join(dir, 'stale.txt'), 'half\n');
+
+		// createJob must self-heal (clear the orphan) and succeed — no manual rm.
+		const job = createJob({
+			url,
+			slug: 'recreate',
+			workspacesDir,
+			env: gitEnv(),
+		});
+		expect(existsSync(join(job.dir, '.git'))).toBe(true);
+		expect(readJobRecord(job.dir)?.slug).toBe('recreate');
+		expect(existsSync(join(job.dir, 'stale.txt'))).toBe(false);
 	});
 });

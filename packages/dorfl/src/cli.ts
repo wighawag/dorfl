@@ -3652,8 +3652,15 @@ export function buildProgram(): Command {
 					`  [retained] ${retained.slug} \u2014 ${RETAIN_REASON_TEXT[retained.reason]}`,
 				);
 			}
+			for (const orphan of result.sweptOrphans) {
+				console.log(`  [swept]    ${orphan.dir} \u2014 ${orphan.kind}`);
+			}
+			const orphanNote =
+				result.sweptOrphans.length > 0
+					? `, ${result.sweptOrphans.length} orphan(s) swept`
+					: '';
 			console.log(
-				`Summary: ${result.reaped.length} reaped, ${result.retained.length} retained.`,
+				`Summary: ${result.reaped.length} reaped, ${result.retained.length} retained${orphanNote}.`,
 			);
 		});
 
