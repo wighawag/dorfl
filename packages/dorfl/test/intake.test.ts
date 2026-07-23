@@ -26,6 +26,9 @@ import {
 	type CloseIssueInput,
 } from '../src/issue-provider.js';
 import {mergeConfig} from '../src/config.js';
+import {resolveRepoConfig, REPO_CONFIG_FILENAME} from '../src/repo-config.js';
+import {resolveIntakeIntegrationModes} from '../src/intake.js';
+import {deriveIntakeFlags} from '../src/intake-trigger-template.js';
 import {
 	makeScratch,
 	isolatePiAgentDir,
@@ -1534,6 +1537,119 @@ describe('intake <N> — per-outcome integration modes reach performIntegration'
 		gitIn(['fetch', '-q', ARBITER], repo);
 		const remoteBranches = gitIn(['branch', '-r'], repo);
 		expect(remoteBranches).not.toMatch(/arbiter\/work\//);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The `intakeIntegration` KNOB, END-TO-END through the resolver → derivation →
+// document landing (spec `intake-integration-knob-and-specs-land-in-proposed-rename`
+// US #1/#3/#4; task acceptance criterion 4). Proves the FULL seam the CI workflow
+// exercises: a committed `dorfl.json` resolves the intake DOCUMENT mode as
+// `intakeIntegration ?? integration` (DECOUPLED from the autonomy gates), that mode
+// flows through `deriveIntakeFlags` → `resolveIntakeIntegrationModes` → the offline
+// `performIntake`, and the DOCUMENT actually MERGES to main. The untrusted variant
+// merges the DOCUMENT the same way (only the stamp differs) while its later BUILD
+// is forced to a PR by the carried stamp (that build-propose leg is covered in the
+// untrusted-placement suite above; here we pin the DOCUMENT merge + the stamp).
+// ---------------------------------------------------------------------------
+describe('intake <N> — the `intakeIntegration` knob drives the document mode end-to-end (config → derivation → merge), decoupled from autoBuild/autoTask', () => {
+	// Resolve the intake document modes the CI workflow would, from a committed
+	// dorfl.json: the resolved `intakeIntegration ?? integration` value, run through
+	// the pure derivation, then the CLI flag resolver — exactly the chain
+	// cli.ts + intake.yml apply.
+	const intakeModesFrom = (
+		repo: string,
+		authorTrusted: boolean,
+	): {task: 'merge' | 'propose'; spec: 'merge' | 'propose'} => {
+		const cfg = resolveRepoConfig({
+			repoPath: repo,
+			global: mergeConfig({}),
+		}).config;
+		const mode = cfg.intakeIntegration ?? cfg.integration;
+		const flags = deriveIntakeFlags({intakeIntegration: mode, authorTrusted});
+		return resolveIntakeIntegrationModes(
+			{
+				mergeTask: flags.task === 'merge',
+				proposeTask: flags.task === 'propose',
+				mergeSpec: flags.spec === 'merge',
+				proposeSpec: flags.spec === 'propose',
+			},
+			mode,
+		);
+	};
+
+	it('`integration: merge` + `autoBuild: true` (intakeIntegration unset) ⇒ a TRUSTED task DOCUMENT MERGES to main — autonomy does NOT force a document PR', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		// The target config from the spec: autonomy ON, integration merge, no
+		// intakeIntegration line (it falls back to integration).
+		writeFileSync(
+			join(repo, REPO_CONFIG_FILENAME),
+			JSON.stringify({
+				integration: 'merge',
+				autoBuild: true,
+				autoTask: true,
+			}),
+		);
+		gitIn(['add', REPO_CONFIG_FILENAME], repo);
+		gitIn(['commit', '-q', '-m', 'add dorfl.json'], repo);
+		const modes = intakeModesFrom(repo, true);
+		expect(modes.task).toBe('merge');
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => TASK_VERDICT,
+			reviewTask: convergingReviewGate,
+			integration: modes,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		// The DOCUMENT merged to main (STAGED in tasks/backlog/ by default placement),
+		// even though autoBuild/autoTask are ON — the knob is decoupled from the gates.
+		expect(existsOnArbiterMain(repo, 'pre-backlog', 'add-quiet-flag')).toBe(
+			true,
+		);
+		expect(result.emitted).toBe('work/tasks/backlog/add-quiet-flag.md');
+	});
+
+	it('`integration: merge` (intakeIntegration unset) ⇒ an UNTRUSTED task DOCUMENT MERGES to main carrying the stamp (only the stamp differs from trusted; no document PR)', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		writeFileSync(
+			join(repo, REPO_CONFIG_FILENAME),
+			JSON.stringify({integration: 'merge', autoBuild: true}),
+		);
+		gitIn(['add', REPO_CONFIG_FILENAME], repo);
+		gitIn(['commit', '-q', '-m', 'add dorfl.json'], repo);
+		// An untrusted author resolves the SAME document mode (merge) — only the
+		// origin-trust stamp changes. Opt the untrusted landing into the pool so the
+		// merged document is directly comparable to the trusted case.
+		const modes = intakeModesFrom(repo, false);
+		expect(modes.task).toBe('merge');
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => TASK_VERDICT,
+			reviewTask: convergingReviewGate,
+			originTrust: 'untrusted',
+			integration: modes,
+			untrustedTasksLandIn: 'ready',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		// The DOCUMENT merged to main (the pool, opted-in) carrying the untrusted
+		// stamp — NOT a document PR. The later BUILD-propose leg is covered by the
+		// untrusted-placement suite above.
+		expect(existsOnArbiterMain(repo, 'backlog', 'add-quiet-flag')).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const onMain = gitIn(
+			['show', `${ARBITER}/main:work/tasks/ready/add-quiet-flag.md`],
+			repo,
+		);
+		expect(onMain).toMatch(/^origin: issue$/m);
+		expect(onMain).toMatch(/^originTrust: untrusted$/m);
 	});
 });
 

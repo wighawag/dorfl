@@ -17,6 +17,10 @@ describe('envVarName', () => {
 		// so `DORFL_TASKING_INTEGRATION` resolves
 		// (`per-transition-integration-mode-slicing-vs-build`).
 		expect(envVarName('taskingIntegration')).toBe('DORFL_TASKING_INTEGRATION');
+		// `intakeIntegration` (the per-TRANSITION INTAKE-DOCUMENT override) maps
+		// mechanically, so `DORFL_INTAKE_INTEGRATION` resolves (spec
+		// `intake-integration-knob-and-specs-land-in-proposed-rename`).
+		expect(envVarName('intakeIntegration')).toBe('DORFL_INTAKE_INTEGRATION');
 	});
 });
 
@@ -218,6 +222,14 @@ describe('envOverrides — enum coercion', () => {
 		});
 		expect(envOverrides({DORFL_TASKING_INTEGRATION: 'propose'})).toEqual({
 			taskingIntegration: 'propose',
+		});
+		// `intakeIntegration` coerces as the SAME propose/merge enum as `integration`
+		// (spec `intake-integration-knob-and-specs-land-in-proposed-rename`).
+		expect(envOverrides({DORFL_INTAKE_INTEGRATION: 'merge'})).toEqual({
+			intakeIntegration: 'merge',
+		});
+		expect(envOverrides({DORFL_INTAKE_INTEGRATION: 'propose'})).toEqual({
+			intakeIntegration: 'propose',
 		});
 		// `tasksLandIn` (the per-repo TASK-PLACEMENT default, task
 		// `runner-deterministic-slice-placement-policy-and-precedence`) coerces as

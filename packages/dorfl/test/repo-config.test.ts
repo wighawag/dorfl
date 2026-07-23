@@ -101,6 +101,12 @@ describe('repo-config constants', () => {
 		// while still building each task as a PR is agreed by all collaborators + travels
 		// with the repo. (`per-transition-integration-mode-slicing-vs-build`.)
 		expect(REPO_ALLOWED_KEYS).toContain('taskingIntegration');
+		// `intakeIntegration` (the per-TRANSITION INTAKE-DOCUMENT override, twin of
+		// `taskingIntegration`) is a genuine repo property like `integration`: whether
+		// THIS repo's intake front door emits a task/spec DOCUMENT straight onto main
+		// or as a PR is agreed by all collaborators + travels with the repo (spec
+		// `intake-integration-knob-and-specs-land-in-proposed-rename`).
+		expect(REPO_ALLOWED_KEYS).toContain('intakeIntegration');
 		// `promptGuidance` (the NUDGE namespace — prompt-text knobs, NOT a gate) is a
 		// genuine repo property: "is this repo nudged toward test-first?" travels with
 		// the repo and is agreed by all collaborators. Resolved per-repo through the
@@ -426,6 +432,59 @@ describe('resolveRepoConfig — per-key layering', () => {
 				env: {DORFL_TASKING_INTEGRATION: 'propose'},
 				flags: {taskingIntegration: 'merge'},
 			}).config.taskingIntegration,
+		).toBe('merge');
+	});
+
+	// `intakeIntegration` (the per-TRANSITION INTAKE-DOCUMENT override, twin of
+	// `taskingIntegration`; spec `intake-integration-knob-and-specs-land-in-proposed-rename`)
+	// resolves through the SAME chain as `integration` and the intake caller reads
+	// it as `intakeIntegration ?? integration` (the FALLBACK is applied at the CLI
+	// seam `cli.ts`; here we pin the config-resolution half).
+	it('a per-repo `intakeIntegration` overrides the global for the intake document; `integration` is independent', () => {
+		writeRepoConfig(repo, {
+			integration: 'merge',
+			intakeIntegration: 'propose',
+		});
+		const global = mergeConfig({integration: 'merge'});
+		const config = resolveRepoConfig({repoPath: repo, global, env: {}}).config;
+		expect(config.integration).toBe('merge');
+		expect(config.intakeIntegration).toBe('propose');
+	});
+
+	it("UNSET `intakeIntegration` resolves to undefined (the caller falls back to `integration` ⇒ byte-for-byte today's behaviour)", () => {
+		writeRepoConfig(repo, {integration: 'merge'});
+		const global = mergeConfig({integration: 'propose'});
+		const config = resolveRepoConfig({repoPath: repo, global, env: {}}).config;
+		expect(config.integration).toBe('merge');
+		// No default in DEFAULT_CONFIG — unset means "fall back to integration", which
+		// the intake caller does with `intakeIntegration ?? integration`.
+		expect(config.intakeIntegration).toBeUndefined();
+	});
+
+	it("resolves `intakeIntegration` flag > env > per-repo > global (the new key rides `integration`'s chain)", () => {
+		// per-repo opts the intake override to merge over an unset global.
+		writeRepoConfig(repo, {intakeIntegration: 'merge'});
+		const global = mergeConfig({integration: 'propose'});
+		expect(
+			resolveRepoConfig({repoPath: repo, global, env: {}}).config
+				.intakeIntegration,
+		).toBe('merge');
+		// env (DORFL_INTAKE_INTEGRATION) beats the per-repo file.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_INTAKE_INTEGRATION: 'propose'},
+			}).config.intakeIntegration,
+		).toBe('propose');
+		// a flag beats env.
+		expect(
+			resolveRepoConfig({
+				repoPath: repo,
+				global,
+				env: {DORFL_INTAKE_INTEGRATION: 'propose'},
+				flags: {intakeIntegration: 'merge'},
+			}).config.intakeIntegration,
 		).toBe('merge');
 	});
 

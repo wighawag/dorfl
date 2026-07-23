@@ -91,201 +91,194 @@ afterEach(() => {
 
 // ─── the AUTHOR-TRUST → per-outcome-flags DERIVATION (CI's POLICY) ────────────
 
-describe('deriveIntakeFlags — file-emit mode is GATE-derived; author-trust drives only the stamp + placement (ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
-	it('TRUSTED author + both gates OFF ⇒ merge BOTH (permissive gate-derived default)', () => {
+describe('deriveIntakeFlags — the DOCUMENT mode is the resolved `intakeIntegration`, decoupled from the autonomy gates; author-trust drives only the stamp + placement (spec intake-integration-knob-and-specs-land-in-proposed-rename; ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
+	it('intakeIntegration merge + TRUSTED author ⇒ merge BOTH (the document merges to main)', () => {
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: false},
+				intakeIntegration: 'merge',
 				authorTrusted: true,
 			}),
 		).toEqual({spec: 'merge', task: 'merge', originTrust: 'trusted'});
 	});
 
-	it('UNTRUSTED author + both gates OFF ⇒ STILL merge BOTH; author-trust changes only the stamp (the DOCUMENT is not force-PR’d)', () => {
-		// The task DOCUMENT now MERGES for an untrusted author exactly like a
-		// trusted one (gate off); the only difference is the origin-trust STAMP,
-		// which carries the placement + build-PR safety (ADR core move).
+	it('intakeIntegration merge + UNTRUSTED author ⇒ STILL merge BOTH; author-trust changes only the stamp (the DOCUMENT is not force-PR’d)', () => {
+		// The DOCUMENT now MERGES for an untrusted author exactly like a trusted one
+		// (mode is intakeIntegration, not author-trust); the only difference is the
+		// origin-trust STAMP, which carries the placement + build-PR safety (ADR).
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: false},
+				intakeIntegration: 'merge',
 				authorTrusted: false,
 			}),
 		).toEqual({spec: 'merge', task: 'merge', originTrust: 'untrusted'});
 	});
 
-	it('autoBuild ON ⇒ --propose-task (gate-derived) — SAME for a trusted or untrusted author', () => {
+	it('intakeIntegration propose ⇒ propose BOTH (a SINGLE knob applied to both the spec and task document) — SAME for a trusted or untrusted author', () => {
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: true, autoTask: false},
+				intakeIntegration: 'propose',
 				authorTrusted: true,
 			}),
-		).toEqual({spec: 'merge', task: 'propose', originTrust: 'trusted'});
+		).toEqual({spec: 'propose', task: 'propose', originTrust: 'trusted'});
 		expect(
 			deriveIntakeFlags({
-				gate: {autoBuild: true, autoTask: false},
+				intakeIntegration: 'propose',
 				authorTrusted: false,
 			}),
-		).toEqual({spec: 'merge', task: 'propose', originTrust: 'untrusted'});
+		).toEqual({spec: 'propose', task: 'propose', originTrust: 'untrusted'});
 	});
 
-	it('autoTask ON forces --propose-spec (an agent will auto-slice it → human PR checkpoint now)', () => {
-		expect(
-			deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: true},
-				authorTrusted: true,
-			}),
-		).toEqual({spec: 'propose', task: 'merge', originTrust: 'trusted'});
-	});
-
-	it('originTrust is the author-trust verdict CARRIED for the stamp (trusted⇒trusted, untrusted⇒untrusted), independent of the gates', () => {
-		// The stamp is derived from the SAME authorTrusted input as the modes, so it
-		// cannot desync; it does not depend on the gate state.
-		for (const autoBuild of [false, true]) {
-			for (const autoTask of [false, true]) {
-				expect(
-					deriveIntakeFlags({gate: {autoBuild, autoTask}, authorTrusted: true})
-						.originTrust,
-				).toBe('trusted');
-				expect(
-					deriveIntakeFlags({
-						gate: {autoBuild, autoTask},
-						authorTrusted: false,
-					}).originTrust,
-				).toBe('untrusted');
+	it('the spec and task document mode are ALWAYS the same single value (US #1 chose one intake knob, not a per-type split)', () => {
+		for (const intakeIntegration of ['merge', 'propose'] as const) {
+			for (const authorTrusted of [true, false]) {
+				const flags = deriveIntakeFlags({intakeIntegration, authorTrusted});
+				expect(flags.spec).toBe(intakeIntegration);
+				expect(flags.task).toBe(intakeIntegration);
+				expect(flags.spec).toBe(flags.task);
 			}
 		}
 	});
 
-	it('the file-emit MODE is INDEPENDENT of author-trust — both modes match for a trusted vs untrusted author at every gate combination', () => {
+	it('originTrust is the author-trust verdict CARRIED for the stamp (trusted⇒trusted, untrusted⇒untrusted), independent of the mode', () => {
+		// The stamp is derived from the SAME authorTrusted input as the mode, so it
+		// cannot desync; it does not depend on the intakeIntegration value.
+		for (const intakeIntegration of ['merge', 'propose'] as const) {
+			expect(
+				deriveIntakeFlags({intakeIntegration, authorTrusted: true}).originTrust,
+			).toBe('trusted');
+			expect(
+				deriveIntakeFlags({intakeIntegration, authorTrusted: false})
+					.originTrust,
+			).toBe('untrusted');
+		}
+	});
+
+	it('the document MODE is INDEPENDENT of author-trust — both modes match for a trusted vs untrusted author at every intakeIntegration value', () => {
 		// The ADR invariant: a trusted and an untrusted author differ ONLY in the
 		// stamp, never in whether the spec/task DOCUMENT is merged or proposed.
-		for (const autoBuild of [false, true]) {
-			for (const autoTask of [false, true]) {
-				const trusted = deriveIntakeFlags({
-					gate: {autoBuild, autoTask},
-					authorTrusted: true,
-				});
-				const untrusted = deriveIntakeFlags({
-					gate: {autoBuild, autoTask},
-					authorTrusted: false,
-				});
-				expect(untrusted.spec).toBe(trusted.spec);
-				expect(untrusted.task).toBe(trusted.task);
-				// ...and only the stamp differs.
-				expect(trusted.originTrust).toBe('trusted');
-				expect(untrusted.originTrust).toBe('untrusted');
-			}
+		for (const intakeIntegration of ['merge', 'propose'] as const) {
+			const trusted = deriveIntakeFlags({
+				intakeIntegration,
+				authorTrusted: true,
+			});
+			const untrusted = deriveIntakeFlags({
+				intakeIntegration,
+				authorTrusted: false,
+			});
+			expect(untrusted.spec).toBe(trusted.spec);
+			expect(untrusted.task).toBe(trusted.task);
+			// ...and only the stamp differs.
+			expect(trusted.originTrust).toBe('trusted');
+			expect(untrusted.originTrust).toBe('untrusted');
 		}
 	});
 
-	it('the task mode is GATE-derived: --merge-task iff autoBuild OFF, else --propose-task, regardless of author-trust', () => {
-		const grid: {
-			autoBuild: boolean;
-			authorTrusted: boolean;
-			task: 'merge' | 'propose';
-		}[] = [
-			{autoBuild: false, authorTrusted: true, task: 'merge'},
-			{autoBuild: false, authorTrusted: false, task: 'merge'},
-			{autoBuild: true, authorTrusted: true, task: 'propose'},
-			{autoBuild: true, authorTrusted: false, task: 'propose'},
-		];
-		for (const row of grid) {
-			expect(
-				deriveIntakeFlags({
-					gate: {autoBuild: row.autoBuild, autoTask: false},
-					authorTrusted: row.authorTrusted,
-				}).task,
-			).toBe(row.task);
-		}
-	});
-
-	it('the merge-everything path is simply both gates OFF (independent of author-trust)', () => {
-		// Merge both ⇒ exactly: autoTask off + autoBuild off, for EITHER author.
+	it('the merge-everything path is simply intakeIntegration merge (independent of author-trust AND of the autonomy gates)', () => {
+		// Merge both ⇒ exactly intakeIntegration merge, for EITHER author. The
+		// autonomy gates are not even an input to deriveIntakeFlags anymore.
 		for (const authorTrusted of [true, false]) {
 			const flags = deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: false},
+				intakeIntegration: 'merge',
 				authorTrusted,
 			});
 			expect(flags.spec).toBe('merge');
 			expect(flags.task).toBe('merge');
 		}
-		// Flip either gate and that type is no longer merge (trust plays no part).
+		// intakeIntegration propose ⇒ both propose (again, no gate involved).
 		expect(
-			deriveIntakeFlags({
-				gate: {autoBuild: true, autoTask: false},
-				authorTrusted: true,
-			}).task,
+			deriveIntakeFlags({intakeIntegration: 'propose', authorTrusted: true})
+				.task,
 		).toBe('propose');
 		expect(
-			deriveIntakeFlags({
-				gate: {autoBuild: false, autoTask: true},
-				authorTrusted: true,
-			}).spec,
+			deriveIntakeFlags({intakeIntegration: 'propose', authorTrusted: true})
+				.spec,
 		).toBe('propose');
 	});
 });
 
 // ─── the committed dorfl.json gate is HONORED (the shadowing bug is fixed) ────
 
-describe('config-resolution: a committed `dorfl.json` gate is HONORED (no longer shadowed by a hardcoded intake env) and flows into the intake derivation (ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
-	it('a repo `dorfl.json` with `autoBuild: true` resolves to autoBuild:true (per-repo BEATS the built-in false default), then derives --propose-task', () => {
-		// The whole point of the fix: the intake workflow used to hardcode
-		// `DORFL_AUTO_BUILD: 'false'` in env (env > per-repo), so a committed
-		// `autoBuild: true` was SHADOWED. With the env gone, the resolved config
-		// (what `dorfl config --json` prints, via `resolveRepoConfig`) reflects the
-		// committed gate. We drive the SAME resolver here and assert it wins.
+describe('config-resolution: the intake DOCUMENT mode is the resolved `intakeIntegration ?? integration`, HONORED from a committed `dorfl.json`, decoupled from the autonomy gates (spec intake-integration-knob-and-specs-land-in-proposed-rename)', () => {
+	// The resolved mode the workflow reads via `.intakeIntegration // .integration`.
+	const resolvedIntakeMode = (
+		cfg: ReturnType<typeof resolveRepoConfig>['config'],
+	): 'merge' | 'propose' => cfg.intakeIntegration ?? cfg.integration;
+
+	it('a repo `dorfl.json` with `integration: merge` + `autoBuild: true` (intakeIntegration UNSET) resolves the document mode to MERGE — autonomy no longer forces a document PR', () => {
+		// The whole point of the knob: `autoBuild: true` (autonomy) and an intake
+		// document merging to main are now compatible. `intakeIntegration` falls back
+		// to `integration` (= merge) with no extra key; the gate does NOT bite it.
 		writeFileSync(
 			join(work, REPO_CONFIG_FILENAME),
-			JSON.stringify({autoBuild: true}),
+			JSON.stringify({integration: 'merge', autoBuild: true, autoTask: true}),
 		);
 		const resolved = resolveRepoConfig({
 			repoPath: work,
-			global: mergeConfig({}), // global + built-in defaults (autoBuild:false)
+			global: mergeConfig({}),
 		}).config;
-		// The committed per-repo gate WINS over the built-in false default.
 		expect(resolved.autoBuild).toBe(true);
-		expect(resolved.autoTask).toBe(false);
-		// ...and it feeds the intake derivation the workflow runs: autoBuild on ⇒
-		// --propose-task (the task DOCUMENT gets a human PR checkpoint), which was
-		// UNREACHABLE while the env pinned the gate to false.
-		const flags = deriveIntakeFlags({
-			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
-			authorTrusted: true,
-		});
-		expect(flags.task).toBe('propose');
-		expect(flags.spec).toBe('merge');
-	});
-
-	it('a repo `dorfl.json` with `autoTask: true` resolves to autoTask:true and derives --propose-spec', () => {
-		writeFileSync(
-			join(work, REPO_CONFIG_FILENAME),
-			JSON.stringify({autoTask: true}),
-		);
-		const resolved = resolveRepoConfig({
-			repoPath: work,
-			global: mergeConfig({}),
-		}).config;
 		expect(resolved.autoTask).toBe(true);
+		// intakeIntegration unset ⇒ falls back to integration (merge).
+		expect(resolved.intakeIntegration).toBeUndefined();
+		expect(resolvedIntakeMode(resolved)).toBe('merge');
+		// ...and it feeds the intake derivation the workflow runs: BOTH documents
+		// merge, independent of the (on) autonomy gates.
 		const flags = deriveIntakeFlags({
-			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
-			authorTrusted: true,
-		});
-		expect(flags.spec).toBe('propose');
-	});
-
-	it('no `dorfl.json` ⇒ the built-in defaults (autoBuild:false / autoTask:false) resolve ⇒ both merge (the calm default)', () => {
-		const resolved = resolveRepoConfig({
-			repoPath: work,
-			global: mergeConfig({}),
-		}).config;
-		expect(resolved.autoBuild).toBe(false);
-		expect(resolved.autoTask).toBe(false);
-		const flags = deriveIntakeFlags({
-			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
+			intakeIntegration: resolvedIntakeMode(resolved),
 			authorTrusted: true,
 		});
 		expect(flags.task).toBe('merge');
 		expect(flags.spec).toBe('merge');
+	});
+
+	it('a repo `dorfl.json` with `intakeIntegration: propose` OVERRIDES `integration: merge` for the intake document (the per-transition knob wins its own transition)', () => {
+		writeFileSync(
+			join(work, REPO_CONFIG_FILENAME),
+			JSON.stringify({integration: 'merge', intakeIntegration: 'propose'}),
+		);
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}),
+		}).config;
+		expect(resolved.integration).toBe('merge');
+		expect(resolved.intakeIntegration).toBe('propose');
+		expect(resolvedIntakeMode(resolved)).toBe('propose');
+		const flags = deriveIntakeFlags({
+			intakeIntegration: resolvedIntakeMode(resolved),
+			authorTrusted: true,
+		});
+		expect(flags.task).toBe('propose');
+		expect(flags.spec).toBe('propose');
+	});
+
+	it('`DORFL_INTAKE_INTEGRATION` env beats the per-repo file for the document mode', () => {
+		writeFileSync(
+			join(work, REPO_CONFIG_FILENAME),
+			JSON.stringify({intakeIntegration: 'merge'}),
+		);
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}),
+			env: {DORFL_INTAKE_INTEGRATION: 'propose'},
+		}).config;
+		expect(resolved.intakeIntegration).toBe('propose');
+		expect(resolvedIntakeMode(resolved)).toBe('propose');
+	});
+
+	it('no `dorfl.json` ⇒ the built-in default `integration: propose` resolves (intakeIntegration unset) ⇒ both propose (the calm default; zero-config unchanged)', () => {
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}),
+		}).config;
+		expect(resolved.intakeIntegration).toBeUndefined();
+		expect(resolved.integration).toBe('propose');
+		expect(resolvedIntakeMode(resolved)).toBe('propose');
+		const flags = deriveIntakeFlags({
+			intakeIntegration: resolvedIntakeMode(resolved),
+			authorTrusted: true,
+		});
+		expect(flags.task).toBe('propose');
+		expect(flags.spec).toBe('propose');
 	});
 });
 
@@ -362,7 +355,7 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(/post a NEW comment/i.test(text)).toBe(true);
 	});
 
-	it('reads author_association off the payload, trust = OWNER/MEMBER/COLLABORATOR, derives all four per-outcome file-emit flags + the origin-trust stamp', () => {
+	it('reads author_association off the payload, trust = OWNER/MEMBER/COLLABORATOR, derives all four per-outcome file-emit flags + the origin-trust stamp; the document mode reads intakeIntegration ?? integration, NOT the autonomy gates', () => {
 		const text = generateIntakeWorkflow(config);
 		expect(/author_association/.test(text)).toBe(true);
 		expect(/OWNER\|MEMBER\|COLLABORATOR/.test(text)).toBe(true);
@@ -371,15 +364,25 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(text).toContain('--merge-task');
 		expect(text).toContain('--merge-spec');
 		expect(text).toContain('--propose-spec');
-		// The derivation reads the RESOLVED gate family via `dorfl config --json`
+		// The derivation reads the RESOLVED document mode via `dorfl config --json`
 		// (NOT a hardcoded DORFL_* env — that was the shadowing bug; ADR
 		// untrusted-origin-carries-via-stamp-not-forced-staging).
 		expect(/dorfl config --json/.test(text)).toBe(true);
-		expect(/\.autoBuild\b/.test(text)).toBe(true);
-		expect(/\.autoTask\b/.test(text)).toBe(true);
+		// The mode is `intakeIntegration ?? integration` (spec
+		// intake-integration-knob-and-specs-land-in-proposed-rename), read as
+		// `.intakeIntegration // .integration`.
+		expect(/\.intakeIntegration\s*\/\/\s*\.integration/.test(text)).toBe(true);
+		// The autonomy gates are DECOUPLED: the document mode must NOT read
+		// `.autoBuild` / `.autoTask` (operative lines) — they gate autonomy only.
+		const operative = text
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/\.autoBuild\b/.test(operative)).toBe(false);
+		expect(/\.autoTask\b/.test(operative)).toBe(false);
 	});
 
-	it('honors the repo `dorfl.json` gates by construction: emits NO DORFL_AUTO_* env assignment; the resolved gate is read via `dorfl config --json` (ADR untrusted-origin-carries-via-stamp-not-forced-staging; the shadowing bug is dead)', () => {
+	it('honors the repo `dorfl.json` by construction: emits NO DORFL_AUTO_* env assignment; the resolved document mode is read via `dorfl config --json` (ADR untrusted-origin-carries-via-stamp-not-forced-staging; the shadowing bug is dead)', () => {
 		const text = generateIntakeWorkflow(config);
 		// The OPERATIVE (non-comment) lines carry NO `DORFL_AUTO_BUILD:` /
 		// `DORFL_AUTO_TASK:` env ASSIGNMENT — an env default there OUTRANKS the
@@ -408,19 +411,20 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 	it('the workflow SHELL derivation matches deriveIntakeFlags (they cannot desync)', () => {
 		const text = generateIntakeWorkflow(config);
 		// Reproduce the workflow's shell logic in JS and assert it agrees with the
-		// pure function for every (autoBuild × autoTask × trust) combination. This
-		// pins "the artifact encodes the SAME rule the function unit-tests".
+		// pure function for every (intakeIntegration × trust) combination. This pins
+		// "the artifact encodes the SAME rule the function unit-tests": the DOCUMENT
+		// mode is the single resolved intakeIntegration value (NOT the autonomy
+		// gates), and author-trust drives ONLY the stamp.
 		const shell = (
-			autoBuild: boolean,
-			autoTask: boolean,
+			intakeIntegration: 'merge' | 'propose',
 			trusted: boolean,
 		): {spec: string; task: string; originTrust: string} => {
-			// SPEC: --propose-spec iff autoTask true, else --merge-spec (gate-derived).
-			const spec = autoTask ? '--propose-spec' : '--merge-spec';
-			// TASK: --propose-task iff autoBuild true, else --merge-task (gate-derived,
-			// SYMMETRIC with the spec). Author-trust does NOT bite the mode (ADR
-			// untrusted-origin-carries-via-stamp-not-forced-staging).
-			const task = autoBuild ? '--propose-task' : '--merge-task';
+			// DOCUMENT mode: --merge-* iff the resolved intakeIntegration is merge, else
+			// --propose-* — the SAME single value applied to both spec and task.
+			const spec =
+				intakeIntegration === 'merge' ? '--merge-spec' : '--propose-spec';
+			const task =
+				intakeIntegration === 'merge' ? '--merge-task' : '--propose-task';
 			// ORIGIN-TRUST: the ONLY thing author-trust drives — the `trusted` case
 			// carried to the stamp flag.
 			const originTrust = trusted
@@ -428,26 +432,29 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 				: '--origin-trust=untrusted';
 			return {spec, task, originTrust};
 		};
-		for (const autoBuild of [false, true]) {
-			for (const autoTask of [false, true]) {
-				for (const trusted of [false, true]) {
-					const fromShell = shell(autoBuild, autoTask, trusted);
-					const fromFn = deriveIntakeFlags({
-						gate: {autoBuild, autoTask},
-						authorTrusted: trusted,
-					});
-					expect(fromShell.spec).toBe(`--${fromFn.spec}-spec`);
-					expect(fromShell.task).toBe(`--${fromFn.task}-task`);
-					// The stamp is derived from the SAME author-trust case as the modes.
-					expect(fromShell.originTrust).toBe(
-						`--origin-trust=${fromFn.originTrust}`,
-					);
-				}
+		for (const intakeIntegration of ['merge', 'propose'] as const) {
+			for (const trusted of [false, true]) {
+				const fromShell = shell(intakeIntegration, trusted);
+				const fromFn = deriveIntakeFlags({
+					intakeIntegration,
+					authorTrusted: trusted,
+				});
+				expect(fromShell.spec).toBe(`--${fromFn.spec}-spec`);
+				expect(fromShell.task).toBe(`--${fromFn.task}-task`);
+				// The stamp is derived from the author-trust case, independent of mode.
+				expect(fromShell.originTrust).toBe(
+					`--origin-trust=${fromFn.originTrust}`,
+				);
 			}
 		}
-		// And the workflow text actually carries that shell shape (the gate reads +
-		// the OWNER/MEMBER/COLLABORATOR case + both task branches + the origin-trust
-		// stamp derived from the SAME case, passed to intake).
+		// And the workflow text actually carries that shell shape: the
+		// `intakeIntegration ?? integration` read (`.intakeIntegration //
+		// .integration`), the merge branch, the OWNER/MEMBER/COLLABORATOR case + the
+		// origin-trust stamp derived from that case, passed to intake.
+		expect(/\.intakeIntegration\s*\/\/\s*\.integration/.test(text)).toBe(true);
+		expect(/if \[ "\$\{intake_integration\}" = "merge" \]/.test(text)).toBe(
+			true,
+		);
 		expect(text).toContain('OWNER|MEMBER|COLLABORATOR');
 		expect(/case "\$\{AUTHOR_ASSOCIATION:-\}"/.test(text)).toBe(true);
 		expect(text).toContain('--origin-trust=trusted');
@@ -576,17 +583,46 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		);
 	});
 
-	it('flags a missing --propose-task branch (the autoBuild-on gate path)', () => {
+	it('flags a missing --propose-task branch (the intakeIntegration-propose path)', () => {
 		expectFlagged(
 			base.replace(/--propose-task/g, '--merge-task'),
 			'derives-propose-task',
 		);
 	});
 
-	it('flags a missing --merge-spec (the autoTask-off gate path)', () => {
+	it('flags a missing --merge-spec (the intakeIntegration-merge path)', () => {
 		expectFlagged(
 			base.replace(/--merge-spec/g, '--propose-spec'),
 			'derives-merge-spec',
+		);
+	});
+
+	it('flags dropping the intakeIntegration read (the document mode must read `.intakeIntegration`)', () => {
+		expectFlagged(
+			base.replace(/\.intakeIntegration \/\/ \.integration/g, '.integration'),
+			'reads-intake-integration',
+		);
+	});
+
+	it('flags a missing `.integration` fallback (intakeIntegration ?? integration)', () => {
+		expectFlagged(
+			base.replace(
+				/\.intakeIntegration \/\/ \.integration/g,
+				'.intakeIntegration',
+			),
+			'intake-integration-falls-back-to-integration',
+		);
+	});
+
+	it('flags the document mode being re-coupled to an autonomy gate (reading `.autoBuild` in the derivation)', () => {
+		// Regression guard: if a future edit derives the mode from `.autoBuild` off
+		// `dorfl config --json` again, `mode-not-gate-derived` must fire.
+		expectFlagged(
+			base.replace(
+				/config_json="\$\(dorfl config --json\)"/,
+				'config_json="$(dorfl config --json)"\n          gate="$(echo "${config_json}" | jq -r \'.autoBuild\')"',
+			),
+			'mode-not-gate-derived',
 		);
 	});
 
@@ -664,7 +700,7 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		);
 	});
 
-	it('flags dropping the `dorfl config --json` gate read (the resolved gate must be read as `advance` does)', () => {
+	it('flags dropping the `dorfl config --json` read (the resolved document mode must be read as `advance` does)', () => {
 		expectFlagged(
 			base.replace(/dorfl config --json/g, 'echo skip'),
 			'reads-config-json',

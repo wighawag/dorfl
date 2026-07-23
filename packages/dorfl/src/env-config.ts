@@ -98,6 +98,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// works and a typo FAILS LOUDLY. Unset ⇒ the tasking transition falls back to
 	// `integration` (the flat value). It NEVER touches the build transition or intake.
 	taskingIntegration: {enum: ['propose', 'merge']},
+	// `intakeIntegration` (the per-TRANSITION INTAKE-DOCUMENT override — the twin of
+	// `taskingIntegration` for the intake front door) coerces as the SAME
+	// `propose`/`merge` enum as `integration`, so `DORFL_INTAKE_INTEGRATION`
+	// works and a typo FAILS LOUDLY. Unset ⇒ the intake document emit falls back to
+	// `integration` (the flat value). Decoupled from the autonomy gates
+	// (`autoBuild`/`autoTask`) — the intake document PR-mode is operator/config, not
+	// a function of autonomy (ADR untrusted-origin-carries-via-stamp-not-forced-staging).
+	intakeIntegration: {enum: ['propose', 'merge']},
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #5) coerces as the
 	// `backlog`/`ready` enum, so `DORFL_TASKS_LAND_IN=ready` works and a

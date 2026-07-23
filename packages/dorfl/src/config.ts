@@ -360,6 +360,37 @@ export interface Config {
 	 */
 	taskingIntegration?: IntegrationMode;
 	/**
+	 * **Per-TRANSITION override for the INTAKE DOCUMENT emit only** — the twin of
+	 * {@link taskingIntegration} for the intake front door. When set, an
+	 * `intake`-emitted DOCUMENT (a task file `work/tasks/*` OR a spec file
+	 * `work/specs/*`) integrates with THIS mode instead of the flat
+	 * {@link integration}; the task-BUILD transition is unaffected (it always reads
+	 * {@link integration}), and neither is the tasking transition (it reads
+	 * {@link taskingIntegration}). UNSET (the default) ⇒ intake falls back to
+	 * {@link integration} — byte-for-byte today's behaviour for any repo that does
+	 * not set it, so a single `integration: 'merge'` merges documents across BOTH
+	 * the tasking and intake transitions with no extra key.
+	 *
+	 * A SINGLE value applies to both the task AND the spec document (spec
+	 * `intake-integration-knob-and-specs-land-in-proposed-rename` US #1 chose a
+	 * single knob, NOT a per-type `{task, spec}` split). Decoupled from the
+	 * AUTONOMY GATES (`autoBuild`/`autoTask`): the intake document PR-mode is now an
+	 * operator/config choice, NOT a function of "may an agent act autonomously" —
+	 * so a repo can have `autoBuild: true`/`autoTask: true` (autonomy) AND intake
+	 * documents merging to `main` at the same time (ADR
+	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). Untrusted safety is
+	 * unchanged: it rests entirely on placement (`untrusted*LandIn`) + the
+	 * build-time `originTrust: untrusted` stamp (the code PR), never a forced
+	 * document PR. Resolved per-repo like {@link taskingIntegration}: flag
+	 * (`--merge`/`--propose`) > env (`DORFL_INTAKE_INTEGRATION`) > per-repo >
+	 * global > (fall back to) `integration` > default `propose`. The intake CLI's
+	 * explicit `--merge-task`/`--merge-spec`/`--merge`/`--propose` flags still win
+	 * (operator-present, top of precedence). DISTINCT from `taskingIntegration` (a
+	 * DIFFERENT lifecycle transition) — each is its own `merge|propose` mode that
+	 * falls back to `integration`, none tied to an autonomy gate.
+	 */
+	intakeIntegration?: IntegrationMode;
+	/**
 	 * **Per-repo DEFAULT landing for the TASKER's emitted tasks** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #5, task
 	 * `runner-deterministic-slice-placement-policy-and-precedence`). Resolved

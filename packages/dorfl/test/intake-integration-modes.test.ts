@@ -128,19 +128,30 @@ describe('resolveIntakeIntegrationModes — the per-outcome resolution table', (
 		);
 	});
 
-	// `per-transition-integration-mode-slicing-vs-build`: the NEW `taskingIntegration`
-	// key is a DIFFERENT resolver (per-LIFECYCLE-TRANSITION, inside the trust
-	// boundary), NOT intake's per-EMITTED-TYPE `{task, spec}` (front door,
-	// author-trust). intake's resolver takes a FLAT `IntegrationMode` default (the
-	// CLI passes `config.integration`, never `config.taskingIntegration`), so it is
-	// structurally independent of the new key.
-	it('the intake default is the FLAT `integration` (the CLI passes `config.integration`); it never consults `taskingIntegration`', () => {
-		// The fallback the CLI supplies is `config.integration`. A repo that ALSO sets
-		// `taskingIntegration:'merge'` must NOT change intake's resolution — the only
-		// default intake sees is the `integration` value handed in here.
+	// `intake-integration-knob-and-specs-land-in-proposed-rename`: the intake
+	// DOCUMENT mode default the CLI supplies here is now `intakeIntegration ??
+	// integration` (the per-INTAKE-TRANSITION knob), NOT the tasking transition's
+	// `taskingIntegration`. This resolver takes a FLAT `IntegrationMode` default, so
+	// it stays structurally independent of BOTH per-transition keys — the CLI
+	// chooses WHICH resolved mode to hand in (cli.ts: `config.intakeIntegration ??
+	// config.integration`). The explicit `--merge-*`/`--propose-*` flags still win
+	// over the default (operator-present, top of precedence — asserted above).
+	it('the intake default is a FLAT mode handed in by the CLI (now `intakeIntegration ?? integration`); the resolver never consults `taskingIntegration`', () => {
+		// The fallback the CLI supplies is `config.intakeIntegration ??
+		// config.integration`. Whatever single mode is handed in, an UNSET type
+		// resolves to it; a repo's `taskingIntegration` is a DIFFERENT transition and
+		// never reaches this resolver.
 		expect(resolveIntakeIntegrationModes({}, 'propose')).toEqual(
 			both('propose'),
 		);
 		expect(resolveIntakeIntegrationModes({}, 'merge')).toEqual(both('merge'));
+		// The operator-present override still tops the config default: an explicit
+		// --propose-task wins over an intakeIntegration:merge default for the task.
+		expect(resolveIntakeIntegrationModes({proposeTask: true}, 'merge')).toEqual(
+			{
+				spec: 'merge',
+				task: 'propose',
+			},
+		);
 	});
 });

@@ -72,6 +72,22 @@ export const REPO_ALLOWED_KEYS = [
 	// intake's per-EMITTED-TYPE `{task, spec}` resolver (front door, author-trust):
 	// this is a per-lifecycle-transition knob, inside the boundary, config-resolved.
 	'taskingIntegration',
+	// `intakeIntegration` (the per-TRANSITION INTAKE-DOCUMENT override — the twin of
+	// `taskingIntegration` for the intake front door) is a genuine repo property
+	// exactly like `taskingIntegration`/`integration`: whether THIS repo's intake
+	// front door emits a task/spec DOCUMENT straight onto `main` (merge, no PR) or
+	// as a reviewable PR is agreed by all collaborators + travels with the repo.
+	// Resolved per-repo through the SAME chain as `taskingIntegration` (flag > env
+	// `DORFL_INTAKE_INTEGRATION` > per-repo > global), then falls back to
+	// `integration` when unset. DECOUPLED from the autonomy gates
+	// (`autoBuild`/`autoTask`): the document PR-mode is operator/config, not a
+	// function of autonomy (ADR untrusted-origin-carries-via-stamp-not-forced-staging).
+	// A SINGLE value applies to both the task AND the spec document (US #1 chose one
+	// knob, not a per-type split). DISTINCT from `taskingIntegration` (a DIFFERENT
+	// lifecycle transition) — the third member of the per-transition integration
+	// family (`integration` build / `taskingIntegration` tasking / `intakeIntegration`
+	// intake), each falling back to `integration`, none tied to a gate.
+	'intakeIntegration',
 	// `tasksLandIn` (the per-repo TASK-PLACEMENT default — staging vs pool, spec
 	// `staging-pool-position-gate-and-trust-model` US #5) is a genuine repo property
 	// exactly like `taskingIntegration`/`integration`: whether THIS repo's tasker

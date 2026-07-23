@@ -4340,14 +4340,21 @@ export function buildProgram(): Command {
 			// Resolve the PER-OUTCOME integration modes (spec US #9): `intake` decides
 			// the artifact TYPE at runtime, so a single --merge/--propose can't express
 			// a type-conditional policy. The granular flags override the aggregate; an
-			// UNSET type falls back to the per-repo/global `integration` (the SAME chain
-			// `do`/`complete` use — flag > per-repo > global > default propose). `intake`
-			// is GATE-FREE, so autoTask/autoBuild are NOT consulted (the explicit
-			// invocation is its own authorization). `intake` owns only these KNOBS; WHICH
-			// knobs CI sets is CI's POLICY (`runner-in-ci`), NOT here.
+			// UNSET type falls back to the per-repo/global `intakeIntegration ??
+			// integration` (the INTAKE-DOCUMENT knob, twin of the tasking path's
+			// `taskingIntegration ?? integration`; spec
+			// `intake-integration-knob-and-specs-land-in-proposed-rename`). DECOUPLED
+			// from the autonomy gates: `intake` is GATE-FREE, so autoTask/autoBuild are
+			// NOT consulted for the document mode (the explicit invocation is its own
+			// authorization; ADR untrusted-origin-carries-via-stamp-not-forced-staging).
+			// `intake` owns only these KNOBS; WHICH knobs CI sets is CI's POLICY
+			// (`runner-in-ci`), NOT here.
 			let modes;
 			try {
-				modes = resolveIntakeIntegrationModes(flags, config.integration);
+				modes = resolveIntakeIntegrationModes(
+					flags,
+					config.intakeIntegration ?? config.integration,
+				);
 			} catch (err) {
 				console.error(
 					`error: ${err instanceof Error ? err.message : String(err)}`,
