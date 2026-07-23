@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'intake-ci-gate-resolution' (Gate 2 app
 date: 2026-07-23
 status: open
 reviewOf: intake-ci-gate-resolution
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
