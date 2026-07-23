@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'derive-intake-flags-trust-drives-place
 date: 2026-07-23
 status: open
 reviewOf: derive-intake-flags-trust-drives-placement-not-mode
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
