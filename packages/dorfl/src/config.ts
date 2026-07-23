@@ -44,23 +44,23 @@ export type TasksLandIn = 'backlog' | 'ready';
  * `pre-prd-staging-pool-split-and-untrusted-prd-placement`, governing ADR
  * `placement-is-runner-deterministic-humanonly-is-agent-judgement`). Which
  * folder the runner lands `intake`-authored spec files in BY DEFAULT —
- * `'pre-proposed'` (staging — durable + readable but NOT in the auto-tasking
+ * `'proposed'` (staging — durable + readable but NOT in the auto-tasking
  * POOL; a runner/human promotion is needed to make the spec auto-taskable; the
  * on-disk folder for this value is `work/specs/proposed/`) or `'ready'` (the
  * auto-tasking POOL — the trusted fast-path landing, on-disk
  * `work/specs/ready/`). The same runner-deterministic placement RESOLVER
  * (`src/placement.ts`) layers on top:
- * `explicit operator flag > configured default > built-in (pre-proposed)`.
+ * `explicit operator flag > configured default > built-in (proposed)`.
  * Author-trust is NO LONGER a rung in the resolver (ADR
  * `untrusted-origin-carries-via-stamp-not-forced-staging`): the CALLER reads the
  * `originTrust:` stamp and selects the untrusted twin `untrustedSpecsLandIn`
- * (default `'pre-proposed'`; opt-in `'ready'`) as the configured default for an
+ * (default `'proposed'`; opt-in `'ready'`) as the configured default for an
  * untrusted intake spec. The SPEC twin of
  * {@link TasksLandIn}; the SAME shape, the SAME precedence chain. The value
  * spellings mirror the live spec folders (`specs/proposed/` staging,
  * `specs/ready/` pool), exactly as {@link TasksLandIn} mirrors the task folders.
  */
-export type SpecsLandIn = 'pre-proposed' | 'ready';
+export type SpecsLandIn = 'proposed' | 'ready';
 
 /**
  * The observation-triage gate (ADR `ci-config-policy-and-gate-family` §2): a
@@ -410,7 +410,7 @@ export interface Config {
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5/#6/#12). The SPEC twin
 	 * of {@link tasksLandIn}: resolved per-repo EXACTLY like it (flag
 	 * `--specs-land-in` > env `DORFL_SPECS_LAND_IN` > per-repo > global >
-	 * built-in `'pre-proposed'`). `intake`'s spec dispatch reads it and passes it as
+	 * built-in `'proposed'`). `intake`'s spec dispatch reads it and passes it as
 	 * the CONFIGURED-DEFAULT rung into the shared placement resolver
 	 * (`src/placement.ts`); the resolver overlays an EXPLICIT operator flag
 	 * (top) and the UNTRUSTED-ORIGIN force (staging) on top, in that order.
@@ -453,12 +453,12 @@ export interface Config {
 	 * US #7, governing ADR
 	 * `untrusted-origin-carries-via-stamp-not-forced-staging`). The exact TWIN of
 	 * {@link specsLandIn} for untrusted-stamped intake specs: SAME value shape
-	 * ({@link SpecsLandIn} — `pre-proposed` staging vs `ready` pool), SAME
+	 * ({@link SpecsLandIn} — `proposed` staging vs `ready` pool), SAME
 	 * resolution chain (flag `--untrusted-specs-land-in` > env
 	 * `DORFL_UNTRUSTED_SPECS_LAND_IN` > per-repo > global > built-in
-	 * `'pre-proposed'`). The caller reads the `originTrust` stamp and selects THIS
+	 * `'proposed'`). The caller reads the `originTrust` stamp and selects THIS
 	 * key (vs the trusted {@link specsLandIn}) as the placement resolver's
-	 * configured-default rung. DEFAULTS to STAGING (`'pre-proposed'`) — the
+	 * configured-default rung. DEFAULTS to STAGING (`'proposed'`) — the
 	 * conservative human-admission landing, preserving today's effective
 	 * behaviour for a repo that configures nothing; a repo opts an untrusted spec
 	 * into the pool (`'ready'`) explicitly, safety then via the carried stamp.
@@ -900,16 +900,16 @@ export const DEFAULT_CONFIG: Config = {
 	// The runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
 	tasksLandIn: 'backlog',
-	// `intake`-authored specs land STAGED (`pre-proposed/`) by default — the
+	// `intake`-authored specs land STAGED (`proposed/`) by default — the
 	// conservative landing that mirrors `tasksLandIn`'s built-in floor: a spec is
 	// durable + readable but NOT in the auto-tasking POOL until a human/runner
 	// promotes it. A repo opts into the trusted fast-path with `specsLandIn: 'ready'`
 	// (or `--specs-land-in ready` / `DORFL_SPECS_LAND_IN=ready`). The same
 	// runner-deterministic resolver overlays explicit-flag + untrusted-origin
 	// force on top of this default (`src/placement.ts`).
-	specsLandIn: 'pre-proposed',
+	specsLandIn: 'proposed',
 	// The untrusted-side placement TWINS default to STAGING (`backlog` /
-	// `pre-proposed`) — the conservative human-admission landing (ADR
+	// `proposed`) — the conservative human-admission landing (ADR
 	// `untrusted-origin-carries-via-stamp-not-forced-staging`). A repo that trusts
 	// its stamp-based pipeline opts an untrusted item into the pool (`ready`)
 	// explicitly; safety is then the carried build STAMP (a code PR), not the
@@ -919,7 +919,7 @@ export const DEFAULT_CONFIG: Config = {
 	// (`DORFL_UNTRUSTED_TASKS_LAND_IN` / `DORFL_UNTRUSTED_SPECS_LAND_IN`) > per-repo
 	// > global > built-in, exactly like their trusted twins.
 	untrustedTasksLandIn: 'backlog',
-	untrustedSpecsLandIn: 'pre-proposed',
+	untrustedSpecsLandIn: 'proposed',
 	agentCmd: '',
 	// Gate 2 (PR/code review) defaults OFF — it puts a model on the merge path, so
 	// it is opt-in (ADR §8). On an `approve` a resolved `merge` lands automatically

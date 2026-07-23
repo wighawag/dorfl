@@ -129,7 +129,7 @@ export const REPO_ALLOWED_KEYS = [
 	// repo's untrusted intake specs land STAGED (`specs/proposed/`) or in the
 	// auto-tasking POOL (`specs/ready/`) is a repo-wide policy. Resolved per-repo
 	// through the SAME chain (flag `--untrusted-specs-land-in` > env
-	// `DORFL_UNTRUSTED_SPECS_LAND_IN` > per-repo > global > built-in `pre-proposed`).
+	// `DORFL_UNTRUSTED_SPECS_LAND_IN` > per-repo > global > built-in `proposed`).
 	'untrustedSpecsLandIn',
 	// `noPR` (the PR-INTENT axis — push the branch but deliberately skip the PR) is
 	// a genuine repo property exactly like `integration`/`review`: whether this

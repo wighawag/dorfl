@@ -574,15 +574,15 @@ describe('resolveRepoConfig — per-key layering', () => {
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {DORFL_SPECS_LAND_IN: 'pre-proposed'},
+				env: {DORFL_SPECS_LAND_IN: 'proposed'},
 			}).config.specsLandIn,
-		).toBe('pre-proposed');
+		).toBe('proposed');
 		// a flag beats env.
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
 				global,
-				env: {DORFL_SPECS_LAND_IN: 'pre-proposed'},
+				env: {DORFL_SPECS_LAND_IN: 'proposed'},
 				flags: {specsLandIn: 'ready'},
 			}).config.specsLandIn,
 		).toBe('ready');
@@ -599,7 +599,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 		expect(REPO_ALLOWED_KEYS).toContain('untrustedSpecsLandIn');
 	});
 
-	it('unset ⇒ both untrusted twins resolve to STAGING (`backlog` / `pre-proposed`) — zero behaviour change for a repo configuring nothing', () => {
+	it('unset ⇒ both untrusted twins resolve to STAGING (`backlog` / `proposed`) — zero behaviour change for a repo configuring nothing', () => {
 		const bare = mergeConfig({});
 		const resolved = resolveRepoConfig({
 			repoPath: repo,
@@ -607,7 +607,7 @@ describe('resolveRepoConfig — per-key layering', () => {
 			env: {},
 		}).config;
 		expect(resolved.untrustedTasksLandIn).toBe('backlog');
-		expect(resolved.untrustedSpecsLandIn).toBe('pre-proposed');
+		expect(resolved.untrustedSpecsLandIn).toBe('proposed');
 	});
 
 	it('resolves `untrustedTasksLandIn` flag > env > per-repo > global > built-in (`backlog`)', () => {
@@ -642,17 +642,17 @@ describe('resolveRepoConfig — per-key layering', () => {
 		).toBe('backlog');
 	});
 
-	it('resolves `untrustedSpecsLandIn` flag > env > per-repo > global > built-in (`pre-proposed`)', () => {
+	it('resolves `untrustedSpecsLandIn` flag > env > per-repo > global > built-in (`proposed`)', () => {
 		const global = mergeConfig({untrustedSpecsLandIn: 'ready'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config
 				.untrustedSpecsLandIn,
 		).toBe('ready');
-		writeRepoConfig(repo, {untrustedSpecsLandIn: 'pre-proposed'});
+		writeRepoConfig(repo, {untrustedSpecsLandIn: 'proposed'});
 		expect(
 			resolveRepoConfig({repoPath: repo, global, env: {}}).config
 				.untrustedSpecsLandIn,
-		).toBe('pre-proposed');
+		).toBe('proposed');
 		expect(
 			resolveRepoConfig({
 				repoPath: repo,
@@ -665,9 +665,9 @@ describe('resolveRepoConfig — per-key layering', () => {
 				repoPath: repo,
 				global,
 				env: {DORFL_UNTRUSTED_SPECS_LAND_IN: 'ready'},
-				flags: {untrustedSpecsLandIn: 'pre-proposed'},
+				flags: {untrustedSpecsLandIn: 'proposed'},
 			}).config.untrustedSpecsLandIn,
-		).toBe('pre-proposed');
+		).toBe('proposed');
 	});
 
 	it('per-repo file overrides the global for `autoBuild` (flag > per-repo > global > default)', () => {

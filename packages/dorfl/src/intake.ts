@@ -325,7 +325,7 @@ export interface PerformIntakeOptions {
 	 * **The per-repo SPEC-PLACEMENT default, passed IN** (spec
 	 * `staging-pool-position-gate-and-trust-model` US #2/#5, task
 	 * `pre-prd-staging-pool-split-and-untrusted-prd-placement`). The resolved
-	 * per-repo default landing for `intake`-authored prds (`pre-proposed` =
+	 * per-repo default landing for `intake`-authored prds (`proposed` =
 	 * staging; `ready` = the auto-tasking pool), fed as the CONFIGURED-DEFAULT rung
 	 * into the shared placement resolver (`src/placement.ts`). The resolver
 	 * overlays an EXPLICIT operator flag ({@link explicitSpecsLandIn}, top) and
@@ -344,7 +344,7 @@ export interface PerformIntakeOptions {
 	 * `originTrust: untrusted`: the spec dispatch reads the stamp and feeds THIS
 	 * default (rather than {@link specsLandIn}) as the configured-default rung of
 	 * the shared placement resolver. The resolver no longer has an
-	 * untrusted-forces-staging rung; DEFAULTS to staging (`pre-proposed`), opt-in
+	 * untrusted-forces-staging rung; DEFAULTS to staging (`proposed`), opt-in
 	 * `ready` (safety then via the tasks' carried stamp, not the folder).
 	 */
 	untrustedSpecsLandIn?: SpecsLandIn;
@@ -424,7 +424,7 @@ const SPEC_PLACEMENT_SLOTS: PlacementSlots = {
 };
 
 /**
- * Map the `specsLandIn` value spelling (`pre-proposed` | `ready`) onto the
+ * Map the `specsLandIn` value spelling (`proposed` | `ready`) onto the
  * resolver's lifecycle-generic side enum (`staging` | `pool`). Returns
  * `undefined` when no value is set, so the resolver's next precedence rung
  * applies (the built-in floor). The spec twin of `landingToSide` on the
@@ -433,7 +433,7 @@ const SPEC_PLACEMENT_SLOTS: PlacementSlots = {
 function specLandingToSide(
 	landing: SpecsLandIn | undefined,
 ): 'staging' | 'pool' | undefined {
-	if (landing === 'pre-proposed') return 'staging';
+	if (landing === 'proposed') return 'staging';
 	if (landing === 'ready') return 'pool';
 	return undefined;
 }

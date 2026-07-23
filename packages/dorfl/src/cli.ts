@@ -721,13 +721,13 @@ function explicitTasksLandInFromFlag(
 function explicitSpecsLandInFromFlag(
 	raw: string | undefined,
 	flagName = '--specs-land-in',
-): 'pre-proposed' | 'ready' | undefined {
+): 'proposed' | 'ready' | undefined {
 	if (raw === undefined) {
 		return undefined;
 	}
-	if (raw !== 'pre-proposed' && raw !== 'ready') {
+	if (raw !== 'proposed' && raw !== 'ready') {
 		throw new Error(
-			`${flagName} must be 'pre-proposed' or 'ready' (got '${raw}').`,
+			`${flagName} must be 'proposed' or 'ready' (got '${raw}').`,
 		);
 	}
 	return raw;
@@ -802,7 +802,7 @@ interface IntakeFlags {
 	 * flags. UNSET (a local intake) ⇒ emit unstamped ⇒ human/trusted.
 	 */
 	originTrust?: string;
-	/** `--specs-land-in <pre-proposed|ready>`: the explicit operator spec-placement override (top of the precedence). Resolves into the `specsLandIn` config key. */
+	/** `--specs-land-in <proposed|ready>`: the explicit operator spec-placement override (top of the precedence). Resolves into the `specsLandIn` config key. */
 	specsLandIn?: string;
 	/** `--tasks-land-in <backlog|ready>`: the explicit operator TASK-placement override for a DIRECT-from-issue task emit (top of the precedence). The task twin of `--specs-land-in`. Resolves into the `tasksLandIn` config key. */
 	tasksLandIn?: string;
@@ -4286,7 +4286,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--specs-land-in <where>',
-			'where an intake-authored spec lands: `pre-proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > specsLandIn default > built-in). Resolved flag > env (DORFL_SPECS_LAND_IN) > per-repo > global > built-in.',
+			'where an intake-authored spec lands: `proposed` (staged, not auto-taskable) or `ready` (the auto-tasking pool). The EXPLICIT operator override at the top of the placement precedence (explicit flag > untrusted-origin forces staging > specsLandIn default > built-in). Resolved flag > env (DORFL_SPECS_LAND_IN) > per-repo > global > built-in.',
 		)
 		.option(
 			'--tasks-land-in <where>',
@@ -4387,7 +4387,7 @@ export function buildProgram(): Command {
 			// The OPERATOR's EXPLICIT spec-placement override (`--specs-land-in`), the
 			// TOP of the placement precedence — mirrors `explicitTasksLandInFromFlag` on
 			// the `do spec:` path. Fails loudly on a bad value.
-			let explicitSpecsLandIn: 'pre-proposed' | 'ready' | undefined;
+			let explicitSpecsLandIn: 'proposed' | 'ready' | undefined;
 			try {
 				explicitSpecsLandIn = explicitSpecsLandInFromFlag(flags.specsLandIn);
 			} catch (err) {

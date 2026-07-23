@@ -116,13 +116,13 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	tasksLandIn: {enum: ['backlog', 'ready']},
 	// `specsLandIn` (the per-repo SPEC-PLACEMENT default — spec
 	// `staging-pool-position-gate-and-trust-model` US #2/#5) coerces as the
-	// `pre-proposed`/`ready` enum, so `DORFL_SPECS_LAND_IN=ready` works and a typo
+	// `proposed`/`ready` enum, so `DORFL_SPECS_LAND_IN=ready` works and a typo
 	// FAILS LOUDLY. Same precedence chain as `tasksLandIn` (flag > env > per-repo
-	// > global > built-in `pre-proposed`); fed into the shared placement resolver
+	// > global > built-in `proposed`); fed into the shared placement resolver
 	// (`src/placement.ts`) as the configured-default rung for the spec lifecycle.
 	// The legacy `prdsLandIn` key / `DORFL_PRDS_LAND_IN` env are GONE after the
 	// ''prd'' → `spec` hard cutover (clean break).
-	specsLandIn: {enum: ['pre-proposed', 'ready']},
+	specsLandIn: {enum: ['proposed', 'ready']},
 	// `untrustedTasksLandIn` (the UNTRUSTED-side TWIN of `tasksLandIn` — spec
 	// `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
 	// US #5/#6, ADR `untrusted-origin-carries-via-stamp-not-forced-staging`)
@@ -133,10 +133,10 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// `originTrust` stamp before feeding the placement resolver.
 	untrustedTasksLandIn: {enum: ['backlog', 'ready']},
 	// `untrustedSpecsLandIn` (the UNTRUSTED-side TWIN of `specsLandIn` — same spec
-	// US #7) coerces as the SAME `pre-proposed`/`ready` enum as `specsLandIn`, so
+	// US #7) coerces as the SAME `proposed`/`ready` enum as `specsLandIn`, so
 	// `DORFL_UNTRUSTED_SPECS_LAND_IN=ready` works and a typo FAILS LOUDLY. Same
-	// precedence chain (flag > env > per-repo > global > built-in `pre-proposed`).
-	untrustedSpecsLandIn: {enum: ['pre-proposed', 'ready']},
+	// precedence chain (flag > env > per-repo > global > built-in `proposed`).
+	untrustedSpecsLandIn: {enum: ['proposed', 'ready']},
 	// `noPR` (the PR-INTENT axis) is a BOOLEAN coercion (like `review`), so
 	// `DORFL_NO_PR=true|false` works and a typo FAILS LOUDLY. The removed
 	// `provider` override has NO env var (a stale `DORFL_PROVIDER` is ignored

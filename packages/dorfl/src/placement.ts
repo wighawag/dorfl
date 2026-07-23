@@ -27,7 +27,7 @@
  * TASK lifecycle (`tasksLandIn`: `backlog`/`ready` — the POOL value was
  * renamed `'backlog'` → `'todo'` → `'ready'`, ADR
  * `rename-task-pool-folder-todo-to-ready`) AND the SPEC-
- * placement lifecycle (`specsLandIn`: `pre-proposed`/`ready`) without forking. A future
+ * placement lifecycle (`specsLandIn`: `proposed`/`ready`) without forking. A future
  * lifecycle (e.g. intake's lone-task) plugs its own `slots` in and reuses the
  * exact precedence — no second implementation.
  */

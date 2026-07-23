@@ -248,7 +248,7 @@ describe('envOverrides — enum coercion', () => {
 		});
 		// HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`):
 		// `DORFL_SPECS_LAND_IN` (the sole spec-placement env) coerces the
-		// `pre-proposed`/`ready` enum; the legacy `DORFL_PRDS_LAND_IN` is GONE.
+		// `proposed`/`ready` enum; the legacy `DORFL_PRDS_LAND_IN` is GONE.
 		expect(envOverrides({DORFL_SPECS_LAND_IN: 'ready'})).toEqual({
 			specsLandIn: 'ready',
 		});
@@ -265,11 +265,11 @@ describe('envOverrides — enum coercion', () => {
 		expect(envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'ready'})).toEqual({
 			untrustedSpecsLandIn: 'ready',
 		});
-		expect(
-			envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'pre-proposed'}),
-		).toEqual({untrustedSpecsLandIn: 'pre-proposed'});
+		expect(envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'proposed'})).toEqual({
+			untrustedSpecsLandIn: 'proposed',
+		});
 		// The dead `DORFL_PRDS_LAND_IN` env is not coerced into any config key.
-		expect(envOverrides({DORFL_PRDS_LAND_IN: 'pre-proposed'})).toEqual({});
+		expect(envOverrides({DORFL_PRDS_LAND_IN: 'proposed'})).toEqual({});
 		// `observationTriage` is a 3-state ENUM coercion (like `integration`).
 		expect(envOverrides({DORFL_OBSERVATION_TRIAGE: 'off'})).toEqual({
 			observationTriage: 'off',
@@ -315,7 +315,15 @@ describe('envOverrides — enum coercion', () => {
 			/DORFL_UNTRUSTED_SPECS_LAND_IN/,
 		);
 		expect(() => envOverrides({DORFL_UNTRUSTED_SPECS_LAND_IN: 'nope'})).toThrow(
-			/pre-proposed.*ready|ready.*pre-proposed/,
+			/proposed.*ready|ready.*proposed/,
+		);
+		// HARD CUTOVER: the OLD value `pre-proposed` is now an INVALID enum value and
+		// FAILS LOUDLY (no back-compat alias), naming the variable + valid options.
+		expect(() => envOverrides({DORFL_SPECS_LAND_IN: 'pre-proposed'})).toThrow(
+			/DORFL_SPECS_LAND_IN/,
+		);
+		expect(() => envOverrides({DORFL_SPECS_LAND_IN: 'pre-proposed'})).toThrow(
+			/proposed.*ready|ready.*proposed/,
 		);
 	});
 });

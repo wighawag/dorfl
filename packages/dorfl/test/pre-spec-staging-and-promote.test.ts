@@ -218,7 +218,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			// The repo OPTS untrusted specs into the pool explicitly. The TRUSTED
 			// default is staging, to prove the UNTRUSTED knob is what selected the
 			// pool.
-			specsLandIn: 'pre-proposed',
+			specsLandIn: 'proposed',
 			untrustedSpecsLandIn: 'ready',
 			originTrust: 'untrusted',
 			env: gitEnv(),
@@ -238,7 +238,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 		expect(landed).toContain('originTrust: untrusted');
 	});
 
-	it('a TRUSTED spec does NOT read the untrusted knob: untrustedSpecsLandIn: pre-proposed + specsLandIn: ready + trusted \u2192 pool', async () => {
+	it('a TRUSTED spec does NOT read the untrusted knob: untrustedSpecsLandIn: proposed + specsLandIn: ready + trusted \u2192 pool', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const result = await performIntake({
 			issueNumber: 72,
@@ -247,7 +247,7 @@ describe('STEP A (PRD) \u2014 intake-authored PRD lands STAGED in pre-prd/, not 
 			issueProvider: stubIssueProvider({issue: {number: 72}}),
 			decide: async () => PRD_VERDICT,
 			specsLandIn: 'ready',
-			untrustedSpecsLandIn: 'pre-proposed',
+			untrustedSpecsLandIn: 'proposed',
 			originTrust: 'trusted',
 			env: gitEnv(),
 		});
