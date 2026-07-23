@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # deriveIntakeFlags trust→placement+stamp rewrite — decisions (2026-07-23)
 
 Task `derive-intake-flags-trust-drives-placement-not-mode` (spec `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`, ADR `untrusted-origin-carries-via-stamp-not-forced-staging`). Recorded per the ADR interface-reshape gate; linked from the done record.
