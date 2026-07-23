@@ -3,6 +3,7 @@ title: review-gate non-blocking nits for 'intake-integration-knob' (Gate 2 appro
 date: 2026-07-23
 status: open
 reviewOf: intake-integration-knob
+needsAnswers: true
 ---
 
 ## Non-blocking review findings
