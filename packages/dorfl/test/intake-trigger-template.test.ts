@@ -26,6 +26,8 @@ import {
 	validateIntakeWorkflow,
 } from '../src/intake-trigger-template.js';
 import {performIntake, type IntakeVerdict} from '../src/intake.js';
+import {resolveRepoConfig, REPO_CONFIG_FILENAME} from '../src/repo-config.js';
+import {mergeConfig} from '../src/config.js';
 import {
 	type Issue,
 	type IssueComment,
@@ -223,6 +225,70 @@ describe('deriveIntakeFlags — file-emit mode is GATE-derived; author-trust dri
 	});
 });
 
+// ─── the committed dorfl.json gate is HONORED (the shadowing bug is fixed) ────
+
+describe('config-resolution: a committed `dorfl.json` gate is HONORED (no longer shadowed by a hardcoded intake env) and flows into the intake derivation (ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
+	it('a repo `dorfl.json` with `autoBuild: true` resolves to autoBuild:true (per-repo BEATS the built-in false default), then derives --propose-task', () => {
+		// The whole point of the fix: the intake workflow used to hardcode
+		// `DORFL_AUTO_BUILD: 'false'` in env (env > per-repo), so a committed
+		// `autoBuild: true` was SHADOWED. With the env gone, the resolved config
+		// (what `dorfl config --json` prints, via `resolveRepoConfig`) reflects the
+		// committed gate. We drive the SAME resolver here and assert it wins.
+		writeFileSync(
+			join(work, REPO_CONFIG_FILENAME),
+			JSON.stringify({autoBuild: true}),
+		);
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}), // global + built-in defaults (autoBuild:false)
+		}).config;
+		// The committed per-repo gate WINS over the built-in false default.
+		expect(resolved.autoBuild).toBe(true);
+		expect(resolved.autoTask).toBe(false);
+		// ...and it feeds the intake derivation the workflow runs: autoBuild on ⇒
+		// --propose-task (the task DOCUMENT gets a human PR checkpoint), which was
+		// UNREACHABLE while the env pinned the gate to false.
+		const flags = deriveIntakeFlags({
+			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
+			authorTrusted: true,
+		});
+		expect(flags.task).toBe('propose');
+		expect(flags.spec).toBe('merge');
+	});
+
+	it('a repo `dorfl.json` with `autoTask: true` resolves to autoTask:true and derives --propose-spec', () => {
+		writeFileSync(
+			join(work, REPO_CONFIG_FILENAME),
+			JSON.stringify({autoTask: true}),
+		);
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}),
+		}).config;
+		expect(resolved.autoTask).toBe(true);
+		const flags = deriveIntakeFlags({
+			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
+			authorTrusted: true,
+		});
+		expect(flags.spec).toBe('propose');
+	});
+
+	it('no `dorfl.json` ⇒ the built-in defaults (autoBuild:false / autoTask:false) resolve ⇒ both merge (the calm default)', () => {
+		const resolved = resolveRepoConfig({
+			repoPath: work,
+			global: mergeConfig({}),
+		}).config;
+		expect(resolved.autoBuild).toBe(false);
+		expect(resolved.autoTask).toBe(false);
+		const flags = deriveIntakeFlags({
+			gate: {autoBuild: resolved.autoBuild, autoTask: resolved.autoTask},
+			authorTrusted: true,
+		});
+		expect(flags.task).toBe('merge');
+		expect(flags.spec).toBe('merge');
+	});
+});
+
 describe('isAuthorTrusted — OWNER/MEMBER/COLLABORATOR is the whole signal (Decision 1)', () => {
 	it('OWNER / MEMBER / COLLABORATOR are TRUSTED', () => {
 		for (const a of TRUSTED_AUTHOR_ASSOCIATIONS) {
@@ -305,9 +371,38 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(text).toContain('--merge-task');
 		expect(text).toContain('--merge-spec');
 		expect(text).toContain('--propose-spec');
-		// The derivation reads the gate env block.
-		expect(/DORFL_AUTO_BUILD\b/.test(text)).toBe(true);
-		expect(/DORFL_AUTO_TASK\b/.test(text)).toBe(true);
+		// The derivation reads the RESOLVED gate family via `dorfl config --json`
+		// (NOT a hardcoded DORFL_* env — that was the shadowing bug; ADR
+		// untrusted-origin-carries-via-stamp-not-forced-staging).
+		expect(/dorfl config --json/.test(text)).toBe(true);
+		expect(/\.autoBuild\b/.test(text)).toBe(true);
+		expect(/\.autoTask\b/.test(text)).toBe(true);
+	});
+
+	it('honors the repo `dorfl.json` gates by construction: emits NO DORFL_AUTO_* env assignment; the resolved gate is read via `dorfl config --json` (ADR untrusted-origin-carries-via-stamp-not-forced-staging; the shadowing bug is dead)', () => {
+		const text = generateIntakeWorkflow(config);
+		// The OPERATIVE (non-comment) lines carry NO `DORFL_AUTO_BUILD:` /
+		// `DORFL_AUTO_TASK:` env ASSIGNMENT — an env default there OUTRANKS the
+		// committed dorfl.json (env > per-repo), shadowing it. The header comment MAY
+		// still name the keys; strip comments before the negative check (mirrors the
+		// validator's `operative`).
+		const operative = text
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/DORFL_AUTO_BUILD\s*:/.test(operative)).toBe(false);
+		expect(/DORFL_AUTO_TASK\s*:/.test(operative)).toBe(false);
+		// The resolved gate is read via `dorfl config --json` (the `advance` pattern).
+		expect(/dorfl config --json/.test(operative)).toBe(true);
+		// The two anti-regression validators are satisfied on the shipped output.
+		const result = validateIntakeWorkflow(text);
+		expect(result.problems.map((p) => p.id)).not.toContain(
+			'no-gate-env-auto-build',
+		);
+		expect(result.problems.map((p) => p.id)).not.toContain(
+			'no-gate-env-auto-task',
+		);
+		expect(result.problems.map((p) => p.id)).not.toContain('reads-config-json');
 	});
 
 	it('the workflow SHELL derivation matches deriveIntakeFlags (they cannot desync)', () => {
@@ -550,6 +645,29 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		expectFlagged(
 			base.replace(/post a NEW comment/gi, 'do something else'),
 			'documents-new-comment-convention',
+		);
+	});
+
+	it('flags a `DORFL_AUTO_BUILD:` env assignment sneaking back in (the shadowing regression; ADR untrusted-origin-carries-via-stamp-not-forced-staging)', () => {
+		// Re-introduce the retired env block on an OPERATIVE (non-comment) line: env
+		// > per-repo, so this default would SHADOW the committed dorfl.json again.
+		expectFlagged(
+			base.replace(/^jobs:/m, "env:\n  DORFL_AUTO_BUILD: 'false'\n\njobs:"),
+			'no-gate-env-auto-build',
+		);
+	});
+
+	it('flags a `DORFL_AUTO_TASK:` env assignment sneaking back in (the shadowing regression)', () => {
+		expectFlagged(
+			base.replace(/^jobs:/m, "env:\n  DORFL_AUTO_TASK: 'false'\n\njobs:"),
+			'no-gate-env-auto-task',
+		);
+	});
+
+	it('flags dropping the `dorfl config --json` gate read (the resolved gate must be read as `advance` does)', () => {
+		expectFlagged(
+			base.replace(/dorfl config --json/g, 'echo skip'),
+			'reads-config-json',
 		);
 	});
 });

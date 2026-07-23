@@ -168,7 +168,7 @@ export interface IntakeGateState {
  * `untrusted-origin-carries-via-stamp-intake-placement-symmetry-and-ci-gate-resolution`
  * US #3/#13). This is the load-bearing pure logic the workflow encodes at runtime
  * (it reads `author_association` off the event payload for the STAMP, and the
- * gate env block for the MODES):
+ * resolved gate family via `dorfl config --json` for the MODES):
  *
  *   - **SPEC mode** — gate-derived: `--merge-spec` iff `autoTask` is OFF (a human
  *     must task the spec before anything autonomous acts on it), else
@@ -243,8 +243,9 @@ export function isAuthorTrusted(
  * shape itself is config-independent.
  *
  * The per-outcome FLAGS are DERIVED AT RUNTIME by a `bash` step that mirrors
- * {@link deriveIntakeFlags}: it reads the gate env block to set the (gate-derived)
- * `--merge-spec`/`--propose-spec` + `--merge-task`/`--propose-task` modes, and the
+ * {@link deriveIntakeFlags}: it reads the resolved gate family via `dorfl config
+ * --json` to set the (gate-derived) `--merge-spec`/`--propose-spec` +
+ * `--merge-task`/`--propose-task` modes, and the
  * event's `author_association` to set ONLY the `--origin-trust` STAMP (which
  * carries the placement + build-PR consequence). The same rule that
  * {@link deriveIntakeFlags} unit-tests is what the workflow executes — they cannot
@@ -333,23 +334,21 @@ permissions:
   pull-requests: write
   issues: write
 
-env:
-  # ── The engine GATE FAMILY, surfaced as the DORFL_* env block ─────────
-  # CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
-  # it runs the SAME engine gates, resolved through flag > env > per-repo > global
-  # > default. The SAME dorfl.json the laptop uses applies here; this env
-  # block is the optional CI-only override. Change behaviour by editing these
-  # values (or a GitHub repo variable / dorfl.json key) — NOT by re-running
-  # install-ci (ADR §6: install-ci is one-time).
-  #
-  # \`intake\` itself is GATE-FREE (the explicit invocation is its own
-  # authorization), so these gates do NOT block it — CI READS them to DERIVE the
-  # per-outcome merge-vs-propose flags below (the merge-vs-propose POLICY). CALM
-  # DEFAULTS: both off ⇒ the next step is a HUMAN, so the gate-derived mode is the
-  # permissive merge side; author-trust then forces propose for a task from an
-  # untrusted author.
-  DORFL_AUTO_BUILD: 'false' # gate: will an agent auto-build the emitted task next?
-  DORFL_AUTO_TASK: 'false' # gate: will an agent auto-task the emitted spec next?
+# ── The engine GATE FAMILY is resolved FROM CONFIG, not carried here ─────────
+# CI is NOT a special policy surface (ADR ci-config-policy-and-gate-family §5):
+# it runs the SAME engine gates, resolved through flag > env > per-repo > global
+# > default. The SAME dorfl.json the laptop uses applies here. This workflow emits
+# NO DORFL_AUTO_BUILD / DORFL_AUTO_TASK line (ADR
+# untrusted-origin-carries-via-stamp-not-forced-staging: hardcoding them here made
+# the env layer OUTRANK the committed dorfl.json — the shadowing bug). So the env
+# layer carries NO gate default; the policy step below READS the resolved gates via
+# \`dorfl config --json\` (the mechanism \`advance\` already uses), so your committed
+# dorfl.json wins (then the global config, then the strict built-in defaults
+# autoBuild:false / autoTask:false). To enable CI autonomy durably, set the gate(s)
+# in dorfl.json (applies everywhere) — NOT by re-running install-ci (ADR §6:
+# install-ci is one-time). \`intake\` itself is GATE-FREE (the explicit invocation is
+# its own authorization); CI READS the resolved gates only to DERIVE the
+# per-outcome merge-vs-propose flags below (the merge-vs-propose POLICY).
 
 jobs:
   intake:
@@ -388,8 +387,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Read the RESOLVED gate family from the committed config via
+          # \`dorfl config --json\` (the mechanism \`advance\` already uses), NOT a
+          # hardcoded DORFL_* env (ADR
+          # untrusted-origin-carries-via-stamp-not-forced-staging: an env default
+          # would OUTRANK dorfl.json — the shadowing bug). In-place, so the
+          # resolution chain reads THIS repo's dorfl.json exactly like the laptop.
+          config_json="$(dorfl config --json)"
+          auto_build="$(echo "\${config_json}" | jq -r '.autoBuild')"
+          auto_task="$(echo "\${config_json}" | jq -r '.autoTask')"
+
           # SPEC flag: gate-derived only (author-trust does NOT bite a spec).
-          if [ "\${DORFL_AUTO_TASK}" = "true" ]; then
+          if [ "\${auto_task}" = "true" ]; then
             spec_flag="--propose-spec"
           else
             spec_flag="--merge-spec"
@@ -400,7 +409,7 @@ jobs:
           # mode (ADR untrusted-origin-carries-via-stamp-not-forced-staging): an
           # untrusted author's task DOCUMENT merges just like a trusted one; the
           # untrusted safety is the stamp + placement below, not a document PR.
-          if [ "\${DORFL_AUTO_BUILD}" = "true" ]; then
+          if [ "\${auto_build}" = "true" ]; then
             task_flag="--propose-task"
           else
             task_flag="--merge-task"
@@ -587,13 +596,39 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		operative,
 	), 'the intake invocation must pass the derived `--origin-trust` flag (the ' +
 		'stamp must reach `dorfl intake`).');
-	// The derivation must compose the gate env block (it READS the gates to derive).
-	require('reads-auto-build-gate', /DORFL_AUTO_BUILD\b/.test(
-		text,
-	), 'the policy derivation must read the `DORFL_AUTO_BUILD` gate.');
-	require('reads-auto-task-gate', /DORFL_AUTO_TASK\b/.test(
-		text,
-	), 'the policy derivation must read the `DORFL_AUTO_TASK` gate.');
+	// The derivation must read the RESOLVED gate family via `dorfl config --json`
+	// (the mechanism `advance` uses), NOT a hardcoded DORFL_* env (ADR
+	// untrusted-origin-carries-via-stamp-not-forced-staging — the shadowing bug).
+	require('reads-config-json', /dorfl config --json/.test(
+		operative,
+	), 'the policy derivation must read the resolved gate family via ' +
+		'`dorfl config --json` (as `advance` does), so a committed `dorfl.json` ' +
+		'gate is honored in CI (not shadowed by a hardcoded env).');
+	require('reads-auto-build-gate', /\.autoBuild\b/.test(
+		operative,
+	), 'the policy derivation must read the resolved `autoBuild` gate (jq ' +
+		'`.autoBuild` off `dorfl config --json`).');
+	require('reads-auto-task-gate', /\.autoTask\b/.test(
+		operative,
+	), 'the policy derivation must read the resolved `autoTask` gate (jq ' +
+		'`.autoTask` off `dorfl config --json`).');
+	// ANTI-REGRESSION (ADR untrusted-origin-carries-via-stamp-not-forced-staging;
+	// spec US #12): the workflow must NOT emit a `DORFL_AUTO_BUILD:` /
+	// `DORFL_AUTO_TASK:` env ASSIGNMENT. The env layer OUTRANKS per-repo config, so
+	// a hardcoded default here SHADOWS the committed `dorfl.json` gates (the bug this
+	// task fixes). Mirrors `advance-lifecycle-template.ts`'s `no-gate-env-auto-build`
+	// / `no-gate-env-auto-task`. Checked over the OPERATIVE (non-comment) lines so
+	// the header comment that NAMES these keys is not a false positive.
+	require('no-gate-env-auto-build', !/DORFL_AUTO_BUILD\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit a `DORFL_AUTO_BUILD:` env assignment (env ' +
+		'carries no defaults; the gate is resolved from per-repo config / built-in ' +
+		'default — else the env SHADOWS the committed dorfl.json).');
+	require('no-gate-env-auto-task', !/DORFL_AUTO_TASK\s*:/.test(
+		operative,
+	), 'the workflow must NOT emit a `DORFL_AUTO_TASK:` env assignment (env ' +
+		'carries no defaults; the gate is resolved from per-repo config / built-in ' +
+		'default — else the env SHADOWS the committed dorfl.json).');
 
 	// --- Insertion point E: the issue-thread review surface ---------------------
 	// E is REUSED via `intake` (which runs the lone-task review and posts to the
