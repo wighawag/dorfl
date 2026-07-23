@@ -1,5 +1,19 @@
 # dorfl
 
+## 0.9.0
+
+### Minor Changes
+
+- ea9d86d: Add an `intakeIntegration` config knob (the twin of `taskingIntegration`) that governs the intake DOCUMENT PR-mode, and decouple that mode from the autonomy gates.
+
+  Previously `deriveIntakeFlags` derived the intake task/spec document merge-vs-propose mode from `autoBuild`/`autoTask` (`task = autoBuild ? propose : merge`), welding "may an agent act autonomously" to "does the document need a PR." So a repo could not have `autoBuild: true`/`autoTask: true` (autonomy) AND intake documents merging to `main` at the same time. Now the intake document mode is the resolved `intakeIntegration ?? integration` (a single operator/config value applied to both the task and spec document), resolved flag > env `DORFL_INTAKE_INTEGRATION` > per-repo > global > fall back to `integration` > default `propose`, surfaced in `dorfl config --json`, and honored per-repo. The autonomy gates go back to meaning ONLY autonomy; they no longer feed the intake document mode. The generated `intake.yml` reads `.intakeIntegration // .integration` (not the gates) for the document mode, and `validateIntakeWorkflow` gains `reads-intake-integration` / `intake-integration-falls-back-to-integration` / `mode-not-gate-derived` invariants so the coupling cannot regress. Untrusted safety is unchanged: it rests on placement (`untrusted*LandIn`) + the build-time `originTrust: untrusted` stamp (the code PR), not a forced document PR. The intake CLI's explicit `--merge-task`/`--merge-spec`/`--merge`/`--propose` overrides still win. Zero-config behaviour is unchanged (everything propose). Governing spec: `intake-integration-knob-and-specs-land-in-proposed-rename`; ADR: `docs/adr/untrusted-origin-carries-via-stamp-not-forced-staging.md`.
+
+### Patch Changes
+
+- 83dbcfe: Stop the generated `intake.yml` hardcoding `DORFL_AUTO_BUILD` / `DORFL_AUTO_TASK` env; read the resolved gates via `dorfl config --json` so the committed `dorfl.json` gates are honored in CI.
+
+  The intake workflow's `env:` block pinned `DORFL_AUTO_BUILD: 'false'` / `DORFL_AUTO_TASK: 'false'`. Since env outranks per-repo config in the resolution chain (flag > env > per-repo > global > default), those defaults SHADOWED a repo's committed gates: a repo with `autoBuild: true` in `dorfl.json` was silently overridden by the hardcoded `false`, contradicting the documented "the same dorfl.json applies in CI." The env lines are removed and the policy step now reads the resolved gates via `dorfl config --json` (the mechanism the `advance` workflow already uses). `validateIntakeWorkflow` gains `no-gate-env-auto-build` / `no-gate-env-auto-task` invariants (mirroring `advance-lifecycle-template.ts`) so the shadowing bug cannot regress. Governing decision: `docs/adr/untrusted-origin-carries-via-stamp-not-forced-staging.md`.
+
 ## 0.8.1
 
 ### Patch Changes
