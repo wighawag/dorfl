@@ -3,6 +3,7 @@ title: smoke test isolated env (throwaway)
 slug: __smoke_isolated_env__
 blockedBy: []
 covers: []
+needsAnswers: true
 ---
 ## What to build
 Throwaway env smoke test.
