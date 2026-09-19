@@ -3,7 +3,7 @@ title: 'Two concurrent `dorfl do` jobs on ONE repo delete each other''s worktree
 slug: two-concurrent-do-jobs-on-one-repo-delete-each-others-worktree
 date: 2026-09-18
 status: spotted
-needsAnswers: false
+needsAnswers: true
 ---
 
 2026-09-18, measured on `dorfl` 0.13.4 while driving the ADR-0086 task family in `github.com/wighawag/etherfold` (recorded there first, moved here because the defect is the RUNNER's). The two dependency-free tasks of that family were dispatched as two concurrent `dorfl do task:<slug> --isolated` jobs against the same repo. Both died, and neither death was the agent's fault.
