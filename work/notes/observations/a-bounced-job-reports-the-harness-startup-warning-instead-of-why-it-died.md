@@ -3,6 +3,7 @@ title: 'A bounced job reports the harness STARTUP WARNING as the reason it faile
 date: 2026-09-20
 status: open
 severity: medium
+needsAnswers: true
 ---
 
 When a `dorfl do` build agent dies, the reason recorded can be a line the harness printed at STARTUP that has nothing to do with why it died. The wrong reason is then committed to `main` and pasted into the item's `work/questions/` sidecar, so a phantom diagnosis becomes the durable record of why the item is blocked.
