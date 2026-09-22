@@ -1,7 +1,7 @@
 ---
 name: work
 disable-model-invocation: true
-description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-spec / to-task / drive-tasks / merge-prs / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
+description: "Router over this repo's work/-contract skills: ask which skill or flow fits your situation. The index you reach for when you can't remember which of setup / to-spec / to-task / drive-tasks / one-shot / merge-prs / orchestrate / triage-observations / review / promote / surface-questions / answer-questions / capture-signal to use."
 ---
 
 # Work (the router)
@@ -18,6 +18,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 4. **Build the ready tasks. Pick the conductor:**
    - **`drive-tasks`**: the SUPERVISED conductor. Drive a board of ready tasks to exhaustion, build each with `dorfl do task:<slug> --isolated`, review the diff yourself, merge, repeat. Requires the dorfl CLI. You are present.
    - **`orchestrate`**: the META conductor, one rung ABOVE `drive-tasks`. Survey the WHOLE tree (observations / ideas / specs / tasks / needs-attention), advance every autonomous rung, batch the genuine judgement residue to the human, fill gaps until tasks are READY, then delegate building to `drive-tasks`. Reach for this when you want "figure out what to work on AND drive it", not just "build the already-ready tasks".
+   - **`one-shot`**: the UNATTENDED conductor, for when there is no runner CLI. You hand it ONE goal and leave; it bootstraps the repo if needed, authors the specs, tasks them, builds/gates/reviews/lands each task, decides the reversible calls itself and RECORDS them (ADRs, `## Decisions` blocks), parks only what it must not decide alone, and ends with a handover report. Every rung runs in a fresh subagent; plain `git` plus subagents replace `dorfl do`. It spans steps 1 to 5 of this flow by itself.
 5. **Land the resulting PRs efficiently (optional, `propose` mode):**
    - **`merge-prs`**: the batch-LANDING conductor. Starts where a build left an OPEN work PR: review the open PRs, partition them into conflict-free clusters (disjoint file-sets), gate each cluster's combined tip ONCE, then merge the cluster; PRs that don't cleanly combine fall out to their own gate. The sibling of `drive-tasks` (which builds+merges one task at a time) for when a `run`/CI/`drive-tasks` burst left a PILE of PRs to land in as few gate runs as possible. Requires `gh` + a GitHub arbiter in propose mode.
 
@@ -25,6 +26,7 @@ A **flow** is a path through the skills. Most work travels one **main flow**; th
 
 A starting situation that generates work, then merges onto the main flow.
 
+- **A GOAL (or a whole new project) stated in one sentence, that you want driven to landed code while you are away**: **`one-shot`** (above). One shot, but structured: same contract, same gates, and a decision journal so a night's unattended work is auditable in ten minutes. The discriminator against `from-idea` is ambition (`from-idea` clarifies and stops at a spec); against `drive-tasks` it is substrate (no `dorfl` CLI); against `orchestrate` it is presence (`orchestrate` batches questions to a human who is sitting there, `one-shot` decides and records, parking only what it must not decide alone).
 - **A raw project idea, from scratch**: **`from-idea`**. The from-scratch entrance to the main flow: clarify a raw idea just enough to be spec-worthy, then sequence `setup` (onboard the `work/` contract) and `to-spec` (synthesize the idea into a spec in `work/specs/ready/`), landing on step 2 of the main flow ready to task. The thin orchestrator over the front door; it does NOT grill the idea (that is `grilling`) and is not itself the spec-producer (it calls `to-spec`). Pick `from-idea` when you hold an IDEA; pick bare `setup` when you just want a repo ON the contract (either works on an empty folder — the idea is the discriminator, not emptiness).
 - **Observations piling up in `work/notes/observations/`**: **`triage-observations`**. Drain the inbox one note at a time, investigate each against current reality, recommend an outcome, the human decides, execute. Promotes notes into tasks/specs/ADRs (composes `to-task`) or directly deletes them (`git rm` / `dorfl drop`).
 
