@@ -120,14 +120,14 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		const text = generateAdvanceLifecycleWorkflow(config);
 		// Propose: a single named item per matrix leg, so --watch fits.
 		expect(text).toMatch(
-			/advance "\$\{\{ matrix\.item \}\}" --propose --watch --arbiter origin/,
+			/advance "\$\{WORK_ITEM\}" --propose --watch --arbiter origin/,
 		);
 		// Merge: per the new fan-out shape (PRD
 		// `land-time-reverify-and-parallel-merge-ceiling`) each merge leg also
 		// names ONE item via the matrix, so --watch fits there too. The old
 		// sequential `-n` form is GONE.
 		expect(text).toMatch(
-			/advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
+			/advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
 		);
 		expect(/dorfl advance -n\b/.test(text)).toBe(false);
 	});
@@ -168,10 +168,14 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(/strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(true);
 		expect(text).toContain('dorfl scan --json');
-		expect(/dorfl advance "?\$\{\{\s*matrix\./.test(text)).toBe(true);
+		expect(
+			/WORK_ITEM: \$\{\{ matrix\.item \}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
+				text,
+			),
+		).toBe(true);
 		// The leg carries `--propose` (tying integration mode to the matrix shape).
 		expect(
-			/advance-propose:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+			/advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
 				text,
 			),
 		).toBe(true);
@@ -180,7 +184,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		// `--merge` (the new fan-out shape).
 		const proposeSection = text.split('advance-merge:')[0];
 		expect(
-			/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(proposeSection),
+			/dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(proposeSection),
 		).toBe(false);
 	});
 
@@ -265,7 +269,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			true,
 		);
 		expect(
-			/advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+			/advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
 				text,
 			),
 		).toBe(true);
@@ -351,9 +355,13 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 			['observationTriage', 'DORFL_OBSERVATION_TRIAGE'],
 			['surfaceBlockers', 'DORFL_SURFACE_BLOCKERS'],
 		] as const) {
+			// The input reaches the shell through the step env (DISPATCH_<X>), never
+			// as `${{ }}` text inside `run:` (script injection).
+			const dispatchVar = envVar.replace(/^DORFL_/, 'DISPATCH_');
 			expect(
 				new RegExp(
-					`\\[ -n "\\$\\{\\{ github\\.event\\.inputs\\.${input} \\}\\}" \\][\\s\\S]*?${envVar}=`,
+					`${dispatchVar}: \\$\\{\\{ github\\.event\\.inputs\\.${input} \\}\\}[\\s\\S]*?` +
+						`\\[ -n "\\$\\{${dispatchVar}\\}" \\] && echo "${envVar}=\\$\\{${dispatchVar}\\}"`,
 				).test(text),
 			).toBe(true);
 		}
@@ -365,7 +373,7 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		// And it appears in all three gate-resolving jobs (enumerate + 2 agent jobs):
 		// the guarded write line for autoBuild occurs at least 3 times.
 		const writes = text.match(
-			/echo "DORFL_AUTO_BUILD=\$\{\{ github\.event\.inputs\.autoBuild \}\}"/g,
+			/echo "DORFL_AUTO_BUILD=\$\{DISPATCH_AUTO_BUILD\}"/g,
 		);
 		expect(writes?.length ?? 0).toBeGreaterThanOrEqual(3);
 
@@ -487,8 +495,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		// call (any `advance` invocation site would do; this one is unique).
 		expectFlagged(
 			base.replace(
-				/dorfl advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
-				'dorfl do "${{ matrix.item }}" --merge --watch --arbiter origin',
+				/dorfl advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
+				'dorfl do "${WORK_ITEM}" --merge --watch --arbiter origin',
 			),
 			'never-invokes-do',
 		);
@@ -518,12 +526,20 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		expectFlagged(broken, 'trigger-on-answer-committed');
 	});
 
-	it('flags a propose matrix leg missing the --propose flag', () => {
+	it('flags the matrix item spliced into `run:` as `${{ matrix.item }}` (script injection)', () => {
+		// The pre-fix shape: the slug became part of the shell script text.
 		expectFlagged(
 			base.replace(
-				/(dorfl advance "\$\{\{ matrix\.item \}\}") --propose/,
-				'$1',
+				/dorfl advance "\$\{WORK_ITEM\}" --propose/,
+				'dorfl advance "${{ matrix.item }}" --propose',
 			),
+			'matrix-item-not-spliced-into-run',
+		);
+	});
+
+	it('flags a propose matrix leg missing the --propose flag', () => {
+		expectFlagged(
+			base.replace(/(dorfl advance "\$\{WORK_ITEM\}") --propose/, '$1'),
 			'propose-leg-carries-propose-flag',
 		);
 	});
@@ -534,7 +550,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		// mode falls back to config and can desync from the matrix shape.
 		expectFlagged(
 			base.replace(
-				/(dorfl advance "\$\{\{ matrix\.item \}\}") --merge --watch --arbiter origin/,
+				/(dorfl advance "\$\{WORK_ITEM\}") --merge --watch --arbiter origin/,
 				'$1 --watch --arbiter origin',
 			),
 			'merge-leg-carries-merge-flag',
@@ -694,7 +710,7 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a step touching .github/workflows/** (US #9)', () => {
 		expectFlagged(
 			base.replace(
-				/run: dorfl advance "\$\{\{ matrix\.item \}\}" --merge --watch --arbiter origin/,
+				/run: dorfl advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
 				'run: cp x .github/workflows/evil.yml',
 			),
 			'never-edits-dot-github-workflows',

@@ -306,13 +306,26 @@ jobs:
         # surfaceBlockers), so an override that does not reach this job produces an
         # empty matrix and is silently inert. \`if:\` + the inner \`[ -n ... ]\` guard
         # keep schedule/push (and a blank dispatch field) exporting NOTHING — an
-        # empty DORFL_* would make env-config coercion throw.
+        # empty DORFL_* would make env-config coercion throw. The inputs reach the
+        # shell through \`env:\` as DATA, never as \`\${{ }}\` text spliced into the
+        # script (GitHub's script-injection guidance), and the \`case\` guard stops a
+        # value from appending its own lines to $GITHUB_ENV. Both only matter if an
+        # input ever stops being a fixed \`type: choice\`; for the choices below the
+        # step writes exactly what it always did.
         if: \${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          DISPATCH_AUTO_BUILD: \${{ github.event.inputs.autoBuild }}
+          DISPATCH_AUTO_TASK: \${{ github.event.inputs.autoTask }}
+          DISPATCH_OBSERVATION_TRIAGE: \${{ github.event.inputs.observationTriage }}
+          DISPATCH_SURFACE_BLOCKERS: \${{ github.event.inputs.surfaceBlockers }}
         run: |
-          [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          case "\${DISPATCH_AUTO_BUILD}\${DISPATCH_AUTO_TASK}\${DISPATCH_OBSERVATION_TRIAGE}\${DISPATCH_SURFACE_BLOCKERS}" in
+            *$'\\n'*|*$'\\r'*) echo "::error::a dispatch gate override contains a line break"; exit 1 ;;
+          esac
+          [ -n "\${DISPATCH_AUTO_BUILD}" ] && echo "DORFL_AUTO_BUILD=\${DISPATCH_AUTO_BUILD}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_AUTO_TASK}" ] && echo "DORFL_AUTO_TASK=\${DISPATCH_AUTO_TASK}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_OBSERVATION_TRIAGE}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${DISPATCH_OBSERVATION_TRIAGE}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_SURFACE_BLOCKERS}" ] && echo "DORFL_SURFACE_BLOCKERS=\${DISPATCH_SURFACE_BLOCKERS}" >> "$GITHUB_ENV"
           true
       - id: scan
         # Enumerate eligible items as namespaced ids, one matrix leg per id. CI
@@ -402,11 +415,19 @@ jobs:
         # DORFL_* ONLY on a workflow_dispatch with a non-blank input, so the
         # one-shot override also reaches the \`advance\` leg that builds the item.
         if: \${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          DISPATCH_AUTO_BUILD: \${{ github.event.inputs.autoBuild }}
+          DISPATCH_AUTO_TASK: \${{ github.event.inputs.autoTask }}
+          DISPATCH_OBSERVATION_TRIAGE: \${{ github.event.inputs.observationTriage }}
+          DISPATCH_SURFACE_BLOCKERS: \${{ github.event.inputs.surfaceBlockers }}
         run: |
-          [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          case "\${DISPATCH_AUTO_BUILD}\${DISPATCH_AUTO_TASK}\${DISPATCH_OBSERVATION_TRIAGE}\${DISPATCH_SURFACE_BLOCKERS}" in
+            *$'\\n'*|*$'\\r'*) echo "::error::a dispatch gate override contains a line break"; exit 1 ;;
+          esac
+          [ -n "\${DISPATCH_AUTO_BUILD}" ] && echo "DORFL_AUTO_BUILD=\${DISPATCH_AUTO_BUILD}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_AUTO_TASK}" ] && echo "DORFL_AUTO_TASK=\${DISPATCH_AUTO_TASK}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_OBSERVATION_TRIAGE}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${DISPATCH_OBSERVATION_TRIAGE}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_SURFACE_BLOCKERS}" ] && echo "DORFL_SURFACE_BLOCKERS=\${DISPATCH_SURFACE_BLOCKERS}" >> "$GITHUB_ENV"
           true
       - name: advance one item in-place (propose ⇒ opens a PR)
         # In-place in this checkout (no --isolated/--remote): the CI container IS
@@ -421,13 +442,19 @@ jobs:
         # works zero-config; the job's \`pull-requests: write\` scopes that token.
         env:
           GH_TOKEN: \${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          # The item id is a slug read from work/ (frontmatter \`slug:\` or the
+          # file name). dorfl sanitises the slugs it mints, but a hand-written
+          # one is only checked when \`advance\` resolves it, so it reaches the
+          # shell as DATA through env, never as \`\${{ matrix.item }}\` text
+          # spliced into the script.
+          WORK_ITEM: \${{ matrix.item }}
         # \`--watch\` streams the build agent's high-signal turns (assistant text,
         # tool calls, finish) into THIS job log live, so the run shows the agent
         # working instead of freezing after "Start work". A read-only observer (no
         # outcome/gate/git effect). It fits because each matrix leg names ONE item
         # (one pi session to tail) — the merge job is now a per-item matrix too
         # (see below) and streams the same way.
-        run: dorfl advance "\${{ matrix.item }}" --propose --watch --arbiter origin
+        run: dorfl advance "\${WORK_ITEM}" --propose --watch --arbiter origin
 
   # ── MERGE: a MATRIX of independent jobs (parallel build/gate/review, serialised land) ──
   # SPEC \`land-time-reverify-and-parallel-merge-ceiling\` (stories 4 + 6): each item
@@ -468,11 +495,19 @@ jobs:
         # merge job re-scans the pool inside \`advance -n\`, so it needs the override
         # too for the lifecycle/task pools to reflect it.
         if: \${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          DISPATCH_AUTO_BUILD: \${{ github.event.inputs.autoBuild }}
+          DISPATCH_AUTO_TASK: \${{ github.event.inputs.autoTask }}
+          DISPATCH_OBSERVATION_TRIAGE: \${{ github.event.inputs.observationTriage }}
+          DISPATCH_SURFACE_BLOCKERS: \${{ github.event.inputs.surfaceBlockers }}
         run: |
-          [ -n "\${{ github.event.inputs.autoBuild }}" ] && echo "DORFL_AUTO_BUILD=\${{ github.event.inputs.autoBuild }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.autoTask }}" ] && echo "DORFL_AUTO_TASK=\${{ github.event.inputs.autoTask }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.observationTriage }}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${{ github.event.inputs.observationTriage }}" >> "$GITHUB_ENV"
-          [ -n "\${{ github.event.inputs.surfaceBlockers }}" ] && echo "DORFL_SURFACE_BLOCKERS=\${{ github.event.inputs.surfaceBlockers }}" >> "$GITHUB_ENV"
+          case "\${DISPATCH_AUTO_BUILD}\${DISPATCH_AUTO_TASK}\${DISPATCH_OBSERVATION_TRIAGE}\${DISPATCH_SURFACE_BLOCKERS}" in
+            *$'\\n'*|*$'\\r'*) echo "::error::a dispatch gate override contains a line break"; exit 1 ;;
+          esac
+          [ -n "\${DISPATCH_AUTO_BUILD}" ] && echo "DORFL_AUTO_BUILD=\${DISPATCH_AUTO_BUILD}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_AUTO_TASK}" ] && echo "DORFL_AUTO_TASK=\${DISPATCH_AUTO_TASK}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_OBSERVATION_TRIAGE}" ] && echo "DORFL_OBSERVATION_TRIAGE=\${DISPATCH_OBSERVATION_TRIAGE}" >> "$GITHUB_ENV"
+          [ -n "\${DISPATCH_SURFACE_BLOCKERS}" ] && echo "DORFL_SURFACE_BLOCKERS=\${DISPATCH_SURFACE_BLOCKERS}" >> "$GITHUB_ENV"
           true
       - name: advance one item in-place (merge ⇒ rebase + CAS land on main)
         # In-place (no --isolated/--remote). \`--merge\` ties the integration mode
@@ -483,10 +518,16 @@ jobs:
         # \`GH_TOKEN\` from the env.
         env:
           GH_TOKEN: \${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          # The item id is a slug read from work/ (frontmatter \`slug:\` or the
+          # file name). dorfl sanitises the slugs it mints, but a hand-written
+          # one is only checked when \`advance\` resolves it, so it reaches the
+          # shell as DATA through env, never as \`\${{ matrix.item }}\` text
+          # spliced into the script.
+          WORK_ITEM: \${{ matrix.item }}
         # \`--watch\` streams the build agent's high-signal turns into THIS job
         # log live; each leg names ONE item, so it fits the same way it does on
         # the propose legs.
-        run: dorfl advance "\${{ matrix.item }}" --merge --watch --arbiter origin
+        run: dorfl advance "\${WORK_ITEM}" --merge --watch --arbiter origin
 
   # ── REAP merged remote work/* branches (capability F, the hygiene sweep) ─────
   # PRESERVED from the seed (NOT a separate gc-sweep workflow): the provider-
@@ -607,11 +648,19 @@ export function validateAdvanceLifecycleWorkflow(
 		text,
 	), 'the matrix items must be ENUMERATED via the eligible-pool scan ' +
 		'(`dorfl scan --json`).');
-	require('propose-one-advance-per-item', /dorfl advance "?\$\{\{\s*matrix\./.test(
+	require('propose-one-advance-per-item', /WORK_ITEM:\s*\$\{\{\s*matrix\.item\s*\}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
 		text,
 	), 'each matrix leg must run one `dorfl advance <matrix item>` ' +
-		'(one PR per item).');
-	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+		'(one PR per item), reading the item from the step env (`WORK_ITEM`).');
+	// The item id is a slug that may be hand-written (only minted slugs are
+	// sanitised), so it must reach the shell as DATA through `env:`, never as `${{ }}` text
+	// spliced into the `run:` script (GitHub Actions script injection).
+	require('matrix-item-not-spliced-into-run', !/dorfl advance "?\$\{\{/.test(
+		operative,
+	), 'the matrix item must NOT be interpolated into the `run:` script as ' +
+		'`${{ matrix.item }}` (script injection): pass it through the step `env:` ' +
+		'as `WORK_ITEM` and quote it as `"${WORK_ITEM}"`.');
+	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
 		text,
 	), 'each `propose` matrix leg must pass `--propose` so the integration mode is ' +
 		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
@@ -626,7 +675,7 @@ export function validateAdvanceLifecycleWorkflow(
 	), 'the `merge` job must use a MATRIX (parallel build/gate/review per item; ' +
 		"the land tail is serialised by the engine's `mergeRetries` CAS-retry " +
 		"loop, not by the workflow's job shape).");
-	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
 		text,
 	), 'each `merge` matrix leg must pass `--merge` so the integration mode is ' +
 		'TIED to the matrix shape (a leg can never propose-only / desync from the ' +
@@ -692,9 +741,14 @@ export function validateAdvanceLifecycleWorkflow(
 		['observationTriage', 'DORFL_OBSERVATION_TRIAGE'],
 		['surfaceBlockers', 'DORFL_SURFACE_BLOCKERS'],
 	] as const) {
-		// The override is a guarded shell write: `[ -n <input> ] && echo <ENV>=<input> >> $GITHUB_ENV`.
+		// The override is a guarded shell write of a step-env copy of the input:
+		// `env: DISPATCH_<X>: ${{ inputs.<x> }}` then
+		// `[ -n "${DISPATCH_<X>}" ] && echo "<ENV>=${DISPATCH_<X>}" >> $GITHUB_ENV`.
+		// The input never appears as `${{ }}` text inside the `run:` script.
+		const dispatchVar = envVar.replace(/^DORFL_/, 'DISPATCH_');
 		const guardedWrite = new RegExp(
-			`\\[ -n "\\$\\{\\{ github\\.event\\.inputs\\.${input} \\}\\}" \\][\\s\\S]*?${envVar}=`,
+			`${dispatchVar}:\\s*\\$\\{\\{ github\\.event\\.inputs\\.${input} \\}\\}` +
+				`[\\s\\S]*?\\[ -n "\\$\\{${dispatchVar}\\}" \\] && echo "${envVar}=\\$\\{${dispatchVar}\\}"`,
 		);
 		require(`dispatch-${input}-guarded-write`, guardedWrite.test(
 			text,

@@ -36,7 +36,8 @@
 		"as-soon": "^0.1.5",
 		"tsx": "^4.21.0",
 		"typescript": "^5.3.3",
-		"vitest": "^4.0.18"
+		"vitest": "^4.0.18",
+		"yaml": "^2.9.1"
 	},
 	"scripts": {
 		"build": "tsc && node scripts/vendor-protocol.mjs && node scripts/vendor-skills.mjs",

@@ -22,6 +22,7 @@
  */
 
 import type {ResolvedCIConfig} from './install-ci-core.js';
+import {shouldDropCheckoutCredentials} from './install-ci-core.js';
 
 /**
  * The required-status-check CONTEXT install-ci sets via branch protection AND the
@@ -47,7 +48,18 @@ export const VERIFY_WORKFLOW_PATH = 'workflows/verify.yml';
  * so the GitHub check it produces matches the required-status `context` install-ci
  * configures on `main` — by construction, not by hand-typed agreement.
  */
-export function generateVerifyWorkflow(_config: ResolvedCIConfig): string {
+export function generateVerifyWorkflow(config: ResolvedCIConfig): string {
+	// `persist-credentials: false` ONLY on a repo KNOWN to be public (see
+	// {@link shouldDropCheckoutCredentials}): this job has `contents: read`, so
+	// the persisted token can only ever read, and on a public repo reads need
+	// no token. Unknown / private / internal ⇒ today's checkout, unchanged.
+	const checkoutCredentials = shouldDropCheckoutCredentials(config)
+		? `
+          # Public repository: every git read works without a token, and this
+          # job cannot push, so do not leave the token in .git/config for later
+          # steps (the project-setup hook's installs, the gate) to read.
+          persist-credentials: false`
+		: '';
 	return `\
 # dorfl — the VERIFY workflow (Tier-1 GitHub ceiling; spec
 # land-time-reverify-and-parallel-merge-ceiling, task
@@ -102,7 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0${checkoutCredentials}
       - uses: ./.github/actions/dorfl-setup
       - name: run the repo verify gate
         run: dorfl verify

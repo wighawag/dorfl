@@ -141,6 +141,44 @@ export interface ResolvedCIConfig {
 	projectSetup?: Record<string, unknown>;
 	/** See {@link CIConfigFile.maxParallel}. Always resolved (default applied). */
 	maxParallel: number;
+	/**
+	 * The repo's visibility, DETECTED at generation time through the provider
+	 * seam ({@link CIProviderContext.getRepoVisibility}); never read from or
+	 * written to a config file (it is a fact about the repo, not a choice).
+	 * `undefined` ⇒ unknown, which keeps the conservative output. See
+	 * {@link shouldDropCheckoutCredentials}.
+	 */
+	repoVisibility?: RepoVisibility;
+}
+
+/**
+ * A repository's visibility on its CI provider. Used ONLY to decide whether the
+ * read-only jobs (verify, close-job) may check out with
+ * `persist-credentials: false`: on a PUBLIC repo every git read works without a
+ * token, so dropping the persisted token cannot break a fetch; on a private or
+ * internal repo (or when visibility is unknown) a fetch may need it.
+ */
+export type RepoVisibility = 'public' | 'private' | 'internal';
+
+/** Parse a provider's visibility answer (`PUBLIC`, `private`, ...); unknown ⇒ `undefined`. */
+export function parseRepoVisibility(raw: string): RepoVisibility | undefined {
+	const v = raw.trim().toLowerCase();
+	return v === 'public' || v === 'private' || v === 'internal' ? v : undefined;
+}
+
+/**
+ * Whether the read-only jobs (verify, close-job) should check out with
+ * `persist-credentials: false`. True ONLY when the repo is KNOWN to be public:
+ * then the persisted token adds nothing a git read needs (those jobs have
+ * `contents: read`, so they cannot push either way), while leaving it in
+ * `.git/config` hands it to every later step, including the project-setup
+ * hook's dependency installs. Unknown or non-public ⇒ keep today's checkout, so
+ * a project gate that runs `git fetch` on a private repo keeps working.
+ */
+export function shouldDropCheckoutCredentials(
+	config: Pick<ResolvedCIConfig, 'repoVisibility'>,
+): boolean {
+	return config.repoVisibility === 'public';
 }
 
 /** The default harness the composite setup action installs. */
@@ -222,6 +260,13 @@ export interface CIProviderContext {
 	 * no default-branch concept.
 	 */
 	getDefaultBranch?(): Promise<string | undefined>;
+	/**
+	 * OPTIONALLY report the repo's VISIBILITY (GitHub:
+	 * `gh repo view --json visibility`). Read-only. Returns `undefined` when the
+	 * lookup fails; absent on a provider with no such concept. Drives
+	 * {@link shouldDropCheckoutCredentials}.
+	 */
+	getRepoVisibility?(): Promise<RepoVisibility | undefined>;
 	/**
 	 * OPTIONALLY create/replace a branch RULESET (GitHub:
 	 * `POST /repos/{owner}/{repo}/rulesets`) carrying the deadlock-guard
@@ -674,6 +719,75 @@ function indent(text: string, spaces: number): string {
 }
 
 /**
+ * The npm package the composite setup action installs for the `pi` harness.
+ *
+ * Upstream moved the harness from `@mariozechner/pi-coding-agent` (deprecated,
+ * frozen at 0.73.1) to this name. The binary is still `pi` and it still reads
+ * `~/.pi/agent/` (models.json / auth.json), so nothing else in the generated
+ * action changes.
+ */
+export const PI_HARNESS_PACKAGE = '@earendil-works/pi-coding-agent';
+
+/**
+ * The EXACT `pi` harness version the composite setup action installs.
+ *
+ * Pinned because the install runs in jobs that hold `contents: write` and a
+ * provider API key: an unpinned `npm install -g` resolves whatever `latest` is
+ * at RUN time, so a compromised or broken release would reach those
+ * credentials with no review and no lockfile to catch it.
+ *
+ * It is a constant dorfl DECLARES (not an install-ci parameter) because the
+ * harness is coupled to dorfl, not to the consumer: dorfl drives `pi` through
+ * its CLI flags and reads its session files (`session-path.ts`,
+ * `watch-session.ts`), so the harness version that works is a property of the
+ * dorfl release. Bump it here, with a changeset, when a dorfl release needs a
+ * newer harness; every consumer picks it up on their next `install-ci` run.
+ *
+ * 0.80.6 is the version dorfl is exercised against day to day (the maintainer's
+ * installed `pi`), not the newest release: a harness upgrade should be a
+ * deliberate, tested bump. It requires Node >= 22.19.0, which the action's
+ * `node-version: '22'` satisfies (setup-node resolves the latest 22.x).
+ */
+export const PI_HARNESS_VERSION = '0.80.6';
+
+/**
+ * The version of THIS dorfl package, read at runtime from its own
+ * `package.json` (the single source changesets bumps on release). The composite
+ * setup action installs `dorfl@<this version>` so a consumer's CI runs the SAME
+ * CLI that generated its workflows, instead of whatever `latest` is at run time.
+ *
+ * Resolved relative to this module (`dist/install-ci-core.js` or
+ * `src/install-ci-core.ts` → `../package.json`), so it works from the built CLI
+ * and under tsx. Throws when the version cannot be read: silently falling back
+ * to an unpinned install would reintroduce exactly the risk the pin removes.
+ */
+export function dorflPackageVersion(): string {
+	const here = dirname(fileURLToPath(import.meta.url));
+	const pkgPath = join(here, '..', 'package.json');
+	let version: unknown;
+	try {
+		version = (JSON.parse(readFileSync(pkgPath, 'utf8')) as {version?: unknown})
+			.version;
+	} catch (err) {
+		throw new Error(
+			`install-ci: cannot read dorfl's own version from ${pkgPath} ` +
+				`(needed to pin \`npm install -g dorfl@<version>\`): ` +
+				(err instanceof Error ? err.message : String(err)),
+		);
+	}
+	if (
+		typeof version !== 'string' ||
+		!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/.test(version)
+	) {
+		throw new Error(
+			`install-ci: dorfl's package.json at ${pkgPath} has no usable semver ` +
+				`"version" (got ${JSON.stringify(version)}); cannot pin the CI install.`,
+		);
+	}
+	return version;
+}
+
+/**
  * The install step for the configured harness (the `pi` CLI; `''` ⇒ none).
  * `registry` mode installs via `npm install -g`; `workspace` mode installs via
  * `pnpm add -g` so the harness lands on the pnpm global bin already on
@@ -684,11 +798,15 @@ function harnessInstallStep(
 	installSource: InstallSource,
 ): string {
 	if (harness === 'pi') {
+		const spec = `${PI_HARNESS_PACKAGE}@${PI_HARNESS_VERSION}`;
 		const run =
 			installSource === 'workspace'
-				? 'pnpm add -g @mariozechner/pi-coding-agent'
-				: 'npm install -g @mariozechner/pi-coding-agent';
+				? `pnpm add -g ${spec}`
+				: `npm install -g ${spec}`;
 		return `
+    # Pinned to the exact harness version this dorfl release declares
+    # (PI_HARNESS_VERSION): the job holds write access and a provider key, so the
+    # version must not move on its own. Re-run \`dorfl install-ci\` to upgrade.
     - name: Install agent harness (pi)
       shell: bash
       run: ${run}`;
@@ -815,17 +933,25 @@ ${indent(modelsJsonStr, 8)}
         pnpm setup
         echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"
 
+    # \`--ignore-scripts\`: nothing here needs an install-time script. The build is
+    # explicit (\`pnpm -r build\` below; the root \`prepare\` would only repeat it),
+    # and verify runs on fork pull requests, where a lifecycle script would run
+    # the fork's code before any gate does.
     - name: Install dependencies and build dorfl
       shell: bash
       run: |
-        pnpm install
+        pnpm install --ignore-scripts
         pnpm -r build
         cd packages/dorfl && pnpm link --global${installHarness}`;
 	} else {
 		installSteps = `\
+    # Pinned to the dorfl version that generated this action, so CI runs the
+    # same CLI that wrote these workflows (and never an unreviewed \`latest\` in a
+    # job holding write access and a provider key). Re-run \`dorfl install-ci\`
+    # after upgrading dorfl to move the pin.
     - name: Install dorfl
       shell: bash
-      run: npm install -g dorfl${installHarness}`;
+      run: npm install -g dorfl@${dorflPackageVersion()}${installHarness}`;
 	}
 
 	// NO bespoke CI resolver shim (task install-ci-shim-converges-on-dorfl-cmd,

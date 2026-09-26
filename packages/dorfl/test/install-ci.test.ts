@@ -377,7 +377,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('using: composite');
 		expect(action).toContain('actions/setup-node@v5');
 		expect(action).toContain('npm install -g dorfl');
-		expect(action).toContain('npm install -g @mariozechner/pi-coding-agent');
+		expect(action).toContain('npm install -g @earendil-works/pi-coding-agent');
 		expect(action).toContain('git config user.name "dorfl[bot]"');
 		expect(action).toContain('Configure agent models (models.json)');
 		expect(action).toContain('~/.pi/agent/models.json');
@@ -438,7 +438,7 @@ describe('composite setup action generation (both auth modes)', () => {
 	it('registry mode (default) installs the published CLI via npm and uses NO pnpm steps', () => {
 		const action = generateSetupAction(modelsConfig);
 		expect(action).toContain('npm install -g dorfl');
-		expect(action).toContain('npm install -g @mariozechner/pi-coding-agent');
+		expect(action).toContain('npm install -g @earendil-works/pi-coding-agent');
 		expect(action).not.toContain('pnpm');
 		expect(action).not.toContain('build dorfl');
 	});
@@ -458,11 +458,11 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('pnpm -r build');
 		expect(action).toContain('cd packages/dorfl && pnpm link --global');
 		// Harness installed via pnpm so it lands on the pnpm global bin on PATH.
-		expect(action).toContain('pnpm add -g @mariozechner/pi-coding-agent');
+		expect(action).toContain('pnpm add -g @earendil-works/pi-coding-agent');
 		// The registry install is GONE in workspace mode.
 		expect(action).not.toContain('npm install -g dorfl');
 		expect(action).not.toContain(
-			'npm install -g @mariozechner/pi-coding-agent',
+			'npm install -g @earendil-works/pi-coding-agent',
 		);
 	});
 

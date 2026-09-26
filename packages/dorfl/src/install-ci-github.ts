@@ -16,7 +16,11 @@
 
 import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
-import type {CIProviderContext} from './install-ci-core.js';
+import {
+	parseRepoVisibility,
+	type CIProviderContext,
+	type RepoVisibility,
+} from './install-ci-core.js';
 
 /**
  * The provider id this adapter exposes through {@link CIProviderContext.providerId}.
@@ -266,6 +270,32 @@ export class GitHubCIContext implements CIProviderContext {
 	}
 
 	/**
+	 * Detect the repo's VISIBILITY via
+	 * `gh repo view --json visibility --jq .visibility` (GitHub answers
+	 * `PUBLIC` / `PRIVATE` / `INTERNAL`). Returns `undefined` when `gh` is
+	 * unavailable / the repo is unknown / the call fails / the answer is not one
+	 * of those three, so the caller keeps the conservative (credential-persisting)
+	 * checkout. Read-only.
+	 */
+	async getRepoVisibility(): Promise<RepoVisibility | undefined> {
+		if (!this.repo) {
+			return undefined;
+		}
+		const result = this.runGh([
+			'repo',
+			'view',
+			'--json',
+			'visibility',
+			'--jq',
+			'.visibility',
+		]);
+		if (result === undefined || result.status !== 0) {
+			return undefined;
+		}
+		return parseRepoVisibility(result.stdout);
+	}
+
+	/**
 	 * Create the deadlock-guard RULESET via
 	 * `POST /repos/{owner}/{repo}/rulesets`. The `ruleset` body is JSON-piped on
 	 * stdin (`gh api --input -`) so the nested rule shape carries cleanly. Throws
@@ -388,6 +418,8 @@ export class MemoryCIProviderContext implements CIProviderContext {
 	private readonly adminScope: boolean | undefined;
 	/** What `getDefaultBranch()` should return (tests configure). */
 	private readonly defaultBranch: string | undefined;
+	/** What `getRepoVisibility()` should return (tests configure). */
+	private readonly visibility: RepoVisibility | undefined;
 	/** Whether `setBranchProtection` should throw (tests configure). */
 	private readonly branchProtectionError: string | undefined;
 	/** Whether `setBranchRuleset` should throw (tests configure). */
@@ -404,6 +436,8 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		 * exercises its `main` fallback (models a `gh` that could not resolve it).
 		 */
 		defaultBranch?: string;
+		/** Fixture repo visibility; `undefined` ⇒ unknown (lookup failed / no gh). */
+		visibility?: RepoVisibility;
 		/** When set, `setBranchProtection` throws with this message (failure path). */
 		branchProtectionError?: string;
 		/** When set, `setBranchRuleset` throws with this message (failure path). */
@@ -421,6 +455,7 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		this.ghAvailable = options.ghAvailable ?? false;
 		this.adminScope = options.adminScope;
 		this.defaultBranch = options.defaultBranch;
+		this.visibility = options.visibility;
 		this.branchProtectionError = options.branchProtectionError;
 		this.branchRulesetError = options.branchRulesetError;
 		this.providerId = options.providerId ?? GITHUB_PROVIDER_ID;
@@ -444,6 +479,10 @@ export class MemoryCIProviderContext implements CIProviderContext {
 
 	async getDefaultBranch(): Promise<string | undefined> {
 		return this.defaultBranch;
+	}
+
+	async getRepoVisibility(): Promise<RepoVisibility | undefined> {
+		return this.visibility;
 	}
 
 	async setBranchProtection(branch: string, spec: unknown): Promise<void> {

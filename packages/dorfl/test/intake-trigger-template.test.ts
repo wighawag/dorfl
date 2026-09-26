@@ -319,9 +319,14 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 	it('invokes `dorfl intake <N>` (explicit issue number, four-outcome dispatch), never a bare slug or a build verb', () => {
 		const text = generateIntakeWorkflow(config);
 		expect(/dorfl intake\b/.test(text)).toBe(true);
+		// The number reaches the shell through the step env, never as `${{ }}`
+		// text spliced into the `run:` script (script injection).
 		expect(
-			/dorfl intake "?\$\{\{\s*github\.event\.issue\.number/.test(text),
+			/ISSUE_NUMBER: \$\{\{ github\.event\.issue\.number \}\}[\s\S]*?dorfl intake "\$\{ISSUE_NUMBER\}"/.test(
+				text,
+			),
 		).toBe(true);
+		expect(/dorfl intake "?\$\{\{/.test(text)).toBe(false);
 		const result = validateIntakeWorkflow(text);
 		expect(result.problems.map((p) => p.id)).not.toContain('no-build-verbs');
 		expect(result.problems.map((p) => p.id)).not.toContain(
@@ -525,6 +530,23 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		expectFlagged(
 			base.replace(/dorfl intake "/, 'echo skip "'),
 			'invokes-intake',
+		);
+	});
+
+	it('flags the issue number or a policy flag spliced into `run:` as `${{ }}` (script injection)', () => {
+		expectFlagged(
+			base.replace(
+				/dorfl intake "\$\{ISSUE_NUMBER\}"/,
+				'dorfl intake "${{ github.event.issue.number }}"',
+			),
+			'intake-args-not-spliced-into-run',
+		);
+		expectFlagged(
+			base.replace(
+				/"\$\{TASK_FLAG\}"/,
+				'"${{ steps.policy.outputs.task_flag }}"',
+			),
+			'intake-args-not-spliced-into-run',
 		);
 	});
 

@@ -54,7 +54,11 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		// one `advance <matrix item>` per leg = one PR per item.
 		expect(/strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(true);
 		expect(text).toContain('dorfl scan --json');
-		expect(/dorfl advance "?\$\{\{\s*matrix\./.test(text)).toBe(true);
+		expect(
+			/WORK_ITEM: \$\{\{ matrix\.item \}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
+				text,
+			),
+		).toBe(true);
 	});
 
 	it('each propose matrix leg carries --propose, tying integration mode to the matrix shape', () => {
@@ -63,7 +67,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		// the integration mode is TIED to the matrix shape the dispatch input picked
 		// (it can never fall back to a repo config default of `merge`).
 		expect(
-			/advance-propose:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+			/advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
 				text,
 			),
 		).toBe(true);
@@ -73,7 +77,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 		// only — split off the merge section so the regex cannot reach it.
 		const proposeSection = text.split('advance-merge:')[0];
 		expect(
-			/dorfl advance "?\$\{\{\s*matrix\.[^\n]*--merge\b/.test(proposeSection),
+			/dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(proposeSection),
 		).toBe(false);
 	});
 
@@ -88,7 +92,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			true,
 		);
 		expect(
-			/advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+			/advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
 				text,
 			),
 		).toBe(true);
@@ -198,7 +202,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			// Drop `--propose` from the matrix leg only: the integration mode would then
 			// fall back to config and could desync from the matrix shape.
 			const broken = base.replace(
-				/(dorfl advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --propose/,
+				/(dorfl advance "\$\{WORK_ITEM\}") --propose/,
 				'$1',
 			);
 			const result = withTmpTemplate(broken);
@@ -212,7 +216,7 @@ describe('advance-install-ci — the CI workflow template (the install-ci notion
 			// Drop `--merge` from the merge matrix leg only: the integration mode
 			// would then fall back to config and could desync from the matrix shape.
 			const broken = base.replace(
-				/(advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.item\s*\}\}"?) --merge/,
+				/(advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}") --merge/,
 				'$1',
 			);
 			const result = withTmpTemplate(broken);

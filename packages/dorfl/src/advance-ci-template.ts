@@ -147,15 +147,23 @@ export function validateAdvanceCiTemplate(
 		'+ `cwd.repo.specs[]` pools), so a ready ungated SPEC becomes one auto-task ' +
 		'matrix leg alongside the eligible-task legs ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
-	require('propose-one-advance-per-item', /dorfl advance "?\$\{\{\s*matrix\./.test(
+	require('propose-one-advance-per-item', /WORK_ITEM:\s*\$\{\{\s*matrix\.item\s*\}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
 		text,
 	), 'each matrix leg must run one `dorfl advance <matrix item>` ' +
-		'(one PR per item).');
+		'(one PR per item), reading the item from the step env (`WORK_ITEM`).');
+	// The item id is a slug that may be hand-written, so it must reach the shell
+	// as DATA through `env:`, never as `${{ }}` text spliced into the `run:` script
+	// (GitHub Actions script injection).
+	require('matrix-item-not-spliced-into-run', !/dorfl advance "?\$\{\{/.test(
+		text,
+	), 'the matrix item must NOT be interpolated into the `run:` script as ' +
+		'`${{ matrix.item }}` (script injection): pass it through the step `env:` ' +
+		'as `WORK_ITEM` and quote it as `"${WORK_ITEM}"`.');
 	// The matrix leg must carry `--propose` so the integration mode is TIED to the
 	// matrix shape (it cannot desync from the dispatch `integrationMode` input nor
 	// fall back to a repo config default of `merge`). Scoped to the `advance-propose`
 	// job so it is the LEG that carries it, not merely the file somewhere.
-	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--propose\b/.test(
+	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
 		text,
 	), 'each `propose` matrix leg must pass `--propose` so the integration mode is ' +
 		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
@@ -176,7 +184,7 @@ export function validateAdvanceCiTemplate(
 	// scoped to the `advance-merge:` job so the `--merge` flag is TIED to its leg
 	// (cannot desync from the dispatch `integrationMode` input nor fall back to a
 	// repo config default of `propose`).
-	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "?\$\{\{\s*matrix\.[\s\S]*?--merge\b/.test(
+	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
 		text,
 	), 'each `merge` matrix leg must pass `--merge` so the integration mode is ' +
 		'TIED to the matrix shape (a leg can never propose-only / desync from the ' +

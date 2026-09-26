@@ -463,13 +463,23 @@ jobs:
         # lone-task review/edit loop and posts its findings as questions back into
         # THIS issue thread (insertion point E) through the issue-comment seam —
         # CI surfaces E by invoking intake; it adds no new review mechanism.
+        #
+        # Every value reaches the shell through \`env:\` as DATA and is read back as a
+        # quoted variable, never as \`\${{ }}\` text spliced into the script
+        # (GitHub's script-injection guidance). The issue number is an integer and
+        # the policy outputs are fixed flags today; routing them through env anyway
+        # keeps "no \`\${{ }}\` inside \`run:\`" a rule with no exceptions.
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: \${{ github.event.issue.number }}
+          SPEC_FLAG: \${{ steps.policy.outputs.spec_flag }}
+          TASK_FLAG: \${{ steps.policy.outputs.task_flag }}
+          ORIGIN_TRUST_FLAG: \${{ steps.policy.outputs.origin_trust_flag }}
         run: |
-          dorfl intake "\${{ github.event.issue.number }}" \\
-            "\${{ steps.policy.outputs.spec_flag }}" \\
-            "\${{ steps.policy.outputs.task_flag }}" \\
-            "\${{ steps.policy.outputs.origin_trust_flag }}" \\
+          dorfl intake "\${ISSUE_NUMBER}" \\
+            "\${SPEC_FLAG}" \\
+            "\${TASK_FLAG}" \\
+            "\${ORIGIN_TRUST_FLAG}" \\
             --arbiter origin
 `;
 }
@@ -521,10 +531,20 @@ export function validateIntakeWorkflow(text: string): IntakeTriggerValidation {
 		'schedules).');
 	// The issue number rides the explicit positional — never a bare slug, and the
 	// number comes from the event payload (the issue under intake).
-	require('intake-explicit-issue-number', /dorfl intake "?\$\{\{\s*github\.event\.issue\.number/.test(
+	require('intake-explicit-issue-number', /ISSUE_NUMBER:\s*\$\{\{\s*github\.event\.issue\.number\s*\}\}[\s\S]*?dorfl intake "\$\{ISSUE_NUMBER\}"/.test(
 		operative,
 	), 'the intake invocation must pass the explicit issue NUMBER ' +
-		'(`github.event.issue.number`), never a bare slug.');
+		'(`github.event.issue.number`, via the step env as `ISSUE_NUMBER`), never a bare slug.');
+	// No `${{ }}` spliced into the intake `run:` script (script injection): the
+	// number and the policy flags reach the shell through the step `env:`.
+	require('intake-args-not-spliced-into-run', !/dorfl intake "?\$\{\{/.test(
+		operative,
+	) &&
+		!/"\$\{\{\s*steps\.policy\.outputs\./.test(
+			operative,
+		), 'the intake invocation must NOT interpolate `${{ github.event.issue.number }}` ' +
+		'or `${{ steps.policy.outputs.* }}` into its `run:` script: pass them through ' +
+		'the step `env:` and quote the variables.');
 	// CI owns ONLY the trigger/policy/delivery — it must NOT invoke a build/task
 	// verb (that is the build/task tick), nor re-implement the transform.
 	require('no-build-verbs', !/dorfl (?:do|advance)\b/.test(

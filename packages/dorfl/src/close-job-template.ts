@@ -34,6 +34,7 @@
  */
 
 import type {ResolvedCIConfig} from './install-ci-core.js';
+import {shouldDropCheckoutCredentials} from './install-ci-core.js';
 
 /** The capability id (the registry key + the emitted workflow file stem). */
 export const CLOSE_JOB_CAPABILITY_ID = 'close-job';
@@ -52,7 +53,19 @@ export const CLOSE_JOB_WORKFLOW_PATH = 'workflows/close-job.yml';
  * and future per-config wiring, but the close-job shape itself is
  * config-independent.
  */
-export function generateCloseJobWorkflow(_config: ResolvedCIConfig): string {
+export function generateCloseJobWorkflow(config: ResolvedCIConfig): string {
+	// `persist-credentials: false` ONLY on a repo KNOWN to be public (see
+	// {@link shouldDropCheckoutCredentials}): this job has `contents: read`, so
+	// the persisted token can only ever read, and on a public repo reads need
+	// no token. Unknown / private / internal ⇒ today's checkout, unchanged.
+	const checkoutCredentials = shouldDropCheckoutCredentials(config)
+		? `
+          # Public repository: every git read works without a token, and this
+          # job cannot push, so do not leave the token in .git/config for later
+          # steps (the setup action, including any project-setup hook, and
+          # close-merged-issues) to read.
+          persist-credentials: false`
+		: '';
 	return `\
 # dorfl — the ISSUE CLOSE-JOB in CI (capability E, spec runner-in-ci).
 # EMITTED by \`dorfl install-ci\`; the human commits it. DO NOT hand-edit a
@@ -112,7 +125,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0${checkoutCredentials}
       - uses: ./.github/actions/dorfl-setup
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS

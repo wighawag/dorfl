@@ -193,6 +193,31 @@ export async function installCI(
 		}
 	}
 
+	// 2c. Detect the repo's VISIBILITY (read-only; also in --fake, like the repo
+	//     slug detection). It decides whether the read-only jobs (verify,
+	//     close-job) check out with `persist-credentials: false`, which is only
+	//     provably safe on a PUBLIC repo (every git read works without a token).
+	//     Detected AFTER the export early-return: it is a fact about the repo,
+	//     never a config value, so it is not baked into an exported config.
+	if (options.ctx.getRepoVisibility) {
+		const visibility = await options.ctx
+			.getRepoVisibility()
+			.catch(() => undefined);
+		if (visibility !== undefined) {
+			config.repoVisibility = visibility;
+		}
+	}
+	if (config.repoVisibility === 'public') {
+		log(
+			'🔒 Public repository: verify + close-job check out with persist-credentials: false (no token left in .git/config).',
+		);
+	} else {
+		log(
+			`🔒 Repository visibility ${config.repoVisibility ?? 'unknown'}: verify + close-job keep the checkout token ` +
+				'(a git fetch in your gate or project-setup hook may need it). Re-run install-ci if the repo becomes public.',
+		);
+	}
+
 	// 3. Orchestrate secrets — SKIPPED in --fake mode (no real secret touched).
 	let secrets: SecretSetResult[] = [];
 	if (fake) {

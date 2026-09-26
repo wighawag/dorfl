@@ -187,7 +187,10 @@ native Actions step YAML. A GitHub `pnpm` example:
   with: { node-version: '22', cache: pnpm }
 - name: Install project dependencies
   shell: bash
-  run: pnpm install --frozen-lockfile
+  # --ignore-scripts: `verify` runs on fork pull requests, so without it a
+  # dependency's install script runs on the runner before any gate does. Drop it
+  # only if your project genuinely needs install-time scripts (see below).
+  run: pnpm install --frozen-lockfile --ignore-scripts
 # Pitfall 2: give `changeset status --since=main` a local main to diff against
 - name: Ensure a local main branch
   shell: bash
@@ -220,6 +223,18 @@ a clean worktree), NOT the GitHub `verify` PR check. So the GitHub `verify` chec
 can be red for one of the pitfalls above while work still lands — the check only
 blocks human/`propose` PRs and the Version PR's mergeability. Fix the gate anyway:
 a perpetually-red required check trains everyone to ignore it.
+
+## Security posture of the generated workflows
+
+Everything `install-ci` emits follows four rules. Consumers are told not to hand-edit the generated files (a re-run overwrites them), so these live in the generator; re-run `dorfl install-ci` after upgrading dorfl to pick up changes.
+
+**No `${{ }}` inside a `run:` script.** An expression in `run:` is substituted as text before the shell starts, so its value becomes part of the script (GitHub Actions script injection). Every value a step needs (the matrix item, dispatch inputs, the issue number, step outputs) is passed through the step's `env:` mapping and read back as a quoted variable, `"${VAR}"`. This matters most for the advance matrix: an item id is a slug read from `work/` (frontmatter `slug:` or the file name), and some slugs are drafted from issue content. dorfl sanitises every slug it mints (`src/slug-safety.ts`) and the slug resolvers refuse anything outside the safe set, but a hand-written slug is only checked when a verb resolves it, so the workflow must not trust it as script text either. A test parses every generated file and fails if any `run:` value contains `${{`; keep the rule when you add a project-setup hook step.
+
+**Pinned global installs.** The composite `dorfl-setup` action installs `dorfl@<the version that generated it>`, so CI runs the same CLI that wrote its workflows, and the `pi` harness at the exact version that dorfl release declares (`PI_HARNESS_VERSION` in `install-ci-core.ts`). Neither floats to `latest` in a job that holds `contents: write` and a provider key.
+
+**Install-time scripts are the project's call.** dorfl installs none of your dependencies (the toolchain boundary above), so it cannot add `--ignore-scripts` to your install for you. The example hook above uses it because `verify` runs on fork pull requests. The tradeoff: with it, a dependency's `preinstall`/`install`/`postinstall` and your own root `prepare` do not run, so if your build relies on one (a native addon compiled at install, a `prepare` that generates code the gate needs), either run that step explicitly in the hook after the install, or drop the flag and accept that a fork PR's dependency scripts execute on the runner. Fork PR runs get a read-only token and no secrets, and `verify` has only `contents: read`, which bounds the damage but does not remove it.
+
+**`persist-credentials: false` only on public repositories.** `install-ci` asks the provider for the repository's visibility (`gh repo view --json visibility`). When it is public, the `verify` and `close-job` checkouts set `persist-credentials: false`: both jobs have `contents: read`, so the token could only read, and on a public repo reads need no token, so nothing is lost and the token is no longer left in `.git/config` for later steps (your hook's installs, your gate) to read. When the repository is private or internal, or the visibility cannot be determined (no authenticated `gh`, `--fake` without one), the checkout keeps the token, because a `git fetch origin main` in your gate or hook needs it on a private repo. If you change the repository's visibility, re-run `install-ci`. The advance and intake jobs push, so they always keep the token.
 
 ## Branch protection and the tree-less answer-loop (a required-check caveat)
 
