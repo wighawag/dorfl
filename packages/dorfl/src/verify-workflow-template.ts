@@ -21,6 +21,7 @@
  * trigger surface — the forward seam the spec's Applied Answers q3 names.
  */
 
+import {ACTION_PINS, pinnedUses} from './install-ci-action-pins.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
 import {shouldDropCheckoutCredentials} from './install-ci-core.js';
 
@@ -112,7 +113,7 @@ jobs:
   ${VERIFY_CHECK_CONTEXT}:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0${checkoutCredentials}
       - uses: ./.github/actions/dorfl-setup

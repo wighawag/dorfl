@@ -180,10 +180,10 @@ native Actions step YAML. A GitHub `pnpm` example:
 ```yaml
 # in .github/actions/dorfl-setup/action.yml, FIRST under runs.steps:
 - name: Setup pnpm
-  uses: pnpm/action-setup@v4
+  uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
   with: { version: 10.28.1 }
 - name: Setup Node.js
-  uses: actions/setup-node@v5
+  uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
   with: { node-version: '22', cache: pnpm }
 - name: Install project dependencies
   shell: bash
@@ -202,6 +202,8 @@ native Actions step YAML. A GitHub `pnpm` example:
 ```
 
 (Requires the workflow's `actions/checkout` to use `fetch-depth: 0`.)
+
+**Action pins.** Every third-party action `install-ci` emits is pinned to a full commit SHA with the version in a trailing comment (`actions/checkout@<sha> # v7.0.1`), the format Dependabot writes; pin the actions in your project-setup snippet the same way. When `install-ci` rewrites a file under `.github/` that already pins an action to a SHA (matched by `owner/repo`, not by position), it keeps your reference and its comment instead of dorfl's default, so a Dependabot bump survives regeneration. It never replaces a SHA with a tag. To let Dependabot reach the composite action, list `/.github/actions/*` in the `github-actions` entry's `directories` alongside `/`.
 
 **Pitfall 3 — a gate step that cannot pass on the changesets Version PR.** If your
 gate asserts "every changed package has a changeset" (`changeset status

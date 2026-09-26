@@ -60,6 +60,7 @@
  * the test generates this artifact under `--fake` and asserts every invariant.
  */
 
+import {ACTION_PINS, pinnedUses} from './install-ci-action-pins.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
 import {providerSecretsWithBlock} from './install-ci-core.js';
 
@@ -296,7 +297,7 @@ jobs:
       # re-run, no baked-in YAML number.
       githubTimeout: \${{ steps.timeout.outputs.githubTimeout }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup
@@ -406,7 +407,7 @@ jobs:
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
@@ -485,7 +486,7 @@ jobs:
       matrix:
         item: \${{ fromJson(needs.enumerate.outputs.items) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
@@ -549,7 +550,7 @@ jobs:
     if: \${{ (github.event.inputs.sweepMergedBranches || 'true') == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup

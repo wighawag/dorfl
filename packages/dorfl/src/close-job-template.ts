@@ -33,6 +33,7 @@
  * the test generates this artifact under `--fake` and asserts every invariant.
  */
 
+import {ACTION_PINS, pinnedUses} from './install-ci-action-pins.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
 import {shouldDropCheckoutCredentials} from './install-ci-core.js';
 
@@ -123,7 +124,7 @@ jobs:
   close-merged-issues:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0${checkoutCredentials}
       - uses: ./.github/actions/dorfl-setup

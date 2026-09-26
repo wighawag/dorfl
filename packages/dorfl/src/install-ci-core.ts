@@ -25,10 +25,21 @@
  * `DORFL_*` env block, NOT a new config knob minted here.
  */
 
-import {readFileSync, writeFileSync, mkdirSync, readdirSync} from 'node:fs';
+import {
+	readFileSync,
+	writeFileSync,
+	mkdirSync,
+	readdirSync,
+	existsSync,
+} from 'node:fs';
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {HarnessAdapter} from './config.js';
+import {
+	ACTION_PINS,
+	pinnedUses,
+	preserveExistingPins,
+} from './install-ci-action-pins.js';
 
 // ─── Config model ──────────────────────────────────────────────────────────
 
@@ -925,7 +936,7 @@ ${indent(modelsJsonStr, 8)}
 	if (config.installSource === 'workspace') {
 		installSteps = `\
     - name: Setup pnpm
-      uses: pnpm/action-setup@v5
+      uses: ${pinnedUses(ACTION_PINS.pnpmSetup)}
 
     - name: Add pnpm global bin to PATH
       shell: bash
@@ -1021,15 +1032,16 @@ runs:
   using: composite
   steps:
 ${projectSetupBlock}    - name: Setup Node.js
-      uses: actions/setup-node@v5
+      uses: ${pinnedUses(ACTION_PINS.setupNode)}
       with:
         node-version: '22'
-        # setup-node@v5 auto-enables package-manager caching, which probes the
-        # project package manager DURING its own run when a lockfile is present,
-        # before that manager is on PATH, so the probe crashes ("Unable to
-        # locate executable file"). dorfl provisions ONLY its own runtime and
-        # leaves the project package-manager cache to the project (toolchain
-        # boundary), so disable it explicitly.
+        # setup-node (v5 and later) auto-enables package-manager caching. In v5
+        # it probed whatever manager package.json's packageManager named, during
+        # its own run and before that manager was on PATH, and crashed ("Unable
+        # to locate executable file"). Since v6 it only fires when package.json
+        # declares npm, and then fails if there is no npm lockfile. Either way
+        # it is the project's cache, not dorfl's: dorfl provisions ONLY its own
+        # runtime (toolchain boundary), so disable it explicitly.
         package-manager-cache: false
 
     - name: Configure git identity
@@ -1195,6 +1207,13 @@ export function outputBaseName(fake: boolean): string {
  * Write the artifacts under `<workDir>/<base>/` (base = `.fake` when `fake`, else
  * `.github`). Returns the repo-relative paths actually written. Pure filesystem
  * I/O — no secrets, no git. Creates parent dirs as needed.
+ *
+ * PIN PRESERVATION. Before writing a YAML artifact, any `uses:` of an action the
+ * repository's EXISTING `.github/<path>` already pins to a full commit SHA keeps
+ * that reference and its trailing comment (see {@link preserveExistingPins}),
+ * so a Dependabot bump survives regeneration and a pin is never swapped for a
+ * tag. The existing file is always read from `.github/`, also in `--fake` mode,
+ * so the `.fake/` preview shows what a real run would write.
  */
 export function writeArtifacts(options: {
 	workDir: string;
@@ -1205,8 +1224,15 @@ export function writeArtifacts(options: {
 	const written: string[] = [];
 	for (const file of options.files) {
 		const abs = join(options.workDir, base, file.path);
+		let content = file.content;
+		if (/\.ya?ml$/.test(file.path)) {
+			const current = join(options.workDir, outputBaseName(false), file.path);
+			if (existsSync(current)) {
+				content = preserveExistingPins(content, readFileSync(current, 'utf8'));
+			}
+		}
 		mkdirSync(dirname(abs), {recursive: true});
-		writeFileSync(abs, file.content, 'utf8');
+		writeFileSync(abs, content, 'utf8');
 		written.push(relative(options.workDir, abs));
 	}
 	return written;

@@ -42,6 +42,10 @@ import {
 	validateGithubProjectSetupPayload,
 } from '../src/install-ci-github.js';
 import {installCI, runWizard, type WizardPrompts} from '../src/install-ci.js';
+import {ACTION_PINS, pinnedUses} from '../src/install-ci-action-pins.js';
+
+/** The setup-node reference dorfl emits (the pinned default). */
+const SETUP_NODE_USES = pinnedUses(ACTION_PINS.setupNode);
 
 /**
  * `install-ci-core-and-github-adapter` — the provider-agnostic FOUNDATION of the
@@ -375,7 +379,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		const action = generateSetupAction(modelsConfig);
 		expect(action).toContain('name: Setup dorfl');
 		expect(action).toContain('using: composite');
-		expect(action).toContain('actions/setup-node@v5');
+		expect(action).toContain(SETUP_NODE_USES);
 		expect(action).toContain('npm install -g dorfl');
 		expect(action).toContain('npm install -g @earendil-works/pi-coding-agent');
 		expect(action).toContain('git config user.name "dorfl[bot]"');
@@ -449,7 +453,7 @@ describe('composite setup action generation (both auth modes)', () => {
 			installSource: 'workspace',
 		});
 		// The build-from-source steps.
-		expect(action).toContain('uses: pnpm/action-setup@v5');
+		expect(action).toContain(`uses: ${pinnedUses(ACTION_PINS.pnpmSetup)}`);
 		expect(action).toContain('pnpm setup');
 		expect(action).toContain(
 			'echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"',
@@ -473,7 +477,7 @@ describe('composite setup action generation (both auth modes)', () => {
 			installSource: 'workspace',
 		});
 		for (const shared of [
-			'actions/setup-node@v5',
+			SETUP_NODE_USES,
 			"node-version: '22'",
 			'git config user.name "dorfl[bot]"',
 			'git config user.email "dorfl[bot]@users.noreply.github.com"',
@@ -514,7 +518,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		// project-setup hook (sibling task `install-ci-project-setup-hook`).
 		const action = generateSetupAction(modelsConfig);
 		// dorfl's own Node step still emits (the criterion's "setup-node still emits").
-		expect(action).toContain('actions/setup-node@v5');
+		expect(action).toContain(SETUP_NODE_USES);
 		expect(action).toContain("node-version: '22'");
 		// Boundary is stated as a YAML comment (a deliberate, honest line) and
 		// names the project-setup hook by task slug so the supported escape hatch
@@ -526,14 +530,15 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toMatch(/not detection/i);
 	});
 
-	it('disables setup-node package-manager caching (setup-node@v5 probes pnpm before it is installed)', () => {
-		// Regression guard: setup-node@v5 auto-enables package-manager caching,
-		// which runs `pnpm store path` DURING the setup-node step when a
-		// pnpm-lock.yaml is present. pnpm is not on PATH yet at that point, so
-		// the run crashes with "Unable to locate executable file: pnpm". dorfl
-		// leaves the project's package-manager cache to the project (toolchain
-		// boundary), so the emitted setup-node step MUST disable it. Pin it in
-		// both install modes.
+	it("disables setup-node package-manager caching (the project cache is not dorfl's)", () => {
+		// Regression guard: setup-node auto-enables package-manager caching. v5
+		// ran `pnpm store path` DURING the setup-node step when package.json's
+		// packageManager named pnpm, before pnpm was on PATH, and crashed with
+		// "Unable to locate executable file: pnpm". v6 and later only do it when
+		// package.json declares npm, and then fail without an npm lockfile.
+		// dorfl leaves the project's package-manager cache to the project
+		// (toolchain boundary), so the emitted setup-node step MUST disable it.
+		// Pin it in both install modes.
 		for (const cfg of [
 			modelsConfig,
 			{...modelsConfig, installSource: 'workspace' as const},
@@ -1192,7 +1197,7 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 		// Ordering: the project-setup steps land BEFORE setup-node + dorfl-install
 		// + the agent-auth (models.json) step.
 		const posPnpm = action.indexOf('Setup pnpm');
-		const posNode = action.indexOf('actions/setup-node@v5');
+		const posNode = action.indexOf(SETUP_NODE_USES);
 		const posDorfl = action.indexOf('npm install -g dorfl');
 		const posAuth = action.indexOf('Configure agent models (models.json)');
 		expect(posPnpm).toBeGreaterThan(0);
@@ -1359,7 +1364,7 @@ describe('install-ci project-setup hook (provider-namespaced opaque pass-through
 		expect(written).toContain('uses: pnpm/action-setup@v5');
 		expect(written).toContain('pnpm install --frozen-lockfile');
 		expect(written.indexOf('Setup pnpm')).toBeLessThan(
-			written.indexOf('actions/setup-node@v5'),
+			written.indexOf(SETUP_NODE_USES),
 		);
 		expect(written.indexOf('Setup pnpm')).toBeLessThan(
 			written.indexOf('npm install -g dorfl'),

@@ -68,6 +68,7 @@
  */
 
 import {brand} from './brand.js';
+import {ACTION_PINS, pinnedUses} from './install-ci-action-pins.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
 import {providerSecretsWithBlock} from './install-ci-core.js';
 
@@ -365,7 +366,7 @@ jobs:
     if: \${{ github.event.issue.number && !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0
       - uses: ./.github/actions/dorfl-setup${setupWith}
