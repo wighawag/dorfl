@@ -113,9 +113,11 @@ describe('advance \u2014 the shared resolver (obs:/spec:/bare, not a do subcomma
 		expect(calls).toEqual(['build-task:task:feature']);
 	});
 
-	it('the HARD CUTOVER: prd:<slug> is a bare literal task slug (NOT the parent-spec rung)', async () => {
-		// `prd:` is no longer a namespace prefix, so `advance prd:autotask` resolves
-		// to a bare literal TASK slug (the build-task rung), NEVER the task-spec rung.
+	it('the HARD CUTOVER: prd:<slug> never reaches the parent-spec rung (refused as an unsafe slug)', async () => {
+		// `prd:` is no longer a namespace prefix. `advance prd:autotask` used to fall
+		// through to a bare literal TASK slug; since the safe-slug guard a `:` in a
+		// slug is refused as a usage error. Either way it is NEVER the task-spec rung,
+		// and nothing is executed.
 		const {executor, calls} = spyExecutor();
 		const result = await performAdvance({
 			arg: 'prd:autotask',
@@ -125,8 +127,9 @@ describe('advance \u2014 the shared resolver (obs:/spec:/bare, not a do subcomma
 			acquireLock: async () => ACQUIRED,
 			releaseLock: async () => RELEASED,
 		});
-		expect(result.rung).toBe('build-task');
-		expect(calls).toEqual(['build-task:task:prd:autotask']);
+		expect(result.exitCode).toBe(1);
+		expect(result.outcome).toBe('usage-error');
+		expect(calls).toEqual([]);
 	});
 
 	it('resolves spec:<slug> (the canonical parent-spec prefix) to the task-spec rung', async () => {

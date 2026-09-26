@@ -7,6 +7,7 @@ import {
 	type CreateItemThroughCasResult,
 } from './advancing-lock.js';
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
+import {ensureSafeSlug} from './slug-safety.js';
 
 /**
  * The **ADR-MINT route** (spec
@@ -185,7 +186,9 @@ export async function mintAdr(options: MintAdrOptions): Promise<MintAdrResult> {
 	const note = options.note ?? (() => {});
 
 	const {slug: obsSlug} = resolveSidecarIdentity(item);
-	const adrSlug = (options.adrSlug ?? obsSlug).trim();
+	// The drafted slug comes from an agent verdict: an unsafe one (a `/`, `..`,
+	// shell metacharacters) is sanitised, a safe one is kept exactly as drafted.
+	const adrSlug = ensureSafeSlug(options.adrSlug ?? obsSlug);
 	if (adrSlug === '') {
 		return {
 			outcome: 'usage-error',

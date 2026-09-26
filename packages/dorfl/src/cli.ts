@@ -1108,8 +1108,8 @@ interface CloseMergedIssuesFlags {
  * it prints the error to stderr and exits 1 (the task-only commands never act on
  * a spec). An OMITTED slug (`start`/`complete`/`prompt` infer it from the branch)
  * passes through untouched. (The legacy ''prd:'' prefix is a DEAD namespace token
- * after the hard cutover — it is neither special-cased nor rejected here; a
- * ''prd:<slug>'' arg resolves as a bare literal task slug.)
+ * after the hard cutover: it is not special-cased here; a ''prd:<slug>'' arg
+ * is refused by the shared safe-slug check, since `:` is not a slug character.)
  *
  * `do` is the ONE command that spans both namespaces; it consumes the full
  * `resolveSlug` (with the cross-namespace collision check) in the `do-in-place`

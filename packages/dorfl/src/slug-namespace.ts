@@ -1,4 +1,5 @@
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
+import {isSafeSlug, MAX_SLUG_LENGTH} from './slug-safety.js';
 
 /**
  * The **§3a slug-namespace resolver** (`docs/adr/command-surface-and-
@@ -44,8 +45,8 @@ import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
  *
  * HARD CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`,
  * contract step): the legacy ''prd'' member is GONE — the parent-spec namespace
- * is `'spec'` only. A ''prd:<slug>'' arg no longer parses to a namespace (it falls
- * through to a bare literal slug), and a `work/prd-<slug>` branch ref no longer
+ * is `'spec'` only. A ''prd:<slug>'' arg no longer parses to a namespace (the
+ * resolvers refuse it by the safe-slug check: `:` is not a slug character), and a `work/prd-<slug>` branch ref no longer
  * parses. No back-compat alias (the clean-break stance).
  */
 export type SlugNamespace = 'task' | 'spec' | 'observation';
@@ -155,8 +156,8 @@ const TASK_PREFIX = 'task:';
 /**
  * The parent-spec namespace prefix: `spec:<slug>` → `{explicit: 'spec'}`. HARD
  * CUTOVER (spec `prd-to-spec-vocabulary-cutover-and-migration-command`): the
- * legacy ''prd:'' prefix is GONE — a ''prd:<slug>'' arg falls through to a bare
- * literal slug (no namespace), the clean-break stance.
+ * legacy ''prd:'' prefix is GONE: a ''prd:<slug>'' arg carries no namespace and
+ * is refused by the safe-slug check (`:` is not a slug character), the clean-break stance.
  */
 const SPEC_PREFIX = 'spec:';
 /**
@@ -185,7 +186,8 @@ export class SlugResolutionError extends Error {
  * `spec:foo` → explicit spec, `foo` → bare (`explicit: undefined`). The prefix
  * match is case-sensitive and exact (`task:`/`spec:`); a slug like `tasked` is
  * NOT a prefix and stays bare. HARD CUTOVER: the legacy ''prd:'' prefix is not a
- * namespace prefix anymore — ''prd:foo'' stays a bare literal slug.
+ * namespace prefix anymore: ''prd:foo'' parses as a bare slug, which the
+ * resolvers then refuse by the safe-slug check (`:` is not a slug character).
  */
 export function parseSlugArg(arg: string): ParsedSlugArg {
 	if (arg.startsWith(TASK_PREFIX)) {
@@ -204,6 +206,29 @@ export function parseSlugArg(arg: string): ParsedSlugArg {
 		return {explicit: 'observation', slug: arg.slice(OBS_PREFIX.length)};
 	}
 	return {explicit: undefined, slug: arg};
+}
+
+/**
+ * Refuse a slug outside the safe set ({@link isSafeSlug}) before any verb acts on
+ * it. Producers sanitise the slugs they mint, but a slug can also arrive from a
+ * hand-written frontmatter `slug:` or a file name, and every resolved slug goes
+ * on to name files, git refs and CI command lines. Loud, like every other
+ * resolution error: an unsafe item is never acted on, and the message says how
+ * to fix it.
+ */
+function assertSafeSlug(arg: string, slug: string): void {
+	if (!isSafeSlug(slug)) {
+		throw new SlugResolutionError(
+			`'${arg}' does not name a usable slug: a slug must be 1-${MAX_SLUG_LENGTH} ` +
+				`letters, digits, '.', '_' or '-', start and end with a letter or digit, ` +
+				`and not contain '..'. Rename the item's file (and its frontmatter ` +
+				`\`slug:\`, if set) to a safe slug.` +
+				(slug.includes(':')
+					? ` (The only namespace prefixes are \`task:\`, \`spec:\`, \`obs:\` ` +
+						`and \`observation:\`; a legacy prefix such as \`prd:\` is not one.)`
+					: ''),
+		);
+	}
 }
 
 /** What the resolver needs to perform the existence checks. */
@@ -261,6 +286,7 @@ function specExists(
 export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 	const read = input.read ?? ledgerRead;
 	const parsed = parseSlugArg(input.arg);
+	assertSafeSlug(input.arg, parsed.slug);
 
 	if (parsed.explicit === 'observation') {
 		// `do` spans the task/spec namespaces ONLY (build a task OR task a spec).
@@ -313,6 +339,7 @@ export function resolveSlug(input: ResolveSlugInput): ResolvedSlug {
 export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
 	const read = input.read ?? ledgerRead;
 	const parsed = parseSlugArg(input.arg);
+	assertSafeSlug(input.arg, parsed.slug);
 
 	if (parsed.explicit !== undefined) {
 		// Explicit prefix (task / spec / observation): unambiguous by construction.
@@ -348,6 +375,7 @@ export function resolveAdvanceArg(input: ResolveSlugInput): ResolvedSlug {
  */
 export function resolveTaskOnlyArg(arg: string): string {
 	const parsed = parseSlugArg(arg);
+	assertSafeSlug(arg, parsed.slug);
 	if (parsed.explicit === 'spec') {
 		throw new SlugResolutionError(
 			`this command operates on tasks, not specs — '${arg}' names a spec. ` +

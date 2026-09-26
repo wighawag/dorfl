@@ -140,13 +140,14 @@ describe('task-only (§3a): resume / work-on reject spec:, accept bare + task:',
 		expect(out).toMatch(/tasks, not specs/);
 	});
 
-	it('the HARD CUTOVER: a prd: argument is NOT rejected as a namespace (it is a bare literal task slug)', () => {
-		// `prd:` is no longer a namespace prefix, so the task-only resolver does NOT
-		// reject it — it passes `prd:some-prd` through verbatim as a bare literal task
-		// slug (asserted at the pure resolver the task-only verbs share; driving the
-		// full verb would proceed to a real resume, which is not this assertion's
-		// concern).
-		expect(resolveTaskOnlyArg('prd:some-prd')).toBe('prd:some-prd');
+	it('the HARD CUTOVER: a prd: argument is NOT treated as a namespace (it is refused as an unsafe slug)', () => {
+		// `prd:` is no longer a namespace prefix. The task-only resolver used to pass
+		// `prd:some-prd` through as a bare literal task slug; since the safe-slug
+		// guard a `:` in a slug is refused, with a message naming the live prefixes
+		// (asserted at the pure resolver the task-only verbs share).
+		expect(() => resolveTaskOnlyArg('prd:some-prd')).toThrow(
+			/only namespace prefixes are `task:`, `spec:`, `obs:`/,
+		);
 	});
 });
 

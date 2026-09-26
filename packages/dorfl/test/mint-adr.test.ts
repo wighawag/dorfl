@@ -185,6 +185,27 @@ describe('mintAdr — ADR creation through the CAS (the sibling of promoteObserv
 		);
 	});
 
+	it('sanitises an unsafe drafted adrSlug (no path escape, no shell metacharacters)', async () => {
+		// The drafted slug comes from an agent verdict: `../` must not escape
+		// docs/adr/, and `$(...)` must not reach a file name or a ref.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredObs(seeded.repo, 'unsafe');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await mintAdr({
+			cwd: seeded.repo,
+			item: 'observation:unsafe',
+			itemPath,
+			adrSlug: '../../escape-$(id)',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('minted');
+		expect(result.adrPath).toBe('docs/adr/escape-id.md');
+	});
+
 	it('an empty ADR slug is a usage error (cannot draft an ADR)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		const itemPath = seedAnsweredObs(seeded.repo, 'empt');

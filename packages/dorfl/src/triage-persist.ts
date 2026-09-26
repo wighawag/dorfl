@@ -11,6 +11,7 @@ import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
 import {renderTaskBody, renderSpecBody} from './buildable-body.js';
 import {setFrontmatterMarker} from './frontmatter.js';
+import {ensureSafeSlug} from './slug-safety.js';
 
 /**
  * The engine-owned TRIAGE PERSIST (spec `advance-loop`, task `advance-rung-triage`,
@@ -433,7 +434,9 @@ export async function promoteObservation(
 	const note = options.note ?? (() => {});
 
 	const {slug: obsSlug} = resolveSidecarIdentity(item);
-	const newSlug = (options.newSlug ?? obsSlug).trim();
+	// The drafted slug comes from an agent verdict: an unsafe one (a `/`, `..`,
+	// shell metacharacters) is sanitised, a safe one is kept exactly as drafted.
+	const newSlug = ensureSafeSlug(options.newSlug ?? obsSlug);
 	const artifact = options.artifact ?? 'task';
 	if (newSlug === '') {
 		return {
@@ -460,13 +463,16 @@ export async function promoteObservation(
 	// review-nits back-pointer); this is the triage-promote lineage. Matching on this
 	// explicit field — not the slug — is what keeps an unrelated same-slug task from
 	// false-positiving into a benign skip.
+	// A drafted `stubContent` carries its own frontmatter, and the ledger reads
+	// `slug:` before the file name, so stamp the SAFE slug over whatever the
+	// draft said: otherwise a drafted `slug: ../x` would become the item's
+	// identity even though the file name was sanitised.
+	const drafted =
+		options.stubContent !== undefined
+			? setFrontmatterMarker(options.stubContent, 'slug', newSlug)
+			: buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env));
 	const content = setFrontmatterMarker(
-		ensureTaskDispatchable(
-			artifact,
-			newSlug,
-			options.stubContent ??
-				buildPromotedBody(artifact, newSlug, readItem(cwd, itemPath, env)),
-		),
+		ensureTaskDispatchable(artifact, newSlug, drafted),
 		'promotedFrom',
 		item,
 	);

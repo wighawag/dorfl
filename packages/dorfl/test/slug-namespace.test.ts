@@ -72,9 +72,9 @@ describe('parseSlugArg — pure prefix splitting', () => {
 
 	it('the HARD CUTOVER: a pre-rename slice:/brief:/prd: prefix is NOT a namespace prefix anymore (no alias)', () => {
 		// After each cutover the previous prefix becomes plain slug text — it carries
-		// no explicit namespace, so it falls through to the bare path (where it
-		// resolves as a literal `slice:foo` / `brief:foo` / `prd:foo` slug, never as
-		// the old namespace). No migration-window alias. (`spec:` is the LIVE
+		// no explicit namespace, so it falls through to the bare path (where the
+		// resolvers now refuse it as an unsafe slug, never resolving it as the old
+		// namespace). No migration-window alias. (`spec:` is the LIVE
 		// parent-spec prefix after the prd->spec cutover — see the positive cases.)
 		expect(parseSlugArg('slice:foo')).toEqual({
 			explicit: undefined,
@@ -223,23 +223,20 @@ describe('resolveSlug — the §3a cross-namespace resolver', () => {
 		});
 	});
 
-	it('the HARD CUTOVER: a pre-rename slice:/brief:/prd: arg is NOT accepted as the old namespace (resolves as a bare literal task)', () => {
-		// After each cutover the previous prefix is no longer a namespace prefix — it
-		// parses as a bare slug whose literal text is `slice:foo` / `brief:foo` /
-		// `prd:foo` (resolved to the TASK namespace because bare = task), NOT the old
-		// namespace. (`spec:foo` IS the live parent-spec prefix — covered above.)
+	it('the HARD CUTOVER: a pre-rename slice:/brief:/prd: arg is NOT accepted as the old namespace (refused: a colon is not a slug character)', () => {
+		// After each cutover the previous prefix is no longer a namespace prefix. It
+		// used to fall through as a bare literal task slug (`prd:foo`); since the
+		// safe-slug guard it is REFUSED loudly instead (a `:` is outside the safe
+		// slug set), with a message naming the live prefixes. Either way it never
+		// reaches the old namespace. (`spec:foo` IS the live parent-spec prefix.)
 		for (const dead of ['slice:foo', 'brief:foo', 'prd:foo']) {
-			expect(
+			expect(() =>
 				resolveSlug({
 					arg: dead,
 					repoPath: repoPath(),
 					read: currentLedgerRead,
 				}),
-			).toEqual({
-				namespace: 'task',
-				slug: dead,
-				explicit: false,
-			});
+			).toThrow(/only namespace prefixes are `task:`, `spec:`, `obs:`/);
 		}
 	});
 
@@ -393,10 +390,13 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		}
 	});
 
-	it('the HARD CUTOVER: a pre-rename prd: argument is NOT rejected as a namespace — it is a bare literal task slug', () => {
-		// `prd:` is no longer a namespace prefix, so a task-only command treats
-		// `prd:feature` as a bare literal slug (passed through verbatim), NOT rejected.
-		expect(resolveTaskOnlyArg('prd:feature')).toBe('prd:feature');
+	it('the HARD CUTOVER: a pre-rename prd: argument is NOT treated as a namespace: it is refused as an unsafe slug', () => {
+		// `prd:` is no longer a namespace prefix, and `prd:feature` is not a usable
+		// literal slug either (a `:` is outside the safe slug set), so a task-only
+		// command refuses it rather than acting on a task named `prd:feature`.
+		expect(() => resolveTaskOnlyArg('prd:feature')).toThrow(
+			/not name a usable slug/,
+		);
 	});
 
 	it('REJECTS an obs: argument with an "operates on tasks, not observations" error', () => {
@@ -409,11 +409,13 @@ describe('resolveTaskOnlyArg — the task-only command guard', () => {
 		}
 	});
 
-	it('the HARD CUTOVER: a pre-rename task: arg is NOT stripped (it is a literal slug, not the old alias)', () => {
-		// `slice:feature` is no longer the explicit task prefix; it is a bare slug
-		// whose literal text is `slice:feature`, so it passes through verbatim (no
-		// strip), NOT mapped to the task `feature`.
-		expect(resolveTaskOnlyArg('slice:feature')).toBe('slice:feature');
+	it('the HARD CUTOVER: a pre-rename task: arg is NOT stripped (never mapped to the task `feature`)', () => {
+		// `slice:feature` is no longer the explicit task prefix, so it is NOT
+		// stripped to the task `feature`; since the safe-slug guard it is refused
+		// outright (a `:` is outside the safe slug set).
+		expect(() => resolveTaskOnlyArg('slice:feature')).toThrow(
+			SlugResolutionError,
+		);
 	});
 
 	it('is PURE — a bare slug on a task-only command never reads files (no spec ambiguity here)', () => {

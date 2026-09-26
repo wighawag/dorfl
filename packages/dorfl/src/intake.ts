@@ -3,6 +3,7 @@ import {dirname, join} from 'node:path';
 import {runAsync, type RunResult} from './git.js';
 import {workFolderRel, workFolderPrefix} from './work-layout.js';
 import {paramCase} from './brand.js';
+import {ensureSafeSlug} from './slug-safety.js';
 import {
 	performIntegration,
 	type IntegrationCoreResult,
@@ -1714,28 +1715,32 @@ async function postCompletionComment(params: {
  * Resolve a content-derived slug from the verdict — NEVER a counter (spec `issue-intake` US #8).
  * Prefer the drafted `taskSlug`, else derive from the drafted title; both go
  * through `paramCase` (the brand case-transform) so the result is a clean
- * lowercase-`-`-joined slug. An empty result (no slug AND no title) signals the
- * caller to refuse (a counter fallback is forbidden).
+ * lowercase-`-`-joined slug, and then through {@link ensureSafeSlug}: the draft
+ * comes from issue content, and `paramCase` alone keeps characters like `$(`,
+ * `"`, `;` and `/` that must never reach a file name, a git ref or a CI command
+ * line. An empty result (no slug AND no title) signals the caller to refuse (a
+ * counter fallback is forbidden).
  */
 function resolveSlug(verdict: IntakeVerdict): string {
 	const candidate =
 		verdict.taskSlug && verdict.taskSlug.trim() !== ''
 			? verdict.taskSlug
 			: (verdict.taskTitle ?? '');
-	return paramCase(candidate);
+	return ensureSafeSlug(paramCase(candidate));
 }
 
 /**
  * Resolve a content-derived slug for the spec outcome — NEVER a counter (spec `issue-intake` US #8).
  * Prefer the drafted `specSlug`, else derive from the drafted spec title; both go
- * through `paramCase`. An empty result signals the caller to refuse.
+ * through `paramCase` and {@link ensureSafeSlug} (see {@link resolveSlug}). An
+ * empty result signals the caller to refuse.
  */
 function resolveSpecSlug(verdict: IntakeVerdict): string {
 	const candidate =
 		verdict.specSlug && verdict.specSlug.trim() !== ''
 			? verdict.specSlug
 			: (verdict.specTitle ?? '');
-	return paramCase(candidate);
+	return ensureSafeSlug(paramCase(candidate));
 }
 
 /**
