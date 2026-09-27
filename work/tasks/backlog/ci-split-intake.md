@@ -1,0 +1,65 @@
+---
+title: 'Split intake into lock, agent and apply phases, with the document re-rendered and re-checked by the apply job'
+slug: ci-split-intake
+spec: ci-agent-job-without-write-token
+blockedBy: [ci-split-phase-mode-and-guards, ci-split-handoff-artifact-format, ci-split-handoff-lfs-objects, intake-frontmatter-title-injection-strips-origin-stamp]
+covers: [1, 11, 13, 24]
+---
+
+## What to build
+
+- **lock:** read the issue, its comments and labels; take the `processing` label (create the label if needed); run the deterministic triage (a skip needs no agent); derive the origin trust from `github.event.comment.author_association`, else `github.event.issue.author_association` (as `intake.yml` does today; a called workflow sees its caller's event), and the document mode (`intakeIntegration ?? integration` from `dorfl.json` at `baseSha`); output them with `seenCommentIds` (the comment ids read).
+- **agent:** read the issue with the read token, but give the decision agent only the comments whose ids are in `seenCommentIds`; run the decision agent and the lone-task review rounds; hand over the verdict (`intake-ask`, `intake-bounce`, `intake-task`, `intake-spec`) with only the record fields the intent table allows.
+- **apply:** recompute slug (checked by `slug-safety.ts`), placement, origin-trust stamp and mode from trusted inputs; reject a title that is not a single line or holds a control character; render the document with every agent-supplied frontmatter scalar YAML-quoted (the helper from task `intake-frontmatter-title-injection-strips-origin-stamp`); re-parse it and assert `origin`, `originTrust`, `slug` and `issue` equal the trusted values; then comment / close / integrate (`performIntegration`, PR or merge with the CAS loop) and post the completion comment; the marker's `seen=` delta is `seenCommentIds`; always remove the label. On any agent non-success: remove the label and post nothing.
+
+### Design reference (carried verbatim from the spec)
+
+#### 3. Per-path phase map
+
+Verified against the code: every CI path is writes, then agents plus local work, then writes, with no network write between two agent launches and no write result fed back to an agent. The review loops (intake lone-task review in `intake.ts`, tasker review rounds in `tasking.ts`, Gate-2 rounds in `review-gate.ts`) change only local files or memory between rounds.
+
+| path | lock phase (writes before) | agent phase (agents, repository code, local git) | apply phase (writes after) |
+| --- | --- | --- | --- |
+| intake | read issue, comments and labels; `processing` label (`intake.ts` `addLabel`); deterministic triage (a skip needs no agent); record the comment ids read | decision agent; lone-task review rounds (in memory) | ask: comment; bounce: `closeIssue` with comment; task/spec: render the document, branch `work/intake-<type>-<slug>`, `performIntegration` (PR, or merge with the CAS loop), completion comment; always: remove the label |
+| build (`advance task:`, `do`) | classify; claim (`acquireItemLock`, `action: implement`); record base and kept-branch tip | continue rebase (decision 7); build agent; stop and deadline detection; gate; Gate-2 review; done-move commit; local rebase; fresh-worktree gate on the rebased tip | push branch, PR or merge (the `applyCompleteTransition` loop); review comment; WIP save with auto-continue or surface on deadline; needs-attention route; lock release |
+| tasking (`advance spec:`, `do spec:`) | tasking lock (`action: task`) | tasker agent; review rounds (candidate files on disk); the one-round task-set review (`reviewGate`, today run inside `performIntegration`) | integrate the candidates with `specs/ready → specs/tasked` (review OFF: it already ran), or save candidates, `closeRequestOnBranch` and surface; lock release |
+| surface | advancing lock (unified, `action: advance`) | `surface-questions` agent (or the deterministic observation short-circuit) | `persistSurfacedQuestions` on a fresh checkout; tree-less publish; lock release |
+| triage | advancing lock; a note already carrying `triaged:` is a no-op, and the legacy back-fill (an engine-written `## Applied answers` record without the marker, stamped by `stampTriaged`) is deterministic, so both are `needsAgent: false` | under `observationTriage: auto` only, the triage gate agent (a duplicate or mapped note is auto-disposed); otherwise, or when the gate keeps the note, the surface path: the engine-built triage question plus the `surface-questions` agent | on a fresh checkout: `stampTriaged` (back-fill), `autoDisposition` (delete the note and its sidecar) or `persistSurfacedQuestions`; tree-less publish; lock release |
+| apply, observation | advancing lock | agentic decision (outcomes `task`, `spec`, `adr`, `dispose`, `resolve`, `ask`: `APPLY_ALLOWED_OUTCOMES` in `apply-decide.ts`) | route the verdict: `task` / `spec` through `promoteObservation` (via `createItemThroughCas`), `adr` through `mintAdr`, `dispose` deletes the note, `resolve` settles and keeps it, `ask` appends the follow-up question and re-pauses; tree-less publish; lock release |
+| apply, task/spec content answers | advancing lock | none (decision 11) | `applyAnsweredQuestions`; tree-less publish; lock release |
+| apply, `kind: stuck` | advancing lock | none | keep, reset (`deleteRemoteWorkBranchIfPresent`) or cancel; persist; publish; release |
+| apply, `kind: merge` | advancing lock | `createJob` checkout of `work/task-<slug>`; local rebase; optional `strictMergeApproval` re-stale check; fresh-worktree gate (`prepare` + `verify` run the branch's code) | merge land with the CAS loop; `applyAnsweredQuestions`; publish; release |
+
+Orderings the implementation must preserve: the tree-less publish (`runAdvanceTickWithTreelessPublish` in `advance-drivers.ts`) happens today AFTER `performAdvance` has released the advancing lock in its `finally`; and the answered merge lands before the answer is recorded, as two separate writes to `main`.
+
+- **Intake inputs:** the lock job derives the origin trust (from `github.event.comment.author_association`, else `github.event.issue.author_association`, as `intake.yml` does today) and the document mode (`intakeIntegration ?? integration` from `dorfl.json` at `baseSha`) and publishes both as outputs. The agent job reads the issue with its read token but passes the decision agent only the comments whose ids are in the lock job's `seenCommentIds`, so a comment posted after the lock is neither read nor marked seen.
+- **Structured products:** every slug passes `slug-safety.ts`; tasking candidate paths must be `work/tasks/backlog/<safe-slug>.md` and new-or-changed relative to `baseSha` (the fence `newOrChangedStagedTasks` applies today); intake document paths are recomputed from the verdict slug and the trusted placement, and the document is re-rendered (`renderBacklogTask`, the spec renderer) in the apply job, so the `origin` / `originTrust` stamp comes from the trusted event and not from the agent job. Re-rendering is not enough on its own: `renderBacklogTask` writes `title: ${title}` unescaped today (`intake.ts`), so a title containing a line break and `---` ends the frontmatter before the stamp lines and pushes them into the body. The apply job therefore (a) rejects any title that is not a single line or contains a control character, (b) renders every agent-supplied frontmatter scalar YAML-quoted, and (c) re-parses the rendered frontmatter and asserts that `origin`, `originTrust`, `slug` and `issue` equal the trusted values before committing. The same re-parse check applies to tasking candidates: their `origin` / `originTrust` are overwritten with the spec's stamp at `baseSha`, and a candidate whose frontmatter does not parse, or carries `humanOnly` / `needsAnswers` values the tasking review loop did not set, is rejected. (The same injection exists on today's single-job path; the separate task `intake-frontmatter-title-injection-strips-origin-stamp` fixes it there first.) The intake `seen=` delta written into the marker comes from the comment ids the lock job read (a lock output), never from a re-read in the apply job (which would mark comments seen that no agent read) and never from the agent job.
+10. **Intake shape.** Decided: `intake.yml` calls the same reusable per-item workflow with `item: issue:<N>`.
+
+## Acceptance criteria
+
+- [ ] END TO END (the intake half of the spec's e2e requirement): three processes in three clones with a stub issue provider; the agent phase records no issue or review write and leaves the arbiter byte-identical; the apply phase produces the task document at the trusted placement with the trusted `originTrust` stamp, the completion comment and the label removal. Also an `ask` and a `bounce` case.
+- [ ] Hostile cases, RED FIRST (written and run before the implementation, the failing run quoted in the report): an intake title containing a line break and `---` (the handoff is rejected, or the rendered document still carries the trusted stamp, never a stripped one); an unsafe verdict slug; a verdict that tries to set its own placement or stamp (ignored).
+- [ ] A comment posted after the lock job ran is neither shown to the agent nor marked seen.
+- [ ] Agent failure, timeout and cancel remove the label and post nothing.
+- [ ] Laptop `intake` without `--phase` is unchanged; the acceptance gate is green.
+- [ ] When the lock job's deterministic triage skips (intake has the last word, or the issue is already terminal), it outputs `needsAgent: false`, the agent job is skipped, and the apply job only removes the label.
+
+## Blocked by
+
+- `ci-split-phase-mode-and-guards`
+- `ci-split-handoff-artifact-format`
+- `ci-split-handoff-lfs-objects`
+- `intake-frontmatter-title-injection-strips-origin-stamp`
+
+Ordering note: the path splits after `ci-split-agent-result-and-reruns` all edit the shared phase driver and the apply half of `performIntegration`, so they are chained (`ci-split-landed-vs-gated-report`, then `ci-split-handoff-lfs-objects`, then `ci-split-intake`, then `ci-split-tasking`, then `ci-split-treeless-rungs`, then `ci-split-answered-merge-action`) to avoid rebase conflicts between parallel builds, not because each needs the previous one's behaviour.
+
+## Prompt
+
+> Split `intake` (in `intake.ts`: `performIntake`, `decideAndDispatch`, `dispatchTask`, `dispatchSpec`, `dispatchComment`) into the three phases, reusing the phase driver from the build-path split. The apply job never takes a document from the agent: it re-renders from the verdict and the trusted inputs, then re-parses to prove the stamp survived.
+>
+> Background: spec `ci-agent-job-without-write-token` (now in `work/specs/tasked/`) and ADR `docs/adr/ci-agent-job-holds-no-write-token.md`, whose numbered decisions 1 to 12 are cited below as "decision N". The goal: make it structurally impossible for a CI agent (an agent with a shell that any GitHub user can prompt-inject through `intake`) to use a repository write credential. Every CI item runs as three jobs: **lock** (write token, no agent, no repository code), **agent** (read-only token, `persist-credentials: false`), **apply** (write token, no agent, no repository code, treats the agent's handoff as hostile). Evidence for the one-run-per-item shape: `work/notes/findings/github-actions-job-output-key-and-per-run-artifact-isolation.md`.
+>
+> FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If a dependency landed differently than this task assumes, or an ADR superseded an assumption here, do NOT build on the stale premise: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). Building on a stale task produces wrong-but-compiling work.
+>
+> RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not; if a choice meets the ADR gate in `ADR-FORMAT.md`, also write an ADR in `docs/adr/` and name it there). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.

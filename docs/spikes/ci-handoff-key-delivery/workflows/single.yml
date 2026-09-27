@@ -1,0 +1,61 @@
+name: single
+on:
+  workflow_dispatch:
+    inputs:
+      item: {type: string, required: true}
+permissions: {}
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          ITEM: ${{ inputs.item }}
+        run: mkdir out && echo "$ITEM" > out/handoff.txt
+      - name: runtime token scope via a JS action (scp claim only)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const t = process.env.ACTIONS_RUNTIME_TOKEN || '';
+            if (!t) { core.info('JS action: no ACTIONS_RUNTIME_TOKEN'); return; }
+            const c = JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString());
+            core.info('JS action scp: ' + c.scp);
+      - name: can a shell step with sudo recover it from Runner.Worker memory? (scp only)
+        run: |
+          cat > /tmp/scan.py <<'PYIN'
+          import re, json, base64, subprocess
+          pids = subprocess.run(['pgrep', '-f', 'Runner.Worker'], capture_output=True, text=True).stdout.split()
+          found = set()
+          jwt = re.compile(rb'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}')
+          for pid in pids:
+              try:
+                  maps = open(f'/proc/{pid}/maps').read().splitlines()
+                  mem = open(f'/proc/{pid}/mem', 'rb', 0)
+              except Exception as e:
+                  print('cannot open', pid, type(e).__name__); continue
+              for line in maps:
+                  addr, perms = line.split()[:2]
+                  if 'r' not in perms: continue
+                  a, b = (int(x, 16) for x in addr.split('-'))
+                  if b - a > 256 * 1024 * 1024: continue
+                  try:
+                      mem.seek(a); chunk = mem.read(b - a)
+                  except Exception:
+                      continue
+                  for m in jwt.finditer(chunk):
+                      try:
+                          p = m.group(0).split(b'.')[1].decode(); p += '=' * (-len(p) % 4)
+                          c = json.loads(base64.urlsafe_b64decode(p))
+                          if 'scp' in c: found.add(str(c['scp'])[:300])
+                      except Exception:
+                          pass
+          print('Runner.Worker pids:', pids)
+          print('JWTs with scp recovered from memory:', len(found))
+          for f in sorted(found): print('memory scp:', f)
+          PYIN
+          timeout 120 sudo python3 /tmp/scan.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: handoff
+          path: out/
+          retention-days: 1

@@ -1,0 +1,19 @@
+name: slot
+on:
+  workflow_dispatch:
+    inputs:
+      item: {type: string, required: true}
+      slot: {type: string, required: true}
+permissions: {}
+concurrency:
+  group: dorfl-slot-${{ inputs.slot }}
+  cancel-in-progress: false
+  queue: max
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          ITEM: ${{ inputs.item }}
+        run: |
+          echo "start $ITEM $(date -u +%T)"; sleep 20; echo "end $ITEM $(date -u +%T)"

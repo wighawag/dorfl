@@ -1,0 +1,37 @@
+name: probe
+on:
+  workflow_dispatch:
+    inputs:
+      mode: {type: choice, options: [fail, timeout, cancel], required: true}
+permissions: {}
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          echo "mode=$MODE"
+          if [ "$MODE" = fail ]; then exit 1; fi
+          if [ "$MODE" = timeout ]; then sleep 150; fi
+          if [ "$MODE" = cancel ]; then sleep 40; fi
+  apply:
+    needs: agent
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {actions: read, checks: read}
+    steps:
+      - env:
+          AGENT_RESULT: ${{ needs.agent.result }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "RESULT needs.agent.result=$AGENT_RESULT"
+          gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.name=="agent") | "API agent job: status=\(.status) conclusion=\(.conclusion) started=\(.started_at) completed=\(.completed_at) steps=\([.steps[] | "\(.name):\(.conclusion)"] | join(","))"'
+          gh api "repos/$REPO/actions/runs/$RUN_ID" --jq '"API run: status=\(.status) conclusion=\(.conclusion)"'
+          JID=$(gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" --jq '.jobs[] | select(.name=="agent") | .id')
+          gh api "repos/$REPO/check-runs/$JID/annotations" --jq '.[] | "ANNOTATION \(.annotation_level): \(.message)"' || echo "ANNOTATION READ FAILED"

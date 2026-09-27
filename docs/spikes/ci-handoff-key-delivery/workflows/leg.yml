@@ -1,0 +1,64 @@
+name: leg
+on:
+  workflow_call:
+    inputs:
+      leg: {type: string, required: true}
+permissions: {}
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      key_plain: ${{ steps.gen.outputs.key_plain }}
+      key_masked: ${{ steps.gen.outputs.key_masked }}
+    steps:
+      - id: gen
+        env:
+          LEG: ${{ inputs.leg }}
+        run: |
+          k="SPIKEKEY-PLAIN-${LEG}-$(openssl rand -hex 16)"
+          m="SPIKEKEY-MASKED-${LEG}-$(openssl rand -hex 16)"
+          echo "::add-mask::$m"
+          echo "key_plain=$k" >> "$GITHUB_OUTPUT"
+          echo "key_masked=$m" >> "$GITHUB_OUTPUT"
+          echo "lock: plain len ${#k}, masked len ${#m}"
+  agent:
+    needs: lock
+    runs-on: ubuntu-latest
+    permissions: {actions: read, contents: read}
+    env:
+      JOB_LEVEL_KEY: ${{ needs.lock.outputs.key_plain }}
+    steps:
+      - name: receive via step env and job env
+        env:
+          STEP_KEY: ${{ needs.lock.outputs.key_plain }}
+          MASKED_KEY: ${{ needs.lock.outputs.key_masked }}
+        run: |
+          echo "agent step len=${#STEP_KEY} job len=${#JOB_LEVEL_KEY} masked len=${#MASKED_KEY}"
+      - name: attacker view (actions read token) of sibling jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          LEG: ${{ inputs.leg }}
+        run: |
+          for round in 1 2 3 4 5 6 7 8; do
+            sleep 10
+            gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" > jobs.json
+            for row in $(jq -r '.jobs[] | "\(.id),\(.status),\(.name|gsub(" ";"_"))"' jobs.json); do
+              IFS=, read -r id status name <<< "$row"
+              n=$(gh api --allow-escape-sequences "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null | grep -Eo 'SPIKEKEY-PLAIN-[a-z]+-[0-9a-f]{32}' | grep -v "PLAIN-${LEG}-" | wc -l || true)
+              echo "round $round job $name status=$status other-leg-key-hits=$n"
+            done
+          done
+  apply:
+    needs: [lock, agent]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          KEY: ${{ needs.lock.outputs.key_plain }}
+          MASKED: ${{ needs.lock.outputs.key_masked }}
+        run: |
+          echo "apply plain len=${#KEY} masked len=${#MASKED}"

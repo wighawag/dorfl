@@ -1,0 +1,12 @@
+name: matrix
+on: workflow_dispatch
+permissions: {}
+jobs:
+  item:
+    permissions: {actions: read, contents: read}
+    strategy:
+      matrix:
+        leg: [a, b]
+    uses: ./.github/workflows/leg.yml
+    with:
+      leg: ${{ matrix.leg }}

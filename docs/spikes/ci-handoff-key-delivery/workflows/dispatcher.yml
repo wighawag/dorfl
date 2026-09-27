@@ -1,0 +1,14 @@
+name: dispatcher
+on: workflow_dispatch
+permissions: {}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    permissions: {actions: write}
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh workflow run single.yml -R "$REPO" -f item=one
+          gh workflow run single.yml -R "$REPO" -f item=two
