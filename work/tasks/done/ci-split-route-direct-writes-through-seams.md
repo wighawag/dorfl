@@ -4,7 +4,7 @@ slug: ci-split-route-direct-writes-through-seams
 spec: ci-agent-job-without-write-token
 blockedBy: []
 covers: [4]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
