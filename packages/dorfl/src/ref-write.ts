@@ -71,6 +71,16 @@ export interface RefWriteStrategy {
 	 */
 	pushContinuedBranch(input: ContinuedBranchPushInput): ContinuedPushResult;
 	/**
+	 * Push an already-rebased work branch ONCE with a lease on the tip observed
+	 * earlier (`<commit>:refs/heads/<branch>
+	 * --force-with-lease=refs/heads/<branch>:<expectedTip>`), with NO retry and NO
+	 * re-rebase: a stale lease is returned for the caller to report. The CI apply
+	 * phase's continue push (ADR `ci-agent-job-holds-no-write-token` decision 7:
+	 * the agent job rebased the kept branch locally, and the lease is the lock
+	 * job's `continueTip`). CI phase: apply.
+	 */
+	pushLeasedWorkBranch(input: LeasedWorkBranchPushInput): Promise<RunResult>;
+	/**
 	 * SAVE the work branch: commit any uncommitted work as a wip commit and push
 	 * the work branch to the arbiter, WITHOUT surfacing the item (the recoverable
 	 * half of a needs-attention route, see {@link routeToNeedsAttention}). Used by
@@ -142,6 +152,22 @@ export type ContinuedBranchPushInput = Parameters<
 	typeof pushContinuedBranchWithStaleLeaseRetry
 >[0];
 
+/** Input of {@link RefWriteStrategy.pushLeasedWorkBranch}. */
+export interface LeasedWorkBranchPushInput {
+	/** The arbiter remote name. */
+	arbiter: string;
+	/** The work branch (`work/task-<slug>`), unqualified. */
+	branch: string;
+	/** The commit to publish as the branch's tip. */
+	commit: string;
+	/** The branch tip the caller observed on the arbiter; the push is leased on it. */
+	expectedTip: string;
+	/** Working clone the push runs in. */
+	cwd: string;
+	/** Environment for the child git process. */
+	env: NodeJS.ProcessEnv | undefined;
+}
+
 /** Input of {@link RefWriteStrategy.pushTaskingCandidatesBranch}. */
 export interface TaskingCandidatesPushInput {
 	/** The arbiter remote name. */
@@ -199,6 +225,21 @@ export const currentRefWrite: RefWriteStrategy = {
 
 	pushContinuedBranch(input) {
 		return pushContinuedBranchWithStaleLeaseRetry(input);
+	},
+
+	pushLeasedWorkBranch({arbiter, branch, commit, expectedTip, cwd, env}) {
+		const ref = `refs/heads/${branch}`;
+		return runAsync(
+			'git',
+			[
+				'push',
+				arbiter,
+				`${commit}:${ref}`,
+				`--force-with-lease=${ref}:${expectedTip}`,
+			],
+			cwd,
+			{env},
+		);
 	},
 
 	saveWorkBranch(input) {

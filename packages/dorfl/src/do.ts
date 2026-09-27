@@ -71,6 +71,7 @@ import {
 } from './agent-stop.js';
 import {surfaceStuckToNeedsAttention} from './needs-attention.js';
 import {refWrite} from './ref-write.js';
+import {annotatePhaseBoundary} from './phase-recorder.js';
 import {resolveItemPathByIdentity} from './item-path.js';
 import {
 	classifyFailureCause,
@@ -158,7 +159,7 @@ function deadlineAutoContinueReason(params: {
 		`tick continues from the branch tip.`
 	);
 }
-function deadlineSurfaceReason(params: {
+export function deadlineSurfaceReason(params: {
 	slug: string;
 	kind: 'no-progress' | 'ceiling' | 'unreaped';
 	count?: number;
@@ -290,6 +291,26 @@ async function saveDeadlineCheckpoint(params: {
 		env,
 	});
 }
+
+/**
+ * What a build's FIRST WRITE is, when the write seam call alone does not say
+ * (CI phase mode, task `ci-split-build-path-non-integrate-intents`): an agent
+ * failure, a deliberate STOP and a red gate all bounce through
+ * `ledgerWrite.applyNeedsAttentionTransition`, and the deadline checkpoint's
+ * first write is a plain branch save. The pipeline names it with
+ * `annotatePhaseBoundary` right before the write; the build phase driver
+ * (`ci-phase-build.ts`) maps it to a handoff intent. Without a phase it is
+ * never read.
+ */
+export type BuildBoundary =
+	| {kind: 'agent-failed'; failureDetail: string}
+	| {kind: 'stop'; reason: string; stopKind: 'sentinel' | 'empty-diff'}
+	| {
+			kind: 'deadline-checkpoint';
+			/** Whether the checkpointed agent's process tree was verified gone. */
+			predecessorGone: boolean;
+			reapDetail?: string;
+	  };
 
 /** The terminal status of one in-place `do` run. */
 export type DoOutcome =
@@ -1742,16 +1763,27 @@ function routeReport(
  * `requeue` (continue) / `requeue --reconcile` (non-destructive retry) vs
  * `requeue --reset` (destructive last resort).
  */
-async function saveAgentFailure(params: {
+export async function saveAgentFailure(params: {
 	slug: string;
 	branch: string | undefined;
 	cwd: string;
 	arbiter: string;
 	detail: string;
+	/**
+	 * `false`: surface only, push no work branch (the CI apply phase when the
+	 * handoff carried no bundle). Default: push, exactly as before.
+	 */
+	pushBranch?: boolean;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, detail, env, note} = params;
+	// CI agent phase: this bounce is the build's first write; name it so the
+	// phase driver hands it over as `agent-failed` (a no-op without a phase).
+	annotatePhaseBoundary({
+		kind: 'agent-failed',
+		failureDetail: detail,
+	} satisfies BuildBoundary);
 	// The work branch is the namespaced build branch (`work/task-<slug>`; the
 	// onboarding switched the checkout to it before the agent ran); derive it from
 	// the slug so the push target is always defined even when the caller's `branch`
@@ -1777,6 +1809,7 @@ async function saveAgentFailure(params: {
 		slug,
 		reason,
 		arbiter,
+		...(params.pushBranch === false ? {pushBranch: false} : {}),
 		env,
 		note,
 	});
@@ -1879,18 +1912,27 @@ async function resolveStopReason(params: {
  * rebase conflict). The agent's STOP reason is recorded VERBATIM as the
  * needs-attention reason. The acceptance gate AND Gate-2 are NEVER reached.
  */
-async function saveAgentStop(params: {
+export async function saveAgentStop(params: {
 	slug: string;
 	branch: string | undefined;
 	cwd: string;
 	arbiter: string;
 	reason: string;
 	kind: 'sentinel' | 'empty-diff';
+	/** As {@link saveAgentFailure}'s `pushBranch` (the sentinel branch only). */
+	pushBranch?: boolean;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
 }): Promise<DoResult> {
 	const {slug, cwd, arbiter, reason, kind, env, note} = params;
 	const branch = params.branch ?? workBranchRef('task', slug);
+	// CI agent phase: name this first write so the phase driver hands it over as
+	// `stop` (a no-op without a phase).
+	annotatePhaseBoundary({
+		kind: 'stop',
+		reason,
+		stopKind: kind,
+	} satisfies BuildBoundary);
 
 	// EMPTY-DIFF branch (spec resolved decision #2, task
 	// `empty-diff-bounce-surfaces-dispose-defaulted-question`): surface a sidecar
@@ -1950,6 +1992,7 @@ async function saveAgentStop(params: {
 		slug,
 		reason,
 		arbiter,
+		...(params.pushBranch === false ? {pushBranch: false} : {}),
 		env,
 		note,
 	});
@@ -2118,7 +2161,7 @@ async function launchAgentUnderWriterLock(params: {
  * Shared by {@link performDo} and {@link runRemotePipeline} so the in-place
  * and remote forms route a deadline stop identically.
  */
-async function routeDeadlineCheckpoint(params: {
+export async function routeDeadlineCheckpoint(params: {
 	slug: string;
 	branch: string;
 	cwd: string;
@@ -2157,6 +2200,13 @@ async function routeDeadlineCheckpoint(params: {
 	if (reap !== undefined && reap.escalatedToSigkill && reap.reaped) {
 		note(`Deadline checkpoint for '${slug}': ${reap.detail}`);
 	}
+	// CI agent phase: the save below is the first write; name it so the phase
+	// driver hands it over as `deadline-checkpoint` (a no-op without a phase).
+	annotatePhaseBoundary({
+		kind: 'deadline-checkpoint',
+		predecessorGone,
+		...(reap?.detail === undefined ? {} : {reapDetail: reap.detail}),
+	} satisfies BuildBoundary);
 
 	// 1. ALWAYS save the WIP first: commit any residue + push the work branch.
 	const savedReason = `deadline checkpoint save for '${slug}'`;

@@ -1,4 +1,4 @@
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {git} from '../src/git.js';
@@ -15,6 +15,7 @@ import {
 	type LockOutputs,
 } from '../src/ci-lock-outputs.js';
 import {acquireItemLock} from '../src/item-lock.js';
+import {ledgerWrite} from '../src/ledger-write.js';
 import {activateProcessPhase} from '../src/phase-recorder.js';
 import type {Phase} from '../src/phase.js';
 import {
@@ -28,8 +29,9 @@ import {
 /**
  * The build path's phase driver in one process (task `ci-split-build-path`):
  * the refusals that must write nothing (a lock phase on a stale checkout, an
- * apply or agent phase whose lock ref moved), the interim `agent-failed`
- * hand-over, and the lock-output transport. The three-process success paths
+ * apply or agent phase whose lock ref moved), the needs-attention hand-over
+ * with its leased release (task `ci-split-build-path-non-integrate-intents`),
+ * and the lock-output transport. The three-process success paths
  * are `ci-phase-build-e2e.test.ts`.
  */
 
@@ -239,8 +241,12 @@ describe('lock ownership', () => {
 	});
 });
 
-describe('outcomes other than integrate (interim)', () => {
-	it('a red gate is handed over as agent-failed and the apply phase surfaces the item', async () => {
+describe('outcomes other than integrate', () => {
+	/** Lock, then an agent phase whose gate is red: a needs-attention handoff. */
+	async function redGateHandoff(): Promise<{
+		lock: LockOutputs;
+		handoffDir: string;
+	}> {
 		const lock = await lockPhase();
 		const handoffDir = join(runnerTemp, 'handoff');
 		const agentClone = jobClone('agent', lock.baseSha);
@@ -256,9 +262,13 @@ describe('outcomes other than integrate (interim)', () => {
 				return {ok: true, output: 'done'};
 			},
 		});
-		expect(agent.intent).toBe('agent-failed');
+		expect(agent.intent).toBe('needs-attention');
 		expect(arbiterRefs()).toBe(before);
+		return {lock, handoffDir};
+	}
 
+	it('a red gate is handed over as needs-attention and the apply phase surfaces the item', async () => {
+		const {lock, handoffDir} = await redGateHandoff();
 		const apply = await phase('apply', {
 			cwd: jobClone('apply', lock.baseSha),
 			lockOutputs: lock,
@@ -266,11 +276,53 @@ describe('outcomes other than integrate (interim)', () => {
 			runnerTemp,
 		});
 		expect(apply.outcome).toBe('surfaced');
+		expect(apply.exitCode).toBe(0);
 		expect(apply.message).toMatch(/acceptance gate failed/);
-		// Surfaced on main (sidecar + needsAnswers) and the lock released.
+		// Surfaced on main (sidecar + needsAnswers), the WIP pushed, the lock released.
 		const body = g(seeded.arbiter, 'show', `main:work/tasks/ready/${SLUG}.md`);
 		expect(body).toMatch(/needsAnswers: true/);
+		expect(
+			g(seeded.arbiter, 'show', `refs/heads/work/task-${SLUG}:thing.txt`),
+		).toBe('thing');
 		expect(onArbiter(LOCK_REF)).toBeUndefined();
+	});
+
+	it('the surface releases the lock leased on lockSha: a lock re-taken after the ownership check stays', async () => {
+		const {lock, handoffDir} = await redGateHandoff();
+		// Between the apply phase's ownership check and its release, another run
+		// takes the item's lock (released, then re-acquired: a new sha).
+		const other = seeded.clone('other-run');
+		let retaken: string | undefined;
+		const original = ledgerWrite.applyTransition.bind(ledgerWrite);
+		const spy = vi
+			.spyOn(ledgerWrite, 'applyTransition')
+			.mockImplementation(async (input) => {
+				const r = await original(input);
+				g(other, 'push', '-q', 'origin', `:${LOCK_REF}`);
+				await acquireItemLock({
+					item: `task:${SLUG}`,
+					action: 'implement',
+					cwd: other,
+					arbiter: 'origin',
+					env: gitEnv(),
+				});
+				retaken = onArbiter(LOCK_REF);
+				return r;
+			});
+		try {
+			await phase('apply', {
+				cwd: jobClone('apply', lock.baseSha),
+				lockOutputs: lock,
+				handoffDir,
+				runnerTemp,
+			});
+		} finally {
+			spy.mockRestore();
+		}
+		expect(retaken).toBeDefined();
+		expect(retaken).not.toBe(lock.lockSha);
+		// The other run's lock is untouched.
+		expect(onArbiter(LOCK_REF)).toBe(retaken);
 	});
 });
 

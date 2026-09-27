@@ -376,6 +376,42 @@ export async function acquireItemLock(
 	}
 }
 
+/**
+ * Lock refs whose release is LEASED on a known sha: `<ref>` → the sha this
+ * process last observed for it (spec `ci-agent-job-without-write-token` §8, the
+ * lock-ownership rule; task `ci-split-build-path-non-integrate-intents`).
+ *
+ * The CI apply phase holds the lock the lock JOB took, and every CI run's lock
+ * `holder` is the same bot, so only the sha tells runs apart. Its releases are
+ * reached from deep inside the reused write halves (the surface, the
+ * return-to-backlog, the land's needs-attention routes), which do not carry the
+ * sha, so the apply phase registers it here for its whole run
+ * ({@link leaseLockReleases}) and {@link releaseLockEntry} refuses to delete a
+ * lock that no longer points at it. Process-global for the same reason the
+ * phase is (`phase.ts`): a phase run is a one-shot process. Empty outside the
+ * apply phase, where every release behaves exactly as before.
+ */
+const releaseLeases = new Map<string, string>();
+
+/**
+ * Lease every release of `item`'s lock on `expectedSha` until the returned
+ * function is called: a release then deletes the ref only while it still points
+ * at `expectedSha`, and otherwise reports an `error` and leaves it untouched (the
+ * lock was re-taken by another run).
+ */
+export function leaseLockReleases(
+	item: string,
+	expectedSha: string,
+): () => void {
+	const ref = itemLockRef(lockEntryFor(item));
+	const previous = releaseLeases.get(ref);
+	releaseLeases.set(ref, expectedSha);
+	return () => {
+		if (previous === undefined) releaseLeases.delete(ref);
+		else releaseLeases.set(ref, previous);
+	};
+}
+
 export interface ReleaseOptions {
 	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
 	item: string;
@@ -450,6 +486,17 @@ async function releaseLockEntry(
 		// Delete the ref on the arbiter. Lease on the current value guards against a
 		// concurrent change between our fetch and the delete.
 		const cur = (await gitHard(['rev-parse', ref], cwd, env)).stdout.trim();
+		const lease = releaseLeases.get(ref);
+		if (lease !== undefined && lease !== cur) {
+			return {
+				outcome: 'error',
+				entry,
+				ref,
+				message:
+					`not released: ${ref} now points at ${cur}, not the leased ` +
+					`${lease} (another run holds the lock now)`,
+			};
+		}
 		const del = await refWrite.deleteLockRef({
 			arbiter,
 			ref,
