@@ -4,6 +4,7 @@ slug: ci-split-handoff-artifact-format
 spec: ci-agent-job-without-write-token
 blockedBy: []
 covers: [8]
+needsAnswers: true
 ---
 
 ## What to build
