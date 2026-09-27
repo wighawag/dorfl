@@ -17,7 +17,12 @@
  *    the apply phase checks it before its FIRST write and writes nothing when
  *    it does not; every later lock operation is leased on the sha last observed
  *    ({@link releaseLockLeased});
- *  - the agent phase bounds the free text it hands over to the handoff limits.
+ *  - the agent phase bounds the free text it hands over to the handoff limits;
+ *  - the lock phase computes the agent job's timeout from the config at
+ *    `baseSha` ({@link agentTimeoutMinutesAt}), and the apply phase decides what
+ *    to do with the agent job's result before it reads any artifact
+ *    ({@link resolveAgentResult}, `ci-agent-result.ts`): only `success` reads
+ *    it (task `ci-split-agent-result-and-reruns`).
  */
 
 import {mkdtempSync, rmSync, appendFileSync} from 'node:fs';
@@ -30,7 +35,22 @@ import {
 	type LockOutputs,
 } from './ci-lock-outputs.js';
 import type {HandoffRung} from './ci-handoff-format.js';
-import {runAsync} from './git.js';
+import {
+	actionsRunRefFromEnv,
+	decideAgentResult,
+	detectAgentTimeout,
+	githubTokenApiGet,
+	type AgentJobResult,
+	type AgentResultDecision,
+	type GithubApiGet,
+} from './ci-agent-result.js';
+import {DEFAULT_CONFIG, type Config} from './config.js';
+import {run, runAsync} from './git.js';
+import {
+	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
+	loadRepoConfigFromContent,
+} from './repo-config.js';
 import {itemLockRef, lockEntryFor} from './item-lock.js';
 import {refWrite} from './ref-write.js';
 
@@ -312,6 +332,92 @@ export function runnerTempFrom(
 		);
 	}
 	return dir;
+}
+
+/**
+ * The repository config committed at `baseSha` (`dorfl.json`, else the legacy
+ * dotfile): the trusted config a phase acts on, never the checkout's or a
+ * bundle's. `undefined` when neither file exists or the first one found does
+ * not parse.
+ */
+export function repoConfigAt(
+	cwd: string,
+	baseSha: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Partial<Config> | undefined {
+	for (const name of [REPO_CONFIG_FILENAME, REPO_CONFIG_FILENAME_LEGACY]) {
+		const r = run('git', ['cat-file', 'blob', `${baseSha}:${name}`], cwd, {
+			env,
+		});
+		if (r.status !== 0) continue;
+		try {
+			return loadRepoConfigFromContent(r.stdout, `${baseSha}:${name}`).config;
+		} catch {
+			return undefined;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * The agent job's timeout in minutes, as the lock phase publishes it
+ * (`agentTimeoutMinutes`): today's `agentDeadlineMinutes +
+ * checkpointHeadroomMinutes`, each read from the config at `baseSha` and falling
+ * back to its default (60 and 30) when absent or outside its valid range
+ * ([1, 240] and [10, 60]).
+ */
+export function agentTimeoutMinutesAt(
+	cwd: string,
+	baseSha: string,
+	env: NodeJS.ProcessEnv | undefined,
+): number {
+	const config = repoConfigAt(cwd, baseSha, env) ?? {};
+	const pick = (v: unknown, min: number, max: number, fallback: number) =>
+		typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+			? v
+			: fallback;
+	return (
+		pick(
+			config.agentDeadlineMinutes,
+			1,
+			240,
+			DEFAULT_CONFIG.agentDeadlineMinutes,
+		) +
+		pick(
+			config.checkpointHeadroomMinutes,
+			10,
+			60,
+			DEFAULT_CONFIG.checkpointHeadroomMinutes,
+		)
+	);
+}
+
+/**
+ * Decide what the apply phase does with the agent job's result (decision 5),
+ * BEFORE any artifact is read. For `cancelled` it reads the agent job from the
+ * Actions API with `GITHUB_TOKEN` (or the injected `api`) to tell a timeout from
+ * a real cancel. `agentTimeoutMinutes` is the trusted lock output
+ * (`--agent-timeout-minutes`, else the lock outputs), never the artifact's.
+ * Nothing it reads from the API is ever printed.
+ */
+export function resolveAgentResult(params: {
+	result: AgentJobResult;
+	held: HeldLock;
+	agentTimeoutMinutes?: number;
+	api?: GithubApiGet;
+	env: NodeJS.ProcessEnv;
+}): Promise<AgentResultDecision> {
+	return decideAgentResult({
+		result: params.result,
+		needsAgent: params.held.needsAgent,
+		detectTimeout: () =>
+			detectAgentTimeout({
+				get: params.api ?? githubTokenApiGet(params.env),
+				run: actionsRunRefFromEnv(params.env),
+				agentTimeoutMinutes:
+					params.agentTimeoutMinutes ?? params.held.agentTimeoutMinutes,
+			}),
+	});
 }
 
 async function gitAsyncHard(

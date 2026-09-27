@@ -20,6 +20,7 @@ import {performBuildPhase} from '../../src/ci-phase-build.js';
 import {activateProcessPhase} from '../../src/phase-recorder.js';
 import type {ReviewProvider} from '../../src/integrator.js';
 import type {Phase} from '../../src/phase.js';
+import type {AgentJobResult, GithubApiGet} from '../../src/ci-agent-result.js';
 
 interface WorkerArgs {
 	phase: Phase;
@@ -52,6 +53,60 @@ interface WorkerArgs {
 	};
 	/** The resolved `maxAutoCheckpoints` option (the config at baseSha wins). */
 	maxAutoCheckpoints?: number;
+	/** apply: `needs.agent.result` (`--agent-result`); default `success`. */
+	agentJobResult?: AgentJobResult;
+	/** apply: `--agent-timeout-minutes`. */
+	agentTimeoutMinutes?: number;
+	/** lock: `github.run_attempt`. */
+	runAttempt?: string;
+	/**
+	 * apply: a stub Actions API for this run attempt: the agent job ran
+	 * `agentMinutes` minutes and carries these annotation pages. Every URL it is
+	 * asked for is appended to `log`.
+	 */
+	actionsApi?: {agentMinutes: number; annotationPages: string[][]; log: string};
+}
+
+/** The stub Actions API of {@link WorkerArgs.actionsApi}. */
+function stubActionsApi(
+	stub: NonNullable<WorkerArgs['actionsApi']>,
+): GithubApiGet {
+	const start = Date.parse('2026-09-27T10:00:00Z');
+	return async (url) => {
+		appendFileSync(stub.log, url + '\n');
+		if (url.includes('/actions/runs/') && url.includes('/jobs')) {
+			return {
+				status: 200,
+				body: {
+					jobs: [
+						{id: 1, name: 'item / lock'},
+						{
+							id: 2,
+							name: 'item / agent',
+							started_at: new Date(start).toISOString(),
+							completed_at: new Date(
+								start + stub.agentMinutes * 60_000,
+							).toISOString(),
+						},
+					],
+				},
+			};
+		}
+		if (url.includes('/check-runs/2/annotations')) {
+			const page = Number(/[?&]page=([0-9]+)/.exec(url)?.[1] ?? '1');
+			const messages = stub.annotationPages[page - 1] ?? [];
+			const base = url.replace(/&page=[0-9]+$/, '');
+			return {
+				status: 200,
+				body: messages.map((message) => ({message})),
+				next:
+					page < stub.annotationPages.length
+						? `${base}&page=${page + 1}`
+						: undefined,
+			};
+		}
+		return {status: 404, body: {}};
+	};
 }
 
 function stubProvider(log: string): ReviewProvider {
@@ -116,8 +171,21 @@ async function main(): Promise<void> {
 			return {ok: true, output: args.agentSummary, ...args.agentResult};
 		},
 		maxAutoCheckpoints: args.maxAutoCheckpoints,
+		agentResult:
+			args.phase === 'apply' ? (args.agentJobResult ?? 'success') : undefined,
+		agentTimeoutMinutes: args.agentTimeoutMinutes,
+		runAttempt: args.runAttempt,
+		actionsApi:
+			args.actionsApi === undefined
+				? undefined
+				: stubActionsApi(args.actionsApi),
 		providerInstance: stubProvider(args.providerLog),
-		env: process.env,
+		env: {
+			...process.env,
+			GITHUB_REPOSITORY: 'o/r',
+			GITHUB_RUN_ID: '77',
+			GITHUB_RUN_ATTEMPT: args.runAttempt ?? '1',
+		},
 		note: (m) => notes.push(m),
 	});
 	process.stdout.write(JSON.stringify({...result, notes}) + '\n');

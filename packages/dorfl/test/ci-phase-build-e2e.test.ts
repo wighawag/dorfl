@@ -77,7 +77,12 @@ function lockRef(slug = SLUG): string {
 function runWorker(
 	args: Record<string, unknown>,
 	lockOutputs?: LockOutputs,
-): Promise<{exitCode: number; stderr: string; out?: WorkerOutput}> {
+): Promise<{
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	out?: WorkerOutput;
+}> {
 	return new Promise((resolve, reject) => {
 		const env: NodeJS.ProcessEnv = {...gitEnv(), GITHUB_ACTIONS: 'true'};
 		if (lockOutputs !== undefined) {
@@ -104,7 +109,7 @@ function runWorker(
 			} catch {
 				out = undefined;
 			}
-			resolve({exitCode: code ?? -1, stderr, out});
+			resolve({exitCode: code ?? -1, stdout, stderr, out});
 		});
 	});
 }
@@ -136,6 +141,12 @@ interface ThreePhaseRun {
 	agentClone: string;
 	/** The arbiter's refs right before the apply phase ran. */
 	refsBeforeApply: string;
+	/** The handoff directory the agent phase wrote. */
+	handoffDir: string;
+	/** Everything the apply process printed (stdout and stderr). */
+	applyPrinted: string;
+	/** The worker arguments the apply phase ran with (a re-run replays them). */
+	applyArgs: Record<string, unknown>;
 }
 
 /**
@@ -152,6 +163,8 @@ async function threePhases(opts: {
 	verify?: string;
 	/** The apply phase's expected result exit code; default 0. */
 	applyExit?: number;
+	/** Extra apply-phase worker arguments (the agent job result, the stub API). */
+	apply?: Record<string, unknown>;
 }): Promise<ThreePhaseRun> {
 	const common = {
 		arg: SLUG,
@@ -213,17 +226,16 @@ async function threePhases(opts: {
 	const applyClone = jobClone('apply', lock.baseSha);
 	const applyProviderLog = join(scratch.root, 'provider-apply.jsonl');
 	const refsBeforeApply = arbiterRefs();
-	const applyRun = await runWorker(
-		{
-			...common,
-			phase: 'apply',
-			cwd: applyClone,
-			handoffDir,
-			runnerTemp,
-			providerLog: applyProviderLog,
-		},
-		lock,
-	);
+	const applyArgs = {
+		...common,
+		phase: 'apply',
+		cwd: applyClone,
+		handoffDir,
+		runnerTemp,
+		providerLog: applyProviderLog,
+		...opts.apply,
+	};
+	const applyRun = await runWorker(applyArgs, lock);
 	expect(applyRun.exitCode, applyRun.stderr).toBe(0);
 	expect(applyRun.out?.exitCode, applyRun.out?.message).toBe(
 		opts.applyExit ?? 0,
@@ -236,6 +248,9 @@ async function threePhases(opts: {
 		applyProviderLog,
 		agentClone,
 		refsBeforeApply,
+		handoffDir,
+		applyPrinted: applyRun.stdout + applyRun.stderr,
+		applyArgs,
 	};
 }
 
@@ -524,5 +539,215 @@ describe('the build path non-integrate outcomes in three processes', () => {
 		);
 		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
 		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// The agent job's result and GitHub re-runs (task
+// `ci-split-agent-result-and-reruns`, decision 5)
+// ---------------------------------------------------------------------------
+
+const TIMEOUT_ANNOTATION =
+	'The job has exceeded the maximum execution time of 1h30m0s';
+const CANCEL_ANNOTATION = 'The run was canceled by @user.';
+
+describe('the agent job result in three processes', () => {
+	/**
+	 * Each case runs a real agent phase that writes a VALID integrate handoff in
+	 * merge mode: from the apply job's point of view it is a forged artifact next
+	 * to a non-success result. Reading it would land the work on main.
+	 */
+	function expectArtifactIgnored(run: ThreePhaseRun): void {
+		expect(run.agent.intent).toBe('integrate');
+		expect(showOnArbiter('main:src/thing.ts')).toBeUndefined();
+		expect(showOnArbiter(`main:work/tasks/done/${SLUG}.md`)).toBeUndefined();
+		expect(onArbiter(WORK_BRANCH)).toBeUndefined();
+		expect(readProviderLog(run.applyProviderLog)).toEqual([]);
+	}
+
+	function apiLog(): string {
+		return join(scratch.root, 'actions-api.log');
+	}
+
+	function apiUrls(): string[] {
+		if (!existsSync(apiLog())) return [];
+		return readFileSync(apiLog(), 'utf8')
+			.split('\n')
+			.filter((l) => l !== '');
+	}
+
+	const FILES = {'src/thing.ts': 'export const thing = 1;\n'};
+
+	it('failure: surfaced, lock released, the artifact never read, the API never read', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: FILES,
+			apply: {agentJobResult: 'failure'},
+		});
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toMatch(/the agent job failed/);
+		expectArtifactIgnored(run);
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+		expect(apiUrls()).toEqual([]);
+	}, 120_000);
+
+	it('timeout (cancelled with the timeout annotation on page 2): surfaced, lock released, annotation text never printed', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: FILES,
+			apply: {
+				agentJobResult: 'cancelled',
+				actionsApi: {
+					agentMinutes: 12,
+					annotationPages: [
+						['::error::the agent was here', 'The operation was canceled.'],
+						[`::error::${TIMEOUT_ANNOTATION}`],
+					],
+					log: apiLog(),
+				},
+			},
+		});
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toMatch(/timed out/);
+		expectArtifactIgnored(run);
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+		// This run attempt's jobs, then every annotation page of the agent job.
+		expect(apiUrls()).toHaveLength(3);
+		expect(apiUrls()[0]).toContain('/actions/runs/77/attempts/1/jobs');
+		expect(run.applyPrinted).not.toContain('::error::');
+		expect(run.applyPrinted).not.toContain('the agent was here');
+	}, 120_000);
+
+	it('timeout by duration (within a minute of the lock job agentTimeoutMinutes): surfaced', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: FILES,
+			apply: {
+				agentJobResult: 'cancelled',
+				actionsApi: {
+					agentMinutes: 89.5,
+					annotationPages: [[CANCEL_ANNOTATION]],
+					log: apiLog(),
+				},
+			},
+		});
+		expect(run.lock.agentTimeoutMinutes).toBe(90);
+		expect(run.apply.outcome).toBe('surfaced');
+		expectArtifactIgnored(run);
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
+	it('cancelled by a user: the lock only released, nothing surfaced, the artifact never read', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: FILES,
+			apply: {
+				agentJobResult: 'cancelled',
+				agentTimeoutMinutes: 90,
+				actionsApi: {
+					agentMinutes: 4,
+					annotationPages: [[CANCEL_ANNOTATION]],
+					log: apiLog(),
+				},
+			},
+		});
+		expect(run.apply.outcome).toBe('released');
+		expectArtifactIgnored(run);
+		expect(bodyOnMain()).not.toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+		// Only the lock ref moved.
+		const withoutLock = (refs: string) =>
+			refs
+				.split('\n')
+				.filter((l) => !l.startsWith(lockRef()))
+				.join('\n');
+		expect(withoutLock(arbiterRefs())).toBe(withoutLock(run.refsBeforeApply));
+	}, 120_000);
+
+	it('skipped although the lock said needsAgent: true: treated as a failure', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: FILES,
+			apply: {agentJobResult: 'skipped'},
+		});
+		expect(run.lock.needsAgent).toBe(true);
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toMatch(/skipped/);
+		expectArtifactIgnored(run);
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+});
+
+describe('GitHub re-runs in three processes', () => {
+	it('"Re-run failed jobs": the apply job replayed after the lock was released writes nothing', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+		});
+		expect(run.apply.outcome).toBe('landed');
+		expect(onArbiter(lockRef())).toBeUndefined();
+
+		// The re-run replays the same lock outputs and the same artifact.
+		const before = arbiterRefs();
+		const rerun = await runWorker(
+			{
+				...run.applyArgs,
+				cwd: jobClone('apply-rerun', run.lock.baseSha),
+				providerLog: join(scratch.root, 'provider-rerun.jsonl'),
+			},
+			run.lock,
+		);
+		expect(rerun.exitCode, rerun.stderr).toBe(0);
+		expect(rerun.out?.outcome).toBe('stale-lock');
+		expect(rerun.out?.exitCode).toBe(1);
+		expect(rerun.out?.message).toMatch(/start a NEW run/);
+		expect(arbiterRefs()).toBe(before);
+		expect(readProviderLog(join(scratch.root, 'provider-rerun.jsonl'))).toEqual(
+			[],
+		);
+	}, 120_000);
+
+	it('"Re-run all jobs": a fresh lock at the current tip and a new artifact name', async () => {
+		// Attempt 1: the agent job was cancelled, so the lock was only released.
+		const first = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+			apply: {
+				agentJobResult: 'cancelled',
+				agentTimeoutMinutes: 90,
+				actionsApi: {
+					agentMinutes: 2,
+					annotationPages: [[CANCEL_ANNOTATION]],
+					log: join(scratch.root, 'actions-api.log'),
+				},
+			},
+		});
+		expect(first.apply.outcome).toBe('released');
+		expect(first.lock.handoffName).toBe(`dorfl-handoff-task-${SLUG}-attempt-1`);
+
+		// A sibling lands meanwhile: attempt 2 classifies at the NEW tip.
+		const tip = commitToMain({'SIBLING.md': 'sibling\n'}, 'sibling lands');
+		const githubOutput = join(scratch.root, 'github-output-attempt-2');
+		writeFileSync(githubOutput, '');
+		const relock = await runWorker({
+			phase: 'lock',
+			arg: SLUG,
+			integration: 'merge',
+			cwd: jobClone('lock-attempt-2'),
+			githubOutput,
+			runAttempt: '2',
+			providerLog: join(scratch.root, 'provider-lock-2.jsonl'),
+		});
+		expect(relock.exitCode, relock.stderr).toBe(0);
+		expect(relock.out?.outcome).toBe('locked');
+		const lock2 = parseLockOutputLines(readFileSync(githubOutput, 'utf8'));
+		expect(lock2.baseSha).toBe(tip);
+		expect(lock2.handoffName).toBe(`dorfl-handoff-task-${SLUG}-attempt-2`);
+		expect(lock2.handoffName).not.toBe(first.lock.handoffName);
+		expect(lock2.lockSha).toBe(onArbiter(lockRef()));
+		expect(lock2.lockSha).not.toBe(first.lock.lockSha);
 	}, 120_000);
 });
