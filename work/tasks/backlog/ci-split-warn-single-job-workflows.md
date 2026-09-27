@@ -14,6 +14,8 @@ Decision 9: in GitHub Actions, when an agent-spawning verb (the `AGENT_SPAWNING_
 
 9. **Old workflows with a new dorfl.** Decided: warn now (in GitHub Actions, when an agent-spawning verb runs without `--phase` in a checkout whose `.git/config` holds a credential), refuse in the next minor version.
 
+> FORWARD-POINTER (conductor, decided with the human 2026-09-27): do NOT warn for `dorfl verify`. `ci-split-phase-mode-and-guards` put `verify` in `AGENT_SPAWNING_VERBS` because it runs repository code, but it launches no agent, and the generated `verify.yml` persists only a `contents: read` credential (on repos not known to be public). Warning there would flag every private consumer's PR check, and the planned next-minor refusal would break it. Keep `verify` in `AGENT_SPAWNING_VERBS` (the workflow guard still reads it); exclude it from THIS warning explicitly, with a test that `verify` in the unsafe shape prints nothing, and say in a code comment that `ci-split-generate-workflows` must apply the same exemption.
+
 ## Acceptance criteria
 
 - [ ] Tests: warning printed in the unsafe case; not printed with `--phase`, outside GitHub Actions, or when no credential is persisted.
