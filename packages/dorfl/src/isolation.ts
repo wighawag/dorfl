@@ -6,6 +6,7 @@ import {
 	rebaseContinuedBranchOntoMain,
 } from './continue-branch.js';
 import {refWrite} from './ref-write.js';
+import {activePhase} from './phase.js';
 import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 
 /**
@@ -312,6 +313,12 @@ export function inPlaceStrategy(options: {
 				);
 				if (rebase.kind === 'conflict') {
 					continueRebaseConflict = true;
+				} else if (activePhase() === 'agent') {
+					// CI AGENT PHASE (ADR `ci-agent-job-holds-no-write-token` decision 7):
+					// the agent job holds no write token, so the rebase stays LOCAL. The
+					// apply job pushes the rebased branch (in the handoff bundle) with
+					// `--force-with-lease` against the tip the lock job observed
+					// (`continueTip`), before any other write.
 				} else {
 					// The helper THROWS on a terminal failure (the stale-lease retry cap, or
 					// a non-stale-lease rejection / unreachable arbiter). CATCH it and flag

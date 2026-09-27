@@ -1,6 +1,7 @@
 /**
  * Worker for the three-process build-path split test
- * (`test/ci-phase-build-e2e.test.ts`, task `ci-split-build-path`). Spawned as
+ * (`test/ci-phase-build-e2e.test.ts`, tasks `ci-split-build-path` and
+ * `ci-split-build-path-non-integrate-intents`). Spawned as
  * its OWN node process via `tsx`, once per phase, so the lock, agent and apply
  * phases share nothing but the handoff directory and the lock outputs (the
  * `DORFL_LOCK_OUTPUTS` env the parent passes, exactly as a workflow would).
@@ -37,6 +38,20 @@ interface WorkerArgs {
 	/** The approved Gate-2 review prose. */
 	reviewProse?: string;
 	verify?: string;
+	/**
+	 * How the stub build agent ends, over the default `{ok: true, output:
+	 * agentSummary}`: `{ok: false, detail}` for an agent failure, `{timedOut:
+	 * true}` for the dorfl-internal deadline, an `output` carrying the STOP
+	 * sentinel for a deliberate STOP.
+	 */
+	agentResult?: {
+		ok?: boolean;
+		detail?: string;
+		output?: string;
+		timedOut?: boolean;
+	};
+	/** The resolved `maxAutoCheckpoints` option (the config at baseSha wins). */
+	maxAutoCheckpoints?: number;
 }
 
 function stubProvider(log: string): ReviewProvider {
@@ -98,8 +113,9 @@ async function main(): Promise<void> {
 				mkdirSync(dirname(join(cwd, rel)), {recursive: true});
 				writeFileSync(join(cwd, rel), content);
 			}
-			return {ok: true, output: args.agentSummary};
+			return {ok: true, output: args.agentSummary, ...args.agentResult};
 		},
+		maxAutoCheckpoints: args.maxAutoCheckpoints,
 		providerInstance: stubProvider(args.providerLog),
 		env: process.env,
 		note: (m) => notes.push(m),

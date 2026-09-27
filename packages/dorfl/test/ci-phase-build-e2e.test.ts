@@ -134,6 +134,8 @@ interface ThreePhaseRun {
 	agentProviderLog: string;
 	applyProviderLog: string;
 	agentClone: string;
+	/** The arbiter's refs right before the apply phase ran. */
+	refsBeforeApply: string;
 }
 
 /**
@@ -144,12 +146,19 @@ async function threePhases(opts: {
 	integration: 'propose' | 'merge';
 	agentFiles: Record<string, string>;
 	between?: () => void;
+	/** How the stub build agent ends (see the worker's `agentResult`). */
+	agentResult?: Record<string, unknown>;
+	/** The acceptance gate (`verify`); default green. */
+	verify?: string;
+	/** The apply phase's expected result exit code; default 0. */
+	applyExit?: number;
 }): Promise<ThreePhaseRun> {
 	const common = {
 		arg: SLUG,
 		integration: opts.integration,
 		agentSummary: 'Implemented the thing.',
 		reviewProse: 'Looks right: the thing is implemented as asked.',
+		...(opts.verify === undefined ? {} : {verify: opts.verify}),
 	};
 
 	// lock
@@ -190,6 +199,7 @@ async function threePhases(opts: {
 			handoffDir,
 			providerLog: agentProviderLog,
 			agentFiles: opts.agentFiles,
+			agentResult: opts.agentResult,
 		},
 		lock,
 	);
@@ -202,6 +212,7 @@ async function threePhases(opts: {
 	// apply
 	const applyClone = jobClone('apply', lock.baseSha);
 	const applyProviderLog = join(scratch.root, 'provider-apply.jsonl');
+	const refsBeforeApply = arbiterRefs();
 	const applyRun = await runWorker(
 		{
 			...common,
@@ -214,6 +225,9 @@ async function threePhases(opts: {
 		lock,
 	);
 	expect(applyRun.exitCode, applyRun.stderr).toBe(0);
+	expect(applyRun.out?.exitCode, applyRun.out?.message).toBe(
+		opts.applyExit ?? 0,
+	);
 	return {
 		lock,
 		agent: agentRun.out!,
@@ -221,6 +235,7 @@ async function threePhases(opts: {
 		agentProviderLog,
 		applyProviderLog,
 		agentClone,
+		refsBeforeApply,
 	};
 }
 
@@ -311,5 +326,203 @@ describe('the build path in three processes (lock, agent, apply)', () => {
 		expect(onArbiter(`refs/heads/work/task-${SLUG}`)).toBeUndefined();
 		// No PR in merge mode.
 		expect(readProviderLog(run.applyProviderLog)).toEqual([]);
+	}, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// The non-integrate outcomes (task `ci-split-build-path-non-integrate-intents`)
+// ---------------------------------------------------------------------------
+
+const WORK_BRANCH = `refs/heads/work/task-${SLUG}`;
+
+/** Land `files` on the arbiter's main from a sibling clone; return the new tip. */
+function commitToMain(files: Record<string, string>, message: string): string {
+	const sibling = seeded.clone(`main-${Math.random().toString(36).slice(2)}`);
+	for (const [rel, content] of Object.entries(files)) {
+		mkdirSync(dirname(join(sibling, rel)), {recursive: true});
+		writeFileSync(join(sibling, rel), content);
+	}
+	g(sibling, 'add', '-A');
+	g(sibling, 'commit', '-q', '-m', message);
+	g(sibling, 'push', '-q', 'origin', 'HEAD:main');
+	return g(sibling, 'rev-parse', 'HEAD');
+}
+
+/**
+ * Push a KEPT `work/task-<slug>` (a requeued item's branch) cut from the
+ * arbiter's current main, then move main on, so the continue must rebase it.
+ */
+function seedKeptBranch(
+	files: Record<string, string>,
+	subject = 'kept work',
+): string {
+	const kept = seeded.clone(`kept-${Math.random().toString(36).slice(2)}`);
+	g(kept, 'checkout', '-q', '-b', `work/task-${SLUG}`);
+	for (const [rel, content] of Object.entries(files)) {
+		mkdirSync(dirname(join(kept, rel)), {recursive: true});
+		writeFileSync(join(kept, rel), content);
+	}
+	g(kept, 'add', '-A');
+	g(kept, 'commit', '-q', '-m', subject);
+	g(kept, 'push', '-q', 'origin', `work/task-${SLUG}`);
+	const tip = g(kept, 'rev-parse', 'HEAD');
+	commitToMain({'MAINLINE.md': 'main moved on\n'}, 'mainline moves');
+	return tip;
+}
+
+/** The item body on the arbiter's main. */
+function bodyOnMain(): string {
+	return showOnArbiter(`main:work/tasks/ready/${SLUG}.md`) ?? '';
+}
+
+/** Subjects of the work branch's commits that main lacks, newest first. */
+function branchSubjects(): string[] {
+	return g(seeded.arbiter, 'log', '--format=%s', WORK_BRANCH, '^main')
+		.split('\n')
+		.filter((l) => l !== '');
+}
+
+describe('the build path non-integrate outcomes in three processes', () => {
+	it('continue: the agent rebases the kept branch locally and the apply pushes it leased on continueTip', async () => {
+		const keptTip = seedKeptBranch({'src/kept.ts': 'export const kept = 1;\n'});
+		const run = await threePhases({
+			integration: 'propose',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+		});
+		expect(run.lock.continueTip).toBe(keptTip);
+		expect(run.agent.intent).toBe('integrate');
+		expect(run.apply.outcome).toBe('proposed');
+
+		// The rebased branch replaced the kept tip: it now sits on main, carries
+		// the kept work, the agent's work and the done-move.
+		const tip = onArbiter(WORK_BRANCH)!;
+		expect(tip).not.toBe(keptTip);
+		const main = onArbiter('refs/heads/main')!;
+		expect(g(seeded.arbiter, 'merge-base', main, tip)).toBe(main);
+		expect(showOnArbiter(`${WORK_BRANCH}:src/kept.ts`)).toContain('kept = 1');
+		expect(showOnArbiter(`${WORK_BRANCH}:src/thing.ts`)).toContain('thing = 1');
+		expect(
+			showOnArbiter(`${WORK_BRANCH}:work/tasks/done/${SLUG}.md`),
+		).toBeDefined();
+		expect(readProviderLog(run.applyProviderLog).map((c) => c.method)).toEqual([
+			'openRequest',
+			'postPRComment',
+		]);
+	}, 120_000);
+
+	it('continue: a stale lease (the kept branch moved) fails the apply cleanly without writing', async () => {
+		seedKeptBranch({'src/kept.ts': 'export const kept = 1;\n'});
+		const run = await threePhases({
+			integration: 'propose',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+			// Someone pushes to the kept branch after the lock job observed it.
+			between: () => {
+				const other = seeded.clone('mover');
+				g(other, 'fetch', '-q', 'origin');
+				g(other, 'checkout', '-q', '-b', 'moved', `origin/work/task-${SLUG}`);
+				writeFileSync(join(other, 'MOVED.md'), 'moved\n');
+				g(other, 'add', '-A');
+				g(other, 'commit', '-q', '-m', 'moved');
+				g(other, 'push', '-q', 'origin', `HEAD:work/task-${SLUG}`);
+			},
+			applyExit: 1,
+		});
+		expect(run.apply.outcome).toBe('stale-lease');
+		expect(arbiterRefs()).toBe(run.refsBeforeApply);
+		expect(onArbiter(lockRef())).toBe(run.lock.lockSha);
+		expect(readProviderLog(run.applyProviderLog)).toEqual([]);
+	}, 120_000);
+
+	it('a red gate: needs-attention, the WIP branch pushed, the item surfaced and the lock released', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+			verify: 'false',
+		});
+		expect(run.agent.intent).toBe('needs-attention');
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toMatch(/acceptance gate failed/);
+		expect(showOnArbiter(`${WORK_BRANCH}:src/thing.ts`)).toContain('thing = 1');
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(showOnArbiter('main:src/thing.ts')).toBeUndefined();
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
+	it('a deadline checkpoint under the ceiling: WIP pushed, lock released, nothing surfaced', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/half.ts': 'export const half = 1;\n'},
+			agentResult: {ok: false, timedOut: true},
+		});
+		expect(run.agent.intent).toBe('deadline-checkpoint');
+		expect(run.apply.outcome).toBe('auto-continued');
+		expect(branchSubjects()).toEqual([
+			`chore(deadline-checkpoint): save wip for '${SLUG}'`,
+		]);
+		expect(showOnArbiter(`${WORK_BRANCH}:src/half.ts`)).toContain('half = 1');
+		expect(bodyOnMain()).not.toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
+	it('a deadline checkpoint at the ceiling (maxAutoCheckpoints from the config at baseSha) surfaces', async () => {
+		commitToMain({'dorfl.json': '{"maxAutoCheckpoints": 1}\n'}, 'ceiling 1');
+		const keptTip = seedKeptBranch(
+			{'src/half.ts': 'export const half = 1;\n'},
+			`chore(deadline-checkpoint): save wip for '${SLUG}'`,
+		);
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/more.ts': 'export const more = 1;\n'},
+			agentResult: {ok: false, timedOut: true},
+			applyExit: 1,
+		});
+		expect(run.lock.continueTip).toBe(keptTip);
+		expect(run.agent.intent).toBe('deadline-checkpoint');
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toMatch(/ceiling 2\/1/);
+		expect(branchSubjects()).toHaveLength(2);
+		expect(showOnArbiter(`${WORK_BRANCH}:src/more.ts`)).toContain('more = 1');
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
+	it('a clean STOP: surfaced with the agent reason, the gate never ran, the lock released', async () => {
+		const reason = 'The task names a module that no longer exists.';
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {},
+			agentResult: {
+				ok: true,
+				output: `I stopped.\n\n=== TASK-STOP ===\n${reason}\n=== END TASK-STOP ===\n`,
+			},
+			// A red gate would be reported instead if the gate ran.
+			verify: 'false',
+		});
+		expect(run.agent.intent).toBe('stop');
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toContain('STOPPED');
+		expect(run.apply.message).toContain(reason);
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(WORK_BRANCH)).toBeUndefined();
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
+	it('an agent failure with WIP: the partial work pushed, the item surfaced, the lock released', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/partial.ts': 'export const partial = 1;\n'},
+			agentResult: {ok: false, detail: 'the model crashed mid-run'},
+		});
+		expect(run.agent.intent).toBe('agent-failed');
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toContain('the model crashed mid-run');
+		expect(branchSubjects()).toEqual([
+			`chore(${SLUG}): save aborted work (wip)`,
+		]);
+		expect(showOnArbiter(`${WORK_BRANCH}:src/partial.ts`)).toContain(
+			'partial = 1',
+		);
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
 	}, 120_000);
 });

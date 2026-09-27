@@ -8,6 +8,7 @@ import {
 	PhaseHaltSentinel,
 	UnrecordedWriteError,
 	activateProcessPhase,
+	annotatePhaseBoundary,
 	createPhaseRecorder,
 	installRecordingSeams,
 	recordingIssueProvider,
@@ -85,6 +86,32 @@ describe('runAgentPhase with a toy pipeline', () => {
 			sentinelSwallowed: false,
 		});
 		expect(steps).toEqual(['agent ran', 'local commit']);
+	});
+
+	it('the first write captures the latest boundary annotation; annotating outside a phase is a no-op', async () => {
+		annotatePhaseBoundary({kind: 'ignored'});
+		const recorder = createPhaseRecorder({
+			record: ['refWrite.deleteLockRef'],
+		});
+		const outcome = await runAgentPhase(recorder, async () => {
+			annotatePhaseBoundary({kind: 'first'});
+			annotatePhaseBoundary({kind: 'stop', reason: 'drifted'});
+			await refWrite.deleteLockRef(lockInput);
+		});
+		expect(outcome).toMatchObject({
+			halted: true,
+			intent: {
+				seam: 'refWrite',
+				method: 'deleteLockRef',
+				annotation: {kind: 'stop', reason: 'drifted'},
+			},
+		});
+		// Restored: a later annotation reaches no recorder.
+		annotatePhaseBoundary({kind: 'late'});
+		expect(recorder.captured()?.annotation).toEqual({
+			kind: 'stop',
+			reason: 'drifted',
+		});
 	});
 
 	it('finishes normally when the pipeline reaches no write', async () => {

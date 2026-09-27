@@ -383,18 +383,7 @@ export async function routeToNeedsAttention(
 	//    tip. Skip when the tree is clean (no aborted work to save). NOTE this no
 	//    longer needs a folder source — the body rests in `backlog/` (task 9a) and
 	//    never moves on a bounce.
-	gitHard(['add', '-A'], cwd, env);
-	const hadWip = !nothingStaged(cwd, env);
-	if (hadWip) {
-		// Save the agent's uncommitted work as a plain wip commit on the work-branch
-		// tip (the RECOVERABLE half — a `requeue` continues from it). No bookkeeping
-		// trailer: after the per-item-lock cut-over (tasks 9a–9d) NO transient status
-		// (no `needs-attention/` move-only commit) lands on a branch, so a branch cut
-		// from `main` rebases PLAINLY with nothing to drop — the `drop-bookkeeping-rebase`
-		// machinery and its `Dorfl-Bookkeeping` trailer are gone (9d).
-		const wipBody = `chore(${slug}): save aborted work (wip)`;
-		gitHard(['commit', '-q', '-m', wipBody], cwd, env);
-	}
+	const hadWip = commitAbortedWork({cwd, slug, env});
 	const commitMessage = `chore(${slug}): bounce to stuck; ${options.reason}`;
 	const moveCommit = hadWip ? revParseHead(cwd, env) : undefined;
 	note(`Bounced '${slug}' to stuck (lock): ${options.reason}`);
@@ -452,6 +441,40 @@ export async function routeToNeedsAttention(
 	}
 
 	return {moved: true, commitMessage, moveCommit, branchPush, pushError};
+}
+
+/**
+ * The LOCAL half of {@link routeToNeedsAttention}'s save: commit whatever the
+ * agent left uncommitted (`git add -A`) as a plain wip commit on the current
+ * branch tip. Returns whether a commit was made (a clean tree makes none).
+ *
+ * No bookkeeping trailer: after the per-item-lock cut-over (tasks 9a–9d) NO
+ * transient status (no `needs-attention/` move-only commit) lands on a branch,
+ * so a branch cut from `main` rebases PLAINLY with nothing to drop: the
+ * `drop-bookkeeping-rebase` machinery and its `Dorfl-Bookkeeping` trailer are
+ * gone (9d).
+ *
+ * The CI agent phase (task `ci-split-build-path-non-integrate-intents`) runs
+ * this on its own when its pipeline halts at a needs-attention bounce, so the
+ * wip travels in the handoff bundle; the apply phase then re-runs the whole
+ * route on the bundle's tip, where this finds a clean tree and commits nothing.
+ */
+export function commitAbortedWork(params: {
+	cwd: string;
+	slug: string;
+	env?: NodeJS.ProcessEnv;
+}): boolean {
+	const {cwd, slug, env} = params;
+	gitHard(['add', '-A'], cwd, env);
+	if (nothingStaged(cwd, env)) {
+		return false;
+	}
+	gitHard(
+		['commit', '-q', '-m', `chore(${slug}): save aborted work (wip)`],
+		cwd,
+		env,
+	);
+	return true;
 }
 
 /**

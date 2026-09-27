@@ -42,6 +42,8 @@ const ALLOWED: Record<string, string> = {
 	'ref-write.ts::currentRefWrite.deleteLockRef': 'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.pushTaskingCandidatesBranch':
 		'the ref-write seam itself',
+	'ref-write.ts::currentRefWrite.pushLeasedWorkBranch':
+		'the ref-write seam itself',
 	'continue-branch.ts::pushContinuedBranchWithStaleLeaseRetry':
 		'implementation of refWrite.pushContinuedBranch (callers checked below)',
 	'needs-attention.ts::routeToNeedsAttention':

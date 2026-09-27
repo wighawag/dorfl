@@ -68,6 +68,7 @@ describe('ref-write seam: shape', () => {
 			'amendLockRef',
 			'deleteLockRef',
 			'pushContinuedBranch',
+			'pushLeasedWorkBranch',
 			'saveWorkBranch',
 			'deleteRemoteWorkBranch',
 			'pushTaskingCandidatesBranch',
@@ -115,6 +116,37 @@ describe('ref-write seam: shape', () => {
 		});
 		expect(amended.status).toBe(0);
 		expect(arbiterRef(seeded, ref)).toBe(commit);
+	});
+});
+
+describe('ref-write seam: the leased work-branch push', () => {
+	it('pushLeasedWorkBranch publishes only while the branch still points at the expected tip', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, ['lease']);
+		const branch = 'work/task-lease';
+		const ref = `refs/heads/${branch}`;
+		const main = gitIn(['rev-parse', 'HEAD'], seeded.repo).trim();
+		const kept = gitIn(
+			['commit-tree', `${main}^{tree}`, '-p', main, '-m', 'kept'],
+			seeded.repo,
+		).trim();
+		gitIn(['push', '-q', ARBITER, `${kept}:${ref}`], seeded.repo);
+		const rebased = gitIn(
+			['commit-tree', `${main}^{tree}`, '-p', main, '-m', 'rebased'],
+			seeded.repo,
+		).trim();
+		const push = (expectedTip: string) =>
+			currentRefWrite.pushLeasedWorkBranch({
+				arbiter: ARBITER,
+				branch,
+				commit: rebased,
+				expectedTip,
+				cwd: seeded.repo,
+				env: gitEnv(),
+			});
+		expect((await push(main)).status).not.toBe(0);
+		expect(arbiterRef(seeded, ref)).toBe(kept);
+		expect((await push(kept)).status).toBe(0);
+		expect(arbiterRef(seeded, ref)).toBe(rebased);
 	});
 });
 

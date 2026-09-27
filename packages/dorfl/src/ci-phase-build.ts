@@ -1,7 +1,8 @@
 /**
  * **The build path split into the three CI phases** (spec
  * `ci-agent-job-without-write-token` §3 build row and §8, ADR
- * `ci-agent-job-holds-no-write-token`, task `ci-split-build-path`).
+ * `ci-agent-job-holds-no-write-token`, tasks `ci-split-build-path` and
+ * `ci-split-build-path-non-integrate-intents`).
  *
  * `advance task:<slug>` / `do <slug>` with `--phase` run ONE of three halves of
  * the one build pipeline (`performDo`), never a second implementation:
@@ -14,20 +15,31 @@
  *    advanced, or its lock is held) is a no-op that writes nothing.
  *  - **agent** ({@link performBuildAgentPhase}): check, read-only, that the lock
  *    ref still equals `lockSha`, then run `performDo` without its claim under
- *    the phase recorder: the build agent, the gate, the Gate-2 review, the
- *    done-move commit, the local rebase and the fresh-worktree gate run exactly
- *    as today, and the pipeline halts at its first write. The success path's
- *    first write is the land half (`integrationLand.land`), handed over as
- *    `integrate` with the work-branch bundle, the PR title and body and the
- *    Gate-2 review prose. Every other outcome is handed over as `agent-failed`
- *    for now (task `ci-split-build-path-non-integrate-intents` adds the real
- *    intents).
+ *    the phase recorder: the continue rebase (LOCAL only, decision 7), the
+ *    build agent, the STOP and deadline detection, the gate, the Gate-2 review,
+ *    the done-move commit, the local rebase and the fresh-worktree gate run
+ *    exactly as today, and the pipeline halts at its first write, which names
+ *    the intent handed over ({@link handOverHalt}):
+ *      - the land half (`integrationLand.land`): `integrate`, with the
+ *        work-branch bundle, the PR title and body and the Gate-2 review prose;
+ *      - a needs-attention bounce (red gate, blocked review, rebase conflict):
+ *        `needs-attention`, the wip committed locally and bundled;
+ *      - the deadline checkpoint's branch save: `deadline-checkpoint`, the
+ *        checkpoint commit bundled;
+ *      - the agent's deliberate STOP: `stop`; an agent failure: `agent-failed`
+ *        (both with the wip bundled, when there is any).
  *  - **apply** ({@link performBuildApplyPhase}): refuse to write unless the
  *    lock ref still equals `lockSha`; validate the handoff as hostile
- *    (`validateApplyHandoff`); resume at the land half (`landIntegration`, the
- *    unchanged compare-and-swap loop, then the review comment); release the lock
- *    with a lease on `lockSha` once the work is durably on `main` (a propose PR
- *    keeps it held, exactly as `complete` does today).
+ *    (`validateApplyHandoff`); when the lock job saw a kept branch, push the
+ *    bundle's tip with a lease on that `continueTip` first (decision 7; a
+ *    stale lease writes nothing); then resume at the write half of the intent:
+ *    the land half (`landIntegration`, the unchanged compare-and-swap loop, then
+ *    the review comment), the needs-attention route, `routeDeadlineCheckpoint`
+ *    (with `maxAutoCheckpoints` from the config at `baseSha`),
+ *    `saveAgentStop` or `saveAgentFailure`. Every lock release in the apply
+ *    phase is leased on `lockSha` (`leaseLockReleases`), and the lock is
+ *    released once the work is durably on `main` (a propose PR keeps it held,
+ *    exactly as `complete` does today).
  */
 
 import {existsSync} from 'node:fs';
@@ -38,7 +50,10 @@ import {
 	HANDOFF_LIMITS,
 	HandoffRejected,
 	handoffName as deriveHandoffName,
+	type AgentFailedProducts,
 	type HandoffRecord,
+	type NeedsAttentionProducts,
+	type StopProducts,
 } from './ci-handoff-format.js';
 import {writeHandoff} from './ci-handoff.js';
 import {validateApplyHandoff} from './ci-handoff-apply.js';
@@ -59,14 +74,26 @@ import {
 	type HeldLock,
 } from './ci-phase-driver.js';
 import {performClaim} from './claim-cas.js';
-import {performDo, type DoOptions} from './do.js';
+import {
+	deadlineSurfaceReason,
+	performDo,
+	routeDeadlineCheckpoint,
+	saveAgentFailure,
+	saveAgentStop,
+	type BuildBoundary,
+	type DoOptions,
+	type DoResult,
+} from './do.js';
 import {
 	checkGatePreconditions,
 	detectLockfileOnDisk,
 } from './gate-readiness.js';
-import {git, runAsync} from './git.js';
+import {git, run, runAsync} from './git.js';
+import {selectProvider} from './github.js';
 import {identityEnv} from './identity.js';
+import {leaseLockReleases} from './item-lock.js';
 import {
+	arbiterUrl,
 	integrationLand,
 	type IntegrationCoreInput,
 	type IntegrationCoreResult,
@@ -74,7 +101,16 @@ import {
 } from './integration-core.js';
 import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
+import {
+	commitAbortedWork,
+	type RouteToNeedsAttentionOptions,
+} from './needs-attention.js';
 import {refWrite} from './ref-write.js';
+import {
+	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
+	loadRepoConfigFromContent,
+} from './repo-config.js';
 import type {Phase} from './phase.js';
 import {
 	createPhaseRecorder,
@@ -138,6 +174,15 @@ export type BuildPhaseOutcome =
 	| 'proposed'
 	/** apply: the item was surfaced to needs-attention. */
 	| 'surfaced'
+	/** apply: surfacing the item did not land on the arbiter (it stays locked). */
+	| 'surface-unmoved'
+	/** apply: a deadline checkpoint was saved and the lock released to continue. */
+	| 'auto-continued'
+	/**
+	 * apply: the kept work branch moved on the arbiter since the lock job saw it
+	 * (`continueTip`), so the leased continue push was refused; nothing was written.
+	 */
+	| 'stale-lease'
 	/** apply: the handoff broke a rule; nothing from it was written. */
 	| 'rejected'
 	/** A usage or environment problem, or a path this task does not split yet. */
@@ -371,7 +416,7 @@ function buildRecordableCalls(): WriteSeamCall[] {
 	];
 }
 
-/** The `agent-failed` detail for a halt at a write this task does not carry yet. */
+/** The `agent-failed` detail for a halt at a write the build path does not carry. */
 function haltDetail(intent: RecordedWriteIntent): string {
 	const input = intent.input as {reason?: unknown} | undefined;
 	const reason =
@@ -382,8 +427,208 @@ function haltDetail(intent: RecordedWriteIntent): string {
 			: '';
 	return (
 		`the build stopped at ${intent.seam}.${intent.method}${reason} ` +
-		'(this outcome is not carried through the CI phases yet)'
+		'(this outcome is not carried through the CI phases)'
 	);
+}
+
+/** What the agent phase writes: the record, and the work branch to bundle. */
+interface Handover {
+	record: HandoffRecord;
+	bundle?: {repo: string; workBranch: string; baseSha: string};
+}
+
+/** The context {@link handOverHalt} maps a halt in. */
+interface HaltContext {
+	item: string;
+	slug: string;
+	arbiter: string;
+	baseSha: string;
+	env: NodeJS.ProcessEnv;
+}
+
+/**
+ * The work branch to bundle as the WIP of a non-integrate intent, or
+ * `undefined` when it carries nothing to recover: the checkout is not on the
+ * item's work branch, or the branch has no commit that `<arbiter>/main` lacks
+ * (the apply phase refuses a bundle without a new commit).
+ */
+function wipBundle(
+	cwd: string,
+	ctx: HaltContext,
+): Handover['bundle'] | undefined {
+	const workBranch = workBranchRef('task', ctx.slug);
+	const head = run('git', ['symbolic-ref', '--quiet', 'HEAD'], cwd, {
+		env: ctx.env,
+	});
+	if (head.status !== 0 || head.stdout.trim() !== `refs/heads/${workBranch}`) {
+		return undefined;
+	}
+	const ahead = run(
+		'git',
+		[
+			'rev-list',
+			'--count',
+			`refs/heads/${workBranch}`,
+			`^refs/remotes/${ctx.arbiter}/main`,
+			`^${ctx.baseSha}`,
+		],
+		cwd,
+		{env: ctx.env},
+	);
+	if (ahead.status !== 0 || Number(ahead.stdout.trim()) === 0) {
+		return undefined;
+	}
+	return {repo: cwd, workBranch, baseSha: ctx.baseSha};
+}
+
+/** A bounded reason (or question) for the handoff record. */
+function reasonText(text: string): string {
+	return boundHandoffText(text, HANDOFF_LIMITS.reasonChars);
+}
+
+/** The `needs-attention` handover of a bounce's recorded input. */
+function needsAttention(
+	ctx: HaltContext,
+	input: {reason: string; questions?: string[]},
+	bundle: Handover['bundle'] | undefined,
+): Handover {
+	return {
+		record: {
+			schema: 1,
+			item: ctx.item,
+			intent: {kind: 'needs-attention'},
+			products: {
+				reason: reasonText(input.reason),
+				...(input.questions === undefined || input.questions.length === 0
+					? {}
+					: {questions: input.questions.map(reasonText)}),
+			},
+		},
+		bundle,
+	};
+}
+
+/**
+ * Map the build's FIRST WRITE (the recorded halt) to the handoff (task
+ * `ci-split-build-path-non-integrate-intents`). The seam call names the write;
+ * the pipeline's {@link BuildBoundary} annotation names the outcome when several
+ * share one seam call. A bounce's LOCAL half (the wip commit, which the seam
+ * would have made before pushing) runs here, so the wip travels in the bundle.
+ */
+function handOverHalt(intent: RecordedWriteIntent, ctx: HaltContext): Handover {
+	const call = `${intent.seam}.${intent.method}`;
+	const boundary = intent.annotation as BuildBoundary | undefined;
+
+	if (call === 'integrationLand.land') {
+		const land = intent.input as IntegrationLandInput;
+		if (land.branch !== workBranchRef('task', ctx.slug)) {
+			throw new Error(
+				`the land half names the branch ${land.branch}, not ` +
+					workBranchRef('task', ctx.slug),
+			);
+		}
+		const limit = HANDOFF_LIMITS.commentChars;
+		return {
+			record: {
+				schema: 1,
+				item: ctx.item,
+				intent: {kind: 'integrate'},
+				products: {
+					prTitle: land.title,
+					prBody: boundHandoffText(land.body ?? '', limit),
+					...(land.reviewProse === undefined
+						? {}
+						: {reviewProse: boundHandoffText(land.reviewProse, limit)}),
+				},
+			},
+			bundle: {repo: land.cwd, workBranch: land.branch, baseSha: ctx.baseSha},
+		};
+	}
+
+	// The deadline checkpoint: its marker commit is already made (locally) when
+	// the branch save is recorded.
+	if (
+		call === 'refWrite.saveWorkBranch' &&
+		boundary?.kind === 'deadline-checkpoint'
+	) {
+		const input = intent.input as RouteToNeedsAttentionOptions;
+		commitAbortedWork({cwd: input.cwd, slug: ctx.slug, env: ctx.env});
+		const bundle = wipBundle(input.cwd, ctx);
+		if (!boundary.predecessorGone) {
+			const reason = deadlineSurfaceReason({
+				slug: ctx.slug,
+				kind: 'unreaped',
+				detail: boundary.reapDetail,
+			});
+			return needsAttention(ctx, {reason}, bundle);
+		}
+		if (bundle === undefined) {
+			// Nothing on the branch: no progress, so today's route surfaces.
+			const reason = deadlineSurfaceReason({
+				slug: ctx.slug,
+				kind: 'no-progress',
+			});
+			return needsAttention(ctx, {reason}, undefined);
+		}
+		return {
+			record: {
+				schema: 1,
+				item: ctx.item,
+				intent: {kind: 'deadline-checkpoint'},
+				products: {},
+			},
+			bundle,
+		};
+	}
+
+	// The empty-diff STOP surfaces a question on main without a branch save.
+	if (boundary?.kind === 'stop' && boundary.stopKind === 'empty-diff') {
+		return {
+			record: {
+				schema: 1,
+				item: ctx.item,
+				intent: {kind: 'stop'},
+				products: {
+					reason: reasonText(boundary.reason),
+					stopKind: 'empty-diff',
+				},
+			},
+		};
+	}
+
+	if (call === 'ledgerWrite.applyNeedsAttentionTransition') {
+		const input = intent.input as RouteToNeedsAttentionOptions;
+		commitAbortedWork({cwd: input.cwd, slug: ctx.slug, env: ctx.env});
+		const bundle =
+			input.pushBranch === false ? undefined : wipBundle(input.cwd, ctx);
+		if (boundary?.kind === 'agent-failed') {
+			return {record: agentFailed(ctx.item, boundary.failureDetail), bundle};
+		}
+		if (boundary?.kind === 'stop') {
+			return {
+				record: {
+					schema: 1,
+					item: ctx.item,
+					intent: {kind: 'stop'},
+					products: {
+						reason: reasonText(boundary.reason),
+						stopKind: boundary.stopKind,
+					},
+				},
+				bundle,
+			};
+		}
+		return needsAttention(ctx, input, bundle);
+	}
+
+	// A tree-less surface (the continue rebase conflicted at onboarding): the
+	// kept branch is untouched on the arbiter, so nothing is bundled.
+	if (call === 'ledgerWrite.applyTreelessNeedsAttentionTransition') {
+		const input = intent.input as {reason: string; questions?: string[]};
+		return needsAttention(ctx, input, undefined);
+	}
+
+	return {record: agentFailed(ctx.item, haltDetail(intent))};
 }
 
 /**
@@ -428,66 +673,50 @@ export async function performBuildAgentPhase(
 	}
 
 	const recorder = createPhaseRecorder({record: buildRecordableCalls()});
-	let products: HandoffRecord;
-	let bundle: {repo: string; workBranch: string; baseSha: string} | undefined;
+	const ctx: HaltContext = {item, slug, arbiter, baseSha: held.baseSha, env};
+	let handover: Handover;
 	try {
+		// EVERY review provider the pipeline can reach records (never only an
+		// injected one): without an injected instance, resolve the one the
+		// integration core would select from the arbiter URL, and wrap it.
+		const provider =
+			options.providerInstance ??
+			selectProvider({arbiterUrl: await arbiterUrl(cwd, arbiter, env)});
 		const outcome = await runAgentPhase(recorder, () =>
 			performDo({
 				...options,
 				phase: 'agent',
-				providerInstance:
-					options.providerInstance === undefined
-						? undefined
-						: recordingReviewProvider(options.providerInstance, recorder),
+				providerInstance: recordingReviewProvider(provider, recorder),
 			}),
 		);
-		if (outcome.halted && outcome.intent.seam === 'integrationLand') {
-			const land = outcome.intent.input as IntegrationLandInput;
-			if (land.branch !== workBranchRef('task', slug)) {
-				throw new Error(
-					`the land half names the branch ${land.branch}, not ` +
-						workBranchRef('task', slug),
-				);
-			}
-			const limit = HANDOFF_LIMITS.commentChars;
-			products = {
-				schema: 1,
-				item,
-				intent: {kind: 'integrate'},
-				products: {
-					prTitle: land.title,
-					prBody: boundHandoffText(land.body ?? '', limit),
-					...(land.reviewProse === undefined
-						? {}
-						: {reviewProse: boundHandoffText(land.reviewProse, limit)}),
-				},
-			};
-			bundle = {repo: land.cwd, workBranch: land.branch, baseSha: held.baseSha};
-		} else {
-			const detail = outcome.halted
-				? haltDetail(outcome.intent)
-				: `the build ended without reaching a write: ${outcome.result.message}`;
-			products = agentFailed(item, detail);
-		}
+		handover = outcome.halted
+			? handOverHalt(outcome.intent, ctx)
+			: {
+					record: agentFailed(
+						item,
+						`the build ended without reaching a write: ${outcome.result.message}`,
+					),
+				};
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		products = agentFailed(item, `the build failed: ${message}`);
+		handover = {record: agentFailed(item, `the build failed: ${message}`)};
 	}
 
 	writeHandoff({
 		dir: options.handoffDir,
 		rung: 'build-task',
-		record: products,
-		bundle,
+		record: handover.record,
+		bundle: handover.bundle,
 	});
-	const message = `handed over ${products.intent.kind} for ${item}`;
+	const kind = handover.record.intent.kind;
+	const message = `handed over ${kind} for ${item}`;
 	note(message);
 	return {
 		exitCode: 0,
 		outcome: 'handed-over',
 		slug,
 		message,
-		intent: products.intent.kind,
+		intent: kind,
 	};
 }
 
@@ -560,8 +789,8 @@ async function surface(params: {
 
 /**
  * The apply phase: check the lock is still this run's, validate the handoff as
- * hostile, then resume the build at the land half. Runs no agent and no
- * repository code; every write goes through dorfl's seams.
+ * hostile, then resume the build at the intent's write half. Runs no agent and
+ * no repository code; every write goes through dorfl's seams.
  */
 export async function performBuildApplyPhase(
 	options: BuildPhaseOptions,
@@ -599,6 +828,37 @@ export async function performBuildApplyPhase(
 		};
 	}
 
+	// Every lock release from here on (the land's, the surface's, the
+	// return-to-backlog's) is leased on the sha this run owns: none of them may
+	// delete a lock another run took since the ownership check.
+	const restoreLease = leaseLockReleases(item, held.lockSha);
+	try {
+		return await applyOwned({options, held, slug, item, arbiter, cwd, env});
+	} finally {
+		restoreLease();
+	}
+}
+
+/** What {@link applyOwned} works with (the apply phase, past the ownership check). */
+interface ApplyContext {
+	options: BuildPhaseOptions;
+	held: HeldLock;
+	slug: string;
+	item: string;
+	arbiter: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv;
+}
+
+/**
+ * The apply phase once the lock is known to be this run's: validate the
+ * handoff, publish a continued branch with its lease, then resume at the
+ * intent's write half.
+ */
+async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
+	const {options, held, slug, item, arbiter, cwd, env} = ctx;
+	const note = options.note ?? (() => {});
+
 	let validated;
 	try {
 		if (options.handoffDir === undefined) {
@@ -632,25 +892,192 @@ export async function performBuildApplyPhase(
 	}
 
 	const record = validated.handoff.record;
-	if (record.intent.kind !== 'integrate' || validated.bundle === undefined) {
-		const reason =
-			record.intent.kind === 'agent-failed'
-				? `the agent job's build failed: ${
-						(record.products as {failureDetail: string}).failureDetail
-					}`
-				: `the agent job handed over ${record.intent.kind}, which the apply ` +
-					'phase does not carry yet';
-		return surface({
+	const bundle = validated.bundle;
+	if (bundle !== undefined) {
+		await gitHard(
+			['checkout', '--quiet', '-B', bundle.workBranch, bundle.tip],
 			cwd,
-			arbiter,
-			slug,
-			reason,
 			env,
-			note,
-			outcome: 'surfaced',
-		});
+		);
+		// The CONTINUE push (decision 7): the agent job rebased the kept branch
+		// locally; publish it with a lease on the tip the LOCK job observed, before
+		// any other write. A branch that moved since then refuses the push, and
+		// this run writes nothing at all.
+		if (held.continueTip !== undefined) {
+			const pushed = await refWrite.pushLeasedWorkBranch({
+				arbiter,
+				branch: bundle.workBranch,
+				commit: bundle.tip,
+				expectedTip: held.continueTip,
+				cwd,
+				env,
+			});
+			if (pushed.status !== 0) {
+				const message =
+					`${bundle.workBranch} on ${arbiter} moved since the lock job saw it ` +
+					`at ${held.continueTip}, so the leased push of the continued branch ` +
+					`was refused (${pushed.stderr.trim()}). Nothing was written and the ` +
+					`lock of ${item} is still held: inspect the branch, then \`dorfl ` +
+					`requeue ${slug}\` to retry the item.`;
+				note(message);
+				return {exitCode: 1, outcome: 'stale-lease', slug, message};
+			}
+		}
 	}
 
+	const pushBranch = bundle !== undefined;
+	const branch = workBranchRef('task', slug);
+	switch (record.intent.kind) {
+		case 'integrate':
+			return applyIntegrate(ctx, validated);
+		case 'needs-attention': {
+			const {reason, questions} = record.products as NeedsAttentionProducts;
+			const routed = pushBranch
+				? await ledgerWrite.applyNeedsAttentionTransition({
+						cwd,
+						slug,
+						reason,
+						questions,
+						arbiter,
+						env,
+						note,
+					})
+				: await ledgerWrite.applyTreelessNeedsAttentionTransition({
+						cwd,
+						slug,
+						reason,
+						questions,
+						arbiter,
+						env,
+						note,
+					});
+			const message = routed.moved
+				? `Surfaced '${slug}' to needs-attention: ${reason}`
+				: `Could not surface '${slug}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
+			note(message);
+			return {
+				exitCode: routed.moved ? 0 : 1,
+				outcome: routed.moved ? 'surfaced' : 'surface-unmoved',
+				slug,
+				message,
+			};
+		}
+		case 'stop': {
+			const stop = record.products as StopProducts;
+			return fromDoResult(
+				await saveAgentStop({
+					slug,
+					branch,
+					cwd,
+					arbiter,
+					reason: stop.reason,
+					kind: stop.stopKind,
+					pushBranch,
+					env,
+					note,
+				}),
+			);
+		}
+		case 'agent-failed':
+			return fromDoResult(
+				await saveAgentFailure({
+					slug,
+					branch,
+					cwd,
+					arbiter,
+					detail: (record.products as AgentFailedProducts).failureDetail,
+					pushBranch,
+					env,
+					note,
+				}),
+			);
+		case 'deadline-checkpoint':
+			return fromDoResult(
+				await routeDeadlineCheckpoint({
+					slug,
+					branch,
+					cwd,
+					arbiter,
+					maxAutoCheckpoints: maxAutoCheckpointsAt(
+						cwd,
+						held.baseSha,
+						options.maxAutoCheckpoints,
+						env,
+					),
+					env,
+					note,
+				}),
+			);
+		default:
+			return surface({
+				cwd,
+				arbiter,
+				slug,
+				reason:
+					`the agent job handed over ${record.intent.kind}, which the build ` +
+					'path does not carry',
+				env,
+				note,
+				outcome: 'surfaced',
+			});
+	}
+}
+
+/** Map a reused `do` write half's result to the apply phase's. */
+function fromDoResult(r: DoResult): BuildPhaseResult {
+	const outcome: BuildPhaseOutcome =
+		r.outcome === 'deadline-auto-continued'
+			? 'auto-continued'
+			: r.routedToNeedsAttention === true
+				? 'surfaced'
+				: 'surface-unmoved';
+	return {exitCode: r.exitCode, outcome, slug: r.slug, message: r.message};
+}
+
+/**
+ * The `maxAutoCheckpoints` ceiling from the repository config AT `baseSha`
+ * (trusted, the arbiter's `main` the lock job classified at), never from the
+ * bundle: a work branch could raise its own ceiling otherwise. Falls back to
+ * the resolved option, then to the default, when the file does not set a
+ * valid value.
+ */
+function maxAutoCheckpointsAt(
+	cwd: string,
+	baseSha: string,
+	fallback: number | undefined,
+	env: NodeJS.ProcessEnv,
+): number {
+	for (const name of [REPO_CONFIG_FILENAME, REPO_CONFIG_FILENAME_LEGACY]) {
+		const r = run('git', ['cat-file', 'blob', `${baseSha}:${name}`], cwd, {
+			env,
+		});
+		if (r.status !== 0) continue;
+		let cap: unknown;
+		try {
+			cap = loadRepoConfigFromContent(r.stdout, `${baseSha}:${name}`).config
+				.maxAutoCheckpoints;
+		} catch {
+			cap = undefined;
+		}
+		if (typeof cap === 'number' && Number.isInteger(cap) && cap >= 1) {
+			return cap;
+		}
+		break;
+	}
+	return fallback ?? 5;
+}
+
+/** The `integrate` write half: the land loop, the review comment, the release. */
+async function applyIntegrate(
+	ctx: ApplyContext,
+	validated: ReturnType<typeof validateApplyHandoff>,
+): Promise<BuildPhaseResult> {
+	const {options, held, slug, item, arbiter, cwd, env} = ctx;
+	const note = options.note ?? (() => {});
+	const record = validated.handoff.record;
+	if (record.intent.kind !== 'integrate' || validated.bundle === undefined) {
+		throw new Error('applyIntegrate needs an integrate handoff with a bundle');
+	}
 	const products = record.products as {
 		prTitle: string;
 		prBody: string;
@@ -658,7 +1085,6 @@ export async function performBuildApplyPhase(
 	};
 	const branch = validated.bundle.workBranch;
 	const tip = validated.bundle.tip;
-	await gitHard(['checkout', '--quiet', '-B', branch, tip], cwd, env);
 	if (validated.forcedPropose) {
 		note(
 			`Untrusted-origin task '${slug}': forcing the BUILD transition to ` +

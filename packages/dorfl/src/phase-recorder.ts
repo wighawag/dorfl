@@ -55,6 +55,14 @@ export interface RecordedWriteIntent {
 	method: string;
 	/** The call's argument, in memory only (see the module comment). */
 	input: unknown;
+	/**
+	 * What the pipeline said the boundary IS, when it said so just before the
+	 * write ({@link annotatePhaseBoundary}): several outcomes reach the same seam
+	 * call (a red gate, an agent failure and a STOP all bounce through
+	 * `ledgerWrite.applyNeedsAttentionTransition`), and the per-path code needs to
+	 * tell them apart. In memory only, like {@link input}.
+	 */
+	annotation?: unknown;
 }
 
 /**
@@ -99,6 +107,11 @@ export interface PhaseRecorder {
 	/** The first unrecorded write, if the pipeline made one. */
 	violation(): UnrecordedWriteError | undefined;
 	/**
+	 * Remember what the NEXT write is (see {@link annotatePhaseBoundary}); the
+	 * first recorded write captures the latest annotation. Ignored once halted.
+	 */
+	annotate(annotation: unknown): void;
+	/**
 	 * Handle one write seam call: always throws. The first recorded call
 	 * captures its intent and throws a {@link PhaseHaltSentinel}; any later write
 	 * re-throws that same sentinel (nothing after the boundary may write). An
@@ -114,10 +127,14 @@ export function createPhaseRecorder(options: {
 	const recordable = new Set<WriteSeamCall>(options.record);
 	let sentinel: PhaseHaltSentinel | undefined;
 	let violation: UnrecordedWriteError | undefined;
+	let annotation: unknown;
 	return {
 		recordable,
 		captured: () => sentinel?.intent,
 		violation: () => violation,
+		annotate(next): void {
+			if (sentinel === undefined) annotation = next;
+		},
 		write(seam, method, input): never {
 			if (violation !== undefined) {
 				throw violation;
@@ -129,7 +146,12 @@ export function createPhaseRecorder(options: {
 				violation = new UnrecordedWriteError(seam, method);
 				throw violation;
 			}
-			sentinel = new PhaseHaltSentinel({seam, method, input});
+			sentinel = new PhaseHaltSentinel({
+				seam,
+				method,
+				input,
+				...(annotation === undefined ? {} : {annotation}),
+			});
 			throw sentinel;
 		},
 	};
@@ -142,7 +164,12 @@ export function createPhaseRecorder(options: {
  * covered (as an unrecorded write) without touching this function.
  */
 export function installRecordingSeams(recorder: PhaseRecorder): () => void {
+	const previousRecorder = activeRecorder;
+	activeRecorder = recorder;
 	const restores = [
+		() => {
+			activeRecorder = previousRecorder;
+		},
 		swapMethods('ledgerWrite', ledgerWrite, recorder),
 		swapMethods('refWrite', refWrite, recorder),
 		swapMethods('integrationLand', integrationLand, recorder),
@@ -152,6 +179,22 @@ export function installRecordingSeams(recorder: PhaseRecorder): () => void {
 			restore();
 		}
 	};
+}
+
+/** The recorder the process-wide seams write into now (agent phase only). */
+let activeRecorder: PhaseRecorder | undefined;
+
+/**
+ * Say what the next write IS, for the agent-phase recorder to capture with it.
+ * A no-op outside the agent phase (no recorder is installed), so a pipeline
+ * calls it unconditionally right before a write seam call whose seam and method
+ * alone do not name the outcome (task `ci-split-build-path-non-integrate-intents`:
+ * an agent failure, a STOP and a red gate all bounce through the same seam).
+ * The annotation never reaches the arbiter; the per-path code maps it to a
+ * handoff intent.
+ */
+export function annotatePhaseBoundary(annotation: unknown): void {
+	activeRecorder?.annotate(annotation);
 }
 
 function swapMethods(
