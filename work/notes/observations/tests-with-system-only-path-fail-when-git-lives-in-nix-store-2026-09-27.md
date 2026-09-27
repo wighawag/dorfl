@@ -1,0 +1,3 @@
+# Tests that pin PATH to system dirs fail on a host whose git lives in the Nix store
+
+2026-09-27, seen while building `ci-split-handoff-artifact-format` on a host where `git` is only at `/nix/store/.../bin/git` (no `/usr/bin/git`): 70 tests in 12 files (`repo-config`, `git`, `do-config`, `review-gate`, `*-config.test.ts`, `intake-trigger-template`) fail with `failed to spawn 'git': not found ... Effective PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, because they run dorfl with a curated PATH that holds only the system dirs `SYSTEM_PATH_DIRS` (`src/git.ts`) re-adds. Setting `DORFL_GIT` does not help. Unrelated to the task; the gate is red on this host for everyone until those tests keep the caller's git dir or resolve git before narrowing PATH.

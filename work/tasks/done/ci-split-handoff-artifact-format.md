@@ -81,3 +81,35 @@ Deliberately NOT handed over as a bundle: intake documents, tasking candidates a
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If a dependency landed differently than this task assumes, or an ADR superseded an assumption here, do NOT build on the stale premise: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). Building on a stale task produces wrong-but-compiling work.
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not; if a choice meets the ADR gate in `ADR-FORMAT.md`, also write an ADR in `docs/adr/` and name it there). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Where the record fields live:** `intent` is only `{kind}`; every field from the "taken from the record" column, verdict enums included, lives in `products`. The spec puts "verdict fields" in `products`, and one container per row makes the "only these fields" rule a single key check. The alternative was splitting enums into `intent` and texts into `products`. The phase tasks write and read this shape.
+- **Which rungs may hand over which kinds** (the spec sets the rule but not the list):
+  - `build-task`: `integrate` (build), `needs-attention`, `deadline-checkpoint`, `stop`, `agent-failed`
+  - `apply`: `integrate` (answered merge), `merge-restale`, `needs-attention`, `apply-decision`
+  - `task-spec`: the two tasking kinds
+  - `surface`: `surface`
+  - `triage-observation`: `triage`
+  - `intake` (a new rung value next to `advance-classify.ts`'s `TickRungKind`): the four intake kinds
+
+  The two `integrate` rows are told apart by the trusted rung, so the answered-merge variant accepts no record fields. This list touches `ci-split-build-path`, `ci-split-answered-merge-action`, `ci-split-treeless-rungs`, `ci-split-tasking` and `ci-split-intake`.
+- **Table rows:** the spec's shared `intake-task` / `intake-spec` row is split in two, because only the spec variant carries `humanOnly` / `needsAnswers`. That gives 16 rows for 15 kinds, each row with all four columns filled.
+- **Bundle rules:** `deadline-checkpoint` requires a bundle (the spec says "WIP tip" without "if any"). `needs-attention`, `stop` and `agent-failed` may carry one; `integrate` must; every other kind must not.
+- **Limits the spec doesn't give:** documents (candidate task files, drafted bodies, the trimmed spec body) up to 200,000 characters, since the largest spec in the repo is about 52,000; document titles up to 200 characters on a single line. The number of list items (questions, candidates) is bounded only by the 2 MB `handoff.json` limit. `intake-ask` is held to the 10,000 question limit and `intake-bounce` to the 60,000 comment limit. The alternative was bounding documents by the comment limit, which would reject real specs.
+- **Field names and value rules:**
+  - Field names: `prTitle`, `prBody`, `reviewProse`, `reason`, `questions`, `stopKind` (`sentinel` / `empty-diff`), `failureDetail`, `candidates`, `reviewVerdict` (`approve` / `block`, optional), `specBody`, `disposition`, `target`, `outcome`, `title`, `body`, `slug`, `question`, `bounceText`, `humanOnly`, `needsAnswers`.
+  - The triage `target` is a `task:` / `spec:` / `observation:` id with a safe slug, because that is what `TriageEmit.existing` produces.
+  - Cross-field rules: `triage` needs a target exactly for `duplicate` / `map`, and questions only with `keep`; `apply-decision` needs title, body and slug exactly for `task` / `spec` / `adr`, and questions exactly for `ask`.
+  - Texts may not contain control characters other than tab and newlines; single-line fields allow none.
+
+  The later tasks inherit these names.
+- **Checks the reader does beyond the task's list:**
+  - The record's `item` must equal the trusted item. The spec gives this to `ci-split-apply-rejects-hostile-bundle`, which can reuse it.
+  - The reader takes `runnerTemp` as a required parameter.
+  - Items are canonicalised: a bare slug becomes a task and `obs:` becomes `observation:`, as `resolveSidecarIdentity` does.
+- **Artifact name:** `dorfl-handoff-<type>-<slug>-attempt-<N>`, using only `[A-Za-z0-9._-]` so every artifact-name rule accepts it; canonicalising first keeps names distinct per item.
+- **Lock outputs:** the keys are fixed to the list in `ci-split-generate-workflows`. `seenCommentIds` is allowed as a comma-separated list of positive integers (at most 5,000), because intake needs it even though "a list of integers" isn't literally in the task's list. `agentTimeoutMinutes` must be between 1 and 7200 (GitHub's 5-day job limit for self-hosted runners).
+- **Limits that don't add up:** the spec's limits are self-inconsistent (the artifact is capped at 200 MB but LFS alone at 500 MB, and LFS objects are inside the artifact). Both are enforced as written, so the effective LFS cap is 200 MB minus the rest. The alternative was leaving `lfs/` out of the artifact total, which is looser. This touches `ci-split-handoff-lfs-objects`.
+- **Naming:** the modules are called "CI handoff" (`ci-handoff*.ts`) to keep them apart from the existing requeue "handoff note" in `prompt.ts`.
+- **No changeset:** the module is unwired and changes nothing a user can see; the wiring tasks carry the release note.
