@@ -1,6 +1,7 @@
 import {spawnSync, spawn} from 'node:child_process';
 import {existsSync, mkdirSync, statSync} from 'node:fs';
 import {delimiter, dirname, isAbsolute, join} from 'node:path';
+import {gitChildEnv} from './ci-read-token.js';
 
 /** Result of running a git (or any) command. */
 export interface RunResult {
@@ -145,8 +146,13 @@ function resolveSpawn(
 	env: NodeJS.ProcessEnv,
 ): {command: string; env: NodeJS.ProcessEnv} {
 	const hardenedEnv = envWithSystemPath(env);
-	const resolved = command === 'git' ? resolveGitBinary(hardenedEnv) : command;
-	return {command: resolved, env: hardenedEnv};
+	if (command !== 'git') {
+		return {command, env: hardenedEnv};
+	}
+	// In the CI `agent` phase, the job's read token rides on this ONE git child
+	// process (never `.git/config`); a no-op otherwise. See `ci-read-token.ts`.
+	const gitEnv = gitChildEnv(hardenedEnv);
+	return {command: resolveGitBinary(gitEnv), env: gitEnv};
 }
 
 /**

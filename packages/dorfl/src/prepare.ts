@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {assertAgentOrRepoCodeAllowed} from './phase.js';
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {run} from './git.js';
@@ -93,6 +94,9 @@ export interface RunPrepareResult {
 export async function runPrepare(
 	options: RunPrepareOptions,
 ): Promise<RunPrepareResult> {
+	// PHASE GUARD: the gate runs repository code, never in the CI lock/apply
+	// phases (their jobs hold the write token; see `phase.ts`).
+	assertAgentOrRepoCodeAllowed('prepare');
 	const commands = resolvePrepareCommands(options.prepare);
 	if (commands.length === 0) {
 		return {exitCode: 0, commands, passed: true, noop: true};

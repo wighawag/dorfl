@@ -1,5 +1,6 @@
 import {spawn, spawnSync} from 'node:child_process';
 import {existsSync, readFileSync, writeSync} from 'node:fs';
+import {assertAgentOrRepoCodeAllowed} from './phase.js';
 import {
 	NullHarness,
 	agentLaunchEnv,
@@ -247,6 +248,8 @@ export class PiHarness implements Harness {
 	}
 
 	launch(input: LaunchInput): LaunchResult {
+		// PHASE GUARD first: no launch at all in the CI lock/apply phases.
+		assertAgentOrRepoCodeAllowed('harness-launch');
 		const sessionFile = this.resolveSessionFile(input);
 		const args = this.buildArgs(input, sessionFile);
 		const result = spawnSync(this.piBin, args, {
@@ -319,6 +322,8 @@ export class PiHarness implements Harness {
 	 * belt-and-suspenders backstop bounding any such residual leak.
 	 */
 	launchAsync(input: LaunchInput): Promise<LaunchResult> {
+		// PHASE GUARD first: no launch at all in the CI lock/apply phases.
+		assertAgentOrRepoCodeAllowed('harness-launch');
 		const sessionFile = this.resolveSessionFile(input);
 		const args = this.buildArgs(input, sessionFile);
 		const record: PiHarnessRecord = {
@@ -561,6 +566,8 @@ export class PiHarness implements Harness {
 	 * nothing to capture, so it returns only the exit code.
 	 */
 	launchInteractive(input: InteractiveLaunchInput): InteractiveLaunchResult {
+		// PHASE GUARD first: no launch at all in the CI lock/apply phases.
+		assertAgentOrRepoCodeAllowed('harness-launch');
 		const sessionFile = this.resolveSessionFile({
 			dir: input.dir,
 			slug: input.slug,
