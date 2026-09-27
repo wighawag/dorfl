@@ -4,7 +4,7 @@ slug: ci-split-agent-result-and-reruns
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-build-path-non-integrate-intents]
 covers: [9]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
