@@ -4,8 +4,8 @@ import {reapJob} from './gc.js';
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
-	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
+import {refWrite} from './ref-write.js';
 import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
 
 /**
@@ -319,7 +319,7 @@ export function inPlaceStrategy(options: {
 					// — the kept work stays committed + recoverable — rather than crashing
 					// the run and stranding it silently in-progress (the stale-lease bug).
 					try {
-						const pushed = pushContinuedBranchWithStaleLeaseRetry({
+						const pushed = refWrite.pushContinuedBranch({
 							cwd: checkout,
 							branch,
 							arbiter,

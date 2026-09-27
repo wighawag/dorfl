@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {runAsync, type RunResult} from './git.js';
+import {refWrite} from './ref-write.js';
 import {
 	resolveSidecarIdentity,
 	sidecarPathFor,
@@ -326,11 +327,7 @@ export async function acquireItemLock(
 			env,
 		);
 		// CREATE-ONLY push: --force-with-lease=<ref>: (empty) succeeds iff ref absent.
-		const push = await gitSoft(
-			['push', arbiter, `${commit}:${ref}`, `--force-with-lease=${ref}:`],
-			cwd,
-			env,
-		);
+		const push = await refWrite.createLockRef({arbiter, ref, commit, cwd, env});
 		if (push.status === 0) {
 			return {outcome: 'acquired', entry, ref, message: `locked ${entry}`};
 		}
@@ -453,11 +450,13 @@ async function releaseLockEntry(
 		// Delete the ref on the arbiter. Lease on the current value guards against a
 		// concurrent change between our fetch and the delete.
 		const cur = (await gitHard(['rev-parse', ref], cwd, env)).stdout.trim();
-		const del = await gitSoft(
-			['push', arbiter, '--delete', ref, `--force-with-lease=${ref}:${cur}`],
+		const del = await refWrite.deleteLockRef({
+			arbiter,
+			ref,
+			expectedSha: cur,
 			cwd,
 			env,
-		);
+		});
 		if (del.status === 0) {
 			// Drop our local copy of the ref too (best-effort).
 			await gitSoft(['update-ref', '-d', ref], cwd, env);
@@ -642,16 +641,14 @@ async function amendHeldEntry(
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<TransitionResult> {
 	const commit = await buildLockCommit(next, cwd, env);
-	const push = await gitSoft(
-		[
-			'push',
-			arbiter,
-			`${commit}:${ref}`,
-			`--force-with-lease=${ref}:${expectedSha}`,
-		],
+	const push = await refWrite.amendLockRef({
+		arbiter,
+		ref,
+		commit,
+		expectedSha,
 		cwd,
 		env,
-	);
+	});
 	if (push.status === 0) {
 		// Move our local copy to the new commit too (best-effort) so a subsequent
 		// read in the same clone sees the amended entry without a refetch.
@@ -695,17 +692,13 @@ async function leasedDeleteLockRef(
 	arbiter: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): Promise<LeasedDeleteOutcome> {
-	const del = await gitSoft(
-		[
-			'push',
-			arbiter,
-			'--delete',
-			ref,
-			`--force-with-lease=${ref}:${expectedSha}`,
-		],
+	const del = await refWrite.deleteLockRef({
+		arbiter,
+		ref,
+		expectedSha,
 		cwd,
 		env,
-	);
+	});
 	if (del.status !== 0) {
 		return 'lost';
 	}
@@ -901,6 +894,10 @@ export async function requeueItemLock(
 				message: `'${entry}' not locked`,
 			};
 		}
+		// WRITE-SEAM EXEMPT: `requeueItemLock` is a human-verb lock primitive (no
+		// CI path reaches it; no production caller today), so its leased delete
+		// stays a direct push rather than going through `refWrite.deleteLockRef`
+		// (task `ci-split-route-direct-writes-through-seams`).
 		const del = await gitSoft(
 			[
 				'push',

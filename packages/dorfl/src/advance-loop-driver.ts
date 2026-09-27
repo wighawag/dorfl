@@ -12,10 +12,8 @@ import {runConcurrent} from './concurrency.js';
 import {scan, type ScanReport} from './scan.js';
 import {run as runProcess} from './git.js';
 import {jobWorktreeDoDriver} from './do.js';
-import {
-	pushTreelessResult,
-	TREELESS_RUNGS,
-} from './advance-treeless-publish.js';
+import {TREELESS_RUNGS} from './advance-treeless-publish.js';
+import {refWrite} from './ref-write.js';
 import type {Config} from './config.js';
 import type {
 	RunTick,
@@ -206,7 +204,7 @@ export async function advanceOnce(
 				TREELESS_RUNGS.has(result.rung) &&
 				options.context.cwd !== undefined
 			) {
-				await pushTreelessResult({
+				await refWrite.publishTreelessResult({
 					cwd: options.context.cwd,
 					arbiter: options.context.arbiter ?? 'origin',
 					// Large liveness ceiling (C2, task `c2-rebase-until-real-on-durable-main-

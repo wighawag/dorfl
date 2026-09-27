@@ -5,10 +5,8 @@ import {
 	type AdvanceExitCode,
 	type AdvanceOutcome,
 } from './advance.js';
-import {
-	pushTreelessResult,
-	TREELESS_RUNGS,
-} from './advance-treeless-publish.js';
+import {TREELESS_RUNGS} from './advance-treeless-publish.js';
+import {refWrite} from './ref-write.js';
 import {scanRepoPaths} from './scan.js';
 import {heldTaskSlugs, heldSpecSlugs} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
@@ -359,7 +357,7 @@ export async function runAdvanceTickWithTreelessPublish(
 		TREELESS_RUNGS.has(result.rung) &&
 		options.arbiter !== undefined
 	) {
-		await pushTreelessResult({
+		await refWrite.publishTreelessResult({
 			cwd: options.cwd,
 			arbiter: options.arbiter,
 			// Large liveness ceiling — see `pushTreelessResult`'s C2 docs (task

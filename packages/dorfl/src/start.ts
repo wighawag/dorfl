@@ -5,8 +5,8 @@ import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
-	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
+import {refWrite} from './ref-write.js';
 import {runAsync, type RunResult} from './git.js';
 import {workFolderRel} from './work-layout.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
@@ -702,7 +702,7 @@ async function continueFromKeptBranch(params: {
 	// needs-attention rather than leaving the committed kept work silently
 	// in-progress.
 	try {
-		const pushed = pushContinuedBranchWithStaleLeaseRetry({
+		const pushed = refWrite.pushContinuedBranch({
 			cwd,
 			branch,
 			arbiter,
@@ -737,7 +737,7 @@ async function continueFromKeptBranch(params: {
 }
 
 /**
- * Discriminate the THROW from {@link pushContinuedBranchWithStaleLeaseRetry} at
+ * Discriminate the THROW from `pushContinuedBranchWithStaleLeaseRetry` (via `refWrite.pushContinuedBranch`) at
  * the `start` continue-push site: is it a TOLERATED offline/unreachable-arbiter
  * outage (the existing best-effort case — `complete` pushes later), or a REAL
  * terminal failure that must SURFACE (the stale-lease retry cap exhausted, or a

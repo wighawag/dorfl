@@ -7,7 +7,7 @@ import {
 	type SidecarEntry,
 	type SidecarModel,
 } from './sidecar.js';
-import {deleteRemoteWorkBranchIfPresent} from './needs-attention.js';
+import {refWrite} from './ref-write.js';
 
 /**
  * The **answered STUCK-QUESTION ACTION DISPATCH** (spec
@@ -229,7 +229,7 @@ export async function performStuckAction(
 	}
 
 	// verb === 'reset'
-	const dropped = await deleteRemoteWorkBranchIfPresent({
+	const dropped = await refWrite.deleteRemoteWorkBranch({
 		cwd: input.cwd,
 		arbiter: input.arbiter,
 		slug: input.slug,

@@ -200,6 +200,15 @@ export type {
 	LedgerWriteStrategy,
 } from './ledger-write.js';
 export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
+export type {
+	RefWriteStrategy,
+	LockRefCreateInput,
+	LockRefAmendInput,
+	LockRefDeleteInput,
+	ContinuedBranchPushInput,
+	TaskingCandidatesPushInput,
+} from './ref-write.js';
+export {currentRefWrite, refWrite} from './ref-write.js';
 
 export type {ReadyItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, scanRepoPaths, readReadyItems, readDoneSlugs} from './scan.js';

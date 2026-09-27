@@ -376,6 +376,9 @@ export function pushProposeBranchWithStaleLeaseRetry(options: {
 		// shape is the same create-only `--force-with-lease=<ref>:` form
 		// `item-lock.ts` uses for the CAS create.
 		const lease = observed === '' ? `${branch}:` : `${branch}:${observed}`;
+		// Write-seam implementation: reached only from the integrator, behind
+		// `ledgerWrite.applyCompleteTransition` (guard:
+		// `write-sites-through-seams.test.ts`).
 		const push = gitSoft(
 			['push', arbiter, `${branch}:${branch}`, `--force-with-lease=${lease}`],
 			cwd,
@@ -493,6 +496,8 @@ export function pushContinuedBranchWithStaleLeaseRetry(options: {
 	let attempt = 0;
 	// eslint-disable-next-line no-constant-condition
 	while (true) {
+		// Write-seam implementation: callers reach this through
+		// `refWrite.pushContinuedBranch` (guard: `write-sites-through-seams.test.ts`).
 		const push = gitSoft(
 			[
 				'push',

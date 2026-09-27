@@ -68,10 +68,8 @@ import {
 	emptyDiffDisposeEnvelope,
 	type AgentStopClass,
 } from './agent-stop.js';
-import {
-	surfaceStuckToNeedsAttention,
-	routeToNeedsAttention,
-} from './needs-attention.js';
+import {surfaceStuckToNeedsAttention} from './needs-attention.js';
+import {refWrite} from './ref-write.js';
 import {resolveItemPathByIdentity} from './item-path.js';
 import {
 	classifyFailureCause,
@@ -278,8 +276,10 @@ async function saveDeadlineCheckpoint(params: {
 	// Push the branch to the arbiter (best-effort). Reuse routeToNeedsAttention's
 	// save-half exact contract: it commits any residue + pushes the branch with
 	// bounded backoff. We already committed above; the wip commit inside
-	// routeToNeedsAttention will be a no-op (clean tree) and the push runs.
-	return routeToNeedsAttention({
+	// routeToNeedsAttention will be a no-op (clean tree) and the push runs. It
+	// is reached through the ref-write seam (`refWrite.saveWorkBranch`) so the
+	// branch push is visible to the CI phase mode.
+	return refWrite.saveWorkBranch({
 		cwd,
 		slug,
 		reason: `deadline-checkpoint save for '${slug}' (see branch)`,

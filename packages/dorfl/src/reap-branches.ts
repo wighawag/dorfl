@@ -178,6 +178,9 @@ export function sweepRemoteMergedBranches(
 			input.cwd,
 			{env},
 		);
+		// WRITE-SEAM EXEMPT: `gc --remote-branches` runs in a no-agent job (or by
+		// a human), never in a CI agent job, so this merged-branch delete stays a
+		// direct push (task `ci-split-route-direct-writes-through-seams`).
 		const del = run(
 			'git',
 			['push', input.arbiter, '--delete', branch],

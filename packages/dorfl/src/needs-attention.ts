@@ -417,6 +417,9 @@ export async function routeToNeedsAttention(
 			const arbiter = options.arbiter;
 			const result = await retryWithBackoff(
 				async () => {
+					// Write-seam implementation: `routeToNeedsAttention` is reached only
+					// through `ledgerWrite.applyNeedsAttentionTransition` or
+					// `refWrite.saveWorkBranch` (guard: `write-sites-through-seams.test.ts`).
 					const r = gitSoftRun(
 						['push', arbiter, `${branch}:${branch}`],
 						cwd,
@@ -586,6 +589,10 @@ export async function deleteRemoteWorkBranchIfPresent(
 		env,
 	);
 	await gitSoftAsync(['branch', '-D', branch], cwd, env);
+	// Write-seam implementation: callers reach this through
+	// `refWrite.deleteRemoteWorkBranch`, or through `returnToBacklog` behind
+	// `ledgerWrite.applyReturnToBacklogTransition` (guard:
+	// `write-sites-through-seams.test.ts`).
 	const del = await gitSoftAsync(
 		['push', arbiter, '--delete', branch],
 		cwd,
@@ -1099,6 +1106,10 @@ async function attemptReconcile(params: {
 		).stdout.trim();
 		const lease =
 			observedTip === '' ? `${branch}:` : `${branch}:${observedTip}`;
+		// WRITE-SEAM EXEMPT: `attemptReconcile` backs the human-only
+		// `requeue --reconcile` verb, never a CI path, so this reconciled
+		// kept-branch push stays direct (task
+		// `ci-split-route-direct-writes-through-seams`).
 		const push = gitSoftRun(
 			[
 				'push',

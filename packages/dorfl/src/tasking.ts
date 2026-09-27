@@ -35,6 +35,7 @@ import {
 	type ReleaseTaskingLockResult,
 } from './tasking-lock.js';
 import {releaseItemLock} from './item-lock.js';
+import {refWrite} from './ref-write.js';
 import {NullHarness, type Harness} from './harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
 import {placementFolder, resolvePlacement} from './placement.js';
@@ -1545,7 +1546,12 @@ async function persistTaskingCandidates(
 	// teardown on an isolated run (the branch ref survives locally too, but a push
 	// makes them remote-recoverable). A push failure is noted, never fatal.
 	try {
-		const pushed = await gitSoft(['push', arbiter, branch], cwd, env);
+		const pushed = await refWrite.pushTaskingCandidatesBranch({
+			arbiter,
+			branch,
+			cwd,
+			env,
+		});
 		if (pushed.status !== 0) {
 			note(
 				`Could not push the candidate-tasks work branch '${branch}' to ${arbiter} ` +

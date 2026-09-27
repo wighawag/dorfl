@@ -134,6 +134,8 @@ export async function pushTreelessResult(
 	const {cwd, arbiter, retries, env, note} = params;
 	const jitterMs = params.jitterMs ?? DEFAULT_TREELESS_JITTER_MS;
 	for (let i = 0; i <= retries; i++) {
+		// Write-seam implementation: callers reach this through
+		// `refWrite.publishTreelessResult` (guard: `write-sites-through-seams.test.ts`).
 		const push = await runAsync(
 			'git',
 			['push', '--quiet', arbiter, 'HEAD:main'],

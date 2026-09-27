@@ -3,10 +3,8 @@ import {dirname, join} from 'node:path';
 import {git} from './git.js';
 import {ensureMirror, encodeRepoKey} from './repo-mirror.js';
 import {jobWorktreeDoDriver} from './do.js';
-import {
-	pushTreelessResult,
-	TREELESS_RUNGS,
-} from './advance-treeless-publish.js';
+import {TREELESS_RUNGS} from './advance-treeless-publish.js';
+import {refWrite} from './ref-write.js';
 import {
 	performAdvance,
 	type AdvanceContext,
@@ -196,7 +194,7 @@ export async function performAdvanceIsolated(
 			result.rung !== undefined &&
 			TREELESS_RUNGS.has(result.rung)
 		) {
-			await pushTreelessResult({
+			await refWrite.publishTreelessResult({
 				cwd: cloneDir,
 				arbiter: arbiterRemoteName,
 				// Large liveness ceiling (C2, task `c2-rebase-until-real-on-durable-main-

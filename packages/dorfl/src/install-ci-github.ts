@@ -12,6 +12,12 @@
  * the ONLY place that shells out to `gh`, and it does so behind the seam so tests
  * stub it entirely (no network, no real `gh`, no real GitHub repo detection). The
  * adapter NEVER `--force`s and degrades gracefully when `gh` is missing.
+ *
+ * WRITE-SEAM EXEMPT (task `ci-split-route-direct-writes-through-seams`): the
+ * `gh secret set` / `gh api` writes here (secrets, rulesets, branch protection,
+ * repo settings) are only reached from the human-run `install-ci` wizard, never
+ * from a CI job, so they stay on this adapter's own `runGh` wrapper instead of a
+ * dorfl write seam.
  */
 
 import {run, type RunResult} from './git.js';

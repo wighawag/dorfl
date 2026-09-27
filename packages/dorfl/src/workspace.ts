@@ -15,8 +15,8 @@ import {
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
-	pushContinuedBranchWithStaleLeaseRetry,
 } from './continue-branch.js';
+import {refWrite} from './ref-write.js';
 import {type HarnessRecord} from './harness.js';
 import {brand} from './brand.js';
 import {workBranchRef, type SlugNamespace} from './slug-namespace.js';
@@ -320,7 +320,7 @@ export function createJob(options: CreateJobOptions): Job {
 			// to needs-attention — the kept work stays committed + recoverable on the
 			// branch — instead of stranding it.
 			try {
-				const pushed = pushContinuedBranchWithStaleLeaseRetry({
+				const pushed = refWrite.pushContinuedBranch({
 					cwd: dir,
 					branch,
 					arbiter: 'origin',
