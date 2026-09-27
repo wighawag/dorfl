@@ -11,7 +11,8 @@
  * token another way while it shares a job with one (its parent processes'
  * environment, `.git/config` when the checkout persists a credential, `sudo` on
  * a hosted runner). The real boundary is running the agent in a job whose
- * token cannot write, see `work/notes/ideas/agent-job-with-read-only-token.md`.
+ * token cannot write, see spec `ci-agent-job-without-write-token` (under
+ * `work/specs/`).
  *
  * On a laptop nothing is removed: it is the human's own machine, and a local
  * tool the agent uses (an MCP server, a `gh` call) may legitimately need the
