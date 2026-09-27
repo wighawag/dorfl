@@ -32,3 +32,14 @@ Remove cache restores from every workflow job in this repository that holds a wr
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does `release.yml` still restore a cache, and does a job there still hold `id-token: write`? If not, route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not). Do no git.
+
+## Decisions
+
+1. **`package-manager-cache: false` in `release.yml`, and the test requires it.** Deleting `cache: pnpm` alone would not stop caching: setup-node v5 turns the pnpm cache on by itself from `package.json`'s `packageManager` (`pnpm@10.28.1`), as the comment in `.github/actions/dorfl-setup/action.yml` already says. So the test treats setup-node without `package-manager-cache: false` as a cache restore, unless the ref is an explicit `@v1`..`@v4` tag, which has no such input. A commit-pinned ref has no readable version, so it must say `false` too. The alternative, checking only the `cache:` input as the acceptance criterion literally says, would have passed while the release job still restored a cache. This touches only this repo's workflows and the new test. The shared `dorfl-setup` action already complies.
+2. **`deploy-gh-pages.yml` fixed by removing the cache, not by giving the build job read-only permissions.** Narrowing the build job's permissions would technically let it keep its cache. But the site that job builds is what gets deployed, so a poisoned cache there still poisons what is published. Removing the cache matches the task's "remove cache restores" wording.
+3. **Where the test is stricter than the criterion.** The acceptance criterion names only the `cache` input on setup-node and the `actions/cache` steps. I chose to go further in three places:
+   - It flags a `cache` input on any action (setup-python, setup-go and others use the same input name).
+   - A job with no `permissions` anywhere counts as write-holding, because the repository's default token may be read-write.
+   - It checks steps inside local composite actions, since the write-holding agent jobs use `./.github/actions/dorfl-setup`.
+
+   The alternative was a literal reading, which would miss those cases. No workflow today breaks the extra rules. This only affects the repo's own workflow check; the generated `install-ci` output is not tested by it.
