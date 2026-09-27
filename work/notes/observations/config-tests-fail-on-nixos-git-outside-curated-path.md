@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # About 70 tests fail on a NixOS host: git is outside the curated spawn PATH
 
 Date: 2026-09-27
