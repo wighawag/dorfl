@@ -1,5 +1,6 @@
 import {ledgerWrite} from './ledger-write.js';
 import {refWrite} from './ref-write.js';
+import {integrationLand} from './integration-core.js';
 import type {ReviewProvider} from './integrator.js';
 import type {IssueProvider} from './issue-provider.js';
 import {enterPhase, type Phase} from './phase.js';
@@ -22,7 +23,10 @@ import {enterPhase, type Phase} from './phase.js';
  * The write seams covered here are every seam a CI path writes through
  * (task `ci-split-route-direct-writes-through-seams`): `ledgerWrite` (which also
  * reaches the integrator, via `applyCompleteTransition`), `refWrite`, the review
- * provider and the issue provider (whose READS pass through). Which seam calls
+ * provider and the issue provider (whose READS pass through), plus the
+ * `integrationLand` seam (`integration-core.ts`): the land half of the build's
+ * rebase-to-integrate tail, whose call is the success path's boundary (task
+ * `ci-split-build-path`). Which seam calls
  * each path records, and how the captured input maps to a handoff intent kind
  * (`ci-handoff-format.ts`), is decided by the per-path split tasks; this module
  * is the shared machinery.
@@ -36,6 +40,7 @@ import {enterPhase, type Phase} from './phase.js';
 export type WriteSeamName =
 	| 'ledgerWrite'
 	| 'refWrite'
+	| 'integrationLand'
 	| 'reviewProvider'
 	| 'issueProvider';
 
@@ -131,8 +136,8 @@ export function createPhaseRecorder(options: {
 }
 
 /**
- * Replace EVERY method of the process-wide `ledgerWrite` and `refWrite` seams
- * with a recording one, and return a function restoring the originals. Every
+ * Replace EVERY method of the process-wide `ledgerWrite`, `refWrite` and
+ * `integrationLand` seams with a recording one, and return a function restoring the originals. Every
  * method is enumerated from the seam object, so a seam method added later is
  * covered (as an unrecorded write) without touching this function.
  */
@@ -140,6 +145,7 @@ export function installRecordingSeams(recorder: PhaseRecorder): () => void {
 	const restores = [
 		swapMethods('ledgerWrite', ledgerWrite, recorder),
 		swapMethods('refWrite', refWrite, recorder),
+		swapMethods('integrationLand', integrationLand, recorder),
 	];
 	return () => {
 		for (const restore of restores.reverse()) {

@@ -163,6 +163,7 @@ import {performCloseMergedIssues} from './close-job.js';
 import {installSkills, type InstallSkillsResult} from './install-skills.js';
 import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
 import {activateProcessPhase} from './phase-recorder.js';
+import {performBuildPhase, type BuildPhaseVerb} from './ci-phase-build.js';
 import {singleJobWarning} from './single-job-warning.js';
 
 interface ScanFlags {
@@ -755,6 +756,10 @@ interface DoFlags {
 	config?: string;
 	/** Hidden, CI-only `--phase lock|agent|apply` (see {@link phaseOption}). */
 	phase?: Phase;
+	/** Hidden, CI-only: the directory the agent phase writes the handoff to. */
+	handoffOut?: string;
+	/** Hidden, CI-only: the directory the apply phase reads the handoff from. */
+	handoffIn?: string;
 	arbiter?: string;
 	remote?: string;
 	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). Since `make-isolated-default-build-mode` this is the DEFAULT; the flag remains accepted as a redundant explicit opt-IN alias (D3). */
@@ -1347,6 +1352,66 @@ function enterCliPhase(phase: Phase | undefined): void {
 	if (phase !== undefined) {
 		activateProcessPhase(phase);
 	}
+}
+
+/**
+ * The hidden, CI-only handoff-directory options of the phase mode: the agent
+ * phase writes the handoff to `--handoff-out`, the apply phase reads it from
+ * `--handoff-in` (task `ci-split-build-path`).
+ */
+function handoffDirOptions(): Option[] {
+	return [
+		new Option(
+			'--handoff-out <dir>',
+			'(CI-only, --phase agent) write the handoff artifact to this directory',
+		).hideHelp(),
+		new Option(
+			'--handoff-in <dir>',
+			'(CI-only, --phase apply) read the handoff artifact from this directory (under $RUNNER_TEMP)',
+		).hideHelp(),
+	];
+}
+
+/**
+ * Run ONE phase of the split build path for a single named item (`do <slug>` /
+ * `advance task:<slug>` with `--phase`) and exit with its code. The lock phase
+ * reads its trusted facts back from nowhere (it produces them); the agent and
+ * apply phases read them from `DORFL_LOCK_OUTPUTS` (see `ci-lock-outputs.ts`).
+ */
+async function runBuildPhaseAndExit(
+	verb: BuildPhaseVerb,
+	args: string[],
+	flags: DoFlags,
+	options: Omit<DoOptions, 'arg'>,
+): Promise<never> {
+	const phase = flags.phase!;
+	if (args.length !== 1) {
+		console.error(
+			`error: --phase runs ONE CI item; name exactly one item (got ${args.length}).`,
+		);
+		process.exit(1);
+	}
+	const handoffDir = phase === 'agent' ? flags.handoffOut : flags.handoffIn;
+	if (phase !== 'lock' && handoffDir === undefined) {
+		console.error(
+			`error: --phase ${phase} needs ${phase === 'agent' ? '--handoff-out' : '--handoff-in'} <dir>.`,
+		);
+		process.exit(1);
+	}
+	const result = await performBuildPhase({
+		...options,
+		arg: args[0],
+		phase,
+		verb,
+		handoffDir,
+		allowBacklog: flags.allowBacklog === true,
+	});
+	if (result.exitCode !== 0) {
+		console.error(`error: ${result.message}`);
+	} else {
+		console.error(`>> ${result.message}`);
+	}
+	process.exit(result.exitCode);
 }
 
 export function buildProgram(): Command {
@@ -2468,6 +2533,8 @@ export function buildProgram(): Command {
 			'cross-job merge-serialiser CAS-retry cap (see `run --help`); resolved flag > env > per-repo > global > default 1000.',
 		)
 		.addOption(phaseOption())
+		.addOption(handoffDirOptions()[0])
+		.addOption(handoffDirOptions()[1])
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			enterCliPhase(flags.phase);
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
@@ -2955,6 +3022,12 @@ export function buildProgram(): Command {
 				process.exit(1);
 			}
 
+			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
+			// split item workflow for a single named task, on the SAME pipeline.
+			if (flags.phase !== undefined) {
+				await runBuildPhaseAndExit('do', args, flags, baseDoOptions);
+			}
+
 			// DISPATCH the variadic grammar (in-place forms):
 			//   zero args         -> AUTO-PICK `count` (default 1) across the two pools
 			//                        (ordered by selectionOrder; default drain = tasks-first)
@@ -3073,6 +3146,8 @@ export function buildProgram(): Command {
 			"stream the build agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git). The same view `do --watch` gives, threaded through the build rung; CI uses it so the job log shows the agent working instead of freezing.",
 		)
 		.addOption(phaseOption())
+		.addOption(handoffDirOptions()[0])
+		.addOption(handoffDirOptions()[1])
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			enterCliPhase(flags.phase);
 			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
@@ -3417,6 +3492,13 @@ export function buildProgram(): Command {
 			// ticks in sequence and would tail several logs; reject rather than silently
 			// stream only one. The CI propose matrix names a single item per leg, so it
 			// satisfies this; the `-n` merge job must NOT pass `--watch`.
+			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
+			// split item workflow. Only the build path is split so far; the lock phase
+			// refuses any other rung before writing anything.
+			if (flags.phase !== undefined) {
+				await runBuildPhaseAndExit('advance', args, flags, doOptions);
+			}
+
 			const advanceMulti =
 				args.length === 0 || count !== undefined || args.length > 1;
 			if (advanceMulti && flags.watch === true) {
