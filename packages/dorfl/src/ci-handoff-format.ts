@@ -69,6 +69,41 @@ export const HANDOFF_LIMITS = {
 	documentChars: 200_000,
 } as const;
 
+/** The byte limits of {@link HANDOFF_LIMITS} (the ones a test may lower). */
+export type HandoffByteLimits = {
+	[K in
+		| 'artifactBytes'
+		| 'bundleBytes'
+		| 'blobBytes'
+		| 'lfsBytes'
+		| 'handoffJsonBytes']: number;
+};
+
+let byteLimitsOverride: Partial<HandoffByteLimits> | undefined;
+
+/**
+ * The byte limits in force: {@link HANDOFF_LIMITS}, unless a test lowered some
+ * of them with {@link setHandoffByteLimitsForTest} (so a size-limit test does
+ * not need a 200 MB fixture). Nothing read from an artifact reaches this.
+ */
+export function handoffByteLimits(): HandoffByteLimits {
+	return {
+		artifactBytes: HANDOFF_LIMITS.artifactBytes,
+		bundleBytes: HANDOFF_LIMITS.bundleBytes,
+		blobBytes: HANDOFF_LIMITS.blobBytes,
+		lfsBytes: HANDOFF_LIMITS.lfsBytes,
+		handoffJsonBytes: HANDOFF_LIMITS.handoffJsonBytes,
+		...byteLimitsOverride,
+	};
+}
+
+/** Lower some byte limits (tests only); `undefined` restores the production values. */
+export function setHandoffByteLimitsForTest(
+	override: Partial<HandoffByteLimits> | undefined,
+): void {
+	byteLimitsOverride = override;
+}
+
 // ---------------------------------------------------------------------------
 // Rejection
 // ---------------------------------------------------------------------------
@@ -90,7 +125,15 @@ export type HandoffRule =
 	| 'bundle-presence'
 	| 'bundle-format'
 	| 'bundle-refs'
-	| 'name';
+	| 'name'
+	// The bundle's content (`ci-handoff-apply.ts`):
+	| 'history'
+	| 'merge-commit'
+	| 'commit-count'
+	| 'protected-path'
+	| 'symlink-target'
+	| 'gitlink'
+	| 'ledger';
 
 /** A handoff (or one being written) that breaks one of the rules. */
 export class HandoffRejected extends Error {
