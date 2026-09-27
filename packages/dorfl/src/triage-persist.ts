@@ -10,7 +10,12 @@ import {
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import type {TriageAutoKind} from './triage-gate.js';
 import {renderTaskBody, renderSpecBody} from './buildable-body.js';
-import {setFrontmatterMarker} from './frontmatter.js';
+import {
+	assertFrontmatterFields,
+	FrontmatterRenderError,
+	quoteYamlScalar,
+	setFrontmatterMarker,
+} from './frontmatter.js';
 import {ensureSafeSlug} from './slug-safety.js';
 
 /**
@@ -476,6 +481,21 @@ export async function promoteObservation(
 		'promotedFrom',
 		item,
 	);
+	// Re-parse the RUNNER-OWNED keys before anything is written (task
+	// `intake-frontmatter-title-injection-strips-origin-stamp`). The stamp above
+	// replaces the FIRST `slug:` line, but the frontmatter parser keeps the LAST,
+	// so a drafted body that repeats `slug:` (or `promotedFrom:`) would still set
+	// the item's identity. Refuse it loudly; the observation stays for a retry.
+	try {
+		assertFrontmatterFields(content, {slug: newSlug, promotedFrom: item});
+	} catch (err) {
+		if (!(err instanceof FrontmatterRenderError)) throw err;
+		return {
+			outcome: 'usage-error',
+			exitCode: 1,
+			message: `promote ${item}: ${err.message}`,
+		};
+	}
 
 	// The note + its answered sidecar `git rm` IN THE SAME create commit (promote =
 	// ONE atomic commit). A CAS LOSER never reaches the commit, so it leaves both
@@ -620,7 +640,9 @@ function buildPromotedBody(
 	const hasQuestions = openQuestions.trim() !== '';
 	const frontmatter: string[] = [
 		'---',
-		`title: ${slug}`,
+		// The title is the (sanitised, agent-draftable) slug, still written through
+		// the shared frontmatter quoter so every runner-rendered title has one shape.
+		`title: ${quoteYamlScalar(slug)}`,
 		`slug: ${slug}`,
 		`needsAnswers: ${hasQuestions ? 'true' : 'false'}`,
 		// A SPEC is a north-star doc, not a blockable task — only the task shape carries

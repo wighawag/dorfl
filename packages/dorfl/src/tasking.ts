@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import {basename, dirname, join} from 'node:path';
-import {parseFrontmatter} from './frontmatter.js';
+import {parseFrontmatter, unquoteYamlScalar} from './frontmatter.js';
 import {runAsync, type RunResult} from './git.js';
 import {
 	workFolderRel,
@@ -2007,12 +2007,14 @@ function readTitleField(content: string): string | undefined {
 		if (!m) continue;
 		let value = m[1].trim();
 		if (value === '') return undefined;
-		// Quoted ⇒ return inner text verbatim; unquoted ⇒ strip trailing `# ...`.
+		// Quoted ⇒ return the inner text (a single-quoted `''` decodes to `'`, the
+		// shape `quoteYamlScalar` writes); unquoted ⇒ strip trailing `# ...`.
 		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
+			value.length >= 2 &&
+			((value.startsWith('"') && value.endsWith('"')) ||
+				(value.startsWith("'") && value.endsWith("'")))
 		) {
-			return value.slice(1, -1);
+			return unquoteYamlScalar(value);
 		}
 		const hash = value.indexOf('#');
 		if (hash !== -1) value = value.slice(0, hash).trimEnd();

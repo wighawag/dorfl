@@ -2,6 +2,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {join} from 'node:path';
 import {mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {mintAdr, buildAdrBody, adrItemRel} from '../src/mint-adr.js';
+import {readFrontmatterField} from '../src/frontmatter.js';
 import {
 	newSidecar,
 	serialiseSidecar,
@@ -292,6 +293,54 @@ describe('mintAdr — ADR creation through the CAS (the sibling of promoteObserv
 
 	it('uses the existing slug-named docs/adr/ convention (NOT the NNNN- numeric prefix)', () => {
 		expect(adrItemRel('my-decision')).toBe('docs/adr/my-decision.md');
+	});
+});
+
+describe('mintAdr — an agent-drafted adrTitle cannot inject frontmatter', () => {
+	it('a hostile SINGLE-LINE adrTitle is written quoted and reads back verbatim', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredObs(seeded.repo, 'hostile');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const title = "Don't: status: rejected # really";
+		const result = await mintAdr({
+			cwd: seeded.repo,
+			item: 'observation:hostile',
+			itemPath,
+			adrTitle: title,
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('minted');
+		const adr = gitIn(
+			['show', 'arbiter/main:docs/adr/hostile.md'],
+			seeded.repo,
+		);
+		expect(readFrontmatterField(adr, 'title')).toBe(title);
+		expect(readFrontmatterField(adr, 'status')).toBe('accepted');
+	});
+
+	it('a MULTI-LINE adrTitle is refused (usage-error): no ADR is created, the observation stays', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredObs(seeded.repo, 'multi');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await mintAdr({
+			cwd: seeded.repo,
+			item: 'observation:multi',
+			itemPath,
+			adrTitle: 'A decision\n---\nstatus: rejected',
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('usage-error');
+		expect(result.exitCode).toBe(1);
+		expect(pathOnArbiterMain(seeded.repo, 'docs/adr/multi.md')).toBe(false);
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(true);
 	});
 });
 

@@ -770,7 +770,7 @@ describe('intake <N> — the drafted title reaches the commit subject + propose-
 			repo,
 		);
 		expect(onBranch).toContain(
-			'title: Add a --quiet flag to suppress progress notes',
+			"title: 'Add a --quiet flag to suppress progress notes'",
 		);
 	});
 
