@@ -1,3 +1,7 @@
+---
+needsAnswers: true
+---
+
 # `amendHeldEntry` in item-lock.ts has no caller
 
 Date: 2026-09-27
