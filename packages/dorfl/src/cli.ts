@@ -163,6 +163,7 @@ import {performCloseMergedIssues} from './close-job.js';
 import {installSkills, type InstallSkillsResult} from './install-skills.js';
 import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
 import {activateProcessPhase} from './phase-recorder.js';
+import {singleJobWarning} from './single-job-warning.js';
 
 interface ScanFlags {
 	config?: string;
@@ -4988,6 +4989,26 @@ export function buildProgram(): Command {
 			const result = installSkills({global: flags.local !== true});
 			console.log(formatSkillsAddReport(result, flags.local === true));
 		});
+
+	// Decision 9 (task `ci-split-warn-single-job-workflows`): warn before an
+	// agent-spawning verb runs in an old single-job CI workflow (GitHub Actions,
+	// no `--phase`, a credential persisted in the checkout's git config).
+	// Warn-only: the action still runs.
+	program.hook('preAction', (_program, actionCommand) => {
+		if (actionCommand.parent !== program) {
+			return;
+		}
+		const phase = (actionCommand.opts() as {phase?: Phase}).phase;
+		const warning = singleJobWarning({
+			verb: actionCommand.name(),
+			phase,
+			env: process.env,
+			cwd: process.cwd(),
+		});
+		if (warning !== undefined) {
+			console.error(warning);
+		}
+	});
 
 	return program;
 }
