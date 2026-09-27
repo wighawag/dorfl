@@ -12,7 +12,12 @@ import {
 import type {IntegrateResult, ReviewProvider} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode, SpecsLandIn, TasksLandIn} from './config.js';
-import type {OriginTrust} from './frontmatter.js';
+import {
+	assertFrontmatterFields,
+	quoteYamlScalar,
+	singleLineScalarProblem,
+	type OriginTrust,
+} from './frontmatter.js';
 import {TASK_PLACEMENT_SLOTS, landingToSide} from './tasking.js';
 import {
 	placementFolder,
@@ -880,6 +885,12 @@ async function decideAndDispatch(
 	let verdict: IntakeVerdict;
 	try {
 		verdict = await runDecision(options, cwd, issue, comments, prompt);
+		// The VERDICT BOUNDARY for the drafted title (task
+		// `intake-frontmatter-title-injection-strips-origin-stamp`): a title that is
+		// not one line, holds a control character, or is blank is refused HERE, so
+		// it degrades onto `agent-failed` like any malformed verdict (never a silent
+		// emit). Runs for the injected `decide` seam and the parsed harness verdict.
+		assertIntakeVerdictTitle(verdict);
 	} catch (err) {
 		const detail = err instanceof Error ? err.message : String(err);
 		const message = `Intake decision failed for issue #${issueNumber}: ${detail}`;
@@ -1289,6 +1300,26 @@ async function dispatchTask(params: {
 	// replaces the agent's first draft.
 	const reviewedBody = review.body;
 
+	// RENDER before any git: the renderer quotes the agent title and re-parses its
+	// own output, THROWING on anything that does not read back as written. That
+	// maps onto `agent-failed` (the input came from the agent) with nothing
+	// written and no branch cut.
+	let taskContent: string;
+	try {
+		taskContent = renderBacklogTask({
+			slug,
+			title: review.title,
+			body: reviewedBody,
+			issueNumber,
+			originTrust,
+		});
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		const message = `Intake could not render the task for issue #${issueNumber}: ${detail}`;
+		note(message);
+		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
+	}
+
 	// ONBOARD the task write onto a `work/intake-task-<slug>` branch cut from the
 	// freshly-fetched `<arbiter>/main` (the SAME runner-owns-git discipline the
 	// tasking path uses): the lifecycle `stage` writes the file ON THIS BRANCH and
@@ -1296,14 +1327,6 @@ async function dispatchTask(params: {
 	// intake- producer prefix keeps it distinct from a later `do task:<slug>`
 	// build branch for the same slug. The agent ran no git.
 	await switchToWorkBranch(cwd, arbiter, 'task', slug, env);
-
-	const taskContent = renderBacklogTask({
-		slug,
-		title: review.title,
-		body: reviewedBody,
-		issueNumber,
-		originTrust,
-	});
 
 	const core = await performIntegration({
 		cwd,
@@ -1457,17 +1480,27 @@ async function dispatchSpec(params: {
 	// ONBOARD onto a `work/intake-spec-<slug>` branch off fresh `<arbiter>/main` —
 	// the SAME runner-owns-git discipline the task branch uses; the intake-
 	// producer prefix keeps it distinct from a `do spec:<slug>` tasking branch.
-	await switchToWorkBranch(cwd, arbiter, 'spec', slug, env);
+	// RENDER before any git (see `dispatchTask`): a render/re-parse failure maps
+	// onto `agent-failed` with nothing written and no branch cut.
+	let specContent: string;
+	try {
+		specContent = renderSpec({
+			slug,
+			title: verdict.specTitle ?? slug,
+			body: verdict.specBody,
+			issueNumber,
+			humanOnly: verdict.specHumanOnly,
+			needsAnswers: verdict.specNeedsAnswers,
+			originTrust,
+		});
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		const message = `Intake could not render the spec for issue #${issueNumber}: ${detail}`;
+		note(message);
+		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
+	}
 
-	const specContent = renderSpec({
-		slug,
-		title: verdict.specTitle ?? slug,
-		body: verdict.specBody,
-		issueNumber,
-		humanOnly: verdict.specHumanOnly,
-		needsAnswers: verdict.specNeedsAnswers,
-		originTrust,
-	});
+	await switchToWorkBranch(cwd, arbiter, 'spec', slug, env);
 
 	const core = await performIntegration({
 		cwd,
@@ -1752,6 +1785,33 @@ function resolveSpecSlug(verdict: IntakeVerdict): string {
 }
 
 /**
+ * Refuse an intake verdict whose drafted title cannot be one frontmatter line
+ * (task `intake-frontmatter-title-injection-strips-origin-stamp`). Only the
+ * title the verdict's OUTCOME will render is checked (`taskTitle` for `task`,
+ * `specTitle` for `spec`): it must be one line with no control character and
+ * not blank. An ABSENT title stays legal (the dispatcher falls back to the
+ * slug). THROWS; the caller maps the throw onto `agent-failed`.
+ */
+export function assertIntakeVerdictTitle(verdict: IntakeVerdict): void {
+	const [field, title] =
+		verdict.outcome === 'task'
+			? ['taskTitle', verdict.taskTitle]
+			: verdict.outcome === 'spec'
+				? ['specTitle', verdict.specTitle]
+				: [undefined, undefined];
+	if (field === undefined || title === undefined) {
+		return;
+	}
+	const problem = singleLineScalarProblem(title);
+	if (problem !== undefined) {
+		throw new Error(`intake verdict '${field}' ${problem}.`);
+	}
+	if (title.trim() === '') {
+		throw new Error(`intake verdict '${field}' is blank.`);
+	}
+}
+
+/**
  * Render the backlog task file: the frontmatter (`title`/`slug`/`covers: []`, NO
  * `spec:` — its own source of truth, spec `issue-intake` decision table) carrying the lone-task
  * `issue: N` closure link + the drafted body. The task closes its source issue
@@ -1776,9 +1836,13 @@ export function renderBacklogTask(params: {
 	originTrust?: OriginTrust;
 }): string {
 	const {slug, title, body, issueNumber, originTrust} = params;
+	// The TITLE is agent-drafted (issue text any user can write): it goes through
+	// the shared quoter, which THROWS on a multi-line / control-character value
+	// (the verdict boundary already refused one; this is the backstop), so it can
+	// never close the fence early and demote the origin-trust stamp below it.
 	const lines = [
 		'---',
-		`title: ${title}`,
+		`title: ${quoteYamlScalar(title)}`,
 		`slug: ${slug}`,
 		`issue: ${issueNumber}`,
 	];
@@ -1804,7 +1868,23 @@ export function renderBacklogTask(params: {
 					acceptanceCriteria: '- [ ] the issue is resolved',
 					prompt: `Resolve issue #${issueNumber}: ${title}`,
 				}).trimEnd();
-	return `${frontmatter}\n\n${drafted}\n`;
+	const rendered = `${frontmatter}\n\n${drafted}\n`;
+	// Re-parse what we rendered: every key is runner-owned, so the frontmatter
+	// must read back EXACTLY these keys and values, else fail loudly.
+	assertFrontmatterFields(
+		rendered,
+		{
+			title,
+			slug,
+			issue: String(issueNumber),
+			origin: originTrust === undefined ? undefined : 'issue',
+			originTrust,
+			covers: '[]',
+			blockedBy: '[]',
+		},
+		{exact: true},
+	);
+	return rendered;
 }
 
 /**
@@ -1836,9 +1916,11 @@ export function renderSpec(params: {
 }): string {
 	const {slug, title, body, issueNumber, humanOnly, needsAnswers, originTrust} =
 		params;
+	// The agent-drafted TITLE goes through the shared quoter (see
+	// `renderBacklogTask`).
 	const lines = [
 		'---',
-		`title: ${title}`,
+		`title: ${quoteYamlScalar(title)}`,
 		`slug: ${slug}`,
 		`issue: ${issueNumber}`,
 	];
@@ -1873,7 +1955,22 @@ export function renderSpec(params: {
 					solution: '(to be detailed; this spec needs tasking via `do spec:`).',
 					userStories: `1. As a user, I want issue #${issueNumber} addressed.`,
 				}).trimEnd();
-	return `${frontmatter}\n\n${drafted}\n`;
+	const rendered = `${frontmatter}\n\n${drafted}\n`;
+	// Re-parse what we rendered (see `renderBacklogTask`).
+	assertFrontmatterFields(
+		rendered,
+		{
+			title,
+			slug,
+			issue: String(issueNumber),
+			origin: originTrust === undefined ? undefined : 'issue',
+			originTrust,
+			humanOnly: humanOnly === true ? 'true' : undefined,
+			needsAnswers: needsAnswers === true ? 'true' : undefined,
+		},
+		{exact: true},
+	);
+	return rendered;
 }
 
 /**

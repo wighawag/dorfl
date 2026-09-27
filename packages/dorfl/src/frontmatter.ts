@@ -157,17 +157,170 @@ function extractBlock(content: string): string | undefined {
 	return lines.slice(1, closing).join('\n');
 }
 
-/** Strip surrounding single or double quotes from a scalar token. */
+/**
+ * Strip surrounding single or double quotes from a scalar token. A
+ * SINGLE-quoted scalar also has its one YAML escape decoded (`''` is a literal
+ * `'`), so a value written by {@link quoteYamlScalar} reads back verbatim.
+ * Double-quoted scalars keep their inner text as-is (no backslash decoding).
+ */
 function unquote(value: string): string {
 	const trimmed = value.trim();
 	if (trimmed.length >= 2) {
 		const first = trimmed[0];
 		const last = trimmed[trimmed.length - 1];
 		if ((first === '"' || first === "'") && last === first) {
-			return trimmed.slice(1, -1);
+			const inner = trimmed.slice(1, -1);
+			return first === "'" ? inner.replace(/''/g, "'") : inner;
 		}
 	}
 	return trimmed;
+}
+
+/**
+ * The read half of {@link quoteYamlScalar}, for the frontmatter readers that
+ * live outside this module (the `title:` readers in `tasking.ts` and
+ * `integration-core.ts`), so a quoted title reads back the same everywhere.
+ */
+export function unquoteYamlScalar(value: string): string {
+	return unquote(value);
+}
+
+/**
+ * Raised when a runner-side renderer is handed a value it cannot write safely
+ * into frontmatter, or when the rendered document does not read back the keys
+ * the runner meant to write (task
+ * `intake-frontmatter-title-injection-strips-origin-stamp`).
+ */
+export class FrontmatterRenderError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'FrontmatterRenderError';
+	}
+}
+
+/**
+ * Any character that can end or fold a YAML line, or any other control
+ * character: C0 controls (incl. tab, LF, CR), DEL, the C1 range (incl. NEL
+ * U+0085, a YAML 1.1 line break), and the Unicode line/paragraph separators.
+ */
+// eslint-disable-next-line no-control-regex
+const SCALAR_CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/**
+ * Why `value` cannot be a one-line frontmatter scalar, or `undefined` when it
+ * can. The verdict boundaries (intake, ADR mint) use it to refuse an
+ * agent-drafted title before anything is rendered.
+ */
+export function singleLineScalarProblem(value: string): string | undefined {
+	return SCALAR_CONTROL_RE.test(value)
+		? 'must be a single line with no control characters'
+		: undefined;
+}
+
+/**
+ * THE shared quoter for agent-supplied text a runner writes into frontmatter
+ * (task `intake-frontmatter-title-injection-strips-origin-stamp`). Returns a
+ * YAML single-quoted scalar (`'...'`, an embedded `'` doubled), which is valid
+ * YAML for every one-line string and reads back verbatim through
+ * {@link unquote} (and so {@link readFrontmatterField}). A single-quoted scalar
+ * has no escape for a line break, so a value that is not one line, or holds any
+ * control character, THROWS {@link FrontmatterRenderError}: callers must reject
+ * such a value at their verdict boundary, and this throw is the backstop.
+ */
+export function quoteYamlScalar(value: string): string {
+	const problem = singleLineScalarProblem(value);
+	if (problem !== undefined) {
+		throw new FrontmatterRenderError(
+			`frontmatter value ${JSON.stringify(value)} ${problem}`,
+		);
+	}
+	return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** A top-level `key: value` frontmatter line (the key grammar {@link parseFrontmatter} uses). */
+const TOP_LEVEL_KEY_RE = /^([A-Za-z0-9_.]+)\s*:\s*(.*)$/;
+
+/**
+ * The post-render RE-PARSE assertion (task
+ * `intake-frontmatter-title-injection-strips-origin-stamp`). A runner renders a
+ * document, then calls this with the frontmatter values it MEANT to write;
+ * any disagreement THROWS {@link FrontmatterRenderError}, so a document whose
+ * runner-owned keys were displaced (a closed-early fence demoting the
+ * `originTrust` stamp into the body, a smuggled duplicate `slug:`) is never
+ * emitted.
+ *
+ * For each `expected` entry: a string value means the key must appear EXACTLY
+ * ONCE as a top-level key and read back (via {@link unquote}) equal to it;
+ * `undefined` means the key must be ABSENT. The typed keys that
+ * {@link parseFrontmatter} models (`slug`, `issue`, `origin`, `originTrust`,
+ * `humanOnly`, `needsAnswers`) are ALSO cross-checked through that parser, the
+ * same reader the rest of dorfl uses. With `exact`, the frontmatter may hold no
+ * top-level key outside `expected` (for a document the runner renders whole).
+ */
+export function assertFrontmatterFields(
+	content: string,
+	expected: Readonly<Record<string, string | undefined>>,
+	options: {exact?: boolean} = {},
+): void {
+	const block = extractBlock(content);
+	if (block === undefined) {
+		throw new FrontmatterRenderError(
+			'rendered document has no frontmatter block',
+		);
+	}
+	const seen = new Map<string, string[]>();
+	for (const line of block.split('\n')) {
+		const match = TOP_LEVEL_KEY_RE.exec(line);
+		if (!match) continue;
+		const values = seen.get(match[1]) ?? [];
+		values.push(unquote(match[2]));
+		seen.set(match[1], values);
+	}
+	const fail = (detail: string): never => {
+		throw new FrontmatterRenderError(
+			`rendered frontmatter does not read back as written: ${detail}`,
+		);
+	};
+	for (const [key, want] of Object.entries(expected)) {
+		const got = seen.get(key) ?? [];
+		if (want === undefined) {
+			if (got.length > 0) fail(`'${key}' must be absent`);
+			continue;
+		}
+		if (got.length !== 1) {
+			fail(`'${key}' appears ${got.length} time(s), expected once`);
+		}
+		if (got[0] !== want) {
+			fail(
+				`'${key}' reads ${JSON.stringify(got[0])}, expected ${JSON.stringify(want)}`,
+			);
+		}
+	}
+	if (options.exact === true) {
+		for (const key of seen.keys()) {
+			if (!(key in expected)) fail(`unexpected key '${key}'`);
+		}
+	}
+	// Cross-check through the typed parser (last-wins, value-normalising), so a
+	// document that passes the line check but that dorfl would READ differently
+	// still fails.
+	const fm = parseFrontmatter(content);
+	const typed: Record<string, string | undefined> = {
+		slug: fm.slug,
+		issue: fm.issue === undefined ? undefined : String(fm.issue),
+		origin: fm.origin,
+		originTrust: fm.originTrust,
+		humanOnly: fm.humanOnly === undefined ? undefined : String(fm.humanOnly),
+		needsAnswers:
+			fm.needsAnswers === undefined ? undefined : String(fm.needsAnswers),
+	};
+	for (const [key, parsed] of Object.entries(typed)) {
+		if (key in expected && parsed !== expected[key]) {
+			fail(
+				`parsed '${key}' is ${JSON.stringify(parsed)}, expected ${JSON.stringify(expected[key])}`,
+			);
+		}
+	}
 }
 
 /**

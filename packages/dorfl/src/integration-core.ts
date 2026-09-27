@@ -32,7 +32,7 @@ import {extractDecisionsBlock} from './agent-stop.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
-import {parseFrontmatter} from './frontmatter.js';
+import {parseFrontmatter, unquoteYamlScalar} from './frontmatter.js';
 import {git, run, runAsync, type RunResult} from './git.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 import {workBranchRef} from './slug-namespace.js';
@@ -2502,21 +2502,12 @@ function readTitle(content: string): string | undefined {
 		const match = /^title\s*:\s*(.*)$/.exec(line);
 		if (match) {
 			const value = match[1].trim();
-			return value === '' ? undefined : unquote(value);
+			// The shared frontmatter unquoter, so a title written by
+			// `quoteYamlScalar` (`''` for a literal `'`) reads back verbatim.
+			return value === '' ? undefined : unquoteYamlScalar(value);
 		}
 	}
 	return undefined;
-}
-
-function unquote(value: string): string {
-	if (value.length >= 2) {
-		const first = value[0];
-		const last = value[value.length - 1];
-		if ((first === '"' || first === "'") && last === first) {
-			return value.slice(1, -1);
-		}
-	}
-	return value;
 }
 
 function escapeRegExp(value: string): string {

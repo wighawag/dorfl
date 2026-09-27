@@ -8,6 +8,11 @@ import {
 } from './advancing-lock.js';
 import {resolveSidecarIdentity, sidecarPathFor} from './sidecar.js';
 import {ensureSafeSlug} from './slug-safety.js';
+import {
+	assertFrontmatterFields,
+	quoteYamlScalar,
+	singleLineScalarProblem,
+} from './frontmatter.js';
 
 /**
  * The **ADR-MINT route** (spec
@@ -200,6 +205,18 @@ export async function mintAdr(options: MintAdrOptions): Promise<MintAdrResult> {
 	const adrPath = adrItemRel(adrSlug);
 	const by = options.by || resolveBy(cwd, env);
 	const title = (options.adrTitle ?? adrSlug).trim() || adrSlug;
+	// The drafted title comes from an agent verdict and is written into the ADR's
+	// frontmatter: a multi-line / control-character one is REFUSED before any
+	// write (task `intake-frontmatter-title-injection-strips-origin-stamp`),
+	// leaving the observation intact for a retry.
+	const titleProblem = singleLineScalarProblem(title);
+	if (titleProblem !== undefined) {
+		return {
+			outcome: 'usage-error',
+			exitCode: 1,
+			message: `mint-adr ${item}: the ADR title ${titleProblem}`,
+		};
+	}
 	const content =
 		options.adrBody !== undefined && options.adrBody.trim() !== ''
 			? renderAdrFile(adrSlug, title, options.adrBody.trim())
@@ -316,9 +333,11 @@ export function buildAdrBody(input: {
  */
 function renderAdrFile(slug: string, title: string, body: string): string {
 	const date = new Date().toISOString().slice(0, 10);
-	return [
+	// The agent-drafted title goes through the shared frontmatter quoter (it
+	// THROWS on a multi-line value; `mintAdr` refuses one before this point).
+	const rendered = [
 		'---',
-		`title: ${title}`,
+		`title: ${quoteYamlScalar(title)}`,
 		'status: accepted',
 		`created: ${date}`,
 		'---',
@@ -328,6 +347,13 @@ function renderAdrFile(slug: string, title: string, body: string): string {
 		body.replace(/\s*$/, ''),
 		'',
 	].join('\n');
+	// Re-parse what we rendered: the frontmatter is wholly runner-rendered.
+	assertFrontmatterFields(
+		rendered,
+		{title, status: 'accepted', created: date},
+		{exact: true},
+	);
+	return rendered;
 }
 
 /**

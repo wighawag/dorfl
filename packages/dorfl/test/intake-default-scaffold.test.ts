@@ -38,7 +38,7 @@ describe('intake renderBacklogTask — task body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Add a --quiet flag\n' +
+				"title: 'Add a --quiet flag'\n" +
 				'slug: add-quiet-flag\n' +
 				'issue: 42\n' +
 				'covers: []\n' +
@@ -68,7 +68,7 @@ describe('intake renderBacklogTask — task body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Fix the thing\n' +
+				"title: 'Fix the thing'\n" +
 				'slug: fix-the-thing\n' +
 				'issue: 7\n' +
 				'covers: []\n' +
@@ -110,7 +110,7 @@ describe('intake renderBacklogTask — task body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Fix the thing\n' +
+				"title: 'Fix the thing'\n" +
 				'slug: fix-the-thing\n' +
 				'issue: 7\n' +
 				'origin: issue\n' +
@@ -159,7 +159,7 @@ describe('intake renderSpec — PRD body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Fix the thing properly\n' +
+				"title: 'Fix the thing properly'\n" +
 				'slug: fix-thing-prd\n' +
 				'issue: 9\n' +
 				'---\n' +
@@ -189,7 +189,7 @@ describe('intake renderSpec — PRD body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Fix the thing properly\n' +
+				"title: 'Fix the thing properly'\n" +
 				'slug: fix-thing-prd\n' +
 				'issue: 9\n' +
 				'---\n' +
@@ -219,7 +219,7 @@ describe('intake renderSpec — PRD body', () => {
 		});
 		expect(out).toBe(
 			'---\n' +
-				'title: Fix the thing properly\n' +
+				"title: 'Fix the thing properly'\n" +
 				'slug: fix-thing-prd\n' +
 				'issue: 9\n' +
 				'humanOnly: true\n' +

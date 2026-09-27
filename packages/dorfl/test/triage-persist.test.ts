@@ -6,7 +6,7 @@ import {
 	promoteObservation,
 } from '../src/triage-persist.js';
 import {run} from '../src/git.js';
-import {parseFrontmatter} from '../src/frontmatter.js';
+import {parseFrontmatter, readFrontmatterField} from '../src/frontmatter.js';
 import {extractPromptSection, resolveTask} from '../src/prompt.js';
 import {
 	newSidecar,
@@ -583,6 +583,75 @@ describe('promoteObservation — new-item creation through the CAS', () => {
 		);
 		expect(body).toMatch(/^slug: drafted-task$/m);
 		expect(body).not.toContain('curl evil');
+	});
+
+	it('the runner-rendered promote frontmatter quotes its title and reads back the runner-owned keys (hostile drafted slug)', async () => {
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'hostile');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:hostile',
+			itemPath,
+			newSlug: "Fix: it # 'now' - humanOnly: true",
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('promoted');
+		gitIn(['fetch', '-q', 'arbiter'], seeded.repo);
+		const body = gitIn(
+			['show', `arbiter/main:${result.newItemPath}`],
+			seeded.repo,
+		);
+		const fm = parseFrontmatter(body);
+		expect(fm.slug).toBe('Fix-it-now-humanOnly-true');
+		expect(fm.humanOnly).toBeUndefined();
+		expect(body).toMatch(/^title: 'Fix-it-now-humanOnly-true'$/m);
+		expect(readFrontmatterField(body, 'title')).toBe(fm.slug);
+		expect(readFrontmatterField(body, 'promotedFrom')).toBe(
+			'observation:hostile',
+		);
+	});
+
+	it('REFUSES (usage-error) a drafted body that smuggles a SECOND `slug:` past the runner stamp: nothing created, the observation stays', async () => {
+		// `setFrontmatterMarker` replaces the FIRST `slug:` line, while
+		// `parseFrontmatter` keeps the LAST, so a duplicated key would make the item's
+		// identity the drafted one. The post-render re-parse catches it.
+		const seeded = seedRepoWithArbiter(scratch.root, []);
+		const itemPath = seedAnsweredPromote(seeded.repo, 'smuggle');
+		gitIn(['add', '-A'], seeded.repo);
+		gitIn(['commit', '-q', '-m', 'answered'], seeded.repo);
+		gitIn(['push', '-q', 'arbiter', 'main'], seeded.repo);
+
+		const result = await promoteObservation({
+			cwd: seeded.repo,
+			item: 'observation:smuggle',
+			itemPath,
+			newSlug: 'smuggle-task',
+			stubContent: [
+				'---',
+				'slug: smuggle-task',
+				'title: Drafted',
+				'slug: someone-elses-task',
+				'---',
+				'',
+				'## Prompt',
+				'',
+				'> Do it.',
+				'',
+			].join('\n'),
+			arbiter: 'arbiter',
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('usage-error');
+		expect(result.exitCode).toBe(1);
+		expect(existsOnArbiterMain(seeded.repo, 'backlog', 'smuggle-task')).toBe(
+			false,
+		);
+		expect(pathOnArbiterMain(seeded.repo, itemPath)).toBe(true);
 	});
 
 	it('a same-slug new-item race ⇒ exactly one promotes, the loser fails CAS (no special case)', async () => {
