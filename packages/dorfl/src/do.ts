@@ -1,3 +1,4 @@
+import type {Phase} from './phase.js';
 import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
@@ -602,6 +603,13 @@ export interface DoOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
+	/**
+	 * The CI phase this run executes as (`--phase lock|agent|apply`, CI-only;
+	 * see `phase.ts`). `undefined` ⇒ today's single process. Threaded next to
+	 * `env` and `note` so the per-path phase splits can branch on it; the phase
+	 * guards read the process-wide active phase.
+	 */
+	phase?: Phase;
 	/**
 	 * Sink for a pre-formatted block printed VERBATIM (forwarded to `complete`'s
 	 * propose-mode next-step block). Defaults to `note`.

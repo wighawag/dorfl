@@ -1,5 +1,6 @@
 import {spawnSync} from 'node:child_process';
 import {agentEnvFor} from './agent-env.js';
+import {assertAgentOrRepoCodeAllowed} from './phase.js';
 
 /**
  * The **harness seam** (ADR §5): how a job's command is launched and how its
@@ -305,10 +306,15 @@ export function isBenignPromptWriteError(error: Error): boolean {
  * `agent-env.ts`). Applied INSIDE every adapter's autonomous launch, so no
  * caller and no workflow can hand a CI agent the token by accident. On a laptop
  * the caller's env passes through unchanged.
+ *
+ * PHASE GUARD: throws a `PhaseGuardError` in the CI `lock` and `apply` phases
+ * (their jobs hold the write token, so no agent may launch there; see
+ * `phase.ts`).
  */
 export function agentLaunchEnv(
 	env: NodeJS.ProcessEnv | undefined,
 ): NodeJS.ProcessEnv {
+	assertAgentOrRepoCodeAllowed('agent-launch-env');
 	return agentEnvFor(env ?? process.env);
 }
 
@@ -323,6 +329,8 @@ export class NullHarness implements Harness {
 	readonly adapter = 'null';
 
 	launch(input: LaunchInput): LaunchResult {
+		// PHASE GUARD first: no launch at all in the CI lock/apply phases.
+		assertAgentOrRepoCodeAllowed('harness-launch');
 		// BACKSTOP (config error, NOT a spawn failure): an empty/whitespace command
 		// resolves the null adapter to `bash -c ''`, which exits 0 with no output — a
 		// "successful" build that ran NOTHING. The `do`/`run`/`--remote` CLI sites
@@ -383,6 +391,7 @@ export class NullHarness implements Harness {
 	 * shelling out the wrong way.
 	 */
 	launchInteractive(_input: InteractiveLaunchInput): InteractiveLaunchResult {
+		assertAgentOrRepoCodeAllowed('harness-launch');
 		throw new Error(
 			'interactive launch requires the pi harness; configure `harness: pi` ' +
 				'(the null/shell adapter only supports the captured autonomous launch).',

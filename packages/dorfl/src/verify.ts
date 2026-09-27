@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {assertAgentOrRepoCodeAllowed} from './phase.js';
 
 /**
  * The per-repo acceptance gate, run as `dorfl verify`. It is a
@@ -149,6 +150,9 @@ export const VERIFY_OUTPUT_TAIL_LINES = 20;
 export async function runVerify(
 	options: RunVerifyOptions,
 ): Promise<RunVerifyResult> {
+	// PHASE GUARD: the gate runs repository code, never in the CI lock/apply
+	// phases (their jobs hold the write token; see `phase.ts`).
+	assertAgentOrRepoCodeAllowed('verify');
 	let commands: string[];
 	try {
 		commands = resolveVerifyCommands(options.verify);

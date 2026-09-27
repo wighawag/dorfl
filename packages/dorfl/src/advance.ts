@@ -1,3 +1,4 @@
+import type {Phase} from './phase.js';
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {type WorkFolderKey, workItemPath, workItemRel} from './work-layout.js';
@@ -433,6 +434,13 @@ export interface AdvanceContext {
 	stuckAction?: StuckActionHandler;
 	/** Sink for human-readable progress notes. */
 	note?: (message: string) => void;
+	/**
+	 * The CI phase this run executes as (`--phase lock|agent|apply`, CI-only;
+	 * see `phase.ts`). `undefined` ⇒ today's single process. Threaded next to
+	 * `env` and `note` so the per-path phase splits can branch on it; the phase
+	 * guards read the process-wide active phase.
+	 */
+	phase?: Phase;
 }
 
 /** The options one `advance` tick consumes. */

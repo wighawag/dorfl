@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {Command, Option} from 'commander';
+import {Command, InvalidArgumentError, Option} from 'commander';
 import type {Command as Commander} from 'commander';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
@@ -161,6 +161,8 @@ import {GitHubCIContext} from './install-ci-github.js';
 import {loadCapabilityRegistry} from './install-ci-core.js';
 import {performCloseMergedIssues} from './close-job.js';
 import {installSkills, type InstallSkillsResult} from './install-skills.js';
+import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
+import {activateProcessPhase} from './phase-recorder.js';
 
 interface ScanFlags {
 	config?: string;
@@ -750,6 +752,8 @@ function explicitSpecsLandInFromFlag(
 
 interface DoFlags {
 	config?: string;
+	/** Hidden, CI-only `--phase lock|agent|apply` (see {@link phaseOption}). */
+	phase?: Phase;
 	arbiter?: string;
 	remote?: string;
 	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). Since `make-isolated-default-build-mode` this is the DEFAULT; the flag remains accepted as a redundant explicit opt-IN alias (D3). */
@@ -804,6 +808,8 @@ interface DoFlags {
 
 interface IntakeFlags {
 	config?: string;
+	/** Hidden, CI-only `--phase lock|agent|apply` (see {@link phaseOption}). */
+	phase?: Phase;
 	arbiter?: string;
 	merge?: boolean;
 	propose?: boolean;
@@ -1304,6 +1310,41 @@ function resolvePackageVersion(): string {
 			: 'unknown';
 	} catch {
 		return 'unknown';
+	}
+}
+
+/**
+ * The hidden, CI-only `--phase lock|agent|apply` option shared by `intake`,
+ * `advance` and `do` (spec `ci-agent-job-without-write-token`, see `phase.ts`).
+ * Validated at PARSE time ({@link parsePhase}): an unknown value, or any value
+ * outside GitHub Actions, is a commander usage error before the action runs.
+ * Absent ⇒ today's single process.
+ */
+function phaseOption(): Option {
+	return new Option(
+		'--phase <phase>',
+		'(CI-only) run as one job of the split CI item workflow: lock, agent or apply. Requires GITHUB_ACTIONS=true.',
+	)
+		.hideHelp()
+		.argParser((raw: string): Phase => {
+			try {
+				return parsePhase(raw);
+			} catch (err) {
+				if (err instanceof PhaseUsageError) {
+					throw new InvalidArgumentError(err.message);
+				}
+				throw err;
+			}
+		});
+}
+
+/**
+ * Enter the `--phase` for this one-shot process (a no-op without one): the phase
+ * guards fire from here on, and the agent phase records its write seams.
+ */
+function enterCliPhase(phase: Phase | undefined): void {
+	if (phase !== undefined) {
+		activateProcessPhase(phase);
 	}
 }
 
@@ -2425,7 +2466,9 @@ export function buildProgram(): Command {
 			'--merge-retries <n>',
 			'cross-job merge-serialiser CAS-retry cap (see `run --help`); resolved flag > env > per-repo > global > default 1000.',
 		)
+		.addOption(phaseOption())
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
+			enterCliPhase(flags.phase);
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
 			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count.
 			const args = rawSlugs ?? [];
@@ -2798,6 +2841,7 @@ export function buildProgram(): Command {
 			// sequential `performDo` (do-autopick runs the EXISTING pipeline per item).
 			const baseDoOptions: Omit<DoOptions, 'arg'> = {
 				cwd,
+				phase: flags.phase,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				// The host-only runner IDENTITY (a bot): scopes the runner's git/provider
 				// ops (claim, push, integrate, `gh`) — NEVER the agent launch. Absent ⇒
@@ -3027,7 +3071,9 @@ export function buildProgram(): Command {
 			'--watch',
 			"stream the build agent's high-signal events live by tailing the pi session log (requires harness: pi; READ-ONLY observer — does not change outcome/gate/git). The same view `do --watch` gives, threaded through the build rung; CI uses it so the job log shows the agent working instead of freezing.",
 		)
+		.addOption(phaseOption())
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
+			enterCliPhase(flags.phase);
 			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
 			// named item; many = those, IN SEQUENCE. `-n <x>` is the auto-pick count
 			// (ALWAYS sequential, US #25).
@@ -3289,6 +3335,7 @@ export function buildProgram(): Command {
 			// hands the resolved arg to `performDo`, never re-implementing it.
 			const doOptions: Omit<DoOptions, 'arg'> = {
 				cwd,
+				phase: flags.phase,
 				// `--watch`: stream the build agent's session live (pi harness only;
 				// validated in `performDo`). Threaded through the orchestrated build rung
 				// so `advance --watch` (and CI) shows the agent working, not a frozen log.
@@ -3351,6 +3398,7 @@ export function buildProgram(): Command {
 			// Surface + apply stay ALWAYS allowed regardless of the gate family.
 			const advanceContext: AdvanceContext = {
 				cwd,
+				phase: flags.phase,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				doOptions,
 				surfaceGate: harnessSurfaceGate({harness, agentCmd: config.agentCmd}),
@@ -4450,7 +4498,9 @@ export function buildProgram(): Command {
 			'--sessions-dir <dir>',
 			'HOST-ONLY root folder under which the pi session file is generated',
 		)
+		.addOption(phaseOption())
 		.action(async (rawNumber: string, flags: IntakeFlags) => {
+			enterCliPhase(flags.phase);
 			const issueNumber = Number(rawNumber);
 			if (
 				rawNumber.trim() === '' ||
@@ -4558,6 +4608,7 @@ export function buildProgram(): Command {
 			const result = await performIntake({
 				issueNumber,
 				cwd,
+				phase: flags.phase,
 				arbiter: flags.arbiter ?? config.defaultArbiter,
 				integration: modes,
 				// The resolved cross-job CAS-retry cap (config `mergeRetries`). `intake`

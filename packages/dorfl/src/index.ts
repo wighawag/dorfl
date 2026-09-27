@@ -210,6 +210,42 @@ export type {
 } from './ref-write.js';
 export {currentRefWrite, refWrite} from './ref-write.js';
 
+export type {Phase, GuardedOperation} from './phase.js';
+export {
+	PHASES,
+	AGENT_SPAWNING_VERBS,
+	NON_AGENT_VERBS,
+	PhaseGuardError,
+	PhaseUsageError,
+	parsePhase,
+	activePhase,
+	enterPhase,
+	assertAgentOrRepoCodeAllowed,
+} from './phase.js';
+export type {
+	WriteSeamName,
+	WriteSeamCall,
+	RecordedWriteIntent,
+	PhaseRecorder,
+	AgentPhaseOutcome,
+} from './phase-recorder.js';
+export {
+	PhaseHaltSentinel,
+	UnrecordedWriteError,
+	createPhaseRecorder,
+	installRecordingSeams,
+	recordingReviewProvider,
+	recordingIssueProvider,
+	runAgentPhase,
+	activateProcessPhase,
+} from './phase-recorder.js';
+export {
+	resolveReadToken,
+	readTokenHeaderKey,
+	withReadTokenGitConfig,
+	gitChildEnv,
+} from './ci-read-token.js';
+
 export type {ReadyItem, ScannedItem, RepoReport, ScanReport} from './scan.js';
 export {scan, scanRepoPaths, readReadyItems, readDoneSlugs} from './scan.js';
 
