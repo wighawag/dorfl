@@ -4,6 +4,7 @@ slug: ci-split-build-path
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-phase-mode-and-guards, ci-split-handoff-artifact-format, ci-split-apply-rejects-hostile-bundle]
 covers: [2, 3, 4, 10, 12, 24, 23]
+needsAnswers: true
 ---
 
 ## What to build
