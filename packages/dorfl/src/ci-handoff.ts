@@ -37,8 +37,8 @@ import {
 import {isAbsolute, join, relative, sep} from 'node:path';
 import {git} from './git.js';
 import {
-	HANDOFF_LIMITS,
 	canonicalHandoffItem,
+	handoffByteLimits,
 	intentRowFor,
 	rejectHandoff as reject,
 	validateHandoffRecord,
@@ -214,10 +214,10 @@ export function writeHandoff(params: {
 	const json = JSON.stringify({...params.record, item});
 	const {row} = validateHandoffRecord(JSON.parse(json), {item, rung});
 	checkBundlePresence(row, bundle !== undefined);
-	if (Buffer.byteLength(json) > HANDOFF_LIMITS.handoffJsonBytes) {
+	if (Buffer.byteLength(json) > handoffByteLimits().handoffJsonBytes) {
 		reject(
 			'size',
-			`${HANDOFF_JSON} is over ${HANDOFF_LIMITS.handoffJsonBytes} bytes`,
+			`${HANDOFF_JSON} is over ${handoffByteLimits().handoffJsonBytes} bytes`,
 		);
 	}
 	mkdirSync(dir, {recursive: true});
@@ -248,10 +248,10 @@ function writeBundle(dir: string, source: HandoffBundleSource): void {
 	if (header.ref !== ref) {
 		reject('bundle-refs', `the bundle carries ${header.ref}, not ${ref}`);
 	}
-	if (statSync(out).size > HANDOFF_LIMITS.bundleBytes) {
+	if (statSync(out).size > handoffByteLimits().bundleBytes) {
 		reject(
 			'size',
-			`${HANDOFF_BUNDLE} is over ${HANDOFF_LIMITS.bundleBytes} bytes`,
+			`${HANDOFF_BUNDLE} is over ${handoffByteLimits().bundleBytes} bytes`,
 		);
 	}
 }
@@ -282,7 +282,7 @@ export interface ReadHandoff {
  * artifact was downloaded: a real directory strictly inside `runnerTemp`
  * (`$RUNNER_TEMP`). Rejects ({@link HandoffRejected}) a symlink anywhere, any
  * entry but `handoff.json`, `work.bundle` and `lfs/<64-hex oid>`, any size over
- * {@link HANDOFF_LIMITS}, a record that fails `validateHandoffRecord`, a bundle
+ * the byte limits (`handoffByteLimits`), a record that fails `validateHandoffRecord`, a bundle
  * the intent forbids or lacks, `lfs/` without a bundle, and a bundle whose
  * header is malformed or carries other than one ref.
  */
@@ -334,14 +334,17 @@ export function readHandoff(params: {
 		}
 	}
 	if (!hasJson) reject('layout', `${HANDOFF_JSON} is missing`);
-	if (lfsTotal > HANDOFF_LIMITS.lfsBytes) {
-		reject('size', `the LFS objects are over ${HANDOFF_LIMITS.lfsBytes} bytes`);
-	}
-	total += lfsTotal;
-	if (total > HANDOFF_LIMITS.artifactBytes) {
+	if (lfsTotal > handoffByteLimits().lfsBytes) {
 		reject(
 			'size',
-			`the artifact is over ${HANDOFF_LIMITS.artifactBytes} bytes`,
+			`the LFS objects are over ${handoffByteLimits().lfsBytes} bytes`,
+		);
+	}
+	total += lfsTotal;
+	if (total > handoffByteLimits().artifactBytes) {
+		reject(
+			'size',
+			`the artifact is over ${handoffByteLimits().artifactBytes} bytes`,
 		);
 	}
 	if (lfsObjects.length > 0 && !hasBundle) {
@@ -351,7 +354,7 @@ export function readHandoff(params: {
 	const raw = readBounded(
 		join(dir, HANDOFF_JSON),
 		HANDOFF_JSON,
-		HANDOFF_LIMITS.handoffJsonBytes,
+		handoffByteLimits().handoffJsonBytes,
 	);
 	let parsed: unknown;
 	try {
@@ -368,7 +371,7 @@ export function readHandoff(params: {
 		const head = readBounded(
 			path,
 			HANDOFF_BUNDLE,
-			HANDOFF_LIMITS.bundleBytes,
+			handoffByteLimits().bundleBytes,
 			MAX_BUNDLE_HEADER_BYTES,
 		);
 		bundle = {path, size: lstatSync(path).size, ...parseBundleHeader(head)};

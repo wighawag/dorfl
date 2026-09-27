@@ -62,3 +62,23 @@ Validate everything, then write. Any rejection writes nothing from the artifact,
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If a dependency landed differently than this task assumes, or an ADR superseded an assumption here, do NOT build on the stale premise: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). Building on a stale task produces wrong-but-compiling work.
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not; if a choice meets the ADR gate in `ADR-FORMAT.md`, also write an ADR in `docs/adr/` and name it there). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Blob-size check timing (quarantine):** "rejected before anything is fetched into the repository" is met by fetching and checking the bundle in a throwaway bare repository whose object store borrows the apply checkout's objects. The real checkout gets the bundle only after acceptance, with the same `git -c transfer.fsckObjects=true fetch <bundle> refs/heads/<name>:refs/dorfl/incoming/tip` command. The alternative, a custom pack parser, is far more code. This touches `ci-split-build-path` and `ci-split-answered-merge-action`, which consume `INCOMING_TIP_REF`.
+- **Protected-path details:**
+  - The list is matched case-insensitively (`.GitHub/` is caught).
+  - `.gitattributes` is protected at any depth, because a nested one sets merge attributes for its folder just like the root one.
+  - The legacy `.dorfl.json` is protected alongside `dorfl.json`, because dorfl still reads it.
+  - Deletions and the old side of every change count.
+  - The alternative was root-only, case-sensitive matching, which is looser. `ci-split-handoff-lfs-objects` relies on `.lfsconfig` being covered here.
+- **Symlink rule:** a target is resolved component by component through the commit's own symlinks (at most 40 hops). An absolute target, an empty one, one over 4096 bytes, one that climbs above the root, or one that resolves into `.git` is rejected. This runs for every commit that adds or changes a symlink, over all symlinks in that commit's tree. Plain lexical normalisation was the alternative, but it misses the chained escape.
+- **Ledger rule scope:**
+  - It is evaluated on the net change of the new commits (from the oldest new commit's parent to the tip), not per commit.
+  - "Own transition" means the item's body in the lifecycle folders of its type (for a task: `tasks/backlog`, `tasks/ready`, `in-progress`, `tasks/done`). Sidecars and `cancelled/` are outside it.
+  - A new note is a file added under `work/notes/` that does not exist on the fresh `main`.
+  - ADRs live in `docs/adr/`, outside `work/`, so they need no exception.
+  - The rule applies to every bundle, including work-in-progress ones, using the recomputed mode.
+- **Untrusted-origin recompute scope:** it applies only to the build `integrate` intent, mirroring `performIntegration`. There is no explicit `--merge` override, since CI never passes one. The answered-merge `integrate` keeps the trusted mode, because the human's answer is the checkpoint there. Any copy of the task at `baseSha` stamped `originTrust: untrusted` forces propose. This touches `ci-split-build-path` and `ci-split-answered-merge-action`.
+- **Rule names and limit override:** the new rejection rules are `history`, `merge-commit`, `commit-count`, `protected-path`, `symlink-target`, `gitlink` and `ledger`; a blob over the limit reuses `size`, and an fsck failure reuses `bundle-format`. The byte limits can be lowered through `setHandoffByteLimitsForTest`, which only tests call, and the reader and writer now use `handoffByteLimits()`. This follows the repo's `...ForTest` pattern rather than adding a parameter production callers could pass.
+- **No changeset:** the module is not wired in, so users see no change; the wiring tasks carry the release note, as for `ci-split-handoff-artifact-format`.
