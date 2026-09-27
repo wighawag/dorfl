@@ -76,6 +76,7 @@ async function phase(
 			freshWorktreeGate: true,
 			mergeJitterMs: 0,
 			env: gitEnv(),
+			...(p === 'apply' ? {agentResult: 'success' as const} : {}),
 			...options,
 		});
 	} finally {
@@ -164,8 +165,65 @@ describe('the lock phase', () => {
 			baseSha: onArbiter('refs/heads/main'),
 			lockSha: onArbiter(LOCK_REF),
 			handoffName: `dorfl-handoff-task-${SLUG}-attempt-1`,
+			// The default agentDeadlineMinutes + checkpointHeadroomMinutes.
+			agentTimeoutMinutes: 90,
 		});
 		expect(facts.continueTip).toBeUndefined();
+	});
+
+	it('computes agentTimeoutMinutes from dorfl.json at baseSha, not the checkout', async () => {
+		const stale = jobClone('stale-lock-checkout');
+		// The checkout's own config says something else (it is not trusted).
+		writeFileSync(
+			join(stale, 'dorfl.json'),
+			'{"agentDeadlineMinutes": 5, "checkpointHeadroomMinutes": 10}\n',
+		);
+		const other = seeded.clone('config-lands');
+		writeFileSync(
+			join(other, 'dorfl.json'),
+			'{"agentDeadlineMinutes": 120, "checkpointHeadroomMinutes": 45}\n',
+		);
+		g(other, 'add', '-A');
+		g(other, 'commit', '-q', '-m', 'config');
+		g(other, 'push', '-q', 'origin', 'HEAD:main');
+		const out = join(scratch.root, 'github-output');
+		writeFileSync(out, '');
+		const r = await phase('lock', {cwd: stale, githubOutput: out});
+		expect(r.outcome, r.message).toBe('locked');
+		expect(
+			parseLockOutputLines(readFileSync(out, 'utf8')).agentTimeoutMinutes,
+		).toBe(165);
+	});
+
+	it('a re-run-all attempt names its artifact with the new run attempt', async () => {
+		const out = join(scratch.root, 'github-output');
+		writeFileSync(out, '');
+		const r = await phase('lock', {
+			cwd: jobClone('lock'),
+			githubOutput: out,
+			runAttempt: '2',
+		});
+		expect(r.outcome, r.message).toBe('locked');
+		expect(parseLockOutputLines(readFileSync(out, 'utf8')).handoffName).toBe(
+			`dorfl-handoff-task-${SLUG}-attempt-2`,
+		);
+	});
+});
+
+describe('the apply phase inputs', () => {
+	it('refuses to run without the agent job result, before any write', async () => {
+		const lock = await lockPhase();
+		const before = arbiterRefs();
+		const apply = await phase('apply', {
+			cwd: jobClone('apply', lock.baseSha),
+			lockOutputs: lock,
+			handoffDir: join(runnerTemp, 'none'),
+			runnerTemp,
+			agentResult: undefined,
+		});
+		expect(apply.outcome).toBe('usage-error');
+		expect(apply.message).toMatch(/--agent-result/);
+		expect(arbiterRefs()).toBe(before);
 	});
 });
 

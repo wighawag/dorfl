@@ -11,8 +11,11 @@
  *    is `baseSha`, and the tree the item is classified in, never the run's
  *    commit); claim (`acquireItemLock`, `action: implement`); publish
  *    `acquired`, `needsAgent`, `rung`, `baseSha`, `lockSha`, `continueTip`,
- *    `handoffName`. An item that is not claimable at `baseSha` (it already
- *    advanced, or its lock is held) is a no-op that writes nothing.
+ *    `handoffName` (it carries `github.run_attempt`, so a "Re-run all jobs"
+ *    attempt never collides with an earlier attempt's artifact) and
+ *    `agentTimeoutMinutes` (from the config at `baseSha`). An item that is not
+ *    claimable at `baseSha` (it already advanced, or its lock is held) is a
+ *    no-op that writes nothing.
  *  - **agent** ({@link performBuildAgentPhase}): check, read-only, that the lock
  *    ref still equals `lockSha`, then run `performDo` without its claim under
  *    the phase recorder: the continue rebase (LOCAL only, decision 7), the
@@ -29,7 +32,11 @@
  *      - the agent's deliberate STOP: `stop`; an agent failure: `agent-failed`
  *        (both with the wip bundled, when there is any).
  *  - **apply** ({@link performBuildApplyPhase}): refuse to write unless the
- *    lock ref still equals `lockSha`; validate the handoff as hostile
+ *    lock ref still equals `lockSha` (so a "Re-run failed jobs" of a finished
+ *    run writes nothing); act on the agent job's result first (task
+ *    `ci-split-agent-result-and-reruns`): anything but `success` never reads
+ *    the handoff, and surfaces the item (failure, timeout, an unexpected skip)
+ *    or only releases the lock (a real cancel); validate the handoff as hostile
  *    (`validateApplyHandoff`); when the lock job saw a kept branch, push the
  *    bundle's tip with a lease on that `continueTip` first (decision 7; a
  *    stale lease writes nothing); then resume at the write half of the intent:
@@ -58,8 +65,10 @@ import {
 import {writeHandoff} from './ci-handoff.js';
 import {validateApplyHandoff} from './ci-handoff-apply.js';
 import type {LockOutputs} from './ci-lock-outputs.js';
+import type {AgentJobResult, GithubApiGet} from './ci-agent-result.js';
 import {
 	PhaseDriverError,
+	agentTimeoutMinutesAt,
 	arbiterLockSha,
 	arbiterRefSha,
 	boundHandoffText,
@@ -68,7 +77,9 @@ import {
 	fetchArbiterMain,
 	noSmudgeEnv,
 	releaseLockLeased,
+	repoConfigAt,
 	requireHeldLock,
+	resolveAgentResult,
 	runnerTempFrom,
 	withBaseWorktree,
 	type HeldLock,
@@ -106,11 +117,6 @@ import {
 	type RouteToNeedsAttentionOptions,
 } from './needs-attention.js';
 import {refWrite} from './ref-write.js';
-import {
-	REPO_CONFIG_FILENAME,
-	REPO_CONFIG_FILENAME_LEGACY,
-	loadRepoConfigFromContent,
-} from './repo-config.js';
 import type {Phase} from './phase.js';
 import {
 	createPhaseRecorder,
@@ -154,6 +160,18 @@ export interface BuildPhaseOptions extends DoOptions {
 	githubOutput?: string;
 	/** The merge-mode CAS-loop jitter (tests pass 0). */
 	mergeJitterMs?: number;
+	/**
+	 * apply: `needs.agent.result` (`--agent-result`), REQUIRED. Only `success`
+	 * reads the handoff (decision 5, task `ci-split-agent-result-and-reruns`).
+	 */
+	agentResult?: AgentJobResult;
+	/**
+	 * apply: the agent job's timeout (`--agent-timeout-minutes`, the trusted
+	 * lock output); defaults to the lock outputs' `agentTimeoutMinutes`.
+	 */
+	agentTimeoutMinutes?: number;
+	/** apply: the Actions API reader (tests stub it); default `fetch` with `GITHUB_TOKEN`. */
+	actionsApi?: GithubApiGet;
 }
 
 /** How a build phase run ended. */
@@ -178,6 +196,10 @@ export type BuildPhaseOutcome =
 	| 'surface-unmoved'
 	/** apply: a deadline checkpoint was saved and the lock released to continue. */
 	| 'auto-continued'
+	/** apply: the agent job was cancelled (not timed out); the lock was only released. */
+	| 'released'
+	/** apply: the cancelled agent job's leased lock release was refused. */
+	| 'release-refused'
 	/**
 	 * apply: the kept work branch moved on the arbiter since the lock job saw it
 	 * (`continueTip`), so the leased continue push was refused; nothing was written.
@@ -389,6 +411,7 @@ export async function performBuildLockPhase(
 			item,
 			options.runAttempt ?? env.GITHUB_RUN_ATTEMPT ?? '1',
 		),
+		agentTimeoutMinutes: agentTimeoutMinutesAt(cwd, baseSha, env),
 	});
 	return {
 		exitCode: 0,
@@ -806,11 +829,21 @@ export async function performBuildApplyPhase(
 		env,
 		rung: 'build-task',
 	});
+	if (options.agentResult === undefined) {
+		throw new PhaseDriverError(
+			'the apply phase needs the agent job result (--agent-result, ' +
+				'needs.agent.result): only success reads the handoff',
+		);
+	}
+	const agentResult = options.agentResult;
 	const slug = buildSlug(options, options.repoPath ?? cwd);
 	const item = `task:${slug}`;
 
 	// Lock ownership BEFORE the first write (spec §8): a lock that was released,
 	// reaped or re-taken since the lock job ran means this run writes nothing.
+	// This is also what makes a "Re-run failed jobs" of a finished run safe: it
+	// replays the old lock outputs and artifact, but the first apply already
+	// released or surfaced the item, so the lock is gone and nothing is written.
 	const ownership = await checkLockOwnership({
 		cwd,
 		arbiter,
@@ -833,7 +866,31 @@ export async function performBuildApplyPhase(
 	// delete a lock another run took since the ownership check.
 	const restoreLease = leaseLockReleases(item, held.lockSha);
 	try {
-		return await applyOwned({options, held, slug, item, arbiter, cwd, env});
+		const ctx: ApplyContext = {options, held, slug, item, arbiter, cwd, env};
+		// The agent job's result (decision 5) BEFORE any artifact is read: only
+		// `success` reads it; the build path has no agent-less rung, so a
+		// `skipped` agent job is never the deterministic case here.
+		const decision = await resolveAgentResult({
+			result: agentResult,
+			held,
+			agentTimeoutMinutes: options.agentTimeoutMinutes,
+			api: options.actionsApi,
+			env,
+		});
+		switch (decision.action) {
+			case 'read-handoff':
+				return await applyOwned(ctx);
+			case 'deterministic':
+				return await surfaceAgentResult(
+					ctx,
+					'the agent job was skipped (needsAgent: false), but the build ' +
+						'path has no rung that runs without an agent; the handoff was not read',
+				);
+			case 'surface':
+				return await surfaceAgentResult(ctx, decision.reason);
+			case 'release':
+				return await releaseAfterCancel(ctx, decision.reason);
+		}
 	} finally {
 		restoreLease();
 	}
@@ -1023,6 +1080,67 @@ async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
 	}
 }
 
+/**
+ * Surface the item to needs-attention because the agent job did not succeed
+ * (decision 5): tree-less (nothing from the agent job is pushed: its artifact is
+ * not read), the lock released leased on `lockSha`. A kept work branch stays as
+ * it is on the arbiter.
+ */
+async function surfaceAgentResult(
+	ctx: ApplyContext,
+	reason: string,
+): Promise<BuildPhaseResult> {
+	const {options, slug, arbiter, cwd, env} = ctx;
+	const note = options.note ?? (() => {});
+	const routed = await ledgerWrite.applyTreelessNeedsAttentionTransition({
+		cwd,
+		slug,
+		reason,
+		arbiter,
+		env,
+		note,
+	});
+	const message = routed.moved
+		? `Surfaced '${slug}' to needs-attention: ${reason}`
+		: `Could not surface '${slug}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
+	note(message);
+	return {
+		exitCode: routed.moved ? 0 : 1,
+		outcome: routed.moved ? 'surfaced' : 'surface-unmoved',
+		slug,
+		message,
+	};
+}
+
+/**
+ * The agent job was cancelled before its timeout (decision 5): only release the
+ * lock, leased on `lockSha`, so the next run picks the item up again.
+ */
+async function releaseAfterCancel(
+	ctx: ApplyContext,
+	reason: string,
+): Promise<BuildPhaseResult> {
+	const {options, held, slug, item, arbiter, cwd, env} = ctx;
+	const note = options.note ?? (() => {});
+	const released = await releaseLockLeased({
+		cwd,
+		arbiter,
+		item,
+		expectedSha: held.lockSha,
+		env,
+	});
+	note(released.message);
+	const message = released.released
+		? `Released '${slug}': ${reason}.`
+		: `Could not release '${slug}' (${released.message}): ${reason}.`;
+	return {
+		exitCode: released.released ? 0 : 1,
+		outcome: released.released ? 'released' : 'release-refused',
+		slug,
+		message,
+	};
+}
+
 /** Map a reused `do` write half's result to the apply phase's. */
 function fromDoResult(r: DoResult): BuildPhaseResult {
 	const outcome: BuildPhaseOutcome =
@@ -1047,22 +1165,9 @@ function maxAutoCheckpointsAt(
 	fallback: number | undefined,
 	env: NodeJS.ProcessEnv,
 ): number {
-	for (const name of [REPO_CONFIG_FILENAME, REPO_CONFIG_FILENAME_LEGACY]) {
-		const r = run('git', ['cat-file', 'blob', `${baseSha}:${name}`], cwd, {
-			env,
-		});
-		if (r.status !== 0) continue;
-		let cap: unknown;
-		try {
-			cap = loadRepoConfigFromContent(r.stdout, `${baseSha}:${name}`).config
-				.maxAutoCheckpoints;
-		} catch {
-			cap = undefined;
-		}
-		if (typeof cap === 'number' && Number.isInteger(cap) && cap >= 1) {
-			return cap;
-		}
-		break;
+	const cap = repoConfigAt(cwd, baseSha, env)?.maxAutoCheckpoints;
+	if (typeof cap === 'number' && Number.isInteger(cap) && cap >= 1) {
+		return cap;
 	}
 	return fallback ?? 5;
 }

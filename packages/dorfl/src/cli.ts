@@ -164,6 +164,12 @@ import {installSkills, type InstallSkillsResult} from './install-skills.js';
 import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
 import {activateProcessPhase} from './phase-recorder.js';
 import {performBuildPhase, type BuildPhaseVerb} from './ci-phase-build.js';
+import {
+	AgentResultUsageError,
+	parseAgentJobResult,
+	parseAgentTimeoutMinutes,
+	type AgentJobResult,
+} from './ci-agent-result.js';
 import {singleJobWarning} from './single-job-warning.js';
 
 interface ScanFlags {
@@ -760,6 +766,10 @@ interface DoFlags {
 	handoffOut?: string;
 	/** Hidden, CI-only: the directory the apply phase reads the handoff from. */
 	handoffIn?: string;
+	/** Hidden, CI-only: `needs.agent.result`, for the apply phase. */
+	agentResult?: AgentJobResult;
+	/** Hidden, CI-only: the lock job's `agentTimeoutMinutes`, for the apply phase. */
+	agentTimeoutMinutes?: number;
 	arbiter?: string;
 	remote?: string;
 	/** `--isolated`: build in a job worktree off THIS repo's arbiter (no checkout takeover). Since `make-isolated-default-build-mode` this is the DEFAULT; the flag remains accepted as a redundant explicit opt-IN alias (D3). */
@@ -1373,6 +1383,42 @@ function handoffDirOptions(): Option[] {
 }
 
 /**
+ * The hidden, CI-only agent-result options of the apply phase (task
+ * `ci-split-agent-result-and-reruns`, decision 5): `--agent-result` is
+ * `needs.agent.result` (only `success` reads the handoff), and
+ * `--agent-timeout-minutes` is the lock job's trusted `agentTimeoutMinutes`,
+ * which tells a timed-out agent job from a cancelled one.
+ */
+function agentResultOptions(): Option[] {
+	const parse =
+		<T>(fn: (raw: string) => T) =>
+		(raw: string): T => {
+			try {
+				return fn(raw);
+			} catch (err) {
+				if (err instanceof AgentResultUsageError) {
+					throw new InvalidArgumentError(err.message);
+				}
+				throw err;
+			}
+		};
+	return [
+		new Option(
+			'--agent-result <result>',
+			'(CI-only, --phase apply) the agent job result (needs.agent.result): success, failure, cancelled or skipped',
+		)
+			.hideHelp()
+			.argParser(parse(parseAgentJobResult)),
+		new Option(
+			'--agent-timeout-minutes <n>',
+			"(CI-only, --phase apply) the agent job's timeout, the lock job's agentTimeoutMinutes output",
+		)
+			.hideHelp()
+			.argParser(parse(parseAgentTimeoutMinutes)),
+	];
+}
+
+/**
  * Run ONE phase of the split build path for a single named item (`do <slug>` /
  * `advance task:<slug>` with `--phase`) and exit with its code. The lock phase
  * reads its trusted facts back from nowhere (it produces them); the agent and
@@ -1398,6 +1444,12 @@ async function runBuildPhaseAndExit(
 		);
 		process.exit(1);
 	}
+	if (phase === 'apply' && flags.agentResult === undefined) {
+		console.error(
+			'error: --phase apply needs --agent-result <result> (needs.agent.result).',
+		);
+		process.exit(1);
+	}
 	const result = await performBuildPhase({
 		...options,
 		arg: args[0],
@@ -1405,6 +1457,8 @@ async function runBuildPhaseAndExit(
 		verb,
 		handoffDir,
 		allowBacklog: flags.allowBacklog === true,
+		agentResult: flags.agentResult,
+		agentTimeoutMinutes: flags.agentTimeoutMinutes,
 	});
 	if (result.exitCode !== 0) {
 		console.error(`error: ${result.message}`);
@@ -2535,6 +2589,8 @@ export function buildProgram(): Command {
 		.addOption(phaseOption())
 		.addOption(handoffDirOptions()[0])
 		.addOption(handoffDirOptions()[1])
+		.addOption(agentResultOptions()[0])
+		.addOption(agentResultOptions()[1])
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			enterCliPhase(flags.phase);
 			// Variadic grammar (`do-autopick`): zero args = AUTO-PICK; one = the single
@@ -3148,6 +3204,8 @@ export function buildProgram(): Command {
 		.addOption(phaseOption())
 		.addOption(handoffDirOptions()[0])
 		.addOption(handoffDirOptions()[1])
+		.addOption(agentResultOptions()[0])
+		.addOption(agentResultOptions()[1])
 		.action(async (rawSlugs: string[], flags: DoFlags) => {
 			enterCliPhase(flags.phase);
 			// Variadic grammar (mirrors `do`): zero args = AUTO-PICK; one = the single
