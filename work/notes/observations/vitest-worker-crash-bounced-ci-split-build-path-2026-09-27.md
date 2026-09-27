@@ -1,0 +1,3 @@
+# The vitest worker crash flake bounced a task at land time
+
+2026-09-27: the second land gate of `ci-split-build-path` (fresh worktree, 20:09) failed with `Error: Worker exited unexpectedly` (263 of 264 files passed, 3837 of 3843 tests reported, no test assertion failed), the same shape as `vitest-worker-heap-oom-flake-2026-09-27.md`. The same branch then passed the full `pnpm -r test` (264 files, 3843 tests) on re-run, so the crash is not caused by the task. That note asked to watch for a gate bounce of this shape: this is one, and with the `do-remote` walk race it is the second unrelated flake to bounce this one task.

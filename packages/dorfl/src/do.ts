@@ -3,7 +3,7 @@ import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
 import {performComplete} from './complete.js';
-import {performClaim} from './claim-cas.js';
+import {performClaim, type ClaimCasResult} from './claim-cas.js';
 import {
 	resolveSlug,
 	SlugResolutionError,
@@ -1154,17 +1154,25 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//         fresh-main `work/<slug>` switch, incl. the §14 continue/rebase path)
 	//         WITHOUT re-claiming — the split the seam mandates (claim → driver,
 	//         onboarding → strategy).
-	const claim = await performClaim({
-		slug,
-		cwd,
-		arbiter,
-		// `--allow-backlog`: widen the claimable predicate to ALSO accept a
-		// `tasks/backlog/`-resident body. Claim stays a pure lock (writes nothing to
-		// `main`, moves nothing); default off ⇒ pool-only, exactly as today.
-		allowBacklog: options.allowBacklog === true,
-		env,
-		note,
-	});
+	//    CI AGENT PHASE (task `ci-split-build-path`): the lock phase already took
+	//    the claim in the job that holds the write token, and the build phase
+	//    driver (`ci-phase-build.ts`) checked the lock ref still equals its
+	//    `lockSha` before calling here. The agent job cannot write, so it skips
+	//    the claim and onboards directly; everything after is unchanged.
+	const claim: ClaimCasResult =
+		options.phase === 'agent'
+			? {exitCode: 0, outcome: 'claimed', message: 'claimed by the lock phase'}
+			: await performClaim({
+					slug,
+					cwd,
+					arbiter,
+					// `--allow-backlog`: widen the claimable predicate to ALSO accept a
+					// `tasks/backlog/`-resident body. Claim stays a pure lock (writes nothing to
+					// `main`, moves nothing); default off ⇒ pool-only, exactly as today.
+					allowBacklog: options.allowBacklog === true,
+					env,
+					note,
+				});
 	if (claim.outcome === 'lost') {
 		return {exitCode: 2, outcome: 'lost', slug, message: claim.message};
 	}

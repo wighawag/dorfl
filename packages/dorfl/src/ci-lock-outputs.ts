@@ -137,3 +137,110 @@ export function serializeLockOutputs(facts: LockOutputs): string {
 	}
 	return out;
 }
+
+// ---------------------------------------------------------------------------
+// Reading the facts back (the agent and apply jobs)
+// ---------------------------------------------------------------------------
+
+/**
+ * The environment variable the agent and apply jobs receive the lock job's
+ * outputs in: the JSON object `toJSON(needs.lock.outputs)` (every value a
+ * string, an unset output an empty string), passed through `env:` like every
+ * other value that reaches a `run:` script.
+ */
+export const LOCK_OUTPUTS_ENV = 'DORFL_LOCK_OUTPUTS';
+
+const PARSE: Record<keyof LockOutputs, (key: string, raw: string) => unknown> =
+	{
+		acquired: parseBoolean,
+		needsAgent: parseBoolean,
+		rung: (key, raw) => {
+			SCHEMA.rung(key, raw);
+			return raw;
+		},
+		baseSha: (key, raw) => sha(key, raw),
+		lockSha: (key, raw) => sha(key, raw),
+		continueTip: (key, raw) => sha(key, raw),
+		handoffName: (key, raw) => SCHEMA.handoffName(key, raw),
+		agentTimeoutMinutes: (key, raw) => {
+			const n = /^[0-9]{1,9}$/.test(raw) ? Number(raw) : Number.NaN;
+			SCHEMA.agentTimeoutMinutes(key, n);
+			return n;
+		},
+		originTrust: (key, raw) => SCHEMA.originTrust(key, raw),
+		documentMode: (key, raw) => SCHEMA.documentMode(key, raw),
+		seenCommentIds: (key, raw) => {
+			const ids = raw.split(',').map((part) => {
+				if (!/^[0-9]{1,16}$/.test(part)) {
+					refuse(key, 'is not a comma-separated list of ids');
+				}
+				return Number(part);
+			});
+			SCHEMA.seenCommentIds(key, ids);
+			return ids;
+		},
+	};
+
+function parseBoolean(key: string, raw: string): boolean {
+	if (raw !== 'true' && raw !== 'false') refuse(key, 'is not a boolean');
+	return raw === 'true';
+}
+
+/**
+ * Parse the lock job's outputs as the agent and apply jobs receive them (a
+ * `key -> string` object), re-checking every value with the same rules
+ * {@link serializeLockOutputs} applied. An empty string is an unset output
+ * (GitHub renders an output the job never wrote as `''`). Throws
+ * {@link LockOutputRefused} for an unknown key or a malformed value.
+ */
+export function parseLockOutputs(raw: unknown): LockOutputs {
+	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+		throw new LockOutputRefused('the lock outputs are not an object');
+	}
+	const facts: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(raw)) {
+		if (!Object.hasOwn(PARSE, key)) {
+			refuse(JSON.stringify(key).slice(0, 80), 'is not a lock output');
+		}
+		if (value === '' || value === undefined || value === null) continue;
+		if (typeof value !== 'string') refuse(key, 'is not a string');
+		facts[key] = PARSE[key as keyof LockOutputs](key, value);
+	}
+	return facts as LockOutputs;
+}
+
+/**
+ * Parse `$GITHUB_OUTPUT` lines as {@link serializeLockOutputs} writes them
+ * (`key=value`, one per line), for tests and local replays of the lock job.
+ */
+export function parseLockOutputLines(text: string): LockOutputs {
+	const raw: Record<string, string> = {};
+	for (const line of text.split('\n')) {
+		if (line === '') continue;
+		const eq = line.indexOf('=');
+		if (eq <= 0) throw new LockOutputRefused('a line is not key=value');
+		raw[line.slice(0, eq)] = line.slice(eq + 1);
+	}
+	return parseLockOutputs(raw);
+}
+
+/**
+ * Read the lock job's outputs from {@link LOCK_OUTPUTS_ENV}. Throws
+ * {@link LockOutputRefused} when it is missing or malformed: the agent and
+ * apply phases act on nothing but these trusted facts.
+ */
+export function readLockOutputsFromEnv(env: NodeJS.ProcessEnv): LockOutputs {
+	const raw = env[LOCK_OUTPUTS_ENV];
+	if (raw === undefined || raw.trim() === '') {
+		throw new LockOutputRefused(
+			`${LOCK_OUTPUTS_ENV} is not set (the lock job's outputs, as JSON)`,
+		);
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		throw new LockOutputRefused(`${LOCK_OUTPUTS_ENV} is not valid JSON`);
+	}
+	return parseLockOutputs(parsed);
+}
