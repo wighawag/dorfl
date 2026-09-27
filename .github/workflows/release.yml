@@ -52,7 +52,14 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24 # >= 22 required for npm OIDC trusted publishing
-          cache: pnpm
+          # NO Actions cache in this job (no `cache:` input, and setup-node's
+          # v5+ automatic package-manager cache turned off). The cache is
+          # shared per branch: a CI agent on main can write an entry through
+          # its job's ACTIONS_RUNTIME_TOKEN, and this job would restore it and
+          # run it while holding id-token: write (npm publish). The price is one
+          # uncached install per release run. Guarded by
+          # packages/dorfl/test/workflows-no-cache-in-write-jobs.test.ts.
+          package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
       - name: Install

@@ -28,7 +28,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+          # NO Actions cache: this job holds pages: write + id-token: write, and
+          # a CI agent on main can write cache entries through its job's
+          # ACTIONS_RUNTIME_TOKEN. See release.yml and
+          # packages/dorfl/test/workflows-no-cache-in-write-jobs.test.ts.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
