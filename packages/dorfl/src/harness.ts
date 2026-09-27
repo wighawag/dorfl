@@ -1,4 +1,5 @@
 import {spawnSync} from 'node:child_process';
+import {agentEnvFor} from './agent-env.js';
 
 /**
  * The **harness seam** (ADR §5): how a job's command is launched and how its
@@ -297,6 +298,21 @@ export function isBenignPromptWriteError(error: Error): boolean {
 }
 
 /**
+ * The environment an autonomous AGENT is launched with. In GitHub Actions every
+ * GitHub credential is removed (`GH_TOKEN`, `GITHUB_TOKEN`, `DORFL_GH_TOKEN`,
+ * any value containing a GitHub token, the Actions OIDC/runtime tokens, the
+ * runner command files, and git env config carrying a credential; see
+ * `agent-env.ts`). Applied INSIDE every adapter's autonomous launch, so no
+ * caller and no workflow can hand a CI agent the token by accident. On a laptop
+ * the caller's env passes through unchanged.
+ */
+export function agentLaunchEnv(
+	env: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv {
+	return agentEnvFor(env ?? process.env);
+}
+
+/**
  * The **null adapter**: runs the configured command synchronously to completion
  * in the job dir, recording the PID. Liveness is `process.kill(pid, 0)` against
  * the recorded PID (the OS process table) — explicitly NOT a file mtime. Because
@@ -328,7 +344,8 @@ export class NullHarness implements Harness {
 			cwd: input.dir,
 			encoding: 'utf8',
 			input: input.prompt,
-			env: input.env ?? process.env,
+			// No GitHub token reaches a CI agent (see agentLaunchEnv).
+			env: agentLaunchEnv(input.env),
 			maxBuffer: 64 * 1024 * 1024,
 		});
 		if (result.error && !isBenignPromptWriteError(result.error)) {

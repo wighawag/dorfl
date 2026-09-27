@@ -2,6 +2,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import {existsSync, readFileSync, writeSync} from 'node:fs';
 import {
 	NullHarness,
+	agentLaunchEnv,
 	pidAlive,
 	registerHarness,
 	type Harness,
@@ -255,7 +256,8 @@ export class PiHarness implements Harness {
 			cwd: input.dir,
 			encoding: 'utf8',
 			input: input.prompt,
-			env: input.env ?? process.env,
+			// No GitHub token reaches a CI agent (see agentLaunchEnv).
+			env: agentLaunchEnv(input.env),
 			maxBuffer: 64 * 1024 * 1024,
 		});
 		if (result.error) {
@@ -333,7 +335,8 @@ export class PiHarness implements Harness {
 				// Same as `launch`: spawn in the repo/worktree dir so the session
 				// header `cwd` groups the dashboard correctly (invariant #3).
 				cwd: input.dir,
-				env: input.env ?? process.env,
+				// No GitHub token reaches a CI agent (see agentLaunchEnv).
+				env: agentLaunchEnv(input.env),
 				stdio: ['pipe', 'pipe', 'pipe'],
 				// PROCESS-GROUP LEADER (observation
 				// `checkpoint-releases-lock-while-predecessor-agent-still-writes`): pi's

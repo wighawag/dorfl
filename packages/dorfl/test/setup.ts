@@ -1,7 +1,7 @@
 /**
  * GLOBAL test setup — runs once per test worker BEFORE any test file imports.
  *
- * It closes TWO ambient-environment leaks that make the suite pass locally but
+ * It closes THREE ambient-environment leaks that make the suite pass locally but
  * FAIL on a clean CI runner (and vice-versa):
  *
  *  1. GIT IDENTITY / CONFIG ISOLATION. Much of the product code shells out to
@@ -26,7 +26,11 @@
  *     wrong. We delete every `DORFL_*` var up-front so the tests see ONLY
  *     the config they pass explicitly — identical on a dev box and on CI.
  *
- * Both are pure ENVIRONMENT isolation: they do not change product behaviour, only
+ *  3. CI-MODE LEAKAGE. dorfl removes GitHub tokens from agent launches when
+ *     `GITHUB_ACTIONS=true`; the suite starts outside that mode so it behaves
+ *     the same on a dev box and on a runner (see the block below).
+ *
+ * All three are pure ENVIRONMENT isolation: they do not change product behaviour, only
  * stop the host's ambient state from bleeding into the suite.
  */
 
@@ -46,3 +50,9 @@ for (const key of Object.keys(process.env)) {
 		delete process.env[key];
 	}
 }
+
+// 3. dorfl removes GitHub tokens from agent launches in GitHub Actions
+//    (`GITHUB_ACTIONS=true`, see `agent-env.ts`). The suite must behave the same
+//    on a dev box and on a runner, so it starts outside that mode; the tests
+//    that cover it set it explicitly for their own spawns.
+delete process.env.GITHUB_ACTIONS;
