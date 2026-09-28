@@ -45,6 +45,10 @@ import {
 	type BackoffOptions,
 	type Sleep,
 } from './retry-backoff.js';
+import {
+	saveCrashedRunWork,
+	type CrashedRunSaveOutcome,
+} from './crashed-run-save.js';
 
 /**
  * The **needs-attention mechanism** (ADR `ledger-status-on-per-item-lock-refs`;
@@ -230,6 +234,20 @@ export interface ReturnToBacklogOptions {
 	 * (a steer is relevant even on `--reset`).
 	 */
 	message?: string;
+	/**
+	 * The execution working area (config `workspacesDir`) where `do --isolated`
+	 * retains job worktrees. When given, a HELD lock's retained job worktree is
+	 * checked BEFORE the release (task
+	 * `a-crashed-runs-local-work-is-saved-before-its-lock-is-released`): a crashed
+	 * run's local-only commits / uncommitted residue are committed + pushed to
+	 * `work/task-<slug>` first (see {@link saveCrashedRunWork}), and a failed save
+	 * KEEPS the lock. Not consulted on `--reset` (which discards the work by
+	 * design). Omitted ⇒ no worktree is looked at (the in-process callers, e.g.
+	 * the deadline checkpoint, which saved its own branch already).
+	 */
+	workspacesDir?: string;
+	/** No-wait sleep for the crashed-run save push's backoff (tests). */
+	sleep?: Sleep;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -253,6 +271,12 @@ export interface ReturnToBacklogResult {
 	reconciled?: boolean;
 	/** When NOT moved, why (e.g. the slug held no recoverable per-item lock on the arbiter, or a failed --reset delete). */
 	reasonNotMoved?: string;
+	/**
+	 * What the crashed-run save found/did in the slug's retained job worktree
+	 * (only when {@link ReturnToBacklogOptions.workspacesDir} was given and a lock
+	 * was held; absent otherwise).
+	 */
+	crashedRunSave?: CrashedRunSaveOutcome;
 	/**
 	 * **The ONE resolved continue-branch state** this requeue decided from — so a
 	 * CALLER reports the same reality the requeue acted on instead of running its
@@ -838,12 +862,57 @@ export async function returnToBacklog(
 		};
 	}
 
-	const result = await requeueHeldItem({
+	// CRASHED-RUN SAVE (task
+	// `a-crashed-runs-local-work-is-saved-before-its-lock-is-released`). A run
+	// killed mid-agent leaves its lock held and its job worktree retained, possibly
+	// with commits (or a wip residue) the arbiter's work branch lacks. Releasing
+	// the lock over them hands the item to a next claim (or a `gc --force`) that
+	// cuts that worktree away, so SAVE them first: wip-commit + push the work
+	// branch. A failed save KEEPS the lock (and the worktree) and says so. Only on
+	// a HELD lock (a short recovery lock means the run already surfaced, its lock
+	// released) and never on `--reset` (which discards the branch by design).
+	let crashedRunSave: CrashedRunSaveOutcome | undefined;
+	if (held && !options.reset && options.workspacesDir !== undefined) {
+		crashedRunSave = await saveCrashedRunWork({
+			cwd,
+			arbiter,
+			slug,
+			workspacesDir: options.workspacesDir,
+			env,
+			note,
+			...(options.sleep !== undefined ? {sleep: options.sleep} : {}),
+		});
+		if (crashedRunSave.kind === 'not-saved') {
+			const message =
+				`requeue for '${slug}': its crashed run left work in ` +
+				`${crashedRunSave.dir} that the arbiter's ${crashedRunSave.branch} ` +
+				`lacks, and it could not be saved: ${crashedRunSave.detail}. The lock ` +
+				'is KEPT (not released) and the worktree left in place, so nothing is ' +
+				`lost. Push ${crashedRunSave.branch} from that worktree by hand, then ` +
+				'`requeue` again.';
+			note(message);
+			return {moved: false, reasonNotMoved: message, crashedRunSave};
+		}
+		if (crashedRunSave.kind === 'saved') {
+			// The guard below reads the arbiter's branch from THIS clone: bring the
+			// just-pushed tip (and its objects) in.
+			await refreshArbiterRefs({
+				cwd,
+				arbiter,
+				branches: ['main', continueBranchName],
+				env,
+			});
+		}
+	}
+
+	const heldResult = await requeueHeldItem({
 		options,
 		arbiter,
 		continueBranchName,
 		note,
 	});
+	const result =
+		crashedRunSave !== undefined ? {...heldResult, crashedRunSave} : heldResult;
 	if (shortLock && !result.moved) {
 		// Give the SHORT lock back: the item returns to exactly the released,
 		// surfaced state it was in (its question sidecar untouched). A failed
