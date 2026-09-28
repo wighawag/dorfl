@@ -8,3 +8,7 @@ On telemaque `~/.dorfl/repos/tmp/` holds 372 `pre-backlog-step-a-*` dirs, the ne
 ## Later datum (2026-09-28, conductor of the fix-task drive)
 
 The leak is still growing: `~/.dorfl/repos/tmp/` went from 372 to 476 `pre-backlog-step-a-*` dirs over one day's drive (about a dozen gate runs). It also has a visible user-facing cost. `dorfl status` treats each leaked dir as a registered mirror whose `file:///tmp/...` arbiter is gone, so it prints one "could not fetch mirror ... reading last-known state (offline)" warning per dir before the dashboard. With hundreds of dirs, the real output is buried. The leaked dirs are still on disk (not the agent's to delete unasked).
+
+## Later datum: it also flakes (2026-09-28, PR #442)
+
+CI `verify` on #442 failed once in `pre-backlog-staging-and-promote.test.ts > STEP A ... promoteFromPreBacklog moves ...` with `ENOTEMPTY: directory not empty, rmdir '/tmp/pre-backlog-step-a-*/project-work.git'` from the `gitRepo.ts` teardown. A fresh run passed. This is probably the same root cause: something (the hub-mirror path this test should not be touching) is still writing into the fixture while it is removed. Fixing the mirror isolation likely fixes both. The 476 leaked dirs under `~/.dorfl/repos/tmp/` were deleted on the human's go-ahead; they will build up again until the test is fixed.
