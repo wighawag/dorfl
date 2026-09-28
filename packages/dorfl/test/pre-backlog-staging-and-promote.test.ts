@@ -1,6 +1,13 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {join} from 'node:path';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	rmdirSync,
+	writeFileSync,
+} from 'node:fs';
+import {homedir} from 'node:os';
 import {performTask, type TaskDorfl} from '../src/tasking.js';
 import {performClaim} from '../src/claim-cas.js';
 import {promoteFromPreBacklog} from '../src/needs-attention.js';
@@ -9,9 +16,13 @@ import {
 	seedRepoWithArbiter,
 	gitEnv,
 	isolatePiAgentDir,
+	rmrf,
 	type Scratch,
 } from './helpers/gitRepo.js';
 import {run} from '../src/git.js';
+import {mirrorPath} from '../src/repo-mirror.js';
+import {encodeRepoKey} from '../src/repo-key.js';
+import {mergeConfig} from '../src/config.js';
 import {buildProgram} from '../src/cli.js';
 
 /**
@@ -40,15 +51,148 @@ import {buildProgram} from '../src/cli.js';
 
 const ARBITER = 'arbiter';
 
+/**
+ * HERMETIC HOME (task `pre-backlog-test-stops-mirroring-into-the-real-dorfl-home`).
+ *
+ * The CLI `do spec:` cases below run the real `buildProgram()` IN-PROCESS, and
+ * `do` has no `--workspace` flag: its `workspacesDir` comes from the global
+ * config at `--config` (default `~/.config/dorfl/config.json`), falling back to
+ * `DEFAULT_CONFIG.workspacesDir`. Before this isolation every such run
+ * materialised a hub mirror (and a claim clone) for its
+ * `file:///tmp/pre-backlog-step-a-*` arbiter under the developer's REAL
+ * `~/.dorfl/repos/tmp/`, and read the developer's real global config. Now each
+ * test:
+ *
+ *   - hands the CLI an explicit scratch `--config` whose `workspacesDir` is the
+ *     scratch AGENTS' AREA ({@link agentsArea}), so the mirror goes where the test
+ *     expects it (and is removed by the teardown). This is THE fix: note that
+ *     `HOME` alone could NOT redirect the fallback, because
+ *     `DEFAULT_CONFIG.workspacesDir` is `join(homedir(), '.dorfl')` evaluated ONCE
+ *     at module load, before any `beforeEach` runs;
+ *   - points `HOME` (+ `XDG_CONFIG_HOME`) at a scratch home anyway, so the
+ *     lazily-resolved home defaults (the default `--config` path, git's global
+ *     config lookup) cannot reach the real home either;
+ *   - runs the in-process product git with {@link gitEnv}'s pinned identity +
+ *     auto-gc/maintenance OFF, so the product's own git (which reads
+ *     `process.env`, not a passed env) leaves no detached background writer in
+ *     the scratch at teardown.
+ *
+ * `afterEach` asserts, for EVERY test in this file, that nothing resolved the
+ * default state root: no `.dorfl` in the scratch home, and no mirror / claim
+ * clone keyed by THIS test's arbiter under the process's real default
+ * `workspacesDir` ({@link realDefaultLeaks}: `existsSync` on exact, per-test
+ * paths plus one listing of `claim/`, never a walk, so it neither grows with the
+ * developer's home nor races other dorfl jobs writing there).
+ */
 let scratch: Scratch;
+let scratchHome: string;
 let restorePiAgentDir: () => void;
+let restoreProcessEnv: () => void;
+
+/** The scratch agents' area (`workspacesDir`) the CLI cases are configured with. */
+function agentsArea(): string {
+	return join(scratch.root, 'agents-area');
+}
+
+/** Overlay `vars` onto `process.env`; the returned fn restores the prior values. */
+function overlayProcessEnv(vars: NodeJS.ProcessEnv): () => void {
+	const prev = new Map<string, string | undefined>();
+	for (const [key, value] of Object.entries(vars)) {
+		prev.set(key, process.env[key]);
+		if (value === undefined) {
+			delete process.env[key];
+		} else {
+			process.env[key] = value;
+		}
+	}
+	return () => {
+		for (const [key, value] of prev) {
+			if (value === undefined) {
+				delete process.env[key];
+			} else {
+				process.env[key] = value;
+			}
+		}
+	};
+}
+
 beforeEach(() => {
 	scratch = makeScratch('pre-backlog-step-a-');
+	scratchHome = join(scratch.root, 'home');
+	mkdirSync(scratchHome, {recursive: true});
 	restorePiAgentDir = isolatePiAgentDir(scratch.root);
+	// `gitEnv()` spreads the CURRENT process.env, so compute it before HOME moves;
+	// HOME (and XDG_CONFIG_HOME, another home-derived config root) then point at
+	// the scratch home.
+	restoreProcessEnv = overlayProcessEnv({
+		...gitEnv(),
+		HOME: scratchHome,
+		XDG_CONFIG_HOME: join(scratchHome, '.config'),
+	});
 });
+/**
+ * The paths THIS test's arbiter would occupy had any call fallen back to the
+ * DEFAULT `workspacesDir` (the real `~/.dorfl` of the developer running the
+ * suite, frozen at module load): its hub mirror and any claim clone. Only exact
+ * per-test paths are checked (they embed the unique `mkdtemp` scratch name), so
+ * a concurrent dorfl job or an unrelated leftover can never fail this.
+ */
+function realDefaultLeaks(): string[] {
+	const defaultWs = mergeConfig({}).workspacesDir;
+	const url = `file://${join(scratch.root, 'project-work.git')}`;
+	const leaks: string[] = [];
+	const mirror = mirrorPath(defaultWs, url);
+	if (existsSync(mirror)) {
+		leaks.push(mirror);
+	}
+	const claimRoot = join(defaultWs, 'claim');
+	const claimPrefix = `${encodeRepoKey(url).split('/').join('__')}__`;
+	if (existsSync(claimRoot)) {
+		for (const entry of readdirSync(claimRoot)) {
+			if (entry.startsWith(claimPrefix)) {
+				leaks.push(join(claimRoot, entry));
+			}
+		}
+	}
+	return leaks;
+}
+
 afterEach(() => {
+	// Read BEFORE restoring HOME / removing the scratch.
+	const leakedScratchHome = existsSync(join(scratchHome, '.dorfl'));
+	const leakedRealHome = realDefaultLeaks();
+	restoreProcessEnv();
 	restorePiAgentDir();
 	scratch.cleanup();
+	// Undo a regression's damage (these exact paths belong to THIS test's unique
+	// scratch arbiter, nothing else) before failing on it.
+	for (const leak of leakedRealHome) {
+		rmrf(leak);
+	}
+	if (leakedRealHome.length > 0) {
+		// The mirror key nests under `repos/tmp/<scratch-name>/`: drop that
+		// now-empty per-test parent too (rmdir refuses anything non-empty).
+		try {
+			rmdirSync(
+				dirname(
+					mirrorPath(
+						mergeConfig({}).workspacesDir,
+						`file://${join(scratch.root, 'project-work.git')}`,
+					),
+				),
+			);
+		} catch {
+			// Not there / not empty: nothing of ours to remove.
+		}
+	}
+	expect(
+		leakedRealHome,
+		'a call resolved the DEFAULT workspacesDir (the real ~/.dorfl)',
+	).toEqual([]);
+	expect(
+		leakedScratchHome,
+		'a call resolved homedir()/.dorfl lazily (under the scratch HOME)',
+	).toBe(false);
 });
 
 function seedPrd(repo: string, slug: string): void {
@@ -372,6 +516,20 @@ function writeRepoConfig(repo: string, config: Record<string, unknown>): void {
 }
 
 /**
+ * A scratch GLOBAL config for the in-process CLI: its only key is `workspacesDir`
+ * = the scratch {@link agentsArea}, so `do` never falls back to
+ * `homedir()/.dorfl` and never reads the developer's real global config. The
+ * per-machine override file resolves next to it (absent, so empty).
+ */
+function hermeticConfig(): string {
+	const dir = join(scratch.root, 'config');
+	mkdirSync(dir, {recursive: true});
+	const path = join(dir, 'config.json');
+	writeFileSync(path, JSON.stringify({workspacesDir: agentsArea()}) + '\n');
+	return path;
+}
+
+/**
  * Drive the REAL `do` command through `buildProgram()` from inside `repo`, with
  * the null harness + the stub tasker supplied as FLAGS (host-only). Intercepts
  * the `do` action's `process.exit` (the established CLI-test idiom, see
@@ -403,6 +561,8 @@ async function runDo(
 			'node',
 			'dorfl',
 			'do',
+			'--config',
+			hermeticConfig(),
 			'--harness',
 			'null',
 			'--agent-cmd',
@@ -512,5 +672,36 @@ describe('STEP 2 — the CLI threads tasksLandIn from config/flag into the taske
 		expect(captured).not.toMatch(/'pre-backlog'/);
 		expect(onArbiterMain(repo, 'work/tasks/backlog/child.md')).toBe(false);
 		expect(onArbiterMain(repo, 'work/tasks/ready/child.md')).toBe(false);
+	});
+});
+
+describe('HERMETIC — the suite never touches the real ~/.dorfl (task pre-backlog-test-stops-mirroring-into-the-real-dorfl-home)', () => {
+	it('a `do spec:` CLI run mirrors into the configured scratch workspacesDir; the (scratch) home gets no `.dorfl`', async () => {
+		// The lazily-resolved home defaults point at the scratch home. (The
+		// module-load-time DEFAULT workspacesDir does NOT follow HOME; the
+		// `afterEach` checks that one by its exact per-test paths.)
+		expect(homedir()).toBe(scratchHome);
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		writeRepoConfig(repo, {autoTask: true});
+		const {code, captured} = await runDo(repo, [
+			'spec:it',
+			'--arbiter',
+			ARBITER,
+			'--merge',
+			'--no-review',
+		]);
+		expect(code, captured).toBe(0);
+		// The run DID materialise its hub mirror, in the configured scratch area
+		// (proves the isolation is exercised, not that nothing ran)...
+		expect(existsSync(join(agentsArea(), 'repos'))).toBe(true);
+		expect(existsSync(mirrorPath(agentsArea(), `file://${arbiter}`))).toBe(
+			true,
+		);
+		// ...and nothing under either default state root: the real one (frozen at
+		// module load) or a lazily-resolved one under the scratch HOME.
+		expect(realDefaultLeaks()).toEqual([]);
+		expect(existsSync(join(scratchHome, '.dorfl'))).toBe(false);
+		expect(readdirSync(scratchHome)).not.toContain('.dorfl');
 	});
 });
