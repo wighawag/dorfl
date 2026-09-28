@@ -45,7 +45,12 @@ export type IntakeMarkerKind = 'ask' | 'bounced' | 'created';
 export interface IntakeMarker {
 	/** What intake did (a neutral fact; the TRIAGE owns terminal-ness, not this). */
 	kind: IntakeMarkerKind;
-	/** The HUMAN comment ids intake READ this run (the per-run delta; may be empty). */
+	/**
+	 * The HUMAN comment ids intake READ this run (the per-run delta; may be
+	 * empty). A CI run (task `ci-split-intake`) records EVERY comment id its lock
+	 * job read (intake's own and already-seen ones included): the apply job has
+	 * only the ids, and a superset of read ids is harmless to the triage.
+	 */
 	seen: string[];
 	/** The created task/spec slug \u2014 present only on `kind=created`. */
 	slug?: string;

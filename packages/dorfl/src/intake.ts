@@ -621,19 +621,20 @@ export async function performIntake(
 	// silently pushing under an ambient credential. Resolve the arbiter URL softly
 	// (a non-zero/unknown URL is skipped — the guard is a no-op without an identity
 	// or a resolvable URL).
-	if (options.identity !== undefined) {
-		const urlRes = await runAsync('git', ['remote', 'get-url', arbiter], cwd, {
-			env,
-		});
-		if (urlRes.status === 0) {
-			try {
-				assertTransportAllowed(options.identity, urlRes.stdout.trim());
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				note(message);
-				return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
-			}
-		}
+	const transportProblem = await intakeTransportProblem(
+		options.identity,
+		cwd,
+		arbiter,
+		env,
+	);
+	if (transportProblem !== undefined) {
+		note(transportProblem);
+		return {
+			exitCode: 1,
+			outcome: 'usage-error',
+			issueNumber,
+			message: transportProblem,
+		};
 	}
 
 	// 1. READ the issue + thread via the seam (the core never imports `gh`; only the
@@ -836,6 +837,12 @@ function createLockReleaser(params: {
  * Split out so the lock release is a clean `try`/`finally` in the caller (the lock
  * MUST release on every terminal path — success or handled failure). The agent
  * DRAFTS only; the runner owns every git/seam side-effect here.
+ *
+ * It composes the SAME two halves the CI phases run in two jobs (task
+ * `ci-split-intake`, `ci-phase-intake.ts`): {@link decideIntake} (the agent half:
+ * the decision agent and the lone-task review, no write) and
+ * {@link applyIntakeDecision} (the write half: the comment, the close, or the
+ * document render + integrate + completion comment).
  */
 async function decideAndDispatch(
 	options: PerformIntakeOptions,
@@ -852,10 +859,6 @@ async function decideAndDispatch(
 ): Promise<IntakeResult> {
 	const {arbiter, issueProvider, note} = ctx;
 	const issueNumber = issue.number;
-	// `env` here is the identity-scoped GIT/provider env (the runner's `gh`/git
-	// ops). The AGENT launches (decision agent, lone-task review) use the AMBIENT
-	// `options.env` — an agent must not act as the bot.
-	const env = ctx.gitEnv;
 
 	// TRIAGE (deterministic, under the lock, BEFORE the prompt): decide whether to run
 	// the decision at all, built ENTIRELY on intake's own MARKER on the thread (no
@@ -866,21 +869,154 @@ async function decideAndDispatch(
 	// is excluded from the human-comment check by construction.
 	const triage = triageIntake(comments);
 	if (triage.action === 'skip') {
-		const message =
-			triage.outcome === 'no-new-input'
-				? `Intake of issue #${issueNumber} found nothing new: it has the last word ` +
-					`on the thread and has already seen every human comment up to it; doing ` +
-					`nothing (the decision prompt did not run).`
-				: `Intake of issue #${issueNumber} skipped: the issue was already ` +
-					`transformed (a terminal intake marker is on the thread); a later human ` +
-					`comment does not re-open it (the decision prompt did not run).`;
+		const message = intakeSkipMessage(issueNumber, triage.outcome);
 		note(message);
 		return {exitCode: 0, outcome: triage.outcome, issueNumber, message};
 	}
 
-	// DECIDE: prompt → VERDICT. The agent DRAFTS only (no git, no seam ops). Tests
-	// inject a canned verdict (the dispatcher's testable seam); production wires the
-	// harness. The prompt's judgement is not unit-tested — only the dispatch.
+	// DECIDE: prompt → VERDICT (+ the lone-task review). The agent DRAFTS only (no
+	// git, no seam ops).
+	const decided = await decideIntake(
+		options,
+		cwd,
+		issue,
+		comments,
+		triage,
+		note,
+	);
+	if (!decided.ok) {
+		return decided.result;
+	}
+
+	// DISPATCH on the decision. The runner owns every git/seam side-effect (the
+	// in-band boundary). PER-OUTCOME integration (spec `issue-intake` US #9): the
+	// resolved mode is keyed on the runtime artifact TYPE. The per-run `seen=`
+	// DELTA (the HUMAN comment ids intake READ this run, excluding its own
+	// marker-comments + already-seen ids) rides every comment intake posts.
+	return applyIntakeDecision(decided.decision, {
+		issueNumber,
+		cwd,
+		arbiter,
+		issueProvider,
+		integration: options.integration ?? {task: 'propose', spec: 'propose'},
+		mergeRetries: options.mergeRetries,
+		// The origin-trust STAMP, passed IN (not resolved here). Unset ⇒ unstamped
+		// (a local intake ⇒ human/trusted).
+		originTrust: options.originTrust,
+		noPR: options.noPR,
+		placement: intakePlacementInputs(options),
+		providerInstance: options.providerInstance,
+		seen: computeSeenDelta(comments),
+		// The identity-scoped GIT/provider env (the `gh` ops, push, PR).
+		env: ctx.gitEnv,
+		note,
+	});
+}
+
+/** The message of a triage SKIP (the decision prompt did not run). */
+export function intakeSkipMessage(
+	issueNumber: number,
+	outcome: 'no-new-input' | 'already-terminal',
+): string {
+	return outcome === 'no-new-input'
+		? `Intake of issue #${issueNumber} found nothing new: it has the last word ` +
+				`on the thread and has already seen every human comment up to it; doing ` +
+				`nothing (the decision prompt did not run).`
+		: `Intake of issue #${issueNumber} skipped: the issue was already ` +
+				`transformed (a terminal intake marker is on the thread); a later human ` +
+				`comment does not re-open it (the decision prompt did not run).`;
+}
+
+/**
+ * The push-time transport-coherence guard (identity): the problem message when
+ * a configured identity forbids the arbiter's transport, else `undefined`. The
+ * arbiter URL is resolved softly (a non-zero/unknown URL is skipped); a no-op
+ * without an identity.
+ */
+export async function intakeTransportProblem(
+	identity: Identity | undefined,
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string | undefined> {
+	if (identity === undefined) {
+		return undefined;
+	}
+	const urlRes = await runAsync('git', ['remote', 'get-url', arbiter], cwd, {
+		env,
+	});
+	if (urlRes.status !== 0) {
+		return undefined;
+	}
+	try {
+		assertTransportAllowed(identity, urlRes.stdout.trim());
+		return undefined;
+	} catch (err) {
+		return err instanceof Error ? err.message : String(err);
+	}
+}
+
+/** A decided task or spec document, before it is rendered (no write yet). */
+export type IntakeDocumentDecision =
+	| {
+			kind: 'task';
+			/** The content-derived, `slug-safety.ts`-checked slug. */
+			slug: string;
+			title: string;
+			/** The (reviewed) drafted body; absent ⇒ the default scaffold. */
+			body: string | undefined;
+	  }
+	| {
+			kind: 'spec';
+			slug: string;
+			title: string;
+			body: string | undefined;
+			/** The gate axes as the prompt judged them. */
+			humanOnly?: boolean;
+			needsAnswers?: boolean;
+	  };
+
+/**
+ * What the AGENT half of intake decided ({@link decideIntake}), before any
+ * write: the comment text of an ask (a lone-task review that did not converge
+ * is an ask carrying the draft) or a bounce, or a document to emit.
+ */
+export type IntakeDecision =
+	| {kind: 'ask'; body: string}
+	| {kind: 'bounce'; body: string}
+	| IntakeDocumentDecision;
+
+/**
+ * The AGENT half of intake (task `ci-split-intake`): run the decision agent on the
+ * issue + thread, refuse a verdict whose title cannot be one frontmatter line,
+ * derive the content-derived slug, and (for a task) run the bounded lone-task
+ * review. Performs NO write (no git, no seam op); returns the
+ * {@link IntakeDecision} the write half acts on, or the failed
+ * {@link IntakeResult} (`agent-failed`, or `usage-error` for a verdict with no
+ * usable slug). The laptop `intake` and the CI agent job both run it.
+ */
+export async function decideIntake(
+	options: PerformIntakeOptions,
+	cwd: string,
+	issue: Issue,
+	comments: IssueComment[],
+	triage: IntakeTriageDecision | undefined,
+	note: (message: string) => void,
+): Promise<
+	{ok: true; decision: IntakeDecision} | {ok: false; result: IntakeResult}
+> {
+	const issueNumber = issue.number;
+	const failed = (
+		outcome: 'agent-failed' | 'usage-error',
+		message: string,
+	): {ok: false; result: IntakeResult} => {
+		note(message);
+		return {ok: false, result: {exitCode: 1, outcome, issueNumber, message}};
+	};
+
+	// DECIDE: prompt → VERDICT. Tests inject a canned verdict (the dispatcher's
+	// testable seam); production wires the harness. The prompt's judgement is not
+	// unit-tested; only the dispatch is.
 	const prompt = buildIntakeDecisionSpec(issue, comments, triage);
 	let verdict: IntakeVerdict;
 	try {
@@ -893,140 +1029,429 @@ async function decideAndDispatch(
 		assertIntakeVerdictTitle(verdict);
 	} catch (err) {
 		const detail = err instanceof Error ? err.message : String(err);
-		const message = `Intake decision failed for issue #${issueNumber}: ${detail}`;
-		note(message);
-		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
+		return failed(
+			'agent-failed',
+			`Intake decision failed for issue #${issueNumber}: ${detail}`,
+		);
 	}
 
-	// DISPATCH on the verdict — the FULL four-outcome decision table (spec
-	// `issue-intake`). The agent only DRAFTED the verdict; the runner owns every
-	// git/seam side-effect below (the in-band boundary): the write + integrate
-	// (task/spec) and the `postIssueComment` (ask/bounce).
-	//
-	// PER-OUTCOME integration (spec `issue-intake` US #9): the resolved mode is keyed on the runtime
-	// artifact TYPE — a `task` verdict integrates with the task mode, a `spec`
-	// verdict with the spec mode. Unset ⇒ propose for both. ask/bounce never
-	// integrate, so the modes are no-ops for them.
-	const modes = options.integration ?? {task: 'propose', spec: 'propose'};
-	// The per-run `seen=` DELTA (the HUMAN comment ids intake READ this run, excluding
-	// its own marker-comments + already-seen ids) the marker records on every comment
-	// intake posts — the chain-model primitive the TRIAGE unions into `seenSet`.
-	const seenDelta = computeSeenDelta(comments);
 	switch (verdict.outcome) {
-		case 'task':
-			return dispatchTask({
-				verdict,
-				issueNumber,
-				cwd,
-				arbiter,
-				integration: modes.task,
-				// The resolved cross-job CAS-retry cap (config `mergeRetries`) — threaded so
-				// intake's lone-task emit lands under the same per-repo cap the build path uses.
-				mergeRetries: options.mergeRetries,
-				// The origin-trust STAMP, passed IN (not resolved here): the emitted task
-				// carries `origin: issue` + this verdict so the becomes-code checkpoint is
-				// not laundered. Unset ⇒ unstamped (a local intake ⇒ human/trusted).
-				originTrust: options.originTrust,
-				noPR: options.noPR,
-				// RUNNER-DETERMINISTIC PLACEMENT for the DIRECT-from-issue task (ADR
-				// `untrusted-origin-carries-via-stamp-not-forced-staging`): the
-				// configured-default + explicit-flag rungs, fed into the SHARED placement
-				// resolver alongside the `originTrust` stamp above — the TASK twin of the
-				// spec dispatch below. `dispatchTask` selects the untrusted-side default
-				// (`untrustedTasksLandIn`) when the stamp is `untrusted`, else
-				// `tasksLandIn`; the resolver decides `tasks/backlog/` (staging) vs
-				// `tasks/ready/` (the pool). `intake` never places itself.
-				tasksLandIn: options.tasksLandIn,
-				untrustedTasksLandIn: options.untrustedTasksLandIn,
-				explicitTasksLandIn: options.explicitTasksLandIn,
-				providerInstance: options.providerInstance,
-				issueProvider,
-				// The bounded lone-task review seam (tests inject a canned verdict;
-				// production wires the harness via the default below).
-				reviewTask: resolveLoneTaskReviewGate(options),
-				seen: seenDelta,
-				env,
-				// The lone-task review AGENT launches AMBIENT (an agent must not act as
-				// the bot); `env` above is the identity-scoped git/provider env.
-				agentEnv: options.env,
-				note,
-			});
-		// The `spec` outcome is the parent-spec verdict; it dispatches through
-		// `modes.spec`. HARD CUTOVER: the legacy ''prd'' outcome case is GONE.
-		case 'spec':
-			return dispatchSpec({
-				verdict,
-				issueNumber,
-				cwd,
-				arbiter,
-				integration: modes.spec,
-				// The resolved cross-job CAS-retry cap (config `mergeRetries`) — threaded so
-				// intake's spec emit lands under the same per-repo cap the build path uses.
-				mergeRetries: options.mergeRetries,
-				// Same origin-trust stamp on the spec outcome (propagated onto its tasks
-				// later by the tasker). Passed IN; not resolved here.
-				originTrust: options.originTrust,
-				noPR: options.noPR,
-				// RUNNER-DETERMINISTIC PLACEMENT (task
-				// `pre-prd-staging-pool-split-and-untrusted-prd-placement`): the
-				// configured-default + explicit-flag rungs, fed into the SHARED placement
-				// resolver alongside the `originTrust` stamp above. The resolver decides
-				// `specs/proposed/` (staging) vs `specs/ready/` (the tasking pool); `intake` never
-				// places itself.
-				specsLandIn: options.specsLandIn,
-				// The UNTRUSTED-side default, selected in `dispatchSpec` when the
-				// `originTrust` stamp is `untrusted` (ADR
-				// `untrusted-origin-carries-via-stamp-not-forced-staging`).
-				untrustedSpecsLandIn: options.untrustedSpecsLandIn,
-				explicitSpecsLandIn: options.explicitSpecsLandIn,
-				providerInstance: options.providerInstance,
-				issueProvider,
-				seen: seenDelta,
-				env,
-				note,
-			});
+		case 'task': {
+			// A content-derived slug, NEVER a counter (spec `issue-intake` US #8).
+			const slug = resolveSlug(verdict);
+			if (slug === '') {
+				return failed(
+					'usage-error',
+					`Intake produced a 'task' verdict for issue #${issueNumber} with no usable ` +
+						`slug/title to derive a content-derived slug from (never a counter).`,
+				);
+			}
+			// BOUNDED INTERNAL REVIEW (observation
+			// `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings
+			// A/B/C): AFTER the `task` verdict and BEFORE the write/integrate, run a
+			// bounded (3-round, HARD-CAPPED) adversarial self-review on the SINGLE
+			// drafted task. It mutates the candidate body IN MEMORY. A launch/parse
+			// failure degrades onto `agent-failed` (never a silent emit of the
+			// un-reviewed task).
+			let review: LoneTaskReviewResult;
+			try {
+				review = await runLoneTaskReview({
+					slug,
+					issueNumber,
+					draftTitle: verdict.taskTitle ?? slug,
+					draftBody: verdict.taskBody,
+					gate: resolveLoneTaskReviewGate(options),
+					cwd,
+					// The review AGENT launches AMBIENT (never the identity-scoped env).
+					env: options.env,
+					note,
+				});
+			} catch (err) {
+				const detail = err instanceof Error ? err.message : String(err);
+				return failed(
+					'agent-failed',
+					`Intake lone-task review failed for issue #${issueNumber}: ${detail}`,
+				);
+			}
+			if (review.outcome === 'non-converge') {
+				// NON-CONVERGE (ruling C): FLIP the verdict TASK→ASK, reusing the EXISTING
+				// `asked` outcome + `kind=ask` marker. The ASK comment carries BOTH the
+				// proposed task DRAFT and the open question(s) in its BODY. NEVER write
+				// the task; the next intake run resumes via the triage gate.
+				note(
+					`Intake's lone-task review did not converge for issue #${issueNumber} ` +
+						`(${review.passes} round(s)); flipping TASK→ASK with the draft + open ` +
+						`question(s) in the comment body.`,
+				);
+				return {
+					ok: true,
+					decision: {
+						kind: 'ask',
+						body: composeLoneTaskAskComment({
+							issueNumber,
+							slug,
+							draftTitle: review.title,
+							draftBody: review.body,
+							questions: review.questions,
+						}),
+					},
+				};
+			}
+			// CONVERGED: the (possibly edited) task is emitted; the refined body
+			// replaces the agent's first draft.
+			return {
+				ok: true,
+				decision: {kind: 'task', slug, title: review.title, body: review.body},
+			};
+		}
+		// The `spec` outcome is the parent-spec verdict. HARD CUTOVER: the legacy
+		// ''prd'' outcome case is GONE.
+		case 'spec': {
+			const slug = resolveSpecSlug(verdict);
+			if (slug === '') {
+				return failed(
+					'usage-error',
+					`Intake produced a 'spec' verdict for issue #${issueNumber} with no usable ` +
+						`slug/title to derive a content-derived slug from (never a counter).`,
+				);
+			}
+			return {
+				ok: true,
+				decision: {
+					kind: 'spec',
+					slug,
+					title: verdict.specTitle ?? slug,
+					body: verdict.specBody,
+					humanOnly: verdict.specHumanOnly,
+					needsAnswers: verdict.specNeedsAnswers,
+				},
+			};
+		}
 		case 'ask':
+			// The drafted clarifying question; a thin fallback keeps the comment
+			// non-empty if the agent left it blank.
+			return {
+				ok: true,
+				decision: {
+					kind: 'ask',
+					body:
+						verdict.question && verdict.question.trim() !== ''
+							? verdict.question
+							: `Could you clarify issue #${issueNumber} so it can be acted on?`,
+				},
+			};
+		case 'bounce':
+			// The drafted bounce message; a thin fallback restates the "file separate
+			// issues" ask. A bounce is TERMINAL: the issue is CLOSED atomically.
+			return {
+				ok: true,
+				decision: {
+					kind: 'bounce',
+					body:
+						verdict.bounceMessage && verdict.bounceMessage.trim() !== ''
+							? verdict.bounceMessage
+							: `This issue looks like multiple unrelated concerns — please file ` +
+								`separate issues so each can be intaken on its own.`,
+				},
+			};
+		default:
+			// Unreachable from the parsed harness verdict (`parseIntakeVerdict` refuses
+			// any other token); an injected decider could still name one (the dead
+			// ''prd'' token). It dispatches NOTHING.
+			return failed(
+				'agent-failed',
+				`Intake decision failed for issue #${issueNumber}: the verdict outcome ` +
+					`${JSON.stringify((verdict as {outcome: unknown}).outcome)} is not one of ask|task|spec|bounce.`,
+			);
+	}
+}
+
+/**
+ * The placement inputs of an intake document: the configured-default rungs
+ * (trusted and untrusted side) and the operator's explicit overrides, per
+ * lifecycle. The agent never influences placement.
+ */
+export interface IntakePlacementInputs {
+	tasksLandIn?: TasksLandIn;
+	untrustedTasksLandIn?: TasksLandIn;
+	explicitTasksLandIn?: TasksLandIn;
+	specsLandIn?: SpecsLandIn;
+	untrustedSpecsLandIn?: SpecsLandIn;
+	explicitSpecsLandIn?: SpecsLandIn;
+}
+
+/** The {@link IntakePlacementInputs} of a run's options. */
+export function intakePlacementInputs(
+	options: PerformIntakeOptions,
+): IntakePlacementInputs {
+	return {
+		tasksLandIn: options.tasksLandIn,
+		untrustedTasksLandIn: options.untrustedTasksLandIn,
+		explicitTasksLandIn: options.explicitTasksLandIn,
+		specsLandIn: options.specsLandIn,
+		untrustedSpecsLandIn: options.untrustedSpecsLandIn,
+		explicitSpecsLandIn: options.explicitSpecsLandIn,
+	};
+}
+
+/**
+ * RUNNER-DETERMINISTIC PLACEMENT of an intake document (ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`): the folder the
+ * document is written into. The SAME shared resolver and precedence chain the
+ * tasker uses (`explicit > configured default > built-in staging`); only the
+ * lifecycle SLOTS differ between a task (`tasks/backlog` vs `tasks/ready`) and a
+ * spec (`specs/proposed` vs `specs/ready`). The `originTrust` stamp selects the
+ * untrusted-side configured default (`untrusted*LandIn`) over the trusted one.
+ * Safety for an untrusted document landing in `ready` flows through its carried
+ * stamp at BUILD / tasking time, not the folder.
+ */
+export function intakePlacementDir(
+	kind: IntakeArtifactType,
+	originTrust: OriginTrust | undefined,
+	placement: IntakePlacementInputs,
+): string {
+	const untrusted = originTrust === 'untrusted';
+	if (kind === 'task') {
+		const configured = untrusted
+			? placement.untrustedTasksLandIn
+			: placement.tasksLandIn;
+		const decision = resolvePlacement({
+			explicit: landingToSide(placement.explicitTasksLandIn),
+			configuredDefault: landingToSide(configured),
+		});
+		return placementFolder(TASK_PLACEMENT_SLOTS, decision.choice);
+	}
+	const configured = untrusted
+		? placement.untrustedSpecsLandIn
+		: placement.specsLandIn;
+	const decision = resolvePlacement({
+		explicit: specLandingToSide(placement.explicitSpecsLandIn),
+		configuredDefault: specLandingToSide(configured),
+	});
+	return placementFolder(SPEC_PLACEMENT_SLOTS, decision.choice);
+}
+
+/** What the WRITE half of intake ({@link applyIntakeDecision}) acts with. */
+export interface IntakeWriteContext {
+	issueNumber: number;
+	cwd: string;
+	arbiter: string;
+	/** The issue seam the comments / close / completion comment go through. */
+	issueProvider: IssueProvider;
+	/** The per-type document modes. */
+	integration: IntakeIntegrationModes;
+	/** The resolved cross-job CAS-retry cap (undefined ⇒ engine default). */
+	mergeRetries?: number;
+	/** The origin-trust stamp (unset ⇒ emit unstamped ⇒ human/trusted). */
+	originTrust?: OriginTrust;
+	noPR?: boolean;
+	placement: IntakePlacementInputs;
+	providerInstance?: ReviewProvider;
+	/** The `seen=` ids the marker of every posted comment records. */
+	seen: string[];
+	/** The identity-scoped GIT/provider env (push, PR, comments). */
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+	/** The merge-mode CAS-loop jitter (tests pass 0). */
+	mergeJitterMs?: number;
+}
+
+/**
+ * The WRITE half of intake (task `ci-split-intake`): act on a decision. An ask
+ * posts the question and leaves the issue open; a bounce closes the issue
+ * atomically with the bounce text; a task or spec is rendered (the title
+ * quoted, the frontmatter re-parsed), written onto a `work/intake-<type>-<slug>`
+ * branch and integrated, then the completion comment is posted. A render
+ * failure maps onto `agent-failed` (the input came from the agent) with nothing
+ * written. Runs no agent.
+ */
+export async function applyIntakeDecision(
+	decision: IntakeDecision,
+	ctx: IntakeWriteContext,
+): Promise<IntakeResult> {
+	const {issueNumber, cwd, issueProvider, seen, env, note} = ctx;
+	switch (decision.kind) {
+		case 'ask':
+			// STAMP the MARKER recording `kind=ask` (non-terminal: the TRIAGE owns
+			// that) + the `seen=` delta, so a re-run recognises this as intake's own
+			// turn and resumes only on genuine new human input.
 			return dispatchComment({
 				outcome: 'asked',
 				cwd,
 				issueNumber,
 				issueProvider,
-				// The drafted clarifying question; a thin fallback keeps the comment
-				// non-empty if the agent left it blank.
-				body:
-					verdict.question && verdict.question.trim() !== ''
-						? verdict.question
-						: `Could you clarify issue #${issueNumber} so it can be acted on?`,
-				// STAMP the MARKER recording `kind=ask` (non-terminal — the TRIAGE owns
-				// that) + the `seen=` delta, so a re-run recognises this as intake's own
-				// turn and resumes only on genuine new human input.
+				body: decision.body,
 				markerKind: 'ask',
-				seen: seenDelta,
+				seen,
 				env,
 				note,
 			});
 		case 'bounce':
+			// STAMP `kind=bounced` (TERMINAL: the TRIAGE then SKIPS
+			// `already-terminal` on a later human comment) + the `seen=` delta.
 			return dispatchComment({
 				outcome: 'bounced',
 				cwd,
 				issueNumber,
 				issueProvider,
-				// The drafted bounce message; a thin fallback restates the "file separate
-				// issues" ask. A bounce is TERMINAL: the issue is CLOSED atomically (this
-				// text as the closing comment + reason not planned).
-				body:
-					verdict.bounceMessage && verdict.bounceMessage.trim() !== ''
-						? verdict.bounceMessage
-						: `This issue looks like multiple unrelated concerns — please file ` +
-							`separate issues so each can be intaken on its own.`,
-				// STAMP `kind=bounced` (TERMINAL — the TRIAGE then SKIPS `already-terminal`
-				// on a later human comment) + the `seen=` delta.
+				body: decision.body,
 				markerKind: 'bounced',
-				seen: seenDelta,
+				seen,
 				env,
 				note,
 			});
+		case 'task':
+		case 'spec': {
+			// RENDER before any git: the renderer quotes the agent title and re-parses
+			// its own output, THROWING on anything that does not read back as
+			// written. That maps onto `agent-failed` with nothing written and no
+			// branch cut.
+			let content: string;
+			try {
+				content = renderIntakeDocument(decision, {
+					issueNumber,
+					originTrust: ctx.originTrust,
+				});
+			} catch (err) {
+				const detail = err instanceof Error ? err.message : String(err);
+				const message = `Intake could not render the ${decision.kind} for issue #${issueNumber}: ${detail}`;
+				note(message);
+				return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
+			}
+			return emitIntakeDocument(decision, content, ctx);
+		}
 	}
+}
+
+/**
+ * Render an intake document from a decision and the TRUSTED issue number and
+ * origin-trust stamp ({@link renderBacklogTask} / {@link renderSpec}: the title
+ * quoted, every runner-owned key re-parsed), then assert once more, through
+ * the shared frontmatter reader, that `origin`, `originTrust`, `slug` and
+ * `issue` read back as the trusted values ({@link assertIntakeDocumentStamp}).
+ * THROWS on any disagreement. The CI apply job calls this on the verdict it
+ * received, so the stamp never comes from the agent job.
+ */
+export function renderIntakeDocument(
+	doc: IntakeDocumentDecision,
+	trusted: {issueNumber: number; originTrust: OriginTrust | undefined},
+): string {
+	const {issueNumber, originTrust} = trusted;
+	const rendered =
+		doc.kind === 'task'
+			? renderBacklogTask({
+					slug: doc.slug,
+					title: doc.title,
+					body: doc.body,
+					issueNumber,
+					originTrust,
+				})
+			: renderSpec({
+					slug: doc.slug,
+					title: doc.title,
+					body: doc.body,
+					issueNumber,
+					humanOnly: doc.humanOnly,
+					needsAnswers: doc.needsAnswers,
+					originTrust,
+				});
+	assertIntakeDocumentStamp(rendered, {
+		slug: doc.slug,
+		issueNumber,
+		originTrust,
+	});
+	return rendered;
+}
+
+/**
+ * The stamp check of a rendered intake document: its frontmatter must read back
+ * `slug`, `issue`, `origin` and `originTrust` EXACTLY as the trusted values
+ * (`origin: issue` + `originTrust` when a stamp is given, both absent
+ * otherwise). THROWS a `FrontmatterRenderError` otherwise.
+ */
+export function assertIntakeDocumentStamp(
+	rendered: string,
+	trusted: {
+		slug: string;
+		issueNumber: number;
+		originTrust: OriginTrust | undefined;
+	},
+): void {
+	assertFrontmatterFields(rendered, {
+		slug: trusted.slug,
+		issue: String(trusted.issueNumber),
+		origin: trusted.originTrust === undefined ? undefined : 'issue',
+		originTrust: trusted.originTrust,
+	});
+}
+
+/**
+ * Emit a RENDERED intake document: place it (runner-deterministic, from the
+ * trusted stamp and the placement inputs), onboard a `work/intake-<type>-<slug>`
+ * branch cut from the freshly-fetched `<arbiter>/main`, stage exactly the one
+ * document path and integrate it through {@link performIntegration} (`propose`
+ * PR, or `merge` with the CAS loop), then post the completion comment. The
+ * `intake-` producer prefix keeps the branch distinct from a later `do
+ * task:<slug>` build branch for the same slug.
+ */
+export async function emitIntakeDocument(
+	doc: IntakeDocumentDecision,
+	content: string,
+	ctx: IntakeWriteContext,
+): Promise<IntakeResult> {
+	const {issueNumber, cwd, arbiter, issueProvider, seen, env, note} = ctx;
+	const {kind, slug, title} = doc;
+	const relPath = `${intakePlacementDir(kind, ctx.originTrust, ctx.placement)}/${slug}.md`;
+
+	await switchToWorkBranch(cwd, arbiter, kind, slug, env);
+
+	const core = await performIntegration({
+		cwd,
+		arbiter,
+		slug,
+		// `source`/`recovering` are task-shaped and IGNORED when `lifecycle` is set.
+		source: 'in-progress',
+		recovering: false,
+		// An intake-emitted document has no `verify` floor of its own (it is a new
+		// backlog item / spec, not a build); skip the acceptance gate, exactly as
+		// the tasking transition does.
+		skipVerify: true,
+		// The EXPLICITLY-chosen per-type mode proceeds as-is (`merge` IS the
+		// auto-land mode, never downgraded).
+		mode: ctx.integration[kind],
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`).
+		mergeRetries: ctx.mergeRetries,
+		...(ctx.mergeJitterMs === undefined
+			? {}
+			: {mergeJitterMs: ctx.mergeJitterMs}),
+		noPR: ctx.noPR,
+		providerInstance: ctx.providerInstance,
+		type: 'feat',
+		lifecycle: {
+			// The document IS the title source. Pass the DRAFTED title EXPLICITLY:
+			// `stage()` writes the file AFTER the core reads the title, so a
+			// `titlePath` read would race the write. `titlePath` stays set (the
+			// lifecycle contract requires it) but is IGNORED while `title` is present.
+			titlePath: join(cwd, relPath),
+			title,
+			commitTag: 'intake',
+			stage: () => stageIntakeContent({cwd, relPath, content, env}),
+		},
+		env,
+		note,
+	});
+
+	return integrationToIntakeResult(core, {
+		issueNumber,
+		slug,
+		relPath,
+		kind,
+		cwd,
+		issueProvider,
+		seen,
+		env,
+		note,
+	});
 }
 
 /**
@@ -1128,422 +1553,6 @@ async function dispatchComment(params: {
 		commented: posted.posted,
 		message,
 	};
-}
-
-/**
- * DISPATCH the `task` outcome: derive a content-derived slug, write
- * `work/backlog/<slug>.md` (`covers: []`, NO `spec:`) carrying `issue: N` (the
- * lone-task closure link, NOT `Fixes #N`), and integrate via {@link
- * performIntegration}. The runner owns the git: it onboards a
- * `work/<slug>` branch off fresh `<arbiter>/main`, then the lifecycle `stage`
- * writes + stages the task and the band commits + rebases + integrates it. The
- * agent did NO git/seam ops.
- */
-async function dispatchTask(params: {
-	verdict: IntakeVerdict;
-	issueNumber: number;
-	cwd: string;
-	arbiter: string;
-	integration: IntegrationMode;
-	/** The resolved cross-job CAS-retry cap (undefined ⇒ engine default). */
-	mergeRetries: number | undefined;
-	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
-	originTrust: OriginTrust | undefined;
-	noPR: boolean | undefined;
-	/** The per-repo TRUSTED-side TASK-PLACEMENT default (configured-default rung when the task is trusted/unset). */
-	tasksLandIn: TasksLandIn | undefined;
-	/**
-	 * The per-repo UNTRUSTED-side TASK-PLACEMENT default, selected as the
-	 * configured-default rung when `originTrust` is `untrusted` (ADR
-	 * `untrusted-origin-carries-via-stamp-not-forced-staging`).
-	 */
-	untrustedTasksLandIn: TasksLandIn | undefined;
-	/** The OPERATOR's EXPLICIT task-placement override (the TOP rung). */
-	explicitTasksLandIn: TasksLandIn | undefined;
-	providerInstance: ReviewProvider | undefined;
-	/** The issue seam the completion comment is posted back through (runner-owned). */
-	issueProvider: IssueProvider;
-	/** The bounded lone-task review seam (tests inject a canned verdict; prod: harness). */
-	reviewTask: LoneTaskReviewGate;
-	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
-	seen: string[];
-	/** The identity-scoped GIT/provider env (push, PR, completion comment). */
-	env: NodeJS.ProcessEnv | undefined;
-	/** The AMBIENT env for the lone-task review AGENT launch (never the identity). */
-	agentEnv: NodeJS.ProcessEnv | undefined;
-	note: (message: string) => void;
-}): Promise<IntakeResult> {
-	const {
-		verdict,
-		issueNumber,
-		cwd,
-		arbiter,
-		integration,
-		mergeRetries,
-		originTrust,
-		noPR,
-		tasksLandIn,
-		untrustedTasksLandIn,
-		explicitTasksLandIn,
-		providerInstance,
-		issueProvider,
-		reviewTask,
-		seen,
-		env,
-		agentEnv,
-		note,
-	} = params;
-
-	// A content-derived slug — NEVER a counter (spec `issue-intake` US #8). Prefer the drafted
-	// `taskSlug`, else derive from the drafted title; sanitise either through
-	// `paramCase` so the filename + frontmatter slug are well-formed.
-	const slug = resolveSlug(verdict);
-	if (slug === '') {
-		const message =
-			`Intake produced a 'task' verdict for issue #${issueNumber} with no usable ` +
-			`slug/title to derive a content-derived slug from (never a counter).`;
-		note(message);
-		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
-	}
-	// RUNNER-DETERMINISTIC PLACEMENT (task `intake-task-placement-symmetry`; the
-	// untrusted-forces-staging rung RETIRED by ADR
-	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
-	// folder the runner writes the intake-authored task into BEFORE handing it to
-	// the shared integrate band — the SAME precedence chain, the SAME shared
-	// resolver, and (via `TASK_PLACEMENT_SLOTS` + `landingToSide` reused from
-	// `tasking.ts`) the SAME task slots the tasker uses; only the intake dispatch
-	// differs from the spec twin (`dispatchSpec`) in its lifecycle SLOTS. THIS
-	// caller selects the trusted-vs-untrusted configured default by reading the
-	// `originTrust` stamp: an untrusted task selects `untrustedTasksLandIn`
-	// (default staging; `ready` when configured), a trusted/unset task selects
-	// `tasksLandIn`. The agent (the intake decider) never influences placement.
-	// Net vs the old hardcoded `tasks-ready`: an untrusted-author task now MERGES
-	// a document to `main` in `backlog` (by default) carrying the stamp instead of
-	// opening a document PR; safety for a `ready`-landed untrusted task flows
-	// through its carried stamp at BUILD time (forces a code PR), not the folder.
-	const configuredTasksLanding =
-		originTrust === 'untrusted' ? untrustedTasksLandIn : tasksLandIn;
-	const placementDecision = resolvePlacement({
-		explicit: landingToSide(explicitTasksLandIn),
-		configuredDefault: landingToSide(configuredTasksLanding),
-	});
-	const placementDir = placementFolder(
-		TASK_PLACEMENT_SLOTS,
-		placementDecision.choice,
-	);
-	const relPath = `${placementDir}/${slug}.md`;
-
-	// BOUNDED INTERNAL REVIEW (observation
-	// `intake-lone-task-skips-adversarial-review-the-prd-path-gets`, rulings A/B/C):
-	// the `do spec:` path gets `runTaskReviewLoop`; the lone-TASK path got NOTHING.
-	// AFTER the `task` verdict and BEFORE the write/integrate, run a bounded (3-round,
-	// HARD-CAPPED) adversarial self-review on the SINGLE drafted task. It mutates the
-	// candidate body IN MEMORY (no `work/backlog/` write pre-convergence). A launch/
-	// parse failure THROWS — `decideAndDispatch`'s try/catch maps it onto `agent-failed`
-	// (never a silent emit of the un-reviewed task).
-	let review: LoneTaskReviewResult;
-	try {
-		review = await runLoneTaskReview({
-			slug,
-			issueNumber,
-			draftTitle: verdict.taskTitle ?? slug,
-			draftBody: verdict.taskBody,
-			gate: reviewTask,
-			cwd,
-			// The review AGENT launches AMBIENT (never the identity-scoped env).
-			env: agentEnv,
-			note,
-		});
-	} catch (err) {
-		// A review-agent launch/parse FAILURE DEGRADES honestly onto the EXISTING
-		// `agent-failed` outcome (exit 1) — NEVER a silent emit of the un-reviewed
-		// task. The SAME try/catch discipline the decision step uses.
-		const detail = err instanceof Error ? err.message : String(err);
-		const message = `Intake lone-task review failed for issue #${issueNumber}: ${detail}`;
-		note(message);
-		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
-	}
-
-	if (review.outcome === 'non-converge') {
-		// NON-CONVERGE (ruling C): FLIP the verdict TASK→ASK, reusing the EXISTING
-		// `asked` outcome + `kind=ask` marker. The ASK comment carries BOTH the proposed
-		// task DRAFT and the open question(s) in its BODY (NOT a new marker kind) — the
-		// human reacts to a concrete draft, strictly richer than a blank-question ask.
-		// NEVER write `work/backlog/<slug>.md`; NEVER silently emit the under-refined
-		// task. The next intake run resumes via the already-built triage gate.
-		note(
-			`Intake's lone-task review did not converge for issue #${issueNumber} ` +
-				`(${review.passes} round(s)); flipping TASK→ASK with the draft + open ` +
-				`question(s) in the comment body.`,
-		);
-		return dispatchComment({
-			outcome: 'asked',
-			cwd,
-			issueNumber,
-			issueProvider,
-			body: composeLoneTaskAskComment({
-				issueNumber,
-				slug,
-				draftTitle: review.title,
-				draftBody: review.body,
-				questions: review.questions,
-			}),
-			markerKind: 'ask',
-			seen,
-			env,
-			note,
-		});
-	}
-
-	// CONVERGED: the (possibly edited) task is emitted via the EXISTING write/integrate
-	// path below + the existing `task created` completion comment. The refined body
-	// replaces the agent's first draft.
-	const reviewedBody = review.body;
-
-	// RENDER before any git: the renderer quotes the agent title and re-parses its
-	// own output, THROWING on anything that does not read back as written. That
-	// maps onto `agent-failed` (the input came from the agent) with nothing
-	// written and no branch cut.
-	let taskContent: string;
-	try {
-		taskContent = renderBacklogTask({
-			slug,
-			title: review.title,
-			body: reviewedBody,
-			issueNumber,
-			originTrust,
-		});
-	} catch (err) {
-		const detail = err instanceof Error ? err.message : String(err);
-		const message = `Intake could not render the task for issue #${issueNumber}: ${detail}`;
-		note(message);
-		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
-	}
-
-	// ONBOARD the task write onto a `work/intake-task-<slug>` branch cut from the
-	// freshly-fetched `<arbiter>/main` (the SAME runner-owns-git discipline the
-	// tasking path uses): the lifecycle `stage` writes the file ON THIS BRANCH and
-	// the shared integrate core (`--propose` PR / `--merge` main) lands it. The
-	// intake- producer prefix keeps it distinct from a later `do task:<slug>`
-	// build branch for the same slug. The agent ran no git.
-	await switchToWorkBranch(cwd, arbiter, 'task', slug, env);
-
-	const core = await performIntegration({
-		cwd,
-		arbiter,
-		slug,
-		// `source`/`recovering` are task-shaped and IGNORED when `lifecycle` is set.
-		source: 'in-progress',
-		recovering: false,
-		// An intake-emitted task has no `verify` floor of its own (it is a new
-		// backlog item, not a build); skip the acceptance gate, exactly as the
-		// tasking transition does.
-		skipVerify: true,
-		// Default `propose` (the per-outcome KNOBS are a later task). The
-		// EXPLICITLY-chosen mode proceeds as-is: a future `--merge-task` lands on main
-		// (`merge` IS the auto-land mode, never downgraded).
-		mode: integration,
-		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — the
-		// git-alone floor of the cross-job land queue, resolved through the gate-
-		// family precedence chain in the CLI and threaded here so intake's lone-task
-		// emit lands under the same per-repo cap the build path uses. Unset ⇒ the
-		// engine default (byte-for-byte unchanged).
-		mergeRetries,
-		noPR,
-		providerInstance,
-		type: 'feat',
-		lifecycle: {
-			// The emitted task IS the title source. Pass the DRAFTED title EXPLICITLY
-			// (not a read-from-path): `stage()` WRITES `work/backlog/<slug>.md` AFTER the
-			// core reads the title, so a `titlePath` read would race the write and degrade
-			// the commit subject / PR title to the generic fallback. `titlePath` stays set
-			// (the lifecycle contract requires it) but is IGNORED while `title` is present.
-			titlePath: join(cwd, relPath),
-			title: review.title,
-			commitTag: 'intake',
-			stage: () =>
-				stageIntakeContent({cwd, relPath, content: taskContent, env}),
-		},
-		env,
-		note,
-	});
-
-	return integrationToIntakeResult(core, {
-		issueNumber,
-		slug,
-		relPath,
-		cwd,
-		issueProvider,
-		seen,
-		env,
-		note,
-	});
-}
-
-/**
- * DISPATCH the `spec` outcome (the SOLE parent-spec outcome after the HARD CUTOVER;
- * the legacy ''prd'' outcome token is GONE): derive a content-derived slug, write the spec file
- * (`work/specs/ready/<slug>.md`) carrying `issue: N` (the loop-closure linkage the
- * close JOB reaches via `task.spec: → spec issue:`; on a fanned spec the number
- * lives ONLY on the spec — a fanned task uses `spec:`, NOT its own `issue:`, which
- * is the lone-task outcome's link) + the gate axes the prompt JUDGED, integrate it
- * via {@link performIntegration}, then STOP. Tasking the emitted spec is the
- * SEPARATE `do spec:` step (NOT done here). A coupled-but-SMALL pair lands here too
- * (the spec vs BOUNCE line is SHARED VISION, not size — the over-bounce guard). The
- * runner owns the git exactly as the task branch does; the agent did NO git/seam ops.
- */
-async function dispatchSpec(params: {
-	verdict: IntakeVerdict;
-	issueNumber: number;
-	cwd: string;
-	arbiter: string;
-	integration: IntegrationMode;
-	/** The resolved cross-job CAS-retry cap (undefined ⇒ engine default). */
-	mergeRetries: number | undefined;
-	/** The origin-trust stamp passed IN (unset ⇒ emit unstamped ⇒ human/trusted). */
-	originTrust: OriginTrust | undefined;
-	noPR: boolean | undefined;
-	/** The per-repo TRUSTED-side SPEC-PLACEMENT default (configured-default rung when the spec is trusted/unset). */
-	specsLandIn: SpecsLandIn | undefined;
-	/**
-	 * The per-repo UNTRUSTED-side SPEC-PLACEMENT default, selected as the
-	 * configured-default rung when `originTrust` is `untrusted` (ADR
-	 * `untrusted-origin-carries-via-stamp-not-forced-staging`).
-	 */
-	untrustedSpecsLandIn: SpecsLandIn | undefined;
-	/** The OPERATOR's EXPLICIT spec-placement override (the TOP rung). */
-	explicitSpecsLandIn: SpecsLandIn | undefined;
-	providerInstance: ReviewProvider | undefined;
-	/** The issue seam the completion comment is posted back through (runner-owned). */
-	issueProvider: IssueProvider;
-	/** The per-run `seen=` delta of HUMAN comment ids the completion marker records. */
-	seen: string[];
-	env: NodeJS.ProcessEnv | undefined;
-	note: (message: string) => void;
-}): Promise<IntakeResult> {
-	const {
-		verdict,
-		issueNumber,
-		cwd,
-		arbiter,
-		integration,
-		mergeRetries,
-		originTrust,
-		noPR,
-		specsLandIn,
-		untrustedSpecsLandIn,
-		explicitSpecsLandIn,
-		providerInstance,
-		issueProvider,
-		seen,
-		env,
-		note,
-	} = params;
-
-	// A content-derived slug — NEVER a counter (spec `issue-intake` US #8). Prefer the drafted
-	// `specSlug`, else derive from the drafted title.
-	const slug = resolveSpecSlug(verdict);
-	if (slug === '') {
-		const message =
-			`Intake produced a 'spec' verdict for issue #${issueNumber} with no usable ` +
-			`slug/title to derive a content-derived slug from (never a counter).`;
-		note(message);
-		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
-	}
-	// RUNNER-DETERMINISTIC PLACEMENT (task
-	// `pre-prd-staging-pool-split-and-untrusted-prd-placement`; the
-	// untrusted-forces-staging rung RETIRED by ADR
-	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
-	// folder the runner writes the intake-authored spec into BEFORE handing it to
-	// the shared integrate band: the SAME precedence chain the tasker uses
-	// (`explicit > configured default > built-in (staging)`), the SAME shared
-	// resolver — only the lifecycle SLOTS differ. THIS caller selects the
-	// trusted-vs-untrusted configured default by reading the `originTrust` stamp:
-	// an untrusted spec selects `untrustedSpecsLandIn` (default staging; `ready`
-	// when configured), a trusted/unset spec selects `specsLandIn`. The agent
-	// (the intake decider) never influences placement; it returns the verdict and
-	// the runner computes the destination from unforgeable inputs. Safety for an
-	// untrusted spec landing in `ready` flows through its tasks' carried stamp,
-	// not the folder.
-	const configuredSpecsLanding =
-		originTrust === 'untrusted' ? untrustedSpecsLandIn : specsLandIn;
-	const placementDecision = resolvePlacement({
-		explicit: specLandingToSide(explicitSpecsLandIn),
-		configuredDefault: specLandingToSide(configuredSpecsLanding),
-	});
-	const placementDir = placementFolder(
-		SPEC_PLACEMENT_SLOTS,
-		placementDecision.choice,
-	);
-	const relPath = `${placementDir}/${slug}.md`;
-
-	// ONBOARD onto a `work/intake-spec-<slug>` branch off fresh `<arbiter>/main` —
-	// the SAME runner-owns-git discipline the task branch uses; the intake-
-	// producer prefix keeps it distinct from a `do spec:<slug>` tasking branch.
-	// RENDER before any git (see `dispatchTask`): a render/re-parse failure maps
-	// onto `agent-failed` with nothing written and no branch cut.
-	let specContent: string;
-	try {
-		specContent = renderSpec({
-			slug,
-			title: verdict.specTitle ?? slug,
-			body: verdict.specBody,
-			issueNumber,
-			humanOnly: verdict.specHumanOnly,
-			needsAnswers: verdict.specNeedsAnswers,
-			originTrust,
-		});
-	} catch (err) {
-		const detail = err instanceof Error ? err.message : String(err);
-		const message = `Intake could not render the spec for issue #${issueNumber}: ${detail}`;
-		note(message);
-		return {exitCode: 1, outcome: 'agent-failed', issueNumber, message};
-	}
-
-	await switchToWorkBranch(cwd, arbiter, 'spec', slug, env);
-
-	const core = await performIntegration({
-		cwd,
-		arbiter,
-		slug,
-		source: 'in-progress',
-		recovering: false,
-		// An intake-emitted spec has no `verify` floor of its own (it is a new spec,
-		// not a build), exactly as the task branch + the tasking transition skip it.
-		skipVerify: true,
-		mode: integration,
-		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) — same
-		// rationale as the lone-task emit above; threaded so intake's spec emit lands
-		// under the same per-repo cap. Unset ⇒ the engine default (byte-for-byte).
-		mergeRetries,
-		noPR,
-		providerInstance,
-		type: 'feat',
-		lifecycle: {
-			// The emitted spec IS the title source. Pass the DRAFTED title EXPLICITLY (same
-			// race as the task path: `stage()` writes the spec file AFTER the title
-			// read). `titlePath` stays set but is IGNORED while `title` is present.
-			titlePath: join(cwd, relPath),
-			title: verdict.specTitle ?? slug,
-			commitTag: 'intake',
-			stage: () =>
-				stageIntakeContent({cwd, relPath, content: specContent, env}),
-		},
-		env,
-		note,
-	});
-
-	return integrationToIntakeResult(core, {
-		issueNumber,
-		slug,
-		relPath,
-		kind: 'spec',
-		cwd,
-		issueProvider,
-		seen,
-		env,
-		note,
-	});
 }
 
 /**
