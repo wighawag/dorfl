@@ -1396,6 +1396,17 @@ export interface IntegrationLandInput extends RebaseReconcileContext {
 	mergeRetries?: number;
 	/** The merge-mode refetch jitter ({@link DEFAULT_MERGE_JITTER_MS}). */
 	mergeJitterMs?: number;
+	/**
+	 * The tip the acceptance gate ran on, set ONLY by the CI apply phase (the
+	 * validated bundle tip, `ci-phase-build.ts`). When set, a merge-mode land
+	 * whose landed tree differs from this tip's tree reports "landed without
+	 * re-gate after N lost races" in the run output and in a
+	 * {@link LANDED_WITHOUT_REGATE_TRAILER} trailer on the landed commit (ADR
+	 * `ci-agent-job-holds-no-write-token` decision 2). Unset (every non-phase
+	 * land: `do`, `complete`, `run`) ⇒ no report and no rewrite, today's
+	 * behaviour unchanged.
+	 */
+	gatedTip?: string;
 }
 
 /**
@@ -1701,6 +1712,18 @@ export async function landIntegration(
 	// reached under sustained parallel load.
 	const maxMergeRetries = input.mergeRetries ?? DEFAULT_MERGE_RETRIES;
 	const mergeJitterMs = input.mergeJitterMs ?? DEFAULT_MERGE_JITTER_MS;
+	// The landed-vs-gated report (ADR `ci-agent-job-holds-no-write-token`
+	// decision 2, task `ci-split-landed-vs-gated-report`), scoped to the CI apply
+	// phase: only it sets `gatedTip` (the validated bundle tip the agent job
+	// gated). The CAS loop below never re-gates, so a re-rebase after a lost race
+	// can land a tree the gate never saw: {@link stampLandedWithoutRegate}
+	// records that on the landed commit. Without `gatedTip` (every non-phase
+	// land) the loop is exactly today's: no tree compare, no message rewrite.
+	const gatedTree =
+		input.gatedTip === undefined
+			? undefined
+			: await treeOf(cwd, input.gatedTip, env);
+	let regateReport: string | undefined;
 	let integration!: IntegrateResult;
 	for (let mergeAttempt = 0; ; mergeAttempt++) {
 		integration = await ledgerWrite.applyCompleteTransition({
@@ -1763,6 +1786,18 @@ export async function landIntegration(
 		if (reRebase.route) {
 			return reRebase.route;
 		}
+		if (gatedTree !== undefined) {
+			regateReport = await stampLandedWithoutRegate({
+				cwd,
+				branch,
+				gatedTree,
+				lostRaces: mergeAttempt + 1,
+				env,
+			});
+		}
+	}
+	if (regateReport !== undefined && integration.mergedToMain === true) {
+		note(`${branch} ${regateReport}.`);
 	}
 
 	// The Race-1 needs-attention route for a merge that could not land (a genuine
@@ -3523,6 +3558,113 @@ async function runFreshWorktreeGate(params: {
 	}
 }
 
+/**
+ * The git trailer key that marks a merge-mode land whose tree differs from the
+ * gated tree (ADR `ci-agent-job-holds-no-write-token` decision 2). Its value is
+ * the report, e.g. `landed without re-gate after 2 lost races`. A git trailer
+ * like `CAS-Nonce` (`ledger-write.ts`), so `git log --format=%(trailers)`
+ * reads it back.
+ */
+export const LANDED_WITHOUT_REGATE_TRAILER = 'Landed-Without-Regate';
+
+/** The landed-vs-gated report for `lostRaces` lost pushes. */
+export function landedWithoutRegateReport(lostRaces: number): string {
+	return (
+		`landed without re-gate after ${lostRaces} lost ` +
+		(lostRaces === 1 ? 'race' : 'races')
+	);
+}
+
+/** The tree id of `rev` in `cwd`. */
+async function treeOf(
+	cwd: string,
+	rev: string,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<string> {
+	return (
+		await gitHard(['rev-parse', `${rev}^{tree}`], cwd, env)
+	).stdout.trim();
+}
+
+/**
+ * After the merge-mode CAS loop re-rebased `branch` for the `lostRaces`-th
+ * time, rewrite its tip so its message carries exactly the right
+ * {@link LANDED_WITHOUT_REGATE_TRAILER}: set (with this count) when the tip's
+ * tree differs from `gatedTree`, removed when it is equal again. A previous
+ * attempt's trailer rides the re-rebase as part of the message, which is why an
+ * existing one is always replaced, never appended to. Only the message changes:
+ * the tree, the parents and the author are the tip's own, and the branch ref
+ * moves by a compare-and-swap `update-ref` (the working tree and the index
+ * already match that tree). Returns the report when the trailer is set.
+ */
+async function stampLandedWithoutRegate(params: {
+	cwd: string;
+	branch: string;
+	gatedTree: string;
+	lostRaces: number;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<string | undefined> {
+	const {cwd, branch, gatedTree, lostRaces, env} = params;
+	const ref = `refs/heads/${branch}`;
+	const FIELD_SEP = '\u0000';
+	const raw = (
+		await gitHard(
+			['log', '-1', '--format=%H%x00%T%x00%P%x00%an%x00%ae%x00%aI%x00%B', ref],
+			cwd,
+			env,
+		)
+	).stdout;
+	const [head, tree, parentList, authorName, authorEmail, authorDate, body] =
+		raw.split(FIELD_SEP);
+	const report =
+		tree.trim() === gatedTree
+			? undefined
+			: landedWithoutRegateReport(lostRaces);
+	const original = (body ?? '').replace(/\s+$/, '');
+	const prefix = `${LANDED_WITHOUT_REGATE_TRAILER}:`;
+	const stripped = original
+		.split('\n')
+		.filter((line) => !line.startsWith(prefix))
+		.join('\n')
+		.replace(/\s+$/, '');
+	const message =
+		report === undefined
+			? stripped
+			: (
+					await gitHard(
+						[
+							'interpret-trailers',
+							'--trailer',
+							`${LANDED_WITHOUT_REGATE_TRAILER}: ${report}`,
+						],
+						cwd,
+						env,
+						`${stripped}\n`,
+					)
+				).stdout.replace(/\s+$/, '');
+	if (message === original) return report;
+	const parents = parentList
+		.trim()
+		.split(/\s+/)
+		.filter((p) => p !== '')
+		.flatMap((p) => ['-p', p]);
+	const rewritten = (
+		await gitHard(
+			['commit-tree', tree.trim(), ...parents, '-F', '-'],
+			cwd,
+			{
+				...(env ?? process.env),
+				GIT_AUTHOR_NAME: authorName,
+				GIT_AUTHOR_EMAIL: authorEmail,
+				GIT_AUTHOR_DATE: authorDate,
+			},
+			`${message}\n`,
+		)
+	).stdout.trim();
+	await gitHard(['update-ref', ref, rewritten, head.trim()], cwd, env);
+	return report;
+}
+
 /** Run git, returning the raw result (no throw) — for soft checks. */
 function gitSoft(
 	args: string[],
@@ -3537,8 +3679,9 @@ async function gitHard(
 	args: string[],
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
+	input?: string,
 ): Promise<RunResult> {
-	const result = await runAsync('git', args, cwd, {env});
+	const result = await runAsync('git', args, cwd, {env, input});
 	if (result.status !== 0) {
 		throw new Error(
 			`git ${args.join(' ')} failed (exit ${result.status}): ${result.stderr.trim()}`,

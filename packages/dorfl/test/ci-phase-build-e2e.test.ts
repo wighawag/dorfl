@@ -341,6 +341,39 @@ describe('the build path in three processes (lock, agent, apply)', () => {
 		expect(onArbiter(`refs/heads/work/task-${SLUG}`)).toBeUndefined();
 		// No PR in merge mode.
 		expect(readProviderLog(run.applyProviderLog)).toEqual([]);
+		// The landed tree is a re-rebase the gate never saw (decision 2): the
+		// landed commit's trailer and the run output say so, with the count.
+		expect(
+			g(
+				seeded.arbiter,
+				'log',
+				'-1',
+				'--format=%(trailers:key=Landed-Without-Regate,valueonly)',
+				'main',
+			),
+		).toBe('landed without re-gate after 1 lost race');
+		expect(run.apply.notes).toContain(
+			`work/task-${SLUG} landed without re-gate after 1 lost race.`,
+		);
+	}, 120_000);
+
+	it('merge: a land that wins its first push carries no landed-vs-gated report', async () => {
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+		});
+		expect(run.apply.outcome).toBe('landed');
+		expect(showOnArbiter('main:src/thing.ts')).toContain('thing = 1');
+		expect(
+			g(
+				seeded.arbiter,
+				'log',
+				'-1',
+				'--format=%(trailers:key=Landed-Without-Regate)',
+				'main',
+			),
+		).toBe('');
+		expect(run.apply.notes.join('\n')).not.toContain('landed without re-gate');
 	}, 120_000);
 });
 

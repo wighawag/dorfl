@@ -37,3 +37,11 @@ Decision 2 keeps the merge-mode CAS loop gate-free, and after the split the firs
 ## Requeue 2026-09-27
 
 Gate-3 BLOCK (PR #417): the landed-vs-gated report must be scoped to the CI apply phase. The run's invariant is 'laptop behaviour without --phase is unchanged', but the report was put in the shared landIntegration, so a laptop/complete/run merge-mode land that loses a race now rewrites its landed tip with a trailer. Gate the trailer stamp and the run-output line on the apply phase only (activePhase() === 'apply', or an IntegrationLandInput flag that only ci-phase-build.ts's apply path sets). Add a test: a non-phase merge-mode land with a forced lost race and a differing tree carries NO trailer and prints no line. Keep the existing apply-phase cases green, and update the Decisions block accordingly.
+
+## Decisions
+
+- **The report is limited to the apply phase by an explicit `gatedTip` input, not by checking `activePhase()`.** This reverses the earlier decision to report on every merge-mode land. That had changed laptop behaviour: a laptop land that lost a race got its commit rewritten with the trailer, which the Gate-3 block rejected. A single field does two jobs: it says what was gated, and its presence turns the report on. Only `ci-phase-build.ts`'s apply path sets it. I considered `activePhase() === 'apply'`, but that would tie `landIntegration` to process-wide state and still need the tip found another way; a separate yes/no flag would be redundant alongside the tip. This touches `IntegrationLandInput` (an optional field, so other callers are unaffected) and `applyIntegrate`.
+- **The gated tree comes from `gatedTip`, not from the branch tip when the land starts.** This replaces the earlier "no new input field" decision. In the apply phase they are the same commit, but naming it removes the assumption.
+- **Carried over unchanged from the earlier attempt:**
+  - **Trailer name and wording:** the key is `Landed-Without-Regate`, exported as `LANDED_WITHOUT_REGATE_TRAILER` and modelled on `CAS-Nonce`. The value is the report text with correct plurals ("1 lost race", "2 lost races").
+  - **Equal trees report nothing:** if a re-rebase leaves the tree equal to the gated tree, there is no report, and any trailer from an earlier attempt is removed. Decision 2 compares trees, not race counts.
