@@ -61,3 +61,34 @@
 <!-- q2 fields: id=q2 kind=stuck -->
 
 **Your answer** (write below this line):
+
+## Q3
+
+**'task:ci-split-docs-drift-and-rollout' was bounced — how should we proceed?**
+
+> acceptance gate failed (exit 1) on the rebased tip — the failing step was: `pnpm format:check && pnpm build && pnpm test`; its last output was:
+>
+> packages/dorfl test:  FAIL  |sequential| test/do-remote.test.ts > do --remote — NEVER touches the human area or the real state dirs > the real ~/.dorfl/ and ~/.pi/agent/sessions/ are UNTOUCHED
+> packages/dorfl test: Error: Test timed out in 5000ms.
+> packages/dorfl test: If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+> packages/dorfl test:  ❯ test/do-remote.test.ts:489:2
+> packages/dorfl test:     487|  });
+> packages/dorfl test:     488|
+> packages/dorfl test:     489|  it('the real ~/.dorfl/ and ~/.pi/agent/sessions/ are UNTOUCHED', asyn…
+> packages/dorfl test:        |  ^
+> packages/dorfl test:     490|   const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+> packages/dorfl test:     491|   const ws = workspacesDir();
+> packages/dorfl test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+> packages/dorfl test:  Test Files  1 failed | 275 passed (276)
+> packages/dorfl test:       Tests  1 failed | 4065 passed (4066)
+> packages/dorfl test:    Start at  09:24:49
+> packages/dorfl test:    Duration  189.87s (transform 23.09s, setup 3.38s, import 62.93s, tests 511.33s, environment 30ms)
+> packages/dorfl test: Failed
+> /tmp/dorfl-fresh-gate-AyHYmd/tip/packages/dorfl:
+>  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  dorfl@0.14.3 test: `vitest run`
+> Exit status 1
+>  ELIFECYCLE  Test failed. See above for more details.
+
+<!-- q3 fields: id=q3 kind=stuck -->
+
+**Your answer** (write below this line):
