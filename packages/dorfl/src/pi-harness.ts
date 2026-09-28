@@ -6,6 +6,7 @@ import {
 	agentLaunchEnv,
 	pidAlive,
 	registerHarness,
+	type CutOffTurn,
 	type Harness,
 	type HarnessRecord,
 	type InteractiveLaunchInput,
@@ -14,7 +15,11 @@ import {
 	type LaunchResult,
 } from './harness.js';
 import {generateSessionPath} from './session-path.js';
-import {lastAssistantTurn, isOutputCappedTurn} from './watch-session.js';
+import {
+	lastAssistantTurn,
+	isOutputCappedTurn,
+	cutOffTurnOf,
+} from './watch-session.js';
 import {reapProcessGroup} from './reap-agent-tree.js';
 import type {HarnessAdapter} from './config.js';
 
@@ -663,6 +668,7 @@ export function piSessionExists(record: HarnessRecord): boolean {
 function readAssistantOutput(sessionFile: string): {
 	output?: string;
 	outputCapped?: number;
+	cutOffTurn?: CutOffTurn;
 } {
 	let jsonl: string;
 	try {
@@ -674,6 +680,10 @@ function readAssistantOutput(sessionFile: string): {
 	return {
 		output: turn.text,
 		outputCapped: isOutputCappedTurn(turn) ? turn.outputTokens : undefined,
+		// How the run's FINAL turn ended (task
+		// `a-truncated-agent-turn-routes-as-agent-failed`): a `length`/`error` stop
+		// makes an empty diff an agent failure, not a deliberate empty-diff STOP.
+		cutOffTurn: cutOffTurnOf(turn),
 	};
 }
 

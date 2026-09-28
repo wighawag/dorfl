@@ -228,6 +228,20 @@ export interface LaunchResult {
 	 */
 	outputCapped?: number;
 	/**
+	 * **The agent's FINAL model turn was CUT OFF** (task
+	 * `a-truncated-agent-turn-routes-as-agent-failed`, observation
+	 * `a-truncated-model-turn-is-read-as-nothing-to-do-and-defaults-to-cancel`):
+	 * present iff the LAST assistant message of the run (whatever it carried: text,
+	 * a tool call, or only a thinking block) ended with a `length` (the per-turn
+	 * output-token cap) or `error` (a provider error) stop rather than a normal end
+	 * of turn. The run ending there is a HARNESS failure, not the agent's judgement
+	 * that there was nothing to build, so the build pipelines route an empty diff
+	 * with this signal as `agent-failed` instead of the empty-diff STOP backstop.
+	 * `undefined` when the final turn ended normally or the adapter has no
+	 * stop-reason telemetry (the null/shell adapter).
+	 */
+	cutOffTurn?: CutOffTurn;
+	/**
 	 * **The verified outcome of reaping the agent's process TREE** after a deadline
 	 * stop (observation
 	 * `checkpoint-releases-lock-while-predecessor-agent-still-writes`).
@@ -242,6 +256,17 @@ export interface LaunchResult {
 	 * and on adapters that do not spawn a killable process group.
 	 */
 	reap?: AgentTreeReap;
+}
+
+/**
+ * Why the agent's final model turn ended abnormally (see
+ * {@link LaunchResult.cutOffTurn}): `length` = the turn hit the model's per-turn
+ * output-token cap; `error` = the provider ended the turn with an error.
+ * `errorMessage` is the provider's error text when the session recorded one.
+ */
+export interface CutOffTurn {
+	cause: 'length' | 'error';
+	errorMessage?: string;
 }
 
 /**

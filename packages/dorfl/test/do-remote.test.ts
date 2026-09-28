@@ -289,6 +289,33 @@ describe('do --remote — a deliberate STOP routes to needs-attention (shared ru
 	});
 });
 
+describe('do --remote: a CUT-OFF final model turn with an empty diff is an agent failure, not a STOP', () => {
+	it('stopReason `length` → agent-failed (no dispose question), the reason naming the truncated turn', async () => {
+		// Task `a-truncated-agent-turn-routes-as-agent-failed`: the shared
+		// `runRemotePipeline` applies the same guard as in-place `do`.
+		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const ws = workspacesDir();
+		const result = await performDoRemote({
+			arg: 'alpha',
+			remote: remoteUrl(arbiter),
+			workspacesDir: ws,
+			integration: 'merge',
+			verify: PASS,
+			dorfl: () => ({
+				ok: true,
+				output: 'Let me read the code first.',
+				cutOffTurn: {cause: 'length'},
+			}),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('agent-failed');
+		expect(result.message).toMatch(/final model turn was cut off/);
+		expect(result.message).toMatch(/stopReason 'length'/);
+		expect(stuckLockOnArbiter(repo, 'alpha')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'alpha')).toBe(false);
+	});
+});
+
 describe('do --remote — slug resolution parity with do-in-place', () => {
 	it('a spec: arg dispatches to the tasking path; an EXPLICITLY-named SPEC tasks with autoTask OFF (no worktree)', async () => {
 		// Slug-resolution parity + the build/task symmetry (task

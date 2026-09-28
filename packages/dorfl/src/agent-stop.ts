@@ -1,6 +1,7 @@
 import {runAsync} from './git.js';
 import {JOB_RECORD_FILENAME} from './workspace.js';
 import type {NewQuestion} from './sidecar.js';
+import type {CutOffTurn} from './harness.js';
 
 /**
  * **The build-agent → runner REPORTING CHANNEL** (task `agent-stop-signal`).
@@ -361,6 +362,86 @@ export function emptyDiffStopReason(slug: string): string {
 		`the agent produced no source change building '${slug}' (empty diff vs the ` +
 		'arbiter main); treating as a no-op/stop — re-scope or re-claim.'
 	);
+}
+
+/**
+ * The provider error text is capped at this many characters in the failure
+ * detail: pi records the raw provider body (often a JSON blob), and the detail
+ * becomes the needs-attention reason on the lock, which must stay one readable
+ * line rather than a pasted payload.
+ */
+const MAX_CUT_OFF_ERROR_LENGTH = 300;
+
+/**
+ * The `agent-failed` detail for a run whose FINAL model turn was CUT OFF
+ * ({@link CutOffTurn}) and which left no source change (task
+ * `a-truncated-agent-turn-routes-as-agent-failed`). Names the stop cause so the
+ * operator reads a harness failure, never "the agent found nothing to build".
+ * The provider's `errorMessage` (an `error` stop) is appended VERBATIM (bounded)
+ * so the shared failure-cause classifier can still recognise an infra signature
+ * in it (an overloaded provider reads `transient-infra`).
+ */
+export function cutOffTurnFailureDetail(
+	slug: string,
+	cutOff: CutOffTurn,
+): string {
+	const cause =
+		cutOff.cause === 'length'
+			? "stopReason 'length': the turn hit the model's per-turn output-token cap"
+			: "stopReason 'error': the provider ended the turn with an error";
+	const error =
+		cutOff.errorMessage === undefined
+			? ''
+			: ` (${boundErrorMessage(cutOff.errorMessage)})`;
+	return (
+		`the agent's final model turn was cut off (${cause}${error}) before it ` +
+		`produced any source change building '${slug}'; this is a harness failure, ` +
+		'not a judgement that there is nothing to build. Requeue to retry.'
+	);
+}
+
+function boundErrorMessage(text: string): string {
+	const oneLine = text.replace(/\s+/g, ' ').trim();
+	return oneLine.length <= MAX_CUT_OFF_ERROR_LENGTH
+		? oneLine
+		: `${oneLine.slice(0, MAX_CUT_OFF_ERROR_LENGTH)}…`;
+}
+
+/**
+ * The CUT-OFF-TURN guard in front of the empty-diff STOP backstop (task
+ * `a-truncated-agent-turn-routes-as-agent-failed`): returns the `agent-failed`
+ * detail when the run's final model turn was cut off ({@link CutOffTurn}), the
+ * agent raised NO in-band STOP sentinel, AND the work branch is empty; else
+ * `undefined` (the caller proceeds to its usual STOP resolution / gate).
+ *
+ * Only a NORMAL end of turn may reach the empty-diff backstop: that route reads
+ * an empty diff as the agent's deliberate "nothing to build" and surfaces a
+ * DISPOSE-defaulted question, which for a truncated turn puts a real, unbuilt
+ * task one default answer away from `tasks/cancelled/`. A sentinel still wins
+ * (the agent DID report a deliberate STOP), and a non-empty diff still goes to
+ * the gate (the gate, not the stop reason, judges built work). Shared by `do`
+ * (in-place and remote, hence the CI agent phase) and `run` so every path with
+ * the empty-diff backstop applies the same rule.
+ */
+export async function resolveCutOffTurnFailure(params: {
+	cutOffTurn: CutOffTurn | undefined;
+	output: string | undefined;
+	slug: string;
+	cwd: string;
+	arbiter: string;
+	env?: NodeJS.ProcessEnv;
+}): Promise<string | undefined> {
+	const {cutOffTurn, output, slug, cwd, arbiter, env} = params;
+	if (cutOffTurn === undefined) {
+		return undefined;
+	}
+	if (parseStopSentinel(output) !== undefined) {
+		return undefined;
+	}
+	if (!(await isWorkBranchDiffEmpty({cwd, arbiter, env}))) {
+		return undefined;
+	}
+	return cutOffTurnFailureDetail(slug, cutOffTurn);
 }
 
 /**

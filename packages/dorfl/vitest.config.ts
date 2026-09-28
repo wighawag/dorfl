@@ -103,6 +103,11 @@ const RACE_SENSITIVE = [
 	// concurrently; keep it out of file-parallel pressure for the same reason as
 	// do.test.ts (deterministic claim/main-CAS).
 	'test/do-watch.test.ts',
+	// A cut-off final model turn routes agent-failed (task
+	// `a-truncated-agent-turn-routes-as-agent-failed`): drives real git against a
+	// --bare arbiter, writes main (the failure / empty-diff surfacing) AND launches
+	// a stubbed pi writing a fake session log; same reasoning as do-watch.test.ts.
+	'test/cut-off-turn-routes-agent-failed.test.ts',
 	// `do --remote <r>` materialises a hub mirror + job worktree in a temp agents'
 	// area, runs the pipeline against the worktree, AND writes main (the autonomous
 	// needs-attention surfacing) against a --bare arbiter; keep it out of
