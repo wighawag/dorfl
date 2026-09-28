@@ -4,7 +4,7 @@ slug: ci-split-docs-drift-and-rollout
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-generate-workflows, ci-split-warn-single-job-workflows, release-workflow-restores-no-cache]
 covers: [20, 22]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
