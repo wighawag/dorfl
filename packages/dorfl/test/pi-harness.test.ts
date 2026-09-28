@@ -17,6 +17,11 @@ import {
 } from '../src/pi-harness.js';
 import {generateSessionPath} from '../src/session-path.js';
 import {NullHarness, resolveHarness} from '../src/harness.js';
+import {harnessTaskReviewGate} from '../src/tasker-review-loop.js';
+import {
+	ReviewParseError,
+	ReviewOutputCappedError,
+} from '../src/review-verdict.js';
 import {
 	makeScratch,
 	isolatePiAgentDir,
@@ -414,6 +419,108 @@ describe('PiHarness — output (last assistant text from the session .jsonl)', (
 			? readdirSync(realSessions).length
 			: -1;
 		expect(after).toBe(before); // real sessions dir entry count unchanged.
+	});
+});
+
+/**
+ * A synthetic pi-shaped session log, modelled on a real pi session-log line:
+ * the assistant record carries pi's camelCase `stopReason` and `usage.output`,
+ * and NO snake_case `stop_reason` key (observation
+ * `output-capped-signal-reads-the-wrong-stop-reason-key`).
+ */
+function piShapedSessionLog(text: string, stopReason: string): string {
+	return (
+		JSON.stringify({type: 'session', version: 3, id: 's'}) +
+		'\n' +
+		JSON.stringify({
+			type: 'message',
+			id: '20ec350b',
+			parentId: 'e07b924d',
+			timestamp: '2026-09-28T20:41:33.578Z',
+			message: {
+				role: 'assistant',
+				content: [{type: 'text', text}],
+				usage: {
+					input: 2,
+					output: 16384,
+					cacheRead: 45926,
+					cacheWrite: 559,
+					totalTokens: 62871,
+				},
+				stopReason,
+				timestamp: 1790628090477,
+			},
+		}) +
+		'\n'
+	);
+}
+
+describe('PiHarness: outputCapped means the turn hit the output-token cap, nothing else', () => {
+	function launchWith(sessionBody: string) {
+		const stub = writePiStub({sessionBody});
+		const harness = new PiHarness({piBin: stub.bin});
+		const dir = join(scratch.root, 'worktree');
+		mkdirSync(dir, {recursive: true});
+		return harness.launch({dir, slug: 'feat', command: '', prompt: 'p'});
+	}
+
+	it("a normally-ended pi turn (stopReason 'stop') with output tokens is NOT outputCapped", () => {
+		const result = launchWith(piShapedSessionLog('a full answer', 'stop'));
+		expect(result.output).toBe('a full answer');
+		expect(result.outputCapped).toBeUndefined();
+	});
+
+	it("a pi turn that hit the cap (stopReason 'length') IS outputCapped, carrying the token count", () => {
+		const result = launchWith(piShapedSessionLog('{"verdict": "bl', 'length'));
+		expect(result.outputCapped).toBe(16384);
+	});
+
+	it('a verdict parse failure on a normally-ended review turn raises the plain ReviewParseError, NOT ReviewOutputCappedError', async () => {
+		const stub = writePiStub({
+			sessionBody: piShapedSessionLog('totally unparseable prose', 'stop'),
+		});
+		const gate = harnessTaskReviewGate({
+			harness: new PiHarness({piBin: stub.bin}),
+		});
+		const cwd = join(scratch.root, 'review-cwd');
+		mkdirSync(cwd, {recursive: true});
+		const err = await gate({
+			slug: 'it',
+			cwd,
+			candidateTasks: ['work/tasks/backlog/child.md'],
+			pass: 1,
+			execution: 1,
+			sessionsDir: join(scratch.root, 'review-sessions'),
+		}).then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+		expect(err).toBeInstanceOf(ReviewParseError);
+		expect(err).not.toBeInstanceOf(ReviewOutputCappedError);
+	});
+
+	it('the SAME parse failure on a capped review turn (stopReason length) is named ReviewOutputCappedError', async () => {
+		const stub = writePiStub({
+			sessionBody: piShapedSessionLog(
+				'{"verdict": "block", "findings": [',
+				'length',
+			),
+		});
+		const gate = harnessTaskReviewGate({
+			harness: new PiHarness({piBin: stub.bin}),
+		});
+		const cwd = join(scratch.root, 'review-cwd');
+		mkdirSync(cwd, {recursive: true});
+		await expect(
+			gate({
+				slug: 'it',
+				cwd,
+				candidateTasks: ['work/tasks/backlog/child.md'],
+				pass: 1,
+				execution: 1,
+				sessionsDir: join(scratch.root, 'review-sessions'),
+			}),
+		).rejects.toThrow(ReviewOutputCappedError);
 	});
 });
 

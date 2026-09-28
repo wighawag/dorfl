@@ -290,7 +290,7 @@ export class PiHarness implements Harness {
 			// The agent's ANSWER (task `harness-agent-output`): the LAST assistant
 			// turn's text read from the session `.jsonl` pi just wrote — NOT piped
 			// stdout (which is drained). Shares `watch-session.ts`'s reader. The
-			// same turn's stop_reason/usage feed the outputCapped cap-truncation
+			// same turn's stop reason/usage feed the outputCapped cap-truncation
 			// signal (observation `tasker-review-edits-payload-caps-the-verdict-response`).
 			...readAssistantOutput(sessionFile),
 		};
@@ -496,7 +496,7 @@ export class PiHarness implements Harness {
 						// Read the agent's ANSWER from the `.jsonl` at `exit` — the same
 						// last-assistant-turn read `launch` does at return (task
 						// `harness-agent-output`); the process has exited so the log is final.
-						// The same turn's stop_reason/usage feed the outputCapped signal.
+						// The same turn's stop reason/usage feed the outputCapped signal.
 						...readAssistantOutput(sessionFile),
 					});
 				};
