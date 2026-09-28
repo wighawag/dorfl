@@ -144,6 +144,9 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 		expect(entry.kind).toBe('merge');
 		expect(entry.default).toBe('merge | hold | drop');
 		expect(entry.answer).toBe('');
+		// The `main` the question was asked against (the `strictMergeApproval`
+		// re-stale check compares it with the `main` at apply time).
+		expect(entry.askedAtMain).toBe(gitIn(['rev-parse', 'main~1'], repo).trim());
 		// The persist set `needsAnswers:true` on the item body atomically.
 		expect(
 			parseFrontmatter(

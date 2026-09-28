@@ -24,7 +24,11 @@ import {activateProcessPhase} from '../src/phase-recorder.js';
 import type {GithubApiGet} from '../src/ci-agent-result.js';
 import type {Phase} from '../src/phase.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
-import {parseSidecar, sidecarPathFor} from '../src/sidecar.js';
+import {
+	parseSidecar,
+	serialiseSidecar,
+	sidecarPathFor,
+} from '../src/sidecar.js';
 import {
 	gitEnv,
 	makeScratch,
@@ -149,6 +153,8 @@ function commitToMain(files: Record<string, string>, message: string): string {
 function seedAnsweredMerge(
 	opts: {
 		answer?: string;
+		/** Record the arbiter `main` the question is asked against (as the surfacer does). */
+		askedAtMain?: boolean;
 		files?: Record<string, string>;
 		keptSetup?: (clone: string) => void;
 	} = {},
@@ -172,6 +178,8 @@ function seedAnsweredMerge(
 		join(seeded.repo, 'work', 'tasks', 'ready', `${SLUG}.md`),
 		'utf8',
 	).replace('blockedBy: []', 'needsAnswers: true\nblockedBy: []');
+	const askedAtMain =
+		opts.askedAtMain === true ? onArbiter('refs/heads/main') : undefined;
 	commitToMain(
 		{
 			[`work/tasks/ready/${SLUG}.md`]: body,
@@ -181,6 +189,7 @@ function seedAnsweredMerge(
 					context: 'An unmerged work/* branch is awaiting a decision.',
 					default: 'merge | hold | drop',
 					kind: 'merge',
+					...(askedAtMain === undefined ? {} : {askedAtMain}),
 					answer: opts.answer ?? 'merge',
 				},
 			]),
@@ -208,8 +217,6 @@ async function threePhases(
 		verify?: string;
 		strictMergeApproval?: boolean;
 		between?: () => void;
-		/** Replace the agent phase: write the handoff directory by hand. */
-		handoff?: (dir: string) => void;
 		applyExit?: number;
 		agentSetup?: (clone: string) => void;
 	} = {},
@@ -238,9 +245,7 @@ async function threePhases(
 
 	const handoffDir = join(runnerTemp, 'handoff');
 	let agent: WorkerOutput | undefined;
-	if (opts.handoff !== undefined) {
-		opts.handoff(handoffDir);
-	} else if (lock.needsAgent === true) {
+	if (lock.needsAgent === true) {
 		const agentClone = seeded.clone('agent');
 		g(agentClone, 'remote', 'set-url', '--push', 'origin', '/nonexistent.git');
 		opts.agentSetup?.(agentClone);
@@ -416,24 +421,17 @@ describe('the answered merge action in three processes', () => {
 		expect(onArbiter(LOCK_REF)).toBeUndefined();
 	}, 180_000);
 
-	it('merge-restale re-pauses: a follow-up merge question, no land', async () => {
-		const keptTip = seedAnsweredMerge();
-		const run = await threePhases({
-			// The agent job's restale verdict (strictMergeApproval on, the
-			// merge-base moved): the record carries no products and no bundle.
-			handoff: (dir) => {
-				mkdirSync(dir, {recursive: true});
-				writeFileSync(
-					join(dir, 'handoff.json'),
-					JSON.stringify({
-						schema: 1,
-						item: ITEM,
-						intent: {kind: 'merge-restale'},
-						products: {},
-					}),
-				);
-			},
-		});
+	it('merge-restale re-pauses when main moved since the question; a re-answer while main stays put lands', async () => {
+		const keptTip = seedAnsweredMerge({askedAtMain: true});
+		// main's code moves after the question was asked.
+		const movedMain = commitToMain(
+			{'sibling.txt': 'benign sibling\n'},
+			'a sibling lands',
+		);
+		const verify = 'test "$(cat feature.txt)" = "the work"';
+		// The agent job decides the re-stale itself (strictMergeApproval on).
+		const run = await threePhases({verify, strictMergeApproval: true});
+		expect(run.agent?.intent).toBe('merge-restale');
 		expect(run.apply.outcome, run.apply.message).toBe('applied');
 		expect(run.apply.rungOutcome).toBe('no-op');
 		expect(showOnArbiter('main:feature.txt')).toBeUndefined();
@@ -445,12 +443,48 @@ describe('the answered merge action in three processes', () => {
 		expect(merges).toHaveLength(2);
 		expect(merges[1].answer.trim()).toBe('');
 		expect(merges[1].question).toContain('Re-confirm');
+		// The follow-up is asked against the main the apply job re-paused on.
+		expect(merges[1].askedAtMain).toBe(movedMain);
 		expect(
 			parseFrontmatter(
 				showOnArbiter(`main:work/tasks/ready/${SLUG}.md`) as string,
 			).needsAnswers,
 		).toBe(true);
 		expect(onArbiter(LOCK_REF)).toBeUndefined();
+
+		// The human re-answers; main moves only by that answer (under `work/`).
+		// No livelock: the next run lands.
+		commitToMain(
+			{
+				[sidecarPathFor(ITEM)]: serialiseSidecar({
+					...sidecar,
+					entries: sidecar.entries.map((e, i) =>
+						i === sidecar.entries.length - 1 ? {...e, answer: 'merge'} : e,
+					),
+				}),
+			},
+			`answer ${ITEM}: merge`,
+		);
+		rmSync(run.handoffDir, {recursive: true, force: true});
+		const again = await threePhases({verify, strictMergeApproval: true});
+		expect(again.agent?.intent).toBe('integrate');
+		expect(again.apply.outcome, again.apply.message).toBe('applied');
+		expect(again.apply.rungOutcome).toBe('advanced');
+		expect(showOnArbiter('main:feature.txt')).toBe('the work\n');
+		expectAnswerRecorded('done');
+		expect(onArbiter(LOCK_REF)).toBeUndefined();
+	}, 300_000);
+
+	it('strictMergeApproval with main unmoved since the question lands', async () => {
+		seedAnsweredMerge({askedAtMain: true});
+		const run = await threePhases({
+			verify: 'test "$(cat feature.txt)" = "the work"',
+			strictMergeApproval: true,
+		});
+		expect(run.agent?.intent).toBe('integrate');
+		expect(run.apply.outcome, run.apply.message).toBe('applied');
+		expect(showOnArbiter('main:feature.txt')).toBe('the work\n');
+		expectAnswerRecorded('done');
 	}, 180_000);
 
 	it('hold needs no agent job: the answer is recorded and the branch stays unmerged', async () => {

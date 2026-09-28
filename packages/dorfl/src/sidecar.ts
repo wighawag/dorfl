@@ -144,7 +144,22 @@ export interface SidecarEntry {
 	 * kind-based SUBFOLDERS.
 	 */
 	kind?: SidecarKind;
+	/**
+	 * The arbiter `main` commit this question was ASKED AGAINST (a full hex
+	 * sha), set on a `kind: merge` entry by the merge-question surfacer and by
+	 * the `strictMergeApproval` re-surface path (task
+	 * `strict-merge-approval-restale-check-runs-before-the-continue-rebase`).
+	 * With `strictMergeApproval` on, an answered merge re-surfaces when `main`'s
+	 * code moved since this commit. Absent on every other entry and on a merge
+	 * entry written before the field existed (which then never re-stales).
+	 * Carried in the per-entry HTML comment as `askedAtMain=<sha>`; a malformed
+	 * value reads as absent.
+	 */
+	askedAtMain?: string;
 }
+
+/** A full git object name: 40 hex (SHA-1) or 64 hex (SHA-256). */
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** The parsed sidecar: identity frontmatter + ordered entries. */
 export interface SidecarModel {
@@ -434,6 +449,7 @@ interface EntryFields {
 	id?: string;
 	answered?: boolean;
 	kind?: SidecarKind;
+	askedAtMain?: string;
 }
 
 /** Parse a per-entry `<!-- qN fields: key=val … -->` HTML comment. */
@@ -467,6 +483,11 @@ function parseEntryComment(line: string): EntryFields | undefined {
 			if (SIDECAR_KINDS.has(value as SidecarKind)) {
 				out.kind = value as SidecarKind;
 			}
+		} else if (key === 'askedAtMain') {
+			// Silent-on-malformed, as for `kind`: only a full sha is kept.
+			if (FULL_SHA.test(value)) {
+				out.askedAtMain = value;
+			}
 		}
 	}
 	return out;
@@ -481,6 +502,7 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	let defaultVal: string | undefined;
 	let answeredOverride: boolean | undefined;
 	let kind: SidecarKind | undefined;
+	let askedAtMain: string | undefined;
 	let answerStart = -1;
 
 	for (let i = 0; i < lines.length; i++) {
@@ -499,6 +521,9 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 			}
 			if (entryFields.kind !== undefined) {
 				kind = entryFields.kind;
+			}
+			if (entryFields.askedAtMain !== undefined) {
+				askedAtMain = entryFields.askedAtMain;
 			}
 			inBlockquote = false;
 			continue;
@@ -567,6 +592,9 @@ function parseEntrySection(lines: string[]): SidecarEntry {
 	}
 	if (kind !== undefined) {
 		entry.kind = kind;
+	}
+	if (askedAtMain !== undefined) {
+		entry.askedAtMain = askedAtMain;
 	}
 	return entry;
 }
@@ -718,6 +746,9 @@ export function serialiseSidecar(
 		if (entry.kind !== undefined) {
 			fields.push(`kind=${entry.kind}`);
 		}
+		if (entry.askedAtMain !== undefined && FULL_SHA.test(entry.askedAtMain)) {
+			fields.push(`askedAtMain=${entry.askedAtMain}`);
+		}
 		out.push(`<!-- ${entry.id} fields: ${fields.join(' ')} -->`);
 		out.push('');
 		out.push(ANSWER_MARKER);
@@ -775,6 +806,8 @@ export interface NewQuestion {
 	 * agentic `decide()` path. INTERIM — removable once kind-subfolders land.
 	 */
 	kind?: SidecarKind;
+	/** The arbiter `main` sha the question is asked against (see {@link SidecarEntry.askedAtMain}). */
+	askedAtMain?: string;
 }
 
 /**
@@ -801,6 +834,9 @@ export function appendQuestions(
 		}
 		if (q.kind !== undefined) {
 			entry.kind = q.kind;
+		}
+		if (q.askedAtMain !== undefined) {
+			entry.askedAtMain = q.askedAtMain;
 		}
 		entries.push(entry);
 	}

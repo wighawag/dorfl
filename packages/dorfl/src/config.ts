@@ -764,13 +764,14 @@ export interface Config {
 	 * **Per-repo OPT-IN strictness layered on the OQ6 stale-approval default**
 	 * (spec `land-time-reverify-and-parallel-merge-ceiling`, sidecar OQ6 / task
 	 * `strict-merge-approval-gate`). Controls how the apply rung treats a prior
-	 * merge-answer when the merge-base CHANGED between the human's answer and
-	 * the apply step. The default (`false`) honours the prior answer and lands
-	 * when the rebased tip re-verifies GREEN — a green re-verify is trusted as
-	 * sufficient (the cheap fast-path). `true` re-surfaces the merge-question
-	 * (clears the answer back to no-answer and re-authors the question on
-	 * `main`/runner under the `advancing` lock — no branch-side mutation)
-	 * instead of auto-landing on a merge-base change, even on a green re-verify
+	 * merge-answer when `main`'s code (outside `work/`) moved since the question
+	 * was asked (the `askedAtMain` the question records). The default (`false`)
+	 * honours the prior answer and lands when the rebased tip re-verifies GREEN
+	 * (a green re-verify is trusted as sufficient: the cheap fast-path). `true`
+	 * re-surfaces the merge-question (appends a follow-up asked against the
+	 * current `main`, under the `advancing` lock, before any checkout or
+	 * rebase: no branch-side mutation) instead of auto-landing when `main`
+	 * moved, even on a green re-verify
 	 * — the host-agnostic analogue of GitHub's "dismiss stale approvals when
 	 * the base changes". Story #16's RED-re-verify refusal is UNCHANGED and
 	 * independent of this flag.

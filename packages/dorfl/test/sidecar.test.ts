@@ -620,6 +620,44 @@ describe('entry `kind` axis — INTERIM dispatch primitive (apply-rung reads it)
 	});
 });
 
+describe('entry `askedAtMain` — the `main` a merge question was asked against', () => {
+	const SHA = 'a'.repeat(40);
+	function withField(token: string): string {
+		return [
+			'<!-- dorfl-sidecar: item=task:foo type=task slug=foo allAnswered=false -->',
+			'',
+			'## Q1',
+			'',
+			'**Land?**',
+			'',
+			`<!-- q1 fields: id=q1 kind=merge ${token} -->`,
+			'',
+			'**Your answer** (write below this line):',
+			'',
+		].join('\n');
+	}
+
+	it('round-trips through serialise + parse, byte-identically', () => {
+		const text = withField(`askedAtMain=${SHA}`);
+		const model = parseSidecar(text);
+		expect(model.entries[0].askedAtMain).toBe(SHA);
+		expect(serialiseSidecar(model)).toBe(text);
+	});
+
+	it('a malformed value reads as absent and is dropped on serialise', () => {
+		const model = parseSidecar(withField('askedAtMain=main'));
+		expect('askedAtMain' in model.entries[0]).toBe(false);
+		expect(serialiseSidecar(model)).not.toContain('askedAtMain');
+	});
+
+	it('`appendQuestions` stamps the `askedAtMain` it is handed', () => {
+		const model = appendQuestions(newSidecar('task:foo', [{question: 'a?'}]), [
+			{question: 'Land?', kind: 'merge', askedAtMain: SHA},
+		]);
+		expect(model.entries.map((e) => e.askedAtMain)).toEqual([undefined, SHA]);
+	});
+});
+
 describe('serialiseSidecar — human-visible Markdown link to the item', () => {
 	function makeRepoWithItem(folder: string, basename: string): string {
 		const root = mkdtempSync(join(tmpdir(), 'sidecar-link-'));
