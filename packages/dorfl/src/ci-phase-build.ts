@@ -1218,6 +1218,9 @@ async function applyIntegrate(
 		reviewProse: products.reviewProse,
 		mergeRetries: options.mergeRetries,
 		mergeJitterMs: options.mergeJitterMs,
+		// The landed-vs-gated report (decision 2): the agent job gated the
+		// bundle tip, so a merge land that lands another tree says so.
+		gatedTip: tip,
 	});
 
 	if (land.outcome !== 'completed') {
