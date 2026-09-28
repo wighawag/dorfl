@@ -37,7 +37,8 @@
  *    `ci-split-agent-result-and-reruns`): anything but `success` never reads
  *    the handoff, and surfaces the item (failure, timeout, an unexpected skip)
  *    or only releases the lock (a real cancel); validate the handoff as hostile
- *    (`validateApplyHandoff`); when the lock job saw a kept branch, push the
+ *    (`validateApplyHandoff`); push the handoff's Git LFS objects before any
+ *    ref, for every intent (decision 6, `pushLfsObjects`); when the lock job saw a kept branch, push the
  *    bundle's tip with a lease on that `continueTip` first (decision 7; a
  *    stale lease writes nothing); then resume at the write half of the intent:
  *    the land half (`landIntegration`, the unchanged compare-and-swap loop, then
@@ -64,6 +65,7 @@ import {
 } from './ci-handoff-format.js';
 import {writeHandoff} from './ci-handoff.js';
 import {validateApplyHandoff} from './ci-handoff-apply.js';
+import {pushLfsObjects} from './ci-handoff-lfs.js';
 import type {LockOutputs} from './ci-lock-outputs.js';
 import type {AgentJobResult, GithubApiGet} from './ci-agent-result.js';
 import {
@@ -725,12 +727,19 @@ export async function performBuildAgentPhase(
 		handover = {record: agentFailed(item, `the build failed: ${message}`)};
 	}
 
-	writeHandoff({
+	const written = writeHandoff({
 		dir: options.handoffDir,
 		rung: 'build-task',
 		record: handover.record,
 		bundle: handover.bundle,
 	});
+	if (written.lfsMissing.length > 0) {
+		note(
+			`the local LFS store lacks ${written.lfsMissing.length} object(s) a new ` +
+				`commit points at (${written.lfsMissing.slice(0, 5).join(', ')}); the ` +
+				'apply job will reject the handoff',
+		);
+	}
 	const kind = handover.record.intent.kind;
 	const message = `handed over ${kind} for ${item}`;
 	note(message);
@@ -950,6 +959,54 @@ async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
 
 	const record = validated.handoff.record;
 	const bundle = validated.bundle;
+
+	// The LFS objects go FIRST (decision 6), before any ref of any intent (the
+	// continue push, the land's pushes, a WIP branch save), so a ref never lands
+	// pointing at a missing object. Pushed from this checkout of the trusted
+	// base, so `.lfsconfig` and the endpoint come from main.
+	if (validated.lfsObjects.length > 0) {
+		let pushed: {status: number; stderr: string};
+		try {
+			pushed = await pushLfsObjects({
+				cwd,
+				arbiter,
+				objects: validated.lfsObjects,
+				env,
+			});
+		} catch (err) {
+			if (!(err instanceof HandoffRejected)) throw err;
+			note(err.message);
+			return surface({
+				cwd,
+				arbiter,
+				slug,
+				reason: err.message,
+				env,
+				note,
+				outcome: 'rejected',
+			});
+		}
+		if (pushed.status !== 0) {
+			const reason =
+				`the ${validated.lfsObjects.length} Git LFS object(s) of the handoff ` +
+				`could not be pushed to ${arbiter} (${pushed.stderr.trim().slice(0, 500)}), ` +
+				'so no branch of the work was pushed';
+			note(reason);
+			return surface({
+				cwd,
+				arbiter,
+				slug,
+				reason,
+				env,
+				note,
+				outcome: 'surfaced',
+			});
+		}
+		note(
+			`pushed ${validated.lfsObjects.length} Git LFS object(s) to ${arbiter}`,
+		);
+	}
+
 	if (bundle !== undefined) {
 		await gitHard(
 			['checkout', '--quiet', '-B', bundle.workBranch, bundle.tip],

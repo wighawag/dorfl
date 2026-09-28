@@ -44,6 +44,7 @@ const ALLOWED: Record<string, string> = {
 		'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.pushLeasedWorkBranch':
 		'the ref-write seam itself',
+	'ref-write.ts::currentRefWrite.pushLfsObjects': 'the ref-write seam itself',
 	'continue-branch.ts::pushContinuedBranchWithStaleLeaseRetry':
 		'implementation of refWrite.pushContinuedBranch (callers checked below)',
 	'needs-attention.ts::routeToNeedsAttention':

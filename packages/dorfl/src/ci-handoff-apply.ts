@@ -20,8 +20,13 @@
  * every history, path and size check runs there. Only an accepted bundle is
  * then fetched into the apply checkout, with the same command.
  *
- * Out of scope here: LFS objects (task `ci-split-handoff-lfs-objects`), and the
- * agent-result, lock-ownership and re-run rules (wired by the path splits).
+ * The LFS objects (decision 6, task `ci-split-handoff-lfs-objects`): the new
+ * commits' blobs are scanned for pointers in the quarantine, and every object
+ * is checked against its pointer (`ci-handoff-lfs.ts`) before the import. The
+ * push of the objects (before any ref) is the path split's first write.
+ *
+ * Out of scope here: the agent-result, lock-ownership and re-run rules (wired
+ * by the path splits).
  */
 
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
@@ -32,7 +37,18 @@ import {
 	rejectHandoff as reject,
 	type HandoffRung,
 } from './ci-handoff-format.js';
-import {readHandoff, type ReadHandoff} from './ci-handoff.js';
+import {
+	readHandoff,
+	type HandoffLfsObject,
+	type ReadHandoff,
+} from './ci-handoff.js';
+import {
+	checkLfsObjects,
+	isRegularFileMode,
+	scanLfsPointers,
+	type ChangedBlob,
+	type LfsScan,
+} from './ci-handoff-lfs.js';
 import {parseFrontmatter} from './frontmatter.js';
 import {git, run} from './git.js';
 import {APPLY_LIFECYCLE_FOLDERS} from './item-path.js';
@@ -134,6 +150,12 @@ export interface ApplyHandoff {
 		/** The new commits (`tip ^<arbiter>/main`), newest first. */
 		newCommits: string[];
 	};
+	/**
+	 * The artifact's LFS objects, each referenced by a pointer of the new
+	 * commits and checked against it (size and sha256), sorted by oid. The path
+	 * split pushes them before any ref.
+	 */
+	lfsObjects: HandoffLfsObject[];
 	/** `work/` paths the bundle changes outside this item's own transition (propose only). */
 	ledgerOutsideItem: string[];
 	/** The PR-body section listing {@link ledgerOutsideItem}, when there are any. */
@@ -386,6 +408,7 @@ function checkBundle(c: BundleCheck): {
 	tip: string;
 	newCommits: string[];
 	ledgerOutside: string[];
+	lfs: LfsScan;
 } {
 	const {quarantine: qdir, env} = c;
 	const fetched = fetchBundle(qdir, c.bundlePath, c.workBranch, env);
@@ -434,6 +457,7 @@ function checkBundle(c: BundleCheck): {
 	// Per commit, against its single parent: protected paths, gitlinks,
 	// symlinks, blob sizes.
 	const blobs = new Map<string, string>();
+	const fileBlobs: ChangedBlob[] = [];
 	let oldestParent = '';
 	for (const commit of newCommits) {
 		const parents = git(['rev-list', '--parents', '-n', '1', commit], qdir, {
@@ -466,6 +490,9 @@ function checkBundle(c: BundleCheck): {
 			}
 			if (ch.newMode === MODE_SYMLINK) touchesSymlink = true;
 			blobs.set(ch.newOid, ch.path);
+			if (isRegularFileMode(ch.newMode)) {
+				fileBlobs.push({oid: ch.newOid, path: ch.path});
+			}
 		}
 		if (touchesSymlink) {
 			const links = treeSymlinks(qdir, commit, env);
@@ -512,7 +539,11 @@ function checkBundle(c: BundleCheck): {
 				.status !== 0;
 		if (!newNote) ledgerOutside.push(ch.path);
 	}
-	return {tip, newCommits, ledgerOutside};
+
+	// LFS pointers among the blobs the new commits add or change (decision 6):
+	// a blob that parses as a pointer counts, whatever `.gitattributes` says.
+	const lfs = scanLfsPointers({cwd: qdir, blobs: fileBlobs, env});
+	return {tip, newCommits, ledgerOutside, lfs};
 }
 
 /** The item's own ledger files: its body in every lifecycle folder of its type. */
@@ -549,8 +580,14 @@ function ownItemPaths(item: string): Set<string> {
  * 4. the `work/` ledger rule on the net change: only this item's own
  *    transition and new `work/notes/*` files (ADRs live outside `work/`);
  *    anything else is rejected in `merge` mode and reported in `propose` mode;
- * 5. only then the bundle is fetched into the apply checkout at
- *    {@link INCOMING_TIP_REF}.
+ * 5. the LFS rule (`checkLfsObjects`): every blob the new commits add or
+ *    change that parses as a pointer (strict spec v1; a blob that only looks
+ *    like one is rejected) needs its object in `lfs/`, of exactly its size and
+ *    hashing to its oid; no object may be unreferenced; the size limit holds;
+ * 6. only then the bundle is fetched into the apply checkout at
+ *    {@link INCOMING_TIP_REF}. Nothing is written to the apply checkout's LFS
+ *    store here: the path split pushes {@link ApplyHandoff.lfsObjects} before
+ *    any ref (`pushLfsObjects`).
  *
  * The integration mode is recomputed ({@link recomputeIntegrationMode}) before
  * the ledger rule, which depends on it.
@@ -581,7 +618,14 @@ export function validateApplyHandoff(params: {
 		env,
 	});
 	if (handoff.bundle === undefined) {
-		return {handoff, mode, forcedPropose, ledgerOutsideItem: []};
+		// `readHandoff` already refused `lfs/` without a bundle.
+		return {
+			handoff,
+			mode,
+			forcedPropose,
+			lfsObjects: [],
+			ledgerOutsideItem: [],
+		};
 	}
 
 	const {type, slug} = resolveSidecarIdentity(item);
@@ -666,6 +710,8 @@ export function validateApplyHandoff(params: {
 		);
 	}
 
+	const lfsObjects = checkLfsObjects(checked.lfs, handoff.lfsObjects);
+
 	const imported = fetchBundle(repo, handoff.bundle.path, workBranch, env);
 	const landed =
 		imported.status === 0
@@ -681,6 +727,7 @@ export function validateApplyHandoff(params: {
 		mode,
 		forcedPropose,
 		bundle: {workBranch, tip: checked.tip, newCommits: checked.newCommits},
+		lfsObjects,
 		ledgerOutsideItem: checked.ledgerOutside,
 		ledgerReport:
 			checked.ledgerOutside.length > 0

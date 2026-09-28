@@ -73,6 +73,7 @@ describe('ref-write seam: shape', () => {
 			'deleteRemoteWorkBranch',
 			'pushTaskingCandidatesBranch',
 			'publishTreelessResult',
+			'pushLfsObjects',
 		];
 		expect(Object.keys(currentRefWrite).sort()).toEqual([...methods].sort());
 		for (const m of methods) {

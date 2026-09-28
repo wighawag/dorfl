@@ -23,8 +23,8 @@ import {
  * review provider, the issue provider or the integrator: the per-item lock ref
  * create / amend / leased delete, the continued work-branch rebase push, the
  * work-branch save (commit WIP + push, without a surface), the remote work-branch
- * delete, the tasking candidates branch push and the tree-less `HEAD:main`
- * publish.
+ * delete, the tasking candidates branch push, the tree-less `HEAD:main`
+ * publish and the Git LFS object upload.
  *
  * Why it exists (spec `ci-agent-job-without-write-token`, ADR
  * `ci-agent-job-holds-no-write-token`, task
@@ -111,7 +111,30 @@ export interface RefWriteStrategy {
 	 * {@link pushTreelessResult}). CI phase: apply.
 	 */
 	publishTreelessResult(input: PushTreelessResultParams): Promise<void>;
+	/**
+	 * UPLOAD Git LFS objects already in `cwd`'s local LFS store to the arbiter's
+	 * LFS endpoint (`git lfs push --object-id <arbiter> <oids>`, in batches),
+	 * BEFORE any ref that points at them (ADR `ci-agent-job-holds-no-write-token`
+	 * decision 6). Returns the first failing batch's result, else the last one.
+	 * CI phase: apply.
+	 */
+	pushLfsObjects(input: LfsObjectsPushInput): Promise<RunResult>;
 }
+
+/** Input of {@link RefWriteStrategy.pushLfsObjects}. */
+export interface LfsObjectsPushInput {
+	/** The arbiter remote name (its LFS endpoint comes from `cwd`'s config and `.lfsconfig`). */
+	arbiter: string;
+	/** The sha256 oids to upload (each already in the local store). */
+	oids: readonly string[];
+	/** Working clone the push runs in. */
+	cwd: string;
+	/** Environment for the child git process. */
+	env: NodeJS.ProcessEnv | undefined;
+}
+
+/** How many oids one `git lfs push --object-id` is given. */
+const LFS_PUSH_BATCH = 100;
 
 /** Input of {@link RefWriteStrategy.createLockRef}. */
 export interface LockRefCreateInput {
@@ -256,6 +279,26 @@ export const currentRefWrite: RefWriteStrategy = {
 
 	publishTreelessResult(input) {
 		return pushTreelessResult(input);
+	},
+
+	async pushLfsObjects({arbiter, oids, cwd, env}) {
+		let last: RunResult = {status: 0, stdout: '', stderr: ''};
+		for (let i = 0; i < oids.length; i += LFS_PUSH_BATCH) {
+			last = await runAsync(
+				'git',
+				[
+					'lfs',
+					'push',
+					'--object-id',
+					arbiter,
+					...oids.slice(i, i + LFS_PUSH_BATCH),
+				],
+				cwd,
+				{env},
+			);
+			if (last.status !== 0) return last;
+		}
+		return last;
 	},
 };
 

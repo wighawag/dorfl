@@ -8,8 +8,9 @@
  *   - `handoff.json`: the record;
  *   - `work.bundle`: for code-carrying intents only, `git bundle create
  *     work.bundle <work-branch> ^<baseSha>`, exactly one ref;
- *   - `lfs/<oid>`: LFS objects (checked against the bundle's pointers by task
- *     `ci-split-handoff-lfs-objects`; here only their names and sizes).
+ *   - `lfs/<oid>`: the object of every LFS pointer the bundle's new commits
+ *     add or change (`ci-handoff-lfs.ts`; the reader here checks only their
+ *     names and sizes, the apply validation checks them against the pointers).
  *
  * The reader treats the directory as HOSTILE (the agent controls everything in
  * its job): it must sit under `$RUNNER_TEMP`, only those names are read, a
@@ -36,6 +37,7 @@ import {
 } from 'node:fs';
 import {isAbsolute, join, relative, sep} from 'node:path';
 import {git} from './git.js';
+import {writeLfsObjects} from './ci-handoff-lfs.js';
 import {
 	canonicalHandoffItem,
 	handoffByteLimits,
@@ -199,16 +201,18 @@ export interface HandoffBundleSource {
 /**
  * Write the handoff into `dir` (created, and required to be empty): validate
  * the record exactly as the reader will, then write `handoff.json` and, for a
- * code-carrying intent, `work.bundle` with exactly one ref. The record's item is
- * written in its canonical form. LFS objects are task
- * `ci-split-handoff-lfs-objects`.
+ * code-carrying intent, `work.bundle` with exactly one ref, and `lfs/<oid>` for
+ * the object of every LFS pointer its new commits add or change (from the
+ * local store; one the store lacks is left out and returned in `lfsMissing`,
+ * and the apply job then rejects the handoff naming it). The record's item is
+ * written in its canonical form.
  */
 export function writeHandoff(params: {
 	dir: string;
 	rung: HandoffRung;
 	record: HandoffRecord;
 	bundle?: HandoffBundleSource;
-}): void {
+}): {lfsMissing: string[]} {
 	const {dir, rung, bundle} = params;
 	const item = canonicalHandoffItem(params.record.item);
 	const json = JSON.stringify({...params.record, item});
@@ -225,7 +229,15 @@ export function writeHandoff(params: {
 		reject('layout', `the handoff directory ${dir} is not empty`);
 	}
 	writeFileSync(join(dir, HANDOFF_JSON), json);
-	if (bundle !== undefined) writeBundle(dir, bundle);
+	if (bundle === undefined) return {lfsMissing: []};
+	writeBundle(dir, bundle);
+	const {missing} = writeLfsObjects({
+		dir,
+		repo: bundle.repo,
+		ref: `refs/heads/${bundle.workBranch}`,
+		baseSha: bundle.baseSha,
+	});
+	return {lfsMissing: missing};
 }
 
 /** `git bundle create work.bundle refs/heads/<branch> ^<baseSha>`, then check it. */

@@ -133,7 +133,12 @@ export type HandoffRule =
 	| 'protected-path'
 	| 'symlink-target'
 	| 'gitlink'
-	| 'ledger';
+	| 'ledger'
+	// The LFS objects (`ci-handoff-lfs.ts`):
+	| 'lfs-pointer'
+	| 'lfs-missing'
+	| 'lfs-mismatch'
+	| 'lfs-extra';
 
 /** A handoff (or one being written) that breaks one of the rules. */
 export class HandoffRejected extends Error {

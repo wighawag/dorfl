@@ -10,7 +10,7 @@ import {
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {randomBytes} from 'node:crypto';
+import {createHash, randomBytes} from 'node:crypto';
 import {
 	HANDOFF_LIMITS,
 	HandoffRejected,
@@ -690,6 +690,213 @@ describe('size limits reject before anything is fetched into the repository', ()
 		setHandoffByteLimitsForTest({blobBytes: 3999});
 		expectHostile(dir, 'size', ['src/big.bin']);
 		expectNotFetched(blob);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Git LFS objects (task `ci-split-handoff-lfs-objects`, decision 6)
+// ---------------------------------------------------------------------------
+
+/** The canonical spec v1 pointer of `content`. */
+function pointerOf(content: Buffer | string): string {
+	const bytes = Buffer.from(content);
+	const oid = createHash('sha256').update(bytes).digest('hex');
+	return (
+		'version https://git-lfs.github.com/spec/v1\n' +
+		`oid sha256:${oid}\n` +
+		`size ${bytes.length}\n`
+	);
+}
+
+function oidOf(content: Buffer | string): string {
+	return createHash('sha256').update(Buffer.from(content)).digest('hex');
+}
+
+/** Put `lfs/<oid>` with `bytes` into the artifact directory. */
+function putLfsObject(dir: string, oid: string, bytes: Buffer | string): void {
+	mkdirSync(join(dir, 'lfs'), {recursive: true});
+	writeFileSync(join(dir, 'lfs', oid), bytes);
+}
+
+/** A hostile LFS case: rejected for `rule`, and nothing reached the apply LFS store. */
+function expectLfsHostile(
+	dir: string,
+	rule: string,
+	mentions: string[] = [],
+): void {
+	expectHostile(dir, rule, mentions);
+	expect(existsSync(join(apply, '.git', 'lfs'))).toBe(false);
+}
+
+describe('LFS objects in the handoff', () => {
+	const PAYLOAD = 'a large binary asset, stored in LFS\n'.repeat(40);
+
+	it('accepts a pointer whose object is present, of the right size and hash', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+		const out = run(dir);
+		expect(out.lfsObjects.map((o) => o.oid)).toEqual([oidOf(PAYLOAD)]);
+		expect(out.lfsObjects[0]!.size).toBe(Buffer.byteLength(PAYLOAD));
+		// Validation writes nothing into the apply checkout's LFS store.
+		expect(existsSync(join(apply, '.git', 'lfs'))).toBe(false);
+	});
+
+	it('accepts a bundle with no pointer and no lfs/ directory', () => {
+		setup();
+		write(agent, 'src/thing.ts', 'x\n');
+		commitAll(agent, 'work');
+		expect(run(writeArtifact()).lfsObjects).toEqual([]);
+	});
+
+	it('rejects a pointer with no object', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		expectLfsHostile(writeArtifact(), 'lfs-missing', [
+			oidOf(PAYLOAD),
+			'assets/logo.bin',
+		]);
+	});
+
+	it('rejects a text file that parses as a pointer when its object is absent', () => {
+		setup();
+		// A legitimate test fixture that happens to be a pointer counts as one.
+		write(agent, 'test/fixtures/pointer.txt', pointerOf('fixture'));
+		commitAll(agent, 'add a fixture');
+		expectLfsHostile(writeArtifact(), 'lfs-missing', [
+			'test/fixtures/pointer.txt',
+		]);
+	});
+
+	it('rejects an object whose hash does not match its pointer', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		const dir = writeArtifact();
+		// Same size, other bytes.
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD.replace('a large', 'A large'));
+		expectLfsHostile(dir, 'lfs-mismatch', [oidOf(PAYLOAD), 'hash']);
+	});
+
+	it('rejects an object whose size does not match its pointer', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD + 'more');
+		expectLfsHostile(dir, 'lfs-mismatch', [oidOf(PAYLOAD), 'bytes']);
+	});
+
+	for (const [label, text] of [
+		[
+			'an extra key',
+			pointerOf(PAYLOAD) + 'ext-0-foo sha256:' + 'a'.repeat(64) + '\n',
+		],
+		[
+			'keys out of order',
+			(() => {
+				const [v, o, s] = pointerOf(PAYLOAD).split('\n');
+				return `${v}\n${s}\n${o}\n`;
+			})(),
+		],
+		[
+			'a short oid',
+			pointerOf(PAYLOAD).replace(/sha256:[0-9a-f]{4}/, 'sha256:'),
+		],
+		[
+			'an upper-case oid',
+			pointerOf(PAYLOAD).replace(
+				/sha256:(.*)/,
+				(_, h: string) => `sha256:${h.toUpperCase()}`,
+			),
+		],
+		[
+			'a size with a leading zero',
+			pointerOf(PAYLOAD).replace('size ', 'size 0'),
+		],
+		['a missing final newline', pointerOf(PAYLOAD).slice(0, -1)],
+		['CRLF line ends', pointerOf(PAYLOAD).replace(/\n/g, '\r\n')],
+		[
+			'the legacy hawser version',
+			pointerOf(PAYLOAD).replace(
+				'https://git-lfs.github.com/spec/v1',
+				'https://hawser.github.com/spec/v1',
+			),
+		],
+	] as const) {
+		it(`rejects a malformed pointer (${label})`, () => {
+			setup();
+			write(agent, 'assets/logo.bin', text);
+			commitAll(agent, 'add a malformed pointer');
+			const dir = writeArtifact();
+			putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+			expectLfsHostile(dir, 'lfs-pointer', ['assets/logo.bin']);
+		});
+	}
+
+	it('rejects an unreferenced extra object', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+		putLfsObject(dir, oidOf('quota filler'), 'quota filler');
+		expectLfsHostile(dir, 'lfs-extra', [oidOf('quota filler')]);
+	});
+
+	it('rejects an extra object next to a bundle that carries no pointer', () => {
+		setup();
+		write(agent, 'src/thing.ts', 'x\n');
+		commitAll(agent, 'work');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf('quota filler'), 'quota filler');
+		expectLfsHostile(dir, 'lfs-extra', [oidOf('quota filler')]);
+	});
+
+	it('rejects an object over the LFS size limit', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'add an LFS asset');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+		setHandoffByteLimitsForTest({lfsBytes: Buffer.byteLength(PAYLOAD) - 1});
+		expectLfsHostile(dir, 'size', ['LFS']);
+	});
+
+	it('rejects a pointer whose size is over the LFS size limit, before looking for its object', () => {
+		setup();
+		const huge =
+			'version https://git-lfs.github.com/spec/v1\n' +
+			`oid sha256:${'e'.repeat(64)}\n` +
+			`size ${handoffByteLimits().lfsBytes + 1}\n`;
+		write(agent, 'assets/huge.bin', huge);
+		commitAll(agent, 'add a huge pointer');
+		expectLfsHostile(writeArtifact(), 'size', ['assets/huge.bin']);
+	});
+
+	it('rejects a .lfsconfig change even with its objects present (protected path)', () => {
+		setup();
+		write(agent, '.lfsconfig', '[lfs]\n\turl = https://evil.example/lfs\n');
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'redirect the LFS endpoint');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+		expectLfsHostile(dir, 'protected-path', ['.lfsconfig', 'locally']);
+	});
+
+	it('scans pointers added in an earlier commit and changed later', () => {
+		setup();
+		write(agent, 'assets/logo.bin', pointerOf('first version'));
+		commitAll(agent, 'first');
+		write(agent, 'assets/logo.bin', pointerOf(PAYLOAD));
+		commitAll(agent, 'second');
+		const dir = writeArtifact();
+		putLfsObject(dir, oidOf(PAYLOAD), PAYLOAD);
+		// The first version's object is referenced by a new commit too.
+		expectLfsHostile(dir, 'lfs-missing', [oidOf('first version')]);
 	});
 });
 
