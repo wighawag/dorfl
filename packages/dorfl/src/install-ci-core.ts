@@ -772,6 +772,55 @@ export const PI_HARNESS_PACKAGE = '@earendil-works/pi-coding-agent';
 export const PI_HARNESS_VERSION = '0.80.6';
 
 /**
+ * The `pi` packages the harness LOADS besides itself, each pinned to an exact
+ * version that is known to load with {@link PI_HARNESS_VERSION}.
+ *
+ * `pi-coding-agent` declares its sibling packages with a caret range
+ * (`@earendil-works/pi-ai: ^0.80.6`), which on a `0.x` version floats within
+ * the minor. `pi-ai@0.80.10` removed the `getOAuthApiKey` export that
+ * `pi-coding-agent@0.80.6` imports, so a resolver that honours the caret kills
+ * `pi` on start. npm happens to be protected by the `npm-shrinkwrap.json` the
+ * package publishes; pnpm ignores that file and was broken. Pinning the family
+ * explicitly (as npm `overrides`, see {@link piHarnessManifest}) makes the
+ * install reproducible whatever the resolver.
+ *
+ * The set is `pi-coding-agent`'s own `@earendil-works/*` dependencies plus
+ * theirs (`npm view @earendil-works/pi-coding-agent@<v> dependencies`,
+ * recursively): at 0.80.6 that is pi-ai, pi-agent-core (which depends on pi-ai)
+ * and pi-tui. Re-derive it on every {@link PI_HARNESS_VERSION} bump: a newer
+ * harness may add a package (0.87 adds `@earendil-works/chord`).
+ */
+export const PI_HARNESS_PINNED_DEPENDENCIES: Readonly<Record<string, string>> =
+	{
+		'@earendil-works/pi-agent-core': PI_HARNESS_VERSION,
+		'@earendil-works/pi-ai': PI_HARNESS_VERSION,
+		'@earendil-works/pi-tui': PI_HARNESS_VERSION,
+	};
+
+/**
+ * The throwaway `package.json` the setup action installs the harness from: the
+ * harness at {@link PI_HARNESS_VERSION} as the only dependency, and every pi
+ * package it loads forced to its exact pin through npm `overrides`.
+ *
+ * A project-local install (not `npm install -g`) because `overrides` only apply
+ * to the ROOT project, and a global install makes each package its own root. The
+ * same file is used in `registry` and `workspace` mode: pnpm 11 also isolates
+ * every global package, so listing the pins next to the harness in
+ * `pnpm add -g` would not constrain the harness's own tree either.
+ */
+export function piHarnessManifest(): {
+	private: true;
+	dependencies: Record<string, string>;
+	overrides: Record<string, string>;
+} {
+	return {
+		private: true,
+		dependencies: {[PI_HARNESS_PACKAGE]: PI_HARNESS_VERSION},
+		overrides: {...PI_HARNESS_PINNED_DEPENDENCIES},
+	};
+}
+
+/**
  * The version of THIS dorfl package, read at runtime from its own
  * `package.json` (the single source changesets bumps on release). The composite
  * setup action installs `dorfl@<this version>` so a consumer's CI runs the SAME
@@ -808,29 +857,48 @@ export function dorflPackageVersion(): string {
 	return version;
 }
 
+/** Where the setup action installs the harness (under the job's temp dir). */
+const PI_HARNESS_DIR = '$RUNNER_TEMP/dorfl-harness';
+
 /**
- * The install step for the configured harness (the `pi` CLI; `''` ⇒ none).
- * `registry` mode installs via `npm install -g`; `workspace` mode installs via
- * `pnpm add -g` so the harness lands on the pnpm global bin already on
- * `$GITHUB_PATH` (mirroring whitesmith's dev mode).
+ * The install + smoke steps for the configured harness (the `pi` CLI; `''` ⇒
+ * none). Identical in `registry` and `workspace` mode: the harness is installed
+ * with npm from {@link piHarnessManifest} into a job-local directory whose
+ * `node_modules/.bin` is added to `$GITHUB_PATH`, so every pi package it loads
+ * is pinned whatever package manager the repository uses. The smoke step then
+ * runs `pi --version`, which imports the harness's whole module graph, so a
+ * broken install fails setup with a clear message instead of failing inside a
+ * dorfl agent launch.
  */
-function harnessInstallStep(
-	harness: HarnessAdapter,
-	installSource: InstallSource,
-): string {
+function harnessInstallStep(harness: HarnessAdapter): string {
 	if (harness === 'pi') {
-		const spec = `${PI_HARNESS_PACKAGE}@${PI_HARNESS_VERSION}`;
-		const run =
-			installSource === 'workspace'
-				? `pnpm add -g ${spec}`
-				: `npm install -g ${spec}`;
+		const manifest = JSON.stringify(piHarnessManifest(), null, 2);
 		return `
     # Pinned to the exact harness version this dorfl release declares
-    # (PI_HARNESS_VERSION): the job holds write access and a provider key, so the
-    # version must not move on its own. Re-run \`dorfl install-ci\` to upgrade.
+    # (PI_HARNESS_VERSION), with every pi package it loads pinned too (npm
+    # \`overrides\`; a caret range on a 0.x version floats within the minor): the
+    # job holds a provider key, so no version may move on its own. Re-run
+    # \`dorfl install-ci\` to upgrade.
     - name: Install agent harness (pi)
       shell: bash
-      run: ${run}`;
+      run: |
+        mkdir -p "${PI_HARNESS_DIR}"
+        cd "${PI_HARNESS_DIR}"
+        cat > package.json << 'HARNESS_EOF'
+${indent(manifest, 8)}
+        HARNESS_EOF
+        npm install --no-audit --no-fund
+        echo "${PI_HARNESS_DIR}/node_modules/.bin" >> "$GITHUB_PATH"
+
+    # \`pi --version\` loads the harness's module graph, so an install whose pi
+    # packages do not load together fails HERE, not inside a dorfl agent launch.
+    - name: Check the agent harness loads (pi)
+      shell: bash
+      run: |
+        if ! pi --version; then
+          echo "::error title=dorfl-setup::The agent harness (pi) is installed but cannot start, so its pi packages do not load together. Re-run dorfl install-ci with a dorfl release that pins a working harness."
+          exit 1
+        fi`;
 	}
 	return '';
 }
@@ -930,18 +998,15 @@ ${indent(modelsJsonStr, 8)}
         MODELS_EOF${exportStep}`;
 	}
 
-	const installHarness = harnessInstallStep(
-		config.harness,
-		config.installSource,
-	);
+	const installHarness = harnessInstallStep(config.harness);
 
 	// The CLI-install block branches on installSource. `registry` installs the
 	// published CLI via `npm install -g dorfl` (the default for every
 	// consumer repo). `workspace` builds the CLI from the checked-out source and
 	// links it onto PATH — for the self-hosting dorfl monorepo, which is
 	// not published under that npm name. We add pnpm's global bin to $GITHUB_PATH
-	// so the linked `dorfl` (and the pnpm-installed harness) are on PATH in
-	// all subsequent steps; we always rebuild because source changes per commit.
+	// so the linked `dorfl` is on PATH in all subsequent steps (the harness adds
+	// its own bin dir, the same way in both modes); we always rebuild because source changes per commit.
 	let installSteps: string;
 	if (config.installSource === 'workspace') {
 		installSteps = `\
