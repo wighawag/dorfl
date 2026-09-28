@@ -1,0 +1,68 @@
+--- a/packages/dorfl/src/ci-phase-intake.ts
++++ b/packages/dorfl/src/ci-phase-intake.ts
+@@ -569,7 +569,8 @@
+ 	// ONLY the comments the lock job read: one posted since is neither shown to
+ 	// the agent nor (the apply job marks `seenCommentIds`) marked seen.
+ 	const seen = new Set(held.seenCommentIds);
+-	const comments = thread.filter((c) => c.id !== undefined && seen.has(c.id));
++	void seen;
++	const comments = thread; // NAIVE STUB: every comment is shown
+ 	if (comments.length < thread.length) {
+ 		note(
+ 			`${thread.length - comments.length} comment(s) the lock job did not read ` +
+@@ -765,20 +766,34 @@
+ 		let doc: IntakeDocumentDecision | undefined;
+ 		let content: string | undefined;
+ 		const originTrust: OriginTrust = held.originTrust ?? 'untrusted';
++		let naivePlacement: 'backlog' | 'ready' | undefined;
++		let naiveTrust: OriginTrust = originTrust;
+ 		try {
+ 			if (options.handoffDir === undefined) {
+ 				throw new HandoffRejected('layout', 'no handoff directory was given');
+ 			}
+-			record = readHandoff({
+-				dir: options.handoffDir,
+-				runnerTemp: runnerTempFrom(options.runnerTemp, env),
+-				trust: {item, rung: 'intake'},
+-			}).record;
++			// NAIVE STUB: trust the record as the agent wrote it.
++			record = JSON.parse(
++				readFileSync(`${options.handoffDir}/handoff.json`, 'utf8'),
++			) as HandoffRecord;
++			void readHandoff;
++			void runnerTempFrom;
++			void intakeDocumentFromRecord;
+ 			if (
+ 				record.intent.kind === 'intake-task' ||
+ 				record.intent.kind === 'intake-spec'
+ 			) {
+-				doc = intakeDocumentFromRecord(record);
++				const p = record.products as Record<string, string>;
++				const slug = p.slug ?? paramCase(p.title).replace(/[^a-z0-9-]/g, '');
++				const trust = (p.originTrust as OriginTrust) ?? originTrust;
++				naivePlacement = p.placement as 'backlog' | 'ready' | undefined;
++				naiveTrust = trust;
++				doc = {kind: 'task', slug, title: p.title, body: p.body};
++				content =
++					`---\ntitle: ${p.title}\nslug: ${slug}\nissue: ${issueNumber}\n` +
++					`origin: ${p.origin ?? 'issue'}\noriginTrust: ${trust}\n---\n\n${p.body}`;
++			}
++			if (false as boolean) {
+ 				// Re-render from the verdict and the TRUSTED issue number and stamp,
+ 				// then re-parse: the stamp must read back as the trusted values.
+ 				try {
+@@ -810,9 +825,12 @@
+ 			integration: {task: mode, spec: mode},
+ 			mergeRetries: options.mergeRetries,
+ 			mergeJitterMs: options.mergeJitterMs,
+-			originTrust,
++			originTrust: naiveTrust,
+ 			noPR: options.noPR,
+-			placement: intakePlacementInputs(options),
++			placement: {
++				...intakePlacementInputs(options),
++				explicitTasksLandIn: naivePlacement,
++			},
+ 			providerInstance: options.providerInstance,
+ 			seen: held.seenCommentIds,
+ 			env,
