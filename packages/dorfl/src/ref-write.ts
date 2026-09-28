@@ -52,12 +52,6 @@ export interface RefWriteStrategy {
 	 */
 	createLockRef(input: LockRefCreateInput): Promise<RunResult>;
 	/**
-	 * AMEND a held per-item lock ref in place: push `<commit>:<ref>` leased on
-	 * the sha the caller just read (`--force-with-lease=<ref>:<expectedSha>`).
-	 * CI phase: apply.
-	 */
-	amendLockRef(input: LockRefAmendInput): Promise<RunResult>;
-	/**
 	 * DELETE a held per-item lock ref on the arbiter, leased on the sha the caller
 	 * read (`push --delete <ref> --force-with-lease=<ref>:<expectedSha>`). CI
 	 * phase: apply (the lease is on the lock job's `lockSha`).
@@ -150,12 +144,6 @@ export interface LockRefCreateInput {
 	env: NodeJS.ProcessEnv | undefined;
 }
 
-/** Input of {@link RefWriteStrategy.amendLockRef}. */
-export interface LockRefAmendInput extends LockRefCreateInput {
-	/** The ref's sha the caller read; the push is leased on it. */
-	expectedSha: string;
-}
-
 /** Input of {@link RefWriteStrategy.deleteLockRef}. */
 export interface LockRefDeleteInput {
 	/** The arbiter remote name. */
@@ -212,20 +200,6 @@ export const currentRefWrite: RefWriteStrategy = {
 		return runAsync(
 			'git',
 			['push', arbiter, `${commit}:${ref}`, `--force-with-lease=${ref}:`],
-			cwd,
-			{env},
-		);
-	},
-
-	amendLockRef({arbiter, ref, commit, expectedSha, cwd, env}) {
-		return runAsync(
-			'git',
-			[
-				'push',
-				arbiter,
-				`${commit}:${ref}`,
-				`--force-with-lease=${ref}:${expectedSha}`,
-			],
 			cwd,
 			{env},
 		);

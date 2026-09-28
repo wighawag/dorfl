@@ -65,7 +65,6 @@ describe('ref-write seam: shape', () => {
 	it('the active seam starts as the current-behaviour strategy, method for method', () => {
 		const methods: (keyof RefWriteStrategy)[] = [
 			'createLockRef',
-			'amendLockRef',
 			'deleteLockRef',
 			'pushContinuedBranch',
 			'pushLeasedWorkBranch',
@@ -79,44 +78,6 @@ describe('ref-write seam: shape', () => {
 		for (const m of methods) {
 			expect(refWrite[m]).toBe(currentRefWrite[m]);
 		}
-	});
-
-	it('the default amendLockRef is a push leased on the expected sha (accepts a match, rejects a mismatch)', async () => {
-		const seeded = seedRepoWithArbiter(scratch.root, ['amend']);
-		const acquired = await acquireItemLock({
-			item: 'task:amend',
-			action: 'implement',
-			cwd: seeded.repo,
-			arbiter: ARBITER,
-			env: gitEnv(),
-		});
-		expect(acquired.outcome).toBe('acquired');
-		const ref = acquired.ref;
-		const before = arbiterRef(seeded, ref);
-		const commit = gitIn(
-			['commit-tree', `${before}^{tree}`, '-m', 'amended'],
-			seeded.repo,
-		).trim();
-		const wrongLease = await currentRefWrite.amendLockRef({
-			arbiter: ARBITER,
-			ref,
-			commit,
-			expectedSha: commit,
-			cwd: seeded.repo,
-			env: gitEnv(),
-		});
-		expect(wrongLease.status).not.toBe(0);
-		expect(arbiterRef(seeded, ref)).toBe(before);
-		const amended = await currentRefWrite.amendLockRef({
-			arbiter: ARBITER,
-			ref,
-			commit,
-			expectedSha: before,
-			cwd: seeded.repo,
-			env: gitEnv(),
-		});
-		expect(amended.status).toBe(0);
-		expect(arbiterRef(seeded, ref)).toBe(commit);
 	});
 });
 

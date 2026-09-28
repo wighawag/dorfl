@@ -152,12 +152,12 @@ export interface ReleaseResult {
 }
 
 /**
- * Outcome of an AMEND-style transition (resume-crash-orphan / requeue) — the
+ * Outcome of an AMEND-style transition (resume-crash-orphan) — the
  * lock-entry STATE MACHINE's interior moves. Post-CONTRACT step (task
  * `retire-stuck-lock-state`) the `mark-stuck` transition + the `wrong-state`
  * verdict are retired with the `stuck` state itself.
  *   - `transitioned` — we won the CAS; the entry is now at the target state
- *                      (or removed, for requeue).
+ *                      (or removed, for the crash-orphan clear).
  *   - `not-held`     — there is no entry to transition (the move's precondition
  *                      is a held entry; absent ⇒ illegal here).
  *   - `lost`         — the leased CAS was rejected because a CONCURRENT writer
@@ -173,7 +173,7 @@ export interface TransitionResult {
 	entry: string;
 	ref: string;
 	message: string;
-	/** The lock entry AFTER a successful `transitioned` (absent for requeue's removal). */
+	/** The lock entry AFTER a successful `transitioned` (absent for a removal). */
 	lock?: LockEntry;
 }
 
@@ -629,7 +629,7 @@ export async function releaseHeldItemLock(
 /**
  * Fetch the lock refs and return the held entry + its current ref sha, or
  * `undefined` when the item is at REST (no ref). Shared read-before-CAS step for
- * the amend-style transitions (mark-stuck / resume / requeue): they all need BOTH
+ * the amend-style transitions (resume): they need BOTH
  * the current entry (to check the state precondition + carry forward `action` /
  * `holder` / `since`) and the current sha (to lease the CAS on it).
  */
@@ -670,50 +670,6 @@ async function fetchHeldEntry(
 		return undefined;
 	}
 	return {lock, sha};
-}
-
-/**
- * AMEND the held entry in place via a leased CAS: build a NEW parentless commit
- * carrying `next` and push it to the SAME ref with `--force-with-lease=<ref>:<sha>`
- * (the sha we just read). The arbiter accepts ONLY if the ref is unchanged since
- * our read — a concurrent writer who moved it makes our lease fail (`lost`). No
- * retry loop: a rejection is a genuine same-item race the caller should lose.
- */
-async function amendHeldEntry(
-	next: LockEntry,
-	ref: string,
-	expectedSha: string,
-	cwd: string,
-	arbiter: string,
-	env: NodeJS.ProcessEnv | undefined,
-): Promise<TransitionResult> {
-	const commit = await buildLockCommit(next, cwd, env);
-	const push = await refWrite.amendLockRef({
-		arbiter,
-		ref,
-		commit,
-		expectedSha,
-		cwd,
-		env,
-	});
-	if (push.status === 0) {
-		// Move our local copy to the new commit too (best-effort) so a subsequent
-		// read in the same clone sees the amended entry without a refetch.
-		await gitSoft(['update-ref', ref, commit], cwd, env);
-		return {
-			outcome: 'transitioned',
-			entry: next.entry,
-			ref,
-			message: `${next.entry} → ${next.action}/${next.state}`,
-			lock: next,
-		};
-	}
-	return {
-		outcome: 'lost',
-		entry: next.entry,
-		ref,
-		message: `'${next.entry}' lock changed concurrently (CAS lost). Back off.`,
-	};
 }
 
 /** Verdict of the SHARED leased delete {@link leasedDeleteLockRef}: `deleted` (the
@@ -900,76 +856,6 @@ export async function resumeItemLock(
 			entry,
 			ref,
 			message: `'${entry}' is active and not surfaced on ${arbiter}/main — nothing to resume (a healthy in-flight hold; a parked item is drained via its needsAnswers sidecar).`,
-		};
-	} catch (err) {
-		return {
-			outcome: 'error',
-			entry,
-			ref,
-			message: err instanceof Error ? err.message : String(err),
-		};
-	}
-}
-
-/**
- * requeue: give up on a held lock and return the item to the pool by REMOVING
- * the entry. Post-CONTRACT step (task `retire-stuck-lock-state`) there is NO
- * `stuck` state to guard against — the held lock is always `active`, so
- * requeue works on any held entry (a leased delete; a concurrent change ⇒
- * `lost`). The body never moved (it rests in the pool on `main`), so requeue
- * is purely "release the lock"; the kept `work/<slug>` branch remains for
- * recovery.
- */
-export async function requeueItemLock(
-	opts: ReleaseOptions,
-): Promise<TransitionResult> {
-	const arbiter = opts.arbiter ?? 'origin';
-	const env = opts.env;
-	const cwd = opts.cwd;
-	if (!opts.item) {
-		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
-	}
-	const entry = lockEntryFor(opts.item);
-	const ref = itemLockRef(entry);
-	try {
-		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
-		if (!held) {
-			return {
-				outcome: 'not-held',
-				entry,
-				ref,
-				message: `'${entry}' not locked`,
-			};
-		}
-		// WRITE-SEAM EXEMPT: `requeueItemLock` is a human-verb lock primitive (no
-		// CI path reaches it; no production caller today), so its leased delete
-		// stays a direct push rather than going through `refWrite.deleteLockRef`
-		// (task `ci-split-route-direct-writes-through-seams`).
-		const del = await gitSoft(
-			[
-				'push',
-				arbiter,
-				'--delete',
-				ref,
-				`--force-with-lease=${ref}:${held.sha}`,
-			],
-			cwd,
-			env,
-		);
-		if (del.status === 0) {
-			await gitSoft(['update-ref', '-d', ref], cwd, env);
-			return {
-				outcome: 'transitioned',
-				entry,
-				ref,
-				message: `requeued ${entry} (lock released, body still in pool)`,
-			};
-		}
-		return {
-			outcome: 'lost',
-			entry,
-			ref,
-			message: `'${entry}' lock changed concurrently (CAS lost). Back off.`,
 		};
 	} catch (err) {
 		return {

@@ -135,7 +135,7 @@ export function assertAgentOrRepoCodeAllowed(
  * be the agent job (read-only token, no persisted credential) or pass
  * `--phase lock|apply`. The workflow guard (task `ci-split-generate-workflows`)
  * and the single-job warning (task `ci-split-warn-single-job-workflows`) read
- * this set; `phase-verbs.test.ts` fails when a CLI verb is in neither this set
+ * this set; `phase-cli.test.ts` fails when a CLI verb is in neither this set
  * nor {@link NON_AGENT_VERBS}.
  */
 export const AGENT_SPAWNING_VERBS: ReadonlySet<string> = new Set([
