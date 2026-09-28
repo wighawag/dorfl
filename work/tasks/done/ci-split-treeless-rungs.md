@@ -62,3 +62,24 @@ Ordering note: the path splits after `ci-split-agent-result-and-reruns` all edit
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If a dependency landed differently than this task assumes, or an ADR superseded an assumption here, do NOT build on the stale premise: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). Building on a stale task produces wrong-but-compiling work.
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not; if a choice meets the ADR gate in `ADR-FORMAT.md`, also write an ADR in `docs/adr/` and name it there). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Where the phase boundary sits.** The agent phase runs the real rung with its write steps stubbed and captures what the agents emitted. The apply phase re-runs the same rung, replaying the checked handoff in place of the agents. This keeps one rung implementation and gives the laptop's exact commits, which the e2e comparison checks. The alternative was to have the apply phase call the write steps directly, which would copy the rung's glue code. This touches only `advance --phase`.
+- **Publish before releasing the lock.** I followed the task text ("publish, then the release"), not the copied design note, which says today's laptop order (release, then publish) must be preserved. This way the lock covers the write, and a refused or failed publish still releases the lock so the next tick retries. It is easy to reverse.
+- **"Surfacing" an item uses the existing stuck-question mechanism** (`surfaceStuckToNeedsAttention`), for any item type. This covers agent failure, timeout, and a rejected handoff, and the lock is released afterwards. The laptop never surfaces tree-less rungs, so this is new behaviour in CI. One side effect: after a surfaced failure, an observation's "keep" answer is handled by the stuck-answer path, not the agentic decision.
+- **Checks added on top of the handoff format:** the record must be this rung's own intent kind. A triage duplicate/map is rejected unless `observationTriage: auto`. A triage target naming the note itself is rejected. On `success` with `needsAgent: false`, the handoff is ignored and the rung runs without an agent.
+- **New refusals in the apply phase.**
+  - `stale`: the item's rung or agent need changed on the fresh `main`; nothing is written.
+  - `publish-refused`: the publish check failed.
+  - `publish-failed`: the result did not reach `main`.
+
+  All three release the lock and exit 1.
+- **What the handoff carries.** The format carries plain strings and requires title/body/slug for a mint, so:
+  - Surface questions travel as question text only; their optional context and default are dropped (noted in the changeset).
+  - A mint with no drafted slug uses the observation's slug, sanitised as `promoteObservation` / `mintAdr` already do.
+  - A mint with no drafted body is sent as an empty string, and the writer builds the body as today.
+  - A missing title becomes the slug.
+  - An `ask` with several questions is joined into one follow-up question.
+- **The "surface short-circuit" is only reachable from triage.** An item on the surface rung always has `needsAnswers: true`, so the short-circuit's own check can never fire there. The short-circuit scenario therefore runs through the triage rung's fall-through, as the code does today. I resolved this from the code rather than stopping.
+- **Routing:** the lock phase classifies at the arbiter's `main`, and the agent and apply phases follow the lock job's `rung` output. When classification is not possible, routing falls back to the argument's prefix: `spec:` goes to tasking, `obs:` to tree-less, anything else to build. This touches the build and tasking lock phases only as routing.
