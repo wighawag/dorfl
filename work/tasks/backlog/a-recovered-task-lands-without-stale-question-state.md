@@ -10,6 +10,8 @@ Every task in the CI-split drive that was surfaced to needs-attention and then r
 
 When a task transitions to `done/` (or another terminal folder), clear `needsAnswers` and drain the item's own stuck/needs-attention sidecar in the same land, on every land path (propose and merge, laptop and the CI apply phase). Also clean up the current state of this repository's ledger once (the done files above and the stranded sidecar) as part of the change.
 
+> FORWARD-NOTE (conductor, 2026-09-28): the ledger examples above are already out of date, and that is expected, not drift. The existing "drain stranded question state ... (terminal on main)" reconcile (`needs-attention.ts`) ran on later claims and rewrote each named done file to `needsAnswers: false`, and drained `work/questions/task-ci-split-docs-drift-and-rollout.md` (commit 2395adf6). The defect this task fixes still holds: the flag and the sidecar survive the LAND itself and are only cleaned by a LATER claim, so the ledger is wrong in between and stays wrong when no claim follows. For the one-off cleanup criterion, re-scan `main` when you build (at the time of this note, `work/tasks/done/advance-tick-classifier.md` still carried `needsAnswers: true`) rather than relying on the list above. A cleared flag may be removed or set to `false`; record which in your Decisions.
+
 ## Acceptance criteria
 
 - [ ] Landing a task that was surfaced and then recovered leaves no `needsAnswers` in the done file and no sidecar under `work/questions/` (tested on the land primitive, merge and propose).
