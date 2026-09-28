@@ -10,6 +10,7 @@ import {
 import {listMirrors} from './registry.js';
 import {
 	fetchMirrorMainOrWarn,
+	mirrorInReconcileScope,
 	resolveRepoConfigFromMirror,
 } from './repo-mirror.js';
 import {resolveRepoConfig} from './repo-config.js';
@@ -425,6 +426,16 @@ export async function scan(
 		 * claim path sweeps on every unit of work.
 		 */
 		reconcileLocks?: boolean;
+		/**
+		 * ARBITER SCOPE of the {@link reconcileLocks} write (task
+		 * `status-no-arbiter-is-honoured`, the same scoping `status --reconcile-locks`
+		 * has). When set, ONLY the registered mirror whose `origin` hub-keys to this
+		 * key has its stale locks RELEASED; every other mirror is merely classified,
+		 * exactly as without `reconcileLocks`. `undefined` reconciles EVERY mirror:
+		 * the CLI leaves it undefined only behind the explicit `--all-arbiters`.
+		 * Ignored when `reconcileLocks` is not `true`.
+		 */
+		reconcileArbiterKey?: string;
 		env?: NodeJS.ProcessEnv;
 		/**
 		 * The per-machine {@link ConfigOverrideMap} (from `loadConfigOverride`),
@@ -494,7 +505,14 @@ export async function scan(
 		const MIRROR_MAIN = {mainRef: 'main'};
 		let staleLockEntries: string[];
 		let lockHeld: LockEntry[];
-		if (options.reconcileLocks === true) {
+		if (
+			options.reconcileLocks === true &&
+			mirrorInReconcileScope(
+				mirror.path,
+				options.reconcileArbiterKey,
+				options.env,
+			)
+		) {
 			const swept = await reconcileTerminalItemLocks(
 				mirror.path,
 				'origin',

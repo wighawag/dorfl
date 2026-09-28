@@ -4,8 +4,7 @@ import {resolveHarness, type Harness} from './harness.js';
 // harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
-import {fetchMirrorMainOrWarn, readOriginUrl} from './repo-mirror.js';
-import {encodeRepoKey} from './repo-key.js';
+import {fetchMirrorMainOrWarn, mirrorInReconcileScope} from './repo-mirror.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {
 	listItemLockEntries,
@@ -238,25 +237,6 @@ export interface StatusOptions {
 	 */
 	cwd?: CwdSection;
 	env?: NodeJS.ProcessEnv;
-}
-
-/**
- * Is `mirrorPath` inside the `--reconcile-locks` write scope? `undefined` scope
- * means every mirror (the explicit `--all-arbiters`); otherwise only the mirror
- * whose `origin` URL hub-keys to `arbiterKey` (the SAME keying `gc` uses for its
- * per-job arbiter scope). A mirror whose `origin` is unreadable is OUT of scope:
- * the safe direction for a write.
- */
-function mirrorInReconcileScope(
-	mirrorPath: string,
-	arbiterKey: string | undefined,
-	env: NodeJS.ProcessEnv | undefined,
-): boolean {
-	if (arbiterKey === undefined) {
-		return true;
-	}
-	const url = readOriginUrl(mirrorPath, env);
-	return url !== undefined && encodeRepoKey(url) === arbiterKey;
 }
 
 /**
