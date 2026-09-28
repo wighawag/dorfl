@@ -16,6 +16,8 @@ For (1), make the interleaving deterministic: force both jobs to finish their re
 
 For (2) and (3), give them explicit timeouts in line with their git-heavy siblings, after checking that nothing in them is actually slow for a fixable reason (for example an un-stubbed sleep or backoff).
 
+> FORWARD-NOTE (conductor, 2026-09-28): the same negative-race pattern also flaked CI on #446: `merge-retries-external.test.ts` > "mergeRetries (resolved through config): cap controls bounce vs converge > with the resolved cap at 0, two disjoint-file same-repo merges do NOT both cleanly land" (`expected 2 to be less than or equal to 1`). It is in scope: make it deterministic the same way as the integration-core control (ideally through one shared barrier helper), and search for any other "two concurrent X do NOT both land" control with the same shape.
+
 ## Acceptance criteria
 
 - [ ] The integration-core control passes deterministically: run it at least 20 times in a loop, some of them under parallel load (for example alongside the rest of `integration-core.test.ts`), and report the result in Decisions.
