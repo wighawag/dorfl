@@ -14,8 +14,9 @@ superseded_by:
 The integration engine has, since its first cut, gated every landing on a
 **re-verify of the rebased tip** — the work branch rebased onto current
 `<arbiter>/main` (the would-be-merged tree), with `verify` (and a relocated
-review) run there. A moved-`main` mid-push re-rebases and re-gates via a bounded
-CAS retry loop; a `--force` to `main` and an auto-resolved conflict are forbidden
+review) run there. A moved-`main` mid-push re-rebases and retries the push via a
+bounded CAS retry loop (without re-running the gate: see the 2026-09-28
+addendum); a `--force` to `main` and an auto-resolved conflict are forbidden
 (see ADR §10 of `execution-substrate-decisions.md`). All of this already works.
 
 But the doctrine was never written down. The protocol docs (`WORK-CONTRACT.md`,
@@ -59,17 +60,20 @@ There is exactly one landing primitive, mode-agnostic:
 > **`land` = fetch current `main` → rebase the work branch onto it → re-run
 > `verify` (and relocated review) on the rebased tree → advance.**
 >
-> A lost CAS / moved-`main` between the gate and the push INVALIDATES any prior
-> green and re-arms the gate (re-rebase, re-`verify`, retry — never `--force`,
-> never auto-resolve).
+> A lost CAS / moved-`main` between the gate and the push re-rebases and
+> retries the push (never `--force`, never auto-resolve). It does NOT re-run
+> the gate; the CI apply phase reports every land whose tree differs from the
+> gated tree (see the 2026-09-28 addendum).
 
 This is what `integration-core.ts`'s `performIntegration` already implements:
 the `freshWorktreeGate` (default-ON) runs `verify` and a relocated review on a
 throwaway worktree checked out at the rebased tip; the `mergeRetries` CAS
 loop (default cap `DEFAULT_MERGE_RETRIES`, resolved through the same
 `flag > env > per-repo > global > default` precedence chain as the rest of the
-gate family) re-runs that gate against the new tip whenever a competing land
-moves `main` between gate and push. Within a single process,
+gate family) re-rebases onto the new tip and retries the push whenever a
+competing land moves `main` between gate and push. (As first written this
+sentence said the loop re-runs the gate; it never did, see the 2026-09-28
+addendum.) Within a single process,
 `integrator.ts` runs each call inside `integrateLock(key, fn)` (keyed per
 repo by `integrateLockKey`); `run.ts` wires it via the `createKeyedLock()`
 primitive. Across processes the CAS loop alone is the cross-job queue.
@@ -122,8 +126,9 @@ Safety lives at the floor; speed and ergonomics live at the ceiling.
 These predate this ADR (`execution-substrate-decisions.md` §10) and are
 restated here only because every frontend of the primitive preserves them:
 
-- **Never `--force` to `main`.** A lost CAS triggers a re-rebase + re-gate +
-  retry, bounded by `mergeRetries`. A genuinely stuck loser bounces to
+- **Never `--force` to `main`.** A lost CAS triggers a re-rebase and a
+  retried push (no re-gate, see the 2026-09-28 addendum), bounded by
+  `mergeRetries`. A genuinely stuck loser bounces to
   needs-attention; it does not overwrite the lived tip.
 - **Never auto-resolve a conflict.** A textual conflict on rebase routes to
   needs-attention. The whole doctrine is about catching what `git` cannot
@@ -159,6 +164,14 @@ when the follow-on spec is taken up.
   via advance's existing surface→answer→apply rungs) is ONE INSTANCE of this
   frontend pattern, not a new primitive. The land it dispatches IS this
   primitive.
+
+## Addendum 2026-09-28: a lost CAS does not re-run the gate
+
+As first written, §2 and §5 said a lost CAS "re-arms the gate" (re-rebase, re-`verify`, retry), and `WORK-CONTRACT.md` / `CLAIM-PROTOCOL.md` said the same. The code never did that: the merge-mode retry loop in `performIntegration` re-runs only `rebaseOntoMainWithReconcile` and the push, never the fresh-worktree gate (verified while writing spec `ci-agent-job-without-write-token`). ADR `ci-agent-job-holds-no-write-token` decision 2 keeps the code's behaviour and corrects the text here and in both protocol docs.
+
+What that means for the principle of §1: the gate runs once, on the work rebased onto the `main` it fetched. A land that wins its first push lands exactly that tree. A land that loses a race is re-rebased onto the new `main` and lands a tree the gate never saw; a textual conflict on the re-rebase still routes to needs-attention, but a clean re-rebase that is semantically broken is not caught at land time. Before the CI split this was rare, because the gate ran seconds before the first push. After it, the agent job gates minutes before the apply job pushes, so in merge mode with parallel item runs most lands are re-rebased after the gate. Propose mode is unaffected (a human merges the PR, and the repository's own required checks run on it).
+
+To keep that visible rather than silent, the CI apply phase (`--phase apply`) compares the landed tip's tree with the gated tip's tree and, when they differ, prints "`<branch>` landed without re-gate after N lost races" and adds a `Landed-Without-Regate: landed without re-gate after N lost race(s)` trailer to the landed commit (task `ci-split-landed-vs-gated-report`). Lands outside the CI phase split (`do`, `complete`, `run` on a laptop) are unchanged and carry no trailer. Re-running the agent phase on a lost race is a possible follow-up, not decided here.
 
 ## Cross-references
 

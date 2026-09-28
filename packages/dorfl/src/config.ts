@@ -746,8 +746,10 @@ export interface Config {
 	 * INTEGRATES in ONE process; across separate CI jobs the CAS loop IS the queue,
 	 * and this cap is what determines how wide a matrix burst converges before any
 	 * spurious bounce. A wide-matrix CI raises it; the default stays modest. Race-1
-	 * safety is unchanged (a lost CAS costs only a re-rebase + re-gate retry, never a
-	 * `--force`, never a both-land-broken) — scaling the cap only changes WHEN a
+	 * safety is unchanged (a lost CAS costs only a re-rebase and a retried push, never
+	 * a `--force`, never a both-land-broken; it does NOT re-run the gate, and the CI
+	 * apply phase reports a land whose tree differs from the gated tree, ADR
+	 * `ci-agent-job-holds-no-write-token` decision 2) — scaling the cap only changes WHEN a
 	 * genuinely-stuck loser gives up. Resolved per-repo like `freshWorktreeGate`:
 	 * flag (`--merge-retries`) > env (`DORFL_MERGE_RETRIES`) > per-repo > global >
 	 * default. The default matches `integration-core.ts`'s built-in fallback (1000 —

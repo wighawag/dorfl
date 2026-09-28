@@ -1,0 +1,1 @@
+2026-09-28: ADR `ci-agent-job-holds-no-write-token` decision 2 says "Re-running the agent phase on a lost race is recorded as a follow-up idea", but no such note exists under `work/notes/ideas/` (or any spec). Spotted while building task `ci-split-docs-drift-and-rollout`; the follow-up is currently only mentioned, not captured.

@@ -256,7 +256,8 @@ export const REPO_ALLOWED_KEYS = [
 	// is agreed by all collaborators in a wide-matrix CI repo + travels with the
 	// repo. Resolved per-repo through the SAME chain as `freshWorktreeGate`
 	// (flag > env > per-repo > global > default). Safety is unchanged — a lost
-	// CAS still costs only a re-rebase + re-gate retry, never a `--force`.
+	// CAS still costs only a re-rebase and a retried push (no re-gate), never a
+	// `--force`.
 	'mergeRetries',
 	// `strictMergeApproval` (the OPT-IN strictness layered on the OQ6
 	// stale-approval default — spec `land-time-reverify-and-parallel-merge-ceiling`

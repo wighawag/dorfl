@@ -1946,8 +1946,10 @@ export async function performAdvance(
 	//    ITSELF acquires the SAME `task-<slug>`/`prd-<slug>` ref (the create-only CAS
 	//    with NO re-entrancy/auto-steal, per the ADR), so taking it here too would
 	//    DEADLOCK the tick against itself. The inner `do`'s claim/task lock IS the
-	//    single exclusion point for those rungs. The `work/advancing/<entry>.md` marker
-	//    CAS is KEPT for ALL rungs (its removal is the capstone task #9).
+	//    single exclusion point for those rungs. The legacy `work/advancing/<entry>.md`
+	//    marker is GONE (removed by the capstone cut-over, task
+	//    `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): there is no
+	//    marker CAS for any rung, only the per-item lock ref (see `advancing-lock.ts`).
 	const unifiedForRung = isTreeLessRung(classification.kind);
 	const acquire =
 		options.acquireLock ??
