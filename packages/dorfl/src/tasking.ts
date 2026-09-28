@@ -512,32 +512,20 @@ export async function performTask(
 		await switchToWorkBranch(cwd, arbiter, slug, env);
 	}
 
-	// 3. INVOKE THE AGENT with the to-task spec. It WRITES
-	//    `work/tasks/backlog/*.md` task files (the STAGED area — NOT `work/tasks/ready/`,
-	//    which is the agent-eligible pool the runner owns the promotion into; task
-	//    `pre-backlog-staging-folder-and-promote-step-a`); it does NO git. We
-	//    snapshot the staged-tasks folder before/after so the runner (not the
-	//    agent) captures + commits exactly what was produced.
-	const before = snapshotStagedTasks(cwd);
-	// Also snapshot the POOL `work/tasks/ready/` BEFORE the agent runs: the runner's
-	// final commit must scrub any agent writes there (an attempt to self-place into
-	// the pool, spec US #4) before `git add -A` would sweep them in.
-	const poolBefore = snapshotPool(cwd);
-	// Read the parent-spec self-pointer off `specFm.spec` (populated from the
-	// `spec:` key).
-	const prompt = buildTaskingSpec(slug, specFm.spec);
-	let agent: {ok: boolean; detail?: string};
-	try {
-		agent = await runTaskAgent(options, cwd, prompt, slug);
-	} catch (err) {
-		agent = {
-			ok: false,
-			detail: err instanceof Error ? err.message : String(err),
-		};
-	}
-	if (!agent.ok) {
-		const detail = agent.detail ?? `the agent failed to task '${slug}'.`;
-		let message = `Agent failed tasking '${slug}' (${detail}).`;
+	// 3. + 3.5 THE AGENT HALF (task `ci-split-tasking`): the tasker agent and the
+	//    tasker review→edit→converge loop. Shared, unchanged, with the CI agent
+	//    phase (`ci-phase-tasking.ts`), which runs this SAME half in the job that
+	//    holds no write token and hands the result over instead of integrating.
+	const half = await runTaskingAgentHalf(options, {
+		cwd,
+		slug,
+		specFm,
+		doer,
+		note,
+	});
+
+	if (half.kind === 'agent-failed') {
+		let message = `Agent failed tasking '${slug}' (${half.detail}).`;
 		// RELEASE THE LOCK THE FAILED RUN TOOK (observation
 		// `crashed-do-spec-strands-a-tasking-lock-no-verb-releases`).
 		//
@@ -593,13 +581,218 @@ export async function performTask(
 		return {exitCode: 1, outcome: 'agent-failed', slug, message};
 	}
 
+	if (half.kind === 'review-leg-failed') {
+		// REVIEW-LEG FAILURE handling (observation
+		// `tasker-review-edits-payload-caps-the-verdict-response`): PERSIST the
+		// candidate tasks, and BOUNCE through the SAME surface the
+		// decomposition-unclear path uses (release the lock + a question sidecar).
+		// NEVER a silent approve — a parse failure is always a needs-attention route.
+		const candidatePaths = await persistTaskingCandidates(
+			cwd,
+			slug,
+			half.before,
+			arbiter,
+			env,
+			note,
+		);
+		const reason = reviewFailureReason(slug, half.error, candidatePaths);
+		const message = reviewFailureMessage(slug, half.error);
+		if (useLock) {
+			return await surfaceTaskingBlock({
+				slug,
+				cwd,
+				arbiter,
+				reason,
+				message,
+				lockedBlob,
+				release: lock.release,
+				mode: resolvedMode,
+				provider: options.providerInstance,
+				env,
+				note,
+			});
+		}
+		note(reason);
+		// Human, no-lock path: a clean park-for-human is a success terminal (exit 0).
+		return {exitCode: 0, outcome: 'needs-attention', slug, message};
+	}
+
+	if (half.kind === 'decomposition-unclear') {
+		// DECOMPOSITION UNCLEAR: emit NO guessed tasks — route the held spec to
+		// needs-attention with the questions as the reason. The lock release surfaces
+		// the spec (a question sidecar + `needsAnswers: true` on main) and releases the
+		// `spec:<slug>` lock; the spec body stays in `work/specs/ready/`.
+		const reason = decompositionUnclearReason(slug, half.questions);
+		if (useLock) {
+			return await surfaceTaskingBlock({
+				slug,
+				cwd,
+				arbiter,
+				reason,
+				message: half.message,
+				lockedBlob,
+				release: lock.release,
+				mode: resolvedMode,
+				provider: options.providerInstance,
+				env,
+				note,
+			});
+		}
+		note(half.message);
+		// Human, no-lock path: nothing to release/surface via the seam; a clean
+		// park-for-human is still a success terminal (exit 0).
+		return {
+			exitCode: 0,
+			outcome: 'needs-attention',
+			slug,
+			message: half.message,
+		};
+	}
+
+	// 4. The RUNNER commits the COMPLETING transition: drop the produced backlog
+	//    tasks IN + move the spec specs/ready/ -> specs/tasked/ (residence = tasked-ness) — now
+	//    through the SHARED integrate core (`--propose` PR / `--merge` main), NOT a
+	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
+	//    taken AFTER any loop edits, so the runner integrates the IMPROVED tasks,
+	//    not the pre-loop candidates.)
+	const stagedEmitted = newOrChangedStagedTasks(cwd, half.before);
+	const emitTasks = collectEmittedTasks(cwd, stagedEmitted);
+	const placementDir = taskPlacementDir(options, specFm);
+	const loopTag = half.loopTag;
+
+	if (useLock) {
+		return await integrateTaskingCandidates({
+			slug,
+			cwd,
+			arbiter,
+			stagedEmitted,
+			emitTasks,
+			poolBefore: half.poolBefore,
+			placementDir,
+			loopTag,
+			lockedBlob,
+			release: lock.release,
+			mode: resolvedMode,
+			review: options.review,
+			reviewGate: options.reviewGate,
+			acceptanceReviewModel: options.acceptanceReviewModel,
+			mergeRetries: options.mergeRetries,
+			noPR: options.noPR,
+			providerInstance: options.providerInstance,
+			env,
+			agentEnv,
+			note,
+		});
+	}
+
+	// HUMAN, no-lock path: the human commits on `main` directly (the runner does
+	// not own the human's git). We report the produced tasks; moving the spec into
+	// `work/specs/tasked/` (residence = tasked-ness) and committing is the human's to
+	// do, as with the human `complete`.
+	const emitted = stagedEmitted.map(
+		(rel) => `${placementDir}/${basename(rel)}`,
+	);
+	const message =
+		`Tasked '${slug}' -> ${emitted.length} backlog task` +
+		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
+		`the produced files (and move the spec into work/specs/tasked/) yourself.`;
+	note(message);
+	return {
+		exitCode: 0,
+		outcome: 'tasked',
+		slug,
+		emitted,
+		loop: loopTag,
+		message,
+	};
+}
+
+/**
+ * How {@link runTaskingAgentHalf} ended (task `ci-split-tasking`): the data the
+ * write half acts on. The laptop `performTask` acts on it in-process; the CI
+ * agent phase (`ci-phase-tasking.ts`) hands it over to the apply phase.
+ */
+export type TaskingAgentHalf =
+	/** The tasker agent itself errored (nothing was produced to trust). */
+	| {kind: 'agent-failed'; detail: string}
+	/**
+	 * The improver loop's review leg returned no parseable verdict; the candidate
+	 * tasks (new-or-changed vs `before`) are on disk for recovery.
+	 */
+	| {
+			kind: 'review-leg-failed';
+			error: ReviewParseError;
+			before: Map<string, string>;
+	  }
+	/** The improver loop found the decomposition unclear: no tasks land. */
+	| {kind: 'decomposition-unclear'; questions: string[]; message: string}
+	/** The candidate tasks are on disk (improved, uncertain ones marked). */
+	| {
+			kind: 'candidates';
+			/** The staged-tasks snapshot taken BEFORE the agent ran (the fence). */
+			before: Map<string, string>;
+			/** The pool snapshot taken BEFORE the agent ran (the scrub fence). */
+			poolBefore: Map<string, string>;
+			loopTag: 'converged' | 'uncertain-tasks' | undefined;
+	  };
+
+/**
+ * The AGENT half of the tasking path (steps 3 and 3.5): run the tasker agent in
+ * `cwd` (on the work branch), then, when a loop seam is wired and the doer is
+ * the agent, the tasker review→edit→converge loop, and report what is on disk.
+ * It performs NO write to the arbiter and no git transition: only the agents'
+ * file edits, the loop's local edits and markers, and the scratch cleanup.
+ */
+export async function runTaskingAgentHalf(
+	options: PerformTaskOptions,
+	params: {
+		cwd: string;
+		slug: string;
+		specFm: {spec?: string};
+		doer: 'agent' | 'human';
+		note: (message: string) => void;
+	},
+): Promise<TaskingAgentHalf> {
+	const {cwd, slug, specFm, doer, note} = params;
+	const agentEnv = options.agentEnv ?? options.env;
+
+	// 3. INVOKE THE AGENT with the to-task spec. It WRITES
+	//    `work/tasks/backlog/*.md` task files (the STAGED area — NOT `work/tasks/ready/`,
+	//    which is the agent-eligible pool the runner owns the promotion into; task
+	//    `pre-backlog-staging-folder-and-promote-step-a`); it does NO git. We
+	//    snapshot the staged-tasks folder before/after so the runner (not the
+	//    agent) captures + commits exactly what was produced.
+	const before = snapshotStagedTasks(cwd);
+	// Also snapshot the POOL `work/tasks/ready/` BEFORE the agent runs: the runner's
+	// final commit must scrub any agent writes there (an attempt to self-place into
+	// the pool, spec US #4) before `git add -A` would sweep them in.
+	const poolBefore = snapshotPool(cwd);
+	// Read the parent-spec self-pointer off `specFm.spec` (populated from the
+	// `spec:` key).
+	const prompt = buildTaskingSpec(slug, specFm.spec);
+	let agent: {ok: boolean; detail?: string};
+	try {
+		agent = await runTaskAgent(options, cwd, prompt, slug);
+	} catch (err) {
+		agent = {
+			ok: false,
+			detail: err instanceof Error ? err.message : String(err),
+		};
+	}
+	if (!agent.ok) {
+		return {
+			kind: 'agent-failed',
+			detail: agent.detail ?? `the agent failed to task '${slug}'.`,
+		};
+	}
+
 	// 3.5 THE TASKER REVIEW→EDIT→CONVERGE LOOP (`slicer-review-edit-loop`, Shape 2 /
 	//     insertion point A): when a loop seam is wired, run the `review` SKILL as a
 	//     review→edit→re-review loop that IMPROVES the candidate tasks in place, then
 	//     determines the disposition (the three outcomes). This plugs in AFTER the
 	//     candidate tasks are produced and BEFORE they are finalised. The agent makes
 	//     the review/edit JUDGEMENTS; the loop applies edits to the candidate files
-	//     and routes the verdict; the runner (below) owns the git transition. Only the
+	//     and routes the verdict; the runner owns the git transition. Only the
 	//     AGENT path runs the loop — the human tasking path is unaffected.
 	let loopDisposition: RunTaskReviewLoopResult | undefined;
 	if (options.reviewLoop && doer === 'agent') {
@@ -609,10 +802,8 @@ export async function performTask(
 		// parseable verdict (a generic parse failure, or the NAMED cap-truncation
 		// class). The pre-fix behaviour THREW here, crashing the run, LEAVING THE
 		// LOCK HELD, writing NO question sidecar, and DISCARDING the tasker's
-		// candidate tasks. Now: catch it, PERSIST the candidate tasks, and BOUNCE
-		// through the SAME surface the decomposition-unclear path uses (release the
-		// lock + a question sidecar). NEVER a silent approve — a parse failure is
-		// always a needs-attention route. A non-review throw (genuine wiring error)
+		// candidate tasks. Now: catch it and report it, so the write half PERSISTS
+		// the candidate tasks and BOUNCES. A non-review throw (genuine wiring error)
 		// is re-thrown.
 		try {
 			loopDisposition = await runTaskReviewLoop({
@@ -635,7 +826,6 @@ export async function performTask(
 			if (!(err instanceof ReviewParseError)) {
 				throw err;
 			}
-			const reviewErr = err as ReviewParseError;
 			// Reap any review-edits SCRATCH the failed pass left on disk so it is never
 			// swept into a later run's integrate commit.
 			try {
@@ -646,66 +836,12 @@ export async function performTask(
 			} catch {
 				// Best-effort.
 			}
-			const candidatePaths = await persistTaskingCandidates(
-				cwd,
-				slug,
-				before,
-				arbiter,
-				env,
-				note,
-			);
-			const reason = reviewFailureReason(slug, reviewErr, candidatePaths);
-			const message = reviewFailureMessage(slug, reviewErr);
-			if (useLock) {
-				return await surfaceTaskingBlock({
-					slug,
-					cwd,
-					arbiter,
-					reason,
-					message,
-					lockedBlob,
-					release: lock.release,
-					mode: resolvedMode,
-					provider: options.providerInstance,
-					env,
-					note,
-				});
-			}
-			note(reason);
-			// Human, no-lock path: a clean park-for-human is a success terminal (exit 0).
-			return {exitCode: 0, outcome: 'needs-attention', slug, message};
+			return {kind: 'review-leg-failed', error: err, before};
 		}
-		// DECOMPOSITION UNCLEAR: emit NO guessed tasks — route the held spec to
-		// needs-attention with the questions as the reason. The lock release amends the
-		// `spec:<slug>` unified lock `active → stuck` (the tasking needs-attention surface
-		// is the stuck lock now — NO folder write; the spec body stays in `work/specs/ready/`).
 		if (loopDisposition.outcome === 'decomposition-unclear') {
-			const reason = decompositionUnclearReason(
-				slug,
-				loopDisposition.specQuestions,
-			);
-			if (useLock) {
-				return await surfaceTaskingBlock({
-					slug,
-					cwd,
-					arbiter,
-					reason,
-					message: loopDisposition.message,
-					lockedBlob,
-					release: lock.release,
-					mode: resolvedMode,
-					provider: options.providerInstance,
-					env,
-					note,
-				});
-			}
-			note(loopDisposition.message);
-			// Human, no-lock path: nothing to release/surface via the seam; a clean
-			// park-for-human is still a success terminal (exit 0).
 			return {
-				exitCode: 0,
-				outcome: 'needs-attention',
-				slug,
+				kind: 'decomposition-unclear',
+				questions: loopDisposition.specQuestions,
 				message: loopDisposition.message,
 			};
 		}
@@ -718,31 +854,42 @@ export async function performTask(
 			}
 		}
 	}
+	return {
+		kind: 'candidates',
+		before,
+		poolBefore,
+		loopTag:
+			loopDisposition?.outcome === 'converged'
+				? 'converged'
+				: loopDisposition?.outcome === 'uncertain-tasks'
+					? 'uncertain-tasks'
+					: undefined,
+	};
+}
 
-	// 4. The RUNNER commits the COMPLETING transition: drop the produced backlog
-	//    tasks IN + move the spec specs/ready/ -> specs/tasked/ (residence = tasked-ness) — now
-	//    through the SHARED integrate core (`--propose` PR / `--merge` main), NOT a
-	//    direct commit to `main`. The agent never does git. (The backlog snapshot is
-	//    taken AFTER any loop edits, so the runner integrates the IMPROVED tasks,
-	//    not the pre-loop candidates.)
-	const stagedEmitted = newOrChangedStagedTasks(cwd, before);
-	const emitTasks = collectEmittedTasks(cwd, stagedEmitted);
-	// RUNNER-DETERMINISTIC PLACEMENT (task
-	// `runner-deterministic-slice-placement-policy-and-precedence`; the
-	// untrusted-forces-staging rung was RETIRED by ADR
-	// `untrusted-origin-carries-via-stamp-not-forced-staging`). Resolve which
-	// folder the runner lands the emitted tasks in BEFORE handing them to the
-	// shared integrate band: precedence `explicit > configured default >
-	// built-in (staging)`. THIS caller selects the trusted-vs-untrusted
-	// configured default by reading the spec's propagated `originTrust:` stamp:
-	// an untrusted-origin spec selects `untrustedTasksLandIn` (default staging;
-	// `ready` when configured), a trusted/unset spec selects `tasksLandIn`. One
-	// knob (`untrustedTasksLandIn`) governs an untrusted task's destination
-	// whether born from an issue directly (intake) or from an untrusted spec
-	// here. The agent NEVER influences this; it always writes to
-	// `work/tasks/backlog/`, and the runner redirects at `stage()` time. Safety
-	// for an untrusted task landing in `ready` is the carried stamp (its BUILD is
-	// forced to a code PR), not the folder.
+/**
+ * The RUNNER-DETERMINISTIC PLACEMENT folder for a spec's emitted tasks (task
+ * `runner-deterministic-slice-placement-policy-and-precedence`; the
+ * untrusted-forces-staging rung was RETIRED by ADR
+ * `untrusted-origin-carries-via-stamp-not-forced-staging`): precedence
+ * `explicit > configured default > built-in (staging)`. This caller selects the
+ * trusted-vs-untrusted configured default by reading the spec's propagated
+ * `originTrust:` stamp: an untrusted-origin spec selects `untrustedTasksLandIn`
+ * (default staging; `ready` when configured), a trusted/unset spec selects
+ * `tasksLandIn`. One knob (`untrustedTasksLandIn`) governs an untrusted task's
+ * destination whether born from an issue directly (intake) or from an untrusted
+ * spec here. The agent NEVER influences this; it always writes to
+ * `work/tasks/backlog/`, and the runner redirects at `stage()` time. Safety for
+ * an untrusted task landing in `ready` is the carried stamp (its BUILD is forced
+ * to a code PR), not the folder.
+ */
+export function taskPlacementDir(
+	options: Pick<
+		PerformTaskOptions,
+		'tasksLandIn' | 'untrustedTasksLandIn' | 'explicitTasksLandIn'
+	>,
+	specFm: {originTrust?: string},
+): string {
 	const configuredTasksLanding =
 		specFm.originTrust === 'untrusted'
 			? options.untrustedTasksLandIn
@@ -751,265 +898,283 @@ export async function performTask(
 		explicit: landingToSide(options.explicitTasksLandIn),
 		configuredDefault: landingToSide(configuredTasksLanding),
 	});
-	const placementDir = placementFolder(
-		TASK_PLACEMENT_SLOTS,
-		placementDecision.choice,
-	);
+	return placementFolder(TASK_PLACEMENT_SLOTS, placementDecision.choice);
+}
+
+/** The inputs of {@link integrateTaskingCandidates}. */
+export interface IntegrateTaskingInput {
+	slug: string;
+	cwd: string;
+	arbiter: string;
+	/** The candidate tasks' repo-relative paths under `work/tasks/backlog/`. */
+	stagedEmitted: string[];
+	/** Their content, keyed by those paths. */
+	emitTasks: Record<string, string>;
+	/** The pool snapshot the stage scrubs agent writes against. */
+	poolBefore: Map<string, string>;
+	/** The runner-resolved destination folder ({@link taskPlacementDir}). */
+	placementDir: string;
+	loopTag: 'converged' | 'uncertain-tasks' | undefined;
+	/** The spec blob the lock took (the read-stability backstop). */
+	lockedBlob: string | undefined;
+	release: TaskingLockSeam['release'];
+	mode: IntegrationMode;
+	/** Run the task-set acceptance gate inside the core (the laptop path). */
+	review?: boolean;
+	reviewGate?: ReviewGate;
+	acceptanceReviewModel?: string;
+	/**
+	 * The approved task-set review prose when the review already ran elsewhere
+	 * (the CI agent phase); posted as the PR comment. `review` is then off.
+	 */
+	approvedReviewProse?: string;
+	mergeRetries?: number;
+	mergeJitterMs?: number;
+	noPR?: boolean;
+	providerInstance?: ReviewProvider;
+	env: NodeJS.ProcessEnv | undefined;
+	agentEnv: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}
+
+/**
+ * The WRITE half of a tasking run that produced candidate tasks (step 4): the
+ * read-stability stale check, the integrate through the shared core (the tasks
+ * + the `specs/ready → specs/tasked` move, `--propose` PR / `--merge` main), the
+ * needs-attention routing of a not-landed transition, and the mode-dependent lock
+ * release. Shared by the laptop `performTask` (review ON inside the core) and the
+ * CI apply phase (`ci-phase-tasking.ts`, review OFF: it ran in the agent phase).
+ */
+export async function integrateTaskingCandidates(
+	params: IntegrateTaskingInput,
+): Promise<TaskResult> {
+	const {
+		slug,
+		cwd,
+		arbiter,
+		stagedEmitted,
+		emitTasks,
+		poolBefore,
+		placementDir,
+		loopTag,
+		lockedBlob,
+		mode: resolvedMode,
+		env,
+		agentEnv,
+		note,
+	} = params;
 	// REWRITE the emitted list to the RUNNER-RESOLVED destination so callers see
 	// where the runner actually placed the files (not where the agent wrote them).
 	const emitted = stagedEmitted.map(
 		(rel) => `${placementDir}/${basename(rel)}`,
 	);
-	const loopTag: 'converged' | 'uncertain-tasks' | undefined =
-		loopDisposition?.outcome === 'converged'
-			? 'converged'
-			: loopDisposition?.outcome === 'uncertain-tasks'
-				? 'uncertain-tasks'
-				: undefined;
 
-	if (useLock) {
-		// READ-STABILITY BACKSTOP (the lock's content-identity check, now owned at the
-		// integrate seam): the OUTPUT no longer rides the lock release, so the band
-		// below would otherwise rebase a concurrent edit of the held spec body CLEANLY
-		// into spec/ (a rename+edit merge) while the tasks were cut from the OLD body —
-		// the exact silent stale-task drift the lock forbids
-		// (`work/notes/observations/tasking-lock-does-not-stabilise-spec-content.md`). So we
-		// compare the CURRENTLY held `work/specs/ready/<slug>.md` blob on the arbiter against
-		// the snapshot the lock TOOK (`lockedBlob`); ANY change ⇒ STALE ⇒ fail loud,
-		// touch NOTHING (the lock stays held; a human re-tasks or routes to
-		// needs-attention). It is the SAME content-identity check `releaseTaskingLock`
-		// runs — relocated here because this transition, not the release, owns the
-		// completing commit now.
-		const stale = await heldSpecIsStale(cwd, arbiter, slug, lockedBlob, env);
-		if (stale) {
-			const specRel = workItemRel('specs-ready', `${slug}.md`);
-			const message =
-				`RELEASE CONFLICT for '${slug}': the spec was edited (${specRel} ` +
-				`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
-				`STALE — re-task from the edited spec or route it to needs-attention. ` +
-				`The arbiter was NOT modified (lock still held).`;
-			note(message);
-			return {exitCode: 4, outcome: 'stale', slug, message};
-		}
+	// READ-STABILITY BACKSTOP (the lock's content-identity check, now owned at the
+	// integrate seam): the OUTPUT no longer rides the lock release, so the band
+	// below would otherwise rebase a concurrent edit of the held spec body CLEANLY
+	// into spec/ (a rename+edit merge) while the tasks were cut from the OLD body —
+	// the exact silent stale-task drift the lock forbids
+	// (`work/notes/observations/tasking-lock-does-not-stabilise-spec-content.md`). So we
+	// compare the CURRENTLY held `work/specs/ready/<slug>.md` blob on the arbiter against
+	// the snapshot the lock TOOK (`lockedBlob`); ANY change ⇒ STALE ⇒ fail loud,
+	// touch NOTHING (the lock stays held; a human re-tasks or routes to
+	// needs-attention). It is the SAME content-identity check `releaseTaskingLock`
+	// runs — relocated here because this transition, not the release, owns the
+	// completing commit now.
+	const stale = await heldSpecIsStale(cwd, arbiter, slug, lockedBlob, env);
+	if (stale) {
+		const specRel = workItemRel('specs-ready', `${slug}.md`);
+		const message =
+			`RELEASE CONFLICT for '${slug}': the spec was edited (${specRel} ` +
+			`changed on ${arbiter}/main) while the tasking lock was held. The tasking is ` +
+			`STALE — re-task from the edited spec or route it to needs-attention. ` +
+			`The arbiter was NOT modified (lock still held).`;
+		note(message);
+		return {exitCode: 4, outcome: 'stale', slug, message};
+	}
 
-		// Route the OUTPUT through the SHARED integrate back-half (task
-		// `slice-output-through-integration`): the produced backlog tasks + the spec
-		// lifecycle move (`work/specs/ready/ -> work/specs/tasked/`, residence = tasked-ness) integrate
-		// via `performIntegration` honoring `--propose` (push the work branch + open a
-		// PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
-		// args resolve ONCE in the shared core, every `do task:` arg applies here by
-		// construction. The agent did NO git; the runner (the band) owns the ONE commit.
-		const core = await performIntegration({
+	// Route the OUTPUT through the SHARED integrate back-half (task
+	// `slice-output-through-integration`): the produced backlog tasks + the spec
+	// lifecycle move (`work/specs/ready/ -> work/specs/tasked/`, residence = tasked-ness) integrate
+	// via `performIntegration` honoring `--propose` (push the work branch + open a
+	// PR, NO `main` touch) / `--merge` (land on `main`). Because the integrate-time
+	// args resolve ONCE in the shared core, every `do task:` arg applies here by
+	// construction. The agent did NO git; the runner (the band) owns the ONE commit.
+	const core = await performIntegration({
+		cwd,
+		arbiter,
+		slug,
+		// `source`/`recovering` are task-shaped and IGNORED when `lifecycle` is set
+		// (a tasking transition never recovers a surfaced needs-attention move).
+		source: 'in-progress',
+		recovering: false,
+		// Skip the build acceptance gate (Gate 1 / verify): a tasking transition has
+		// no `verify` floor (the tasker review loop above is its quality gate).
+		skipVerify: true,
+		// THE TASK-SET ACCEPTANCE GATE (task `slice-acceptance-gate`): the
+		// task-path mirror of the build Gate-2, riding THIS shared core's
+		// review-before-integrate block. When `review` resolves on, the wired
+		// `reviewGate` (production: `harnessTaskReviewGate` with the task-SET
+		// prompt) runs a FRESH-CONTEXT review of the produced task SET before it
+		// integrates: `approve` lands it, `block` routes the set to needs-attention
+		// via the SAME machinery the build block uses (mapped to the tasking
+		// `needs-attention` outcome below). It is ONE-SHOT: we pin
+		// `reviewMaxRounds: 1` so the gate is a SINGLE reviewer invocation → verdict
+		// (terminal pass/fail). The task path NEVER exposes/consults
+		// `--review-max-rounds` — a gate is terminal, the rounds bound is an orphan
+		// that belongs to a future revise↔review loop (see
+		// `work/notes/observations/reviewmaxrounds-on-wrong-concept.md`). This is
+		// independently controllable from the tasker improver loop (`reviewLoop` /
+		// the `--tasker-loop*` family); toggling one does not affect the other.
+		// The CI apply phase passes it OFF (it ran in the agent phase) and hands
+		// its approved prose in as `approvedReviewProse`.
+		review: params.review,
+		reviewGate: params.reviewGate,
+		reviewModel: params.acceptanceReviewModel,
+		reviewMaxRounds: 1,
+		approvedReviewProse: params.approvedReviewProse,
+		// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
+		// threaded so a wide-matrix CI's raised cap reaches the tasking-
+		// transition's land tail too (task
+		// `thread-merge-retries-cross-task-and-ratify-default`). Unset ⇒ falls
+		// through to the engine default (byte-for-byte unchanged).
+		mergeRetries: params.mergeRetries,
+		...(params.mergeJitterMs === undefined
+			? {}
+			: {mergeJitterMs: params.mergeJitterMs}),
+		// The EXPLICITLY-chosen integrate mode proceeds AS-IS on an APPROVE — a
+		// `--merge` tasking run lands on main, `--propose` opens a PR. The tasking
+		// path's merge-vs-propose decision is the `integration` mode the user typed;
+		// `merge` IS the auto-land mode, so a resolved `merge` is never downgraded.
+		// The task gate family is `--review`/`--no-review`/`--review-model` only
+		// (spec US #6).
+		mode: resolvedMode,
+		noPR: params.noPR,
+		providerInstance: params.providerInstance,
+		// PROPOSE-MODE PR BODY (task `slicing-pr-body-summary-threading`): mirror the
+		// BUILD path's body threading (`do.ts` — `body: agent.output`). The tasker
+		// agent produces no `LaunchResult.output` we can carry, but the slice-SET
+		// itself is a summary-worthy artifact: the emitted task slugs+titles, their
+		// coverage of the spec's user stories, the dependency graph (keystone +
+		// blockedBy edges), and any `needsAnswers` open questions the tasker review
+		// loop flagged. Compose it here and thread it into the shared core as `body`
+		// so the propose-mode PR carries the summary instead of degrading to
+		// `gh pr create --fill`. Empty-set (no emitted tasks) ⇒ undefined ⇒ the
+		// provider's `--fill` fallback (no regression on that edge).
+		body: composeTaskingProposeBody(slug, emitTasks),
+		type: 'tasking',
+		lifecycle: {
+			// Read the PR title / commit summary from the held spec (before it moves).
+			titlePath: workItemPath(cwd, 'specs-ready', slug),
+			commitTag: 'tasked',
+			stage: () =>
+				stageTaskingLifecycle({
+					cwd,
+					slug,
+					emitTasks,
+					poolBefore,
+					placementDir,
+					note,
+					env,
+				}),
+		},
+		env,
+		// The task-SET acceptance review AGENT launches AMBIENT, never the
+		// identity-scoped `env` (an agent must not act as the bot).
+		agentEnv,
+		note,
+	});
+
+	const surfaceBlock = (reason: string, message: string) =>
+		surfaceTaskingBlock({
+			slug,
 			cwd,
 			arbiter,
-			slug,
-			// `source`/`recovering` are task-shaped and IGNORED when `lifecycle` is set
-			// (a tasking transition never recovers a surfaced needs-attention move).
-			source: 'in-progress',
-			recovering: false,
-			// Skip the build acceptance gate (Gate 1 / verify): a tasking transition has
-			// no `verify` floor (the tasker review loop above is its quality gate).
-			skipVerify: true,
-			// THE TASK-SET ACCEPTANCE GATE (task `slice-acceptance-gate`): the
-			// task-path mirror of the build Gate-2, riding THIS shared core's
-			// review-before-integrate block. When `review` resolves on, the wired
-			// `reviewGate` (production: `harnessTaskReviewGate` with the task-SET
-			// prompt) runs a FRESH-CONTEXT review of the produced task SET before it
-			// integrates: `approve` lands it, `block` routes the set to needs-attention
-			// via the SAME machinery the build block uses (mapped to the tasking
-			// `needs-attention` outcome below). It is ONE-SHOT: we pin
-			// `reviewMaxRounds: 1` so the gate is a SINGLE reviewer invocation → verdict
-			// (terminal pass/fail). The task path NEVER exposes/consults
-			// `--review-max-rounds` — a gate is terminal, the rounds bound is an orphan
-			// that belongs to a future revise↔review loop (see
-			// `work/notes/observations/reviewmaxrounds-on-wrong-concept.md`). This is
-			// independently controllable from the tasker improver loop (`reviewLoop` /
-			// the `--tasker-loop*` family); toggling one does not affect the other.
-			review: options.review,
-			reviewGate: options.reviewGate,
-			reviewModel: options.acceptanceReviewModel,
-			reviewMaxRounds: 1,
-			// The cross-job merge-serialiser CAS-retry cap (config `mergeRetries`) —
-			// threaded so a wide-matrix CI's raised cap reaches the tasking-
-			// transition's land tail too (task
-			// `thread-merge-retries-cross-task-and-ratify-default`). Unset ⇒ falls
-			// through to the engine default (byte-for-byte unchanged).
-			mergeRetries: options.mergeRetries,
-			// The EXPLICITLY-chosen integrate mode proceeds AS-IS on an APPROVE — a
-			// `--merge` tasking run lands on main, `--propose` opens a PR. The tasking
-			// path's merge-vs-propose decision is the `integration` mode the user typed;
-			// `merge` IS the auto-land mode, so a resolved `merge` is never downgraded.
-			// The task gate family is `--review`/`--no-review`/`--review-model` only
-			// (spec US #6).
+			reason,
+			message,
+			lockedBlob,
+			release: params.release,
 			mode: resolvedMode,
-			noPR: options.noPR,
-			providerInstance: options.providerInstance,
-			// PROPOSE-MODE PR BODY (task `slicing-pr-body-summary-threading`): mirror the
-			// BUILD path's body threading (`do.ts` — `body: agent.output`). The tasker
-			// agent produces no `LaunchResult.output` we can carry, but the slice-SET
-			// itself is a summary-worthy artifact: the emitted task slugs+titles, their
-			// coverage of the spec's user stories, the dependency graph (keystone +
-			// blockedBy edges), and any `needsAnswers` open questions the tasker review
-			// loop flagged. Compose it here and thread it into the shared core as `body`
-			// so the propose-mode PR carries the summary instead of degrading to
-			// `gh pr create --fill`. Empty-set (no emitted tasks) ⇒ undefined ⇒ the
-			// provider's `--fill` fallback (no regression on that edge).
-			body: composeTaskingProposeBody(slug, emitTasks),
-			type: 'tasking',
-			lifecycle: {
-				// Read the PR title / commit summary from the held spec (before it moves).
-				titlePath: workItemPath(cwd, 'specs-ready', slug),
-				commitTag: 'tasked',
-				stage: () =>
-					stageTaskingLifecycle({
-						cwd,
-						slug,
-						emitTasks,
-						poolBefore,
-						placementDir,
-						note,
-						env,
-					}),
-			},
+			provider: params.providerInstance,
 			env,
-			// The task-SET acceptance review AGENT launches AMBIENT, never the
-			// identity-scoped `env` (an agent must not act as the bot).
-			agentEnv,
 			note,
 		});
 
-		// THE TASK-SET ACCEPTANCE GATE BLOCKED (task `slice-acceptance-gate`): the
-		// fresh-context review of the produced SET returned `block`, so the core ran
-		// the review BEFORE the stage/integrate and did NOT integrate the tasks
-		// (correct). The CORRECT task-path destination is the SAME needs-attention
-		// route the lock release owns for the decomposition-unclear verdict: it amends
-		// the `spec:<slug>` unified lock `active -> stuck` with the block reason (the
-		// tasking needs-attention surface is the stuck lock now — NO folder write; the
-		// spec body stays in `work/specs/ready/`). So on a block we route the held spec to
-		// needs-attention THROUGH the lock release — the set never lands.
-		if (core.outcome === 'review-blocked') {
-			const reason = taskGateBlockedReason(slug, core.reviewBlockReason);
-			return await surfaceTaskingBlock({
-				slug,
-				cwd,
-				arbiter,
-				reason,
-				message:
-					`The task acceptance gate disapproved the set produced for '${slug}'; ` +
-					`parked it for your attention (no tasks landed). ` +
-					`Resolve the findings, then re-task.`,
-				lockedBlob,
-				release: lock.release,
-				mode: resolvedMode,
-				provider: options.providerInstance,
-				env,
-				note,
-			});
-		}
-		if (core.outcome === 'sidecar-violation') {
-			// A co-located `<slug>/` asset sidecar sits beside the FLOWING spec item
-			// (WORK-CONTRACT.md rule 8): the tasking transition would `git mv`
-			// `specs/ready → specs/tasked` and STRAND the sidecar. The core HARD-BLOCKED
-			// before the stage/integrate; route the held spec to needs-attention through
-			// the SAME `spec:<slug>` lock-release seam the block path uses (no tasks land),
-			// carrying the actionable relocate-to-`docs/spikes/<slug>/` reason.
-			const reason =
-				`The spec '${slug}' carries a co-located asset sidecar: ` +
-				`${core.reviewBlockReason ?? core.reason ?? ''}`;
-			return await surfaceTaskingBlock({
-				slug,
-				cwd,
-				arbiter,
-				reason,
-				message:
-					`The spec '${slug}' carries a co-located asset sidecar (WORK-CONTRACT ` +
-					`rule 8); parked it for your attention (no tasks landed; relocate it ` +
-					`to docs/spikes/${slug}/ and reference by path).`,
-				lockedBlob,
-				release: lock.release,
-				mode: resolvedMode,
-				provider: options.providerInstance,
-				env,
-				note,
-			});
-		}
-		if (core.outcome === 'review-unparseable') {
-			// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
-			// JSON). Route the held spec to needs-attention through the SAME lock-release
-			// seam the block path uses (the tasking needs-attention surface is the stuck
-			// `spec:<slug>` lock; no folder write). It is NOT a block (the gate output was
-			// unreadable) — record it as the transient-infra-class re-run signal so the
-			// stuck reason reads correctly; nothing landed.
-			const reason =
-				`The task acceptance gate for '${slug}' produced an UNPARSEABLE verdict ` +
-				`(re-run — transient): ${core.reason ?? ''}`;
-			return await surfaceTaskingBlock({
-				slug,
-				cwd,
-				arbiter,
-				reason,
-				message:
-					`The task acceptance gate produced an unparseable verdict for '${slug}'; ` +
-					`parked it for your attention (no tasks landed; re-run).`,
-				lockedBlob,
-				release: lock.release,
-				mode: resolvedMode,
-				provider: options.providerInstance,
-				env,
-				note,
-			});
-		}
-		if (core.outcome === 'completed') {
-			// LOCK LIFETIME IS MODE-DEPENDENT (fix
-			// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`;
-			// the "hold-across-the-PR" capstone the older interim half deferred).
-			//
-			// `merge`: the durable `specs/ready → specs/tasked` `main` move HAS landed, so
-			// residence-in-`specs/tasked/` on `main` now carries tasked-ness and the lock
-			// has done its job — RELEASE it (delete the ref). Best-effort + idempotent
-			// (`not-held` is fine).
-			//
-			// `propose`: the move lives ONLY on the pushed work branch / open PR — `main`
-			// still holds the spec in `work/specs/ready/`, so residence does NOT yet signal
-			// tasked-ness. If we released here, the next in-place scan would see the spec
-			// eligible again (ready + not-tasked + lock free) and re-task it EVERY tick,
-			// force-recreating the branch (`git switch -C`) and force-pushing the SAME PR —
-			// regenerating its review forever until a human merges/closes it. So we KEEP
-			// the `spec:<slug>` lock HELD across the open PR: the held lock IS the
-			// "in-flight tasking" marker, and `scoreSpecs`/`taskableSpecs` subtract held
-			// specs from the taskable pool (symmetric to the task-pool held-slug
-			// subtraction). The lock is reaped when the PR resolves: a MERGE lands the
-			// durable move (which now carries tasked-ness on its own) and the reap/gc path
-			// deletes the merged branch + its lock; a human CLOSING the PR unmerged is a
-			// recovery the human owns via `release-lock` (the same model as any other
-			// abandoned in-flight item — no liveness heartbeat/auto-steal).
-			//
-			// MIGRATE step: the ref is keyed under the `spec:<slug>` identity (the
-			// `spec-<slug>` lock entry the acquire took).
-			if (useLock && resolvedMode === 'merge') {
-				await releaseItemLock({item: `spec:${slug}`, cwd, arbiter, env});
-			}
-		}
-		return integrationToTaskResult(core, {slug, emitted, loop: loopTag});
+	// THE TASK-SET ACCEPTANCE GATE BLOCKED (task `slice-acceptance-gate`): the
+	// fresh-context review of the produced SET returned `block`, so the core ran
+	// the review BEFORE the stage/integrate and did NOT integrate the tasks
+	// (correct). The CORRECT task-path destination is the SAME needs-attention
+	// route the lock release owns for the decomposition-unclear verdict: it surfaces
+	// the spec and releases the `spec:<slug>` lock with the block reason. So on a
+	// block we route the held spec to needs-attention THROUGH the lock release —
+	// the set never lands.
+	if (core.outcome === 'review-blocked') {
+		return await surfaceBlock(
+			taskGateBlockedReason(slug, core.reviewBlockReason),
+			`The task acceptance gate disapproved the set produced for '${slug}'; ` +
+				`parked it for your attention (no tasks landed). ` +
+				`Resolve the findings, then re-task.`,
+		);
 	}
-
-	// HUMAN, no-lock path: the human commits on `main` directly (the runner does
-	// not own the human's git). We report the produced tasks; moving the spec into
-	// `work/specs/tasked/` (residence = tasked-ness) and committing is the human's to
-	// do, as with the human `complete`.
-	const message =
-		`Tasked '${slug}' -> ${emitted.length} backlog task` +
-		`${emitted.length === 1 ? '' : 's'} (human path, no lock). Inspect + commit ` +
-		`the produced files (and move the spec into work/specs/tasked/) yourself.`;
-	note(message);
-	return {
-		exitCode: 0,
-		outcome: 'tasked',
-		slug,
-		emitted,
-		loop: loopTag,
-		message,
-	};
+	if (core.outcome === 'sidecar-violation') {
+		// A co-located `<slug>/` asset sidecar sits beside the FLOWING spec item
+		// (WORK-CONTRACT.md rule 8): the tasking transition would `git mv`
+		// `specs/ready → specs/tasked` and STRAND the sidecar. The core HARD-BLOCKED
+		// before the stage/integrate; route the held spec to needs-attention through
+		// the SAME `spec:<slug>` lock-release seam the block path uses (no tasks land),
+		// carrying the actionable relocate-to-`docs/spikes/<slug>/` reason.
+		return await surfaceBlock(
+			`The spec '${slug}' carries a co-located asset sidecar: ` +
+				`${core.reviewBlockReason ?? core.reason ?? ''}`,
+			`The spec '${slug}' carries a co-located asset sidecar (WORK-CONTRACT ` +
+				`rule 8); parked it for your attention (no tasks landed; relocate it ` +
+				`to docs/spikes/${slug}/ and reference by path).`,
+		);
+	}
+	if (core.outcome === 'review-unparseable') {
+		// The task-set acceptance gate RAN but its verdict was UNPARSEABLE (malformed
+		// JSON). Route the held spec to needs-attention through the SAME lock-release
+		// seam the block path uses. It is NOT a block (the gate output was
+		// unreadable) — record it as the transient-infra-class re-run signal so the
+		// stuck reason reads correctly; nothing landed.
+		return await surfaceBlock(
+			taskGateUnparseableReason(slug, core.reason),
+			`The task acceptance gate produced an unparseable verdict for '${slug}'; ` +
+				`parked it for your attention (no tasks landed; re-run).`,
+		);
+	}
+	if (core.outcome === 'completed') {
+		// LOCK LIFETIME IS MODE-DEPENDENT (fix
+		// `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`;
+		// the "hold-across-the-PR" capstone the older interim half deferred).
+		//
+		// `merge`: the durable `specs/ready → specs/tasked` `main` move HAS landed, so
+		// residence-in-`specs/tasked/` on `main` now carries tasked-ness and the lock
+		// has done its job — RELEASE it (delete the ref). Best-effort + idempotent
+		// (`not-held` is fine).
+		//
+		// `propose`: the move lives ONLY on the pushed work branch / open PR — `main`
+		// still holds the spec in `work/specs/ready/`, so residence does NOT yet signal
+		// tasked-ness. If we released here, the next in-place scan would see the spec
+		// eligible again (ready + not-tasked + lock free) and re-task it EVERY tick,
+		// force-recreating the branch (`git switch -C`) and force-pushing the SAME PR —
+		// regenerating its review forever until a human merges/closes it. So we KEEP
+		// the `spec:<slug>` lock HELD across the open PR: the held lock IS the
+		// "in-flight tasking" marker, and `scoreSpecs`/`taskableSpecs` subtract held
+		// specs from the taskable pool (symmetric to the task-pool held-slug
+		// subtraction). The lock is reaped when the PR resolves: a MERGE lands the
+		// durable move (which now carries tasked-ness on its own) and the reap/gc path
+		// deletes the merged branch + its lock; a human CLOSING the PR unmerged is a
+		// recovery the human owns via `release-lock` (the same model as any other
+		// abandoned in-flight item — no liveness heartbeat/auto-steal).
+		//
+		// MIGRATE step: the ref is keyed under the `spec:<slug>` identity (the
+		// `spec-<slug>` lock entry the acquire took).
+		if (resolvedMode === 'merge') {
+			await releaseItemLock({item: `spec:${slug}`, cwd, arbiter, env});
+		}
+	}
+	return integrationToTaskResult(core, {slug, emitted, loop: loopTag});
 }
 
 /**
@@ -1101,11 +1266,18 @@ function integrationToTaskResult(
  * pre-existing local `work/<slug>` (a re-run) is force-recreated off fresh main.
  * The agent runs in-place on this branch (branch ≠ worktree).
  */
-async function switchToWorkBranch(
+export async function switchToWorkBranch(
 	cwd: string,
 	arbiter: string,
 	slug: string,
 	env: NodeJS.ProcessEnv | undefined,
+	/**
+	 * The commit to cut the branch from; default the freshly fetched
+	 * `<arbiter>/main`. The CI phases pass the lock job's `baseSha` (task
+	 * `ci-split-tasking`), so the agent and apply jobs work on the tree the lock
+	 * job classified.
+	 */
+	base?: string,
 ): Promise<void> {
 	// The tasking path is the parent-spec namespace (`do spec:<slug>`): the branch
 	// is `work/spec-<slug>`, distinct from a same-slug task-build's `work/task-<slug>`.
@@ -1115,7 +1287,7 @@ async function switchToWorkBranch(
 	const branch = workBranchRef('spec', slug);
 	await gitHard(['fetch', '--quiet', arbiter], cwd, env);
 	await gitHard(
-		['switch', '--quiet', '-C', branch, `${arbiter}/main`],
+		['switch', '--quiet', '-C', branch, base ?? `${arbiter}/main`],
 		cwd,
 		env,
 	);
@@ -1332,7 +1504,7 @@ async function gitHard(
  * generic line when absent. DISTINCT from the improver loop's
  * {@link decompositionUnclearReason} (which carries the loop's open questions).
  */
-function taskGateBlockedReason(
+export function taskGateBlockedReason(
 	slug: string,
 	findingsReason: string | undefined,
 ): string {
@@ -1341,6 +1513,21 @@ function taskGateBlockedReason(
 		`'${slug}'. The spec is parked for your attention with no tasks landed; ` +
 		`resolve the blocking findings, then re-task.`;
 	return findingsReason ? `${head}\n\n${findingsReason}` : head;
+}
+
+/**
+ * The needs-attention REASON for a task-SET ACCEPTANCE GATE whose verdict was
+ * UNPARSEABLE (the gate ran; its output could not be read): NOT a block, the
+ * transient-infra re-run signal. `detail` is the gate's parse-failure reason.
+ */
+export function taskGateUnparseableReason(
+	slug: string,
+	detail: string | undefined,
+): string {
+	return (
+		`The task acceptance gate for '${slug}' produced an UNPARSEABLE verdict ` +
+		`(re-run — transient): ${detail ?? ''}`
+	);
 }
 
 /**
@@ -1364,7 +1551,7 @@ function taskGateBlockedReason(
  * is GREEN — a park-for-human is not a failure). Only a surface that FAILED to
  * publish maps to a non-zero {@link releaseFailureToResult}.
  */
-async function surfaceTaskingBlock(params: {
+export async function surfaceTaskingBlock(params: {
 	slug: string;
 	cwd: string;
 	arbiter: string;
@@ -1428,7 +1615,10 @@ async function surfaceTaskingBlock(params: {
  * spec is parked for the human with these open questions + a question sidecar on
  * main, no guessed tasks). Prose only — recorded as the parked question's reason.
  */
-function decompositionUnclearReason(slug: string, questions: string[]): string {
+export function decompositionUnclearReason(
+	slug: string,
+	questions: string[],
+): string {
 	const head =
 		`The tasker review→edit loop could not converge on a sound decomposition of ` +
 		`'${slug}' (--tasker-loop-max exhausted with unresolved blockers). The spec is parked ` +
@@ -1451,7 +1641,7 @@ function decompositionUnclearReason(slug: string, questions: string[]): string {
  * The candidate tasks the tasker produced are PERSISTED on the work branch (see
  * {@link persistTaskingCandidates}) so a human can recover them.
  */
-function reviewFailureReason(
+export function reviewFailureReason(
 	slug: string,
 	err: ReviewParseError,
 	candidatePaths: string[],
@@ -1477,7 +1667,10 @@ function reviewFailureReason(
 }
 
 /** The human-readable terminal MESSAGE for a review-leg failure (the result's `message`). */
-function reviewFailureMessage(slug: string, err: ReviewParseError): string {
+export function reviewFailureMessage(
+	slug: string,
+	err: ReviewParseError,
+): string {
 	if (err instanceof ReviewOutputCappedError) {
 		return (
 			`Tasking '${slug}' parked: the review leg hit the model output cap ` +
@@ -1503,7 +1696,7 @@ function reviewFailureMessage(slug: string, err: ReviewParseError): string {
  * candidate paths persisted (empty when there were none). Never throws — a git
  * failure is noted and the bounce proceeds (the lock is still released).
  */
-async function persistTaskingCandidates(
+export async function persistTaskingCandidates(
 	cwd: string,
 	slug: string,
 	before: Map<string, string>,
@@ -1625,7 +1818,7 @@ function appendQuestionsBlock(content: string, questions: string[]): string {
  * cross-spec `taskedAfter` ordering, resolved against `work/specs/tasked/` residence of
  * the specs present in the checkout.
  */
-function resolveAgentGate(
+export function resolveAgentGate(
 	cwd: string,
 	slug: string,
 	specFm: {humanOnly?: boolean; needsAnswers?: boolean; taskedAfter: string[]},
@@ -1643,7 +1836,7 @@ function resolveAgentGate(
 }
 
 /** Build an HONEST gate-refusal message naming WHY the agent skipped the spec. */
-function gateRefusalReason(
+export function gateRefusalReason(
 	slug: string,
 	specFm: {humanOnly?: boolean; needsAnswers?: boolean},
 	eligibility: TaskingEligibilityResult,
@@ -1802,7 +1995,7 @@ async function runTaskAgent(
 }
 
 /** A snapshot of {@link STAGED_TASKS_DIR}: filename → file content. */
-function snapshotStagedTasks(cwd: string): Map<string, string> {
+export function snapshotStagedTasks(cwd: string): Map<string, string> {
 	const dir = join(cwd, STAGED_TASKS_DIR);
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
@@ -1818,7 +2011,7 @@ function snapshotStagedTasks(cwd: string): Map<string, string> {
  * re-committed.) The agent's staging folder is `work/tasks/backlog/`; writes to
  * the pool `work/tasks/ready/` are scrubbed at stage time, never picked up here.
  */
-function newOrChangedStagedTasks(
+export function newOrChangedStagedTasks(
 	cwd: string,
 	before: Map<string, string>,
 ): string[] {
@@ -1834,7 +2027,7 @@ function newOrChangedStagedTasks(
 }
 
 /** Snapshot the POOL `work/tasks/ready/` (for the agent-write fence at stage time). */
-function snapshotPool(cwd: string): Map<string, string> {
+export function snapshotPool(cwd: string): Map<string, string> {
 	const dir = workFolderPath(cwd, 'tasks-ready');
 	const snap = new Map<string, string>();
 	for (const file of listMarkdown(dir)) {
@@ -1844,7 +2037,7 @@ function snapshotPool(cwd: string): Map<string, string> {
 }
 
 /** Read the produced backlog tasks' content keyed by repo-relative path. */
-function collectEmittedTasks(
+export function collectEmittedTasks(
 	cwd: string,
 	relPaths: string[],
 ): Record<string, string> {

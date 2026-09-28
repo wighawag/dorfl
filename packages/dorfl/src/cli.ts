@@ -169,6 +169,7 @@ import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
 import {activateProcessPhase} from './phase-recorder.js';
 import {performBuildPhase, type BuildPhaseVerb} from './ci-phase-build.js';
 import {performIntakePhase} from './ci-phase-intake.js';
+import {performTaskingPhase} from './ci-phase-tasking.js';
 import {
 	AgentResultUsageError,
 	parseAgentJobResult,
@@ -1432,8 +1433,10 @@ function agentResultOptions(): Option[] {
 }
 
 /**
- * Run ONE phase of the split build path for a single named item (`do <slug>` /
- * `advance task:<slug>` with `--phase`) and exit with its code. The lock phase
+ * Run ONE phase of the split build path (`do <slug>` / `advance task:<slug>`)
+ * or tasking path (`do spec:<slug>` / `advance spec:<slug>`, task
+ * `ci-split-tasking`) for a single named item with `--phase`, and exit with its
+ * code. The lock phase
  * reads its trusted facts back from nowhere (it produces them); the agent and
  * apply phases read them from `DORFL_LOCK_OUTPUTS` (see `ci-lock-outputs.ts`).
  */
@@ -1463,16 +1466,29 @@ async function runBuildPhaseAndExit(
 		);
 		process.exit(1);
 	}
-	const result = await performBuildPhase({
-		...options,
-		arg: args[0],
-		phase,
-		verb,
-		handoffDir,
-		allowBacklog: flags.allowBacklog === true,
-		agentResult: flags.agentResult,
-		agentTimeoutMinutes: flags.agentTimeoutMinutes,
-	});
+	// A `spec:<slug>` item is the TASKING path (task `ci-split-tasking`); every
+	// other item is the build path, which refuses a non-task itself.
+	const result =
+		parseSlugArg(args[0]).explicit === 'spec'
+			? await performTaskingPhase({
+					...options,
+					arg: args[0],
+					phase,
+					verb,
+					handoffDir,
+					agentResult: flags.agentResult,
+					agentTimeoutMinutes: flags.agentTimeoutMinutes,
+				})
+			: await performBuildPhase({
+					...options,
+					arg: args[0],
+					phase,
+					verb,
+					handoffDir,
+					allowBacklog: flags.allowBacklog === true,
+					agentResult: flags.agentResult,
+					agentTimeoutMinutes: flags.agentTimeoutMinutes,
+				});
 	if (result.exitCode !== 0) {
 		console.error(`error: ${result.message}`);
 	} else {
@@ -3129,7 +3145,7 @@ export function buildProgram(): Command {
 			}
 
 			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
-			// split item workflow for a single named task, on the SAME pipeline.
+			// split item workflow for a single named task or spec, on the SAME pipeline.
 			if (flags.phase !== undefined) {
 				await runBuildPhaseAndExit('do', args, flags, baseDoOptions);
 			}
@@ -3601,7 +3617,7 @@ export function buildProgram(): Command {
 			// stream only one. The CI propose matrix names a single item per leg, so it
 			// satisfies this; the `-n` merge job must NOT pass `--watch`.
 			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
-			// split item workflow. Only the build path is split so far; the lock phase
+			// split item workflow. Only the build and tasking paths are split so far; the lock phase
 			// refuses any other rung before writing anything.
 			if (flags.phase !== undefined) {
 				await runBuildPhaseAndExit('advance', args, flags, doOptions);
