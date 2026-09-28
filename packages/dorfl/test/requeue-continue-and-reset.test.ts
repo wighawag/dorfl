@@ -205,7 +205,14 @@ describe('requeue default — REBASE onto fresh main at onboard-time', () => {
 		expect(needsAnswersOnArbiterMain(fresh, 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'backlog', 'gamma')).toBe(true);
 		expect(existsOnArbiterMain(fresh, 'needs-attention', 'gamma')).toBe(false);
-	});
+		// Explicit timeout, like the other git-heavy real-arbiter tests: the
+		// heaviest test in this file (claim, push, surface, requeue, a conflicting
+		// main move, then a continue claim whose rebase conflicts and surfaces),
+		// ~0.5s in isolation with no sleep or backoff on its path. Under full-suite
+		// load it hit the default 5s once (task
+		// deflake-the-integration-core-control-and-two-load-timeouts); 30s absorbs
+		// the load without masking a real hang.
+	}, 30_000);
 });
 
 describe('requeue default — force-with-lease on the WORK branch only (never main)', () => {

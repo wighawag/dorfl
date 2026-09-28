@@ -193,7 +193,15 @@ describe('do — continue-site surface moved:false (surface-unmoved)', () => {
 		expect(stuckLockOnArbiter(repo, 'beta')).toBe(false);
 		expect(sidecarSurfacedOnArbiterMain(repo, 'beta')).toBe(true);
 		expect(needsAnswersOnArbiterMain(repo, 'beta')).toBe(true);
-	});
+		// Explicit timeout, like the other git-heavy real-arbiter tests: this drives
+		// real git end to end (seed, claim, push, conflicting move, then the
+		// continue rebase + the REAL tree-less surface CAS publish) and takes ~0.3s
+		// in isolation with no sleep or backoff on its path (the surface retries
+		// only on contention, which this single-writer fixture never has). Under
+		// full-suite load it hit the default 5s once (task
+		// deflake-the-integration-core-control-and-two-load-timeouts); 30s absorbs
+		// the load without masking a real hang.
+	}, 30_000);
 });
 
 describe('run — continue-site surface moved:false (surface-unmoved)', () => {

@@ -15,6 +15,7 @@ import {
 	sidecarSurfacedOnArbiterMain,
 	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
+import {holdLandsUntilAllRebased} from './helpers/land-barrier.js';
 
 /**
  * External behaviour for the resolved `mergeRetries` cap (prd
@@ -112,35 +113,41 @@ describe('mergeRetries (resolved through config) — cap controls bounce vs conv
 			'r0b',
 			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
 		);
-		const [a, b] = await Promise.all([
-			integrateMergeViaConfig(cwdA, 'r0a', 0),
-			integrateMergeViaConfig(cwdB, 'r0b', 0),
-		]);
-		// Exactly ONE landed cleanly; the OTHER did NOT (it routed). The point is
-		// the resolved cap drives this, NOT a hard-coded engine value.
-		const landed = [a.outcome, b.outcome].filter(
-			(o) => o === 'completed',
-		).length;
-		expect(landed).toBeLessThanOrEqual(1);
-		const winnerSlug =
-			a.outcome === 'completed'
-				? 'r0a'
-				: b.outcome === 'completed'
-					? 'r0b'
-					: undefined;
-		if (winnerSlug !== undefined) {
-			const loserSlug = winnerSlug === 'r0a' ? 'r0b' : 'r0a';
-			expect(existsOnArbiterMain(seeded.repo, 'done', winnerSlug)).toBe(true);
-			expect(existsOnArbiterMain(seeded.repo, 'done', loserSlug)).toBe(false);
-			// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
-			// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
-			// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
-			// then RELEASES the lock. Assert the A1 triple.
-			expect(stuckLockOnArbiter(seeded.repo, loserSlug)).toBe(false);
-			expect(sidecarSurfacedOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
-			expect(needsAnswersOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
+		// DETERMINISTIC INTERLEAVING (task
+		// `deflake-the-integration-core-control-and-two-load-timeouts`, the same
+		// barrier as the `integration-core.test.ts` control): both jobs are parked
+		// at the land seam until BOTH rebased onto the SAME stale base, then
+		// released one at a time. Without it, one job could finish before the other
+		// fetched, and the other would land legitimately (`expected 2 to be less
+		// than or equal to 1`).
+		const held = holdLandsUntilAllRebased(2);
+		let a: Awaited<ReturnType<typeof integrateMergeViaConfig>>;
+		let b: Awaited<ReturnType<typeof integrateMergeViaConfig>>;
+		try {
+			[a, b] = await Promise.all([
+				integrateMergeViaConfig(cwdA, 'r0a', 0),
+				integrateMergeViaConfig(cwdB, 'r0b', 0),
+			]);
+		} finally {
+			held.restore();
 		}
-	});
+		// Exactly ONE landed cleanly (the first released); the OTHER did NOT (it
+		// routed). The point is the resolved cap drives this, NOT a hard-coded
+		// engine value.
+		const [winnerSlug, loserSlug] = held.order;
+		const bySlug = {r0a: a, r0b: b} as Record<string, typeof a>;
+		expect(bySlug[winnerSlug].outcome).toBe('completed');
+		expect(bySlug[loserSlug].outcome).toBe('rebase-conflict');
+		expect(existsOnArbiterMain(seeded.repo, 'done', winnerSlug)).toBe(true);
+		expect(existsOnArbiterMain(seeded.repo, 'done', loserSlug)).toBe(false);
+		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,
+		// decision #1 / D1): a bounce no longer marks the lock stuck — it surfaces
+		// a stuck-kind sidecar + needsAnswers:true on <arbiter>/main in one commit
+		// then RELEASES the lock. Assert the A1 triple.
+		expect(stuckLockOnArbiter(seeded.repo, loserSlug)).toBe(false);
+		expect(sidecarSurfacedOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
+		expect(needsAnswersOnArbiterMain(seeded.repo, loserSlug)).toBe(true);
+	}, 30_000);
 
 	it('with the resolved cap at the default (1000), the same disjoint-file race converges — BOTH contenders land', async () => {
 		// The cap is the cross-job land queue: with it RAISED (here: the default
