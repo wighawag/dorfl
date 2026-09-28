@@ -490,29 +490,60 @@ describe('do --remote — NEVER touches the human area or the real state dirs', 
 		const {arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const ws = workspacesDir();
 
-		// Snapshot the real state dirs BEFORE the run (we point workspacesDir +
-		// PI_CODING_AGENT_DIR at scratch, so NEITHER should change).
-		const realDorfl = join(homedir(), '.dorfl');
-		const realPiSessions = join(homedir(), '.pi', 'agent', 'sessions');
-		const before = {
-			dorfl: listAllFiles(realDorfl),
-			piSessions: listAllFiles(realPiSessions),
-		};
+		// We do NOT walk the developer's REAL home: its size (retained job
+		// worktrees, GBs of pi sessions) made this test time out, ELOOP on pnpm
+		// symlink cycles, OOM the worker, or race another live dorfl job. Instead
+		// `HOME` is pointed at a small SCRATCH home holding stand-ins for
+		// `~/.dorfl/` and `~/.pi/agent/sessions/`. Every default state path dorfl
+		// and pi derive (`homedir()`-based `workspacesDir`, config dir, pi's
+		// `~/.pi/agent`) then resolves INTO that scratch home, so a leak would land
+		// there and be caught, while the walk below is bounded by the fixture's
+		// size and never depends on what lives in the real home. (The configured
+		// `workspacesDir` and `PI_CODING_AGENT_DIR` still point elsewhere in
+		// scratch, exactly as in a real `--remote` run, so NOTHING under the scratch
+		// home may change.)
+		const scratchHome = join(scratch.root, 'home');
+		const standInDorfl = join(scratchHome, '.dorfl');
+		const standInPiSessions = join(scratchHome, '.pi', 'agent', 'sessions');
+		mkdirSync(standInDorfl, {recursive: true});
+		mkdirSync(standInPiSessions, {recursive: true});
+		writeFileSync(join(standInDorfl, 'pre-existing.txt'), 'x\n');
+		writeFileSync(join(standInPiSessions, 'pre-existing.jsonl'), '{}\n');
 
-		const result = await performDoRemote({
-			arg: 'alpha',
-			remote: remoteUrl(arbiter),
-			workspacesDir: ws,
-			integration: 'merge',
-			verify: PASS,
-			dorfl: editingAgent,
-			env: gitEnv(),
-		});
-		expect(result.outcome).toBe('completed');
+		const prevHome = process.env.HOME;
+		process.env.HOME = scratchHome;
+		try {
+			// Guard against a vacuous pass: the lever must actually redirect the
+			// home-derived defaults (Node's `homedir()` reads `HOME` per call).
+			expect(homedir()).toBe(scratchHome);
 
-		// The real state dirs are byte-for-path identical (nothing leaked there).
-		expect(listAllFiles(realDorfl)).toEqual(before.dorfl);
-		expect(listAllFiles(realPiSessions)).toEqual(before.piSessions);
+			const before = listAllFiles(scratchHome);
+			expect(before).toEqual([
+				'.dorfl/pre-existing.txt',
+				'.pi/agent/sessions/pre-existing.jsonl',
+			]);
+
+			const result = await performDoRemote({
+				arg: 'alpha',
+				remote: remoteUrl(arbiter),
+				workspacesDir: ws,
+				integration: 'merge',
+				verify: PASS,
+				dorfl: editingAgent,
+				env: gitEnv(),
+			});
+			expect(result.outcome).toBe('completed');
+
+			// The (stand-in) home state dirs are path-for-path identical: nothing
+			// leaked into ~/.dorfl/, ~/.pi/agent/sessions/, or anywhere else in ~.
+			expect(listAllFiles(scratchHome)).toEqual(before);
+		} finally {
+			if (prevHome === undefined) {
+				delete process.env.HOME;
+			} else {
+				process.env.HOME = prevHome;
+			}
+		}
 
 		// Sanity: the run DID materialise its mirror in the SCRATCH agents' area.
 		expect(existsSync(mirrorPath(ws, remoteUrl(arbiter)))).toBe(true);
