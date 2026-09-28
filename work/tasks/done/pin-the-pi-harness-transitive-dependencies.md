@@ -38,3 +38,15 @@ Make the harness install reproducible: install the pi packages at versions that 
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Both modes now install the harness the same way: npm into a job-local folder with `overrides`.** I considered three alternatives:
+  - Keeping `pnpm add -g` in workspace mode with the siblings listed next to the harness. I tested it: pnpm 11 puts each global package in its own folder, so the harness's own tree still pulled `pi-ai@0.80.10`.
+  - `npm install -g` with the siblings listed. It has the same problem: each global package gets its own tree.
+  - Keeping registry mode on `npm install -g` and relying on the shrinkwrap. That leaves the protection up to the package publisher.
+  - This touches the `--install-source` modes: workspace mode no longer installs the harness through pnpm. The tests that asserted `pnpm add -g` now assert it is absent.
+- **The harness bin folder is added to `PATH` through `$GITHUB_PATH`,** instead of relying on the npm/pnpm global bin already being on `PATH`. It works the same in both modes and consumers see no difference.
+- **The check step is `pi --version`.** It loads the whole harness module graph, which I confirmed by reproducing the `getOAuthApiKey` crash with it. It needs no API key and makes no network call. The error text avoids backticks so the shell quoting stays simple.
+- **I kept the harness at 0.80.6 rather than moving to 0.87.1.** The existing comment in the code says a harness upgrade should be a deliberate, tested bump. The code comment on `PI_HARNESS_PINNED_DEPENDENCIES` says to re-derive the list on any bump, because 0.87 adds `@earendil-works/chord`.
+- **The npm install still runs install scripts, as the old global install did.** Adding `--ignore-scripts` would be a separate hardening change.

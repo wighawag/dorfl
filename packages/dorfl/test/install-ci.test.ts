@@ -381,7 +381,8 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('using: composite');
 		expect(action).toContain(SETUP_NODE_USES);
 		expect(action).toContain('npm install -g dorfl');
-		expect(action).toContain('npm install -g @earendil-works/pi-coding-agent');
+		expect(action).toContain('Install agent harness (pi)');
+		expect(action).toContain('"@earendil-works/pi-coding-agent": "0.80.6"');
 		expect(action).toContain('git config user.name "dorfl[bot]"');
 		expect(action).toContain('Configure agent models (models.json)');
 		expect(action).toContain('~/.pi/agent/models.json');
@@ -442,12 +443,12 @@ describe('composite setup action generation (both auth modes)', () => {
 	it('registry mode (default) installs the published CLI via npm and uses NO pnpm steps', () => {
 		const action = generateSetupAction(modelsConfig);
 		expect(action).toContain('npm install -g dorfl');
-		expect(action).toContain('npm install -g @earendil-works/pi-coding-agent');
+		expect(action).toContain('Install agent harness (pi)');
 		expect(action).not.toContain('pnpm');
 		expect(action).not.toContain('build dorfl');
 	});
 
-	it('workspace mode builds the CLI from source + links it, harness via pnpm, NO npm install -g dorfl', () => {
+	it('workspace mode builds the CLI from source + links it, NO npm install -g dorfl', () => {
 		const action = generateSetupAction({
 			...modelsConfig,
 			installSource: 'workspace',
@@ -461,13 +462,12 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('pnpm install');
 		expect(action).toContain('pnpm -r build');
 		expect(action).toContain('cd packages/dorfl && pnpm link --global');
-		// Harness installed via pnpm so it lands on the pnpm global bin on PATH.
-		expect(action).toContain('pnpm add -g @earendil-works/pi-coding-agent');
 		// The registry install is GONE in workspace mode.
 		expect(action).not.toContain('npm install -g dorfl');
-		expect(action).not.toContain(
-			'npm install -g @earendil-works/pi-coding-agent',
-		);
+		// The harness is NOT a global pnpm install: pnpm ignores the harness's
+		// npm-shrinkwrap.json and floats its pi packages (see the pinned-harness
+		// tests in install-ci-no-expression-in-run.test.ts).
+		expect(action).not.toContain('pnpm add -g');
 	});
 
 	it('auth/identity/setup-node steps are identical in registry and workspace modes', () => {

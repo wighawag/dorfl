@@ -8,7 +8,9 @@ import {
 	dorflPackageVersion,
 	loadCapabilityRegistry,
 	PI_HARNESS_PACKAGE,
+	PI_HARNESS_PINNED_DEPENDENCIES,
 	PI_HARNESS_VERSION,
+	piHarnessManifest,
 	type ResolvedCIConfig,
 } from '../src/install-ci-core.js';
 
@@ -211,13 +213,87 @@ describe('install-ci: the composite setup action pins its global installs', () =
 			.map((s) => s.run)
 			.filter((r): r is string => typeof r === 'string');
 		expect(runs).toContain(`npm install -g dorfl@${pkg.version}`);
-		expect(runs).toContain(
-			`npm install -g ${PI_HARNESS_PACKAGE}@${PI_HARNESS_VERSION}`,
-		);
-		// No unpinned global install of either package anywhere.
+		// No unpinned global install of dorfl anywhere, and no global install of
+		// the harness at all (a global install ignores npm `overrides`).
 		for (const r of runs) {
 			expect(r).not.toMatch(/npm install -g dorfl(?!@)/);
-			expect(r).not.toMatch(/pi-coding-agent(?!@)/);
+			expect(r).not.toMatch(/(?:npm install|pnpm add) -g[^\n]*pi-/);
 		}
 	});
+});
+
+/** The `run:` of the named step of the generated agent setup action. */
+function setupStepRun(
+	installSource: ResolvedCIConfig['installSource'],
+	name: string,
+): string {
+	const [action] = buildSetupArtifacts({...BASE, installSource});
+	const step = (
+		parse(action.content) as {runs: {steps: {name?: string; run?: string}[]}}
+	).runs.steps.find((s) => s.name === name);
+	expect(step?.run, `step "${name}" (${installSource})`).toBeTypeOf('string');
+	return step!.run!;
+}
+
+/** The package.json the harness install step writes (parsed from its heredoc). */
+function harnessManifestIn(run: string): unknown {
+	const m =
+		/cat > package\.json << 'HARNESS_EOF'\n([\s\S]*?)\nHARNESS_EOF/.exec(run);
+	expect(m, 'the harness install writes package.json').not.toBeNull();
+	return JSON.parse(m![1]);
+}
+
+describe('install-ci: the agent harness is installed with its whole pi family pinned', () => {
+	const EXACT = /^\d+\.\d+\.\d+$/;
+
+	it('declares an exact version for the harness and every pi package it loads', () => {
+		expect(PI_HARNESS_VERSION).toMatch(EXACT);
+		// The pi packages pi-coding-agent@0.80.6 loads (its @earendil-works/*
+		// dependencies, recursively). A caret on any of them floated to a
+		// pi-ai that no longer exports what the harness imports.
+		expect(Object.keys(PI_HARNESS_PINNED_DEPENDENCIES).sort()).toEqual([
+			'@earendil-works/pi-agent-core',
+			'@earendil-works/pi-ai',
+			'@earendil-works/pi-tui',
+		]);
+		for (const v of Object.values(PI_HARNESS_PINNED_DEPENDENCIES)) {
+			expect(v).toMatch(EXACT);
+		}
+		expect(piHarnessManifest()).toEqual({
+			private: true,
+			dependencies: {[PI_HARNESS_PACKAGE]: PI_HARNESS_VERSION},
+			overrides: PI_HARNESS_PINNED_DEPENDENCIES,
+		});
+	});
+
+	for (const installSource of ['registry', 'workspace'] as const) {
+		it(`${installSource} mode: installs from a manifest pinning every pi package, and puts its bin on PATH`, () => {
+			const run = setupStepRun(installSource, 'Install agent harness (pi)');
+			expect(harnessManifestIn(run)).toEqual(piHarnessManifest());
+			// A project-local npm install: only the ROOT project's `overrides`
+			// apply, and a global install (npm or pnpm 11) makes each package its
+			// own root.
+			expect(run).toContain('npm install --no-audit --no-fund');
+			expect(run).not.toMatch(/ -g\b/);
+			expect(run).toContain(
+				'echo "$RUNNER_TEMP/dorfl-harness/node_modules/.bin" >> "$GITHUB_PATH"',
+			);
+		});
+
+		it(`${installSource} mode: a smoke step right after the install fails setup when pi cannot load`, () => {
+			const [action] = buildSetupArtifacts({...BASE, installSource});
+			const names = (
+				parse(action.content) as {runs: {steps: {name?: string}[]}}
+			).runs.steps.map((s) => s.name);
+			const install = names.indexOf('Install agent harness (pi)');
+			expect(names[install + 1]).toBe('Check the agent harness loads (pi)');
+			const run = setupStepRun(
+				installSource,
+				'Check the agent harness loads (pi)',
+			);
+			expect(run).toContain('if ! pi --version; then');
+			expect(run).toMatch(/::error title=dorfl-setup::[^\n]*cannot start/);
+			expect(run).toContain('exit 1');
+		});
+	}
 });
