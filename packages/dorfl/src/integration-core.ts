@@ -429,6 +429,14 @@ export interface IntegrationCoreInput {
 	reviewModel?: string;
 	/** Bound the revise↔review loop (Gate 2). Defaults to 2. */
 	reviewMaxRounds?: number;
+	/**
+	 * The approved review prose of a review that already ran ELSEWHERE, set only
+	 * by the CI tasking apply phase (task `ci-split-tasking`): the task-set review
+	 * ran in the agent phase, so this land runs with `review` off and posts that
+	 * prose as the PR comment instead. Ignored when this band's own review runs
+	 * and approves (its verdict's prose wins). Unset everywhere else.
+	 */
+	approvedReviewProse?: string;
 	/** Integration mode the caller REQUESTED (`propose` default, or `merge`). */
 	mode: IntegrationMode;
 	/**
@@ -1333,7 +1341,7 @@ export async function performIntegration(
 			openPr: input.openPr,
 			title: prTitle,
 			body: composeProposeBody({slug, body: input.body}),
-			reviewProse: approvedVerdict?.review,
+			reviewProse: approvedVerdict?.review ?? input.approvedReviewProse,
 			mergeRetries: input.mergeRetries,
 			mergeJitterMs: input.mergeJitterMs,
 		});
@@ -3223,6 +3231,97 @@ type Gate2ReviewOutcome =
 			verdict: ReviewVerdict | undefined;
 	  };
 
+/** The outcome of {@link runReviewRounds}: the verdict data, with no routing done. */
+export type ReviewRoundsOutcome =
+	| {kind: 'approved'; verdict: ReviewVerdict | undefined}
+	| {kind: 'blocked'; verdict: ReviewVerdict | undefined}
+	| {
+			kind: 'unparseable';
+			/** The needs-attention reason (names the parse failure, a transient class). */
+			reason: string;
+	  };
+
+/**
+ * Run a review gate for up to `maxRounds` rounds on ONE tree and return the
+ * verdict as DATA, writing nothing (the WRITE-FREE core of {@link runGate2Review},
+ * which adds the needs-attention routing). Factored out so the CI tasking agent
+ * phase (task `ci-split-tasking`) runs the one-round task-set review the SAME
+ * way `performIntegration` does, in the job that may launch agents, without the
+ * routing writes (the apply phase routes). A non-parse error is re-thrown.
+ */
+export async function runReviewRounds(params: {
+	reviewGate: ReviewGate;
+	slug: string;
+	/** The tree the review AGENT inspects. */
+	reviewCwd: string;
+	maxRounds: number;
+	reviewModel?: string;
+	watch?: boolean;
+	watchSink?: (line: string) => void;
+	color?: boolean;
+	sessionsDir?: string;
+	/** The AGENT env (ambient, never the identity-scoped one). */
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<ReviewRoundsOutcome> {
+	const {reviewGate, slug, reviewCwd, maxRounds} = params;
+	// CORROBORATED-APPROVAL semantics (NOT retry-until-pass): the gate runs the
+	// reviewer up to `reviewMaxRounds` times on the SAME tip and approves ONLY if
+	// EVERY round approves. A `block` is TERMINAL — it short-circuits the loop and
+	// is never re-rolled, because the reviewer is stochastic and re-reviewing an
+	// UNCHANGED tip after a block would just be a dice re-roll that could launder a
+	// real reject into a pass. The extra rounds therefore exist to make a FALSE
+	// APPROVE harder to slip through (a second reviewer gets a veto), never to give
+	// blocked work a second chance. (A future builder-REVISE step that mutates the
+	// tree between rounds is the ONLY thing that should make a block retryable; it
+	// would change the artifact under review and is not implemented here.)
+	let approved = false;
+	let lastVerdict: ReviewVerdict | undefined;
+	for (let round = 1; round <= maxRounds; round++) {
+		let verdict: ReviewVerdict;
+		try {
+			verdict = await reviewGate({
+				slug,
+				cwd: reviewCwd,
+				reviewModel: params.reviewModel,
+				round,
+				watch: params.watch,
+				watchSink: params.watchSink,
+				color: params.color,
+				sessionsDir: params.sessionsDir,
+				env: params.env,
+			});
+		} catch (err) {
+			if (!(err instanceof ReviewParseError)) {
+				// Anything else (a harness/connection throw, a programmer bug) is NOT this
+				// gate's concern: re-throw so the existing catch sites classify it.
+				throw err;
+			}
+			// A parse failure in ANY round is TERMINAL (never re-roll the remaining
+			// rounds). The reason carries the parse-failure phrase the
+			// `failure-cause.ts` signature matches (a transient class).
+			return {
+				kind: 'unparseable',
+				reason:
+					`PR/code review (Gate 2) ran but its verdict could not be parsed: ` +
+					`${err.message}`,
+			};
+		}
+		lastVerdict = verdict;
+		if (verdict.verdict !== 'approve') {
+			// A `block` is TERMINAL: stop now (never re-roll an unchanged tip) and route
+			// the blocking findings to needs-attention below. `approved` stays false.
+			approved = false;
+			break;
+		}
+		// An `approve`: provisionally approved, but keep going — every remaining round
+		// must ALSO approve for the gate to pass (corroboration, not first-approve-wins).
+		approved = true;
+	}
+	return approved
+		? {kind: 'approved', verdict: lastVerdict}
+		: {kind: 'blocked', verdict: lastVerdict};
+}
+
 /**
  * Run the Gate-2 PR/code REVIEW gate against a given tree ({@param reviewCwd}) and
  * route a BLOCK to needs-attention, returning DATA the caller acts on. Factored out
@@ -3267,105 +3366,75 @@ async function runGate2Review(params: {
 				`for '${slug}' (this is a wiring bug; the gate must not be skipped).`,
 		);
 	}
-	const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
 	note('Running the PR/code review gate (Gate 2)…');
-	// CORROBORATED-APPROVAL semantics (NOT retry-until-pass): the gate runs the
-	// reviewer up to `reviewMaxRounds` times on the SAME tip and approves ONLY if
-	// EVERY round approves. A `block` is TERMINAL — it short-circuits the loop and
-	// is never re-rolled, because the reviewer is stochastic and re-reviewing an
-	// UNCHANGED tip after a block would just be a dice re-roll that could launder a
-	// real reject into a pass. The extra rounds therefore exist to make a FALSE
-	// APPROVE harder to slip through (a second reviewer gets a veto), never to give
-	// blocked work a second chance. (A future builder-REVISE step that mutates the
-	// tree between rounds is the ONLY thing that should make a block retryable; it
-	// would change the artifact under review and is not implemented here.)
-	let approved = false;
-	let lastVerdict: ReviewVerdict | undefined;
-	for (let round = 1; round <= maxRounds; round++) {
-		let verdict: ReviewVerdict;
-		try {
-			verdict = await reviewGate({
-				slug,
-				cwd: reviewCwd,
-				reviewModel: input.reviewModel,
-				round,
-				// `--watch` threading (task `watch-review-session`): when on, the production
-				// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
-				watch: input.watch,
-				watchSink: input.watchSink,
-				color: input.color,
-				sessionsDir: input.sessionsDir,
-				// The review AGENT launches with the AMBIENT env, never the identity-scoped
-				// `env` (an agent must not act as the bot). Falls back to `env` when no
-				// identity is configured (unchanged for non-identity callers).
-				env: input.agentEnv ?? env,
-			});
-		} catch (err) {
-			if (!(err instanceof ReviewParseError)) {
-				// Anything else (a harness/connection throw, a programmer bug) is NOT this
-				// gate's concern — re-throw so the existing catch sites classify it.
-				throw err;
-			}
-			// THE GATE RAN BUT ITS VERDICT WAS UNREADABLE (direction 1, the safety net):
-			// the reviewer did NOT block — the gate's OUTPUT could not be parsed (a
-			// malformed JSON verdict, common on large diffs + weaker models, AFTER the
-			// direction-2 repair pass could not salvage it). WITHOUT this catch the throw
-			// escapes the core and `performComplete` maps it to the generic `usage-error`
-			// (verbatim, no push, no surface) AFTER the green build but BEFORE the
-			// done-move/push — STRANDING the lock + work branch with no PR.
-			//
-			// A parse failure in ANY round is TERMINAL: route IMMEDIATELY, never re-roll
-			// the remaining rounds (mirroring the block-is-terminal rule — re-reviewing
-			// the same tip would just be the dice re-roll the corroboration loop forbids).
-			// We route through the SAME work-preserving `applyNeedsAttentionTransition`
-			// seam the block path uses (it PUSHES the work branch + surfaces the item on
-			// `surfaceArbiter` for the autonomous path), targeting `cwd` (the work branch +
-			// ledger), NOT the throwaway `reviewCwd` — so BOTH the direct `!freshWorktreeGate`
-			// path AND the fresh-worktree `review:` callback are covered by this ONE catch.
-			// The recorded reason carries the parse-failure phrase the `failure-cause.ts`
-			// signature matches → the `do`/`run` tail classifies it `transient-infra`
-			// (retry the SAME work: the gate output is STOCHASTIC, so a re-run CAN differ,
-			// and the direction-2 repair makes a re-run far more likely to parse). NEVER a
-			// silent approve.
-			const reason =
-				`PR/code review (Gate 2) ran but its verdict could not be parsed: ` +
-				`${err.message}`;
-			const routed = await ledgerWrite.applyNeedsAttentionTransition({
-				cwd,
-				slug,
+	const maxRounds = Math.max(1, input.reviewMaxRounds ?? 2);
+	const rounds = await runReviewRounds({
+		reviewGate,
+		slug,
+		reviewCwd,
+		maxRounds,
+		reviewModel: input.reviewModel,
+		// `--watch` threading (task `watch-review-session`): when on, the production
+		// gate tails the review session live. OFF ⇒ the plain sync launch, unchanged.
+		watch: input.watch,
+		watchSink: input.watchSink,
+		color: input.color,
+		sessionsDir: input.sessionsDir,
+		// The review AGENT launches with the AMBIENT env, never the identity-scoped
+		// `env` (an agent must not act as the bot). Falls back to `env` when no
+		// identity is configured (unchanged for non-identity callers).
+		env: input.agentEnv ?? env,
+	});
+	if (rounds.kind === 'unparseable') {
+		// THE GATE RAN BUT ITS VERDICT WAS UNREADABLE (direction 1, the safety net):
+		// the reviewer did NOT block — the gate's OUTPUT could not be parsed (a
+		// malformed JSON verdict, common on large diffs + weaker models, AFTER the
+		// direction-2 repair pass could not salvage it). WITHOUT this catch the throw
+		// escapes the core and `performComplete` maps it to the generic `usage-error`
+		// (verbatim, no push, no surface) AFTER the green build but BEFORE the
+		// done-move/push — STRANDING the lock + work branch with no PR.
+		//
+		// A parse failure in ANY round is TERMINAL: route IMMEDIATELY, never re-roll
+		// the remaining rounds (mirroring the block-is-terminal rule — re-reviewing
+		// the same tip would just be the dice re-roll the corroboration loop forbids).
+		// We route through the SAME work-preserving `applyNeedsAttentionTransition`
+		// seam the block path uses (it PUSHES the work branch + surfaces the item on
+		// `surfaceArbiter` for the autonomous path), targeting `cwd` (the work branch +
+		// ledger), NOT the throwaway `reviewCwd` — so BOTH the direct `!freshWorktreeGate`
+		// path AND the fresh-worktree `review:` callback are covered by this ONE catch.
+		// The recorded reason carries the parse-failure phrase the `failure-cause.ts`
+		// signature matches → the `do`/`run` tail classifies it `transient-infra`
+		// (retry the SAME work: the gate output is STOCHASTIC, so a re-run CAN differ,
+		// and the direction-2 repair makes a re-run far more likely to parse). NEVER a
+		// silent approve.
+		const reason = rounds.reason;
+		const routed = await ledgerWrite.applyNeedsAttentionTransition({
+			cwd,
+			slug,
+			reason,
+			arbiter: input.surfaceArbiter,
+			env,
+			note,
+		});
+		const message = routed.moved
+			? `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
+				'marked it stuck on its per-item lock (work branch pushed + lock ' +
+				'surfaced; transient-infra — re-run). NOT integrated.'
+			: `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
+				'NOT integrating.';
+		note(message);
+		return {
+			kind: 'blocked',
+			result: {
+				outcome: 'review-unparseable',
+				routedToNeedsAttention: routed.moved,
+				branch,
 				reason,
-				arbiter: input.surfaceArbiter,
-				env,
-				note,
-			});
-			const message = routed.moved
-				? `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
-					'marked it stuck on its per-item lock (work branch pushed + lock ' +
-					'surfaced; transient-infra — re-run). NOT integrated.'
-				: `PR/code review (Gate 2) produced an UNPARSEABLE verdict for '${slug}'; ` +
-					'NOT integrating.';
-			note(message);
-			return {
-				kind: 'blocked',
-				result: {
-					outcome: 'review-unparseable',
-					routedToNeedsAttention: routed.moved,
-					branch,
-					reason,
-				},
-			};
-		}
-		lastVerdict = verdict;
-		if (verdict.verdict !== 'approve') {
-			// A `block` is TERMINAL: stop now (never re-roll an unchanged tip) and route
-			// the blocking findings to needs-attention below. `approved` stays false.
-			approved = false;
-			break;
-		}
-		// An `approve`: provisionally approved, but keep going — every remaining round
-		// must ALSO approve for the gate to pass (corroboration, not first-approve-wins).
-		approved = true;
+			},
+		};
 	}
+	const lastVerdict = rounds.verdict;
+	const approved = rounds.kind === 'approved';
 	if (!approved) {
 		// NON-approve verdict: route to needs-attention via the SAME seam the red gate
 		// uses, NEVER integrate. We reach here EITHER because a round returned a

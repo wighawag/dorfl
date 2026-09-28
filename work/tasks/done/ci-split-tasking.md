@@ -64,3 +64,18 @@ Ordering note: the path splits after `ci-split-agent-result-and-reruns` all edit
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If a dependency landed differently than this task assumes, or an ADR superseded an assumption here, do NOT build on the stale premise: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). Building on a stale task produces wrong-but-compiling work.
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md` for what that block is and is not; if a choice meets the ADR gate in `ADR-FORMAT.md`, also write an ADR in `docs/adr/` and name it there). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+These were made by the prior attempt. I reviewed them and am recording them here.
+
+- **Apply only re-commits the candidate tasks and the trimmed spec.** Any other file the tasker agent wrote, and the task-set review's non-blocking-findings observation, are not carried in the phase split. The changeset says so. The alternative was to also carry those files, which means validating more agent-written paths. This touches what `do spec:` / `advance spec:` land under `--phase` only.
+- **"New-or-changed relative to `baseSha`" is enforced as "new at the base".** Candidate paths are derived from safe-slug keys, never taken from the record. Any candidate whose `work/tasks/backlog/<slug>.md` already exists at `baseSha` is rejected, because a run cannot have produced a file that was already there. The alternative was a content comparison, which would still allow edits to tasks this run did not produce.
+- **`slug` is pinned in the trimmed spec body**, in addition to the task's list (`humanOnly`, `needsAnswers`, `taskedAfter`, `issue`, `origin`, `originTrust`). Other specs' `taskedAfter` resolve against the tasked spec's identity. A pinned key must match the base exactly, line for line, so neither a reader that keeps the first value nor one that keeps the last can see a different value.
+- **Required headings are only required if the base spec has them.** A spec that never had one of Problem Statement / Solution / User Stories is not refused. The alternative, requiring them unconditionally, would refuse old specs that are otherwise valid.
+- **A review `block` or unparseable verdict becomes `tasking-surface` with no candidates.** This mirrors the laptop path, which surfaces the spec without saving the set.
+- **A `tasking-land` carrying a non-`approve` `reviewVerdict` is rejected** as a hostile handoff.
+- **An agent result of `deterministic` (`needsAgent: false`) surfaces the spec.** Every tasking rung needs an agent, so this should never happen, and the apply phase does not read the handoff in that case.
+- **When the lock phase's agent tasking gate refuses the spec, it exits 1 before any write** and publishes `acquired: false`.
+- **The CLI routes by argument.** `runBuildPhaseAndExit` sends a `spec:<slug>` argument to `performTaskingPhase` and everything else to `performBuildPhase` as before. No generated workflow uses `--phase` yet.
+- **Refactor for the review.** `runReviewRounds` was factored out of `runGate2Review` with the same semantics, and `performIntegration` gained `approvedReviewProse` so the apply phase can post the agent phase's review prose on the PR with the review off. Both are used only by the tasking phase split.

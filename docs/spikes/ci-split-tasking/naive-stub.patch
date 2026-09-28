@@ -1,0 +1,39 @@
+diff --git a/packages/dorfl/src/ci-phase-tasking.ts b/packages/dorfl/src/ci-phase-tasking.ts
+--- a/packages/dorfl/src/ci-phase-tasking.ts
++++ b/packages/dorfl/src/ci-phase-tasking.ts
+@@ -729,6 +729,8 @@ export function checkTaskingCandidate(params: {
+ 	stamp: OriginStamp;
+ 	existsAtBase: boolean;
+ }): string {
++	// NAIVE STUB: take the candidate as the agent wrote it.
++	if (params.content !== undefined) return params.content;
+ 	const {slug, content, stamp} = params;
+ 	const path = `${STAGED_TASKS_DIR}/${slug}.md`;
+ 	if (!isSafeSlug(slug)) {
+@@ -842,6 +844,8 @@ export function checkTrimmedSpecBody(params: {
+ 	body: string;
+ 	baseSpec: string;
+ }): string {
++	// NAIVE STUB: take the trimmed spec body as the agent wrote it.
++	if (params.body !== undefined) return params.body;
+ 	const {slug, body, baseSpec} = params;
+ 	const what = `the trimmed spec body of '${slug}'`;
+ 	const fm = splitFrontmatter(body);
+@@ -1143,11 +1147,12 @@ async function applyOwned(ctx: ApplyContext): Promise<TaskingPhaseResult> {
+ 		if (options.handoffDir === undefined) {
+ 			throw new HandoffRejected('layout', 'no handoff directory was given');
+ 		}
+-		record = readHandoff({
+-			dir: options.handoffDir,
+-			runnerTemp: runnerTempFrom(options.runnerTemp, env),
+-			trust: {item, rung: 'task-spec'},
+-		}).record;
++		// NAIVE STUB: trust the artifact (no record validation).
++		void readHandoff;
++		void runnerTempFrom;
++		record = JSON.parse(
++			readFileSync(join(options.handoffDir, 'handoff.json'), 'utf8'),
++		) as HandoffRecord;
+ 		const products = record.products as {candidates: Record<string, string>};
+ 		candidates = await checkCandidates(ctx, products.candidates, stamp);
+ 		if (record.intent.kind === 'tasking-land') {
