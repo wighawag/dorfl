@@ -27,6 +27,7 @@ import {readdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../../src/integration-core.js';
 import {mergeConfig} from '../../src/config.js';
+import {installLandGate} from './land-barrier.js';
 
 interface WorkerArgs {
 	cwd: string;
@@ -36,6 +37,15 @@ interface WorkerArgs {
 	rendezvousDir: string;
 	/** Wait until this many `ready-*` files exist (race rendezvous). */
 	expectedReadyCount?: number;
+	/**
+	 * Also rendezvous at the LAND seam: after this racer's step-4 rebase (and
+	 * fresh gate), write `at-land-<slug>` and wait until `expectedReadyCount`
+	 * such files exist before pushing. Guarantees every racer rebased onto the
+	 * SAME pre-merge base before any of them pushes, so a cap-0 race cannot
+	 * degrade into two sequential (both-landing) integrations under load (task
+	 * `deflake-the-integration-core-control-and-two-load-timeouts`).
+	 */
+	landRendezvous?: boolean;
 }
 
 async function pollUntil(
@@ -72,6 +82,21 @@ async function main(): Promise<void> {
 		30_000,
 		`race ready-count >= ${want}`,
 	);
+
+	if (args.landRendezvous === true) {
+		installLandGate(async (input, land) => {
+			writeFileSync(join(args.rendezvousDir, `at-land-${args.slug}`), 'ready');
+			await pollUntil(
+				() =>
+					readdirSync(args.rendezvousDir).filter((f) =>
+						f.startsWith('at-land-'),
+					).length >= want,
+				30_000,
+				`land ready-count >= ${want}`,
+			);
+			return land(input);
+		});
+	}
 
 	const result = await performIntegration({
 		cwd: args.cwd,

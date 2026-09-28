@@ -20,6 +20,7 @@ import {
 	sidecarSurfacedOnArbiterMain,
 	needsAnswersOnArbiterMain,
 } from './helpers/gitRepo.js';
+import {holdLandsUntilAllRebased} from './helpers/land-barrier.js';
 
 /**
  * Unit tests for the SHARED gate→integrate back-half (`integration-core.ts`,
@@ -820,27 +821,55 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 		// re-rebase-and-retry (Race-1 fix), so to keep this control meaningful we ALSO
 		// disable the retry (`mergeRetries: 0`) — otherwise the retry alone both-lands
 		// (the `retry alone (no lock)` test below asserts exactly that new contract).
-		const {seeded, arbiterUrl, cwdA, cwdB} = await twoSameRepoMergeJobs(
+		//
+		// DETERMINISTIC INTERLEAVING (task
+		// `deflake-the-integration-core-control-and-two-load-timeouts`): left to the
+		// scheduler, one job could finish its whole tail (fetch, rebase, push) before
+		// the other even fetched; the other then rebased onto the ADVANCED main and
+		// landed legitimately, and this control flaked red (`expected 2 to be less
+		// than 2`). The land barrier parks both jobs at the land seam (after their
+		// step-4 rebase, before any push) until BOTH have rebased onto the SAME stale
+		// base, then releases them one at a time. The outcome is thereby decided by
+		// the product (the second push is non-fast-forward and, with `mergeRetries:
+		// 0`, never re-rebased), not by scheduling.
+		const {seeded, cwdA, cwdB} = await twoSameRepoMergeJobs(
 			'na',
 			'nb',
 			(cwd, slug) => writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`),
 		);
-		void arbiterUrl;
-		// No lock passed (undefined) AND retry disabled (0) ⇒ the tail runs
-		// un-serialised + un-retried, exactly like the pre-task single-job caller.
-		const settled = await Promise.allSettled([
-			integrateMerge(cwdA, 'na', 'unused', undefined, 0),
-			integrateMerge(cwdB, 'nb', 'unused', undefined, 0),
-		]);
+		const held = holdLandsUntilAllRebased(2);
+		let a: Awaited<ReturnType<typeof integrateMerge>>;
+		let b: Awaited<ReturnType<typeof integrateMerge>>;
+		try {
+			// No lock passed (undefined) AND retry disabled (0) ⇒ the tail runs
+			// un-serialised + un-retried, exactly like the pre-task single-job caller.
+			[a, b] = await Promise.all([
+				integrateMerge(cwdA, 'na', 'unused', undefined, 0),
+				integrateMerge(cwdB, 'nb', 'unused', undefined, 0),
+			]);
+		} finally {
+			held.restore();
+		}
+		const [first, second] = held.order;
+		expect(new Set(held.order)).toEqual(new Set(['na', 'nb']));
+		const bySlug = {na: a, nb: b} as const;
+		// The first released job's push fast-forwards main.
+		expect(bySlug[first as 'na' | 'nb'].outcome).toBe('completed');
+		expect(existsOnArbiterMain(seeded.repo, 'done', first)).toBe(true);
+		// The second pushes a branch rebased onto the now-stale base: its
+		// `${branch}:main` push is non-fast-forward and, with NO retry, it is NOT
+		// re-rebased; it routes to needs-attention instead of landing.
+		const loser = bySlug[second as 'na' | 'nb'];
+		expect(loser.outcome).toBe('rebase-conflict');
+		expect(loser.routedToNeedsAttention).toBe(true);
+		expect(loser.reason ?? '').toMatch(/non-fast-forward push/);
+		expect(existsOnArbiterMain(seeded.repo, 'done', second)).toBe(false);
+		// Hence the un-serialised, un-retried path does NOT both-land.
 		const landed = ['na', 'nb'].filter((slug) =>
 			existsOnArbiterMain(seeded.repo, 'done', slug),
 		);
-		// The un-serialised, un-retried path cannot deterministically land BOTH on
-		// `main`: the loser's `${branch}:main` push is non-fast-forward against the
-		// winner's advance and is NOT re-rebased.
-		expect(landed.length).toBeLessThan(2);
-		expect(settled).toHaveLength(2);
-	});
+		expect(landed).toEqual([first]);
+	}, 30_000);
 
 	it('WITHOUT the lock but WITH the default retry, two same-base concurrent merges BOTH land (Race-1 bounded re-rebase-and-retry)', async () => {
 		// Race 1 (claim-vs-integrate) fix proven WITHOUT the integrate lock: two
@@ -1006,31 +1035,43 @@ describe('integration-core — per-repo INTEGRATE lock serialises the merge tail
 			writeFileSync(join(cwd, `${slug}.txt`), `work ${slug}\n`);
 			cwds.push(cwd);
 		}
-		const settled = await Promise.allSettled(
-			cwds.map((cwd, i) =>
-				performIntegration({
-					cwd,
-					arbiter: ARBITER,
-					slug: slugs[i],
-					source: 'tasks-ready',
-					recovering: false,
-					verify: PASS,
-					mode: 'merge',
-					surfaceArbiter: ARBITER,
-					// Retry DISABLED: the un-retried push tail cannot recover a
-					// non-fast-forward `${branch}:main` against a concurrent winner.
-					mergeRetries: 0,
-					mergeJitterMs: 0,
-					env: gitEnv(),
-				}),
-			),
-		);
+		// Same DETERMINISTIC INTERLEAVING as the two-job control above: every job
+		// is parked at the land seam until ALL N have rebased onto the SAME stale
+		// base, then released one at a time, so the outcome is the product's (the
+		// first push lands, every later one is non-fast-forward and un-retried), not
+		// the scheduler's.
+		const held = holdLandsUntilAllRebased(N);
+		let settled: PromiseSettledResult<unknown>[];
+		try {
+			settled = await Promise.allSettled(
+				cwds.map((cwd, i) =>
+					performIntegration({
+						cwd,
+						arbiter: ARBITER,
+						slug: slugs[i],
+						source: 'tasks-ready',
+						recovering: false,
+						verify: PASS,
+						mode: 'merge',
+						surfaceArbiter: ARBITER,
+						// Retry DISABLED: the un-retried push tail cannot recover a
+						// non-fast-forward `${branch}:main` against a concurrent winner.
+						mergeRetries: 0,
+						mergeJitterMs: 0,
+						env: gitEnv(),
+					}),
+				),
+			);
+		} finally {
+			held.restore();
+		}
 		const landed = slugs.filter((s) =>
 			existsOnArbiterMain(seeded.repo, 'done', s),
 		);
-		// Without the retry, the un-serialised high-fan-out path cannot
-		// deterministically land ALL N: the losers' non-fast-forward pushes are not
-		// re-rebased onto the winner's advanced main.
+		// Without the retry, the un-serialised high-fan-out path does NOT land all
+		// N: only the first released job lands; the losers' non-fast-forward pushes
+		// are not re-rebased onto the winner's advanced main.
+		expect(landed).toEqual([held.order[0]]);
 		expect(landed.length).toBeLessThan(N);
 		expect(settled).toHaveLength(N);
 		// Generous explicit timeout, same reasoning as the N=7 ALL-land test above:

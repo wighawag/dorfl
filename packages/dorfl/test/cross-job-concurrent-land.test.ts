@@ -105,6 +105,7 @@ function spawnWorker(args: {
 	slug: string;
 	mergeRetries: number;
 	expectedReadyCount?: number;
+	landRendezvous?: boolean;
 }): Promise<WorkerResult> {
 	return new Promise((resolve, reject) => {
 		const payload = JSON.stringify({
@@ -114,6 +115,7 @@ function spawnWorker(args: {
 			mergeRetries: args.mergeRetries,
 			rendezvousDir,
 			expectedReadyCount: args.expectedReadyCount ?? 2,
+			landRendezvous: args.landRendezvous ?? false,
 		});
 		const child = spawn(TSX_BIN, [WORKER, payload], {
 			env: gitEnv(),
@@ -256,9 +258,26 @@ describe('cross-process concurrent merge land — only the CAS loop can serialis
 		// which slug happened to lose this run.
 		const {seeded, cwdA, cwdB} = await setupTwoRacers('pa', 'pb');
 
+		// LAND RENDEZVOUS (task
+		// `deflake-the-integration-core-control-and-two-load-timeouts`): the start
+		// rendezvous alone does not guarantee both racers rebase onto the SAME base;
+		// under load one could finish its whole tail before the other fetched, and
+		// the other would then land legitimately (both-land, a false red). Both
+		// workers also wait at the land seam (after rebase + fresh gate, before any
+		// push), so the pushes genuinely race from the same stale base.
 		const [a, b] = await Promise.all([
-			spawnWorker({cwd: cwdA, slug: 'pa', mergeRetries: 0}),
-			spawnWorker({cwd: cwdB, slug: 'pb', mergeRetries: 0}),
+			spawnWorker({
+				cwd: cwdA,
+				slug: 'pa',
+				mergeRetries: 0,
+				landRendezvous: true,
+			}),
+			spawnWorker({
+				cwd: cwdB,
+				slug: 'pb',
+				mergeRetries: 0,
+				landRendezvous: true,
+			}),
 		]);
 
 		expect(a.exitCode, `worker A stderr: ${a.stderr}`).toBe(0);
