@@ -102,7 +102,7 @@ runs:
         {
           "providers": {
             "anthropic": {
-              "apiKey": "ANTHROPIC_API_KEY",
+              "apiKey": "$ANTHROPIC_API_KEY",
               "baseUrl": "https://claude.etherplay.io"
             }
           }

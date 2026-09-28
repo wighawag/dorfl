@@ -34,3 +34,8 @@ Emit env-var references in the form the pinned harness resolves (`"$ANTHROPIC_AP
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): if the generator already emits `$`-prefixed references, route the task to needs-attention with the discrepancy as the reason.
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **`$NAME` over `${NAME}`:** I emit `"$" + apiKeyEnvVar`, which is the form the task gave first. pi resolves both the same way for a plain env-var name. This affects only `buildModelsJson` and the file it generates. Existing `models.json` files on consumer repos stay broken until someone re-runs `install-ci`, as the changeset says.
+- **New exported helper `modelsJsonEnvRef` in `install-ci-core.ts`:** I made it a named function so the resolver rule is documented in one place and tests can use it. I checked it against `CONTEXT.md`: it doesn't overlap any existing term. `ProviderEntry.apiKeyEnvVar` still means the bare name, because that is also the GitHub secret and action input name (`requiredSecretNames`, the export step). I considered storing `$NAME` in the config and rejected it, since that would break the secret names.

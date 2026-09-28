@@ -46,7 +46,7 @@ import {
 /**
  * The two auth modes, mirroring whitesmith:
  *   - `models-json` (DEFAULT): one GitHub secret per provider API key; the harness
- *     `models.json` is generated inline and references the env var names. No
+ *     `models.json` is generated inline and references the env vars (`$NAME`). No
  *     OAuth-refresh machinery, no `GH_PAT` — the conservative default.
  *   - `auth-json`: a single `PI_AUTH_JSON` secret + a `GH_PAT` for OAuth-token
  *     refresh + an OAuth-refresh script (the `pi-mono#2743` workaround, the SINGLE
@@ -416,9 +416,12 @@ function pathToFileUrl(absPath: string): string {
 
 /**
  * Build the harness `models.json` object from the providers. Built-in providers
- * (`anthropic`/`openai`) get `{apiKey: <ENV_VAR>}` (the harness resolves the env
- * var at runtime); a custom provider carries its `baseUrl`/`api`/`models`/`compat`.
+ * (`anthropic`/`openai`) get `{apiKey: "$<ENV_VAR>"}` (the harness resolves the
+ * env var at runtime); a custom provider carries its `baseUrl`/`api`/`models`/`compat`.
  * Mirrors whitesmith's `buildModelsJson`.
+ *
+ * The `apiKey` is an env-var REFERENCE (see {@link modelsJsonEnvRef}), never the
+ * bare env-var name: pi treats a bare value as a LITERAL key.
  */
 export function buildModelsJson(providers: ProviderEntry[]): {
 	providers: Record<string, unknown>;
@@ -426,14 +429,16 @@ export function buildModelsJson(providers: ProviderEntry[]): {
 	const providersObj: Record<string, unknown> = {};
 	for (const p of providers) {
 		if (p.builtin) {
-			const entry: Record<string, unknown> = {apiKey: p.apiKeyEnvVar};
+			const entry: Record<string, unknown> = {
+				apiKey: modelsJsonEnvRef(p.apiKeyEnvVar),
+			};
 			if (p.baseUrl) entry.baseUrl = p.baseUrl;
 			providersObj[p.name] = entry;
 		} else {
 			const entry: Record<string, unknown> = {
 				baseUrl: p.baseUrl,
 				api: p.api,
-				apiKey: p.apiKeyEnvVar,
+				apiKey: modelsJsonEnvRef(p.apiKeyEnvVar),
 				models: p.models,
 			};
 			if (p.compat) entry.compat = p.compat;
@@ -441,6 +446,19 @@ export function buildModelsJson(providers: ProviderEntry[]): {
 		}
 	}
 	return {providers: providersObj};
+}
+
+/**
+ * The `models.json` config value that makes the pi harness read `envVarName`
+ * from the environment: `"$NAME"`. The pinned harness
+ * (`@earendil-works/pi-coding-agent`, `dist/core/resolve-config-value.js`)
+ * resolves a config value as a shell command when it starts with `!`, as an env
+ * var when it is `$NAME` / `${NAME}`, and as a LITERAL otherwise. Writing the bare
+ * name therefore sent the string `ANTHROPIC_API_KEY` as the token (`401
+ * Unauthorized` on every CI launch).
+ */
+export function modelsJsonEnvRef(envVarName: string): string {
+	return `$${envVarName}`;
 }
 
 // ─── secret-orchestration LOGIC (which secrets, dedup) ───────────────────────
@@ -964,7 +982,8 @@ export function generateSetupAction(
 		// Map each provider-key INPUT into the step env, then append the non-empty
 		// ones to `$GITHUB_ENV` so the agent step inherits them. Values flow via env
 		// (never interpolated into the script body), and Actions masks the secret in
-		// logs. `models.json`'s `apiKey` is the env-var NAME; this puts the value there.
+		// logs. `models.json`'s `apiKey` is a `$NAME` env-var REFERENCE (pi resolves it at
+		// runtime; a bare name would be a literal key); this puts the value there.
 		const exportEnvLines = providerKeyNames
 			.map((name) => `        ${name}: \${{ inputs.${name} }}`)
 			.join('\n');
