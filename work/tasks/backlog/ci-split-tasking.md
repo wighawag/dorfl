@@ -4,6 +4,7 @@ slug: ci-split-tasking
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-intake]
 covers: [12, 13]
+needsAnswers: true
 ---
 
 ## What to build
