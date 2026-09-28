@@ -170,6 +170,7 @@ import {activateProcessPhase} from './phase-recorder.js';
 import {performBuildPhase, type BuildPhaseVerb} from './ci-phase-build.js';
 import {performIntakePhase} from './ci-phase-intake.js';
 import {performTaskingPhase} from './ci-phase-tasking.js';
+import {advancePhasePath, performTreelessPhase} from './ci-phase-treeless.js';
 import {
 	AgentResultUsageError,
 	parseAgentJobResult,
@@ -1495,6 +1496,63 @@ async function runBuildPhaseAndExit(
 		console.error(`>> ${result.message}`);
 	}
 	process.exit(result.exitCode);
+}
+
+/**
+ * Run ONE phase of `advance <item> --phase` and exit with its code. The item's
+ * rung picks the split path ({@link advancePhasePath}): the build and tasking
+ * paths as before ({@link runBuildPhaseAndExit}), and the tree-less rungs
+ * (surface, triage, apply; task `ci-split-treeless-rungs`) through
+ * {@link performTreelessPhase} with the same advance context the laptop tick
+ * gets.
+ */
+async function runAdvancePhaseAndExit(
+	args: string[],
+	flags: DoFlags,
+	doOptions: Omit<DoOptions, 'arg'>,
+	advanceContext: AdvanceContext,
+): Promise<never> {
+	const phase = flags.phase!;
+	if (args.length === 1) {
+		const path = await advancePhasePath({
+			phase,
+			arg: args[0],
+			cwd: advanceContext.cwd,
+			arbiter: advanceContext.arbiter,
+			env: identityEnv(doOptions.identity, process.env),
+		});
+		if (path === 'treeless') {
+			const handoffDir = phase === 'agent' ? flags.handoffOut : flags.handoffIn;
+			if (phase !== 'lock' && handoffDir === undefined) {
+				console.error(
+					`error: --phase ${phase} needs ${phase === 'agent' ? '--handoff-out' : '--handoff-in'} <dir>.`,
+				);
+				process.exit(1);
+			}
+			if (phase === 'apply' && flags.agentResult === undefined) {
+				console.error(
+					'error: --phase apply needs --agent-result <result> (needs.agent.result).',
+				);
+				process.exit(1);
+			}
+			const result = await performTreelessPhase({
+				...advanceContext,
+				arg: args[0],
+				phase,
+				identity: doOptions.identity,
+				handoffDir,
+				agentResult: flags.agentResult,
+				agentTimeoutMinutes: flags.agentTimeoutMinutes,
+			});
+			if (result.exitCode !== 0) {
+				console.error(`error: ${result.message}`);
+			} else {
+				console.error(`>> ${result.message}`);
+			}
+			process.exit(result.exitCode);
+		}
+	}
+	return runBuildPhaseAndExit('advance', args, flags, doOptions);
 }
 
 /**
@@ -3617,10 +3675,11 @@ export function buildProgram(): Command {
 			// stream only one. The CI propose matrix names a single item per leg, so it
 			// satisfies this; the `-n` merge job must NOT pass `--watch`.
 			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
-			// split item workflow. Only the build and tasking paths are split so far; the lock phase
-			// refuses any other rung before writing anything.
+			// split item workflow: the build, tasking and tree-less (surface, triage,
+			// apply) paths are split (task `ci-split-treeless-rungs`); the lock phase
+			// refuses anything else (an answered merge action) before writing anything.
 			if (flags.phase !== undefined) {
-				await runBuildPhaseAndExit('advance', args, flags, doOptions);
+				await runAdvancePhaseAndExit(args, flags, doOptions, advanceContext);
 			}
 
 			const advanceMulti =

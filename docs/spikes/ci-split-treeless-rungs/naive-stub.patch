@@ -1,0 +1,55 @@
+--- a/packages/dorfl/src/ci-phase-treeless.ts
++++ b/packages/dorfl/src/ci-phase-treeless.ts
+@@ -59,6 +59,8 @@
+ 	sidecarTypeFor,
+ 	treelessAgentNeed,
+ } from './advance.js';
++import {readFileSync} from 'node:fs';
++import {join} from 'node:path';
+ import {classifyTick} from './advance-classify.js';
+ import {
+ 	DEFAULT_TREELESS_JITTER_MS,
+@@ -958,38 +960,14 @@
+  * Throws {@link HandoffRejected}.
+  */
+ function readTreelessHandoff(ctx: ApplyContext): HandoffRecord {
+-	const {options, held, resolved, env} = ctx;
++	// NAIVE STUB (docs/spikes/ci-split-treeless-rungs): trust the record.
++	const {options} = ctx;
+ 	if (options.handoffDir === undefined) {
+ 		throw new HandoffRejected('layout', 'no handoff directory was given');
+ 	}
+-	const record = readHandoff({
+-		dir: options.handoffDir,
+-		runnerTemp: runnerTempFrom(options.runnerTemp, env),
+-		trust: {item: resolved.item, rung: held.rung},
+-	}).record;
+-	if (record.intent.kind !== INTENT_FOR_RUNG[held.rung]) {
+-		throw new HandoffRejected(
+-			'kind-for-rung',
+-			`a ${held.rung} run hands over ${INTENT_FOR_RUNG[held.rung]}, not ${record.intent.kind}`,
+-		);
+-	}
+-	if (record.intent.kind === 'triage') {
+-		const t = record.products as TriageProducts;
+-		if (t.disposition !== 'keep' && options.observationTriage !== 'auto') {
+-			throw new HandoffRejected(
+-				'field',
+-				`products.disposition is ${t.disposition}, but observationTriage is ` +
+-					`${options.observationTriage ?? 'unset'}: only 'auto' runs the triage gate`,
+-			);
+-		}
+-		if (t.target === resolved.item) {
+-			throw new HandoffRejected(
+-				'field',
+-				'products.target names the observation itself',
+-			);
+-		}
+-	}
+-	return record;
++	return JSON.parse(
++		readFileSync(join(options.handoffDir, 'handoff.json'), 'utf8'),
++	) as HandoffRecord;
+ }
+ 
+ /** A gate the apply phase never launches: the handoff did not answer it. */

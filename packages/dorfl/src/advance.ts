@@ -502,7 +502,7 @@ export interface ReadSignalsInput {
  * to the `spec` sidecar type, so `advance spec:<slug>` resolves its
  * signals/folders (`FOLDERS_FOR_TYPE['spec']`) and orchestrates `do spec:<slug>`.
  */
-function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
+export function sidecarTypeFor(namespace: SlugNamespace): SidecarType {
 	return namespace === 'observation'
 		? 'observation'
 		: namespace === 'spec'
@@ -1441,6 +1441,86 @@ async function maybeRunStuckAction(
 }
 
 /**
+ * What a TREE-LESS rung needs to run on this item, read off the same state the
+ * rung body reads (spec `ci-agent-job-without-write-token` decision 11, task
+ * `ci-split-treeless-rungs`): the CI lock phase publishes it as `needsAgent`, and
+ * the apply phase recomputes it on its fresh checkout. It mirrors the rung
+ * bodies above branch for branch, so it lives next to them:
+ *
+ *  - `triage-observation`: a note already carrying `triaged:`, or the legacy
+ *    back-fill (an engine-written `## Applied answers` record without the
+ *    marker), is deterministic; under `observationTriage: auto` the triage gate
+ *    agent runs; otherwise the surface path runs the `surface-questions` agent
+ *    unless the observation provably has nothing to ask (the surface
+ *    short-circuit, which then surfaces only the engine-built triage question);
+ *  - `surface`: the `surface-questions` agent, or the same short-circuit;
+ *  - `apply`: an answered `kind: merge` entry is `unsplit` (task
+ *    `ci-split-answered-merge-action`); an answered `kind: stuck` entry and a
+ *    task/spec content answer run no agent; an answered observation runs the
+ *    agentic decision.
+ *
+ * A missing item file needs no agent (the rung is a benign `vanished` skip).
+ */
+export type TreelessAgentNeed =
+	| {needsAgent: boolean}
+	| {unsplit: string; needsAgent?: undefined};
+
+/** See {@link TreelessAgentNeed}. */
+export function treelessAgentNeed(input: RungExecInput): TreelessAgentNeed {
+	const {item, context} = input;
+	const cwd = context.cwd;
+	const itemPath = findItemPath(cwd, input.namespace, input.slug);
+	if (itemPath === undefined) return {needsAgent: false};
+	const sidecarExists = existsSync(join(cwd, sidecarPathFor(item)));
+	switch (input.classification.kind) {
+		case 'triage-observation': {
+			const body = readFileSync(join(cwd, itemPath), 'utf8');
+			const fm = parseFrontmatter(body);
+			if (fm.triaged !== undefined && fm.triaged !== '') {
+				return {needsAgent: false};
+			}
+			if (hasAppliedAnswersRecord(body)) return {needsAgent: false};
+			if (context.observationTriage === 'auto') return {needsAgent: true};
+			return {
+				needsAgent: !isNothingToSurfaceObservation(
+					cwd,
+					input,
+					itemPath,
+					sidecarExists,
+				),
+			};
+		}
+		case 'surface':
+			return {
+				needsAgent: !isNothingToSurfaceObservation(
+					cwd,
+					input,
+					itemPath,
+					sidecarExists,
+				),
+			};
+		case 'apply':
+			if (detectAnsweredMergeAction(cwd, item) !== undefined) {
+				return {
+					unsplit:
+						'an answered kind: merge entry (the answered merge action is not ' +
+						'split into CI phases yet)',
+				};
+			}
+			if (detectAnsweredStuckAction(cwd, item) !== undefined) {
+				return {needsAgent: false};
+			}
+			return {
+				needsAgent:
+					input.namespace === 'observation' &&
+					!(context.applyFollowups && context.applyFollowups.length > 0),
+			};
+		default:
+			return {unsplit: `the ${input.classification.kind} rung`};
+	}
+}
+
+/**
  * The cross-tick-window BENIGN SKIP shared by all three rungs that need to
  * resolve an item file (surface / triage / apply). The lifecycle pool enumerated
  * the item at scan-time, but by the time this leg ran a sibling parallel leg had
@@ -1470,7 +1550,7 @@ function vanishedSkip(input: {
  * folders it may rest in (the SAME folder set {@link readNeedsAnswers} searches).
  * Returns the path RELATIVE to `cwd`, or `undefined` when no file exists.
  */
-function findItemPath(
+export function findItemPath(
 	cwd: string,
 	namespace: SlugNamespace,
 	slug: string,

@@ -209,6 +209,65 @@ export async function pushTreelessResult(
 	}
 }
 
+/** The result of {@link checkTreelessPublishScope}. */
+export type TreelessPublishScope =
+	/** `HEAD` is `base`: the rung committed nothing, so there is nothing to push. */
+	| {kind: 'nothing'}
+	/** `HEAD` is exactly one commit whose parent is `base`: the rung's own. */
+	| {kind: 'rung-commit'; commit: string}
+	/** Anything else: publishing `HEAD:main` would carry commits that are not the rung's. */
+	| {kind: 'refused'; message: string};
+
+/**
+ * Check, BEFORE a tree-less publish, that `HEAD:main` would publish exactly the
+ * rung's own commit (task `ci-split-treeless-rungs`; observation
+ * `advance-lifecycle-push-trigger-lands-an-unreviewed-work-branch-on-main`).
+ * {@link pushTreelessResult} pushes `HEAD:main` from whatever is checked out, so
+ * a checkout not based on the fetched `<arbiter>/main` tip (`base`) would
+ * publish every commit between the two. The CI apply phase runs the rung on a
+ * fresh checkout of `base` and calls this first: the new commit's parent must be
+ * `base` (the publish's own retry may then rebase only that commit). Read-only.
+ */
+export async function checkTreelessPublishScope(params: {
+	cwd: string;
+	base: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<TreelessPublishScope> {
+	const {cwd, base, env} = params;
+	const head = await runAsync('git', ['rev-parse', 'HEAD'], cwd, {env});
+	if (head.status !== 0) {
+		return {kind: 'refused', message: 'the checkout has no HEAD commit'};
+	}
+	const tip = head.stdout.trim();
+	if (tip === base) return {kind: 'nothing'};
+	const list = await runAsync('git', ['rev-list', `${base}..${tip}`], cwd, {
+		env,
+	});
+	const commits = list.stdout.split('\n').filter((l) => l.trim() !== '');
+	const parents = await runAsync(
+		'git',
+		['rev-list', '--parents', '-n', '1', tip],
+		cwd,
+		{env},
+	);
+	const parentList = parents.stdout.trim().split(/\s+/).slice(1);
+	if (
+		list.status !== 0 ||
+		commits.length !== 1 ||
+		parentList.length !== 1 ||
+		parentList[0] !== base
+	) {
+		return {
+			kind: 'refused',
+			message:
+				`HEAD (${tip}) is not one commit on top of the fetched main (${base}): ` +
+				`${commits.length} commit(s) would be published, so the tree-less publish ` +
+				'is refused (it would land commits that are not the rung result)',
+		};
+	}
+	return {kind: 'rung-commit', commit: tip};
+}
+
 /**
  * The rung kinds that commit a tree-less result LOCALLY (sidecar / `needsAnswers`
  * / `triaged:` marker) and therefore need {@link pushTreelessResult} to reach the
