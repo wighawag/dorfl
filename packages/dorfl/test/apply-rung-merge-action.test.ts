@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, mkdirSync, existsSync} from 'node:fs';
+import {writeFileSync, mkdirSync, existsSync, readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {performAdvance} from '../src/advance.js';
@@ -11,7 +11,12 @@ import {
 	type MergeActionInput,
 	type MergeActionResult,
 } from '../src/apply-merge-action.js';
-import {newSidecar, serialiseSidecar, sidecarPathFor} from '../src/sidecar.js';
+import {
+	newSidecar,
+	parseSidecar,
+	serialiseSidecar,
+	sidecarPathFor,
+} from '../src/sidecar.js';
 import {performClaim} from '../src/claim-cas.js';
 import {
 	makeScratch,
@@ -321,11 +326,13 @@ describe('apply rung — answered merge-question dispatches the runner-action la
 		expect(existsSync(join(repo, sidecarPath))).toBe(false);
 	});
 
-	it('answer=merge + `restale` (strictMergeApproval ON, merge-base moved) ⇒ apply rung RE-SURFACES (re-pause; sidecar stays with a new pending follow-up)', async () => {
+	it('answer=merge + `restale` (strictMergeApproval ON, main moved) ⇒ apply rung RE-SURFACES (re-pause; sidecar stays with a new pending follow-up asked at the new main)', async () => {
 		const {repo, sidecarPath} = seedAnsweredMergeQuestion('eps', 'merge');
+		const newMain = 'b'.repeat(40);
 		const {handler, calls} = stubHandler({
 			outcome: 'restale',
-			message: 'merge-base moved; re-surfacing',
+			message: 'main moved; re-surfacing',
+			main: newMain,
 		});
 
 		const result = await performAdvance({
@@ -347,6 +354,12 @@ describe('apply rung — answered merge-question dispatches the runner-action la
 		expect(calls[0].strictMergeApproval).toBe(true);
 		// sidecar still present (re-paused with a follow-up)
 		expect(existsSync(join(repo, sidecarPath))).toBe(true);
+		const entries = parseSidecar(
+			readFileSync(join(repo, sidecarPath), 'utf8'),
+		).entries;
+		expect(entries).toHaveLength(2);
+		expect(entries[1].kind).toBe('merge');
+		expect(entries[1].askedAtMain).toBe(newMain);
 	});
 });
 
@@ -359,11 +372,18 @@ describe('apply rung — answered merge-question dispatches the runner-action la
  * (the surfacer would only enumerate it because its tip is NOT reachable from
  * main). The arbiter is bare and PR-less (NoneProvider).
  */
-async function seedAnsweredMergeLand(slug: string): Promise<{
+async function seedAnsweredMergeLand(
+	slug: string,
+	opts: {
+		/** Record the `main` the question is asked against (as the surfacer does). */
+		askedAtMain?: boolean;
+	} = {},
+): Promise<{
 	repo: string;
 	seeded: SeededRepo;
 	workTip: string;
 	sidecarPath: string;
+	askedAtMain?: string;
 }> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
 	const repo = seeded.repo;
@@ -414,12 +434,17 @@ async function seedAnsweredMergeLand(slug: string): Promise<{
 		].join('\n'),
 	);
 	const item = `task:${slug}`;
+	const askedAtMain =
+		opts.askedAtMain === true
+			? gitIn(['rev-parse', 'HEAD'], repo).trim()
+			: undefined;
 	let model = newSidecar(item, [
 		{
 			question: `Land \`work/task-${slug}\`?`,
 			context: 'unmerged work/* branch — integration decision',
 			default: 'merge | hold | drop',
 			kind: 'merge',
+			...(askedAtMain === undefined ? {} : {askedAtMain}),
 		},
 	]);
 	model = {
@@ -436,7 +461,7 @@ async function seedAnsweredMergeLand(slug: string): Promise<{
 	);
 	gitIn(['push', '-q', ARBITER, 'main:main'], repo);
 
-	return {repo, seeded, workTip, sidecarPath};
+	return {repo, seeded, workTip, sidecarPath, askedAtMain};
 }
 
 /** Push a non-conflicting commit onto `<arbiter>/main` via a throwaway clone. */
@@ -487,7 +512,11 @@ describe('apply rung — answered merge-question LANDS via the existing land pri
 	}, 30_000);
 
 	it('moved main + GREEN re-verify on the rebased tip (OQ6 default policy) → LANDS', async () => {
-		const {repo, seeded} = await seedAnsweredMergeLand('stale-green');
+		// The question records the `main` it was asked against, yet with
+		// strictMergeApproval OFF a move since then does not matter.
+		const {repo, seeded} = await seedAnsweredMergeLand('stale-green', {
+			askedAtMain: true,
+		});
 
 		// Main moved AFTER the merge-question was answered, but the rebased tip
 		// still verifies green (a non-conflicting, non-breaking sibling commit).
@@ -548,6 +577,133 @@ describe('apply rung — answered merge-question LANDS via the existing land pri
 			{cwd: repo, env: gitEnv()},
 		);
 		expect(isAncestor.status).not.toBe(0);
+	}, 30_000);
+});
+
+// --- strictMergeApproval: re-stale against the `main` the question was asked at ---
+
+/** Answer the LATEST `kind: merge` entry of `item` on `repo`'s main, and publish it. */
+function answerLatestMergeQuestion(
+	repo: string,
+	item: string,
+	answer: string,
+): void {
+	const abs = join(repo, sidecarPathFor(item));
+	const model = parseSidecar(readFileSync(abs, 'utf8'));
+	const last = model.entries.length - 1;
+	writeFileSync(
+		abs,
+		serialiseSidecar({
+			...model,
+			entries: model.entries.map((e, i) => (i === last ? {...e, answer} : e)),
+		}),
+	);
+	gitIn(['add', '-A'], repo);
+	gitIn(['commit', '-q', '-m', `answer ${item}: ${answer}`], repo);
+	gitIn(['push', '-q', ARBITER, 'main:main'], repo);
+}
+
+/** Bring `repo`'s main to the arbiter's (a sibling pushed to it). */
+function syncMain(repo: string): void {
+	gitIn(['fetch', '-q', ARBITER], repo);
+	gitIn(['merge', '-q', '--ff-only', `${ARBITER}/main`], repo);
+}
+
+function arbiterRev(repo: string, rev: string): string {
+	gitIn(['fetch', '-q', ARBITER], repo);
+	return gitIn(['rev-parse', `${ARBITER}/${rev}`], repo).trim();
+}
+
+describe('apply rung — strictMergeApproval re-stales when `main` moved since the question was asked', () => {
+	function advance(
+		repo: string,
+		seeded: SeededRepo,
+		slug: string,
+		strictMergeApproval: boolean,
+	) {
+		return performAdvance({
+			arg: slug,
+			cwd: repo,
+			arbiter: ARBITER,
+			workspacesDir: join(scratch.root, 'ws'),
+			arbiterUrl: `file://${seeded.arbiter}`,
+			verify: 'test "$(cat feature.txt)" = "the work"',
+			strictMergeApproval,
+			acquireLock: async () => ACQUIRED,
+			releaseLock: async () => RELEASED,
+		});
+	}
+
+	it('code moved on main since the question → RE-SURFACES before the continue rebase; a re-answer while main stays put LANDS', async () => {
+		const slug = 'strict-moved';
+		const item = `task:${slug}`;
+		const {repo, seeded, workTip, askedAtMain} = await seedAnsweredMergeLand(
+			slug,
+			{askedAtMain: true},
+		);
+		advanceMainWithFile(seeded, 'code', 'sibling.txt', 'benign sibling\n');
+		const movedMain = arbiterRev(repo, 'main');
+		syncMain(repo);
+
+		const first = await advance(repo, seeded, slug, true);
+		expect(first.exitCode, first.message).toBe(0);
+		expect(first.outcome).toBe('no-op');
+		expect(first.rung).toBe('apply');
+		// Nothing landed, and the kept branch was NOT rebased + pushed: the check
+		// ran before the continue rebase.
+		expect(existsOnArbiterMain(repo, 'done', slug)).toBe(false);
+		expect(arbiterRev(repo, `work/task-${slug}`)).toBe(workTip);
+		// A follow-up merge question, asked against the moved `main`.
+		const merges = parseSidecar(
+			readFileSync(join(repo, sidecarPathFor(item)), 'utf8'),
+		).entries.filter((e) => e.kind === 'merge');
+		expect(merges).toHaveLength(2);
+		expect(merges[0].askedAtMain).toBe(askedAtMain);
+		expect(merges[1].answer).toBe('');
+		expect(merges[1].question).toContain('Re-confirm');
+		expect(merges[1].askedAtMain).toBe(movedMain);
+
+		// The human re-answers; `main` moves only by that answer (under `work/`).
+		syncMain(repo);
+		answerLatestMergeQuestion(repo, item, 'merge');
+		const second = await advance(repo, seeded, slug, true);
+		expect(second.exitCode, second.message).toBe(0);
+		expect(second.outcome).toBe('advanced');
+		expect(existsOnArbiterMain(repo, 'done', slug)).toBe(true);
+		expect(gitIn(['show', `${ARBITER}/main:feature.txt`], repo).trim()).toBe(
+			'the work',
+		);
+	}, 60_000);
+
+	it('main moved only under `work/` since the question → LANDS', async () => {
+		const slug = 'strict-ledger-only';
+		const {repo, seeded} = await seedAnsweredMergeLand(slug, {
+			askedAtMain: true,
+		});
+		advanceMainWithFile(
+			seeded,
+			'ledger',
+			'work/notes/observations/unrelated.md',
+			'an unrelated note\n',
+		);
+		syncMain(repo);
+
+		const result = await advance(repo, seeded, slug, true);
+		expect(result.exitCode, result.message).toBe(0);
+		expect(result.outcome).toBe('advanced');
+		expect(existsOnArbiterMain(repo, 'done', slug)).toBe(true);
+	}, 30_000);
+
+	it('a question with no recorded base (written before the field existed) → LANDS, as before', async () => {
+		const slug = 'strict-legacy';
+		const {repo, seeded} = await seedAnsweredMergeLand(slug);
+		advanceMainWithFile(seeded, 'code', 'sibling.txt', 'benign sibling\n');
+		syncMain(repo);
+
+		const result = await advance(repo, seeded, slug, true);
+		expect(result.exitCode, result.message).toBe(0);
+		expect(result.outcome).toBe('advanced');
+		expect(existsOnArbiterMain(repo, 'done', slug)).toBe(true);
 	}, 30_000);
 });
 

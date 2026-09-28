@@ -249,6 +249,13 @@ export function surfaceMergeQuestions(
 	const surfaced: MergeQuestionSurfaced[] = [];
 	const skipped: MergeQuestionSkipped[] = [];
 
+	// The `main` every question of this pass is asked against: recorded on the
+	// entry so a `strictMergeApproval` apply can tell whether `main` moved since
+	// (task `strict-merge-approval-restale-check-runs-before-the-continue-rebase`).
+	// Unresolvable (a test seam over a non-repo) ⇒ no base recorded.
+	const askedAtMain =
+		branches.length > 0 ? resolveCommit(cwd, base, env) : undefined;
+
 	for (const branch of branches) {
 		const item = `task:${branch.slug}`;
 
@@ -281,7 +288,7 @@ export function surfaceMergeQuestions(
 		}
 
 		const pr = prs.get(branch.ref);
-		const question = buildMergeQuestion(branch, pr);
+		const question = buildMergeQuestion(branch, pr, askedAtMain);
 
 		const result = persist({
 			cwd,
@@ -329,6 +336,7 @@ export function surfaceMergeQuestions(
 function buildMergeQuestion(
 	branch: UnmergedWorkBranch,
 	pr: MergeQuestionPullRequest | undefined,
+	askedAtMain: string | undefined,
 ): NewQuestion {
 	const contextLines: string[] = [
 		`The branch \`${branch.ref}\` is not reachable from \`main\` — it carries pushed work that has not yet landed.`,
@@ -352,7 +360,29 @@ function buildMergeQuestion(
 		default: 'merge | hold | drop',
 		// MACHINE dispatch signal — the apply layer routes on this, not on `default`.
 		kind: 'merge',
+		...(askedAtMain === undefined ? {} : {askedAtMain}),
 	};
+}
+
+/** The full sha `rev` names in `cwd`, or `undefined` when it does not resolve. */
+function resolveCommit(
+	cwd: string,
+	rev: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	let res: RunResult;
+	try {
+		res = gitSoft(
+			['rev-parse', '--verify', '--quiet', `${rev}^{commit}`],
+			cwd,
+			env,
+		);
+	} catch {
+		return undefined;
+	}
+	if (res.status !== 0) return undefined;
+	const sha = res.stdout.trim();
+	return sha === '' ? undefined : sha;
 }
 
 /** Probe the sidecar for an existing pending `kind: merge` entry. */

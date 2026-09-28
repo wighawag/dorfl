@@ -726,7 +726,7 @@ function mergeResultFor(p: MergeLandPreparation): MergeActionResult {
 		case 'integrate':
 			return {outcome: 'landed', message: RECORDED};
 		case 'restale':
-			return {outcome: 'restale', message: p.message};
+			return {outcome: 'restale', message: p.message, main: p.main};
 		case 'needs-attention':
 			return {outcome: 'refused', message: p.reason};
 		case 'already-integrated':
@@ -1659,12 +1659,20 @@ function replayMergeAction(
 			};
 		}
 		if (kind === 'merge-restale') {
+			// The follow-up is asked against the fresh `main` this rung runs on
+			// (the base worktree's HEAD), which it records as its `askedAtMain`: a
+			// re-answer while `main` stays put then lands (no re-stale livelock).
+			const head = await runAsync('git', ['rev-parse', 'HEAD'], input.cwd, {
+				env: input.env,
+			});
+			const main = head.status === 0 ? head.stdout.trim() : '';
 			return {
 				outcome: 'restale',
 				message:
 					`merge-question for ${input.item} answered MERGE, but ` +
-					'strictMergeApproval is ON and the merge-base moved (checked by the ' +
-					'agent job): re-surfacing the merge-question.',
+					'strictMergeApproval is ON and `main` moved since the question was ' +
+					'asked (checked by the agent job): re-surfacing the merge-question.',
+				...(main === '' ? {} : {main}),
 			};
 		}
 		if (record === undefined) {

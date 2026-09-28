@@ -10,6 +10,7 @@ import {
 } from './sidecar.js';
 import {run as runProc} from './git.js';
 import {createJob, type Job} from './workspace.js';
+import {ensureMirrorMain, type EnsureMirrorResult} from './repo-mirror.js';
 import {
 	performIntegration,
 	type IntegrationCoreInput,
@@ -67,9 +68,9 @@ import type {VerifyConfig} from './verify.js';
  * "HONOUR the prior approval + land on a green re-verify" path; opt-in
  * `strictMergeApproval` (resolved per-repo via the gate-family precedence chain
  * by the sibling task `strict-merge-approval-gate`, default OFF) RE-SURFACES
- * the merge-question instead of landing when the merge-base moved between the
- * surfacer's question and this apply. The RED-re-verify refusal is unchanged
- * in both modes.
+ * the merge-question instead of landing when `main`'s code moved since the
+ * question was asked (its recorded `askedAtMain`; see `approvedBaseMoved`).
+ * The RED-re-verify refusal is unchanged in both modes.
  *
  * House-style boundary: this module is the DETERMINISTIC DISPATCH LAYER. It
  * does NOT re-implement rebase / verify / integrate (it drives the EXISTING
@@ -206,8 +207,8 @@ export interface MergeActionInput {
 	 * `strictMergeApproval` (resolved per-repo by the sibling task
 	 * `strict-merge-approval-gate`; default OFF). OFF ⇒ honour the prior answer
 	 * + land on a green re-verify (the cheap default). ON ⇒ re-surface the
-	 * merge-question when the merge-base moved between the surfacer's question
-	 * and this apply (don't land; the apply rung folds this into a re-pause).
+	 * merge-question when `main`'s code moved since the question was asked
+	 * (don't land; the apply rung folds this into a re-pause).
 	 */
 	strictMergeApproval?: boolean;
 	/** Bounded recovery-rebase retry knob (mirrors the build path). */
@@ -237,9 +238,9 @@ export type MergeActionOutcome =
 	 */
 	| 'refused'
 	/**
-	 * `answer=merge` + `strictMergeApproval` ON + the merge-base moved between
-	 * the surfacer's question and this apply: the dispatcher RE-SURFACES the
-	 * merge-question (the apply rung appends a fresh follow-up + re-pauses).
+	 * `answer=merge` + `strictMergeApproval` ON + `main`'s code moved since the
+	 * question was asked: the dispatcher RE-SURFACES the merge-question (the
+	 * apply rung appends a fresh follow-up asked at the new `main` + re-pauses).
 	 */
 	| 'restale'
 	/** `answer=hold` ⇒ no land; the apply rung records the answer in body as usual. */
@@ -259,6 +260,12 @@ export interface MergeActionResult {
 	 * `already-integrated`, …), so callers can branch on it.
 	 */
 	integration?: IntegrationCoreResult;
+	/**
+	 * On `restale`: the arbiter `main` the approval was found stale against. The
+	 * apply rung records it as the re-surfaced question's `askedAtMain`, so a
+	 * re-answer while `main` stays put lands (no re-stale livelock).
+	 */
+	main?: string;
 }
 
 /**
@@ -291,50 +298,77 @@ function resolveArbiterUrl(input: MergeActionInput): string | undefined {
 	return url === '' ? undefined : url;
 }
 
+/** The verdict of {@link approvedBaseMoved}. */
+interface ApprovedBaseCheck {
+	/** `main`'s code moved since the answered question was asked ⇒ re-surface. */
+	stale: boolean;
+	/** The arbiter `main` the check compared against (when it was read). */
+	main?: string;
+}
+
 /**
- * The `strictMergeApproval` re-stale check (SPEC OQ6 opt-in): did `<arbiter>/
- * main` move past the merge-base of the work branch since the surfacer
- * authored the question? The git-alone analogue of GitHub's "dismiss stale
- * approvals when the base changes" — host-agnostic by reachability.
+ * The `strictMergeApproval` re-stale check (SPEC OQ6 opt-in; task
+ * `strict-merge-approval-restale-check-runs-before-the-continue-rebase`): did
+ * `main` move since the answered merge question was ASKED? The git-alone
+ * analogue of GitHub's "dismiss stale approvals when the base changes".
  *
- * We fetch the latest `<arbiter>/main` from the JOB worktree's hub mirror (the
- * worktree's `origin`), compute `merge-base(<branch>, <origin/main>)`, and
- * compare against `<origin/main>` itself: if the merge-base IS `<origin/main>`,
- * the branch is a strict descendant — the merge-base did NOT move — and the
- * cheap default applies (HONOUR + land on green re-verify). If the merge-base
- * is NOT `<origin/main>`, `main` advanced past the branch's divergence point
- * since the branch was last rebased — the merge-base MOVED — and the strict
- * mode re-surfaces.
+ * ONE implementation for the laptop dispatcher ({@link performMergeAction}) and
+ * the CI agent half ({@link prepareMergeLand}), and both call it BEFORE
+ * {@link createJob}, whose continue rebase would otherwise make the kept branch
+ * a descendant of the current `main` and hide the move (the bug this replaced).
  *
- * Returns `true` when the merge-base moved (⇒ re-surface), `false` otherwise.
- * On any plumbing failure returns `false` (do NOT spuriously re-surface — the
- * red re-verify is still the load-bearing safety; a transient git failure must
- * not block a clean answer-then-land).
+ * The approved base is the `askedAtMain` the answered entry carries (stamped by
+ * the merge-question surfacer, and by the re-surface path with the `main` the
+ * follow-up is asked against, so a re-answer while `main` stays put lands and
+ * the CI split cannot livelock). It is compared with the arbiter's current
+ * `main`, freshly fetched into the hub mirror {@link createJob} then reuses.
+ *
+ * "Moved" means the tree OUTSIDE `work/` differs: the question, its answer and
+ * every other ledger write are commits on `main` under `work/`, so a plain sha
+ * compare would re-stale every answer (the answer commit itself moves `main`).
+ *
+ * Never stale (the cheap default applies) when the entry carries no
+ * `askedAtMain` (a sidecar written before it existed) or on any plumbing
+ * failure: the red re-verify on the rebased tip stays the load-bearing safety,
+ * and a transient git failure must not block a clean answer-then-land.
  */
-function mergeBaseMoved(job: Job, env: NodeJS.ProcessEnv | undefined): boolean {
-	const fetch = runProc(
+function approvedBaseMoved(
+	url: string,
+	input: MergeActionInput,
+): ApprovedBaseCheck {
+	const asked = input.action.entry.askedAtMain;
+	if (asked === undefined) return {stale: false};
+	let mirror: EnsureMirrorResult;
+	try {
+		mirror = ensureMirrorMain({
+			url,
+			workspacesDir: input.workspacesDir,
+			env: input.env,
+		});
+	} catch {
+		return {stale: false};
+	}
+	const main = mirror.mainSha;
+	if (main === asked) return {stale: false, main};
+	const diff = runProc(
 		'git',
-		[
-			'fetch',
-			'--quiet',
-			job.arbiterRemote,
-			`+refs/heads/main:refs/remotes/${job.arbiterRemote}/main`,
-		],
-		job.dir,
-		{env},
+		['diff-tree', '--quiet', '-r', asked, main, '--', ':(exclude)work'],
+		mirror.path,
+		{env: input.env},
 	);
-	if (fetch.status !== 0) return false;
-	const mainRef = `${job.arbiterRemote}/main`;
-	const mainSha = runProc(
-		'git',
-		['rev-parse', '--verify', '--quiet', mainRef],
-		job.dir,
-		{env},
+	// 0: no change outside `work/`; 1: changed; anything else: plumbing failure.
+	return {stale: diff.status === 1, main};
+}
+
+/** The re-stale message both halves report. */
+function restaleMessage(input: MergeActionInput, main: string): string {
+	const asked = input.action.entry.askedAtMain ?? '(unknown)';
+	return (
+		`merge-question for ${input.item} answered MERGE, but ` +
+		`strictMergeApproval is ON and \`main\` moved since the question was ` +
+		`asked (asked at ${asked}, now ${main}): RE-SURFACING the ` +
+		`merge-question (no land; the human re-confirms against the new base).`
 	);
-	if (mainSha.status !== 0) return false;
-	const base = runProc('git', ['merge-base', 'HEAD', mainRef], job.dir, {env});
-	if (base.status !== 0) return false;
-	return base.stdout.trim() !== mainSha.stdout.trim();
 }
 
 /**
@@ -414,6 +448,22 @@ export async function performMergeAction(
 		};
 	}
 
+	// STRICT re-stale check (OQ6 opt-in), BEFORE the checkout's continue rebase
+	// (which would push the rebased branch, and hide the move): when ON and
+	// `main` moved since the question was asked, RE-SURFACE the merge-question
+	// (the apply rung folds this into a re-pause) instead of landing. Default
+	// OFF ⇒ skipped; the cheap "green re-verify is enough" path runs.
+	if (input.strictMergeApproval === true) {
+		const check = approvedBaseMoved(url, input);
+		if (check.stale && check.main !== undefined) {
+			return {
+				outcome: 'restale',
+				message: restaleMessage(input, check.main),
+				main: check.main,
+			};
+		}
+	}
+
 	// Check out the unmerged `work/<type>-<slug>` via the EXISTING per-job
 	// worktree seam — the SAME seam build/recovery callers use, NOT a bespoke
 	// worktree or clone. The job dir is the worktree `performIntegration` works
@@ -459,22 +509,6 @@ export async function performMergeAction(
 					`merge-question for ${input.item} answered MERGE — but the ` +
 					`continue-rebase push to the arbiter failed (${job.continuePushFailure}). ` +
 					`NOT landing; the kept work is intact on the branch.`,
-			};
-		}
-
-		// STRICT re-stale check (OQ6 opt-in): when ON and the merge-base moved
-		// between the surfacer's question and this apply, RE-SURFACE the
-		// merge-question (the apply rung folds this into a re-pause) instead of
-		// landing. Default OFF ⇒ this block is skipped; the cheap "green
-		// re-verify is enough" path runs.
-		if (input.strictMergeApproval === true && mergeBaseMoved(job, input.env)) {
-			return {
-				outcome: 'restale',
-				message:
-					`merge-question for ${input.item} answered MERGE — but ` +
-					`strictMergeApproval is ON and the merge-base of \`work/${input.slug}\` ` +
-					`moved between answer and apply: RE-SURFACING the merge-question ` +
-					`(no land; the human re-confirms against the new base).`,
 			};
 		}
 
@@ -576,8 +610,8 @@ function mergeLandIntegrationInput(
  *
  *  - `integrate`: the rebased tip passed the fresh-worktree gate; the apply job
  *    pushes it leased and lands it (`integrate`, the rebased tip bundled);
- *  - `restale`: `strictMergeApproval` is on and the merge-base moved
- *    (`merge-restale`);
+ *  - `restale`: `strictMergeApproval` is on and `main`'s code moved since the
+ *    question was asked (`merge-restale`; checked before any checkout);
  *  - `needs-attention`: a red gate on the rebased tip (the rebased tip bundled)
  *    or a rebase conflict (nothing bundled: the kept branch is untouched);
  *  - `already-integrated`: the kept tip is already on `main`; nothing to land
@@ -586,7 +620,7 @@ function mergeLandIntegrationInput(
  */
 export type MergeLandPreparation =
 	| {kind: 'integrate'; repo: string; workBranch: string; tip: string}
-	| {kind: 'restale'; message: string}
+	| {kind: 'restale'; message: string; main: string}
 	| {
 			kind: 'needs-attention';
 			reason: string;
@@ -605,8 +639,9 @@ export interface PreparedMergeLand {
 
 /**
  * The AGENT half of the answered-merge land, for the CI agent job, which holds a
- * read-only token: the SAME checkout ({@link createJob}), rebase, optional
- * `strictMergeApproval` re-stale check and fresh-worktree gate (`prepare` +
+ * read-only token: the SAME optional `strictMergeApproval` re-stale check
+ * (before the checkout), checkout ({@link createJob}), rebase and
+ * fresh-worktree gate (`prepare` +
  * `verify` run the branch's code) as {@link performMergeAction}, but nothing is
  * written to the arbiter. The continue rebase stays local (decision 7,
  * `localContinue`), and `performIntegration` runs under the phase recorder, so
@@ -636,6 +671,22 @@ export async function prepareMergeLand(
 				`get-url ${input.arbiter}\` failed in ${input.cwd})`,
 		);
 	}
+	// The re-stale check runs BEFORE the (local) continue rebase, exactly as on
+	// the laptop: the same `approvedBaseMoved`.
+	if (input.strictMergeApproval === true) {
+		const check = approvedBaseMoved(url, input);
+		if (check.stale && check.main !== undefined) {
+			const main = check.main;
+			return {
+				preparation: {
+					kind: 'restale',
+					message: restaleMessage(input, main),
+					main,
+				},
+				dispose: () => {},
+			};
+		}
+	}
 	const job = createJob({
 		url,
 		slug: input.slug,
@@ -663,16 +714,6 @@ export async function prepareMergeLand(
 					`rebasing \`work/task-${input.slug}\` onto current main conflicted ` +
 					'(aborted, never auto-resolved); the kept work is intact on the ' +
 					'branch. Resolve it, then answer the merge question again.',
-			});
-		}
-		if (input.strictMergeApproval === true && mergeBaseMoved(job, input.env)) {
-			return prepared({
-				kind: 'restale',
-				message:
-					`merge-question for ${input.item} answered MERGE, but ` +
-					`strictMergeApproval is ON and the merge-base of ` +
-					`\`work/task-${input.slug}\` moved between answer and apply: ` +
-					're-surfacing the merge-question.',
 			});
 		}
 		const outcome = await runAgentPhase(

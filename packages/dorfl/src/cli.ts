@@ -3300,11 +3300,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--strict-merge-approval',
-			'opt in to the host-agnostic "dismiss stale approvals on base change" discipline (spec `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6): when the merge-base CHANGED between the human’s merge-answer and the apply step, RE-SURFACE the merge-question (clear the answer back to no-answer; re-author the question on main/runner under the advancing lock) instead of auto-landing on a green re-verify. Default OFF (a green re-verify is trusted as sufficient; honour the prior answer). Story #16’s RED-re-verify refusal is UNCHANGED and independent of this flag. Resolved flag > env > per-repo > global > default off.',
+			'opt in to the host-agnostic "dismiss stale approvals on base change" discipline (spec `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6): when `main`’s code (anything outside `work/`) moved since the merge-question was asked (the `askedAtMain` it records), RE-SURFACE the merge-question (append a follow-up asked against the current `main`, under the advancing lock) instead of auto-landing on a green re-verify. A question written before `askedAtMain` existed never re-stales. Default OFF (a green re-verify is trusted as sufficient; honour the prior answer). Story #16’s RED-re-verify refusal is UNCHANGED and independent of this flag. Resolved flag > env > per-repo > global > default off.',
 		)
 		.option(
 			'--no-strict-merge-approval',
-			'honour the prior merge-answer and land when the rebased tip re-verifies GREEN even if the merge-base changed (default; the cheap green-re-verify-is-enough path)',
+			'honour the prior merge-answer and land when the rebased tip re-verifies GREEN even if `main` moved since the question was asked (default; the cheap green-re-verify-is-enough path)',
 		)
 		.option(
 			'--merge-questions <mode>',

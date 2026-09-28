@@ -402,9 +402,10 @@ export interface AdvanceContext {
 	 * Resolved `strictMergeApproval` boolean (sibling task
 	 * `strict-merge-approval-gate`). Default OFF ⇒ honour the prior approval +
 	 * land on a green re-verify (cheap, the SPEC-applied OQ6 default). ON ⇒
-	 * re-surface the merge-question when the merge-base moved between the
-	 * surfacer's question and this apply (the host-agnostic analogue of
-	 * GitHub's "dismiss stale approvals when the base changes").
+	 * re-surface the merge-question when `main`'s code (outside `work/`) moved
+	 * since the question was asked, i.e. since its recorded `askedAtMain` (the
+	 * host-agnostic analogue of GitHub's "dismiss stale approvals when the base
+	 * changes").
 	 */
 	strictMergeApproval?: boolean;
 	/**
@@ -1194,8 +1195,8 @@ async function applyRung(input: RungExecInput): Promise<RungExecResult> {
  *     the item to needs-attention through its own shared seam, so `main` never
  *     received a failing tree. The apply rung SHORT-CIRCUITS — the sidecar is
  *     LEFT IN PLACE so the open answer stays surfaced for a human follow-up.
- *   - `restale` ⇒ `strictMergeApproval` was ON and the merge-base moved
- *     between the surfacer's question and this apply; the apply rung appends
+ *   - `restale` ⇒ `strictMergeApproval` was ON and `main`'s code moved
+ *     since the question was asked; the apply rung appends
  *     a follow-up question + re-pauses (the human re-confirms against the new
  *     base).
  *   - `hold` / `drop` ⇒ no land; fall through to the normal apply path so the
@@ -1271,7 +1272,9 @@ async function maybeRunMergeAction(
 	if (result.outcome === 'restale') {
 		// `strictMergeApproval` re-surface: append a follow-up question and
 		// re-pause. The previous answer stays recorded in the entry; the human
-		// re-confirms against the new merge-base in the appended question.
+		// re-confirms against the new `main` in the appended question, which
+		// records that `main` as its `askedAtMain` (so a re-answer while `main`
+		// stays put lands instead of re-staling forever).
 		const apply = context.applyPersist ?? applyAnsweredQuestions;
 		try {
 			const applied = apply({
@@ -1281,11 +1284,12 @@ async function maybeRunMergeAction(
 				appendQuestions: [
 					{
 						question:
-							`Merge-base for \`work/${input.slug}\` moved since your last ` +
-							`answer (strictMergeApproval is ON). Re-confirm: still land?`,
+							`\`main\` moved since the merge question for \`work/${input.slug}\` ` +
+							`was asked (strictMergeApproval is ON). Re-confirm: still land?`,
 						context: result.message,
 						default: 'merge | hold | drop',
 						kind: 'merge',
+						...(result.main === undefined ? {} : {askedAtMain: result.main}),
 					},
 				],
 				note,
