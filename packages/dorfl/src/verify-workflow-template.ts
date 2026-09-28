@@ -102,9 +102,9 @@ concurrency:
   group: ${VERIFY_CHECK_CONTEXT}-\${{ github.ref }}
   cancel-in-progress: true
 
-# NO \`workflows\` permission (US #9). \`contents: read\` is all the gate needs.
-permissions:
-  contents: read
+# Nothing at workflow level: the job grants its own scopes. NO \`workflows\`
+# permission (US #9).
+permissions: {}
 
 jobs:
   # The job name IS the GitHub check context — it must equal VERIFY_CHECK_CONTEXT
@@ -112,6 +112,9 @@ jobs:
   # context this workflow does not produce.
   ${VERIFY_CHECK_CONTEXT}:
     runs-on: ubuntu-latest
+    # \`contents: read\` is all the gate needs.
+    permissions:
+      contents: read
     steps:
       - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:

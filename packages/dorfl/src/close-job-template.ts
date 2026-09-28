@@ -35,7 +35,10 @@
 
 import {ACTION_PINS, pinnedUses} from './install-ci-action-pins.js';
 import type {ResolvedCIConfig} from './install-ci-core.js';
-import {shouldDropCheckoutCredentials} from './install-ci-core.js';
+import {
+	WRITER_SETUP_ACTION_USES,
+	shouldDropCheckoutCredentials,
+} from './install-ci-core.js';
 
 /** The capability id (the registry key + the emitted workflow file stem). */
 export const CLOSE_JOB_CAPABILITY_ID = 'close-job';
@@ -63,8 +66,7 @@ export function generateCloseJobWorkflow(config: ResolvedCIConfig): string {
 		? `
           # Public repository: every git read works without a token, and this
           # job cannot push, so do not leave the token in .git/config for later
-          # steps (the setup action, including any project-setup hook, and
-          # close-merged-issues) to read.
+          # steps (the setup action and close-merged-issues) to read.
           persist-credentials: false`
 		: '';
 	return `\
@@ -114,20 +116,25 @@ concurrency:
   group: close-job-\${{ github.ref }}
   cancel-in-progress: false
 
-# NO \`workflows\` permission: the running job can NEVER edit the workflows tree
-# under .github (US #9). It needs only to READ the work/ tree and CLOSE issues.
-permissions:
-  contents: read
-  issues: write
+# Nothing at workflow level: the job grants its own scopes. NO \`workflows\`
+# permission: the running job can NEVER edit the workflows tree under .github
+# (US #9).
+permissions: {}
 
 jobs:
   close-merged-issues:
     runs-on: ubuntu-latest
+    # It needs only to READ the work/ tree and CLOSE issues.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: ${pinnedUses(ACTION_PINS.checkout)}
         with:
           fetch-depth: 0${checkoutCredentials}
-      - uses: ./.github/actions/dorfl-setup
+      # The writer role (Node and dorfl only): this job runs no agent, so it
+      # installs no harness, no provider key and no project-setup hook.
+      - uses: ${WRITER_SETUP_ACTION_USES}
       - name: close issues whose work has landed on main
         # In-place in this checkout (no --isolated/--remote): the CI container IS
         # the isolation. Resolves the closing issue(s) from the work/ tree, runs

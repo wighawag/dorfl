@@ -20,23 +20,24 @@ import {fileURLToPath} from 'node:url';
  * This module locates + reads that template and STRUCTURALLY VALIDATES it. The
  * package depends on NO YAML library (see `frontmatter.ts` for the same
  * constraint), so {@link validateAdvanceCiTemplate} checks the small set of
- * invariants the task's acceptance criteria require directly:
+ * invariants the acceptance criteria require directly:
  *
- *   - triggers on a CRON schedule AND on-answer-committed (a push touching
- *     `work/questions/**`);
- *   - `propose` mode → a MATRIX of independent jobs enumerated via the
- *     mirror-side pool scan (`dorfl scan --json`), one `advance … --propose`
- *     per item (the `--propose` flag TIES the integration mode to the matrix shape,
- *     so a leg can never merge to main);
- *   - `merge` mode → a MATRIX of independent jobs (one per item), each leg
- *     running `dorfl advance <item> --merge` so build/gate/review run
- *     concurrently across siblings; the LAND TAIL is serialised by the engine's
- *     `mergeRetries` CAS-retry loop (the git-alone floor), NOT by this
- *     workflow's job shape — a host-specific `concurrency:` group would be
- *     load-bearing for safety, which the floor framing forbids;
- *   - the dispatch input is `integrationMode` (ONE word, ONE meaning): it drives
- *     BOTH the integration flag the legs pass AND the job shape, so they cannot
- *     desync;
+ *   - triggers on a CRON schedule AND on-answer-committed (a push to `main`
+ *     touching `work/questions/**`);
+ *   - THE SPLIT (spec `ci-agent-job-without-write-token`, ADR
+ *     `ci-agent-job-holds-no-write-token`, task `ci-split-generate-workflows`):
+ *     the tick runs NO agent. `enumerate` lists the items via the pool scan
+ *     (`dorfl scan --json`), and a `dispatch` job holding `actions: write` ONLY
+ *     (no checkout, no setup) starts one `dorfl-item-dispatch.yml` run per item,
+ *     which calls `dorfl-item.yml` (lock, agent, apply). No matrix: one item per
+ *     workflow run, so no item shares another's artifact namespace;
+ *   - the dispatch input is `integrationMode` (ONE word, ONE meaning): the
+ *     `dispatch` job forwards it to every item run, which passes it to
+ *     `advance` as `--propose`/`--merge`, so they cannot desync. In merge mode
+ *     the LAND tail is serialised by the engine's `mergeRetries` CAS-retry loop
+ *     in the item's apply job (the git-alone floor), NOT by a workflow
+ *     `concurrency:` group; a lost CAS re-runs the rebase and the push only,
+ *     never the gate (decision 2), and the apply phase reports it;
  *   - it references the EXISTING `advance` driver only (no new execution model);
  *   - it is a `.template` (so it never self-triggers in THIS repo).
  *
@@ -125,87 +126,85 @@ export function validateAdvanceCiTemplate(
 		text,
 	), 'must trigger on-answer-committed (a push touching `work/questions/**`).');
 
-	// --- propose ⇒ a MATRIX enumerated via the mirror-side pool scan -------------
-	require('propose-matrix', /strategy:\s*[\s\S]*?matrix:/.test(
+	// --- The pool scan enumerates the items ------------------------------------
+	require('enumerates-via-scan', /dorfl scan --json/.test(
 		text,
-	), '`propose` mode must emit a MATRIX of jobs (`strategy.matrix`).');
-	require('propose-enumerates-via-scan', /dorfl scan --json/.test(
-		text,
-	), 'the matrix items must be ENUMERATED via the mirror-side pool scan ' +
+	), 'the items must be ENUMERATED via the mirror-side pool scan ' +
 		'(`dorfl scan --json`).');
-	// The `enumerate` `jq` must UNION taskable prds into the matrix
+	// The `enumerate` `jq` must UNION taskable prds into the item list
 	// (`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`): a
-	// task-only `jq` would render `DORFL_AUTO_TASK` dead on the hourly
-	// cron — a ready ungated SPEC would never become a matrix leg. The `jq` must
-	// read `scan --json`'s taskable-SPEC pool (`repos[].specs[]` + `cwd.repo.specs[]`)
-	// and emit `spec:<slug>` legs alongside the `task:<slug>` legs.
+	// task-only `jq` would render `DORFL_AUTO_TASK` dead on the hourly cron.
 	require('propose-enumerates-taskable-specs', /"spec:" \+ \.slug/.test(text) &&
 		/\.specs\[\]/.test(
 			text,
-		), 'the propose-mode `enumerate` `jq` must union taskable specs into the ' +
-		"matrix as `spec:<slug>` legs (read from `scan --json`'s `repos[].specs[]` " +
+		), 'the `enumerate` `jq` must union taskable specs into the item list as ' +
+		"`spec:<slug>` ids (read from `scan --json`'s `repos[].specs[]` " +
 		'+ `cwd.repo.specs[]` pools), so a ready ungated SPEC becomes one auto-task ' +
-		'matrix leg alongside the eligible-task legs ' +
+		'item run alongside the eligible-task items ' +
 		'(`ci-propose-matrix-must-enumerate-sliceable-prds-not-only-slices`).');
-	require('propose-one-advance-per-item', /WORK_ITEM:\s*\$\{\{\s*matrix\.item\s*\}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
-		text,
-	), 'each matrix leg must run one `dorfl advance <matrix item>` ' +
-		'(one PR per item), reading the item from the step env (`WORK_ITEM`).');
-	// The item id is a slug that may be hand-written, so it must reach the shell
-	// as DATA through `env:`, never as `${{ }}` text spliced into the `run:` script
-	// (GitHub Actions script injection).
-	require('matrix-item-not-spliced-into-run', !/dorfl advance "?\$\{\{/.test(
-		text,
-	), 'the matrix item must NOT be interpolated into the `run:` script as ' +
-		'`${{ matrix.item }}` (script injection): pass it through the step `env:` ' +
-		'as `WORK_ITEM` and quote it as `"${WORK_ITEM}"`.');
-	// The matrix leg must carry `--propose` so the integration mode is TIED to the
-	// matrix shape (it cannot desync from the dispatch `integrationMode` input nor
-	// fall back to a repo config default of `merge`). Scoped to the `advance-propose`
-	// job so it is the LEG that carries it, not merely the file somewhere.
-	require('propose-leg-carries-propose-flag', /advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
-		text,
-	), 'each `propose` matrix leg must pass `--propose` so the integration mode is ' +
-		'TIED to the matrix shape (a leg can never merge to main / desync from the ' +
-		'dispatch mode).');
 
-	// --- merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land) -
-	// The engine's `integrateLock` + `mergeRetries` CAS-retry loop is what makes
-	// concurrent merge jobs LAND-SAFE (`land-time-reverify-and-parallel-merge-ceiling`):
-	// build/gate/review fan out across siblings, and a non-fast-forward push
-	// triggers re-rebase + re-gate + retry up to the resolved `mergeRetries` cap.
-	// The cross-job serialiser is the CAS-retry loop itself — the git-alone floor.
-	require('merge-matrix', /advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(
+	// --- THE SPLIT: one dorfl-item run per item, dispatched, never a matrix -----
+	require('no-matrix', !/\bstrategy:\s*[\s\S]*?matrix:/.test(
 		text,
-	), 'the `merge` job must use a MATRIX (parallel build/gate/review per item; ' +
-		"the land tail is serialised by the engine's `mergeRetries` CAS-retry " +
-		"loop, not by the workflow's job shape).");
-	// Each merge matrix leg must run one `dorfl advance <matrix.item> --merge`,
-	// scoped to the `advance-merge:` job so the `--merge` flag is TIED to its leg
-	// (cannot desync from the dispatch `integrationMode` input nor fall back to a
-	// repo config default of `propose`).
-	require('merge-leg-carries-merge-flag', /advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
+	), 'no job may use a `strategy.matrix`: one item per workflow run (a matrix ' +
+		'shares one artifact namespace across items; decision 1 of ADR ' +
+		'ci-agent-job-holds-no-write-token).');
+	require('dispatches-item-runs', /gh workflow run dorfl-item-dispatch\.yml\b/.test(
 		text,
-	), 'each `merge` matrix leg must pass `--merge` so the integration mode is ' +
-		'TIED to the matrix shape (a leg can never propose-only / desync from the ' +
-		'dispatch mode).');
-	// The merge fan-out is the SAFETY-FLOOR shape: no `concurrency:` group on the
-	// `advance-merge:` job, because a GitHub Actions `concurrency:` serialiser
-	// would be load-bearing for cross-job land safety, and the floor must work on
-	// a bare arbiter with no host (Applied Answer q1: scaled CAS-retry is the
-	// floor; the portable cross-job ref-lock is the planned accelerator; GitHub
-	// `concurrency:` is OPTIONAL host sugar only, deliberately not used here).
-	require('merge-no-host-concurrency-serialiser', !/advance-merge:[\s\S]*?\n\s{4}concurrency:/.test(
+	), 'the `dispatch` job must start one `dorfl-item-dispatch.yml` run per item ' +
+		'(which calls dorfl-item.yml: lock, agent, apply).');
+	require('dispatch-actions-write-only', /\n {2}dispatch:[\s\S]*?\n {4}permissions:\s*\n {6}actions: write\s*\n {4}steps:/.test(
 		text,
-	), 'the `merge` job must NOT carry a `concurrency:` group: a host-specific ' +
-		'serialiser would make the cross-job land safety depend on a GitHub Actions ' +
-		"feature; the engine's `mergeRetries` CAS-retry loop is the git-alone " +
-		'floor.');
+	), 'the `dispatch` job must hold `actions: write` and nothing else.');
+	const dispatchJob =
+		/\n {2}dispatch:[\s\S]*?(?=\n {2}[#\w]|$)/.exec(text)?.[0] ?? '';
+	require('dispatch-no-checkout-no-setup', dispatchJob !== '' &&
+		!/uses:/.test(
+			dispatchJob,
+		), 'the `dispatch` job must have NO checkout and NO setup (no repository ' +
+		'code runs next to `actions: write`).');
+	// ONE word: the dispatch job forwards `integrationMode` to every item run,
+	// which passes it to `advance` as `--propose`/`--merge`.
+	require('dispatch-forwards-integration-mode', /-f "integrationMode=\$\{INTEGRATION_MODE\}"/.test(
+		text,
+	) &&
+		/INTEGRATION_MODE: \$\{\{ github\.event\.inputs\.integrationMode \|\| 'propose' \}\}/.test(
+			text,
+		), 'the `dispatch` job must forward the `integrationMode` dispatch input ' +
+		"(default `propose`) to each item run, so the items' integration mode is " +
+		'TIED to the tick.');
+	require('dispatch-slot', /-f "slot=\$\{slot\}"/.test(
+		text,
+	), 'the `dispatch` job must give each item run a parallelism slot.');
+	require('dispatch-skips-active-runs', /gh run list[^\n]*--workflow dorfl-item-dispatch\.yml[^\n]*displayTitle,status/.test(
+		text,
+	), 'the `dispatch` job must skip an item whose `dorfl-item <item>` run is ' +
+		'not completed yet.');
+	// The item id may be hand-written, so it must reach the shell as DATA through
+	// `env:`, never as `${{ }}` text spliced into the `run:` script.
+	require('items-not-spliced-into-run', !/gh workflow run[^\n]*\$\{\{/.test(
+		text,
+	), 'the items must reach the dispatch script through `env:`, never as ' +
+		'`${{ }}` text in the `run:` script (script injection).');
+	// No host-specific serialiser on the land: a workflow-level `concurrency:`
+	// group keyed on main would be load-bearing for cross-run land safety, which
+	// the git-alone floor forbids (the slot groups live on the item runs and
+	// only cap the parallelism).
+	require('permissions-empty', /^permissions: \{\}$/m.test(
+		text,
+	), 'the workflow must grant nothing at workflow level (`permissions: {}`).');
+	require('push-pinned-to-main', /\bpush:\s*\n\s+(?:#[^\n]*\n\s+)*branches:\s*\n\s+-\s*main\b/.test(
+		text,
+	), 'the on-answer-committed `push` trigger must be pinned to `main`.');
 
 	// --- It only INVOKES the existing `advance` driver (no new execution model) --
-	require('invokes-advance-driver', /dorfl advance\b/.test(
-		text,
-	), 'the workflow must INVOKE the existing `advance` driver.');
+	// The driver runs inside the per-item workflow: the template names it in the
+	// comments and must not run any agent verb itself.
+	require('invokes-advance-driver', /\badvance\b/.test(text) &&
+		!/^\s*[^#\n]*dorfl (?:advance|do|intake|run)\b/m.test(
+			text,
+		), 'the workflow must reach the existing `advance` driver through the ' +
+		'per-item workflow, and run no agent verb itself.');
 
 	return {ok: problems.length === 0, problems};
 }

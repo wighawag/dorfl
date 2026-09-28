@@ -582,10 +582,11 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		expect(outputBaseName(false)).toBe('.github');
 	});
 
-	it('buildSetupArtifacts: models-json ships only the composite action', () => {
+	it('buildSetupArtifacts: models-json ships only the two composite actions (the agent and writer roles)', () => {
 		const files = buildSetupArtifacts(config);
 		expect(files.map((f) => f.path)).toEqual([
 			join('actions', 'dorfl-setup', 'action.yml'),
+			join('actions', 'dorfl-setup-writer', 'action.yml'),
 		]);
 	});
 
@@ -597,6 +598,7 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		});
 		expect(files.map((f) => f.path)).toEqual([
 			join('actions', 'dorfl-setup', 'action.yml'),
+			join('actions', 'dorfl-setup-writer', 'action.yml'),
 			join('scripts', 'refresh-oauth-token.mjs'),
 		]);
 	});
@@ -1007,7 +1009,22 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		const adv = await import('../src/advance-lifecycle-template.js');
 		const intake = await import('../src/intake-trigger-template.js');
 		const closeJob = await import('../src/close-job-template.js');
+		const item = await import('../src/dorfl-item-template.js');
 		return [
+			{
+				id: 'dorfl-item',
+				label: 'the split CI item workflows',
+				emit: (c: ResolvedCIConfig) => [
+					{
+						path: item.ITEM_WORKFLOW_PATH,
+						content: item.generateItemWorkflow(c),
+					},
+					{
+						path: item.ITEM_DISPATCH_WORKFLOW_PATH,
+						content: item.generateItemDispatchWorkflow(c),
+					},
+				],
+			},
 			{
 				id: adv.ADVANCE_LIFECYCLE_CAPABILITY_ID,
 				label: adv.ADVANCE_LIFECYCLE_CAPABILITY_LABEL,
@@ -1060,7 +1077,7 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 		).toBe(false);
 	});
 
-	it('the emitted file set contains exactly ONE workflow that invokes `dorfl advance`, and NO build-task-tick.yml', async () => {
+	it('the emitted file set contains exactly ONE workflow that invokes `dorfl advance` (the per-item workflow the lifecycle tick dispatches), and NO build-task-tick.yml', async () => {
 		const shipped = await shippedEmitters();
 		const files = buildSetupArtifacts(config, shipped);
 
@@ -1069,18 +1086,28 @@ describe('install-ci emits exactly ONE advance-verb workflow (advance-lifecycle,
 			expect(f.path).not.toMatch(/build-task-tick/);
 		}
 
-		// Workflow files = those under workflows/. Exactly one carries the
-		// `dorfl advance` verb (the lifecycle superset); intake +
-		// close-job are workflows too, but they do NOT invoke `advance`.
+		// Workflow files = those under workflows/. Exactly one RUNS the
+		// `dorfl advance` verb: the per-item workflow (lock, agent, apply) that
+		// the lifecycle superset dispatches (THE SPLIT, ADR
+		// ci-agent-job-holds-no-write-token). The tick itself runs no agent.
+		const operative = (text: string): string =>
+			text
+				.split('\n')
+				.filter((line) => !/^\s*#/.test(line))
+				.join('\n');
 		const workflowFiles = files.filter((f) =>
 			f.path.startsWith(join('workflows', '')),
 		);
 		const advanceWorkflows = workflowFiles.filter((f) =>
-			/\bdorfl advance\b/.test(f.content),
+			/\bdorfl advance\b/.test(operative(f.content)),
 		);
 		expect(advanceWorkflows).toHaveLength(1);
-		expect(advanceWorkflows[0]!.path).toBe(
-			join('workflows', 'advance-lifecycle.yml'),
+		expect(advanceWorkflows[0]!.path).toBe(join('workflows', 'dorfl-item.yml'));
+		const lifecycle = workflowFiles.find(
+			(f) => f.path === join('workflows', 'advance-lifecycle.yml'),
+		)!;
+		expect(lifecycle.content).toContain(
+			'gh workflow run dorfl-item-dispatch.yml',
 		);
 	});
 

@@ -507,8 +507,7 @@ export function optionalSecretNames(config: ResolvedCIConfig): string[] {
  * no template re-derives it.
  */
 export function providerSecretsWithBlock(config: ResolvedCIConfig): string {
-	const names =
-		config.authMode === 'models-json' ? requiredSecretNames(config) : [];
+	const names = providerSecretNames(config);
 	if (names.length === 0) {
 		return '';
 	}
@@ -516,6 +515,17 @@ export function providerSecretsWithBlock(config: ResolvedCIConfig): string {
 		.map((name) => `          ${name}: \${{ secrets.${name} }}`)
 		.join('\n');
 	return `\n        with:\n${entries}`;
+}
+
+/**
+ * The provider API key secrets the AGENT-running jobs forward to the setup
+ * action (models-json mode: one per distinct provider key; auth-json mode: none,
+ * it uses auth.json). The split item workflow declares exactly these (plus
+ * {@link PR_IDENTITY_SECRET_NAME}) as its `workflow_call` secrets, and hands
+ * them to its agent job only.
+ */
+export function providerSecretNames(config: ResolvedCIConfig): string[] {
+	return config.authMode === 'models-json' ? requiredSecretNames(config) : [];
 }
 
 /** The outcome of orchestrating one secret through the provider seam. */
@@ -1056,6 +1066,120 @@ ${authStep}
 `;
 }
 
+/** The local path a workflow step `uses:` for the agent-role setup action. */
+export const SETUP_ACTION_USES = './.github/actions/dorfl-setup';
+
+/** The local path a workflow step `uses:` for the writer-role setup action. */
+export const WRITER_SETUP_ACTION_USES = './.github/actions/dorfl-setup-writer';
+
+/**
+ * Generate the WRITER-ROLE composite setup action (`dorfl-setup-writer`, spec
+ * `ci-agent-job-without-write-token` §9, ADR
+ * `ci-agent-job-holds-no-write-token`; task `ci-split-generate-workflows`).
+ *
+ * The jobs that hold a write token and run no agent (the split item
+ * workflow's lock and apply jobs, `reap-merged-branches`, `close-job`, and the
+ * read-only `enumerate`) install Node and dorfl ONLY: no harness, no provider
+ * key, no `models.json`, no project-setup hook, no install of the project's
+ * dependencies, and no Actions cache. In `registry` mode the dorfl install runs
+ * from `$RUNNER_TEMP`, outside the checkout, with `--ignore-scripts`, so a
+ * repository `.npmrc` cannot redirect the registry and no install script runs.
+ *
+ * In `workspace` mode (dorfl's own repository) dorfl is built from source
+ * (decision 8): the tree of `source-ref` (default the checkout's `HEAD`) is
+ * exported with `git archive` into `$RUNNER_TEMP` and built there with
+ * `--ignore-scripts`. In merge mode that is code an earlier agent landed on
+ * `main`, which is the trust merge mode already implies.
+ *
+ * It is a SIBLING action rather than a `role` input on `dorfl-setup`: the
+ * project-setup hook is an opaque fragment spliced first into `dorfl-setup`
+ * (ADR `install-ci-project-provisioning-native-passthrough`), and a composite
+ * action cannot skip an opaque block of steps by input. `dorfl-setup` stays the
+ * agent role, byte for byte.
+ */
+export function generateWriterSetupAction(config: ResolvedCIConfig): string {
+	let installSteps: string;
+	let inputsBlock = '';
+	if (config.installSource === 'workspace') {
+		inputsBlock = `inputs:
+  source-ref:
+    description: 'The commit to build dorfl from (workspace mode). Blank: the checkout HEAD.'
+    required: false
+    default: ''
+
+`;
+		installSteps = `\
+    - name: Setup pnpm
+      uses: ${pinnedUses(ACTION_PINS.pnpmSetup)}
+
+    - name: Add pnpm global bin to PATH
+      shell: bash
+      run: |
+        pnpm setup
+        echo "$HOME/.local/share/pnpm" >> "$GITHUB_PATH"
+
+    # Workspace mode (dorfl's own repository, decision 8 of ADR
+    # ci-agent-job-holds-no-write-token): build dorfl from the tree of
+    # \`source-ref\`, exported into $RUNNER_TEMP (outside the checkout), with
+    # \`--ignore-scripts\`. In merge mode this is code an earlier agent landed on
+    # main running in a write job, the trust merge mode already implies.
+    - name: Build dorfl from the base commit (outside the checkout)
+      shell: bash
+      env:
+        SOURCE_REF: \${{ inputs.source-ref }}
+      run: |
+        set -euo pipefail
+        src="$RUNNER_TEMP/dorfl-src"
+        rm -rf "$src"
+        mkdir -p "$src"
+        git archive "$(git rev-parse --verify "\${SOURCE_REF:-HEAD}^{commit}")" | tar -x -C "$src"
+        cd "$src"
+        pnpm install --frozen-lockfile --ignore-scripts
+        pnpm -r build
+        cd packages/dorfl && pnpm link --global`;
+	} else {
+		installSteps = `\
+    # Pinned to the dorfl version that generated this action. Installed from
+    # $RUNNER_TEMP (outside the checkout, so a repository .npmrc cannot redirect
+    # the registry) with --ignore-scripts (no install script runs next to the
+    # write token).
+    - name: Install dorfl (outside the checkout, no install scripts)
+      shell: bash
+      run: |
+        cd "$RUNNER_TEMP"
+        npm install -g --ignore-scripts dorfl@${dorflPackageVersion()}`;
+	}
+	return `\
+name: Setup dorfl (writer role)
+description: Install Node.js and dorfl only, for the CI jobs that run no agent (lock, apply, reap, close, enumerate)
+
+${inputsBlock}# THE WRITER ROLE (ADR ci-agent-job-holds-no-write-token): the jobs that use
+# this action hold a write token (or run next to one) and run NO agent and NO
+# repository code. So it installs Node.js and dorfl ONLY: no agent harness, no
+# provider API key, no models.json, no project-setup hook, no install of the
+# project's dependencies, and no Actions cache (an agent can write
+# default-branch cache entries, so a restore here would run its bytes with
+# write access). The agent role is ./.github/actions/dorfl-setup.
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: ${pinnedUses(ACTION_PINS.setupNode)}
+      with:
+        node-version: '22'
+        # No cache in the writer role (see above).
+        package-manager-cache: false
+
+    - name: Configure git identity
+      shell: bash
+      run: |
+        git config user.name "dorfl[bot]"
+        git config user.email "dorfl[bot]@users.noreply.github.com"
+
+${installSteps}
+`;
+}
+
 /**
  * The OAuth-refresh script emitted ONLY in `auth-json` mode (whitesmith's
  * `pi-mono#2743` workaround): refreshes the Anthropic OAuth token in
@@ -1179,6 +1303,10 @@ export function buildSetupArtifacts(
 		{
 			path: join('actions', 'dorfl-setup', 'action.yml'),
 			content: generateSetupAction(config, options?.projectSetupSteps),
+		},
+		{
+			path: join('actions', 'dorfl-setup-writer', 'action.yml'),
+			content: generateWriterSetupAction(config),
 		},
 	];
 	if (config.authMode === 'auth-json') {

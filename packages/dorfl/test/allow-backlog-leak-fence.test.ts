@@ -12,6 +12,7 @@ import {
 } from '../src/do-autopick.js';
 import {type DoOptions, type DoResult} from '../src/do.js';
 import {loadAdvanceCiTemplate} from '../src/advance-ci-template.js';
+import {generateItemWorkflow} from '../src/dorfl-item-template.js';
 import {mergeConfig, type Config} from '../src/config.js';
 import {scanRepoPaths} from '../src/scan.js';
 import {
@@ -316,10 +317,22 @@ describe('leak-fence: the CI `advance` matrix surface never passes --allow-backl
 		expect(text).not.toContain('allowBacklog');
 	});
 
-	it('every `dorfl advance` invocation in the template is flag-free of --allow-backlog', () => {
+	it('every `dorfl advance` invocation in the per-item CI workflow is flag-free of --allow-backlog', () => {
 		// Pin it per-invocation too (not just absence anywhere): each `dorfl advance`
 		// command line is free of the flag. Documents the autonomous surface intent.
-		const text = loadAdvanceCiTemplate();
+		// Since the CI split (task `ci-split-generate-workflows`) the template only
+		// DISPATCHES item runs; `advance` runs in dorfl-item.yml's lock, agent and
+		// apply jobs.
+		const text = generateItemWorkflow({
+			authMode: 'models-json',
+			providers: [],
+			defaultProvider: 'anthropic',
+			defaultModel: 'm',
+			harness: 'pi',
+			installSource: 'registry',
+			maxParallel: 2,
+		});
+		expect(text).not.toContain('allow-backlog');
 		const advanceLines = text
 			.split('\n')
 			.filter((line) => line.includes('dorfl advance'));
