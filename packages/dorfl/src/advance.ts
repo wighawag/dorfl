@@ -1454,10 +1454,14 @@ async function maybeRunStuckAction(
  *    unless the observation provably has nothing to ask (the surface
  *    short-circuit, which then surfaces only the engine-built triage question);
  *  - `surface`: the `surface-questions` agent, or the same short-circuit;
- *  - `apply`: an answered `kind: merge` entry is `unsplit` (task
- *    `ci-split-answered-merge-action`); an answered `kind: stuck` entry and a
- *    task/spec content answer run no agent; an answered observation runs the
- *    agentic decision.
+ *  - `apply`: an answered `kind: merge` entry answered `merge` runs the agent
+ *    job (task `ci-split-answered-merge-action`: no model, but `prepare` and
+ *    `verify` run the branch's code on the rebased tip), and `hold` / `drop`
+ *    run none; the CI phases refine the `merge` case against the arbiter (a
+ *    work branch that is absent or already on `main` needs none, see
+ *    `ci-phase-treeless.ts`), which this tree-only read cannot see. An
+ *    answered `kind: stuck` entry and a task/spec content answer run no agent;
+ *    an answered observation runs the agentic decision.
  *
  * A missing item file needs no agent (the rung is a benign `vanished` skip).
  */
@@ -1500,12 +1504,9 @@ export function treelessAgentNeed(input: RungExecInput): TreelessAgentNeed {
 				),
 			};
 		case 'apply':
-			if (detectAnsweredMergeAction(cwd, item) !== undefined) {
-				return {
-					unsplit:
-						'an answered kind: merge entry (the answered merge action is not ' +
-						'split into CI phases yet)',
-				};
+			const merge = detectAnsweredMergeAction(cwd, item);
+			if (merge !== undefined) {
+				return {needsAgent: merge.verb === 'merge'};
 			}
 			if (detectAnsweredStuckAction(cwd, item) !== undefined) {
 				return {needsAgent: false};

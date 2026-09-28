@@ -3676,10 +3676,20 @@ export function buildProgram(): Command {
 			// satisfies this; the `-n` merge job must NOT pass `--watch`.
 			// CI PHASE MODE (task `ci-split-build-path`): `--phase` runs ONE job of the
 			// split item workflow: the build, tasking and tree-less (surface, triage,
-			// apply) paths are split (task `ci-split-treeless-rungs`); the lock phase
-			// refuses anything else (an answered merge action) before writing anything.
+			// apply) paths are split (task `ci-split-treeless-rungs`), and the apply
+			// rung's answered merge action with them (task
+			// `ci-split-answered-merge-action`), whose agent job checks the branch
+			// out through `createJob` under `workspacesDir` and gates the rebased tip
+			// with the repo's `prepare` / `verify`. Threaded for the phase mode ONLY:
+			// the in-place laptop tick below keeps today's context.
 			if (flags.phase !== undefined) {
-				await runAdvancePhaseAndExit(args, flags, doOptions, advanceContext);
+				await runAdvancePhaseAndExit(args, flags, doOptions, {
+					...advanceContext,
+					workspacesDir: config.workspacesDir,
+					prepare: config.prepare,
+					verify: config.verify,
+					strictMergeApproval: config.strictMergeApproval,
+				});
 			}
 
 			const advanceMulti =

@@ -1,4 +1,4 @@
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readFileSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 import {
 	isEntryAnswered,
@@ -12,8 +12,17 @@ import {run as runProc} from './git.js';
 import {createJob, type Job} from './workspace.js';
 import {
 	performIntegration,
+	type IntegrationCoreInput,
 	type IntegrationCoreResult,
 } from './integration-core.js';
+import {
+	changedFileBlobs,
+	lfsObjectPath,
+	localLfsObjectsDir,
+	scanLfsPointers,
+} from './ci-handoff-lfs.js';
+import {commitAbortedWork} from './needs-attention.js';
+import {createPhaseRecorder, runAgentPhase} from './phase-recorder.js';
 import type {VerifyConfig} from './verify.js';
 
 /**
@@ -475,28 +484,9 @@ export async function performMergeAction(
 		// drive the committed-recovery tail — but with `freshWorktreeGate: true`
 		// so the REBASED TIP is re-verified BEFORE the integrate (the
 		// `committed-recovery-honours-fresh-worktree-gate` task's contract).
-		const integration = await performIntegration({
-			cwd: job.dir,
-			arbiter: job.arbiterRemote,
-			slug: input.slug,
-			source: 'tasks-ready',
-			recovering: false,
-			committedRecovery: true,
-			freshWorktreeGate: true,
-			prepare: input.prepare,
-			verify: input.verify,
-			mode: 'merge',
-			// surfaceArbiter is set so a RED rebased-tip gate (or a rebase
-			// conflict surfaced during the retry loop) routes to needs-attention
-			// observably on the arbiter (not local-only). The build path uses
-			// this shape; we mirror it here for the answered-merge land.
-			surfaceArbiter: job.arbiterRemote,
-			recoveryRebaseRetries: input.recoveryRebaseRetries,
-			recoveryRebaseJitterMs: input.recoveryRebaseJitterMs,
-			mergeRetries: input.mergeRetries,
-			env: input.env,
-			note,
-		});
+		const integration = await performIntegration(
+			mergeLandIntegrationInput(job, input, note),
+		);
 
 		if (integration.outcome === 'completed') {
 			return {
@@ -536,5 +526,262 @@ export async function performMergeAction(
 			// Best-effort: a failed dispose leaves a reapable per-job worktree
 			// behind, which `gc` cleans up. Never crash the dispatch on teardown.
 		}
+	}
+}
+
+/**
+ * The `performIntegration` input of the answered-merge land: the committed-
+ * recovery tail (the branch already carries its done-move) with the fresh-
+ * worktree gate on the rebased tip, in merge mode. Shared by the laptop
+ * dispatcher ({@link performMergeAction}) and the CI agent half
+ * ({@link prepareMergeLand}), so both run the SAME rebase and gate.
+ */
+function mergeLandIntegrationInput(
+	job: Job,
+	input: MergeActionInput,
+	note: (message: string) => void,
+): IntegrationCoreInput {
+	return {
+		cwd: job.dir,
+		arbiter: job.arbiterRemote,
+		slug: input.slug,
+		source: 'tasks-ready',
+		recovering: false,
+		committedRecovery: true,
+		freshWorktreeGate: true,
+		prepare: input.prepare,
+		verify: input.verify,
+		mode: 'merge',
+		// surfaceArbiter is set so a RED rebased-tip gate (or a rebase
+		// conflict surfaced during the retry loop) routes to needs-attention
+		// observably on the arbiter (not local-only). The build path uses
+		// this shape; we mirror it here for the answered-merge land.
+		surfaceArbiter: job.arbiterRemote,
+		recoveryRebaseRetries: input.recoveryRebaseRetries,
+		recoveryRebaseJitterMs: input.recoveryRebaseJitterMs,
+		mergeRetries: input.mergeRetries,
+		env: input.env,
+		note,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// The CI agent half (task `ci-split-answered-merge-action`)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the CI agent job found for an answered `merge` (spec
+ * `ci-agent-job-without-write-token` §3, the `apply, kind: merge` row). Each
+ * maps to one handoff intent of the `apply` rung:
+ *
+ *  - `integrate`: the rebased tip passed the fresh-worktree gate; the apply job
+ *    pushes it leased and lands it (`integrate`, the rebased tip bundled);
+ *  - `restale`: `strictMergeApproval` is on and the merge-base moved
+ *    (`merge-restale`);
+ *  - `needs-attention`: a red gate on the rebased tip (the rebased tip bundled)
+ *    or a rebase conflict (nothing bundled: the kept branch is untouched);
+ *  - `already-integrated`: the kept tip is already on `main`; nothing to land
+ *    (the lock job's `needsAgent: false` covers this case, so here it means the
+ *    branch landed between the lock job and this one).
+ */
+export type MergeLandPreparation =
+	| {kind: 'integrate'; repo: string; workBranch: string; tip: string}
+	| {kind: 'restale'; message: string}
+	| {
+			kind: 'needs-attention';
+			reason: string;
+			questions?: string[];
+			/** The rebased (red) tip to publish, when there is one. */
+			bundle?: {repo: string; workBranch: string};
+	  }
+	| {kind: 'already-integrated'; message: string};
+
+/** A {@link MergeLandPreparation} and the job worktree it lives in. */
+export interface PreparedMergeLand {
+	preparation: MergeLandPreparation;
+	/** Remove the job worktree; call it once the handoff (and its bundle) is written. */
+	dispose(): void;
+}
+
+/**
+ * The AGENT half of the answered-merge land, for the CI agent job, which holds a
+ * read-only token: the SAME checkout ({@link createJob}), rebase, optional
+ * `strictMergeApproval` re-stale check and fresh-worktree gate (`prepare` +
+ * `verify` run the branch's code) as {@link performMergeAction}, but nothing is
+ * written to the arbiter. The continue rebase stays local (decision 7,
+ * `localContinue`), and `performIntegration` runs under the phase recorder, so
+ * its first write (the land, or the needs-attention route of a red gate) halts
+ * it and names what the apply job performs. Only an answered `merge` gets here
+ * (`hold` / `drop` need no agent job).
+ *
+ * The caller writes the handoff from the returned preparation (a bundle reads
+ * the job worktree) and then calls `dispose`. Throws when the checkout itself
+ * fails (the agent job then fails, and the apply job surfaces the item).
+ */
+export async function prepareMergeLand(
+	input: MergeActionInput,
+): Promise<PreparedMergeLand> {
+	const note = input.note ?? (() => {});
+	const identity = resolveSidecarIdentity(input.item);
+	if (identity.type !== 'task' || input.action.verb !== 'merge') {
+		throw new Error(
+			`prepareMergeLand: only an answered merge of a task is prepared ` +
+				`(got ${input.item}, answer ${input.action.verb})`,
+		);
+	}
+	const url = resolveArbiterUrl(input);
+	if (url === undefined) {
+		throw new Error(
+			`the arbiter URL of ${input.item} could not be resolved (\`git remote ` +
+				`get-url ${input.arbiter}\` failed in ${input.cwd})`,
+		);
+	}
+	const job = createJob({
+		url,
+		slug: input.slug,
+		type: 'task',
+		workspacesDir: input.workspacesDir,
+		localContinue: true,
+		env: input.env,
+	});
+	const dispose = (): void => {
+		try {
+			job.dispose();
+		} catch {
+			// Best-effort, as in performMergeAction: `gc` reaps a leftover.
+		}
+	};
+	const prepared = (preparation: MergeLandPreparation): PreparedMergeLand => ({
+		preparation,
+		dispose,
+	});
+	try {
+		if (job.continueRebaseConflict) {
+			return prepared({
+				kind: 'needs-attention',
+				reason:
+					`rebasing \`work/task-${input.slug}\` onto current main conflicted ` +
+					'(aborted, never auto-resolved); the kept work is intact on the ' +
+					'branch. Resolve it, then answer the merge question again.',
+			});
+		}
+		if (input.strictMergeApproval === true && mergeBaseMoved(job, input.env)) {
+			return prepared({
+				kind: 'restale',
+				message:
+					`merge-question for ${input.item} answered MERGE, but ` +
+					`strictMergeApproval is ON and the merge-base of ` +
+					`\`work/task-${input.slug}\` moved between answer and apply: ` +
+					're-surfacing the merge-question.',
+			});
+		}
+		const outcome = await runAgentPhase(
+			createPhaseRecorder({
+				record: [
+					'ledgerWrite.applyCompleteTransition',
+					'ledgerWrite.applyNeedsAttentionTransition',
+				],
+			}),
+			() => performIntegration(mergeLandIntegrationInput(job, input, note)),
+		);
+		if (outcome.halted) {
+			const call = `${outcome.intent.seam}.${outcome.intent.method}`;
+			if (call === 'ledgerWrite.applyCompleteTransition') {
+				fetchKeptLfsObjects(job, input.env, note);
+				const tip = runProc('git', ['rev-parse', 'HEAD'], job.dir, {
+					env: input.env,
+				}).stdout.trim();
+				return prepared({
+					kind: 'integrate',
+					repo: job.dir,
+					workBranch: job.branch,
+					tip,
+				});
+			}
+			// A red gate (or prepare) on the rebased tip: the route's local half
+			// (the wip commit) runs here, so the rebased tip travels in the bundle.
+			const routed = outcome.intent.input as {
+				reason: string;
+				questions?: string[];
+			};
+			commitAbortedWork({cwd: job.dir, slug: input.slug, env: input.env});
+			fetchKeptLfsObjects(job, input.env, note);
+			return prepared({
+				kind: 'needs-attention',
+				reason: routed.reason,
+				...(routed.questions === undefined
+					? {}
+					: {questions: routed.questions}),
+				bundle: {repo: job.dir, workBranch: job.branch},
+			});
+		}
+		const result = outcome.result;
+		if (result.outcome === 'already-integrated') {
+			return prepared({
+				kind: 'already-integrated',
+				message: result.reason ?? `work/task-${input.slug} is already on main`,
+			});
+		}
+		// A rebase conflict on every attempt (or an invariant violation): nothing
+		// was written and the kept branch is untouched on the arbiter.
+		return prepared({
+			kind: 'needs-attention',
+			reason:
+				result.reason ??
+				`the answered merge of ${input.item} ended as ${result.outcome}`,
+		});
+	} catch (err) {
+		dispose();
+		throw err;
+	}
+}
+
+/**
+ * Bring into the job's local LFS store the objects of every LFS pointer the
+ * kept commits (`HEAD ^<origin>/main`) add or change, so the handoff carries
+ * them (`writeLfsObjects` copies from that store) and the apply job pushes them
+ * before the branch (decision 6). The kept branch was built elsewhere, so its
+ * objects live on the arbiter's LFS store, not in this fresh job: a read-only
+ * `git lfs fetch` of those commits. Best-effort: an object still missing is
+ * reported by the handoff writer, and the apply job then rejects the handoff
+ * and surfaces the item.
+ */
+function fetchKeptLfsObjects(
+	job: Job,
+	env: NodeJS.ProcessEnv | undefined,
+	note: (message: string) => void,
+): void {
+	const commits = runProc(
+		'git',
+		['rev-list', 'HEAD', `^refs/remotes/${job.arbiterRemote}/main`],
+		job.dir,
+		{env},
+	)
+		.stdout.split('\n')
+		.filter((l) => l !== '');
+	if (commits.length === 0) return;
+	const {pointers} = scanLfsPointers({
+		cwd: job.dir,
+		blobs: changedFileBlobs(job.dir, commits, env),
+		env,
+	});
+	if (pointers.length === 0) return;
+	const store = localLfsObjectsDir(job.dir, env);
+	const missing = pointers.some((p) => {
+		const path = lfsObjectPath(store, p.oid);
+		return !existsSync(path) || !statSync(path).isFile();
+	});
+	if (!missing) return;
+	const fetched = runProc(
+		'git',
+		['lfs', 'fetch', job.arbiterRemote, ...commits],
+		job.dir,
+		{env},
+	);
+	if (fetched.status !== 0) {
+		note(
+			`git lfs fetch of the kept commits failed (${fetched.stderr.trim().slice(0, 300)}); ` +
+				'the handoff will lack their LFS objects',
+		);
 	}
 }
