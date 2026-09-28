@@ -42,3 +42,10 @@ Build:
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **`authMode` stays as a config key that accepts only `"models-json"`.** Existing configs, and the `--export-config` output that always writes `"authMode": "models-json"`, keep parsing and exporting byte-identically, and a missing key still defaults to `models-json`. The alternative was dropping the key, but that would make every existing exported config carry an unknown key and change the export format. This touches `--config`, `--export-config` and the exported `AuthMode` type.
+- **The refusal text is an exported constant, `AUTH_JSON_REMOVED_MESSAGE`,** so tests and other consumers can match it. Other unknown values keep a generic error (`must be "models-json"`). The alternative was one generic message for everything, but that would not point at the replacement, which the task requires.
+- **The wizard's auth-mode question is removed rather than kept with one choice.** A one-option question adds nothing. This changes the order of the wizard's questions for anyone scripting it; the byte-identical wizard-vs-config test was updated to the new order.
+- **`REFRESH_OAUTH_SCRIPT` is removed from the public exports and the changeset is `minor`.** Refusing a previously accepted config value and removing an export is a breaking change for a 0.x package. The alternative was `patch`, on the grounds that the mode never worked.

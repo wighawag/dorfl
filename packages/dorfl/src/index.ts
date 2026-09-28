@@ -841,7 +841,7 @@ export {
 	resolveCIConfig,
 	exportCIConfig,
 	generateSetupAction,
-	REFRESH_OAUTH_SCRIPT,
+	AUTH_JSON_REMOVED_MESSAGE,
 	buildSetupArtifacts,
 	outputBaseName,
 	writeArtifacts,

@@ -56,19 +56,6 @@ const CONFIGS: {name: string; config: ResolvedCIConfig; hook?: string}[] = [
 		name: 'models-json/workspace',
 		config: {...BASE, installSource: 'workspace'},
 	},
-	{
-		name: 'auth-json/registry',
-		config: {...BASE, authMode: 'auth-json', providers: []},
-	},
-	{
-		name: 'auth-json/workspace',
-		config: {
-			...BASE,
-			authMode: 'auth-json',
-			providers: [],
-			installSource: 'workspace',
-		},
-	},
 	{name: 'public', config: {...BASE, repoVisibility: 'public'}},
 	{name: 'private', config: {...BASE, repoVisibility: 'private'}},
 	{name: 'internal', config: {...BASE, repoVisibility: 'internal'}},
@@ -83,13 +70,9 @@ const CONFIGS: {name: string; config: ResolvedCIConfig; hook?: string}[] = [
 	},
 ];
 
-/** The provider API key secrets of a config (auth-json: the auth blob). */
+/** The provider API key secrets of a config. */
 function providerKeys(config: ResolvedCIConfig): Set<string> {
-	return new Set(
-		config.authMode === 'auth-json'
-			? ['PI_AUTH_JSON']
-			: requiredSecretNames(config),
-	);
+	return new Set(requiredSecretNames(config));
 }
 
 async function generated(): Promise<
@@ -272,6 +255,31 @@ describe('the workflow guard: each rule fires on a bad fixture', () => {
 		]);
 	});
 
+	it('the agent job accepts ONLY provider credentials: the removed auth-json secrets are foreign', () => {
+		// The removed auth-json mode's PI_AUTH_JSON blob and its write-capable
+		// GH_PAT (for OAuth rotation) are NOT provider keys, so an agent job that
+		// references either is flagged (ADR ci-agent-job-holds-no-write-token).
+		const v = guardOne(
+			[
+				'permissions: {}',
+				'jobs:',
+				'  agent:',
+				'    runs-on: ubuntu-latest',
+				'    permissions: {contents: read}',
+				'    steps:',
+				'      - run: dorfl advance x --phase agent',
+				'        env:',
+				'          A: ${{ secrets.ANTHROPIC_API_KEY }}',
+				'          P: ${{ secrets.PI_AUTH_JSON }}',
+				'          G: ${{ secrets.GH_PAT }}',
+			].join('\n'),
+		);
+		expect(v.map((x) => `${x.job}:${x.rule}:${x.detail}`)).toEqual([
+			'agent:agent-job-foreign-secret:references secrets.PI_AUTH_JSON',
+			'agent:agent-job-foreign-secret:references secrets.GH_PAT',
+		]);
+	});
+
 	it('an agent in a matrix, and a matrix calling the item workflows', () => {
 		const v = guardOne(
 			[
@@ -413,6 +421,29 @@ describe('the workflow guard over everything install-ci generates, and this repo
 			}
 		}
 		expect(all).toEqual([]);
+	});
+
+	it('no generated artifact carries the removed auth-json mode (PI_AUTH_JSON, the auth.json step, the OAuth refresh script, a GH_PAT)', async () => {
+		const caps = await loadCapabilityRegistry();
+		const hits: string[] = [];
+		for (const {name, config, hook} of CONFIGS) {
+			for (const f of buildSetupArtifacts(config, caps, {
+				projectSetupSteps: hook,
+			})) {
+				for (const needle of [
+					'PI_AUTH_JSON',
+					'auth.json',
+					'refresh-oauth-token',
+					'Refresh OAuth token',
+					'GH_PAT',
+				]) {
+					if (f.content.includes(needle) || f.path.includes(needle)) {
+						hits.push(`[${name}] ${f.path}: ${needle}`);
+					}
+				}
+			}
+		}
+		expect(hits).toEqual([]);
 	});
 
 	it("this repository's checked-in .github/workflows and composite actions pass", () => {

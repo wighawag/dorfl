@@ -164,13 +164,6 @@ describe('secret-orchestration logic (which secrets, deduplicated)', () => {
 		expect(requiredSecretNames(config)).toEqual(['KEY_X', 'KEY_Y']);
 	});
 
-	it('auth-json: the fixed PI_AUTH_JSON + GH_PAT pair (the sharp edge)', () => {
-		expect(requiredSecretNames(baseConfig({authMode: 'auth-json'}))).toEqual([
-			'PI_AUTH_JSON',
-			'GH_PAT',
-		]);
-	});
-
 	it('orchestrates secrets through the seam: known taken, missing prompted, empty skipped', async () => {
 		const ctx = new MemoryCIProviderContext({
 			workDir: work,
@@ -260,15 +253,12 @@ describe('secret-orchestration logic (which secrets, deduplicated)', () => {
 		expect(ctxC.secrets.has('DORFL_GH_TOKEN')).toBe(false);
 	});
 
-	it('optionalSecretNames is the PR-identity token in both auth modes; requiredSecretNames is unchanged', async () => {
+	it('optionalSecretNames is the PR-identity token; requiredSecretNames is unchanged', async () => {
 		expect(PR_IDENTITY_SECRET_NAME).toBe('DORFL_GH_TOKEN');
 		expect(optionalSecretNames(baseConfig({}))).toEqual(['DORFL_GH_TOKEN']);
-		expect(optionalSecretNames(baseConfig({authMode: 'auth-json'}))).toEqual([
-			'DORFL_GH_TOKEN',
-		]);
 	});
 
-	it('providerSecretsWithBlock: a with: fragment in models-json mode, empty in auth-json / no-providers', () => {
+	it('providerSecretsWithBlock: a with: fragment per provider key, empty with no providers', () => {
 		const block = providerSecretsWithBlock(
 			baseConfig({
 				providers: [
@@ -285,10 +275,8 @@ describe('secret-orchestration logic (which secrets, deduplicated)', () => {
 		expect(block).toContain(
 			'ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}',
 		);
-		// auth-json mode has no provider keys here.
-		expect(providerSecretsWithBlock(baseConfig({authMode: 'auth-json'}))).toBe(
-			'',
-		);
+		// No provider keys ⇒ no with: block (the uses: line is emitted bare).
+		expect(providerSecretsWithBlock(baseConfig({providers: []}))).toBe('');
 	});
 });
 
@@ -318,6 +306,49 @@ describe('config load + --export-config round-trip', () => {
 
 		writeFileSync(file, JSON.stringify({authMode: 'models-json'}));
 		expect(() => loadCIConfigFile(file)).toThrow(CIConfigError);
+	});
+
+	it('refuses the REMOVED auth-json mode with a pointer to models-json + a proxy baseUrl', () => {
+		const file = join(work, 'ci.json');
+		writeFileSync(
+			file,
+			JSON.stringify({
+				authMode: 'auth-json',
+				providers: [],
+				defaultProvider: 'anthropic',
+				defaultModel: 'm',
+			}),
+		);
+		expect(() => loadCIConfigFile(file)).toThrow(CIConfigError);
+		expect(() => loadCIConfigFile(file)).toThrow(
+			/auth-json.*no longer supported/,
+		);
+		expect(() => loadCIConfigFile(file)).toThrow(/models-json/);
+		expect(() => loadCIConfigFile(file)).toThrow(/baseUrl.*proxy/);
+	});
+
+	it('an unknown authMode is refused; an absent or models-json authMode loads unchanged', () => {
+		const file = join(work, 'ci.json');
+		const body = {
+			providers: [
+				{
+					name: 'anthropic',
+					apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+					models: [{id: 'm'}],
+					builtin: true,
+				},
+			],
+			defaultProvider: 'anthropic',
+			defaultModel: 'm',
+		};
+		writeFileSync(file, JSON.stringify({...body, authMode: 'bogus'}));
+		expect(() => loadCIConfigFile(file)).toThrow(
+			'config file "authMode" must be "models-json"',
+		);
+		writeFileSync(file, JSON.stringify(body));
+		expect(loadCIConfigFile(file).authMode).toBe('models-json');
+		writeFileSync(file, JSON.stringify({...body, authMode: 'models-json'}));
+		expect(loadCIConfigFile(file).authMode).toBe('models-json');
 	});
 
 	it('exportCIConfig omits secrets unless given, and round-trips through load', () => {
@@ -356,9 +387,9 @@ describe('config load + --export-config round-trip', () => {
 	});
 });
 
-// ─── composite setup action snapshot (both auth modes) ───────────────────────
+// ─── composite setup action snapshot ─────────────────────────────────────────
 
-describe('composite setup action generation (both auth modes)', () => {
+describe('composite setup action generation', () => {
 	const modelsConfig: ResolvedCIConfig = {
 		authMode: 'models-json',
 		providers: [
@@ -387,9 +418,11 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('Configure agent models (models.json)');
 		expect(action).toContain('~/.pi/agent/models.json');
 		expect(action).toContain('"apiKey": "$ANTHROPIC_API_KEY"');
-		// models-json mode carries NO auth.json / OAuth refresh.
+		// No auth.json / OAuth refresh (the removed auth-json mode).
 		expect(action).not.toContain('auth.json');
 		expect(action).not.toContain('refresh-oauth-token');
+		expect(action).not.toContain('PI_AUTH_JSON');
+		expect(action).not.toContain('GH_PAT');
 	});
 
 	it('models-json mode declares a provider-key INPUT and forwards it to $GITHUB_ENV (so pi can auth)', () => {
@@ -406,30 +439,12 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('>> "$GITHUB_ENV"');
 	});
 
-	it('auth-json mode declares NO provider input and NO export step (it uses auth.json)', () => {
-		const action = generateSetupAction({
-			...modelsConfig,
-			authMode: 'auth-json',
-			providers: [],
-		});
+	it('with no provider keys it declares NO provider input and NO export step', () => {
+		const action = generateSetupAction({...modelsConfig, providers: []});
 		expect(action).not.toContain('inputs:');
 		expect(action).not.toContain(
 			'Export provider API key(s) to the environment',
 		);
-	});
-
-	it('auth-json mode writes auth.json from PI_AUTH_JSON + runs the OAuth refresh (the sharp edge)', () => {
-		const action = generateSetupAction({
-			...modelsConfig,
-			authMode: 'auth-json',
-			providers: [],
-		});
-		expect(action).toContain('Configure agent auth (auth.json)');
-		expect(action).toContain('$PI_AUTH_JSON');
-		expect(action).toContain('~/.pi/agent/auth.json');
-		expect(action).toContain('node .github/scripts/refresh-oauth-token.mjs');
-		// auth-json mode does NOT write a models.json.
-		expect(action).not.toContain('models.json');
 	});
 
 	it('is deterministic — the same config produces byte-identical output', () => {
@@ -486,26 +501,6 @@ describe('composite setup action generation (both auth modes)', () => {
 		]) {
 			expect(registry).toContain(shared);
 			expect(workspace).toContain(shared);
-		}
-		// auth-json mode's shared steps are likewise mode-independent.
-		const authRegistry = generateSetupAction({
-			...modelsConfig,
-			authMode: 'auth-json',
-			providers: [],
-		});
-		const authWorkspace = generateSetupAction({
-			...modelsConfig,
-			authMode: 'auth-json',
-			providers: [],
-			installSource: 'workspace',
-		});
-		for (const shared of [
-			'Configure agent auth (auth.json)',
-			'$PI_AUTH_JSON',
-			'node .github/scripts/refresh-oauth-token.mjs',
-		]) {
-			expect(authRegistry).toContain(shared);
-			expect(authWorkspace).toContain(shared);
 		}
 	});
 
@@ -587,19 +582,6 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 		expect(files.map((f) => f.path)).toEqual([
 			join('actions', 'dorfl-setup', 'action.yml'),
 			join('actions', 'dorfl-setup-writer', 'action.yml'),
-		]);
-	});
-
-	it('buildSetupArtifacts: auth-json additionally ships the OAuth refresh script', () => {
-		const files = buildSetupArtifacts({
-			...config,
-			authMode: 'auth-json',
-			providers: [],
-		});
-		expect(files.map((f) => f.path)).toEqual([
-			join('actions', 'dorfl-setup', 'action.yml'),
-			join('actions', 'dorfl-setup-writer', 'action.yml'),
-			join('scripts', 'refresh-oauth-token.mjs'),
 		]);
 	});
 
@@ -713,10 +695,10 @@ describe('--fake snapshot mode (writes .fake/, never .github/, sets no real secr
 
 describe('the wizard and the --config path produce byte-identical artifacts', () => {
 	it('drives the wizard deterministically and the config-file path reproduces it exactly', async () => {
-		// Drive the wizard: models-json, pi harness, anthropic built-in, default
+		// Drive the wizard: pi harness, anthropic built-in, default
 		// env var + model, no custom URL, one model, no more providers.
 		const prompts = scriptedPrompts({
-			selects: ['models-json', 'pi', 'anthropic'],
+			selects: ['pi', 'anthropic'],
 			// GitHub secret name (default ANTHROPIC_API_KEY), base URL (blank), model id.
 			inputs: ['ANTHROPIC_API_KEY', '', 'claude-sonnet-4-20250514'],
 			// add another model? no; add another provider? no.
@@ -736,7 +718,7 @@ describe('the wizard and the --config path produce byte-identical artifacts', ()
 			fake: true,
 			// re-run the same scripted prompts (a fresh queue) to gather inside installCI
 			prompts: scriptedPrompts({
-				selects: ['models-json', 'pi', 'anthropic'],
+				selects: ['pi', 'anthropic'],
 				inputs: ['ANTHROPIC_API_KEY', '', 'claude-sonnet-4-20250514'],
 				confirms: [false, false],
 			}),
