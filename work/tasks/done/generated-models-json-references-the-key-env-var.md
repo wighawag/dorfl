@@ -3,7 +3,7 @@ title: 'The models.json that install-ci generates must reference the provider ke
 slug: generated-models-json-references-the-key-env-var
 humanOnly: true
 blockedBy: []
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
