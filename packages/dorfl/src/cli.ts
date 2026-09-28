@@ -4097,7 +4097,8 @@ export function buildProgram(): Command {
 			}
 			for (const retained of result.retained) {
 				console.log(
-					`  [retained] ${retained.slug} \u2014 ${RETAIN_REASON_TEXT[retained.reason]}`,
+					`  [retained] ${retained.slug} \u2014 ${RETAIN_REASON_TEXT[retained.reason]}` +
+						(retained.hint ? ` (${retained.hint})` : ''),
 				);
 			}
 			for (const orphan of result.sweptOrphans) {
@@ -4330,7 +4331,7 @@ export function buildProgram(): Command {
 		.command('requeue <slug>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. Escalation ladder (least to most destructive): (1) DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note. (2) --reconcile (alias --rebase) = NON-DESTRUCTIVE recovery: re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept branch onto latest arbiter/main in a scratch worktree; on a clean rebase, push the reconciled tip back (--force-with-lease, work branch only) and release the lock; on a genuine content conflict AFTER the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted) so the human can retry when the churn settles. NEVER deletes the remote branch. (3) --reset = DESTRUCTIVE last resort: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). RELEASED LOCK: a surfaced item (question sidecar on main) has its lock already released by the surface; if its body rests in the pool and its work/<slug> branch is on the arbiter, --reconcile and --reset still act on it, taking a short per-item lock for the operation and releasing it on every outcome; plain requeue on such an item is a no-op (the next claim already continues from the kept branch). -m/--message adds a dated handoff note to the item body, just before its `## Acceptance criteria` so it cannot collide with a kept branch’s done-move tail on the continue rebase (all modes; additive).',
+			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. Escalation ladder (least to most destructive): (1) DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note. (2) --reconcile (alias --rebase) = NON-DESTRUCTIVE recovery: re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept branch onto latest arbiter/main in a scratch worktree; on a clean rebase, push the reconciled tip back (--force-with-lease, work branch only) and release the lock; on a genuine content conflict AFTER the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted) so the human can retry when the churn settles. NEVER deletes the remote branch. (3) --reset = DESTRUCTIVE last resort: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). RELEASED LOCK: a surfaced item (question sidecar on main) has its lock already released by the surface; if its body rests in the pool and its work/<slug> branch is on the arbiter, --reconcile and --reset still act on it, taking a short per-item lock for the operation and releasing it on every outcome; plain requeue on such an item is a no-op (the next claim already continues from the kept branch). -m/--message adds a dated handoff note to the item body, just before its `## Acceptance criteria` so it cannot collide with a kept branch’s done-move tail on the continue rebase (all modes; additive). CRASHED RUN: when the lock is held and a DEAD run left its retained job worktree (workspacesDir/work/*) with commits or uncommitted files the arbiter’s work/<slug> lacks, requeue first commits the residue as a wip commit and pushes the branch (plain push, never --force), so the next claim continues from it; if that save fails, the lock and the worktree are KEPT and requeue says why (not on --reset, which discards the work by design).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(
@@ -4378,6 +4379,11 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
+			// Where `do --isolated` retains job worktrees: a CRASHED run's retained
+			// worktree may hold local-only commits, which requeue saves (pushes to the
+			// work branch) before it releases the lock (task
+			// `a-crashed-runs-local-work-is-saved-before-its-lock-is-released`).
+			const {workspacesDir} = resolveGlobalConfig(loadConfig(flags.config), {});
 			const result = await ledgerWrite.applyReturnToBacklogTransition({
 				cwd,
 				slug,
@@ -4385,6 +4391,7 @@ export function buildProgram(): Command {
 				// arbiter to `origin` so the common case Just Works; `--arbiter` overrides.
 				// `--cwd` is purely the ORIGIN SOURCE the remote is resolved from.
 				arbiter: flags.arbiter ?? 'origin',
+				workspacesDir,
 				reset: flags.reset,
 				reconcile,
 				message: flags.message,
@@ -4400,7 +4407,13 @@ export function buildProgram(): Command {
 				: result.reconciled
 					? ` (--reconcile: re-synced mirror + rebased ${workBranchRef('task', slug)} onto latest main and pushed the reconciled tip back; next claim continues from it)`
 					: ' (kept the work branch; next claim continues from its tip)';
-			console.log(`Requeued '${slug}' to backlog for re-claiming.${how}`);
+			const saved =
+				result.crashedRunSave?.kind === 'saved'
+					? ` Saved the crashed run's local work from ${result.crashedRunSave.dir} to ${result.crashedRunSave.branch} first.`
+					: '';
+			console.log(
+				`Requeued '${slug}' to backlog for re-claiming.${how}${saved}`,
+			);
 		});
 
 	// `promote [item]` (spec `staging-pool-position-gate-and-trust-model`, tasks

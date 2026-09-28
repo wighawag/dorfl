@@ -247,6 +247,30 @@ export interface RetainedJob extends GcJob {
 	reason: RetainReason;
 	/** Human-readable reason text (`RETAIN_REASON_TEXT[reason]`). */
 	reasonText: string;
+	/**
+	 * How to SAVE the retained work, for a task job (every retain reason means the
+	 * worktree holds work the arbiter lacks): `requeue <slug>` pushes it to the
+	 * work branch before releasing a crashed run's lock (task
+	 * `a-crashed-runs-local-work-is-saved-before-its-lock-is-released`). Absent
+	 * for a non-task branch.
+	 */
+	hint?: string;
+}
+
+/**
+ * The save hint {@link gc} attaches to a retained TASK job (see
+ * {@link RetainedJob.hint}), or `undefined` for any other branch.
+ */
+export function retainedWorkHint(job: GcJob): string | undefined {
+	const parsed = parseWorkBranchRef(job.branch);
+	if (parsed === undefined || parsed.namespace !== 'task') {
+		return undefined;
+	}
+	return (
+		`it holds work the arbiter lacks; if its run is dead and its lock still ` +
+		`held, \`dorfl requeue ${parsed.slug}\` saves it to ${job.branch} before ` +
+		`releasing the lock (else push ${job.branch} from ${job.dir})`
+	);
 }
 
 export interface GcOptions {
@@ -363,8 +387,9 @@ export function gc(options: GcOptions): GcResult {
 
 		const reason = result.verdict.reason ?? 'unmerged-commits';
 		const reasonText = RETAIN_REASON_TEXT[reason];
-		retained.push({...job, reason, reasonText});
-		note(`Retained ${job.slug}: ${reasonText}.`);
+		const hint = retainedWorkHint(job);
+		retained.push({...job, reason, reasonText, ...(hint ? {hint} : {})});
+		note(`Retained ${job.slug}: ${reasonText}${hint ? ` (${hint})` : ''}.`);
 	}
 
 	return {reaped, retained, sweptOrphans};
