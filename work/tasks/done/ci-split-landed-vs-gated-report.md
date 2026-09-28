@@ -4,7 +4,7 @@ slug: ci-split-landed-vs-gated-report
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-agent-result-and-reruns]
 covers: [10]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
