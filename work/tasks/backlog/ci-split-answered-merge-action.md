@@ -4,6 +4,7 @@ slug: ci-split-answered-merge-action
 spec: ci-agent-job-without-write-token
 blockedBy: [ci-split-treeless-rungs]
 covers: [10, 12]
+needsAnswers: true
 ---
 
 ## What to build
