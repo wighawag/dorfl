@@ -268,6 +268,34 @@ export function git(
 }
 
 /**
+ * Run `git <args>` in `cwd` and return its stdout as raw BYTES (no text
+ * decoding), for output that mixes headers with object contents (`cat-file
+ * --batch`). Throws on a non-zero exit, like {@link git}.
+ */
+export function gitBytes(
+	args: string[],
+	cwd: string,
+	options: {input?: string; env?: NodeJS.ProcessEnv} = {},
+): Buffer {
+	const {command: exe, env} = resolveSpawn('git', options.env ?? process.env);
+	const result = spawnSync(exe, args, {
+		cwd,
+		input: options.input,
+		env,
+		maxBuffer: 64 * 1024 * 1024,
+	});
+	if (result.error) {
+		throw new Error(spawnErrorMessage('git', exe, env, result.error));
+	}
+	if (result.status !== 0) {
+		throw new Error(
+			`git ${args.join(' ')} failed (exit ${result.status}): ${String(result.stderr).trim()}`,
+		);
+	}
+	return result.stdout;
+}
+
+/**
  * Move a tracked file with `git mv`, creating the destination directory first
  * (`mkdir -p`). The `work/` contract requires this: git does not track empty
  * dirs, so `work/done/` (or `work/in-progress/`) may not exist yet. No

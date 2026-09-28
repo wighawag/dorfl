@@ -1,6 +1,14 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {spawn} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync, existsSync} from 'node:fs';
+import {spawn, spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {
+	chmodSync,
+	mkdirSync,
+	readFileSync,
+	readdirSync,
+	writeFileSync,
+	existsSync,
+} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {git} from '../src/git.js';
@@ -165,6 +173,10 @@ async function threePhases(opts: {
 	applyExit?: number;
 	/** Extra apply-phase worker arguments (the agent job result, the stub API). */
 	apply?: Record<string, unknown>;
+	/** The agent job's setup, run in its clone before the agent phase (e.g. `git lfs install --local`). */
+	agentSetup?: (clone: string) => void;
+	/** Runs right after the agent phase, before `between` (e.g. an assertion on the arbiter). */
+	afterAgent?: () => void;
 }): Promise<ThreePhaseRun> {
 	const common = {
 		arg: SLUG,
@@ -201,6 +213,7 @@ async function threePhases(opts: {
 		'origin',
 		'/nonexistent/no-push.git',
 	);
+	opts.agentSetup?.(agentClone);
 	const handoffDir = join(runnerTemp, 'handoff');
 	const agentProviderLog = join(scratch.root, 'provider-agent.jsonl');
 	const before = arbiterRefs();
@@ -219,6 +232,7 @@ async function threePhases(opts: {
 	expect(agentRun.exitCode, agentRun.stderr).toBe(0);
 	expect(arbiterRefs()).toBe(before);
 	expect(readProviderLog(agentProviderLog)).toEqual([]);
+	opts.afterAgent?.();
 
 	opts.between?.();
 
@@ -784,3 +798,137 @@ describe('GitHub re-runs in three processes', () => {
 		expect(lock2.lockSha).not.toBe(first.lock.lockSha);
 	}, 120_000);
 });
+
+// ---------------------------------------------------------------------------
+// Git LFS objects (task `ci-split-handoff-lfs-objects`, decision 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The LFS cases need `git-lfs`. They must not silently skip in CI (GitHub-hosted
+ * runners have it): there they run, and fail loudly without it. Locally they
+ * skip with a message naming the missing binary.
+ */
+const HAS_GIT_LFS =
+	spawnSync('git-lfs', ['version'], {stdio: 'ignore'}).status === 0;
+const IN_CI =
+	process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+if (!HAS_GIT_LFS && !IN_CI) {
+	console.warn(
+		'skipping the LFS three-process cases: the `git-lfs` binary is not on PATH',
+	);
+}
+
+describe.skipIf(!HAS_GIT_LFS && !IN_CI)(
+	'LFS objects in three processes',
+	() => {
+		const PAYLOAD = 'binary-ish asset stored in Git LFS\n'.repeat(64);
+		const OID = createHash('sha256').update(PAYLOAD).digest('hex');
+		const LFS_PATH = 'assets/logo.bin';
+
+		/** Where the arbiter's standalone file transfer stores the object. */
+		function arbiterObject(): string {
+			return join(
+				seeded.arbiter,
+				'lfs',
+				'objects',
+				OID.slice(0, 2),
+				OID.slice(2, 4),
+				OID,
+			);
+		}
+
+		/**
+		 * A pre-receive hook on the arbiter that records, for every branch the
+		 * apply phase pushes, whether the LFS object was already in the store
+		 * when the ref arrived.
+		 */
+		function recordObjectPresenceAtEachRefPush(): string {
+			const log = join(scratch.root, 'pre-receive.log');
+			const hook = join(seeded.arbiter, 'hooks', 'pre-receive');
+			writeFileSync(
+				hook,
+				'#!/bin/sh\n' +
+					'while read old new ref; do\n' +
+					`  if [ -f '${arbiterObject()}' ]; then s=present; else s=absent; fi\n` +
+					`  echo "$ref $s" >> '${log}'\n` +
+					'done\n' +
+					'exit 0\n',
+			);
+			chmodSync(hook, 0o755);
+			return log;
+		}
+
+		function branchPushes(log: string): string[] {
+			if (!existsSync(log)) return [];
+			return readFileSync(log, 'utf8')
+				.split('\n')
+				.filter((l) => l.startsWith('refs/heads/'));
+		}
+
+		function lfsSetup(clone: string): void {
+			// The agent job's setup step: pointers on commit, objects in .git/lfs.
+			g(clone, 'lfs', 'install', '--local');
+		}
+
+		/** Nothing reached the arbiter's LFS store while the agent phase ran. */
+		function expectAgentUploadedNothing(): void {
+			expect(existsSync(join(seeded.arbiter, 'lfs'))).toBe(false);
+		}
+
+		beforeEach(() => {
+			commitToMain(
+				{'.gitattributes': '*.bin filter=lfs diff=lfs merge=lfs -text\n'},
+				'track *.bin with LFS',
+			);
+		});
+
+		it('merge: the object reaches the arbiter LFS store before the ref, and the agent clone uploaded nothing', async () => {
+			let log = '';
+			const run = await threePhases({
+				integration: 'merge',
+				agentFiles: {[LFS_PATH]: PAYLOAD},
+				agentSetup: lfsSetup,
+				afterAgent: expectAgentUploadedNothing,
+				between: () => {
+					log = recordObjectPresenceAtEachRefPush();
+				},
+			});
+			expect(run.agent.intent).toBe('integrate');
+			// The agent committed a pointer, and handed its object over.
+			expect(readdirSync(join(run.handoffDir, 'lfs'))).toEqual([OID]);
+			expect(run.apply.outcome).toBe('landed');
+
+			// main carries the pointer; the store carries the object.
+			expect(showOnArbiter(`main:${LFS_PATH}`)).toContain(`oid sha256:${OID}`);
+			expect(readFileSync(arbiterObject(), 'utf8')).toBe(PAYLOAD);
+			// Every branch push (main here) found the object already stored.
+			const pushes = branchPushes(log);
+			expect(pushes).toContain('refs/heads/main present');
+			expect(pushes.filter((l) => l.endsWith(' absent'))).toEqual([]);
+		}, 120_000);
+
+		it('needs-attention: the object reaches the LFS store before the WIP branch', async () => {
+			let log = '';
+			const run = await threePhases({
+				integration: 'merge',
+				agentFiles: {[LFS_PATH]: PAYLOAD},
+				verify: 'false',
+				agentSetup: lfsSetup,
+				afterAgent: expectAgentUploadedNothing,
+				between: () => {
+					log = recordObjectPresenceAtEachRefPush();
+				},
+			});
+			expect(run.agent.intent).toBe('needs-attention');
+			expect(run.apply.outcome).toBe('surfaced');
+			expect(showOnArbiter(`${WORK_BRANCH}:${LFS_PATH}`)).toContain(
+				`oid sha256:${OID}`,
+			);
+			expect(readFileSync(arbiterObject(), 'utf8')).toBe(PAYLOAD);
+			const pushes = branchPushes(log);
+			expect(pushes).toContain(`${WORK_BRANCH} present`);
+			expect(pushes.filter((l) => l.endsWith(' absent'))).toEqual([]);
+			expect(onArbiter(lockRef())).toBeUndefined();
+		}, 120_000);
+	},
+);
