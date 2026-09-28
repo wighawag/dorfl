@@ -112,7 +112,7 @@ afterEach(() => {
 // ─── config model + models.json builder ──────────────────────────────────────
 
 describe('models.json builder (provider-agnostic core)', () => {
-	it('built-in providers reference the env var name; custom carry baseUrl/api/models', () => {
+	it('built-in providers reference the env var as $NAME; custom carry baseUrl/api/models', () => {
 		const providers: ProviderEntry[] = [
 			{
 				name: 'anthropic',
@@ -130,11 +130,11 @@ describe('models.json builder (provider-agnostic core)', () => {
 			},
 		];
 		const json = buildModelsJson(providers);
-		expect(json.providers.anthropic).toEqual({apiKey: 'ANTHROPIC_API_KEY'});
+		expect(json.providers.anthropic).toEqual({apiKey: '$ANTHROPIC_API_KEY'});
 		expect(json.providers.local).toEqual({
 			baseUrl: 'http://localhost:8080',
 			api: 'openai-completions',
-			apiKey: 'LOCAL_KEY',
+			apiKey: '$LOCAL_KEY',
 			models: [{id: 'llama'}],
 		});
 	});
@@ -386,7 +386,7 @@ describe('composite setup action generation (both auth modes)', () => {
 		expect(action).toContain('git config user.name "dorfl[bot]"');
 		expect(action).toContain('Configure agent models (models.json)');
 		expect(action).toContain('~/.pi/agent/models.json');
-		expect(action).toContain('"ANTHROPIC_API_KEY"');
+		expect(action).toContain('"apiKey": "$ANTHROPIC_API_KEY"');
 		// models-json mode carries NO auth.json / OAuth refresh.
 		expect(action).not.toContain('auth.json');
 		expect(action).not.toContain('refresh-oauth-token');
