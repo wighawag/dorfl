@@ -29,7 +29,49 @@ const SYSTEM_PATH_DIRS = [
 ];
 
 /**
- * `PATH` with {@link SYSTEM_PATH_DIRS} APPENDED (caller entries kept FIRST, so a
+ * The NixOS system profiles. NixOS has no FHS `/usr/bin/git`: a system-wide git
+ * lives under `/run/current-system/sw/bin` (the NixOS system profile) or
+ * `/nix/var/nix/profiles/default/bin` (the multi-user Nix default profile), both
+ * symlinks into the Nix store. Without these, a spawn whose env has no usable
+ * `PATH` (a caller or test passing `env: {}`) cannot find git on NixOS at all.
+ * APPENDED after {@link SYSTEM_PATH_DIRS}, so the caller's own `PATH` and the FHS
+ * dirs still win; on a non-NixOS host these dirs simply do not exist and are
+ * skipped by the probe (and harmless on the spawn `PATH`).
+ */
+const NIXOS_PROFILE_DIRS = [
+	'/run/current-system/sw/bin',
+	'/nix/var/nix/profiles/default/bin',
+];
+
+/** The default fallback probe list: FHS dirs first, then the NixOS profiles. */
+const DEFAULT_FALLBACK_PATH_DIRS: readonly string[] = [
+	...SYSTEM_PATH_DIRS,
+	...NIXOS_PROFILE_DIRS,
+];
+
+/**
+ * The fallback dirs actually in use. Defaults to
+ * {@link DEFAULT_FALLBACK_PATH_DIRS}; replaceable ONLY via
+ * {@link setFallbackPathDirsForTest}, the probe-list seam a test uses to point
+ * the fallback at a fake bin dir.
+ */
+let fallbackPathDirs: readonly string[] = DEFAULT_FALLBACK_PATH_DIRS;
+
+/**
+ * Replace the fallback probe list (tests only); pass `undefined` to restore the
+ * default. Clears the {@link resolveGitBinary} cache so no stale resolution from
+ * the previous list survives.
+ */
+export function setFallbackPathDirsForTest(
+	dirs: readonly string[] | undefined,
+): void {
+	fallbackPathDirs = dirs ?? DEFAULT_FALLBACK_PATH_DIRS;
+	gitBinaryCache.clear();
+}
+
+/**
+ * `PATH` with the fallback dirs ({@link SYSTEM_PATH_DIRS}, then
+ * {@link NIXOS_PROFILE_DIRS}) APPENDED (caller entries kept FIRST, so a
  * pinned tool earlier on `PATH` still wins; missing system dirs are added, not
  * substituted). Deduplicated, preserving first-seen order.
  */
@@ -38,7 +80,7 @@ function pathWithSystemDirs(path: string | undefined): string {
 	const out: string[] = [];
 	for (const dir of [
 		...(path ? path.split(delimiter) : []),
-		...SYSTEM_PATH_DIRS,
+		...fallbackPathDirs,
 	]) {
 		if (dir !== '' && !seen.has(dir)) {
 			seen.add(dir);
@@ -86,7 +128,9 @@ export function resetResolvedGitBinaryForTest(): void {
  *   2. a probe of the env's OWN `PATH` FIRST (so a shim / pinned git earlier on
  *      `PATH` wins), then the standard system dirs APPENDED — so `/usr/bin/git`
  *      is still found when the caller dropped `/usr/bin`, but never AHEAD of the
- *      caller's own entries.
+ *      caller's own entries. LAST come the NixOS system profiles
+ *      ({@link NIXOS_PROFILE_DIRS}), so git resolves on NixOS even when the env
+ *      carries no `PATH` at all.
  *
  * Falls back to the bare name `'git'` when nothing resolves (git genuinely
  * absent) so the spawn still runs and produces the diagnostic path. Cached PER

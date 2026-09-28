@@ -1,9 +1,19 @@
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {
 	run,
 	runAsync,
 	resolveGitBinary,
 	resetResolvedGitBinaryForTest,
+	setFallbackPathDirsForTest,
 } from '../src/git.js';
 
 /**
@@ -79,5 +89,68 @@ describe('git spawn hardening under a caller PATH that omits /usr/bin', () => {
 			env: brokenEnv(),
 		});
 		expect(res.status).toBe(0);
+	});
+});
+
+/** Create `<root>/<name>/git` as an executable fake git; returns the dir. */
+function fakeGitDir(root: string, name: string): string {
+	const dir = join(root, name);
+	mkdirSync(dir, {recursive: true});
+	const git = join(dir, 'git');
+	writeFileSync(git, `#!/bin/sh\necho "fake git from ${name}"\n`);
+	chmodSync(git, 0o755);
+	return dir;
+}
+
+describe('git resolution falls back to the NixOS system profiles', () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), 'dorfl-git-probe-'));
+		resetResolvedGitBinaryForTest();
+	});
+
+	afterEach(() => {
+		setFallbackPathDirsForTest(undefined);
+		rmSync(root, {recursive: true, force: true});
+	});
+
+	it('resolves git from a NixOS-profile-like dir when the env has no PATH', () => {
+		// Simulate a NixOS host: the FHS dirs hold no git, only the (fake) system
+		// profile does, and the env carries no PATH at all (the `env: {}` case).
+		const emptyFhs = join(root, 'usr-bin');
+		mkdirSync(emptyFhs);
+		const profile = fakeGitDir(root, 'run-current-system-sw-bin');
+		setFallbackPathDirsForTest([emptyFhs, profile]);
+		expect(resolveGitBinary({})).toBe(join(profile, 'git'));
+		const res = run('git', [], root, {env: {}});
+		expect(res.status).toBe(0);
+		expect(res.stdout).toMatch(/fake git from run-current-system-sw-bin/);
+	});
+
+	it('precedence: DORFL_GIT, then GIT, then the env PATH, then the fallback dirs in order', () => {
+		const override = join(fakeGitDir(root, 'override'), 'git');
+		const gitVar = join(fakeGitDir(root, 'git-var'), 'git');
+		const onPath = fakeGitDir(root, 'on-path');
+		const fhs = fakeGitDir(root, 'fhs');
+		const nix = fakeGitDir(root, 'nix');
+		setFallbackPathDirsForTest([fhs, nix]);
+
+		expect(
+			resolveGitBinary({DORFL_GIT: override, GIT: gitVar, PATH: onPath}),
+		).toBe(override);
+		expect(resolveGitBinary({GIT: gitVar, PATH: onPath})).toBe(gitVar);
+		expect(resolveGitBinary({PATH: onPath})).toBe(join(onPath, 'git'));
+		// No PATH: the FIRST fallback dir (the FHS stand-in) wins over the later one.
+		expect(resolveGitBinary({})).toBe(join(fhs, 'git'));
+	});
+
+	it('the default fallback list keeps the FHS dirs ahead of the NixOS profiles on the spawn PATH', () => {
+		setFallbackPathDirsForTest(undefined);
+		expect(() =>
+			run('definitely-not-a-real-binary-xyz', [], root, {env: {}}),
+		).toThrow(
+			'Effective PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin',
+		);
 	});
 });
