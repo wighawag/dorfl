@@ -95,6 +95,7 @@ import {
 	canonicalHandoffItem,
 	handoffName as deriveHandoffName,
 	type ApplyDecisionProducts,
+	type HandoffQuestionEntry,
 	type HandoffRecord,
 	type NeedsAttentionProducts,
 	type SurfaceProducts,
@@ -147,6 +148,7 @@ import {
 	harnessSurfaceGate,
 	type SurfaceEmit,
 	type SurfaceGate,
+	type SurfaceQuestion,
 } from './surface-gate.js';
 import {harnessTriageGate, type TriageEmit} from './triage-gate.js';
 
@@ -791,11 +793,41 @@ function mergeHandover(
 	}
 }
 
-/** The surface questions of a captured emit, bounded for the handoff. */
-function questionTexts(emit: SurfaceEmit | undefined): string[] {
-	return (emit?.questions ?? [])
-		.map((q) => boundHandoffText(q.question, HANDOFF_LIMITS.reasonChars))
-		.filter((q) => q.trim() !== '');
+/**
+ * The surface questions of a captured emit, bounded for the handoff, each with
+ * the context and suggested default the agent gave it. A question with neither
+ * travels as its bare text (the plain form every schema-1 reader accepts), so
+ * only a question that has more to carry needs the object form.
+ */
+function questionEntries(
+	emit: SurfaceEmit | undefined,
+): HandoffQuestionEntry[] {
+	const bound = (t: string): string =>
+		boundHandoffText(t, HANDOFF_LIMITS.reasonChars);
+	const entries: HandoffQuestionEntry[] = [];
+	for (const q of emit?.questions ?? []) {
+		const question = bound(q.question);
+		if (question.trim() === '') continue;
+		if (q.context === undefined && q.default === undefined) {
+			entries.push(question);
+			continue;
+		}
+		entries.push({
+			question,
+			...(q.context === undefined ? {} : {context: bound(q.context)}),
+			...(q.default === undefined ? {} : {default: bound(q.default)}),
+		});
+	}
+	return entries;
+}
+
+/** The ask's follow-up questions of a verdict, kept separate (never joined). */
+function askQuestions(verdict: DecisionVerdict): string[] {
+	const questions =
+		verdict.questions !== undefined && verdict.questions.length > 0
+			? verdict.questions
+			: [verdict.question ?? ''];
+	return questions.map((q) => boundHandoffText(q, HANDOFF_LIMITS.reasonChars));
 }
 
 /** Control characters and line separators (a one-line handoff field refuses them). */
@@ -866,9 +898,7 @@ function decisionProducts(
 		case 'ask':
 			return {
 				outcome: 'ask',
-				questions: [
-					boundHandoffText(verdict.question ?? '', HANDOFF_LIMITS.reasonChars),
-				],
+				questions: askQuestions(verdict),
 			};
 		default:
 			throw new Error(
@@ -938,7 +968,7 @@ function capturedRecord(
 				item,
 				intent: {kind: 'surface'},
 				products: {
-					questions: questionTexts(captured.surface),
+					questions: questionEntries(captured.surface),
 				} satisfies SurfaceProducts,
 			};
 		case 'triage-observation': {
@@ -969,7 +999,7 @@ function capturedRecord(
 				intent: {kind: 'triage'},
 				products: {
 					disposition: 'keep',
-					questions: questionTexts(captured.surface),
+					questions: questionEntries(captured.surface),
 				} satisfies TriageProducts,
 			};
 		}
@@ -1543,10 +1573,25 @@ function noAgent(what: string): never {
 	);
 }
 
-/** Replay the checked handoff's surface questions as the surface gate's emit. */
-function replaySurface(questions: string[] | undefined): SurfaceGate {
+/**
+ * Replay the checked handoff's surface questions as the surface gate's emit,
+ * with each question's context and suggested default, so the rung persists the
+ * same sidecar the laptop does.
+ */
+function replaySurface(
+	questions: HandoffQuestionEntry[] | undefined,
+): SurfaceGate {
 	return async () => ({
-		questions: (questions ?? []).map((question) => ({question})),
+		questions: (questions ?? []).map(
+			(q): SurfaceQuestion =>
+				typeof q === 'string'
+					? {question: q}
+					: {
+							question: q.question,
+							...(q.context === undefined ? {} : {context: q.context}),
+							...(q.default === undefined ? {} : {default: q.default}),
+						},
+		),
 	});
 }
 
@@ -1580,13 +1625,8 @@ function replayDecision(p: ApplyDecisionProducts): ApplyDecider {
 			case 'resolve':
 				return {outcome: 'resolve', resolveReason: p.reason};
 			case 'ask':
-				return {
-					outcome: 'ask',
-					question: (p.questions ?? [])
-						.map((q) => q.trim())
-						.filter((q) => q !== '')
-						.join('\n\n'),
-				};
+				// One follow-up question per handed-over question (never joined).
+				return {outcome: 'ask', questions: p.questions ?? []};
 		}
 	};
 }
