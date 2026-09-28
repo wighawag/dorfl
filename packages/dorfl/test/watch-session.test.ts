@@ -593,11 +593,11 @@ describe('SessionTailer — concurrent tail of a GROWING session .jsonl', () => 
 	});
 });
 
-describe('lastAssistantTurn — stop_reason + usage (the output-cap signal)', () => {
-	/** One assistant record carrying stop_reason + usage. */
+describe('lastAssistantTurn: stop reason + usage (the output-cap signal)', () => {
+	/** One assistant record carrying a stop reason (either key) + usage. */
 	function turn(
 		text: string,
-		extra: {stop_reason?: unknown; usage?: unknown} = {},
+		extra: {stopReason?: unknown; stop_reason?: unknown; usage?: unknown} = {},
 	): string {
 		return (
 			JSON.stringify({
@@ -611,7 +611,41 @@ describe('lastAssistantTurn — stop_reason + usage (the output-cap signal)', ()
 		);
 	}
 
-	it("returns the text + the last turn's stop_reason + usage.output_tokens", () => {
+	/**
+	 * A synthetic pi-shaped assistant record, modelled on a real pi session-log
+	 * line: pi's camelCase `stopReason`, `usage.output` alongside the other usage
+	 * counters, and NO snake_case `stop_reason` key at all.
+	 */
+	function piTurn(text: string, stopReason: string, output: number): string {
+		return (
+			JSON.stringify({
+				type: 'message',
+				id: '20ec350b',
+				parentId: 'e07b924d',
+				timestamp: '2026-09-28T20:41:33.578Z',
+				message: {
+					role: 'assistant',
+					content: [{type: 'text', text}],
+					api: 'anthropic-messages',
+					provider: 'anthropic',
+					model: 'claude-sonnet-4',
+					usage: {
+						input: 2,
+						output,
+						cacheRead: 45926,
+						cacheWrite: 559,
+						totalTokens: 46487 + output,
+						cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0},
+					},
+					stopReason,
+					timestamp: 1790628090477,
+					responseId: 'msg_011CfWV8RFTLP2VrwjevaCNA',
+				},
+			}) + '\n'
+		);
+	}
+
+	it("returns the text + the last turn's stop reason + usage.output_tokens", () => {
 		const log =
 			turn('first', {stop_reason: 'end_turn', usage: {output: 10}}) +
 			turn('final', {stop_reason: 'max_tokens', usage: {output_tokens: 16384}});
@@ -630,18 +664,49 @@ describe('lastAssistantTurn — stop_reason + usage (the output-cap signal)', ()
 		expect(lastAssistantTurn(b).outputTokens).toBe(8192);
 	});
 
-	it('treats stop_reason null/None as a cap signal (the truncated-turn shape)', () => {
-		expect(isOutputCappedTurn({stopReason: null, outputTokens: 16384})).toBe(
-			true,
+	it("a pi-shaped turn that ended normally (stopReason 'stop') with output tokens is NOT output-capped", () => {
+		const t = lastAssistantTurn(piTurn('Here is my verdict: ...', 'stop', 285));
+		expect(t.stopReason).toBe('stop');
+		expect(t.outputTokens).toBe(285);
+		expect(isOutputCappedTurn(t)).toBe(false);
+	});
+
+	it("a pi-shaped turn with stopReason 'toolUse' / 'error' / 'aborted' is NOT output-capped", () => {
+		for (const reason of ['toolUse', 'error', 'aborted']) {
+			expect(
+				isOutputCappedTurn(lastAssistantTurn(piTurn('x', reason, 900))),
+			).toBe(false);
+		}
+	});
+
+	it("a pi-shaped turn that hit the cap (stopReason 'length') IS output-capped", () => {
+		const t = lastAssistantTurn(
+			piTurn('{"verdict": "block", "findings": [', 'length', 16384),
 		);
-		// `None` (the string pi emits) is also a cap signal.
-		expect(isOutputCappedTurn({stopReason: 'None', outputTokens: 16384})).toBe(
-			true,
+		expect(t.stopReason).toBe('length');
+		expect(isOutputCappedTurn(t)).toBe(true);
+		expect(t.outputTokens).toBe(16384);
+		// And the text itself is the truncated (unparseable) body.
+		expect(t.text).not.toMatch(/\}/);
+	});
+
+	it('the raw API `max_tokens` (snake_case `stop_reason` fallback) is also the cap signal', () => {
+		const t = lastAssistantTurn(
+			turn('partial', {stop_reason: 'max_tokens', usage: {output: 16384}}),
 		);
-		// `max_tokens` (the standard API cap) is a cap signal.
-		expect(
-			isOutputCappedTurn({stopReason: 'max_tokens', outputTokens: 16384}),
-		).toBe(true);
+		expect(isOutputCappedTurn(t)).toBe(true);
+	});
+
+	it('the camelCase `stopReason` wins over a snake_case `stop_reason` on the same record', () => {
+		const t = lastAssistantTurn(
+			turn('x', {
+				stopReason: 'stop',
+				stop_reason: 'max_tokens',
+				usage: {output: 5},
+			}),
+		);
+		expect(t.stopReason).toBe('stop');
+		expect(isOutputCappedTurn(t)).toBe(false);
 	});
 
 	it('a natural turn-end (end_turn / tool_use) is NOT a cap signal', () => {
@@ -653,30 +718,36 @@ describe('lastAssistantTurn — stop_reason + usage (the output-cap signal)', ()
 		).toBe(false);
 	});
 
-	it('a cap signal with NO produced tokens is NOT a cap (nothing was emitted)', () => {
-		expect(isOutputCappedTurn({stopReason: null, outputTokens: 0})).toBe(false);
+	it('NO recorded stop reason (absent / null) is NOT a cap, however many tokens were produced', () => {
 		expect(
-			isOutputCappedTurn({stopReason: null, outputTokens: undefined}),
+			isOutputCappedTurn({stopReason: undefined, outputTokens: 16384}),
+		).toBe(false);
+		const t = lastAssistantTurn(
+			turn('answer', {stop_reason: null, usage: {output: 16384}}),
+		);
+		expect(t.stopReason).toBeUndefined();
+		expect(isOutputCappedTurn(t)).toBe(false);
+	});
+
+	it('a cap signal with NO produced tokens is NOT a cap (nothing was emitted)', () => {
+		expect(isOutputCappedTurn({stopReason: 'length', outputTokens: 0})).toBe(
+			false,
+		);
+		expect(
+			isOutputCappedTurn({stopReason: 'length', outputTokens: undefined}),
 		).toBe(false);
 	});
 
-	it('detects the cap-truncation shape end-to-end from a session log', () => {
-		// A run that ended with stop_reason null + usage.output 16384 (the
-		// reproduced defect's transcript shape).
-		const log = turn('{"verdict": "block", "findings": [', {
-			stop_reason: null,
-			usage: {output: 16384},
-		});
-		const t = lastAssistantTurn(log);
-		expect(isOutputCappedTurn(t)).toBe(true);
-		expect(t.outputTokens).toBe(16384);
-		expect(t.stopReason).toBeNull();
-		// And the text itself is the truncated (unparseable) body.
-		expect(t.text).not.toMatch(/\}/);
+	it('the cap signal and finalStopReason read the SAME stop reason off the final text turn', () => {
+		for (const reason of ['stop', 'length']) {
+			const t = lastAssistantTurn(piTurn('x', reason, 10));
+			expect(t.stopReason).toBe(reason);
+			expect(t.finalStopReason).toBe(reason);
+		}
 	});
 
-	it('a turn with no stop_reason/usage yields undefined signals (not a cap)', () => {
-		const log = turn('answer'); // no stop_reason/usage
+	it('a turn with no stop reason/usage yields undefined signals (not a cap)', () => {
+		const log = turn('answer'); // no stop reason/usage
 		const t = lastAssistantTurn(log);
 		expect(t.text).toBe('answer');
 		expect(t.stopReason).toBeUndefined();

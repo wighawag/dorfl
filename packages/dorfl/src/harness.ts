@@ -216,14 +216,15 @@ export interface LaunchResult {
 	 * **The model OUTPUT-CAP signal** (observation
 	 * `tasker-review-edits-payload-caps-the-verdict-response`): present iff the
 	 * adapter detected the agent's final assistant turn was TRUNCATED at the
-	 * model's output-token cap before it finished — i.e. its `stop_reason` is not a
-	 * natural turn-end (`null`/`None`/`max_tokens`) AND it produced a positive
-	 * `usage.output` token count. The value is that token count (the observed cap).
+	 * model's output-token cap before it finished — i.e. its stop reason is the
+	 * cap signal (pi's `stopReason: 'length'`, or a raw `max_tokens`) AND it
+	 * produced a positive `usage.output` token count. A normal end, an error, or no
+	 * recorded stop reason is NOT a cap. The value is that token count (the observed cap).
 	 * A gate that fails to parse a verdict AND sees this signal names the failure
 	 * a cap-truncation (NOT a generic parse error) so an operator does not mis-read
 	 * it as a model flake and retry blindly. `undefined` when the adapter has no
-	 * usage/stop_reason telemetry (the null/shell adapter) or the turn ended
-	 * naturally — in which case a parse failure stays the generic `ReviewParseError`
+	 * usage/stop-reason telemetry (the null/shell adapter) or the turn did not
+	 * hit the cap — in which case a parse failure stays the generic `ReviewParseError`
 	 * (still needs-attention, NEVER a silent approve).
 	 */
 	outputCapped?: number;

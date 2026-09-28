@@ -124,7 +124,7 @@ export class ReviewParseError extends Error {}
  * shared the capped response with the verdict) rather than chasing a model flake.
  *
  * Detected at the harness seam: the adapter surfaces the last assistant turn's
- * `stop_reason` (null / `None` / `max_tokens` — the turn did not end naturally) and
+ * stop reason (pi's `length`, or a raw `max_tokens`: the turn hit the output cap) and
  * its `usage.output` token count; the gate throws this when a parse fails AND that
  * cap signal is present. When the adapter CANNOT see the signal (the null/shell
  * adapter, or a future adapter without usage telemetry), the parse still fails as a

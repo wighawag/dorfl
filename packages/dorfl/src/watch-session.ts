@@ -301,7 +301,7 @@ function assistantContentText(content: unknown): string {
  * (task `harness-agent-output`) — the agent's final ANSWER, surfaced through
  * the harness seam as `LaunchResult.output`. A thin delegate to
  * {@link lastAssistantTurn} (one walk, returning the `.text`); the turn reader
- * ALSO carries the `stop_reason`/`usage` the pi adapter uses for the
+ * ALSO carries the stop reason + `usage` the pi adapter uses for the
  * `LaunchResult.outputCapped` cap-truncation signal.
  *
  * Kept as a PURE `string → string | undefined` function on purpose: the pi
@@ -324,8 +324,9 @@ export function lastAssistantText(jsonl: string): string | undefined {
 }
 
 /**
- * The last assistant turn's TEXT + its Anthropic-API turn-termination signal
- * (`stop_reason` + `usage.output`/`usage.output_tokens` token count). Reused by
+ * The last assistant turn's TEXT + its turn-termination signal (the stop
+ * reason, read by {@link readStopReason}, + the `usage.output`/`usage.output_tokens`
+ * token count). Reused by
  * the pi adapter to populate BOTH `LaunchResult.output` (the `.text`) AND
  * `LaunchResult.outputCapped` (the cap-truncation signal — see
  * {@link isOutputCappedTurn}). One walk over the `.jsonl`, not two. `text` is the
@@ -337,14 +338,18 @@ export function lastAssistantText(jsonl: string): string | undefined {
 export interface LastAssistantTurn {
 	/** The last assistant turn's concatenated `text` parts (its answer). */
 	text?: string;
-	/** The turn's `stop_reason` (raw — `null`, `'end_turn'`, `'max_tokens'`, …). */
-	stopReason?: string | null;
+	/**
+	 * The last TEXT turn's stop reason, read by {@link readStopReason} (pi's
+	 * `stopReason`: `'stop'`, `'toolUse'`, `'length'`, …; or a raw `stop_reason`
+	 * such as `'end_turn'` / `'max_tokens'` for another harness shape).
+	 */
+	stopReason?: string;
 	/** The turn's produced output-token count (`usage.output` OR `usage.output_tokens`). */
 	outputTokens?: number;
 	/**
 	 * The stop reason of the FINAL assistant message in the log, WHATEVER it
-	 * carried (text, tool calls, or only a thinking block), read from pi's
-	 * `stopReason` key (falling back to `stop_reason`). Unlike {@link stopReason}
+	 * carried (text, tool calls, or only a thinking block), read by the SAME
+	 * {@link readStopReason} as {@link stopReason}. Unlike {@link stopReason}
 	 * (which belongs to the last TEXT turn), this is how the run actually ENDED:
 	 * a turn that spent its whole output budget thinking has no text, so only this
 	 * field sees it. `undefined` when the log has no assistant message or the
@@ -357,7 +362,7 @@ export interface LastAssistantTurn {
 
 export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 	let lastText: string | undefined;
-	let lastStopReason: string | null | undefined = undefined;
+	let lastStopReason: string | undefined = undefined;
 	let lastOutputTokens: number | undefined = undefined;
 	let finalStopReason: string | undefined = undefined;
 	let finalErrorMessage: string | undefined = undefined;
@@ -385,8 +390,7 @@ export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 		}
 		// EVERY assistant message (text or not) moves the "how did the run end"
 		// pointer: the final one wins.
-		const ended = message.stopReason ?? message.stop_reason;
-		finalStopReason = typeof ended === 'string' ? ended : undefined;
+		finalStopReason = readStopReason(message);
 		finalErrorMessage =
 			typeof message.errorMessage === 'string' && message.errorMessage !== ''
 				? message.errorMessage
@@ -394,7 +398,7 @@ export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 		const text = assistantContentText(message.content);
 		if (text !== '') {
 			lastText = text; // a later text turn supersedes an earlier one.
-			lastStopReason = readStopReason(message.stop_reason);
+			lastStopReason = readStopReason(message);
 			lastOutputTokens = readOutputTokens(message.usage);
 		}
 	}
@@ -427,33 +431,35 @@ export function cutOffTurnOf(turn: LastAssistantTurn): CutOffTurn | undefined {
 }
 
 /**
- * Is this assistant turn's signal an OUTPUT-CAP truncation — the turn did NOT
- * end naturally? `stop_reason` `null`/`None`/`undefined` (the turn was cut off) OR
- * `'max_tokens'` (the model hit its output-token cap), together with a positive
- * produced-token count. The `null`/`None` form is what pi's session log records
- * when the `--print` run is truncated before the turn closes (observation
- * `tasker-review-edits-payload-caps-the-verdict-response`); `'max_tokens'` is the
- * standard API cap signal. Both name the same structural cause: the verdict never
- * finished.
+ * Did this assistant turn HIT THE OUTPUT-TOKEN CAP (and nothing else)? True iff
+ * its stop reason is pi's `'length'` (or the raw API `'max_tokens'`, for a
+ * harness that mirrors the provider's own key) AND it produced a positive
+ * token count (observation `tasker-review-edits-payload-caps-the-verdict-response`:
+ * the verdict never finished). A normal end (`'stop'`, `'toolUse'`, `'end_turn'`,
+ * …), an error/abort, or NO recorded stop reason is NOT a cap: an unknown reason
+ * proves nothing, and inferring a cap from it named every pi parse failure a cap
+ * truncation (observation `output-capped-signal-reads-the-wrong-stop-reason-key`).
  */
 export function isOutputCappedTurn(turn: LastAssistantTurn): boolean {
 	const cappedReason =
-		turn.stopReason === null ||
-		turn.stopReason === undefined ||
-		turn.stopReason === 'None' ||
-		turn.stopReason === 'max_tokens';
+		turn.stopReason === 'length' || turn.stopReason === 'max_tokens';
 	return cappedReason && (turn.outputTokens ?? 0) > 0;
 }
 
-/** Read `stop_reason` defensively as a string-or-null (pi may emit `None`/`null`). */
-function readStopReason(raw: unknown): string | null | undefined {
-	if (raw === null) {
-		return null;
-	}
-	if (typeof raw === 'string') {
-		return raw;
-	}
-	return undefined;
+/**
+ * THE one stop-reason reader, shared by the output-cap signal
+ * ({@link isOutputCappedTurn}, via `stopReason`) and the cut-off signal
+ * ({@link cutOffTurnOf}, via `finalStopReason`) so the two can never disagree
+ * about a turn. Reads pi's normalised camelCase `message.stopReason` (what real
+ * pi session logs carry), falling back to a snake_case `message.stop_reason` for
+ * other harness shapes. Anything that is not a string (absent, `null`) is
+ * `undefined`: no recorded reason.
+ */
+function readStopReason(
+	message: NonNullable<SessionLogRecord['message']>,
+): string | undefined {
+	const raw = message.stopReason ?? message.stop_reason;
+	return typeof raw === 'string' ? raw : undefined;
 }
 
 /** Read the produced output-token count from `usage.output` OR `usage.output_tokens`. */
