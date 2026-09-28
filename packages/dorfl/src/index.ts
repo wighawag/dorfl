@@ -203,7 +203,6 @@ export {currentLedgerWrite, ledgerWrite} from './ledger-write.js';
 export type {
 	RefWriteStrategy,
 	LockRefCreateInput,
-	LockRefAmendInput,
 	LockRefDeleteInput,
 	ContinuedBranchPushInput,
 	TaskingCandidatesPushInput,

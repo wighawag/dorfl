@@ -29,3 +29,8 @@ Two small cleanups found during the CI-split drive:
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Added a patch changeset.** Removing `amendLockRef` from the exported `RefWriteStrategy` interface and dropping the `LockRefAmendInput` export changes the package's public types. The verify gate doesn't require a changeset, but recent commits add one for such changes. The alternative was no changeset, which would treat this as purely internal. This touches only the `dorfl` package's release notes.
+- **Removed `LockRefAmendInput` from `index.ts` rather than leaving it exported.** The task says to remove any seam method left unused, and an exported type for a deleted method would itself be dead. Keeping it for compatibility was the alternative, but it has no remaining users in the repo.

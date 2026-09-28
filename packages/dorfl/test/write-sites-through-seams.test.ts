@@ -38,7 +38,6 @@ const ALLOWED: Record<string, string> = {
 		'the ledger seam itself (CAS push to main)',
 	// --- the ref-write seam (task ci-split-route-direct-writes-through-seams) ---
 	'ref-write.ts::currentRefWrite.createLockRef': 'the ref-write seam itself',
-	'ref-write.ts::currentRefWrite.amendLockRef': 'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.deleteLockRef': 'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.pushTaskingCandidatesBranch':
 		'the ref-write seam itself',
@@ -75,8 +74,6 @@ const ALLOWED: Record<string, string> = {
 	'issue-provider.ts::GitHubIssueProvider.createLabel':
 		'the issue provider seam',
 	// --- WRITE-SEAM EXEMPT: never run in a CI agent job ---
-	'item-lock.ts::requeueItemLock':
-		'exempt: human-verb lock primitive, no CI path reaches it',
 	'needs-attention.ts::attemptReconcile':
 		'exempt: human-only `requeue --reconcile`',
 	'reap-branches.ts::sweepRemoteMergedBranches':

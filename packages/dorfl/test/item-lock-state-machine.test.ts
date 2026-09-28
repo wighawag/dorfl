@@ -4,9 +4,7 @@ import {
 	releaseItemLock,
 	markStuckItemLock,
 	resumeItemLock,
-	requeueItemLock,
 	readItemLock,
-	listItemLocks,
 	itemLockRef,
 	LOCK_REF_PREFIX,
 	type LockState,
@@ -153,7 +151,7 @@ describe('lock state machine — degenerate `active`-only state (post retire-stu
 		expect(entry?.state).toBe('active');
 	});
 
-	it('markStuckItemLock / resumeItemLock / requeueItemLock on an ABSENT entry are `not-held`', async () => {
+	it('markStuckItemLock / resumeItemLock on an ABSENT entry are `not-held`', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		for (const outcome of [
 			(
@@ -173,48 +171,9 @@ describe('lock state machine — degenerate `active`-only state (post retire-stu
 					env: gitEnv(),
 				})
 			).outcome,
-			(
-				await requeueItemLock({
-					item: 'task:alpha',
-					cwd: repo,
-					arbiter: 'arbiter',
-					env: gitEnv(),
-				})
-			).outcome,
 		]) {
 			expect(outcome).toBe('not-held');
 		}
-	});
-
-	it('requeue on a held ACTIVE entry releases the lock (no `stuck` guard any more)', async () => {
-		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
-		await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		const r = await requeueItemLock({
-			item: 'task:alpha',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(r.outcome).toBe('transitioned');
-		expect(lockRefOnArbiter(arbiter, 'task-alpha')).toBe(false);
-		expect(await listItemLocks(repo, 'arbiter', gitEnv())).toEqual([]);
-		// The body never moved: it is still resting in backlog/ on main.
-		expect(existsOnArbiterMain(repo, 'backlog', 'alpha')).toBe(true);
-		// After requeue the item is freely re-acquirable.
-		const reacq = await acquireItemLock({
-			item: 'task:alpha',
-			action: 'implement',
-			cwd: repo,
-			arbiter: 'arbiter',
-			env: gitEnv(),
-		});
-		expect(reacq.outcome).toBe('acquired');
 	});
 });
 
