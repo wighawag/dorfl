@@ -4,7 +4,8 @@ import {resolveHarness, type Harness} from './harness.js';
 // harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
-import {fetchMirrorMainOrWarn} from './repo-mirror.js';
+import {fetchMirrorMainOrWarn, readOriginUrl} from './repo-mirror.js';
+import {encodeRepoKey} from './repo-key.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {
 	listItemLockEntries,
@@ -205,6 +206,18 @@ export interface StatusOptions {
 	 */
 	reconcileLocks?: boolean;
 	/**
+	 * ARBITER SCOPE of the {@link StatusOptions.reconcileLocks} write (task
+	 * `reconcile-locks-stays-within-the-current-arbiter`, mirroring `gc`'s
+	 * arbiter-scoped default). When set, ONLY the registered mirror whose arbiter
+	 * hub key ({@link encodeRepoKey} of its `origin` URL) equals this key has its
+	 * stale locks RELEASED; every other mirror is merely classified and REPORTED,
+	 * exactly as without `reconcileLocks`, so a drain run from repo A never reaches
+	 * repo B's arbiter. `undefined` reconciles EVERY mirror: the CLI passes it
+	 * undefined only behind the explicit `--all-arbiters`, never by default.
+	 * Ignored when `reconcileLocks` is not `true`.
+	 */
+	reconcileArbiterKey?: string;
+	/**
 	 * Sink for the fetch-first fall-back warning (ADR §5/§6): when a mirror's `main`
 	 * cannot be fetched, `status` warns through this and reads that mirror's
 	 * last-known state. The CLI wires it to the standard `>>` stderr note.
@@ -225,6 +238,25 @@ export interface StatusOptions {
 	 */
 	cwd?: CwdSection;
 	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Is `mirrorPath` inside the `--reconcile-locks` write scope? `undefined` scope
+ * means every mirror (the explicit `--all-arbiters`); otherwise only the mirror
+ * whose `origin` URL hub-keys to `arbiterKey` (the SAME keying `gc` uses for its
+ * per-job arbiter scope). A mirror whose `origin` is unreadable is OUT of scope:
+ * the safe direction for a write.
+ */
+function mirrorInReconcileScope(
+	mirrorPath: string,
+	arbiterKey: string | undefined,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	if (arbiterKey === undefined) {
+		return true;
+	}
+	const url = readOriginUrl(mirrorPath, env);
+	return url !== undefined && encodeRepoKey(url) === arbiterKey;
 }
 
 /**
@@ -294,7 +326,14 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 		const MIRROR_MAIN = {mainRef: 'main'};
 		let staleEntries: string[] = [];
 		let entries: LockEntry[];
-		if (options.reconcileLocks === true) {
+		if (
+			options.reconcileLocks === true &&
+			mirrorInReconcileScope(
+				mirrorPath,
+				options.reconcileArbiterKey,
+				options.env,
+			)
+		) {
 			const reconciled = await reconcileTerminalItemLocks(
 				mirrorPath,
 				'origin',
