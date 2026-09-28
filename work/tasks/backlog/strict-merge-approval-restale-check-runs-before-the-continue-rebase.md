@@ -11,6 +11,15 @@ Observation `strict-merge-approval-restale-check-runs-after-the-continue-rebase`
 
 Decide staleness against what the human approved: take the base the answer was given against (the kept branch's merge-base with `main` before any rebase, or a base recorded with the answer if one exists) and compare it with the current `main` BEFORE the continue rebase runs; then rebase. Keep one implementation for the laptop and the CI agent half.
 
+> FORWARD-NOTE (conductor, 2026-09-28; the human's answer to this task's surfaced stuck question, which this note supersedes): the first build STOPPED because the only usable base, the kept branch's pre-rebase merge-base, livelocks in CI. The `merge-restale` handoff carries no bundle, so the CI rebase is never published, and every re-answer re-fires. The human chose option **(b)** with the **"since the question was asked"** semantics:
+>
+> - **Record the approved base.** When a merge question is surfaced, and again when the re-stale path re-surfaces it, store the arbiter `main` SHA it was asked against on the sidecar entry. This is a new, bounded, optional field on the entry, set by `merge-question-surfacer.ts` and by the re-surface path.
+> - **Compare against it before the continue rebase.** With `strictMergeApproval: true`, both the laptop `performMergeAction` and the CI agent half `prepareMergeLand` compare the current `<arbiter>/main` with that recorded base BEFORE the continue rebase runs. Keep ONE shared implementation. If they differ, it is a re-stale; otherwise rebase and land.
+> - **Stale means "`main` moved since the question was asked",** not "since the branch was built". So a first answer given against the current `main` lands.
+> - **No livelock.** A re-surfaced question records the NEW base, so a re-answer given while `main` stays put LANDS, in CI as well as on the laptop. Add a test for this: a CI re-stale, then a re-answer, then the item lands.
+> - **Legacy entries.** A sidecar entry with no recorded base (written before this change) keeps today's behaviour (no re-stale). Record that in your Decisions.
+> - **Staging is expected.** The task body lives in `work/tasks/backlog/`, not `ready/`; this is a deliberate drive-from-staging build.
+
 ## Acceptance criteria
 
 - [ ] With `strictMergeApproval: true`, an answered merge whose base moved since the answer re-surfaces the follow-up question (laptop path, tested).
