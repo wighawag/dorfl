@@ -26,11 +26,15 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
    cp docs/ci/advance-loop.yml.template .github/workflows/advance-loop.yml
    ```
 
-2. Provide the `dorfl-setup` composite action the template references at
-   `.github/actions/dorfl-setup` (installs Node + `dorfl` + the
-   agent harness, configures git identity + provider auth). Its auth/secrets shape
-   is the separate `runner-in-ci` spec's concern — this template only assumes such a
-   setup step exists and INVOKES the driver. (If the repo pins its dorfl via
+2. Provide the files the template calls, which `dorfl install-ci` generates: the
+   per-item workflows `.github/workflows/dorfl-item-dispatch.yml` and
+   `.github/workflows/dorfl-item.yml`, the agent-role setup action
+   `.github/actions/dorfl-setup` (installs Node + `dorfl` + the agent harness,
+   configures git identity + provider auth, runs your project-setup hook) and the
+   writer-role setup action `.github/actions/dorfl-setup-writer` (Node + `dorfl`
+   only). Their auth/secrets shape is the separate `runner-in-ci` spec's concern;
+   this template only assumes they exist and INVOKES the driver (see "The three-job
+   shape" below). (If the repo pins its dorfl via
    **`dorflCmd`** in `dorfl.json`, CI's bare `dorfl` self-forwards to that pin by the
    same mechanism the laptop uses, so CI and local run the same version — see
    [`docs/dorfl-cmd/README.md`](../dorfl-cmd/README.md).)
@@ -38,10 +42,10 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
 3. Pick the integration mode with the `workflow_dispatch` `integrationMode` input
    (default `propose`). This ONE value drives BOTH the job shape AND the
    integration flag passed to `advance`, so they can never disagree:
-   - `propose` (default) → a **matrix** of independent jobs, each leg
+   - `propose` (default) → one workflow run per item, each
      `advance <item> --propose`, one PR per item;
-   - `merge` → a **single sequential** job `advance -n <x> --merge` (rebase-chains
-     to `main`).
+   - `merge` → one workflow run per item, each `advance <item> --merge`
+     (each item lands on `main` by rebase + compare-and-swap push).
 
    The `--propose`/`--merge` flag sits at the TOP of `advance`'s precedence chain
    (flag > per-repo `dorfl.json` `integration` > global > default), so the
@@ -49,12 +53,62 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
    `integration` in `dorfl.json` as the default for un-dispatched runs, but
    the workflow leg always passes the explicit flag matching its shape.)
 
-## The two CI shapes (US #27)
+## The three-job shape: the agent job holds no write token
 
-| `integrationMode` | shape                                                                  | `advance` invocation         | why                                                                                                                                                                                                                                                                                                  |
-| ----------------- | ---------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `propose`         | a MATRIX of independent jobs                                           | `advance <item> --propose`   | propose-mode items are independent PRs → true parallelism, one PR per item.                                                                                                                                                                                                                          |
-| `merge`           | a MATRIX of independent jobs (parallel build/gate/review; LAND serialised by the engine) | `advance <item> --merge` | merge-mode items land on `main` via rebase (ADR §10). Build/gate/review fan out per item; the cross-job land tail is serialised by the engine's `mergeRetries` CAS-retry loop — the git-alone floor — NOT by this workflow's job shape (per SPEC `land-time-reverify-and-parallel-merge-ceiling`). |
+Every CI item (an advance item, or an issue for `intake`) runs as three jobs in `dorfl-item.yml`, in a workflow run of its own (ADR `ci-agent-job-holds-no-write-token`):
+
+| job     | token                                                        | runs                                                                                                                                                                  |
+| ------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lock`  | write (`contents`, `issues`, `pull-requests`), no agent      | classifies the item at the arbiter's current `main`, takes its locks and publishes trusted facts (the base sha, the rung, whether an agent is needed) as job outputs. |
+| `agent` | read-only, `persist-credentials: false`, the provider key    | the agents, the acceptance gate and the Gate-2 review, exactly as before; it stops at the first write and uploads a handoff artifact instead of pushing.             |
+| `apply` | write, plus `actions: read` and `checks: read`, no agent     | `if: always()`: treats the handoff as hostile, validates it against the lock job's outputs, then does every write (land, PR, comment, needs-attention, lock release). |
+
+**Why.** The `intake` workflow runs an agent with a shell over issue text any GitHub user can write, so a prompt injection is expected, not hypothetical. Removing tokens from the agent's environment was only a first layer: an agent that shares a job with a write token can still reach it through the credential `actions/checkout` persists in `.git/config`, its parent processes' environment, or `sudo` on a hosted runner. A hardening of the single job was built and dropped because every review found another way through. So the agent now runs in a job whose token cannot write, and the jobs that can write run no agent and no repository code (the writer-role setup action installs Node and dorfl only: no harness, no provider key, no project-setup hook, no dependency install, no cache). The agent keeps every tool, including its shell. The provider key and the read token can still be read by the agent; neither can write. On a laptop nothing changes: there is one process and no `--phase`.
+
+The lock job skips the agent job when the item needs none (an answered question with nothing to build, an observation with nothing to ask, an intake triage skip). The apply job acts on the agent job's result first: `failure` or a timeout surfaces the item to needs-attention, a real cancel only releases the lock, and for intake every non-success only removes the `processing` label.
+
+### One run per item, and the slot cap
+
+All jobs of one workflow run share one artifact namespace, and an agent with a shell can recover its job's `ACTIONS_RUNTIME_TOKEN`, so inside a matrix one item's agent could plant another item's handoff. The advance tick therefore no longer uses a matrix: `advance-lifecycle.yml` runs no agent, its `enumerate` job (`contents: read`) lists the eligible items, and its `dispatch` job (`actions: write` only, no checkout, no setup) starts one `dorfl-item-dispatch.yml` run per item with `gh workflow run`. That run calls `dorfl-item.yml`, so "this artifact came from this item's agent job" is enforced by GitHub, with no key to leak. `intake.yml` already handles one issue per run and calls `dorfl-item.yml` with `item: issue:<N>`.
+
+The old matrix `max-parallel` is now `maxParallel` concurrency slots (`install-ci --max-parallel`, default 2): item *i* joins the group `dorfl-slot-<i mod maxParallel>` with `queue: max`, so at most that many item runs execute at once and the rest wait first-in-first-out without using runner minutes. A slot holds at most 100 pending runs; beyond that GitHub cancels runs, and the next tick dispatches the item again. The tick does not dispatch an item whose `dorfl-item <item>` run has not completed yet; a duplicate that slips through a race is harmless, because its lock job re-classifies at the fresh arbiter tip.
+
+### Protected paths: build workflow-editing tasks locally
+
+The apply job rejects a handoff whose commits change a protected path. The list is fixed and built in (not a config key): anything under `.github/`, `CODEOWNERS` (at the root, `docs/` or `.github/`), `dorfl.json`, `.lfsconfig`, and `.gitattributes` at any depth, matched case-insensitively. A change there would let an agent rewrite the workflows, the reviewers, dorfl's own configuration or how the apply job's rebase resolves conflicts. The item goes to needs-attention with a reason that names the path and says to build the task locally: CI never lands such a change, in either mode. So a task that legitimately edits a workflow (dorfl's own repository has them) is built on a laptop (`dorfl do <task>` or `dorfl work-on <task>`), where the single-process path has no such rule and a human is at the keyboard.
+
+The same check holds a build to its own ledger under `work/`: in merge mode the work branch may change only its own item's transition and add new `work/notes/*` files; anything else (another item's body, a new file in a pool folder, a question sidecar) is rejected. In propose mode those paths are listed in the PR body for the reviewer instead.
+
+### Your project-setup hook must not restore an Actions cache
+
+Your project-setup hook (`projectSetup.<provider>`, spliced first into `.github/actions/dorfl-setup`) runs in the agent job. dorfl's generated jobs never restore an Actions cache, agent jobs included, but the hook is yours: it must not restore one either. No `actions/cache` or `actions/cache/restore` step, no `cache:` input on `actions/setup-node` (or another `setup-*` action), and `package-manager-cache: false` on `actions/setup-node` v5 and later.
+
+Why: every run on the default branch shares its cache, and any agent can write entries to it through its runtime token. If item B's agent job restores a dependency store that item A's agent poisoned, A controls B's build and handoff, and in merge mode can land code through B: exactly the cross-item substitution that one run per item removes. A hook that restores a cache anyway is your accepted risk. The cost is one uncached dependency install per agent job. The same rule applies to your own workflows' write jobs, below.
+
+### Self-hosted runners must be ephemeral
+
+The separation between the jobs is the machine: every job needs a fresh one. GitHub-hosted runners give that. A self-hosted runner that serves several jobs keeps the files and processes one job leaves behind, so an agent could plant a process, a git hook or a poisoned tool that a later lock or apply job, holding a write token, then runs. If you use self-hosted runners for these workflows, make them ephemeral (one job per machine, e.g. the runner's `--ephemeral` mode or an autoscaler that creates a fresh VM or container per job).
+
+### Upgrading from single-job workflows
+
+Re-run `dorfl install-ci` after upgrading dorfl, then commit what it writes:
+
+- It regenerates `intake.yml` and `advance-lifecycle.yml`, adds `dorfl-item.yml` and `dorfl-item-dispatch.yml`, and adds the writer-role setup action `.github/actions/dorfl-setup-writer` next to `.github/actions/dorfl-setup` (which stays the agent role). Existing SHA pins in files it rewrites are kept, as before. The new third-party actions, `actions/upload-artifact` and `actions/download-artifact`, are pinned to full commit SHAs.
+- The setup actions install `dorfl@<the version that generated them>`, so regenerated workflows always run a dorfl that understands the hidden `--phase` option.
+- `DORFL_GH_TOKEN`: nothing to do. The generated workflows now pass it to the lock and apply jobs only, never to an agent job. `intake.yml` does not pass it at all: intake writes under the built-in `GITHUB_TOKEN`.
+- The `advance-lifecycle` push trigger (`work/questions/**`) is now limited to `branches: [main]`. Older generated workflows fire it for any branch whose push touches a question sidecar; regenerating fixes that.
+- If you copied `docs/ci/advance-loop.yml.template` by hand, copy it again: it now needs the per-item workflows and both setup actions.
+
+An old single-job workflow with a new dorfl keeps working unchanged, but every agent-spawning verb run in it without `--phase`, in a checkout whose git config persists a credential, prints a warning that any agent it launches can read that token and that re-running `dorfl install-ci` upgrades the workflow. `dorfl verify` is exempt (it launches no agent). The next minor version turns that warning into a refusal.
+
+What it costs: two extra jobs per item, one Actions run per item, and a `dispatch` job per tick. Runs waiting in a slot cost no runner minutes. In merge mode, expect most lands to be re-rebased after the gate ran (next section).
+
+## The two CI modes (US #27)
+
+| `integrationMode` | shape                                   | `advance` invocation       | why                                                                                                                                                                                                                                                                                                             |
+| ----------------- | --------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `propose`         | one workflow run per item               | `advance <item> --propose` | propose-mode items are independent PRs → true parallelism, one PR per item.                                                                                                                                                                                                                                     |
+| `merge`           | one workflow run per item (LAND serialised by the engine) | `advance <item> --merge` | merge-mode items land on `main` via rebase (ADR §10). Build/gate/review fan out per item; the cross-run land tail is serialised by the engine's `mergeRetries` CAS-retry loop in each item's apply job (the git-alone floor), NOT by the workflow shape (per SPEC `land-time-reverify-and-parallel-merge-ceiling`). |
 
 **One word, one meaning.** The dispatch input is `integrationMode` — the SAME
 vocabulary as `dorfl.json`'s `integration` and `advance --propose`/
@@ -66,11 +120,11 @@ every leg silently merging to `main` because the repo config defaulted to `merge
 
 Both modes enumerate their items via the **mirror-side eligible-pool scan**
 (`dorfl scan --json`, the hub-mirror enumeration the loop driver also
-consumes), so CI fans out over exactly the eligible pool. Each propose leg passes
-`--propose`, so a propose leg can NEVER merge to `main`; each merge leg passes
-`--merge`, so its integration mode is tied to its job shape just as tightly. The
-legs run the existing `advance <item>` driver (no `-n` in either shape —
-parallelism comes from the matrix itself).
+consumes), so CI fans out over exactly the eligible pool. Each propose item run
+passes `--propose`, so it can NEVER merge to `main`; each merge item run passes
+`--merge`, so its integration mode is tied to the tick's just as tightly. The
+item runs use the existing `advance <item>` driver (no `-n` in either mode:
+parallelism comes from the per-item runs and their slots).
 
 ### Parallel-merge fan-out and the cross-job serialiser (the floor)
 
@@ -85,18 +139,28 @@ The engine's actual safety story:
   keyed per repo): serialises ONLY the land-on-`main` TAIL within a single
   process, so build/gate/review run concurrently across siblings on the same
   runner. It is the IN-PROCESS optimisation; it does NOT span separate CI jobs.
-- **`mergeRetries`** (cross-job, the CAS-retry loop): a non-fast-forward push
-  triggers re-rebase + re-gate + retry up to the resolved cap — never a
-  `--force`, never a both-land-broken merge. Across runners this CAS loop IS the
-  queue: losers re-rebase and re-gate, the winner lands; the LAST land's
-  fresh-worktree gate ran on the current `main` tip.
+- **`mergeRetries`** (cross-job, the CAS-retry loop, run by each item's apply
+  job): a non-fast-forward push triggers a re-rebase onto the moved `main` and a
+  retried push, up to the resolved cap; never a `--force`, and a textual conflict
+  on the re-rebase routes to needs-attention. Across runs this CAS loop IS the
+  queue: the winner lands, the losers re-rebase and retry. A lost CAS does NOT
+  re-run the gate: the gate ran in the agent job, minutes before the apply job's
+  first push, so with parallel item runs in merge mode `main` has usually moved
+  and most lands are a re-rebase the gate never saw. The apply phase reports each
+  one: its output says "`<branch>` landed without re-gate after N lost races", and
+  the landed commit carries a `Landed-Without-Regate:` trailer (list them with
+  `git log --format='%h %(trailers:key=Landed-Without-Regate,valueonly)' main`).
+  A land that won its first push, or whose re-rebase kept the gated tree, carries
+  neither. Propose mode is unaffected: a human merges the PR, and the
+  repository's own required checks run on it.
 - **`mergeRetries` is gate-family-resolved** (`merge-retries-gate-precedence`):
   flag > env > per-repo > global > default. A wide CI matrix can raise the cap
   without redeploying.
 
-So concurrent merge legs in CI are LAND-SAFE: there is no scenario in which two
-green, rebased trees both land semantically-broken, and no scenario in which the
-runner is driven to `--force`. The throughput cost of a wide burst is bounded by
+So concurrent merge runs in CI never `--force` and never auto-resolve a
+conflict. They do not prove that the landed tree passes the gate when a race was
+lost: two individually green items that break only together can both land, and
+the `Landed-Without-Regate` trailer is how you find those lands. The throughput cost of a wide burst is bounded by
 the cap — past the cap a loser bounces to needs-attention rather than land
 incorrectly.
 
@@ -120,25 +184,24 @@ Applied Answer q1):**
 > **No `concurrency:` block on the merge job by default.** The workflow-level
 > `concurrency: advance-loop-${{ github.ref }}` group (which only deduplicates
 > overlapping ticks of the same shape) is unrelated to land serialisation and
-> stays. The merge JOB carries no `concurrency:` of its own — a host-specific
+> stays. The `dorfl-slot-<n>` groups on the item runs only cap how many items run
+> at once; they do not serialise the land. The land carries no `concurrency:` of its own — a host-specific
 > serialiser there would be load-bearing for cross-job land safety, breaking
 > the git-alone floor framing. A maintainer who wants the host accelerator on a
 > GitHub arbiter may add one locally; it is intentionally not part of the
 > shipped template.
 
-### Matrix enumeration scope
+### Enumeration scope
 
-`dorfl scan --json` reports eligible **tasks** from BOTH the hub-mirror
-queue (`repos[].items[]`) AND the in-place working checkout (`cwd.repo.items[]`);
-the enumeration unions both pools, because CI runs in-place (a fresh runner has no
-registered mirror, so the eligible tasks live in `cwd.repo.items[]`). So the
-propose **matrix** fans out over eligible tasks — one PR per task. Taskable **specs** (the `do spec:`/tasking rung) are advanced via
-the **sequential** path instead: the `merge` job's `advance -n <x>` covers both
-pools (it drives the full eligible set sequentially), or you dispatch a named
-`advance spec:<slug>`. This keeps the matrix to genuinely-independent PRs and does
-NOT mint a new mirror-pool JSON CLI surface (that enumeration lives in
-`scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a separate
-concern, not this template's).
+`dorfl scan --json` reports eligible **tasks** and taskable **specs** from BOTH
+the hub-mirror queue (`repos[].items[]`, `repos[].specs[]`) AND the in-place
+working checkout (`cwd.repo.items[]`, `cwd.repo.specs[]`); the `enumerate` job
+unions both pools, because CI runs in-place (a fresh runner has no registered
+mirror, so the eligible items live in `cwd.repo`). It emits explicit
+`task:<slug>` / `spec:<slug>` ids, and the `dispatch` job starts one item run per
+id. This does NOT mint a new mirror-pool JSON CLI surface (that enumeration lives
+in `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a
+separate concern, not this template's).
 
 ## Writing a CI-safe `verify` gate (the toolchain-boundary pitfalls)
 
@@ -182,9 +245,11 @@ native Actions step YAML. A GitHub `pnpm` example:
 - name: Setup pnpm
   uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
   with: { version: 10.28.1 }
+# No Actions cache: this hook runs in the agent job (see "Your project-setup
+# hook must not restore an Actions cache" above).
 - name: Setup Node.js
   uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-  with: { node-version: '22', cache: pnpm }
+  with: { node-version: '22', package-manager-cache: false }
 - name: Install project dependencies
   shell: bash
   # --ignore-scripts: `verify` runs on fork pull requests, so without it a
@@ -232,11 +297,11 @@ Everything `install-ci` emits follows four rules. Consumers are told not to hand
 
 **No `${{ }}` inside a `run:` script.** An expression in `run:` is substituted as text before the shell starts, so its value becomes part of the script (GitHub Actions script injection). Every value a step needs (the matrix item, dispatch inputs, the issue number, step outputs) is passed through the step's `env:` mapping and read back as a quoted variable, `"${VAR}"`. This matters most for the advance matrix: an item id is a slug read from `work/` (frontmatter `slug:` or the file name), and some slugs are drafted from issue content. dorfl sanitises every slug it mints (`src/slug-safety.ts`) and the slug resolvers refuse anything outside the safe set, but a hand-written slug is only checked when a verb resolves it, so the workflow must not trust it as script text either. A test parses every generated file and fails if any `run:` value contains `${{`; keep the rule when you add a project-setup hook step.
 
-**Pinned global installs.** The composite `dorfl-setup` action installs `dorfl@<the version that generated it>`, so CI runs the same CLI that wrote its workflows, and the `pi` harness at the exact version that dorfl release declares (`PI_HARNESS_VERSION` in `install-ci-core.ts`). Neither floats to `latest` in a job that holds `contents: write` and a provider key.
+**Pinned global installs.** The composite `dorfl-setup` action installs `dorfl@<the version that generated it>`, so CI runs the same CLI that wrote its workflows, and the `pi` harness at the exact version that dorfl release declares (`PI_HARNESS_VERSION` in `install-ci-core.ts`). Neither floats to `latest`: the agent job holds a provider key, and the lock and apply jobs (the writer-role `dorfl-setup-writer`, which installs the same pinned `dorfl` and no harness) hold a write token.
 
 **Install-time scripts are the project's call.** dorfl installs none of your dependencies (the toolchain boundary above), so it cannot add `--ignore-scripts` to your install for you. The example hook above uses it because `verify` runs on fork pull requests. The tradeoff: with it, a dependency's `preinstall`/`install`/`postinstall` and your own root `prepare` do not run, so if your build relies on one (a native addon compiled at install, a `prepare` that generates code the gate needs), either run that step explicitly in the hook after the install, or drop the flag and accept that a fork PR's dependency scripts execute on the runner. Fork PR runs get a read-only token and no secrets, and `verify` has only `contents: read`, which bounds the damage but does not remove it.
 
-**`persist-credentials: false` only on public repositories.** `install-ci` asks the provider for the repository's visibility (`gh repo view --json visibility`). When it is public, the `verify` and `close-job` checkouts set `persist-credentials: false`: both jobs have `contents: read`, so the token could only read, and on a public repo reads need no token, so nothing is lost and the token is no longer left in `.git/config` for later steps (your hook's installs, your gate) to read. When the repository is private or internal, or the visibility cannot be determined (no authenticated `gh`, `--fake` without one), the checkout keeps the token, because a `git fetch origin main` in your gate or hook needs it on a private repo. If you change the repository's visibility, re-run `install-ci`. The advance and intake jobs push, so they always keep the token.
+**`persist-credentials: false` only on public repositories.** `install-ci` asks the provider for the repository's visibility (`gh repo view --json visibility`). When it is public, the `verify` and `close-job` checkouts set `persist-credentials: false`: both jobs have `contents: read`, so the token could only read, and on a public repo reads need no token, so nothing is lost and the token is no longer left in `.git/config` for later steps (your hook's installs, your gate) to read. When the repository is private or internal, or the visibility cannot be determined (no authenticated `gh`, `--fake` without one), the checkout keeps the token, because a `git fetch origin main` in your gate or hook needs it on a private repo. If you change the repository's visibility, re-run `install-ci`. The agent job of `dorfl-item.yml` always sets `persist-credentials: false`, whatever the visibility (dorfl passes its read token to its own git commands per command instead); the lock and apply jobs push, so they keep the token, and they run no agent.
 
 ### Your own workflows: no Actions cache in a job that can write or publish
 
@@ -264,8 +329,9 @@ That direct push collides with one specific branch-protection shape: **a require
 ## Triggers
 
 - **cron** — a scheduled tick drains whatever has been answered since the last run.
-- **on-answer-committed** — a push touching `work/questions/**` (a freshly-answered
-  question sidecar) re-runs the loop so the answer is applied promptly.
+- **on-answer-committed** — a push to `main` touching `work/questions/**` (a
+  freshly-answered question sidecar) re-runs the loop so the answer is applied
+  promptly. A work-branch push never triggers it.
 - **`workflow_dispatch`** — a manual catch-up/debug run, with the `integrationMode`
   input (drives both the integration flag and the job shape).
 
@@ -295,7 +361,7 @@ So the division of labour is settled:
 
 - **This directory** owns the advance-loop workflow SHAPE (the cron +
   answer-committed triggers, the `integrationMode`-drives-both discipline, the
-  propose-matrix / merge-sequential split). It is validated by shipped code
+  enumerate + one-run-per-item dispatch). It is validated by shipped code
   (`src/advance-ci-template.ts` + `test/advance-ci-template.test.ts`), so its
   structure is a contract, not a sketch.
 - **`runner-in-ci`'s `install-ci`** will, when built, **EMIT this template**
