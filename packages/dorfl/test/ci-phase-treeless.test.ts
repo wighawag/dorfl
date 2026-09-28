@@ -420,32 +420,6 @@ describe('apply: the publish carries only the rung commit', () => {
 });
 
 describe('lock and stale-lock', () => {
-	it('an answered kind: merge entry is refused before any write', async () => {
-		const item = 'task:merge-me';
-		const s: TreelessScenario = {
-			name: 'merge',
-			arg: item,
-			files: {
-				'work/tasks/ready/merge-me.md':
-					'---\ntitle: m\nslug: merge-me\nneedsAnswers: true\n---\n\n## Prompt\n\n> x\n',
-				[sidecarPathFor(item)]: answeredSidecar(item, [
-					{question: 'Land it?', kind: 'merge', answer: 'merge'},
-				]),
-			},
-			rung: 'apply',
-			needsAgent: false,
-			emits: {},
-		};
-		seedScenario(seeded, s);
-		const before = arbiterRefs();
-		const r = await inPhase('lock', () =>
-			performTreelessPhase(base('lock', seeded.clone('lock'), s)),
-		);
-		expect(r.outcome, r.message).toBe('usage-error');
-		expect(r.message).toContain('kind: merge');
-		expect(arbiterRefs()).toBe(before);
-	}, 60_000);
-
 	it('a pending sidecar is a no-op that takes no lock', async () => {
 		const s: TreelessScenario = {
 			...scenario('apply-decision resolve'),

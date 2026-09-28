@@ -34,7 +34,7 @@ import {
 	serializeLockOutputs,
 	type LockOutputs,
 } from './ci-lock-outputs.js';
-import type {HandoffRung} from './ci-handoff-format.js';
+import {HandoffRejected, type HandoffRung} from './ci-handoff-format.js';
 import {
 	actionsRunRefFromEnv,
 	decideAgentResult,
@@ -45,7 +45,11 @@ import {
 	type GithubApiGet,
 } from './ci-agent-result.js';
 import {DEFAULT_CONFIG, type Config} from './config.js';
-import {run, runAsync} from './git.js';
+import {git, run, runAsync} from './git.js';
+import {pushLfsObjects} from './ci-handoff-lfs.js';
+import type {HandoffLfsObject} from './ci-handoff.js';
+import type {IntegrationCoreInput} from './integration-core.js';
+import {workItemRel} from './work-layout.js';
 import {
 	REPO_CONFIG_FILENAME,
 	REPO_CONFIG_FILENAME_LEGACY,
@@ -418,6 +422,76 @@ export function resolveAgentResult(params: {
 					params.agentTimeoutMinutes ?? params.held.agentTimeoutMinutes,
 			}),
 	});
+}
+
+/** The result of {@link pushHandoffLfs}. */
+export type HandoffLfsPush =
+	| {ok: true}
+	| {
+			ok: false;
+			/** True when an object broke a handoff rule (the handoff is rejected). */
+			rejected: boolean;
+			reason: string;
+	  };
+
+/**
+ * Push the validated handoff's Git LFS objects to the arbiter (decision 6),
+ * the apply phase's FIRST write: before any ref of any intent (a continue push,
+ * the land's pushes, a WIP branch save), so a ref never lands pointing at a
+ * missing object. Pushed from the apply checkout of the trusted base, so
+ * `.lfsconfig` and the endpoint come from main. The caller surfaces the item on
+ * a failure (`rejected` when an object broke a handoff rule).
+ */
+export async function pushHandoffLfs(params: {
+	cwd: string;
+	arbiter: string;
+	objects: readonly HandoffLfsObject[];
+	env: NodeJS.ProcessEnv;
+	note: (message: string) => void;
+}): Promise<HandoffLfsPush> {
+	const {cwd, arbiter, objects, env, note} = params;
+	if (objects.length === 0) return {ok: true};
+	let pushed: {status: number; stderr: string};
+	try {
+		pushed = await pushLfsObjects({cwd, arbiter, objects, env});
+	} catch (err) {
+		if (!(err instanceof HandoffRejected)) throw err;
+		note(err.message);
+		return {ok: false, rejected: true, reason: err.message};
+	}
+	if (pushed.status !== 0) {
+		const reason =
+			`the ${objects.length} Git LFS object(s) of the handoff ` +
+			`could not be pushed to ${arbiter} (${pushed.stderr.trim().slice(0, 500)}), ` +
+			'so no branch of the work was pushed';
+		note(reason);
+		return {ok: false, rejected: false, reason};
+	}
+	note(`pushed ${objects.length} Git LFS object(s) to ${arbiter}`);
+	return {ok: true};
+}
+
+/**
+ * The done-move source folder of the task AT `baseSha` (trusted), which picks
+ * the land half's ledger reconcile arms exactly as the agent's `complete` did.
+ */
+export function taskSourceAtBase(
+	cwd: string,
+	baseSha: string,
+	slug: string,
+	env: NodeJS.ProcessEnv,
+): IntegrationCoreInput['source'] {
+	const folders = ['tasks-ready', 'tasks-backlog', 'done'] as const;
+	for (const folder of folders) {
+		const spec = `${baseSha}:${workItemRel(folder, `${slug}.md`)}`;
+		try {
+			git(['cat-file', '-e', spec], cwd, {env});
+			return folder;
+		} catch {
+			// not in this folder
+		}
+	}
+	return 'tasks-ready';
 }
 
 async function gitAsyncHard(

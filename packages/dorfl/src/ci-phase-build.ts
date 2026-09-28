@@ -65,7 +65,6 @@ import {
 } from './ci-handoff-format.js';
 import {writeHandoff} from './ci-handoff.js';
 import {validateApplyHandoff} from './ci-handoff-apply.js';
-import {pushLfsObjects} from './ci-handoff-lfs.js';
 import type {LockOutputs} from './ci-lock-outputs.js';
 import type {AgentJobResult, GithubApiGet} from './ci-agent-result.js';
 import {
@@ -78,11 +77,13 @@ import {
 	emitLockOutputs,
 	fetchArbiterMain,
 	noSmudgeEnv,
+	pushHandoffLfs,
 	releaseLockLeased,
 	repoConfigAt,
 	requireHeldLock,
 	resolveAgentResult,
 	runnerTempFrom,
+	taskSourceAtBase,
 	withBaseWorktree,
 	type HeldLock,
 } from './ci-phase-driver.js';
@@ -101,14 +102,13 @@ import {
 	checkGatePreconditions,
 	detectLockfileOnDisk,
 } from './gate-readiness.js';
-import {git, run, runAsync} from './git.js';
+import {run, runAsync} from './git.js';
 import {selectProvider} from './github.js';
 import {identityEnv} from './identity.js';
 import {leaseLockReleases} from './item-lock.js';
 import {
 	arbiterUrl,
 	integrationLand,
-	type IntegrationCoreInput,
 	type IntegrationCoreResult,
 	type IntegrationLandInput,
 } from './integration-core.js';
@@ -767,29 +767,6 @@ function agentFailed(item: string, detail: string): HandoffRecord {
 // apply
 // ---------------------------------------------------------------------------
 
-/**
- * The done-move source folder of the task AT `baseSha` (trusted), which picks
- * the land half's ledger reconcile arms exactly as the agent's `complete` did.
- */
-function sourceAtBase(
-	cwd: string,
-	baseSha: string,
-	slug: string,
-	env: NodeJS.ProcessEnv,
-): IntegrationCoreInput['source'] {
-	const folders = ['tasks-ready', 'tasks-backlog', 'done'] as const;
-	for (const folder of folders) {
-		const spec = `${baseSha}:${workItemRel(folder, `${slug}.md`)}`;
-		try {
-			git(['cat-file', '-e', spec], cwd, {env});
-			return folder;
-		} catch {
-			// not in this folder
-		}
-	}
-	return 'tasks-ready';
-}
-
 /** Surface the item to needs-attention (tree-less) with `reason`. */
 async function surface(params: {
 	cwd: string;
@@ -962,49 +939,24 @@ async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
 
 	// The LFS objects go FIRST (decision 6), before any ref of any intent (the
 	// continue push, the land's pushes, a WIP branch save), so a ref never lands
-	// pointing at a missing object. Pushed from this checkout of the trusted
-	// base, so `.lfsconfig` and the endpoint come from main.
-	if (validated.lfsObjects.length > 0) {
-		let pushed: {status: number; stderr: string};
-		try {
-			pushed = await pushLfsObjects({
-				cwd,
-				arbiter,
-				objects: validated.lfsObjects,
-				env,
-			});
-		} catch (err) {
-			if (!(err instanceof HandoffRejected)) throw err;
-			note(err.message);
-			return surface({
-				cwd,
-				arbiter,
-				slug,
-				reason: err.message,
-				env,
-				note,
-				outcome: 'rejected',
-			});
-		}
-		if (pushed.status !== 0) {
-			const reason =
-				`the ${validated.lfsObjects.length} Git LFS object(s) of the handoff ` +
-				`could not be pushed to ${arbiter} (${pushed.stderr.trim().slice(0, 500)}), ` +
-				'so no branch of the work was pushed';
-			note(reason);
-			return surface({
-				cwd,
-				arbiter,
-				slug,
-				reason,
-				env,
-				note,
-				outcome: 'surfaced',
-			});
-		}
-		note(
-			`pushed ${validated.lfsObjects.length} Git LFS object(s) to ${arbiter}`,
-		);
+	// pointing at a missing object.
+	const lfs = await pushHandoffLfs({
+		cwd,
+		arbiter,
+		objects: validated.lfsObjects,
+		env,
+		note,
+	});
+	if (!lfs.ok) {
+		return surface({
+			cwd,
+			arbiter,
+			slug,
+			reason: lfs.reason,
+			env,
+			note,
+			outcome: lfs.rejected ? 'rejected' : 'surfaced',
+		});
 	}
 
 	if (bundle !== undefined) {
@@ -1262,7 +1214,7 @@ async function applyIntegrate(
 		slug,
 		branch,
 		lifecycle: false,
-		source: sourceAtBase(cwd, held.baseSha, slug, env),
+		source: taskSourceAtBase(cwd, held.baseSha, slug, env),
 		surfaceArbiter: arbiter,
 		commitMessage,
 		env,

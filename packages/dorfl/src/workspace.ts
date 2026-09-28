@@ -170,6 +170,14 @@ export interface CreateJobOptions {
 	workspacesDir: string;
 	/** The initial harness block to persist in the record (default: null adapter). */
 	harness?: HarnessRecord;
+	/**
+	 * Rebase a kept branch LOCALLY only: skip the `--force-with-lease` push of the
+	 * rebased tip (ADR `ci-agent-job-holds-no-write-token` decision 7). The CI
+	 * agent job holds a read-only token, so its continue rebase stays local and
+	 * the apply job pushes the tip, leased on the one the lock job observed
+	 * (task `ci-split-answered-merge-action`). Default `false`: today's push.
+	 */
+	localContinue?: boolean;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -304,7 +312,7 @@ export function createJob(options: CreateJobOptions): Job {
 		const rebase = rebaseContinuedBranchOntoMain(dir, 'main', env);
 		if (rebase.kind === 'conflict') {
 			continueRebaseConflict = true;
-		} else {
+		} else if (options.localContinue !== true) {
 			// Push the rebased tip with --force-with-lease, SURVIVING a stale-lease
 			// ("stale info") rejection: re-fetch the arbiter `work/<slug>` + main,
 			// re-rebase onto current main, and retry (bounded) instead of stranding the

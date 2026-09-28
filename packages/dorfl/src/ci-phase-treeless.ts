@@ -20,7 +20,9 @@
  *    advancing lock (the unified per-item lock, `action: advance`); publish
  *    `acquired`, `needsAgent`, `rung`, `baseSha`, `lockSha`, `handoffName` and
  *    `agentTimeoutMinutes`. No agent, no repository code. An answered
- *    `kind: merge` entry is refused before any write (task
+ *    `kind: merge` entry answered `merge` also publishes `continueTip`, the
+ *    kept `work/task-<slug>` tip it observed, and needs the agent job only when
+ *    that branch carries work `main` lacks (task
  *    `ci-split-answered-merge-action`).
  *  - **agent** ({@link performTreelessAgentPhase}): check, read-only, that the
  *    lock ref still equals `lockSha`; run the rung body in a worktree of
@@ -28,7 +30,12 @@
  *    emitted, and every write seam replaced by a stub that writes nothing; hand
  *    over what the agents decided: `surface` (the surface questions), `triage`
  *    (the triage gate's disposition, or `keep` plus the surface questions on
- *    the fall-through) or `apply-decision` (the agentic verdict). Writes nothing
+ *    the fall-through) or `apply-decision` (the agentic verdict). For an
+ *    answered merge the rung's merge-action seam runs the agent half of the
+ *    land instead (`prepareMergeLand`: the `createJob` checkout, the LOCAL
+ *    rebase, the optional `strictMergeApproval` re-stale check, the
+ *    fresh-worktree gate on the rebased tip) and hands over `integrate` (the
+ *    rebased tip bundled), `merge-restale` or `needs-attention`. Writes nothing
  *    to the arbiter. A rung that fails writes no handoff and fails the job.
  *  - **apply** ({@link performTreelessApplyPhase}): refuse to write unless the
  *    lock ref still equals `lockSha`; act on the agent job's result first
@@ -42,7 +49,13 @@
  *    today's; check the publish carries only the rung's own commit
  *    (`checkTreelessPublishScope`), publish it (`publishTreelessResult`), and
  *    release the lock, leased on `lockSha`. It launches no agent: a gate the
- *    handoff does not answer throws.
+ *    handoff does not answer throws. An answered merge's handoff is validated
+ *    as a bundle (`validateApplyHandoff`, the trusted merge mode); its apply
+ *    pushes the bundle's LFS objects, then the rebased branch leased on
+ *    `continueTip` (a stale lease writes nothing), lands it through the
+ *    unchanged compare-and-swap loop (`integrationLand`, with the gated tip),
+ *    and only then records the answer on a fresh checkout of the new `main`
+ *    (two writes to `main`, as on the laptop).
  */
 
 import type {
@@ -51,6 +64,7 @@ import type {
 	RungExecInput,
 	RungExecResult,
 	RungExecutor,
+	TreelessAgentNeed,
 } from './advance.js';
 import {
 	defaultRungExecutor,
@@ -65,6 +79,15 @@ import {
 	checkTreelessPublishScope,
 } from './advance-treeless-publish.js';
 import {acquireAdvancingLock} from './advancing-lock.js';
+import {
+	detectAnsweredMergeAction,
+	performMergeAction,
+	prepareMergeLand,
+	type MergeActionHandler,
+	type MergeActionResult,
+	type MergeLandPreparation,
+	type PreparedMergeLand,
+} from './apply-merge-action.js';
 import type {AgentJobResult, GithubApiGet} from './ci-agent-result.js';
 import {
 	HANDOFF_LIMITS,
@@ -73,24 +96,29 @@ import {
 	handoffName as deriveHandoffName,
 	type ApplyDecisionProducts,
 	type HandoffRecord,
+	type NeedsAttentionProducts,
 	type SurfaceProducts,
 	type TriageProducts,
 } from './ci-handoff-format.js';
 import {readHandoff, writeHandoff} from './ci-handoff.js';
+import {validateApplyHandoff, type ApplyHandoff} from './ci-handoff-apply.js';
 import {readLockOutputsFromEnv, type LockOutputs} from './ci-lock-outputs.js';
 import {
 	PhaseDriverError,
 	agentTimeoutMinutesAt,
 	arbiterLockSha,
+	arbiterRefSha,
 	boundHandoffText,
 	checkLockOwnership,
 	emitLockOutputs,
 	fetchArbiterMain,
 	noSmudgeEnv,
+	pushHandoffLfs,
 	releaseLockLeased,
 	requireHeldLock,
 	resolveAgentResult,
 	runnerTempFrom,
+	taskSourceAtBase,
 	withBaseWorktree,
 	type HeldLock,
 } from './ci-phase-driver.js';
@@ -98,8 +126,10 @@ import type {DecisionVerdict} from './decision-engine.js';
 import {harnessApplyDecider, type ApplyDecider} from './apply-decide.js';
 import {runAsync} from './git.js';
 import {identityEnv, type Identity} from './identity.js';
+import {integrationLand} from './integration-core.js';
 import {leaseLockReleases} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
+import {ledgerWrite} from './ledger-write.js';
 import {surfaceStuckToNeedsAttention} from './needs-attention.js';
 import type {Phase} from './phase.js';
 import {createPhaseRecorder, runAgentPhase} from './phase-recorder.js';
@@ -110,6 +140,7 @@ import {
 	SlugResolutionError,
 	parseSlugArg,
 	resolveAdvanceArg,
+	workBranchRef,
 	type SlugNamespace,
 } from './slug-namespace.js';
 import {
@@ -179,6 +210,10 @@ export interface TreelessPhaseOptions extends AdvanceContext {
 	publishRetries?: number;
 	/** apply: the tree-less publish's retry jitter in ms (tests pass 0). */
 	publishJitterMs?: number;
+	/** apply (answered merge): the land's compare-and-swap liveness ceiling; default `doOptions.mergeRetries`. */
+	mergeRetries?: number;
+	/** apply (answered merge): the land's refetch jitter in ms (tests pass 0). */
+	mergeJitterMs?: number;
 }
 
 /** How a tree-less phase run ended. */
@@ -203,6 +238,14 @@ export type TreelessPhaseOutcome =
 	| 'rung-failed'
 	/** apply: the item was surfaced to needs-attention and its lock released. */
 	| 'surfaced'
+	/**
+	 * apply (answered merge): the kept work branch moved on the arbiter since the
+	 * lock job saw it (`continueTip`), so the leased push of the rebased branch
+	 * was refused; nothing was written and the lock stays held.
+	 */
+	| 'stale-lease'
+	/** apply (answered merge): the land did not reach `main` and did not surface the item; the lock was released. */
+	| 'land-failed'
 	/** apply: surfacing the item did not land on the arbiter (the lock stays held). */
 	| 'surface-unmoved'
 	/** apply: the handoff broke a rule; nothing from it was written, the item was surfaced. */
@@ -314,6 +357,78 @@ function rungInput(
 	};
 }
 
+/**
+ * The kept `work/task-<slug>` tip of an answered merge, when it carries work
+ * `mainSha` lacks; `undefined` when the branch is absent or already on `main`
+ * (nothing to land: the laptop's `already-integrated`). Reads the arbiter and
+ * fetches the branch's objects only: nothing is checked out and no repository
+ * code runs, so the lock phase may call it.
+ */
+async function keptMergeTip(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	mainSha: string;
+	env: NodeJS.ProcessEnv;
+}): Promise<string | undefined> {
+	const {cwd, arbiter, slug, mainSha, env} = params;
+	const branch = workBranchRef('task', slug);
+	const ref = `refs/heads/${branch}`;
+	if ((await arbiterRefSha({cwd, arbiter, ref, env})) === undefined) {
+		return undefined;
+	}
+	const tracking = `refs/remotes/${arbiter}/${branch}`;
+	const fetched = await runAsync(
+		'git',
+		['fetch', '--quiet', '--no-tags', arbiter, `+${ref}:${tracking}`],
+		cwd,
+		{env},
+	);
+	if (fetched.status !== 0) {
+		throw new Error(
+			`fetching ${branch} from ${arbiter} failed: ${fetched.stderr.trim()}`,
+		);
+	}
+	const tip = (
+		await runAsync('git', ['rev-parse', '--verify', tracking], cwd, {env})
+	).stdout.trim();
+	const onMain = await runAsync(
+		'git',
+		['merge-base', '--is-ancestor', tip, mainSha],
+		cwd,
+		{env},
+	);
+	return onMain.status === 0 ? undefined : tip;
+}
+
+/**
+ * The agent need of a tree-less rung as the CI phases see it:
+ * {@link treelessAgentNeed} (the tree), refined for an answered `merge` by the
+ * arbiter's kept branch ({@link keptMergeTip}), which the tree cannot show. The
+ * lock phase publishes the result (and the branch tip as `continueTip`); the
+ * apply phase recomputes it on its fresh checkout.
+ */
+async function treelessPhaseNeed(
+	input: RungExecInput,
+	params: {
+		cwd: string;
+		arbiter: string;
+		mainSha: string;
+		env: NodeJS.ProcessEnv;
+	},
+): Promise<{need: TreelessAgentNeed; continueTip?: string}> {
+	const need = treelessAgentNeed(input);
+	if (need.needsAgent !== true || input.classification.kind !== 'apply') {
+		return {need};
+	}
+	const merge = detectAnsweredMergeAction(input.context.cwd, input.item);
+	if (merge === undefined) return {need};
+	const tip = await keptMergeTip({...params, slug: input.slug});
+	return tip === undefined
+		? {need: {needsAgent: false}}
+		: {need, continueTip: tip};
+}
+
 /** Dispatch the tree-less rung to its body. */
 function dispatchTreeless(
 	executor: RungExecutor,
@@ -370,7 +485,7 @@ export async function performTreelessLockPhase(
 	type Verdict = {resolved: ResolvedItem} & (
 		| {skip: string}
 		| {invariant: string}
-		| {rung: TreelessPhaseRung; needsAgent: boolean}
+		| {rung: TreelessPhaseRung; needsAgent: boolean; continueTip?: string}
 	);
 	const verdict = await withBaseWorktree(
 		{cwd, baseSha, env},
@@ -404,15 +519,21 @@ export async function performTreelessLockPhase(
 					skip: `no-op for ${resolved.item}: its item file is not on ${arbiter}/main (${baseSha})`,
 				};
 			}
-			const need = treelessAgentNeed(
+			const {need, continueTip} = await treelessPhaseNeed(
 				rungInput(resolved, classification, {...options, cwd: base}),
+				{cwd, arbiter, mainSha: baseSha, env},
 			);
 			if (need.needsAgent === undefined) {
 				throw new PhaseDriverError(
 					`--phase does not split ${resolved.item} yet: ${need.unsplit}`,
 				);
 			}
-			return {resolved, rung: kind, needsAgent: need.needsAgent};
+			return {
+				resolved,
+				rung: kind,
+				needsAgent: need.needsAgent,
+				...(continueTip === undefined ? {} : {continueTip}),
+			};
 		},
 	);
 	const {item} = verdict.resolved;
@@ -436,7 +557,7 @@ export async function performTreelessLockPhase(
 			lockOutputs: publish({acquired: false, baseSha}),
 		};
 	}
-	const {rung, needsAgent} = verdict;
+	const {rung, needsAgent, continueTip} = verdict;
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${item}' is already locked on ${arbiter}; backing off.`;
 		note(message);
@@ -475,6 +596,9 @@ export async function performTreelessLockPhase(
 		rung,
 		baseSha,
 		lockSha,
+		// An answered merge's kept branch as the lock job saw it: the apply job
+		// pushes the rebased tip leased on it (decision 7).
+		...(continueTip === undefined ? {} : {continueTip}),
 		handoffName: deriveHandoffName(
 			item,
 			options.runAttempt ?? env.GITHUB_RUN_ATTEMPT ?? '1',
@@ -503,6 +627,8 @@ interface Captured {
 	verdict?: DecisionVerdict;
 	surfacePersisted: boolean;
 	autoDisposed: boolean;
+	/** The answered merge's agent half, whose job worktree the handoff bundle reads. */
+	merge?: PreparedMergeLand;
 }
 
 const RECORDED =
@@ -574,10 +700,95 @@ function agentPhaseContext(
 		}),
 		mintAdr: async () => ({outcome: 'minted', exitCode: 0, message: RECORDED}),
 		stuckAction: async () => ({outcome: 'keep', message: RECORDED}),
-		mergeAction: async () => {
-			throw new Error('the answered merge action is not split into CI phases');
+		mergeAction: async (input) => {
+			if (input.workspacesDir === '') {
+				throw new Error(
+					'the answered merge action needs a workspacesDir to check the ' +
+						'work branch out (createJob)',
+				);
+			}
+			const prepared = await prepareMergeLand(input);
+			captured.merge = prepared;
+			return mergeResultFor(prepared.preparation);
 		},
 	};
+}
+
+/**
+ * The merge-action result the rung body sees for the agent half's preparation
+ * (it only steers the rung's recording stubs; the handoff comes from the
+ * preparation itself, {@link mergeHandover}).
+ */
+function mergeResultFor(p: MergeLandPreparation): MergeActionResult {
+	switch (p.kind) {
+		case 'integrate':
+			return {outcome: 'landed', message: RECORDED};
+		case 'restale':
+			return {outcome: 'restale', message: p.message};
+		case 'needs-attention':
+			return {outcome: 'refused', message: p.reason};
+		case 'already-integrated':
+			return {outcome: 'already-integrated', message: p.message};
+	}
+}
+
+/** What the agent phase writes: the record, and the work branch to bundle. */
+interface TreelessHandover {
+	record: HandoffRecord;
+	bundle?: {repo: string; workBranch: string; baseSha: string};
+}
+
+/**
+ * The handoff of an answered merge's agent half: `integrate` with the rebased
+ * tip, `merge-restale`, or `needs-attention` (the red rebased tip bundled, or
+ * nothing on a rebase conflict). A branch that landed since the lock job ran
+ * has nothing to hand over, so the agent job fails and the apply job surfaces
+ * the item.
+ */
+function mergeHandover(
+	item: string,
+	p: MergeLandPreparation,
+	baseSha: string,
+): TreelessHandover {
+	switch (p.kind) {
+		case 'integrate':
+			return {
+				record: {schema: 1, item, intent: {kind: 'integrate'}, products: {}},
+				bundle: {repo: p.repo, workBranch: p.workBranch, baseSha},
+			};
+		case 'restale':
+			return {
+				record: {
+					schema: 1,
+					item,
+					intent: {kind: 'merge-restale'},
+					products: {},
+				},
+			};
+		case 'needs-attention': {
+			const reason = (t: string): string =>
+				boundHandoffText(t, HANDOFF_LIMITS.reasonChars);
+			const products: NeedsAttentionProducts = {
+				reason: reason(p.reason),
+				...(p.questions === undefined || p.questions.length === 0
+					? {}
+					: {questions: p.questions.map(reason)}),
+			};
+			return {
+				record: {
+					schema: 1,
+					item,
+					intent: {kind: 'needs-attention'},
+					products,
+				},
+				...(p.bundle === undefined ? {} : {bundle: {...p.bundle, baseSha}}),
+			};
+		}
+		case 'already-integrated':
+			throw new Error(
+				`the answered merge of ${item} has nothing to land: ${p.message}`,
+			);
+	}
 }
 
 /** The surface questions of a captured emit, bounded for the handoff. */
@@ -675,10 +886,11 @@ async function treelessHandover(params: {
 	rung: TreelessPhaseRung;
 	resolved: ResolvedItem;
 	dir: string;
-}): Promise<HandoffRecord> {
-	const {options, rung, resolved, dir} = params;
+	baseSha: string;
+	captured: Captured;
+}): Promise<TreelessHandover> {
+	const {options, rung, resolved, dir, captured} = params;
 	const {item} = resolved;
-	const captured: Captured = {surfacePersisted: false, autoDisposed: false};
 	const classification = classifyIn(dir, resolved);
 	if (classification.kind !== rung) {
 		throw new Error(
@@ -694,6 +906,11 @@ async function treelessHandover(params: {
 			agentPhaseContext(options, dir, captured),
 		),
 	);
+	// The answered merge: what its agent half found IS the handover (a red gate
+	// or a conflict ends the rung as `merge-refused`, which is still handed over).
+	if (captured.merge !== undefined) {
+		return mergeHandover(item, captured.merge.preparation, params.baseSha);
+	}
 	if (exec.exitCode !== 0) {
 		throw new Error(`the ${rung} rung failed: ${exec.message}`);
 	}
@@ -702,6 +919,17 @@ async function treelessHandover(params: {
 			`the ${rung} rung of ${item} reached nothing to hand over (${exec.outcome}: ${exec.message})`,
 		);
 	};
+	return {record: capturedRecord(rung, resolved, captured, nothing)};
+}
+
+/** The handoff record of what the rung's agents decided (see {@link treelessHandover}). */
+function capturedRecord(
+	rung: TreelessPhaseRung,
+	resolved: ResolvedItem,
+	captured: Captured,
+	nothing: () => never,
+): HandoffRecord {
+	const {item} = resolved;
 	switch (rung) {
 		case 'surface':
 			if (!captured.surfacePersisted) nothing();
@@ -803,15 +1031,24 @@ export async function performTreelessAgentPhase(
 	}
 
 	let record: HandoffRecord;
+	const captured: Captured = {surfacePersisted: false, autoDisposed: false};
 	try {
 		// A read-only fetch, so the lock job's base is in this checkout.
 		await fetchArbiterMain({cwd, arbiter, env});
-		record = await withBaseWorktree(
+		const handover = await withBaseWorktree(
 			{cwd, baseSha: held.baseSha, env},
 			async (dir) => {
 				const outcome = await runAgentPhase(
 					createPhaseRecorder({record: []}),
-					() => treelessHandover({options, rung: held.rung, resolved, dir}),
+					() =>
+						treelessHandover({
+							options,
+							rung: held.rung,
+							resolved,
+							dir,
+							baseSha: held.baseSha,
+							captured,
+						}),
 				);
 				if (outcome.halted) {
 					throw new Error(
@@ -821,11 +1058,27 @@ export async function performTreelessAgentPhase(
 				return outcome.result;
 			},
 		);
-		writeHandoff({dir: options.handoffDir, rung: held.rung, record});
+		record = handover.record;
+		const written = writeHandoff({
+			dir: options.handoffDir,
+			rung: held.rung,
+			record,
+			bundle: handover.bundle,
+		});
+		if (written.lfsMissing.length > 0) {
+			note(
+				`the local LFS store lacks ${written.lfsMissing.length} object(s) a new ` +
+					`commit points at (${written.lfsMissing.slice(0, 5).join(', ')}); the ` +
+					'apply job will reject the handoff',
+			);
+		}
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		note(message);
 		return {exitCode: 1, outcome: 'agent-failed', item, message};
+	} finally {
+		// The answered merge's job worktree, once its bundle is written.
+		captured.merge?.dispose();
 	}
 	const kind = record.intent.kind;
 	const message = `handed over ${kind} for ${item}`;
@@ -924,6 +1177,16 @@ export async function performTreelessApplyPhase(
 					);
 					return await runRungAndPublish(ctx, undefined);
 				}
+				if (isAnsweredMergeRun(held)) {
+					let validated: ApplyHandoff;
+					try {
+						validated = readAnsweredMergeHandoff(ctx);
+					} catch (err) {
+						if (!(err instanceof HandoffRejected)) throw err;
+						return await surfaceItem(ctx, err.message, 'rejected');
+					}
+					return await applyAnsweredMerge(ctx, validated);
+				}
 				let record: HandoffRecord;
 				try {
 					record = readTreelessHandoff(ctx);
@@ -1007,6 +1270,272 @@ function readTreelessHandoff(ctx: ApplyContext): HandoffRecord {
 	return record;
 }
 
+/**
+ * Whether this run carries an answered merge's agent job: the lock job
+ * publishes `continueTip` on the apply rung only for an answered `merge` whose
+ * kept branch carries work `main` lacks (trusted lock outputs, never the
+ * artifact).
+ */
+function isAnsweredMergeRun(held: HeldLock): boolean {
+	return held.rung === 'apply' && held.continueTip !== undefined;
+}
+
+/** The intents an answered merge's agent job may hand over. */
+const ANSWERED_MERGE_INTENTS: readonly HandoffRecord['intent']['kind'][] = [
+	'integrate',
+	'merge-restale',
+	'needs-attention',
+];
+
+/**
+ * Read an answered merge's handoff as hostile, bundle included
+ * (`validateApplyHandoff`: the bundle's one ref is the item's work branch, its
+ * history descends from `baseSha`, and every path, size and LFS rule holds). The
+ * integration mode is the trusted `merge`: the human's answer is the checkpoint,
+ * so the untrusted-origin rule (a BUILD rule) does not apply. Throws
+ * {@link HandoffRejected}.
+ */
+function readAnsweredMergeHandoff(ctx: ApplyContext): ApplyHandoff {
+	const {options, held, resolved, arbiter, cwd, env} = ctx;
+	if (options.handoffDir === undefined) {
+		throw new HandoffRejected('layout', 'no handoff directory was given');
+	}
+	const validated = validateApplyHandoff({
+		dir: options.handoffDir,
+		runnerTemp: runnerTempFrom(options.runnerTemp, env),
+		repo: cwd,
+		trust: {
+			item: resolved.item,
+			rung: held.rung,
+			baseSha: held.baseSha,
+			arbiter,
+			integrationMode: 'merge',
+		},
+		env,
+	});
+	const kind = validated.handoff.record.intent.kind;
+	if (!ANSWERED_MERGE_INTENTS.includes(kind)) {
+		throw new HandoffRejected(
+			'kind-for-rung',
+			`an answered merge hands over ${ANSWERED_MERGE_INTENTS.join(', ')}, not ${kind}`,
+		);
+	}
+	return validated;
+}
+
+/**
+ * The write half of an answered merge (spec §3, the `apply, kind: merge` row).
+ * `merge-restale` re-pauses through the rung body. Otherwise, after checking the
+ * item still carries the answered `merge` on a fresh `main`: the handoff's LFS
+ * objects first, then the rebased branch pushed leased on `continueTip` (a
+ * branch that moved writes nothing more), then either the needs-attention route
+ * or the land through the unchanged compare-and-swap loop in merge mode, with
+ * the gated tip (a land after a lost race carries `Landed-Without-Regate`), and
+ * only then the answer recorded and published on the new `main`.
+ */
+async function applyAnsweredMerge(
+	ctx: ApplyContext,
+	validated: ApplyHandoff,
+): Promise<TreelessPhaseResult> {
+	const {options, held, resolved, arbiter, cwd, env, note} = ctx;
+	const {item, slug} = resolved;
+	const record = validated.handoff.record;
+	if (record.intent.kind === 'merge-restale') {
+		return runRungAndPublish(ctx, record);
+	}
+
+	// Nothing is written unless the item still carries its answered merge.
+	const stale = await answeredMergeGone(ctx);
+	if (stale !== undefined) return releaseAfter(ctx, stale);
+
+	const lfs = await pushHandoffLfs({
+		cwd,
+		arbiter,
+		objects: validated.lfsObjects,
+		env,
+		note,
+	});
+	if (!lfs.ok) {
+		return surfaceItem(ctx, lfs.reason, lfs.rejected ? 'rejected' : 'surfaced');
+	}
+
+	const bundle = validated.bundle;
+	if (bundle !== undefined) {
+		await gitHard(
+			['checkout', '--quiet', '-B', bundle.workBranch, bundle.tip],
+			cwd,
+			env,
+		);
+		// The rebased branch (decision 7): the agent job rebased it locally; publish
+		// it leased on the tip the LOCK job observed, before any other ref.
+		const pushed = await refWrite.pushLeasedWorkBranch({
+			arbiter,
+			branch: bundle.workBranch,
+			commit: bundle.tip,
+			expectedTip: held.continueTip as string,
+			cwd,
+			env,
+		});
+		if (pushed.status !== 0) {
+			const message =
+				`${bundle.workBranch} on ${arbiter} moved since the lock job saw it ` +
+				`at ${held.continueTip}, so the leased push of the rebased branch was ` +
+				`refused (${pushed.stderr.trim()}). Nothing was written and the lock ` +
+				`of ${item} is still held: inspect the branch, then \`dorfl ` +
+				`release-lock ${item}\` to retry the item.`;
+			note(message);
+			return {exitCode: 1, outcome: 'stale-lease', item, message};
+		}
+	}
+
+	if (record.intent.kind === 'needs-attention') {
+		const {reason, questions} = record.products as NeedsAttentionProducts;
+		const routed =
+			bundle !== undefined
+				? await ledgerWrite.applyNeedsAttentionTransition({
+						cwd,
+						slug,
+						reason,
+						questions,
+						arbiter,
+						env,
+						note,
+					})
+				: await ledgerWrite.applyTreelessNeedsAttentionTransition({
+						cwd,
+						slug,
+						reason,
+						questions,
+						arbiter,
+						env,
+						note,
+					});
+		const message = routed.moved
+			? `Surfaced '${item}' to needs-attention: ${reason}`
+			: `Could not surface '${item}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
+		note(message);
+		return {
+			exitCode: routed.moved ? 0 : 1,
+			outcome: routed.moved ? 'surfaced' : 'surface-unmoved',
+			item,
+			message,
+		};
+	}
+
+	// `integrate`: the bundle is required by the intent table.
+	if (bundle === undefined) {
+		throw new Error('an answered-merge integrate handoff carries no bundle');
+	}
+	const commitMessage = (
+		await gitHard(['log', '-1', '--format=%s', bundle.tip], cwd, env)
+	).trim();
+	const land = await integrationLand.land({
+		cwd,
+		arbiter,
+		slug,
+		branch: bundle.workBranch,
+		lifecycle: false,
+		source: taskSourceAtBase(cwd, held.baseSha, slug, env),
+		surfaceArbiter: arbiter,
+		commitMessage,
+		env,
+		note,
+		mode: 'merge',
+		title: commitMessage,
+		mergeRetries: options.mergeRetries ?? options.doOptions?.mergeRetries,
+		mergeJitterMs: options.mergeJitterMs,
+		// The landed-vs-gated report (decision 2): the agent job gated the
+		// rebased tip, so a land after a lost race says it landed another tree.
+		gatedTip: bundle.tip,
+	});
+	const landed =
+		land.outcome === 'completed' &&
+		(land.integration?.mergedToMain === true ||
+			land.integration?.alreadyLanded === true);
+	if (!landed) {
+		const message = land.reason ?? `the land ended as ${land.outcome}`;
+		if (land.routedToNeedsAttention) {
+			note(message);
+			return {exitCode: 0, outcome: 'surfaced', item, message};
+		}
+		return releaseAfter(ctx, {
+			exitCode: 1,
+			outcome: 'land-failed',
+			item,
+			message,
+		});
+	}
+	note(`landed ${bundle.workBranch} on ${arbiter}/main`);
+	// The answer is recorded AFTER the land, a second write to `main`, as on the
+	// laptop.
+	return runRungAndPublish(ctx, record, {landed: true});
+}
+
+/**
+ * The `stale` result when the item no longer carries an answered `merge` on
+ * the arbiter's current `main` (answered again, landed, or gone), else
+ * `undefined`. Read-only.
+ */
+async function answeredMergeGone(
+	ctx: ApplyContext,
+): Promise<TreelessPhaseResult | undefined> {
+	const {resolved, arbiter, cwd, env} = ctx;
+	const {item} = resolved;
+	const tip = await fetchArbiterMain({cwd, arbiter, env});
+	return withBaseWorktree({cwd, baseSha: tip, env}, async (dir) => {
+		const kind = classifyIn(dir, resolved).kind;
+		const verb =
+			kind === 'apply' ? detectAnsweredMergeAction(dir, item)?.verb : undefined;
+		if (verb === 'merge') return undefined;
+		return {
+			exitCode: 1,
+			outcome: 'stale',
+			item,
+			message:
+				`${item} no longer carries an answered merge on ${arbiter}/main ` +
+				`(${tip}: ${kind}${verb === undefined ? '' : `, answered ${verb}`}); nothing was written`,
+		};
+	});
+}
+
+/** Release the lock (leased on `lockSha`) after `result`, folding a refused release into it. */
+async function releaseAfter(
+	ctx: ApplyContext,
+	result: TreelessPhaseResult,
+): Promise<TreelessPhaseResult> {
+	const {held, resolved, arbiter, cwd, env, note} = ctx;
+	const released = await releaseLockLeased({
+		cwd,
+		arbiter,
+		item: resolved.item,
+		expectedSha: held.lockSha,
+		env,
+	});
+	note(released.message);
+	if (!released.released) {
+		return {
+			...result,
+			exitCode: result.exitCode === 0 ? 1 : result.exitCode,
+			message: `${result.message} (${released.message})`,
+		};
+	}
+	return result;
+}
+
+async function gitHard(
+	args: string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv,
+): Promise<string> {
+	const r = await runAsync('git', args, cwd, {env});
+	if (r.status !== 0) {
+		throw new Error(
+			`git ${args.join(' ')} failed (exit ${r.status}): ${r.stderr.trim()}`,
+		);
+	}
+	return r.stdout;
+}
+
 /** A gate the apply phase never launches: the handoff did not answer it. */
 function noAgent(what: string): never {
 	throw new PhaseDriverError(
@@ -1064,19 +1593,67 @@ function replayDecision(p: ApplyDecisionProducts): ApplyDecider {
 
 type AgentSeams = Pick<
 	AdvanceContext,
-	'surfaceGate' | 'triageGate' | 'applyDecide'
+	'surfaceGate' | 'triageGate' | 'applyDecide' | 'mergeAction'
 >;
+
+/**
+ * The answered merge's action in the apply phase, which never runs the
+ * repository's code: the land the apply phase itself just made (`landed`), the
+ * agent job's `merge-restale`, and, with no agent job, `hold` / `drop` (the
+ * laptop dispatcher, which touches nothing for them) or a `merge` whose kept
+ * branch is absent or already on `main` (`already-integrated`, as the laptop
+ * reports it). Anything else would need the agent job, so it throws.
+ */
+function replayMergeAction(
+	record: HandoffRecord | undefined,
+	landed: boolean,
+): MergeActionHandler {
+	return async (input) => {
+		const kind = record?.intent.kind;
+		if (kind === 'integrate' && landed) {
+			return {
+				outcome: 'landed',
+				message:
+					`merge-question for ${input.item} answered MERGE: landed ` +
+					`\`work/task-${input.slug}\` (rebased and gated by the agent job).`,
+			};
+		}
+		if (kind === 'merge-restale') {
+			return {
+				outcome: 'restale',
+				message:
+					`merge-question for ${input.item} answered MERGE, but ` +
+					'strictMergeApproval is ON and the merge-base moved (checked by the ' +
+					'agent job): re-surfacing the merge-question.',
+			};
+		}
+		if (record === undefined) {
+			if (input.action.verb !== 'merge') return performMergeAction(input);
+			return {
+				outcome: 'already-integrated',
+				message:
+					`merge-question for ${input.item} answered MERGE: ` +
+					`\`work/task-${input.slug}\` is absent or already on main (nothing to land).`,
+			};
+		}
+		return noAgent('the answered merge action');
+	};
+}
 
 /**
  * The agent seams of the apply phase: replays of the checked handoff, and a
  * throwing gate for every seam the handoff does not answer (all of them when
  * the rung runs deterministically).
  */
-function replayGates(record: HandoffRecord | undefined): AgentSeams {
+function replayGates(
+	record: HandoffRecord | undefined,
+	landed = false,
+): AgentSeams {
 	const gates: AgentSeams = {
 		surfaceGate: async () => noAgent('the surface-questions agent'),
 		triageGate: async () => noAgent('the triage gate'),
 		applyDecide: async () => noAgent('the apply decision agent'),
+		mergeAction: replayMergeAction(record, landed),
 	};
 	if (record === undefined) return gates;
 	if (record.intent.kind === 'surface') {
@@ -1140,7 +1717,9 @@ async function publishedToMain(
 async function runRungAndPublish(
 	ctx: ApplyContext,
 	record: HandoffRecord | undefined,
+	opts: {landed?: boolean} = {},
 ): Promise<TreelessPhaseResult> {
+	const landed = opts.landed === true;
 	const {options, held, resolved, arbiter, cwd, env, note} = ctx;
 	const {item} = resolved;
 	const tip = await fetchArbiterMain({cwd, arbiter, env});
@@ -1153,12 +1732,22 @@ async function runRungAndPublish(
 				cwd: dir,
 				arbiter,
 				note,
-				...replayGates(record),
+				...replayGates(record, landed),
 			});
-			const need =
-				classification.kind === held.rung
-					? treelessAgentNeed(input)
-					: undefined;
+			let need: TreelessAgentNeed | undefined;
+			if (classification.kind === held.rung && landed) {
+				// The land already happened, so the kept branch is on main and the
+				// need would recompute to none: an agent job did run, and its
+				// answered merge is what is left to record.
+				need =
+					detectAnsweredMergeAction(dir, item)?.verb === 'merge'
+						? {needsAgent: true}
+						: {unsplit: 'no answered merge left to record after the land'};
+			} else if (classification.kind === held.rung) {
+				need = (
+					await treelessPhaseNeed(input, {cwd, arbiter, mainSha: tip, env})
+				).need;
+			}
 			if (need?.needsAgent !== (record !== undefined)) {
 				const what =
 					need === undefined
@@ -1172,7 +1761,11 @@ async function runRungAndPublish(
 					exitCode: 1,
 					outcome: 'stale',
 					item,
-					message: `${item} ${what} on ${arbiter}/main (${tip}); nothing was written`,
+					message:
+						`${item} ${what} on ${arbiter}/main (${tip}); ` +
+						(landed
+							? 'its merge landed, but the answer was not recorded'
+							: 'nothing was written'),
 				};
 			}
 			const exec = await dispatchTreeless(

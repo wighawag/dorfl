@@ -35,6 +35,12 @@ interface WorkerArgs {
 	/** apply: `needs.agent.result`; default `success`. */
 	agentJobResult?: AgentJobResult;
 	emits: ScenarioEmits;
+	/** The answered merge (task `ci-split-answered-merge-action`): the agent job's job worktrees. */
+	workspacesDir?: string;
+	/** The answered merge: the acceptance gate on the rebased tip. */
+	verify?: string;
+	/** The answered merge: the opt-in re-stale check. */
+	strictMergeApproval?: boolean;
 }
 
 async function main(): Promise<void> {
@@ -79,6 +85,10 @@ async function main(): Promise<void> {
 		runnerTemp: args.runnerTemp,
 		githubOutput: args.githubOutput,
 		publishJitterMs: 0,
+		mergeJitterMs: 0,
+		workspacesDir: args.workspacesDir,
+		verify: args.verify,
+		strictMergeApproval: args.strictMergeApproval,
 		...seams,
 		agentResult:
 			args.phase === 'apply' ? (args.agentJobResult ?? 'success') : undefined,
