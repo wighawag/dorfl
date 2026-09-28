@@ -276,6 +276,30 @@ function gx(args: string[], cwd: string): string {
 }
 
 /**
+ * Turn git's post-push auto-maintenance OFF in a bare fixture ARBITER's own
+ * repo-local config.
+ *
+ * WHY {@link gitEnv}'s `gc.auto=0` / `maintenance.auto=false` does not already
+ * cover it: those ride the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_*` env, and git's
+ * LOCAL transport (a `file://` push) STRIPS that env (`local_repo_env`) before it
+ * spawns `git-receive-pack` in the arbiter. So every push to a fixture arbiter
+ * ran `git maintenance run --auto --quiet --detach` there, which DAEMONISES and
+ * keeps running (taking `objects/maintenance.lock`) after the push returned. A
+ * fixture teardown that removes the arbiter at that instant throws
+ * `ENOTEMPTY: rmdir '.../project-work.git'` (seen on
+ * `pre-backlog-staging-and-promote.test.ts`, observation
+ * `pre-backlog-test-mirrors-into-the-real-dorfl-home-2026-09-28`). Repo-local
+ * config is read by receive-pack regardless of the stripped env, so
+ * `receive.autogc=false` stops the spawn at its source (the other keys cover any
+ * other command run directly in the arbiter).
+ */
+function quietArbiterMaintenance(arbiter: string): void {
+	gx(['config', 'receive.autogc', 'false'], arbiter);
+	gx(['config', 'maintenance.auto', 'false'], arbiter);
+	gx(['config', 'gc.auto', '0'], arbiter);
+}
+
+/**
  * Build a throwaway project repo with a `work/tasks/ready/<slug>.md` for each given
  * slug, plus a sibling local `--bare` arbiter the project pushes its `main` to.
  * Returns the working-clone path, the arbiter path, and a `clone()` that makes
@@ -351,6 +375,7 @@ export function seedRepoWithArbiter(
 	// Bare arbiter next to (not inside) the working clone.
 	const arbiter = join(root, 'project-work.git');
 	gx(['clone', '-q', '--bare', repo, arbiter], root);
+	quietArbiterMaintenance(arbiter);
 	gx(['remote', 'add', 'arbiter', `file://${arbiter}`], repo);
 	gx(['fetch', '-q', 'arbiter'], repo);
 

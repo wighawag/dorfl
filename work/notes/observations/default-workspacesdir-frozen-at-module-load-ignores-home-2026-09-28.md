@@ -1,0 +1,6 @@
+# `DEFAULT_CONFIG.workspacesDir` is frozen at module load, so pointing `HOME` at scratch does not isolate it
+
+Date: 2026-09-28
+Observer: builder of `pre-backlog-test-stops-mirroring-into-the-real-dorfl-home`.
+
+`packages/dorfl/src/config.ts` builds `DEFAULT_CONFIG.workspacesDir` (and `arbitersDir`) as `join(homedir(), ...)` in a module-level constant, so it is evaluated once when `config.ts` is first imported. A test that sets `process.env.HOME` in `beforeEach` (the approach `do-remote.test.ts`'s UNTOUCHED case and the task above use) redirects `defaultConfigPath()` and other lazily-resolved paths, but NOT this default: a caller that falls back to it still writes to the developer's real `~/.dorfl`. Verified by removing the explicit `--config` from `pre-backlog-staging-and-promote.test.ts` with `HOME` already pointed at scratch: the mirrors landed in the real `~/.dorfl/repos/tmp/`. `do-remote.test.ts`'s `expect(homedir()).toBe(scratchHome)` guard may therefore read as stronger than it is for that one default (unverified whether any of its calls can reach the fallback). Also: the 28 `pre-backlog-step-a-*` dirs that leaked into the real `~/.dorfl/repos/tmp/` since the last cleanup are still there (not deleted; the developer's real state).
