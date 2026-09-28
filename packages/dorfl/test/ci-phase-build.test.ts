@@ -19,7 +19,7 @@ import {ledgerWrite} from '../src/ledger-write.js';
 import {activateProcessPhase} from '../src/phase-recorder.js';
 import type {Phase} from '../src/phase.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	makeScratch,
 	seedRepoWithArbiter,
 	type Scratch,
@@ -42,7 +42,7 @@ let seeded: SeededRepo;
 let runnerTemp: string;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -75,7 +75,7 @@ async function phase(
 			verify: 'true',
 			freshWorktreeGate: true,
 			mergeJitterMs: 0,
-			env: gitEnv(),
+			env: ciPhaseEnv(),
 			...(p === 'apply' ? {agentResult: 'success' as const} : {}),
 			...options,
 		});
@@ -144,7 +144,7 @@ describe('the lock phase', () => {
 			action: 'implement',
 			cwd: seeded.clone('holder'),
 			arbiter: 'origin',
-			env: gitEnv(),
+			env: ciPhaseEnv(),
 		});
 		const before = arbiterRefs();
 		const r = await phase('lock', {
@@ -169,6 +169,21 @@ describe('the lock phase', () => {
 			agentTimeoutMinutes: 90,
 		});
 		expect(facts.continueTip).toBeUndefined();
+	});
+
+	it('does not read the run attempt of the runner the suite runs on', async () => {
+		// A "re-run failed jobs" of `verify` runs this suite on attempt 2: the
+		// phase must see only what the test wrote (observation
+		// `ci-phase-build-test-reads-the-real-github-run-attempt-2026-09-28`).
+		vi.stubEnv('GITHUB_RUN_ATTEMPT', '2');
+		vi.stubEnv('GITHUB_RUN_ID', '987654');
+		vi.stubEnv('GITHUB_REPOSITORY', 'someone/else');
+		try {
+			const facts = await lockPhase();
+			expect(facts.handoffName).toBe(`dorfl-handoff-task-${SLUG}-attempt-1`);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it('computes agentTimeoutMinutes from dorfl.json at baseSha, not the checkout', async () => {
@@ -250,7 +265,7 @@ describe('lock ownership', () => {
 			action: 'implement',
 			cwd: other,
 			arbiter: 'origin',
-			env: gitEnv(),
+			env: ciPhaseEnv(),
 		});
 		expect(onArbiter(LOCK_REF)).not.toBe(lock.lockSha);
 
@@ -362,7 +377,7 @@ describe('outcomes other than integrate', () => {
 					action: 'implement',
 					cwd: other,
 					arbiter: 'origin',
-					env: gitEnv(),
+					env: ciPhaseEnv(),
 				});
 				retaken = onArbiter(LOCK_REF);
 				return r;

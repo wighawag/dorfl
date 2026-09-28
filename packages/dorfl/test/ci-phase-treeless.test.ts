@@ -15,7 +15,7 @@ import {parseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import type {Phase} from '../src/phase.js';
 import {git} from '../src/git.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	isolatePiAgentDir,
 	makeScratch,
 	seedRepoWithArbiter,
@@ -53,7 +53,7 @@ let runnerTemp: string;
 let restorePi: () => void;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -62,7 +62,7 @@ function arbiterRefs(): string {
 
 function showOnArbiter(spec: string): string | undefined {
 	try {
-		return git(['show', spec], seeded.arbiter, {env: gitEnv()});
+		return git(['show', spec], seeded.arbiter, {env: ciPhaseEnv()});
 	} catch {
 		return undefined;
 	}
@@ -96,7 +96,7 @@ function base(
 		arbiter: 'origin',
 		observationTriage: s.observationTriage,
 		publishJitterMs: 0,
-		env: gitEnv(),
+		env: ciPhaseEnv(),
 		...extra,
 	};
 }
@@ -320,7 +320,7 @@ describe('apply: the agent job did not succeed', () => {
 		};
 	}
 	const actionsEnv = {
-		...gitEnv(),
+		...ciPhaseEnv(),
 		GITHUB_REPOSITORY: 'o/r',
 		GITHUB_RUN_ID: '77',
 		GITHUB_RUN_ATTEMPT: '1',
@@ -508,14 +508,19 @@ describe('routing advance --phase', () => {
 		seedScenario(seeded, s);
 		const cwd = seeded.clone('route');
 		expect(
-			await advancePhasePath({phase: 'lock', arg: s.arg, cwd, env: gitEnv()}),
+			await advancePhasePath({
+				phase: 'lock',
+				arg: s.arg,
+				cwd,
+				env: ciPhaseEnv(),
+			}),
 		).toBe('treeless');
 		expect(
 			await advancePhasePath({
 				phase: 'lock',
 				arg: 'task:no-such-task-anywhere',
 				cwd,
-				env: gitEnv(),
+				env: ciPhaseEnv(),
 			}),
 		).toBe('build');
 		expect(

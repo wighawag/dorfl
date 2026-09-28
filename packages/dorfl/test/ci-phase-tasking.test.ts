@@ -21,7 +21,7 @@ import type {ReviewVerdict} from '../src/review-gate.js';
 import type {Phase} from '../src/phase.js';
 import {git} from '../src/git.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	isolatePiAgentDir,
 	makeScratch,
 	seedRepoWithArbiter,
@@ -114,7 +114,7 @@ let providerLog: string;
 let restorePi: () => void;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -123,7 +123,7 @@ function arbiterRefs(): string {
 
 function showOnArbiter(spec: string): string | undefined {
 	try {
-		return git(['show', spec], seeded.arbiter, {env: gitEnv()});
+		return git(['show', spec], seeded.arbiter, {env: ciPhaseEnv()});
 	} catch {
 		return undefined;
 	}
@@ -203,7 +203,7 @@ function base(
 		integration: 'merge',
 		mergeJitterMs: 0,
 		providerInstance: stubProvider(),
-		env: gitEnv(),
+		env: ciPhaseEnv(),
 		...extra,
 	};
 }
@@ -545,7 +545,7 @@ describe('apply: the agent job did not succeed', () => {
 		};
 	}
 	const actionsEnv = {
-		...gitEnv(),
+		...ciPhaseEnv(),
 		GITHUB_REPOSITORY: 'o/r',
 		GITHUB_RUN_ID: '77',
 		GITHUB_RUN_ATTEMPT: '1',

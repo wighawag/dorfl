@@ -17,7 +17,7 @@ import {
 	type LockOutputs,
 } from '../src/ci-lock-outputs.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	makeScratch,
 	seedRepoWithArbiter,
 	type Scratch,
@@ -54,7 +54,7 @@ let seeded: SeededRepo;
 let runnerTemp: string;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 /** Every ref of the bare arbiter with its sha (`for-each-ref`), incl. lock refs. */
@@ -92,7 +92,7 @@ function runWorker(
 	out?: WorkerOutput;
 }> {
 	return new Promise((resolve, reject) => {
-		const env: NodeJS.ProcessEnv = {...gitEnv(), GITHUB_ACTIONS: 'true'};
+		const env: NodeJS.ProcessEnv = {...ciPhaseEnv(), GITHUB_ACTIONS: 'true'};
 		if (lockOutputs !== undefined) {
 			// As `toJSON(needs.lock.outputs)` renders it: every value a string.
 			const asStrings: Record<string, string> = {};

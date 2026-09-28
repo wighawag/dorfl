@@ -10,7 +10,7 @@ import {
 } from '../src/ci-lock-outputs.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	makeScratch,
 	seedRepoWithArbiter,
 	type Scratch,
@@ -88,7 +88,7 @@ let providerLog: string;
 let reviewLog: string;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -97,7 +97,7 @@ function arbiterRefs(): string {
 
 function showOnArbiter(spec: string): string | undefined {
 	try {
-		return git(['show', spec], seeded.arbiter, {env: gitEnv()});
+		return git(['show', spec], seeded.arbiter, {env: ciPhaseEnv()});
 	} catch {
 		return undefined;
 	}
@@ -108,7 +108,7 @@ function runWorker(
 	lockOutputs?: LockOutputs,
 ): Promise<{exitCode: number; stderr: string; out?: WorkerOutput}> {
 	return new Promise((resolve, reject) => {
-		const env: NodeJS.ProcessEnv = {...gitEnv(), GITHUB_ACTIONS: 'true'};
+		const env: NodeJS.ProcessEnv = {...ciPhaseEnv(), GITHUB_ACTIONS: 'true'};
 		if (lockOutputs !== undefined) {
 			// As `toJSON(needs.lock.outputs)` renders it: every value a string.
 			const asStrings: Record<string, string> = {};
