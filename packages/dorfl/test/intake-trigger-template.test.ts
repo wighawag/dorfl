@@ -26,6 +26,7 @@ import {
 	validateIntakeWorkflow,
 } from '../src/intake-trigger-template.js';
 import {performIntake, type IntakeVerdict} from '../src/intake.js';
+import {originTrustFromEvent} from '../src/ci-phase-intake.js';
 import {resolveRepoConfig, REPO_CONFIG_FILENAME} from '../src/repo-config.js';
 import {mergeConfig} from '../src/config.js';
 import {
@@ -316,22 +317,33 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(generateIntakeWorkflow(config)).toBe(generateIntakeWorkflow(config));
 	});
 
-	it('invokes `dorfl intake <N>` (explicit issue number, four-outcome dispatch), never a bare slug or a build verb', () => {
+	it('calls the per-item workflow with `item: issue:<N>` (explicit issue number), runs no dorfl verb itself (decision 10)', () => {
 		const text = generateIntakeWorkflow(config);
-		expect(/dorfl intake\b/.test(text)).toBe(true);
-		// The number reaches the shell through the step env, never as `${{ }}`
-		// text spliced into the `run:` script (script injection).
-		expect(
-			/ISSUE_NUMBER: \$\{\{ github\.event\.issue\.number \}\}[\s\S]*?dorfl intake "\$\{ISSUE_NUMBER\}"/.test(
-				text,
-			),
-		).toBe(true);
-		expect(/dorfl intake "?\$\{\{/.test(text)).toBe(false);
+		expect(text).toContain('uses: ./.github/workflows/dorfl-item.yml');
+		expect(text).toContain('item: issue:${{ github.event.issue.number }}');
+		const operative = text
+			.split('\n')
+			.filter((line) => !/^\s*#/.test(line))
+			.join('\n');
+		expect(/dorfl (?:intake|advance|do)\b/.test(operative)).toBe(false);
 		const result = validateIntakeWorkflow(text);
-		expect(result.problems.map((p) => p.id)).not.toContain('no-build-verbs');
+		expect(result.problems.map((p) => p.id)).not.toContain('no-agent-verbs');
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'intake-explicit-issue-number',
 		);
+	});
+
+	it('grants nothing at workflow level; the calling job grants the union dorfl-item.yml needs; secrets are explicit (the provider key, no DORFL_GH_TOKEN)', () => {
+		const text = generateIntakeWorkflow(config);
+		expect(text).toMatch(/^permissions: \{\}$/m);
+		expect(text).toContain(
+			'    permissions:\n      contents: write\n      issues: write\n      pull-requests: write\n      actions: read\n      checks: read\n',
+		);
+		expect(text).toContain(
+			'    secrets:\n      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}\n',
+		);
+		expect(text).not.toMatch(/secrets: inherit/);
+		expect(text).not.toContain('DORFL_GH_TOKEN');
 	});
 
 	it('triggers on issues opened + issue_comment created + a label (capability D)', () => {
@@ -360,49 +372,30 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(/post a NEW comment/i.test(text)).toBe(true);
 	});
 
-	it('reads author_association off the payload, trust = OWNER/MEMBER/COLLABORATOR, derives all four per-outcome file-emit flags + the origin-trust stamp; the document mode reads intakeIntegration ?? integration, NOT the autonomy gates', () => {
+	it('documents that the item LOCK job derives the policy: origin trust from the event (OWNER/MEMBER/COLLABORATOR), document mode from `intakeIntegration ?? integration` (NOT the autonomy gates)', () => {
 		const text = generateIntakeWorkflow(config);
-		expect(/author_association/.test(text)).toBe(true);
-		expect(/OWNER\|MEMBER\|COLLABORATOR/.test(text)).toBe(true);
-		// All four granular per-outcome flags appear in the derivation.
-		expect(text).toContain('--propose-task');
-		expect(text).toContain('--merge-task');
-		expect(text).toContain('--merge-spec');
-		expect(text).toContain('--propose-spec');
-		// The derivation reads the RESOLVED document mode via `dorfl config --json`
-		// (NOT a hardcoded DORFL_* env — that was the shadowing bug; ADR
-		// untrusted-origin-carries-via-stamp-not-forced-staging).
-		expect(/dorfl config --json/.test(text)).toBe(true);
-		// The mode is `intakeIntegration ?? integration` (spec
-		// intake-integration-knob-and-specs-land-in-proposed-rename), read as
-		// `.intakeIntegration // .integration`.
-		expect(/\.intakeIntegration\s*\/\/\s*\.integration/.test(text)).toBe(true);
-		// The autonomy gates are DECOUPLED: the document mode must NOT read
-		// `.autoBuild` / `.autoTask` (operative lines) — they gate autonomy only.
+		expect(text).toContain('OWNER/MEMBER/COLLABORATOR');
+		expect(text).toContain('author_association');
+		expect(text).toContain('intakeIntegration ?? integration');
+		// The workflow no longer derives the flags in a shell step.
 		const operative = text
 			.split('\n')
 			.filter((line) => !/^\s*#/.test(line))
 			.join('\n');
+		expect(operative).not.toMatch(/--(?:merge|propose)-(?:task|spec)\b/);
+		expect(operative).not.toMatch(/--origin-trust/);
 		expect(/\.autoBuild\b/.test(operative)).toBe(false);
 		expect(/\.autoTask\b/.test(operative)).toBe(false);
 	});
 
-	it('honors the repo `dorfl.json` by construction: emits NO DORFL_AUTO_* env assignment; the resolved document mode is read via `dorfl config --json` (ADR untrusted-origin-carries-via-stamp-not-forced-staging; the shadowing bug is dead)', () => {
+	it('honors the repo `dorfl.json` by construction: emits NO DORFL_AUTO_* env assignment (ADR untrusted-origin-carries-via-stamp-not-forced-staging; the shadowing bug is dead)', () => {
 		const text = generateIntakeWorkflow(config);
-		// The OPERATIVE (non-comment) lines carry NO `DORFL_AUTO_BUILD:` /
-		// `DORFL_AUTO_TASK:` env ASSIGNMENT — an env default there OUTRANKS the
-		// committed dorfl.json (env > per-repo), shadowing it. The header comment MAY
-		// still name the keys; strip comments before the negative check (mirrors the
-		// validator's `operative`).
 		const operative = text
 			.split('\n')
 			.filter((line) => !/^\s*#/.test(line))
 			.join('\n');
 		expect(/DORFL_AUTO_BUILD\s*:/.test(operative)).toBe(false);
 		expect(/DORFL_AUTO_TASK\s*:/.test(operative)).toBe(false);
-		// The resolved gate is read via `dorfl config --json` (the `advance` pattern).
-		expect(/dorfl config --json/.test(operative)).toBe(true);
-		// The two anti-regression validators are satisfied on the shipped output.
 		const result = validateIntakeWorkflow(text);
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'no-gate-env-auto-build',
@@ -410,61 +403,37 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'no-gate-env-auto-task',
 		);
-		expect(result.problems.map((p) => p.id)).not.toContain('reads-config-json');
 	});
 
-	it('the workflow SHELL derivation matches deriveIntakeFlags (they cannot desync)', () => {
-		const text = generateIntakeWorkflow(config);
-		// Reproduce the workflow's shell logic in JS and assert it agrees with the
-		// pure function for every (intakeIntegration × trust) combination. This pins
-		// "the artifact encodes the SAME rule the function unit-tests": the DOCUMENT
-		// mode is the single resolved intakeIntegration value (NOT the autonomy
-		// gates), and author-trust drives ONLY the stamp.
-		const shell = (
-			intakeIntegration: 'merge' | 'propose',
-			trusted: boolean,
-		): {spec: string; task: string; originTrust: string} => {
-			// DOCUMENT mode: --merge-* iff the resolved intakeIntegration is merge, else
-			// --propose-* — the SAME single value applied to both spec and task.
-			const spec =
-				intakeIntegration === 'merge' ? '--merge-spec' : '--propose-spec';
-			const task =
-				intakeIntegration === 'merge' ? '--merge-task' : '--propose-task';
-			// ORIGIN-TRUST: the ONLY thing author-trust drives — the `trusted` case
-			// carried to the stamp flag.
-			const originTrust = trusted
-				? '--origin-trust=trusted'
-				: '--origin-trust=untrusted';
-			return {spec, task, originTrust};
-		};
-		for (const intakeIntegration of ['merge', 'propose'] as const) {
-			for (const trusted of [false, true]) {
-				const fromShell = shell(intakeIntegration, trusted);
-				const fromFn = deriveIntakeFlags({
-					intakeIntegration,
-					authorTrusted: trusted,
-				});
-				expect(fromShell.spec).toBe(`--${fromFn.spec}-spec`);
-				expect(fromShell.task).toBe(`--${fromFn.task}-task`);
-				// The stamp is derived from the author-trust case, independent of mode.
-				expect(fromShell.originTrust).toBe(
-					`--origin-trust=${fromFn.originTrust}`,
+	it('the lock job derives the same rule deriveIntakeFlags states (origin trust from the event)', () => {
+		// The shell derivation moved into dorfl's intake LOCK phase
+		// (`ci-phase-intake.ts`): the origin trust comes from the event's
+		// author association with the SAME trusted set the function uses.
+		for (const association of [
+			'OWNER',
+			'MEMBER',
+			'COLLABORATOR',
+			'CONTRIBUTOR',
+			'NONE',
+			'',
+		]) {
+			const dir = mkdtempSync(join(tmpdir(), 'intake-event-'));
+			try {
+				const path = join(dir, 'event.json');
+				writeFileSync(
+					path,
+					JSON.stringify({issue: {number: 7, author_association: association}}),
 				);
+				expect(originTrustFromEvent(path, 7)).toBe(
+					deriveIntakeFlags({
+						intakeIntegration: 'propose',
+						authorTrusted: isAuthorTrusted(association),
+					}).originTrust,
+				);
+			} finally {
+				rmSync(dir, {recursive: true, force: true});
 			}
 		}
-		// And the workflow text actually carries that shell shape: the
-		// `intakeIntegration ?? integration` read (`.intakeIntegration //
-		// .integration`), the merge branch, the OWNER/MEMBER/COLLABORATOR case + the
-		// origin-trust stamp derived from that case, passed to intake.
-		expect(/\.intakeIntegration\s*\/\/\s*\.integration/.test(text)).toBe(true);
-		expect(/if \[ "\$\{intake_integration\}" = "merge" \]/.test(text)).toBe(
-			true,
-		);
-		expect(text).toContain('OWNER|MEMBER|COLLABORATOR');
-		expect(/case "\$\{AUTHOR_ASSOCIATION:-\}"/.test(text)).toBe(true);
-		expect(text).toContain('--origin-trust=trusted');
-		expect(text).toContain('--origin-trust=untrusted');
-		expect(/steps\.policy\.outputs\.origin_trust_flag/.test(text)).toBe(true);
 	});
 
 	it('insertion point E: requests issues: write (post the verdict to the thread) and does NOT use the PR-comment seam', () => {
@@ -507,11 +476,9 @@ describe('the intake-trigger workflow satisfies every structural invariant', () 
 		);
 	});
 
-	it('wires the SHARED composite setup action', () => {
+	it('runs no setup itself: the called workflow sets up each of its jobs', () => {
 		const text = generateIntakeWorkflow(config);
-		expect(/uses:\s*\.\/\.github\/actions\/dorfl-setup\b/.test(text)).toBe(
-			true,
-		);
+		expect(/uses:\s*\.\/\.github\/actions\//.test(text)).toBe(false);
 	});
 });
 
@@ -526,37 +493,50 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		expect(result.problems.map((p) => p.id)).toContain(id);
 	};
 
-	it('flags a missing `dorfl intake` invocation', () => {
+	it('flags a missing call of the per-item workflow', () => {
 		expectFlagged(
-			base.replace(/dorfl intake "/, 'echo skip "'),
-			'invokes-intake',
+			base.replace(
+				'    uses: ./.github/workflows/dorfl-item.yml\n',
+				'    runs-on: ubuntu-latest\n',
+			),
+			'calls-item-workflow',
 		);
 	});
 
-	it('flags the issue number or a policy flag spliced into `run:` as `${{ }}` (script injection)', () => {
+	it('flags a caller that grants less than dorfl-item.yml needs', () => {
 		expectFlagged(
-			base.replace(
-				/dorfl intake "\$\{ISSUE_NUMBER\}"/,
-				'dorfl intake "${{ github.event.issue.number }}"',
-			),
-			'intake-args-not-spliced-into-run',
-		);
-		expectFlagged(
-			base.replace(
-				/"\$\{TASK_FLAG\}"/,
-				'"${{ steps.policy.outputs.task_flag }}"',
-			),
-			'intake-args-not-spliced-into-run',
+			base.replace('      checks: read\n', ''),
+			'caller-grants-item-scopes',
 		);
 	});
 
-	it('flags a build/task verb sneaking in (CI owns only the trigger + policy)', () => {
+	it('flags `secrets: inherit` (secrets reach the called workflow explicitly)', () => {
 		expectFlagged(
 			base.replace(
-				/dorfl intake "/,
-				'dorfl advance -n 10\n          dorfl intake "',
+				/    secrets:\n(?:      [^\n]*\n)+/,
+				'    secrets: inherit\n',
 			),
-			'no-build-verbs',
+			'secrets-explicit',
+		);
+	});
+
+	it('flags a non-explicit item id (the issue number must ride `issue:<N>`)', () => {
+		expectFlagged(
+			base.replace(
+				'item: issue:${{ github.event.issue.number }}',
+				'item: ${{ github.event.issue.title }}',
+			),
+			'intake-explicit-issue-number',
+		);
+	});
+
+	it('flags a dorfl verb run by the intake workflow itself (the agent must run in the called agent job)', () => {
+		expectFlagged(
+			base.replace(
+				/^jobs:\n/m,
+				'jobs:\n  inline:\n    runs-on: ubuntu-latest\n    steps:\n      - run: dorfl intake 1\n',
+			),
+			'no-agent-verbs',
 		);
 	});
 
@@ -591,68 +571,25 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 	it('flags updated_at / body-hash edit-tracking (Decision 2)', () => {
 		expectFlagged(
 			base.replace(
-				/run: \|\n          set -euo pipefail/,
-				'run: |\n          echo updated_at\n          set -euo pipefail',
+				/      item: issue:/,
+				'      since: updated_at\n      item: issue:',
 			),
 			'no-edit-tracking',
 		);
 	});
 
-	it('flags a missing author_association read (Decision 1)', () => {
+	it('flags a dropped description of where the policy comes from', () => {
 		expectFlagged(
-			base.replace(/author_association/g, 'login'),
-			'reads-author-association',
-		);
-	});
-
-	it('flags a missing --propose-task branch (the intakeIntegration-propose path)', () => {
-		expectFlagged(
-			base.replace(/--propose-task/g, '--merge-task'),
-			'derives-propose-task',
-		);
-	});
-
-	it('flags a missing --merge-spec (the intakeIntegration-merge path)', () => {
-		expectFlagged(
-			base.replace(/--merge-spec/g, '--propose-spec'),
-			'derives-merge-spec',
-		);
-	});
-
-	it('flags dropping the intakeIntegration read (the document mode must read `.intakeIntegration`)', () => {
-		expectFlagged(
-			base.replace(/\.intakeIntegration \/\/ \.integration/g, '.integration'),
-			'reads-intake-integration',
-		);
-	});
-
-	it('flags a missing `.integration` fallback (intakeIntegration ?? integration)', () => {
-		expectFlagged(
-			base.replace(
-				/\.intakeIntegration \/\/ \.integration/g,
-				'.intakeIntegration',
-			),
-			'intake-integration-falls-back-to-integration',
-		);
-	});
-
-	it('flags the document mode being re-coupled to an autonomy gate (reading `.autoBuild` in the derivation)', () => {
-		// Regression guard: if a future edit derives the mode from `.autoBuild` off
-		// `dorfl config --json` again, `mode-not-gate-derived` must fire.
-		expectFlagged(
-			base.replace(
-				/config_json="\$\(dorfl config --json\)"/,
-				'config_json="$(dorfl config --json)"\n          gate="$(echo "${config_json}" | jq -r \'.autoBuild\')"',
-			),
-			'mode-not-gate-derived',
+			base.replace(/OWNER\/MEMBER\/COLLABORATOR/g, 'someone'),
+			'documents-policy-derivation',
 		);
 	});
 
 	it('flags routing the verdict through the PR-comment seam (E posts to the ISSUE)', () => {
 		expectFlagged(
 			base.replace(
-				/dorfl intake "/,
-				'dorfl postPRComment\n          dorfl intake "',
+				/      item: issue:/,
+				'      seam: postPRComment\n      item: issue:',
 			),
 			'no-pr-comment-seam',
 		);
@@ -660,14 +597,17 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 
 	it('flags a missing issues: write permission (cannot surface E)', () => {
 		expectFlagged(
-			base.replace(/  issues: write\n/, ''),
+			base.replace(/      issues: write\n/, ''),
 			'issues-write-permission',
 		);
 	});
 
 	it('flags an --isolated flag (CI runs in-place)', () => {
 		expectFlagged(
-			base.replace(/--arbiter origin/, '--isolated --arbiter origin'),
+			base.replace(
+				/      item: issue:/,
+				'      extra: --isolated\n      item: issue:',
+			),
 			'no-isolated-flag',
 		);
 	});
@@ -692,8 +632,8 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 	it('flags a step touching .github/workflows/** (US #9)', () => {
 		expectFlagged(
 			base.replace(
-				/--arbiter origin/,
-				'--arbiter origin\n          cp x .github/workflows/evil.yml',
+				/      item: issue:/,
+				'      target: .github/workflows/evil.yml\n      item: issue:',
 			),
 			'never-edits-dot-github-workflows',
 		);
@@ -719,13 +659,6 @@ describe('validateIntakeWorkflow flags a workflow missing each invariant', () =>
 		expectFlagged(
 			base.replace(/^jobs:/m, "env:\n  DORFL_AUTO_TASK: 'false'\n\njobs:"),
 			'no-gate-env-auto-task',
-		);
-	});
-
-	it('flags dropping the `dorfl config --json` read (the resolved document mode must be read as `advance` does)', () => {
-		expectFlagged(
-			base.replace(/dorfl config --json/g, 'echo skip'),
-			'reads-config-json',
 		);
 	});
 });

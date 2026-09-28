@@ -3,9 +3,9 @@
  * `graceful-pre-timeout-wip-checkpoint`):
  *
  *   - Config defaults + FAIL-LOUD range validation for the three new fields.
- *   - The advance-lifecycle template renders a DYNAMIC GitHub timeout that
- *     consumes `dorfl config --json` at run time via the enumerate job's
- *     `githubTimeout` output (retiring the static `legTimeoutMinutes` render).
+ *   - The split CI item workflow renders a DYNAMIC GitHub timeout: the agent
+ *     job reads the lock job's `agentTimeoutMinutes` output (from dorfl.json at
+ *     the item's base), retiring the static `legTimeoutMinutes` render.
  *   - The `PiHarness.launchAsync` deadline race SIGTERMs the child on fire and
  *     resolves with `timedOut: true`; a run that finishes BEFORE the deadline
  *     is byte-for-byte unchanged (`timedOut` absent).
@@ -29,6 +29,7 @@ import {
 	validateAdvanceLifecycleWorkflow,
 } from '../src/advance-lifecycle-template.js';
 import type {ResolvedCIConfig} from '../src/install-ci-core.js';
+import {generateItemWorkflow} from '../src/dorfl-item-template.js';
 import {PiHarness, DEADLINE_SIGKILL_GRACE_MS} from '../src/pi-harness.js';
 
 // ─── Config defaults + fail-loud coercion ────────────────────────────────────
@@ -113,38 +114,28 @@ const templateConfig: ResolvedCIConfig = {
 	maxParallel: 4,
 };
 
-describe('advance-lifecycle template — DYNAMIC GitHub backstop (retires legTimeoutMinutes)', () => {
-	it('emits `githubTimeout` as an enumerate-job OUTPUT computed from `dorfl config --json`', () => {
-		const text = generateAdvanceLifecycleWorkflow(templateConfig);
-		// The enumerate job declares the output …
-		expect(/enumerate:[\s\S]*?outputs:[\s\S]*?githubTimeout:/.test(text)).toBe(
-			true,
+describe('the split CI item workflow — DYNAMIC GitHub backstop (retires legTimeoutMinutes)', () => {
+	it('the agent job reads the DYNAMIC backstop from the item lock job (agentTimeoutMinutes, dorfl.json at the base); the tick computes none', () => {
+		// THE SPLIT (task `ci-split-generate-workflows`): the lock job of
+		// dorfl-item.yml publishes `agentTimeoutMinutes` =
+		// agentDeadlineMinutes + checkpointHeadroomMinutes, read from dorfl.json
+		// at the item's base (`agentTimeoutMinutesAt`), and the agent job reads it.
+		const item = generateItemWorkflow(templateConfig);
+		expect(item).toContain(
+			'timeout-minutes: ${{ fromJSON(needs.lock.outputs.agentTimeoutMinutes) }}',
 		);
-		// … computed via `dorfl config --json` at run time …
-		expect(text).toContain('dorfl config --json');
-		// … as `agentDeadlineMinutes + checkpointHeadroomMinutes`.
-		expect(text).toContain('agentDeadlineMinutes + checkpointHeadroomMinutes');
-	});
-
-	it('the agent-leg jobs consume the DYNAMIC output; NO baked static `timeout-minutes: <n>`', () => {
-		const text = generateAdvanceLifecycleWorkflow(templateConfig);
-		expect(
-			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*(?:fromJson\()?needs\.enumerate\.outputs\.githubTimeout\)?\s*\}\}/.test(
-				text,
-			),
-		).toBe(true);
-		expect(
-			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*(?:fromJson\()?needs\.enumerate\.outputs\.githubTimeout\)?\s*\}\}/.test(
-				text,
-			),
-		).toBe(true);
-		// No baked-in numeric `timeout-minutes:` (the retired legTimeoutMinutes
-		// render). Only the dynamic ${{ … }} reference is allowed.
-		expect(
-			/(?:advance-propose|advance-merge):[\s\S]*?timeout-minutes:\s*\d/.test(
-				text,
-			),
-		).toBe(false);
+		expect(item).toMatch(
+			/\n {2}agent:\n[\s\S]*?timeout-minutes: \$\{\{ fromJSON\(needs\.lock\.outputs\.agentTimeoutMinutes\) \}\}/,
+		);
+		// The lock and apply jobs get FIXED bounds (they run no agent).
+		expect(item).toMatch(
+			/\n {2}lock:\n {4}runs-on: ubuntu-latest\n {4}timeout-minutes: 15\n/,
+		);
+		expect(item).toMatch(/\n {2}apply:\n[\s\S]*?\n {4}timeout-minutes: 30\n/);
+		// No baked static render of the agent timeout, and the tick computes none.
+		const tick = generateAdvanceLifecycleWorkflow(templateConfig);
+		expect(/timeout-minutes:/.test(tick)).toBe(false);
+		expect(tick).not.toContain('githubTimeout');
 	});
 
 	it('validateAdvanceLifecycleWorkflow enforces the dynamic invariants', () => {

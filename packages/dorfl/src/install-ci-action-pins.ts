@@ -41,6 +41,21 @@
  *     (#288)"). With no `version` input it still reads `packageManager` from
  *     package.json, which is how dorfl's workspace mode uses it.
  *
+ * Resolved 2026-09-28 (task `ci-split-generate-workflows`, the split CI item
+ * workflow's handoff artifact; the spec requires at least v4.1.3 of both):
+ *   actions/upload-artifact v7.0.1: lightweight tag (`ls-remote` lists no
+ *     peeled `^{}` line for it), `git/ref` type `commit`,
+ *     043fb46d1a93c77aae656e7c1c64a875d1fc6a0a ("Merge pull request #797 from
+ *     actions/yacaovsnc/update-dependency"). The floating `v7` tag points at
+ *     the same commit. The inputs dorfl passes (`name`, `path`,
+ *     `retention-days`, `if-no-files-found`) are unchanged since v4.
+ *   actions/download-artifact v8.0.1: lightweight tag, `git/ref` type
+ *     `commit`, 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c ("Add regression tests
+ *     for CJK characters (#471)"). The floating `v8` tag points at the same
+ *     commit. v8 fails on a digest mismatch by default (`digest-mismatch:
+ *     error`), which is what the apply job wants; dorfl passes `name` and
+ *     `path` and never `run-id` (the apply job reads its OWN run's artifact).
+ *
  * To bump a pin: resolve the new tag the same way, update the entry, and record
  * the resolution above. `install-ci-actions-pinned.test.ts` fails on any
  * emitted `uses:` that is not a full SHA.
@@ -72,6 +87,16 @@ export const ACTION_PINS = {
 		action: 'pnpm/action-setup',
 		sha: 'ea17c68df8912ef543352723c149a84f56e3d413',
 		version: 'v6.1.0',
+	},
+	uploadArtifact: {
+		action: 'actions/upload-artifact',
+		sha: '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+		version: 'v7.0.1',
+	},
+	downloadArtifact: {
+		action: 'actions/download-artifact',
+		sha: '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+		version: 'v8.0.1',
 	},
 } as const satisfies Record<string, ActionPin>;
 

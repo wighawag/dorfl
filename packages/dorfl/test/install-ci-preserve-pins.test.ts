@@ -94,6 +94,33 @@ describe('install-ci regeneration preserves the consumer’s SHA pins', () => {
 		expect(after).toBe(edited);
 	});
 
+	it('a bump of the split item workflow artifact actions survives regeneration', async () => {
+		await generate();
+		const up = `      - uses: actions/upload-artifact@${BUMPED_SHA} # v7.9.9`;
+		rewriteLine(
+			'workflows/dorfl-item.yml',
+			/^\s+uses: actions\/upload-artifact@/,
+			up.replace('      - uses:', '        uses:'),
+		);
+		rewriteLine(
+			'workflows/dorfl-item.yml',
+			/^\s+uses: actions\/download-artifact@/,
+			`        uses: actions/download-artifact@${BUMPED_SHA} # v8.9.9`,
+		);
+		const edited = read('workflows/dorfl-item.yml');
+
+		await generate();
+
+		const after = read('workflows/dorfl-item.yml');
+		expect(after).toContain(
+			`uses: actions/upload-artifact@${BUMPED_SHA} # v7.9.9`,
+		);
+		expect(after).toContain(
+			`uses: actions/download-artifact@${BUMPED_SHA} # v8.9.9`,
+		);
+		expect(after).toBe(edited);
+	});
+
 	it('a bump in the composite action survives, and applies to every step using that action', async () => {
 		await generate({
 			...CONFIG,

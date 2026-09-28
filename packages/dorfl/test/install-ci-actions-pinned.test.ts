@@ -166,7 +166,10 @@ describe('install-ci: every generated `uses:` is pinned to a full commit SHA', (
 		// Guard against the walk silently checking nothing.
 		for (const expected of [
 			join('actions', 'dorfl-setup', 'action.yml'),
+			join('actions', 'dorfl-setup-writer', 'action.yml'),
 			'workflows/advance-lifecycle.yml',
+			'workflows/dorfl-item.yml',
+			'workflows/dorfl-item-dispatch.yml',
 			'workflows/intake.yml',
 			'workflows/close-job.yml',
 			'workflows/verify.yml',
@@ -175,15 +178,19 @@ describe('install-ci: every generated `uses:` is pinned to a full commit SHA', (
 		}
 		// And the walk does see the remote actions (so an empty result below is
 		// a real pass, not an empty haystack).
-		const all = files.flatMap(({content}) =>
-			JSON.stringify(parse(content)).match(/"uses":"[^".][^"]*"/g),
+		const all = files.flatMap(
+			({content}) =>
+				// A file with no remote action (a thin caller) contributes nothing.
+				JSON.stringify(parse(content)).match(/"uses":"[^".][^"]*"/g) ?? [],
 		);
 		const remotes = new Set(
 			all.map((u) => (u ?? '').replace(/^"uses":"/, '').split('@')[0]),
 		);
 		expect([...remotes].sort()).toEqual([
 			'actions/checkout',
+			'actions/download-artifact',
 			'actions/setup-node',
+			'actions/upload-artifact',
 			'pnpm/action-setup',
 		]);
 	});

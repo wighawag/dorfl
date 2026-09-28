@@ -42,7 +42,7 @@ import {
  * memory, `ghAvailable=false`, `repo` a fixture) — NO network, NO real `gh`, NO
  * real GitHub. The produced YAML is structurally validated (and ALSO cross-checked
  * against the seed's own validator `src/advance-ci-template.ts`); the on-answer
- * trigger, both calm-default lifecycle env vars, the matrix/sequential split, the
+ * trigger, both calm-default lifecycle env vars, the per-item dispatch, the
  * preserved capability-F reap job, the concurrency group, and the US #9 self-edit
  * prohibition are asserted; and shared-write isolation (real `.github/` + real
  * secrets untouched) is pinned.
@@ -89,22 +89,17 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		);
 	});
 
-	it('the agent-running jobs pass the provider secret to the setup action via `with:` (so pi can auth); enumerate/reap do not', () => {
+	it('the tick runs NO agent: no provider secret anywhere, and enumerate/reap use the writer-role setup', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// The propose + merge jobs forward the provider secret. (The gate-override
-		// step now sits between the setup `with:` and the advance step, so allow it.)
-		const proposeUses =
-			/dorfl-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance one item/;
-		const mergeUses =
-			/dorfl-setup\n        with:\n          ANTHROPIC_API_KEY: \$\{\{ secrets\.ANTHROPIC_API_KEY \}\}\n      - name: apply dispatch gate overrides[\s\S]*?\n      - name: advance one item in-place \(merge/;
-		expect(text).toMatch(proposeUses);
-		expect(text).toMatch(mergeUses);
-		// The enumerate + reap jobs use the bare setup action (no agent, no secret).
-		// Enumerate's bare setup is followed by the gate-override step, then `id: scan`.
+		// The agent runs in the per-item workflow's agent job, never here.
+		expect(text).not.toMatch(/secrets\.ANTHROPIC_API_KEY/);
 		expect(text).toMatch(
-			/dorfl-setup\n      - name: apply dispatch gate overrides[\s\S]*?\n      - id: scan/,
+			/dorfl-setup-writer\n      - name: apply dispatch gate overrides[\s\S]*?\n      - id: scan/,
 		);
-		expect(text).toMatch(/dorfl-setup\n      - name: reap merged remote/);
+		expect(text).toMatch(
+			/dorfl-setup-writer\n      - name: reap merged remote/,
+		);
+		expect(text).not.toMatch(/uses: \.\/\.github\/actions\/dorfl-setup\n/);
 	});
 
 	it('auth-json mode passes NO provider secret to the setup action (it uses auth.json)', () => {
@@ -116,19 +111,12 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(text).not.toMatch(/secrets\.[A-Z_]*API_KEY/);
 	});
 
-	it('both propose AND merge legs stream the agent live (`--watch`); both name ONE item per leg, so a single pi session can be tailed', () => {
+	it('the dispatch job forwards integrationMode (default propose) to every item run', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// Propose: a single named item per matrix leg, so --watch fits.
-		expect(text).toMatch(
-			/advance "\$\{WORK_ITEM\}" --propose --watch --arbiter origin/,
+		expect(text).toContain(
+			"INTEGRATION_MODE: ${{ github.event.inputs.integrationMode || 'propose' }}",
 		);
-		// Merge: per the new fan-out shape (PRD
-		// `land-time-reverify-and-parallel-merge-ceiling`) each merge leg also
-		// names ONE item via the matrix, so --watch fits there too. The old
-		// sequential `-n` form is GONE.
-		expect(text).toMatch(
-			/advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
-		);
+		expect(text).toContain('-f "integrationMode=${INTEGRATION_MODE}"');
 		expect(/dorfl advance -n\b/.test(text)).toBe(false);
 	});
 
@@ -145,10 +133,10 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(result.ok).toBe(true);
 	});
 
-	it('CI ALWAYS invokes `advance`, NEVER `do` (the verb is not a user decision)', () => {
+	it('the tick runs no agent verb itself (`advance` runs in the per-item workflow), NEVER `do`', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/dorfl advance\b/.test(text)).toBe(true);
-		expect(/dorfl do\b/.test(text)).toBe(false);
+		expect(/dorfl (?:advance|do|intake)\b/.test(text)).toBe(false);
+		expect(text).toContain('gh workflow run dorfl-item-dispatch.yml');
 	});
 
 	it('triggers on cron + workflow_dispatch + the on-answer-committed push (work/questions/**)', () => {
@@ -164,81 +152,38 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		);
 	});
 
-	it('propose ⇒ a DYNAMIC matrix enumerated via `scan --json`, one `advance --propose` per item', () => {
+	it('one dorfl-item-dispatch.yml run per item enumerated via `scan --json`, never a matrix (one item per run, decision 1)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(true);
+		expect(/strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(false);
 		expect(text).toContain('dorfl scan --json');
-		expect(
-			/WORK_ITEM: \$\{\{ matrix\.item \}\}[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"/.test(
-				text,
-			),
-		).toBe(true);
-		// The leg carries `--propose` (tying integration mode to the matrix shape).
-		expect(
-			/advance-propose:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--propose\b/.test(
-				text,
-			),
-		).toBe(true);
-		// `--merge` must NEVER ride a `propose` matrix leg (it would silently land
-		// a propose leg on main). The merge job's own matrix legs DO carry
-		// `--merge` (the new fan-out shape).
-		const proposeSection = text.split('advance-merge:')[0];
-		expect(
-			/dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(proposeSection),
-		).toBe(false);
+		expect(text).toContain('ITEMS: ${{ needs.enumerate.outputs.items }}');
+		expect(text).toMatch(
+			/gh workflow run dorfl-item-dispatch\.yml -R "\$\{REPO\}" --ref "\$\{DEFAULT_BRANCH\}" "\$\{args\[@\]\}"/,
+		);
+		// The advance-propose / advance-merge matrix jobs are gone.
+		expect(text).not.toMatch(/advance-(?:propose|merge):/);
 	});
 
-	it('caps the matrix fan-out with `max-parallel` from config (both propose + merge)', () => {
+	it('spreads the item runs over `maxParallel` slots from config (slot = index mod maxParallel)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// Both matrices carry the cap (config.maxParallel = 4 here).
-		const caps = text.match(/max-parallel: \d+/g) ?? [];
-		expect(caps).toEqual(['max-parallel: 4', 'max-parallel: 4']);
-		// It is threaded from config, not hard-coded: an override flows through.
+		expect(text).toContain("MAX_PARALLEL: '4'");
+		expect(text).toContain('slot=$(( i % MAX_PARALLEL ))');
+		expect(text).toContain('-f "slot=${slot}"');
+		expect(text).not.toMatch(/max-parallel:/);
 		const overridden = generateAdvanceLifecycleWorkflow({
 			...config,
 			maxParallel: 8,
 		});
-		expect(overridden.match(/max-parallel: \d+/g)).toEqual([
-			'max-parallel: 8',
-			'max-parallel: 8',
-		]);
+		expect(overridden).toContain("MAX_PARALLEL: '8'");
 		// Sanity: the default matches DEFAULT_MAX_PARALLEL.
 		expect(DEFAULT_MAX_PARALLEL).toBe(2);
 	});
 
-	it('caps each agent-leg with a DYNAMIC `timeout-minutes` sourced from the enumerate job (spec `graceful-pre-timeout-wip-checkpoint`)', () => {
+	it('computes no agent timeout: the item lock job owns it (agentTimeoutMinutes from dorfl.json at the base)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		// The retired `legTimeoutMinutes` render — a baked-in numeric
-		// `timeout-minutes: <n>` on an agent-leg job — must NOT appear anywhere. The
-		// GitHub backstop is now DYNAMIC: computed at run time from the committed
-		// dorfl.json as agentDeadlineMinutes + checkpointHeadroomMinutes.
-		expect(
-			/(?:advance-propose|advance-merge):[\s\S]*?timeout-minutes:\s*\d/.test(
-				text,
-			),
-		).toBe(false);
-		// Both propose + merge agent-legs consume the enumerate job's dynamic
-		// `githubTimeout` output via
-		// `${{ fromJson(needs.enumerate.outputs.githubTimeout) }}` — fromJson-coerced
-		// because a job output is a STRING but `timeout-minutes` needs an INTEGER.
-		expect(
-			/advance-propose:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
-				text,
-			),
-		).toBe(true);
-		expect(
-			/advance-merge:[\s\S]*?timeout-minutes:\s*\$\{\{\s*fromJson\(needs\.enumerate\.outputs\.githubTimeout\)\s*\}\}/.test(
-				text,
-			),
-		).toBe(true);
-		// The enumerate job emits it as an output, computed via `dorfl config --json`
-		// at run time so an edit to dorfl.json flips it on the NEXT tick with no
-		// install-ci re-run.
-		expect(/enumerate:[\s\S]*?outputs:[\s\S]*?githubTimeout:/.test(text)).toBe(
-			true,
-		);
-		expect(text).toContain('dorfl config --json');
-		expect(text).toContain('agentDeadlineMinutes + checkpointHeadroomMinutes');
+		expect(/timeout-minutes:/.test(text)).toBe(false);
+		expect(text).not.toContain('githubTimeout');
+		expect(text).not.toContain('dorfl config --json');
 	});
 
 	it(
@@ -259,44 +204,37 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		},
 	);
 
-	it("merge ⇒ a MATRIX per item (parallel build/gate/review, serialised land via the engine's CAS-retry loop)", () => {
-		// PRD `land-time-reverify-and-parallel-merge-ceiling` stories 4 + 6: the
-		// merge job fans out one leg per item; the land tail is serialised by the
-		// engine's `mergeRetries` CAS-retry loop (the git-alone floor), NOT by the
-		// workflow's job shape. The old single-sequential `-n` form is gone.
+	it('the tick grants nothing at workflow level; enumerate reads, dispatch holds actions: write only, reap writes contents', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/advance-merge:[\s\S]*?strategy:\s*[\s\S]*?matrix:/.test(text)).toBe(
-			true,
+		expect(text).toMatch(/^permissions: \{\}$/m);
+		expect(text).toMatch(
+			/\n  enumerate:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    outputs:/,
 		);
-		expect(
-			/advance-merge:[\s\S]*?dorfl advance "\$\{WORK_ITEM\}"[^\n]*--merge\b/.test(
-				text,
-			),
-		).toBe(true);
-		expect(/dorfl advance -n\b/.test(text)).toBe(false);
-		// And no host-specific `concurrency:` group on the merge job (the floor
-		// must not depend on a GitHub Actions feature for cross-job safety).
-		expect(/advance-merge:[\s\S]*?\n {4}concurrency:/.test(text)).toBe(false);
+		expect(text).toMatch(
+			/\n  dispatch:\n[\s\S]*?\n    permissions:\n      actions: write\n    steps:/,
+		);
+		expect(text).toMatch(
+			/\n  reap-merged-branches:\n[\s\S]*?\n    permissions:\n      contents: write\n    steps:/,
+		);
 	});
 
-	it('ONE word `integrationMode` drives BOTH the flag and the derived job shape (matches the build tick)', () => {
+	it('the on-answer-committed push trigger is pinned to the default branch (main)', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		expect(text).toMatch(
+			/\n  push:\n(?:    #[^\n]*\n)*    branches:\n      - main\n    paths:\n      - 'work\/questions\/\*\*'\n/,
+		);
+		expect(
+			validateAdvanceLifecycleWorkflow(
+				text.replace(/    branches:\n      - main\n    paths:/, '    paths:'),
+			).problems.map((p) => p.id),
+		).toContain('push-pinned-to-main');
+	});
+
+	it('ONE word `integrationMode` is the dispatch input the tick forwards (no second knob)', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(text).toContain('integrationMode:');
 		expect(/github\.event\.inputs\.integrationMode/.test(text)).toBe(true);
-		// The same value gates BOTH the propose and merge jobs' `if:` (the shape),
-		// and selects the `--propose`/`--merge` flag (no second knob to desync).
-		// Both `if:` clauses now also AND-guard on `needs.enumerate.outputs.any`
-		// because merge — like propose — fans out from the same eligible-pool scan.
-		expect(
-			text.includes(
-				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'propose' && needs.enumerate.outputs.any == 'true' }}",
-			),
-		).toBe(true);
-		expect(
-			text.includes(
-				"if: ${{ (github.event.inputs.integrationMode || 'propose') == 'merge' && needs.enumerate.outputs.any == 'true' }}",
-			),
-		).toBe(true);
+		expect(text).toContain("if: ${{ needs.enumerate.outputs.any == 'true' }}");
 	});
 
 	it('emits NO active DORFL_* gate env (env carries no defaults; per-repo config wins)', () => {
@@ -323,10 +261,10 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		).not.toContain('no-auto-advance-gate');
 	});
 
-	it('exposes the four gate-family knobs as one-shot workflow_dispatch overrides, wired into EVERY gate-resolving job (incl. enumerate, before scan)', () => {
+	it('exposes the four gate-family knobs as one-shot workflow_dispatch overrides, exported in enumerate (before scan) and forwarded to every item run', () => {
 		// Task `advance-lifecycle-dispatch-gate-inputs`: a human can flip a gate ON
 		// for ONE manual run. The review fix: the override MUST reach the `enumerate`
-		// job (which gates the matrix pools via `scan`), not just the agent jobs —
+		// job (which gates the item pools via `scan`), not just the item runs —
 		// otherwise an `observationTriage`/`surfaceBlockers`/`autoTask` override
 		// yields an empty matrix and is silently inert.
 		const text = generateAdvanceLifecycleWorkflow(config);
@@ -370,12 +308,18 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(text).toMatch(
 			/enumerate:[\s\S]*?DORFL_OBSERVATION_TRIAGE=[\s\S]*?id: scan/,
 		);
-		// And it appears in all three gate-resolving jobs (enumerate + 2 agent jobs):
-		// the guarded write line for autoBuild occurs at least 3 times.
-		const writes = text.match(
-			/echo "DORFL_AUTO_BUILD=\$\{DISPATCH_AUTO_BUILD\}"/g,
-		);
-		expect(writes?.length ?? 0).toBeGreaterThanOrEqual(3);
+		// And the dispatch job forwards each non-blank override to every item run
+		// (whose lock, agent and apply jobs export it).
+		for (const input of [
+			'autoBuild',
+			'autoTask',
+			'observationTriage',
+			'surfaceBlockers',
+		]) {
+			expect(text).toMatch(
+				new RegExp(`args\\+=\\(-f "${input}=\\$\\{DISPATCH_`),
+			);
+		}
 
 		// (d) The whole override is guarded by the workflow_dispatch event, so a
 		// schedule/push tick never enters the write step (the override is dispatch-only).
@@ -445,11 +389,11 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(/\bconcurrency:\s*[\s\S]*?group:/.test(text)).toBe(true);
 	});
 
-	it('wires the SHARED composite setup action into every job', () => {
+	it('wires the writer-role setup action into the jobs that set up dorfl', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
-		expect(/uses:\s*\.\/\.github\/actions\/dorfl-setup\b/.test(text)).toBe(
-			true,
-		);
+		expect(
+			/uses:\s*\.\/\.github\/actions\/dorfl-setup-writer\b/.test(text),
+		).toBe(true);
 	});
 
 	it('the fully-autonomous-to-main path is a loud, NON-DEFAULT opt-in (default is propose)', () => {
@@ -491,12 +435,10 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	};
 
 	it('flags invoking `do` directly', () => {
-		// Inject a `dorfl do` invocation by replacing the merge leg's `advance`
-		// call (any `advance` invocation site would do; this one is unique).
 		expectFlagged(
 			base.replace(
-				/dorfl advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
-				'dorfl do "${WORK_ITEM}" --merge --watch --arbiter origin',
+				/run: dorfl gc --remote-branches --arbiter origin/,
+				'run: dorfl do task:x --merge',
 			),
 			'never-invokes-do',
 		);
@@ -526,59 +468,69 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		expectFlagged(broken, 'trigger-on-answer-committed');
 	});
 
-	it('flags the matrix item spliced into `run:` as `${{ matrix.item }}` (script injection)', () => {
-		// The pre-fix shape: the slug became part of the shell script text.
+	it('flags an item value spliced into the dispatch `run:` as `${{ }}` (script injection)', () => {
 		expectFlagged(
 			base.replace(
-				/dorfl advance "\$\{WORK_ITEM\}" --propose/,
-				'dorfl advance "${{ matrix.item }}" --propose',
+				/gh workflow run dorfl-item-dispatch\.yml -R "\$\{REPO\}"/,
+				'gh workflow run dorfl-item-dispatch.yml -R "${REPO}" -f item=${{ matrix.item }}',
 			),
-			'matrix-item-not-spliced-into-run',
+			'item-values-not-spliced-into-run',
 		);
 	});
 
-	it('flags a propose matrix leg missing the --propose flag', () => {
+	it('flags a dispatch that stops forwarding integrationMode', () => {
 		expectFlagged(
-			base.replace(/(dorfl advance "\$\{WORK_ITEM\}") --propose/, '$1'),
-			'propose-leg-carries-propose-flag',
+			base.replace(' -f "integrationMode=${INTEGRATION_MODE}"', ''),
+			'dispatch-forwards-integration-mode',
 		);
 	});
 
-	it('flags a merge matrix leg missing the --merge flag', () => {
-		// Drop `--merge` from the merge matrix leg only (scoped by the watch +
-		// arbiter suffix unique to that line). Without `--merge` the integration
-		// mode falls back to config and can desync from the matrix shape.
+	it('flags a dispatch that stops skipping the active item runs', () => {
 		expectFlagged(
-			base.replace(
-				/(dorfl advance "\$\{WORK_ITEM\}") --merge --watch --arbiter origin/,
-				'$1 --watch --arbiter origin',
-			),
-			'merge-leg-carries-merge-flag',
+			base.replace(/gh run list[^\n]*/, 'active=""'),
+			'dispatch-skips-active-runs',
 		);
 	});
 
-	it('flags a host-specific `concurrency:` group injected on `advance-merge` (would make safety host-dependent)', () => {
-		// Applied Answer q1: a GitHub Actions `concurrency:` group on the merge
-		// job would make cross-job land safety depend on a host feature, breaking
-		// the git-alone-floor framing.
+	it('flags a matrix sneaking back (one item per run)', () => {
 		expectFlagged(
 			base.replace(
-				/(advance-merge:\n)(\s{4}needs:)/,
-				'$1    concurrency:\n      group: dorfl-merge-${{ github.ref }}\n      cancel-in-progress: false\n$2',
+				/(\n  dispatch:\n)/,
+				'\n  legs:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        item: [a]\n    steps:\n      - run: echo\n$1',
 			),
-			'merge-no-host-concurrency-serialiser',
+			'no-matrix',
+		);
+	});
+
+	it('flags a checkout or a setup step in the dispatch job (actions: write next to repository code)', () => {
+		expectFlagged(
+			base.replace(
+				/(\n  dispatch:\n[\s\S]*?\n    steps:\n)/,
+				'$1      - uses: actions/checkout@v7\n',
+			),
+			'dispatch-no-checkout-no-setup',
+		);
+	});
+
+	it('flags a dispatch job holding more than actions: write', () => {
+		expectFlagged(
+			base.replace(
+				/(\n  dispatch:\n[\s\S]*?\n    permissions:\n      actions: write\n)/,
+				'$1      contents: write\n',
+			),
+			'dispatch-actions-write-only',
 		);
 	});
 
 	it('flags a re-introduced active DORFL_AUTO_BUILD env assignment', () => {
-		// Inject an active env line under the existing `env:` block (right after
-		// the SWEEP_MERGED_BRANCHES line). Any active form of the four gate keys
+		// Inject an active env line under the dispatch job's `env:` block (right
+		// after the MAX_PARALLEL line). Any active form of the four gate keys
 		// must FAIL the validator: env is the opt-in CI-only OVERRIDE layer, not
 		// the carrier of defaults.
 		expectFlagged(
 			base.replace(
-				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  DORFL_AUTO_BUILD: 'true'\n",
+				/(MAX_PARALLEL:[^\n]*\n)/,
+				"$1          DORFL_AUTO_BUILD: 'true'\n",
 			),
 			'no-gate-env-auto-build',
 		);
@@ -587,8 +539,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a re-introduced active DORFL_AUTO_TASK env assignment', () => {
 		expectFlagged(
 			base.replace(
-				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  DORFL_AUTO_TASK: 'true'\n",
+				/(MAX_PARALLEL:[^\n]*\n)/,
+				"$1          DORFL_AUTO_TASK: 'true'\n",
 			),
 			'no-gate-env-auto-task',
 		);
@@ -597,8 +549,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a re-introduced active DORFL_OBSERVATION_TRIAGE env assignment', () => {
 		expectFlagged(
 			base.replace(
-				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  DORFL_OBSERVATION_TRIAGE: 'ask'\n",
+				/(MAX_PARALLEL:[^\n]*\n)/,
+				"$1          DORFL_OBSERVATION_TRIAGE: 'ask'\n",
 			),
 			'no-gate-env-observation-triage',
 		);
@@ -607,8 +559,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a re-introduced active DORFL_SURFACE_BLOCKERS env assignment', () => {
 		expectFlagged(
 			base.replace(
-				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  DORFL_SURFACE_BLOCKERS: 'true'\n",
+				/(MAX_PARALLEL:[^\n]*\n)/,
+				"$1          DORFL_SURFACE_BLOCKERS: 'true'\n",
 			),
 			'no-gate-env-surface-blockers',
 		);
@@ -617,8 +569,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags an autoAdvance gate sneaking in', () => {
 		expectFlagged(
 			base.replace(
-				/(SWEEP_MERGED_BRANCHES:[^\n]*\n)/,
-				"$1  DORFL_AUTO_ADVANCE: 'true'\n",
+				/(MAX_PARALLEL:[^\n]*\n)/,
+				"$1          DORFL_AUTO_ADVANCE: 'true'\n",
 			),
 			'no-auto-advance-gate',
 		);
@@ -686,8 +638,8 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags an --isolated flag (CI runs in-place)', () => {
 		expectFlagged(
 			base.replace(
-				/--merge --watch --arbiter origin/,
-				'--merge --watch --isolated --arbiter origin',
+				/dorfl gc --remote-branches --arbiter origin/,
+				'dorfl gc --remote-branches --isolated --arbiter origin',
 			),
 			'no-isolated-flag',
 		);
@@ -710,20 +662,30 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 	it('flags a step touching .github/workflows/** (US #9)', () => {
 		expectFlagged(
 			base.replace(
-				/run: dorfl advance "\$\{WORK_ITEM\}" --merge --watch --arbiter origin/,
+				/run: dorfl gc --remote-branches --arbiter origin/,
 				'run: cp x .github/workflows/evil.yml',
 			),
 			'never-edits-dot-github-workflows',
 		);
 	});
 
-	it('flags a dropped shared composite setup action', () => {
+	it('flags a dropped writer-role setup action', () => {
 		expectFlagged(
 			base.replace(
-				/uses: \.\/\.github\/actions\/dorfl-setup/g,
+				/uses: \.\/\.github\/actions\/dorfl-setup-writer/g,
 				'run: echo no-setup',
 			),
-			'uses-shared-setup-action',
+			'uses-writer-setup-action',
+		);
+	});
+
+	it('flags the agent-role setup in the tick (no agent runs here)', () => {
+		expectFlagged(
+			base.replace(
+				/uses: \.\/\.github\/actions\/dorfl-setup-writer\n      - name: reap/,
+				'uses: ./.github/actions/dorfl-setup\n      - name: reap',
+			),
+			'no-agent-setup-action',
 		);
 	});
 });

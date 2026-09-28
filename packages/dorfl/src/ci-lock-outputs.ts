@@ -135,6 +135,15 @@ const SCHEMA: Record<keyof LockOutputs, (key: string, v: unknown) => string> = {
 };
 
 /**
+ * Every lock output key, in output order. The generated lock job declares
+ * exactly these as its job `outputs` (task `ci-split-generate-workflows`), so
+ * `toJSON(needs.lock.outputs)` carries no key {@link parseLockOutputs} refuses.
+ */
+export const LOCK_OUTPUT_KEYS = Object.keys(SCHEMA) as ReadonlyArray<
+	keyof LockOutputs
+>;
+
+/**
  * Serialize lock facts as `$GITHUB_OUTPUT` lines (`key=value\n`, in a fixed
  * order; an `undefined` fact is omitted). Throws {@link LockOutputRefused} for
  * an unknown key or any value outside its type, so free text never reaches the
