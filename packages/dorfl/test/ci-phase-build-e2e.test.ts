@@ -569,6 +569,28 @@ describe('the build path non-integrate outcomes in three processes', () => {
 		expect(onArbiter(lockRef())).toBeUndefined();
 	}, 120_000);
 
+	it('a cut-off final model turn (stopReason length) with no change: agent-failed, not a stop', async () => {
+		// Task `a-truncated-agent-turn-routes-as-agent-failed`: the build agent
+		// phase hands a truncated turn over as `agent-failed`, never as `stop`
+		// (whose apply would surface a dispose-defaulted question).
+		const run = await threePhases({
+			integration: 'merge',
+			agentFiles: {},
+			agentResult: {
+				ok: true,
+				output: 'Let me read the code first.',
+				cutOffTurn: {cause: 'length'},
+			},
+			verify: 'false',
+		});
+		expect(run.agent.intent).toBe('agent-failed');
+		expect(run.apply.outcome).toBe('surfaced');
+		expect(run.apply.message).toContain('final model turn was cut off');
+		expect(run.apply.message).not.toContain('STOPPED');
+		expect(bodyOnMain()).toMatch(/needsAnswers: true/);
+		expect(onArbiter(lockRef())).toBeUndefined();
+	}, 120_000);
+
 	it('an agent failure with WIP: the partial work pushed, the item surfaced, the lock released', async () => {
 		const run = await threePhases({
 			integration: 'merge',

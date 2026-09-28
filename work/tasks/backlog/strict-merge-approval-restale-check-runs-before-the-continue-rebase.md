@@ -2,6 +2,7 @@
 title: 'Run the strictMergeApproval re-stale check before the answered merge's continue rebase, so it can actually fire'
 slug: strict-merge-approval-restale-check-runs-before-the-continue-rebase
 blockedBy: []
+needsAnswers: true
 ---
 
 ## What to build

@@ -221,8 +221,10 @@ export interface ReturnToBacklogOptions {
 	reconcile?: boolean;
 	/**
 	 * `requeue -m "<note>"` (the handoff note): an optional human steer for the
-	 * NEXT agent. APPENDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
-	 * section to the item BODY before the move — the ledger file is the durable,
+	 * NEXT agent. ADDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
+	 * section to the item BODY, just before `## Acceptance criteria` (so it never
+	 * collides with a kept branch's done-move tail; see `insertRequeueNoteText`),
+	 * before the move — the ledger file is the durable,
 	 * conflict-safe, cross-machine home (same place the needs-attention reason
 	 * lives). Repeated requeues ACCUMULATE a handoff log. Applies to BOTH modes
 	 * (a steer is relevant even on `--reset`).
@@ -515,9 +517,10 @@ export function commitAbortedWork(params: {
  *     closes the claim-race window; a FAILED delete ABORTS (no backlog move)
  *     so the item stays in needs-attention. The next claim then finds NO
  *     arbiter branch and cuts fresh — no special claim-time logic.
- *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, APPEND a dated
- *     `## Requeue YYYY-MM-DD` section to the item BODY (append-only; accumulates
- *     over repeated requeues) for the next agent. Applies to BOTH modes.
+ *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, ADD a dated
+ *     `## Requeue YYYY-MM-DD` section to the item BODY, just before
+ *     `## Acceptance criteria` (additive; accumulates over repeated requeues,
+ *     oldest first) for the next agent. Applies to BOTH modes.
  *
  * Like the move, NEVER throws for the expected "not in needs-attention" case.
  */
@@ -666,6 +669,19 @@ export async function returnToBacklog(
 		};
 	}
 
+	// Destructive vs non-destructive are exclusive verbs on the same escalation.
+	// Checked up front (before any lock is read or taken) so the refusal is the
+	// same whether the item's lock is held or already released by a surface.
+	if (options.reconcile && options.reset) {
+		return {
+			moved: false,
+			reasonNotMoved:
+				`requeue for '${slug}': --reconcile and --reset are mutually ` +
+				'exclusive (non-destructive recovery vs destructive last resort). ' +
+				'Pick one.',
+		};
+	}
+
 	// Refresh the remote-tracking refs so every check below (the item's residence,
 	// the continue-branch guard, the CAS base) sees the arbiter's TRUTH, not a stale
 	// local copy. This is a fetch, not a checkout — the working tree is untouched.
@@ -706,7 +722,58 @@ export async function returnToBacklog(
 	} catch {
 		held = await readLocalItemLock(slug, cwd, env);
 	}
+	// RELEASED-LOCK RECOVERY (task
+	// `requeue-reset-and-reconcile-work-after-the-lock-was-released`). A surface
+	// (`surfaceStuckToNeedsAttention`) RELEASES the per-item lock after landing the
+	// question sidecar, so a surfaced item with a KEPT work branch has no held lock,
+	// yet it is exactly what `--reconcile` (re-sync + retry) and `--reset` (discard,
+	// start fresh) exist for. When the item's body rests in the pool/staging on
+	// `<arbiter>/main` AND its `work/task-<slug>` branch is on the arbiter, take a
+	// SHORT per-item lock (create-only, like claim) so no claim can continue from
+	// the branch while it is being rebased or deleted, run the ordinary held-lock
+	// path, and give the short lock back on every outcome. Plain `requeue` stays a
+	// no-op (the next claim already continues from the kept branch).
+	let shortLock = false;
+	let releasedRecoverable: ReleasedRecoverableItem | undefined;
 	if (!held) {
+		releasedRecoverable = await probeReleasedRecoverableItem({
+			cwd,
+			slug,
+			arbiter,
+			branch: continueBranchName,
+			env,
+		});
+		if (
+			releasedRecoverable !== undefined &&
+			(options.reset || options.reconcile)
+		) {
+			const verb = options.reset ? '--reset' : '--reconcile';
+			const acquired = await acquireItemLock({
+				item: `task:${slug}`,
+				action: 'implement',
+				cwd,
+				arbiter,
+				env,
+			});
+			if (acquired.outcome !== 'acquired') {
+				const message =
+					`requeue ${verb} for '${slug}': its lock was already released, ` +
+					'but the short lock this recovery needs could not be taken ' +
+					(acquired.outcome === 'lost'
+						? '(another run claimed the item meanwhile); nothing was changed.'
+						: `(${acquired.message}); nothing was changed. Try again shortly.`);
+				note(message);
+				return {moved: false, reasonNotMoved: message};
+			}
+			shortLock = true;
+			note(
+				`'${slug}' has no held lock (a surface or earlier requeue already ` +
+					`released it); took a short lock to ${options.reset ? 'discard' : 'reconcile'} ` +
+					`the kept ${continueBranchName} (${verb}).`,
+			);
+		}
+	}
+	if (!held && !shortLock) {
 		// CROSS-NAMESPACE HINT (observation
 		// `crashed-do-spec-strands-a-tasking-lock-no-verb-releases`). `requeue` is a
 		// TASK-only verb, so a bare `<slug>` resolves to `task:<slug>` and finds no
@@ -746,6 +813,19 @@ export async function returnToBacklog(
 		} catch {
 			// Best-effort hint only: fall through to the plain refusal.
 		}
+		// A released item that DOES rest in the pool with a kept branch (plain
+		// requeue only; `--reset`/`--reconcile` took the short-lock path above):
+		// nothing to release, and the next claim already continues from the branch.
+		// Say so, and name the two verbs that DO act on a released item.
+		const keptHint =
+			releasedRecoverable !== undefined
+				? ` NOTE: '${slug}' rests in the pool (${releasedRecoverable.bodyRel}) ` +
+					`with a kept work branch ${continueBranchName} on ${arbiter}; the ` +
+					'next claim continues from it, so plain requeue has nothing to do. ' +
+					'To act on the kept branch: `requeue --reconcile` (non-destructive ' +
+					're-sync + rebase retry) or `requeue --reset` (DESTRUCTIVELY discard ' +
+					'it and start fresh).'
+				: '';
 		return {
 			moved: false,
 			reasonNotMoved:
@@ -753,9 +833,101 @@ export async function returnToBacklog(
 				'(wrong slug, or already at rest in backlog/done?). requeue recovers a ' +
 				'task whose lock is held stuck (needs-attention) or active (a killed ' +
 				'in-progress run).' +
-				specHint,
+				specHint +
+				keptHint,
 		};
 	}
+
+	const result = await requeueHeldItem({
+		options,
+		arbiter,
+		continueBranchName,
+		note,
+	});
+	if (shortLock && !result.moved) {
+		// Give the SHORT lock back: the item returns to exactly the released,
+		// surfaced state it was in (its question sidecar untouched). A failed
+		// release here is reported, never thrown.
+		const back = await releaseItemLock({
+			item: `task:${slug}`,
+			cwd,
+			arbiter,
+			env,
+		});
+		const tail =
+			back.outcome === 'error'
+				? ` WARNING: could not release the short recovery lock this requeue ` +
+					`took (${back.message}); clear it with \`dorfl release-lock ` +
+					`task:${slug}\`.`
+				: ' (The short recovery lock this requeue took was released again; ' +
+					'the item stays as it was before this requeue.)';
+		note(tail.trim());
+		return {...result, reasonNotMoved: (result.reasonNotMoved ?? '') + tail};
+	}
+	return result;
+}
+
+/** A task whose lock is RELEASED but which rests in the pool with a kept branch. */
+interface ReleasedRecoverableItem {
+	/** The body's on-`main` path (`work/tasks/ready/<slug>.md` or staging). */
+	bodyRel: string;
+	/** The kept branch's tip on the arbiter. */
+	branchSha: string;
+}
+
+/**
+ * Is `<slug>` a RELEASED-lock task that `requeue --reset`/`--reconcile` can act
+ * on? True iff its body rests in `tasks/ready/` or `tasks/backlog/` on
+ * `<arbiter>/main` (the D1 probe a surface uses) AND the arbiter HAS its
+ * `work/task-<slug>` branch (arbiter-authoritative `ls-remote`). A surfaced item
+ * (question sidecar + `needsAnswers:true`, lock released) is the motivating
+ * case, but the sidecar is NOT required: a plain requeue that already released
+ * the lock leaves the same recoverable shape. An unknown slug (no body) or a
+ * pooled item with no kept branch answers `undefined`, so the refusal for those
+ * is unchanged. Best-effort: an unreachable arbiter answers `undefined`.
+ */
+async function probeReleasedRecoverableItem(params: {
+	cwd: string;
+	slug: string;
+	arbiter: string;
+	branch: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<ReleasedRecoverableItem | undefined> {
+	const {cwd, slug, arbiter, branch, env} = params;
+	try {
+		const bodyRel = await resolveBounceItemBodyPathOnMain({
+			cwd,
+			item: `task:${slug}`,
+			arbiter,
+			env,
+		});
+		if (bodyRel === undefined) {
+			return undefined;
+		}
+		const resolved = await resolveArbiterBranch({cwd, arbiter, branch, env});
+		if (!resolved.trustworthy || resolved.sha === undefined) {
+			return undefined;
+		}
+		return {bodyRel, branchSha: resolved.sha};
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The body of {@link returnToBacklog} once the item's per-item lock is HELD
+ * (either a pre-existing stuck/active hold, or the short lock a released-lock
+ * `--reset`/`--reconcile` just took): the reconcile / reset / keep+continue
+ * guard, the optional handoff note, and the lock release.
+ */
+async function requeueHeldItem(params: {
+	options: ReturnToBacklogOptions;
+	arbiter: string;
+	continueBranchName: string;
+	note: (message: string) => void;
+}): Promise<ReturnToBacklogResult> {
+	const {options, arbiter, continueBranchName, note} = params;
+	const {cwd, slug, env} = options;
 
 	// `--reconcile`: the NON-DESTRUCTIVE recovery rung (task
 	// `requeue-reconcile-nondestructive-recovery-verb`, parent observation
@@ -774,15 +946,6 @@ export async function returnToBacklog(
 	// deletes the remote branch — this verb's contract is "keep the work".
 	let reconciled: boolean | undefined;
 	if (options.reconcile) {
-		if (options.reset) {
-			return {
-				moved: false,
-				reasonNotMoved:
-					`requeue for '${slug}': --reconcile and --reset are mutually ` +
-					'exclusive (non-destructive recovery vs destructive last resort). ' +
-					'Pick one.',
-			};
-		}
 		const attempt = await attemptReconcile({
 			cwd,
 			slug,
@@ -944,8 +1107,9 @@ export async function returnToBacklog(
 		'tasks-backlog',
 	];
 
-	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
-	// section to the item BODY where it already rests (pool or staging), via the SAME
+	// `-m "<note>"` (the handoff steer): ADD a dated `## Requeue YYYY-MM-DD`
+	// section (before `## Acceptance criteria`, clear of a kept branch's done-move
+	// tail) to the item BODY where it already rests (pool or staging), via the SAME
 	// tree-less CAS move (same-folder rewrite with the body transform) — it NEVER
 	// stages/commits in the cwd tree. The handoff is OPTIONAL and NON-FATAL: a failed
 	// append degrades to a WARNING and the lock release below STILL runs, because the
@@ -976,7 +1140,7 @@ export async function returnToBacklog(
 					base,
 					sourceRel: bodyRel,
 					destRel: bodyRel,
-					transformBody: (body) => appendRequeueNoteText(body, handoff),
+					transformBody: (body) => insertRequeueNoteText(body, handoff),
 					commitMessage: `chore(${slug}): requeue handoff note`,
 					refNamespace: 'requeue',
 					env,
@@ -3194,22 +3358,47 @@ const BOUNCE_BODY_PROBE_ORDER: Record<SidecarType, readonly WorkFolderKey[]> = {
 	observation: ['observations'],
 };
 
+/** The body heading a requeue handoff note is inserted BEFORE (see
+ * {@link insertRequeueNoteText}). */
+const ACCEPTANCE_HEADING_RE = /^##\s+Acceptance criteria\s*$/m;
+
 /**
- * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
- * (append-only — never overwrites; repeated requeues accumulate a handoff log).
- * Body prose only (never a frontmatter field — WORK-CONTRACT rule 3). The date is
- * UTC `YYYY-MM-DD`; multiple notes on the same day are distinct appended blocks.
+ * Add a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
+ * (additive — never overwrites; repeated requeues accumulate a handoff log,
+ * oldest first). Body prose only (never a frontmatter field — WORK-CONTRACT
+ * rule 3). The date is UTC `YYYY-MM-DD`; multiple notes on the same day are
+ * distinct blocks.
+ *
+ * PLACEMENT (task `requeue-handoff-note-does-not-conflict-with-the-kept-done-move`):
+ * the section is inserted immediately BEFORE the `## Acceptance criteria`
+ * heading, NOT at the end of the body. A kept work branch the next claim
+ * CONTINUES from may already have done-moved this body AND appended its
+ * `## Decisions` block at the END; a tail-appended note on `main` then collided
+ * with that tail in the continue rebase (which never auto-resolves, ADR §10) and
+ * bounced the item. Mid-body, the two edits are disjoint hunks and the rebase
+ * merges them cleanly. A body with no `## Acceptance criteria` heading falls back
+ * to the end (the old behaviour). The continue prompt reads every `## Requeue`
+ * section wherever it sits (`extractRequeueNotes`), so the note still reaches
+ * the continuing agent.
  *
  * A PURE string transform (it operates on the body CONTENT, not a file path) so
  * the tree-less requeue can apply it to the blob read from `<arbiter>/main`
  * without touching the cwd working tree.
  */
-function appendRequeueNoteText(content: string, message: string): string {
+export function insertRequeueNoteText(
+	content: string,
+	message: string,
+): string {
 	const date = new Date().toISOString().slice(0, 10);
-	const base = content.replace(/\s*$/, '');
-	return [base, '', `${REQUEUE_HEADING_PREFIX} ${date}`, '', message, ''].join(
-		'\n',
-	);
+	const section = `${REQUEUE_HEADING_PREFIX} ${date}\n\n${message}\n`;
+	const anchor = ACCEPTANCE_HEADING_RE.exec(content);
+	if (anchor === null) {
+		const base = content.replace(/\s*$/, '');
+		return `${base}\n\n${section}`;
+	}
+	const before = content.slice(0, anchor.index).replace(/\s*$/, '');
+	const after = content.slice(anchor.index);
+	return `${before}\n\n${section}\n${after}`;
 }
 
 /**

@@ -902,6 +902,29 @@ describe('runOnce — a deliberate STOP routes to needs-attention BEFORE the gat
 		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
 	});
 
+	it('a CUT-OFF final model turn (stopReason length) with an empty diff → agent-failed, NOT the empty-diff STOP', async () => {
+		// Task `a-truncated-agent-turn-routes-as-agent-failed`: `run` shares the
+		// guard `do` runs before its empty-diff backstop.
+		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
+		const config = configFor(scratch.root);
+		const result = await runOnce({
+			config,
+			report: scanProject(config),
+			workspace: join(scratch.root, 'ws'),
+			dorfl: () => ({
+				ok: true,
+				output: 'Let me read the code first.',
+				cutOffTurn: {cause: 'length'},
+			}),
+			env: gitEnv(),
+			agentId: () => 'agentA',
+		});
+		expect(result.items[0].status).toBe('agent-failed');
+		expect(result.items[0].detail).toMatch(/final model turn was cut off/);
+		expect(stuckLockOnArbiter(repo, 'feat')).toBe(false);
+		expect(existsOnArbiterMain(repo, 'done', 'feat')).toBe(false);
+	});
+
 	it('a NORMAL build (non-empty diff, no sentinel) is UNAFFECTED', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, ['feat']);
 		const config = configFor(scratch.root);
