@@ -1207,6 +1207,9 @@ export function generateWriterSetupAction(config: ResolvedCIConfig): string {
     # \`source-ref\`, exported into $RUNNER_TEMP (outside the checkout), with
     # \`--ignore-scripts\`. In merge mode this is code an earlier agent landed on
     # main running in a write job, the trust merge mode already implies.
+    # Only dorfl and its workspace dependencies (\`--filter 'dorfl...'\`) are
+    # installed and built: the other workspace packages (the website) are not
+    # needed to run dorfl, so they do not run next to the write token.
     - name: Build dorfl from the base commit (outside the checkout)
       shell: bash
       env:
@@ -1218,8 +1221,8 @@ export function generateWriterSetupAction(config: ResolvedCIConfig): string {
         mkdir -p "$src"
         git archive "$(git rev-parse --verify "\${SOURCE_REF:-HEAD}^{commit}")" | tar -x -C "$src"
         cd "$src"
-        pnpm install --frozen-lockfile --ignore-scripts
-        pnpm -r build
+        pnpm install --frozen-lockfile --ignore-scripts --filter 'dorfl...'
+        pnpm --filter 'dorfl...' build
         cd packages/dorfl && pnpm link --global`;
 	} else {
 		installSteps = `\

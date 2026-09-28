@@ -31,3 +31,8 @@ Build only dorfl and what it depends on (for example `pnpm --filter dorfl... bui
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Decisions
+
+- **Filter the install as well as the build (`--filter 'dorfl...'` on both).** The task allowed a filtered install "if that is sound with a frozen lockfile". I confirmed it is with pnpm 10.28.1 on an exported tree: the lockfile is used as-is and only the dependencies of `dorfl` and its workspace dependencies are installed, so the website's dependencies are never fetched next to the write token. The alternative was a full install with only a filtered build, which is less of a reduction. This touches only the workspace-mode writer action. The agent role (`dorfl-setup`) still installs everything and runs `pnpm -r build`, which is outside this task, and so does the `InstallSource` doc comment describing that role.
+- **Select by package name (`dorfl...`) rather than by path (`./packages/dorfl...`).** The action already assumes the name `dorfl` and the `packages/dorfl` layout (it runs `cd packages/dorfl`). The root package is named `dorfl-monorepo`, so the filter cannot match it.
