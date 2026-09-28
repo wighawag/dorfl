@@ -23,7 +23,7 @@ import {
 	writeIssueState,
 } from './helpers/file-issue-provider.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	isolatePiAgentDir,
 	makeScratch,
 	seedRepoWithArbiter,
@@ -51,7 +51,7 @@ let stateFile: string;
 let restorePi: () => void;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -129,7 +129,7 @@ async function apply(opts: {
 			handoffDir: opts.handoffDir ?? join(runnerTemp, 'handoff'),
 			runnerTemp,
 			agentResult: opts.agentResult ?? 'success',
-			env: gitEnv(),
+			env: ciPhaseEnv(),
 			note: (m) => opts.notes?.push(m),
 		}),
 	);
@@ -369,7 +369,7 @@ describe('lock and agent: the comments the agent sees', () => {
 				issueProvider: fileIssueProvider(stateFile),
 				githubOutput,
 				eventPath,
-				env: gitEnv(),
+				env: ciPhaseEnv(),
 			}),
 		);
 		expect(locked.outcome, locked.message).toBe('locked');
@@ -408,7 +408,7 @@ describe('lock and agent: the comments the agent sees', () => {
 					seen.push(comments.map((c) => c.id ?? ''));
 					return {outcome: 'ask', question: 'Which output?'} as IntakeVerdict;
 				},
-				env: gitEnv(),
+				env: ciPhaseEnv(),
 			}),
 		);
 		expect(agent.outcome, agent.message).toBe('handed-over');
@@ -464,7 +464,7 @@ describe('lock and agent: the comments the agent sees', () => {
 				cwd: lockClone,
 				issueProvider: fileIssueProvider(stateFile),
 				githubOutput,
-				env: gitEnv(),
+				env: ciPhaseEnv(),
 			}),
 		);
 		expect(locked.outcome, locked.message).toBe('no-new-input');
@@ -497,7 +497,7 @@ describe('lock and agent: the comments the agent sees', () => {
 				cwd: lockClone,
 				issueProvider: fileIssueProvider(stateFile),
 				githubOutput,
-				env: gitEnv(),
+				env: ciPhaseEnv(),
 			}),
 		);
 		expect(locked.outcome).toBe('backed-off');

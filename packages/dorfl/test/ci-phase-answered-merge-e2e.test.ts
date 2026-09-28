@@ -30,7 +30,7 @@ import {
 	sidecarPathFor,
 } from '../src/sidecar.js';
 import {
-	gitEnv,
+	ciPhaseEnv,
 	makeScratch,
 	seedRepoWithArbiter,
 	type Scratch,
@@ -74,7 +74,7 @@ let seeded: SeededRepo;
 let runnerTemp: string;
 
 function g(cwd: string, ...args: string[]): string {
-	return git(args, cwd, {env: gitEnv()}).trim();
+	return git(args, cwd, {env: ciPhaseEnv()}).trim();
 }
 
 function arbiterRefs(): string {
@@ -91,7 +91,7 @@ function onArbiter(rev: string): string | undefined {
 
 function showOnArbiter(spec: string): string | undefined {
 	try {
-		return git(['show', spec], seeded.arbiter, {env: gitEnv()});
+		return git(['show', spec], seeded.arbiter, {env: ciPhaseEnv()});
 	} catch {
 		return undefined;
 	}
@@ -102,7 +102,7 @@ function runWorker(
 	lockOutputs?: LockOutputs,
 ): Promise<{exitCode: number; stderr: string; out?: WorkerOutput}> {
 	return new Promise((resolve, reject) => {
-		const env: NodeJS.ProcessEnv = {...gitEnv(), GITHUB_ACTIONS: 'true'};
+		const env: NodeJS.ProcessEnv = {...ciPhaseEnv(), GITHUB_ACTIONS: 'true'};
 		if (lockOutputs !== undefined) {
 			const asStrings: Record<string, string> = {};
 			for (const [k, v] of Object.entries(lockOutputs)) {
@@ -524,7 +524,7 @@ function phaseOptions(
 		publishJitterMs: 0,
 		mergeJitterMs: 0,
 		workspacesDir: join(scratch.root, 'ws'),
-		env: gitEnv(),
+		env: ciPhaseEnv(),
 		...extra,
 	};
 }
@@ -554,7 +554,7 @@ describe('the answered merge when the agent job does not succeed', () => {
 		};
 	}
 	const actionsEnv = {
-		...gitEnv(),
+		...ciPhaseEnv(),
 		GITHUB_REPOSITORY: 'o/r',
 		GITHUB_RUN_ID: '77',
 		GITHUB_RUN_ATTEMPT: '1',

@@ -98,6 +98,44 @@ export function gitEnv(): NodeJS.ProcessEnv {
 }
 
 /**
+ * Is `name` a value the GitHub Actions RUNNER injects into every step: the
+ * `GITHUB_*` context (`GITHUB_RUN_ATTEMPT`, `GITHUB_RUN_ID`, `GITHUB_REPOSITORY`,
+ * `GITHUB_OUTPUT`, `GITHUB_TOKEN`, `GITHUB_EVENT_PATH`, ...), the `RUNNER_*`
+ * paths (`RUNNER_TEMP`) and the `ACTIONS_*` runtime values.
+ */
+function isAmbientActionsVar(name: string): boolean {
+	return /^(GITHUB|RUNNER|ACTIONS)_/.test(name);
+}
+
+/**
+ * `env` with every ambient GitHub Actions runner value removed (see
+ * {@link isAmbientActionsVar}). A test that WANTS one of them sets it back
+ * explicitly on the result, so what the phase sees is what the test wrote.
+ */
+export function withoutAmbientActionsEnv(
+	env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+	return Object.fromEntries(
+		Object.entries(env).filter(([name]) => !isAmbientActionsVar(name)),
+	);
+}
+
+/**
+ * The {@link gitEnv} a CI-phase test runs a phase with: the same pinned git
+ * identity + config, MINUS the ambient GitHub Actions values of whatever runner
+ * the suite happens to run on. The phases fall back to the env for facts like
+ * the run attempt (`options.runAttempt ?? env.GITHUB_RUN_ATTEMPT ?? '1'`), so a
+ * test on `gitEnv()` read the REAL `GITHUB_RUN_ATTEMPT` and failed on every
+ * "re-run failed jobs" of `verify` (observation
+ * `ci-phase-build-test-reads-the-real-github-run-attempt-2026-09-28`). The
+ * `*-e2e` tests hand this env to their worker processes, which run the phase on
+ * their own `process.env`, so it covers them too.
+ */
+export function ciPhaseEnv(): NodeJS.ProcessEnv {
+	return withoutAmbientActionsEnv(gitEnv());
+}
+
+/**
  * A DISTINCT-committer git env for ONE racer in a two-racer CAS test, modelling
  * two DISTINCT PRINCIPALS contending for the same ledger ref.
  *
