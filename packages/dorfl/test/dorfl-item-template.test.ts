@@ -594,10 +594,18 @@ describe('workspace install mode (this repository, decision 8)', () => {
 		expect(wsAction).toContain(
 			'git archive "$(git rev-parse --verify "${SOURCE_REF:-HEAD}^{commit}")" | tar -x -C "$src"',
 		);
+		// Only dorfl and its workspace dependencies are installed and built (not
+		// every workspace package, e.g. the website) next to the write token.
 		expect(wsAction).toContain(
-			'pnpm install --frozen-lockfile --ignore-scripts',
+			"pnpm install --frozen-lockfile --ignore-scripts --filter 'dorfl...'",
+		);
+		expect(wsAction).toContain("pnpm --filter 'dorfl...' build");
+		expect(wsAction).not.toContain('pnpm -r build');
+		expect(wsAction).toMatch(
+			/pnpm --filter 'dorfl\.\.\.' build\n\s+cd packages\/dorfl && pnpm link --global/,
 		);
 		const regAction = pick(config);
+		expect(regAction).not.toContain('--filter');
 		expect(regAction).toMatch(
 			/cd "\$RUNNER_TEMP"\n\s+npm install -g --ignore-scripts dorfl@/,
 		);
