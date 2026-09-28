@@ -84,7 +84,7 @@ const BASE: ResolvedCIConfig = {
 
 /**
  * Every config shape that changes what the generators emit (the same matrix the
- * script-injection guard covers): both auth modes, both install sources (the
+ * script-injection guard covers): both install sources (the
  * workspace mode adds `pnpm/action-setup`), every repo visibility, a non-default
  * matrix cap, and a project-setup hook fragment that carries no `uses:` of its
  * own (the hook is consumer-authored; dorfl only guarantees its own defaults).
@@ -94,19 +94,6 @@ const CONFIGS: {name: string; config: ResolvedCIConfig; hook?: string}[] = [
 	{
 		name: 'models-json/workspace',
 		config: {...BASE, installSource: 'workspace'},
-	},
-	{
-		name: 'auth-json/registry',
-		config: {...BASE, authMode: 'auth-json', providers: []},
-	},
-	{
-		name: 'auth-json/workspace',
-		config: {
-			...BASE,
-			authMode: 'auth-json',
-			providers: [],
-			installSource: 'workspace',
-		},
 	},
 	{name: 'public', config: {...BASE, repoVisibility: 'public'}},
 	{name: 'private', config: {...BASE, repoVisibility: 'private'}},

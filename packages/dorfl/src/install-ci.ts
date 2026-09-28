@@ -400,54 +400,33 @@ async function gatherSecretsForExport(
 // ─── The interactive wizard ──────────────────────────────────────────────────
 
 /**
- * The interactive wizard: gather the auth mode, providers/models (models-json) or
- * the default provider/model (auth-json), and the harness, into a
- * {@link CIConfigFile}. Drives the {@link WizardPrompts} seam, so it runs
- * deterministically in tests and the gathered shape exactly equals a config-file
- * input — the equivalence the snapshot test pins. Mirrors whitesmith's prompt
- * flow (provider type → key env var → models → defaults).
+ * The interactive wizard: gather the providers/models and the harness into a
+ * {@link CIConfigFile}. There is no auth-mode prompt: `models-json` is the only
+ * mode (the former `auth-json` mode was removed, see {@link AuthMode}); OAuth or
+ * other rotating credentials go behind a proxy set as a provider's `baseUrl`.
+ * Drives the {@link WizardPrompts} seam, so it runs deterministically in tests
+ * and the gathered shape exactly equals a config-file input, the equivalence the
+ * snapshot test pins. Mirrors whitesmith's prompt flow (provider type → key env
+ * var → models → defaults).
  */
 export async function runWizard(prompts: WizardPrompts): Promise<CIConfigFile> {
-	const authMode = await prompts.select<AuthMode>('Auth mode:', [
-		{
-			name: 'models.json (default — one GitHub secret per provider key)',
-			value: 'models-json',
-		},
-		{
-			name: 'auth.json (single PI_AUTH_JSON + GH_PAT + OAuth refresh — the sharp edge)',
-			value: 'auth-json',
-		},
-	]);
-
 	const harness = await prompts.select<HarnessAdapter>('Agent harness:', [
 		{name: 'pi (the pi coding agent)', value: 'pi'},
 		{name: 'null (shell out to a configured agentCmd)', value: 'null'},
 	]);
-
-	if (authMode === 'auth-json') {
-		// auth.json mode: no per-provider keys, but the harness still needs a
-		// default provider/model for its invocations.
-		const defaultProvider = await prompts.input('Default AI provider:', {
-			default: 'anthropic',
-		});
-		const defaultModel = await prompts.input('Default AI model:', {
-			default: 'claude-sonnet-4-20250514',
-		});
-		return {
-			authMode,
-			providers: [],
-			defaultProvider,
-			defaultModel,
-			harness,
-		};
-	}
 
 	const providers = await promptProviders(prompts);
 	const {defaultProvider, defaultModel} = await promptDefaults(
 		prompts,
 		providers,
 	);
-	return {authMode, providers, defaultProvider, defaultModel, harness};
+	return {
+		authMode: 'models-json',
+		providers,
+		defaultProvider,
+		defaultModel,
+		harness,
+	};
 }
 
 /** Prompt for one or more providers (the models-json path). */

@@ -10,8 +10,7 @@
  * This module is the PROVIDER-AGNOSTIC half: the config model (`ProviderEntry` /
  * `AuthMode` / `CIConfigFile`), the `models.json` builder, the secret-orchestration
  * LOGIC (which secrets, dedup, prompt-or-take-from-config), the `--export-config`
- * (+ `--include-secrets`) round-trip, the composite-setup-action + OAuth-refresh-
- * script generators, the `--fake` snapshot mechanism (write to `.fake/` instead of
+ * (+ `--include-secrets`) round-trip, the composite-setup-action generators, the `--fake` snapshot mechanism (write to `.fake/` instead of
  * `.github/`), and the capability-emitter REGISTRY seam. It imports NOTHING
  * GitHub-specific: the thin GitHub adapter (`github-ci.ts`) plugs into the
  * {@link CIProviderContext} seam, so a second provider could slot in WITHOUT
@@ -44,16 +43,31 @@ import {
 // ─── Config model ──────────────────────────────────────────────────────────
 
 /**
- * The two auth modes, mirroring whitesmith:
- *   - `models-json` (DEFAULT): one GitHub secret per provider API key; the harness
- *     `models.json` is generated inline and references the env vars (`$NAME`). No
- *     OAuth-refresh machinery, no `GH_PAT` — the conservative default.
- *   - `auth-json`: a single `PI_AUTH_JSON` secret + a `GH_PAT` for OAuth-token
- *     refresh + an OAuth-refresh script (the `pi-mono#2743` workaround, the SINGLE
- *     CI→repo mutation in the whole design). The known SHARP EDGE; default AWAY
- *     from it.
+ * The auth mode. `models-json` is the ONLY mode: one GitHub secret per provider
+ * API key; the harness `models.json` is generated inline and references the env
+ * vars (`$NAME`). Credential rotation (e.g. OAuth) is NOT done in CI: point a
+ * provider's `baseUrl` at a proxy that rotates credentials outside GitHub.
+ *
+ * The former `auth-json` mode (a `PI_AUTH_JSON` secret + an OAuth-refresh
+ * script that wrote the rotated token back with a write-capable `GH_PAT`) was
+ * REMOVED: its refresh needed a write token in the agent job, which ADR
+ * `ci-agent-job-holds-no-write-token` forbids, and without the refresh the
+ * OAuth token expires within hours. A config still naming it is refused by
+ * {@link loadCIConfigFile} with {@link AUTH_JSON_REMOVED_MESSAGE}. The type
+ * (and the `authMode` config key) is kept so existing `models-json` configs
+ * still parse and export unchanged.
  */
-export type AuthMode = 'auth-json' | 'models-json';
+export type AuthMode = 'models-json';
+
+/**
+ * The refusal a config naming the removed `auth-json` mode gets: it says the
+ * mode is gone and names the replacement (`models-json` + a proxy `baseUrl`).
+ */
+export const AUTH_JSON_REMOVED_MESSAGE =
+	'config file "authMode": "auth-json" is no longer supported (the mode was ' +
+	'removed: its OAuth refresh needed a write-capable GH_PAT in the agent job). ' +
+	'Use "authMode": "models-json" and point a provider\'s "baseUrl" at a proxy ' +
+	'that handles credential rotation outside GitHub.';
 
 /**
  * Where the composite setup action gets the `dorfl` CLI from:
@@ -95,7 +109,7 @@ export interface ProviderEntry {
 export interface CIConfigFile {
 	/** The auth mode (`models-json` default). */
 	authMode: AuthMode;
-	/** The configured providers (empty for `auth-json` mode). */
+	/** The configured providers (non-empty). */
 	providers: ProviderEntry[];
 	/** The default provider name. */
 	defaultProvider: string;
@@ -465,15 +479,10 @@ export function modelsJsonEnvRef(envVarName: string): string {
 
 /**
  * The DEDUPLICATED set of secret env-var names the config requires, in first-seen
- * order. For `models-json` mode it is one per distinct provider `apiKeyEnvVar`;
- * for `auth-json` mode it is the fixed `PI_AUTH_JSON` + `GH_PAT` pair (the sharp
- * edge). This is the pure secret-orchestration LOGIC the adapter's setter
+ * order: one per distinct provider `apiKeyEnvVar`. This is the pure secret-orchestration LOGIC the adapter's setter
  * consumes — which secrets, deduped — separated from any provider I/O.
  */
 export function requiredSecretNames(config: ResolvedCIConfig): string[] {
-	if (config.authMode === 'auth-json') {
-		return ['PI_AUTH_JSON', 'GH_PAT'];
-	}
 	const seen = new Set<string>();
 	const names: string[] = [];
 	for (const p of config.providers) {
@@ -486,9 +495,7 @@ export function requiredSecretNames(config: ResolvedCIConfig): string[] {
 
 /**
  * The GitHub secret the propose/merge CI legs read as `GH_TOKEN` to open PRs
- * under a CHOSEN identity (a PAT / App token). It is the PR-IDENTITY token, a
- * distinct purpose from `auth-json` mode's `GH_PAT` (which exists only to rotate
- * the OAuth `PI_AUTH_JSON` secret). The generated workflows reference it as
+ * under a CHOSEN identity (a PAT / App token). The generated workflows reference it as
  * `${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}` so it is
  * OPTIONAL: unset ⇒ the legs fall back to the built-in `GITHUB_TOKEN` (PRs are
  * `github-actions[bot]` and do not trigger downstream `on: pull_request`
@@ -519,7 +526,7 @@ export function optionalSecretNames(config: ResolvedCIConfig): string[] {
  * entry). Each entry maps the action input (named identically to the secret) to
  * `${{ secrets.<NAME> }}`.
  *
- * Empty string when there are no provider keys (auth-json mode, or no providers),
+ * Empty string when there are no provider keys (no providers),
  * so the `uses:` line is emitted bare and unchanged. This is the SINGLE place the
  * provider→`with:` shape lives, shared by every capability workflow generator, so
  * no template re-derives it.
@@ -537,13 +544,13 @@ export function providerSecretsWithBlock(config: ResolvedCIConfig): string {
 
 /**
  * The provider API key secrets the AGENT-running jobs forward to the setup
- * action (models-json mode: one per distinct provider key; auth-json mode: none,
- * it uses auth.json). The split item workflow declares exactly these (plus
+ * action: one per distinct provider key (the same set as
+ * {@link requiredSecretNames}). The split item workflow declares exactly these (plus
  * {@link PR_IDENTITY_SECRET_NAME}) as its `workflow_call` secrets, and hands
  * them to its agent job only.
  */
 export function providerSecretNames(config: ResolvedCIConfig): string[] {
-	return config.authMode === 'models-json' ? requiredSecretNames(config) : [];
+	return requiredSecretNames(config);
 }
 
 /** The outcome of orchestrating one secret through the provider seam. */
@@ -643,12 +650,17 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 				(err instanceof Error ? err.message : String(err)),
 		);
 	}
-	const authMode = data.authMode ?? 'models-json';
-	if (authMode !== 'models-json' && authMode !== 'auth-json') {
-		throw new CIConfigError(
-			`config file "authMode" must be "models-json" or "auth-json"`,
-		);
+	// `authMode` is kept as a key (so existing configs still parse) but the only
+	// accepted value is `models-json`. The removed `auth-json` mode gets a refusal
+	// that names its replacement rather than the generic "must be" message.
+	const rawAuthMode: unknown = (data as {authMode?: unknown}).authMode;
+	if (rawAuthMode === 'auth-json') {
+		throw new CIConfigError(AUTH_JSON_REMOVED_MESSAGE);
 	}
+	if (rawAuthMode !== undefined && rawAuthMode !== 'models-json') {
+		throw new CIConfigError(`config file "authMode" must be "models-json"`);
+	}
+	const authMode: AuthMode = 'models-json';
 	if (!data.defaultProvider) {
 		throw new CIConfigError('config file must contain "defaultProvider"');
 	}
@@ -677,20 +689,18 @@ export function loadCIConfigFile(filePath: string): CIConfigFile {
 			);
 		}
 	}
-	if (authMode === 'models-json') {
-		if (
-			!data.providers ||
-			!Array.isArray(data.providers) ||
-			data.providers.length === 0
-		) {
-			throw new CIConfigError(
-				'config file (models-json) must contain a non-empty "providers" array',
-			);
-		}
+	if (
+		!data.providers ||
+		!Array.isArray(data.providers) ||
+		data.providers.length === 0
+	) {
+		throw new CIConfigError(
+			'config file (models-json) must contain a non-empty "providers" array',
+		);
 	}
 	return {
 		authMode,
-		providers: data.providers ?? [],
+		providers: data.providers,
 		defaultProvider: data.defaultProvider,
 		defaultModel: data.defaultModel,
 		harness: data.harness,
@@ -746,7 +756,7 @@ export function exportCIConfig(
 	return JSON.stringify(file, null, 2) + '\n';
 }
 
-// ─── composite setup action + OAuth-refresh script generation ────────────────
+// ─── composite setup action generation ───────────────────────────────────────
 
 /** Indent every non-blank line of `text` by `spaces` spaces. */
 function indent(text: string, spaces: number): string {
@@ -929,14 +939,11 @@ ${indent(manifest, 8)}
  * `uses: ./.github/actions/dorfl-setup`. The advance-loop seed template
  * already references this exact action name + path (`docs/ci/README.md`).
  *
- * The auth step branches on the mode: `models-json` writes a generated
- * `~/.pi/agent/models.json` inline (the conservative default) AND exports each
+ * The auth step writes a generated `~/.pi/agent/models.json` inline AND exports each
  * configured provider's API key from a same-named ACTION INPUT to `$GITHUB_ENV`,
  * so the agent step (`pi`) can resolve the env var `models.json` references; the
  * workflow passes the secrets ONCE via `with:` on the `uses:` line (no
- * per-step / per-capability provider enumeration). `auth-json` writes
- * `~/.pi/agent/auth.json` from `$PI_AUTH_JSON` + runs the OAuth-refresh script
- * (the sharp edge). Deterministic: the same config produces byte-identical output.
+ * per-step / per-capability provider enumeration). Deterministic: the same config produces byte-identical output.
  */
 export function generateSetupAction(
 	config: ResolvedCIConfig,
@@ -950,52 +957,32 @@ export function generateSetupAction(
 	 */
 	projectSetupSteps?: string,
 ): string {
-	let authStep: string;
-	// models-json mode declares one ACTION INPUT per distinct provider key (named
-	// identically to the secret / env var) and exports it to `$GITHUB_ENV`, so every
-	// later step inherits it. auth-json mode has no provider keys (it uses auth.json).
-	const providerKeyNames =
-		config.authMode === 'models-json' ? requiredSecretNames(config) : [];
-	if (config.authMode === 'auth-json') {
-		authStep = `\
-    - name: Configure agent auth (auth.json)
-      shell: bash
-      run: |
-        if [ -z "$PI_AUTH_JSON" ]; then
-          echo "ERROR: PI_AUTH_JSON secret is not set" >&2; exit 1
-        fi
-        mkdir -p ~/.pi/agent
-        echo "$PI_AUTH_JSON" > ~/.pi/agent/auth.json
-        chmod 600 ~/.pi/agent/auth.json
-
-    # Workaround for https://github.com/badlogic/pi-mono/issues/2743 — the SINGLE
-    # CI→repo mutation in the design; needs GH_PAT to rotate PI_AUTH_JSON.
-    - name: Refresh OAuth token
-      shell: bash
-      run: node .github/scripts/refresh-oauth-token.mjs`;
-	} else {
-		const modelsJsonStr = JSON.stringify(
-			buildModelsJson(config.providers),
-			null,
-			2,
-		);
-		// Map each provider-key INPUT into the step env, then append the non-empty
-		// ones to `$GITHUB_ENV` so the agent step inherits them. Values flow via env
-		// (never interpolated into the script body), and Actions masks the secret in
-		// logs. `models.json`'s `apiKey` is a `$NAME` env-var REFERENCE (pi resolves it at
-		// runtime; a bare name would be a literal key); this puts the value there.
-		const exportEnvLines = providerKeyNames
-			.map((name) => `        ${name}: \${{ inputs.${name} }}`)
-			.join('\n');
-		const exportRunLines = providerKeyNames
-			.map(
-				(name) =>
-					`        if [ -n "\${${name}}" ]; then echo "${name}=\${${name}}" >> "$GITHUB_ENV"; fi`,
-			)
-			.join('\n');
-		const exportStep =
-			providerKeyNames.length > 0
-				? `\n
+	// models-json mode (the only mode) declares one ACTION INPUT per distinct
+	// provider key (named identically to the secret / env var) and exports it to
+	// `$GITHUB_ENV`, so every later step inherits it.
+	const providerKeyNames = providerSecretNames(config);
+	const modelsJsonStr = JSON.stringify(
+		buildModelsJson(config.providers),
+		null,
+		2,
+	);
+	// Map each provider-key INPUT into the step env, then append the non-empty
+	// ones to `$GITHUB_ENV` so the agent step inherits them. Values flow via env
+	// (never interpolated into the script body), and Actions masks the secret in
+	// logs. `models.json`'s `apiKey` is a `$NAME` env-var REFERENCE (pi resolves it at
+	// runtime; a bare name would be a literal key); this puts the value there.
+	const exportEnvLines = providerKeyNames
+		.map((name) => `        ${name}: \${{ inputs.${name} }}`)
+		.join('\n');
+	const exportRunLines = providerKeyNames
+		.map(
+			(name) =>
+				`        if [ -n "\${${name}}" ]; then echo "${name}=\${${name}}" >> "$GITHUB_ENV"; fi`,
+		)
+		.join('\n');
+	const exportStep =
+		providerKeyNames.length > 0
+			? `\n
     # Surface the configured provider API key(s) to the environment so the agent
     # step (\`pi\`) can resolve the env var \`models.json\` references. The workflow
     # passes the secret(s) via \`with:\` on the \`uses:\` line; we forward the
@@ -1006,8 +993,8 @@ export function generateSetupAction(
 ${exportEnvLines}
       run: |
 ${exportRunLines}`
-				: '';
-		authStep = `\
+			: '';
+	const authStep = `\
     - name: Configure agent models (models.json)
       shell: bash
       run: |
@@ -1015,7 +1002,6 @@ ${exportRunLines}`
         cat > ~/.pi/agent/models.json << 'MODELS_EOF'
 ${indent(modelsJsonStr, 8)}
         MODELS_EOF${exportStep}`;
-	}
 
 	const installHarness = harnessInstallStep(config.harness);
 
@@ -1080,10 +1066,9 @@ ${indent(modelsJsonStr, 8)}
 	// double-resolution. The install step below leaves `dorfl` on `$PATH` as the
 	// bootstrap; the forward does the pinning.
 
-	// One optional ACTION INPUT per provider key (models-json mode), named
-	// identically to the secret/env var. Optional + default '' so a workflow that
-	// does not pass it (or auth-json mode, which declares none) is valid; the export
-	// step skips an empty value. auth-json mode declares no inputs.
+	// One optional ACTION INPUT per provider key, named identically to the
+	// secret/env var. Optional + default '' so a workflow that does not pass it is
+	// valid; the export step skips an empty value.
 	const inputsBlock =
 		providerKeyNames.length > 0
 			? `inputs:
@@ -1267,111 +1252,11 @@ ${installSteps}
 `;
 }
 
-/**
- * The OAuth-refresh script emitted ONLY in `auth-json` mode (whitesmith's
- * `pi-mono#2743` workaround): refreshes the Anthropic OAuth token in
- * `~/.pi/agent/auth.json` before the agent runs, then writes the rotated token
- * BACK via `gh secret set PI_AUTH_JSON` (the single CI→repo mutation, needing a
- * `GH_PAT`). This is the documented SHARP EDGE; `models-json` mode avoids it.
- */
-export const REFRESH_OAUTH_SCRIPT = `\
-#!/usr/bin/env node
-/**
- * Refresh OAuth tokens in the agent's auth.json before it runs.
- *
- * Workaround for https://github.com/badlogic/pi-mono/issues/2743.
- * After refreshing, updates the PI_AUTH_JSON GitHub secret so the next run has
- * the latest rotated refresh token (requires GH_PAT with repo scope). This is the
- * known SHARP EDGE of auth-json mode; models-json mode avoids it entirely.
- *
- * Remove this script once the upstream fix is released.
- */
-import { readFileSync, writeFileSync, chmodSync } from "fs";
-import { join } from "path";
-import { execSync } from "child_process";
-
-const ANTHROPIC_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-const ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
-
-const authPath = join(process.env.HOME, ".pi", "agent", "auth.json");
-const auth = JSON.parse(readFileSync(authPath, "utf-8"));
-const cred = auth.anthropic;
-
-if (!cred || cred.type !== "oauth") {
-  console.log("No OAuth credentials for anthropic, skipping refresh");
-  process.exit(0);
-}
-
-if (Date.now() < cred.expires) {
-  console.log("Token still valid until", new Date(cred.expires).toISOString());
-  process.exit(0);
-}
-
-console.log(
-  "Token expired at",
-  new Date(cred.expires).toISOString(),
-  "- refreshing..."
-);
-
-const response = await fetch(ANTHROPIC_TOKEN_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/x-www-form-urlencoded",
-    Accept: "application/json",
-  },
-  body: new URLSearchParams({
-    grant_type: "refresh_token",
-    client_id: ANTHROPIC_CLIENT_ID,
-    refresh_token: cred.refresh,
-  }).toString(),
-  signal: AbortSignal.timeout(30_000),
-});
-
-const data = await response.json();
-
-if (!response.ok) {
-  console.error("Refresh failed:", response.status, JSON.stringify(data));
-  process.exit(1);
-}
-
-auth.anthropic = {
-  type: "oauth",
-  refresh: data.refresh_token,
-  access: data.access_token,
-  expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
-};
-
-writeFileSync(authPath, JSON.stringify(auth, null, 2));
-chmodSync(authPath, 0o600);
-console.log(
-  "Token refreshed, new expiry:",
-  new Date(auth.anthropic.expires).toISOString()
-);
-
-// Update the GitHub secret so the next run has the latest refresh token.
-const repo = process.env.GITHUB_REPOSITORY;
-const token = process.env.GH_PAT;
-if (repo && token) {
-  try {
-    execSync(\`gh secret set PI_AUTH_JSON --repo "\${repo}"\`, {
-      input: JSON.stringify(auth),
-      env: { ...process.env, GH_TOKEN: token },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    console.log("PI_AUTH_JSON secret updated");
-  } catch (err) {
-    console.warn("Failed to update secret (non-fatal):", err.stderr?.toString() || err.message);
-  }
-} else {
-  console.log("Skipping secret update (no GH_PAT or GITHUB_REPOSITORY)");
-}
-`;
-
 // ─── the --fake snapshot mechanism + artifact assembly ───────────────────────
 
 /**
- * The setup ARTIFACTS this task generates: the composite setup action + (in
- * `auth-json` mode) the OAuth-refresh script, plus any selected capabilities'
+ * The setup ARTIFACTS this task generates: the composite setup actions, plus
+ * any selected capabilities'
  * workflow files. This task emits NO capability workflow itself (those are the
  * sibling tasks); `capabilities` defaults to none.
  */
@@ -1396,12 +1281,6 @@ export function buildSetupArtifacts(
 			content: generateWriterSetupAction(config),
 		},
 	];
-	if (config.authMode === 'auth-json') {
-		files.push({
-			path: join('scripts', 'refresh-oauth-token.mjs'),
-			content: REFRESH_OAUTH_SCRIPT,
-		});
-	}
 	for (const cap of capabilities) {
 		files.push(...cap.emit(config));
 	}

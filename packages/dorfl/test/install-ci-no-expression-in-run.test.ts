@@ -89,8 +89,8 @@ const BASE: ResolvedCIConfig = {
 };
 
 /**
- * Every config shape that changes what the generators emit: both auth modes,
- * both install sources, and every repo visibility (public adds
+ * Every config shape that changes what the generators emit: both install
+ * sources, and every repo visibility (public adds
  * `persist-credentials: false`), plus a project-setup hook fragment.
  */
 const CONFIGS: {name: string; config: ResolvedCIConfig; hook?: string}[] = [
@@ -98,10 +98,6 @@ const CONFIGS: {name: string; config: ResolvedCIConfig; hook?: string}[] = [
 	{
 		name: 'models-json/workspace',
 		config: {...BASE, installSource: 'workspace'},
-	},
-	{
-		name: 'auth-json/registry',
-		config: {...BASE, authMode: 'auth-json', providers: []},
 	},
 	{name: 'public', config: {...BASE, repoVisibility: 'public'}},
 	{name: 'private', config: {...BASE, repoVisibility: 'private'}},

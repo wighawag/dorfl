@@ -5213,7 +5213,7 @@ export function buildProgram(): Command {
 		.command('install-ci')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Scaffold the CI auth/setup foundation (a one-time, human-run SCAFFOLDER): write the shared composite setup action (`dorfl-setup`) + provider auth (models.json default, or auth.json + GH_PAT + OAuth refresh) and set the provider secrets via the GitHub seam. Interactive wizard, or `--config <file>` for a non-interactive reproduction; `--export-config` round-trips the config; `--fake` writes to `.fake/` (never `.github/`) and sets NO real secret (a snapshot dry-run).',
+			'Scaffold the CI auth/setup foundation (a one-time, human-run SCAFFOLDER): write the shared composite setup action (`dorfl-setup`) + provider auth (a generated models.json; put rotating credentials such as OAuth behind a proxy provider `baseUrl`) and set the provider secrets via the GitHub seam. Interactive wizard, or `--config <file>` for a non-interactive reproduction; `--export-config` round-trips the config; `--fake` writes to `.fake/` (never `.github/`) and sets NO real secret (a snapshot dry-run).',
 		)
 		.option(
 			'--config <file>',

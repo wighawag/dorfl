@@ -102,15 +102,6 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		expect(text).not.toMatch(/uses: \.\/\.github\/actions\/dorfl-setup\n/);
 	});
 
-	it('auth-json mode passes NO provider secret to the setup action (it uses auth.json)', () => {
-		const text = generateAdvanceLifecycleWorkflow({
-			...config,
-			authMode: 'auth-json',
-			providers: [],
-		});
-		expect(text).not.toMatch(/secrets\.[A-Z_]*API_KEY/);
-	});
-
 	it('the dispatch job forwards integrationMode (default propose) to every item run', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		expect(text).toContain(
