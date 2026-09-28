@@ -221,8 +221,10 @@ export interface ReturnToBacklogOptions {
 	reconcile?: boolean;
 	/**
 	 * `requeue -m "<note>"` (the handoff note): an optional human steer for the
-	 * NEXT agent. APPENDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
-	 * section to the item BODY before the move — the ledger file is the durable,
+	 * NEXT agent. ADDED (never overwritten) as a dated `## Requeue YYYY-MM-DD`
+	 * section to the item BODY, just before `## Acceptance criteria` (so it never
+	 * collides with a kept branch's done-move tail; see `insertRequeueNoteText`),
+	 * before the move — the ledger file is the durable,
 	 * conflict-safe, cross-machine home (same place the needs-attention reason
 	 * lives). Repeated requeues ACCUMULATE a handoff log. Applies to BOTH modes
 	 * (a steer is relevant even on `--reset`).
@@ -515,9 +517,10 @@ export function commitAbortedWork(params: {
  *     closes the claim-race window; a FAILED delete ABORTS (no backlog move)
  *     so the item stays in needs-attention. The next claim then finds NO
  *     arbiter branch and cuts fresh — no special claim-time logic.
- *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, APPEND a dated
- *     `## Requeue YYYY-MM-DD` section to the item BODY (append-only; accumulates
- *     over repeated requeues) for the next agent. Applies to BOTH modes.
+ *   - **`-m "<note>"` = HANDOFF NOTE.** When `message` is set, ADD a dated
+ *     `## Requeue YYYY-MM-DD` section to the item BODY, just before
+ *     `## Acceptance criteria` (additive; accumulates over repeated requeues,
+ *     oldest first) for the next agent. Applies to BOTH modes.
  *
  * Like the move, NEVER throws for the expected "not in needs-attention" case.
  */
@@ -1104,8 +1107,9 @@ async function requeueHeldItem(params: {
 		'tasks-backlog',
 	];
 
-	// `-m "<note>"` (the handoff steer): APPEND a dated `## Requeue YYYY-MM-DD`
-	// section to the item BODY where it already rests (pool or staging), via the SAME
+	// `-m "<note>"` (the handoff steer): ADD a dated `## Requeue YYYY-MM-DD`
+	// section (before `## Acceptance criteria`, clear of a kept branch's done-move
+	// tail) to the item BODY where it already rests (pool or staging), via the SAME
 	// tree-less CAS move (same-folder rewrite with the body transform) — it NEVER
 	// stages/commits in the cwd tree. The handoff is OPTIONAL and NON-FATAL: a failed
 	// append degrades to a WARNING and the lock release below STILL runs, because the
@@ -1136,7 +1140,7 @@ async function requeueHeldItem(params: {
 					base,
 					sourceRel: bodyRel,
 					destRel: bodyRel,
-					transformBody: (body) => appendRequeueNoteText(body, handoff),
+					transformBody: (body) => insertRequeueNoteText(body, handoff),
 					commitMessage: `chore(${slug}): requeue handoff note`,
 					refNamespace: 'requeue',
 					env,
@@ -3354,22 +3358,47 @@ const BOUNCE_BODY_PROBE_ORDER: Record<SidecarType, readonly WorkFolderKey[]> = {
 	observation: ['observations'],
 };
 
+/** The body heading a requeue handoff note is inserted BEFORE (see
+ * {@link insertRequeueNoteText}). */
+const ACCEPTANCE_HEADING_RE = /^##\s+Acceptance criteria\s*$/m;
+
 /**
- * Append a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
- * (append-only — never overwrites; repeated requeues accumulate a handoff log).
- * Body prose only (never a frontmatter field — WORK-CONTRACT rule 3). The date is
- * UTC `YYYY-MM-DD`; multiple notes on the same day are distinct appended blocks.
+ * Add a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
+ * (additive — never overwrites; repeated requeues accumulate a handoff log,
+ * oldest first). Body prose only (never a frontmatter field — WORK-CONTRACT
+ * rule 3). The date is UTC `YYYY-MM-DD`; multiple notes on the same day are
+ * distinct blocks.
+ *
+ * PLACEMENT (task `requeue-handoff-note-does-not-conflict-with-the-kept-done-move`):
+ * the section is inserted immediately BEFORE the `## Acceptance criteria`
+ * heading, NOT at the end of the body. A kept work branch the next claim
+ * CONTINUES from may already have done-moved this body AND appended its
+ * `## Decisions` block at the END; a tail-appended note on `main` then collided
+ * with that tail in the continue rebase (which never auto-resolves, ADR §10) and
+ * bounced the item. Mid-body, the two edits are disjoint hunks and the rebase
+ * merges them cleanly. A body with no `## Acceptance criteria` heading falls back
+ * to the end (the old behaviour). The continue prompt reads every `## Requeue`
+ * section wherever it sits (`extractRequeueNotes`), so the note still reaches
+ * the continuing agent.
  *
  * A PURE string transform (it operates on the body CONTENT, not a file path) so
  * the tree-less requeue can apply it to the blob read from `<arbiter>/main`
  * without touching the cwd working tree.
  */
-function appendRequeueNoteText(content: string, message: string): string {
+export function insertRequeueNoteText(
+	content: string,
+	message: string,
+): string {
 	const date = new Date().toISOString().slice(0, 10);
-	const base = content.replace(/\s*$/, '');
-	return [base, '', `${REQUEUE_HEADING_PREFIX} ${date}`, '', message, ''].join(
-		'\n',
-	);
+	const section = `${REQUEUE_HEADING_PREFIX} ${date}\n\n${message}\n`;
+	const anchor = ACCEPTANCE_HEADING_RE.exec(content);
+	if (anchor === null) {
+		const base = content.replace(/\s*$/, '');
+		return `${base}\n\n${section}`;
+	}
+	const before = content.slice(0, anchor.index).replace(/\s*$/, '');
+	const after = content.slice(anchor.index);
+	return `${before}\n\n${section}\n${after}`;
 }
 
 /**
