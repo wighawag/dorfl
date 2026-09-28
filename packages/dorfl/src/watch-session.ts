@@ -1,4 +1,5 @@
 import {open, type FileHandle} from 'node:fs/promises';
+import type {CutOffTurn} from './harness.js';
 
 /**
  * The **`do --watch` observer** (tasks `do-watch` + `do-watch-session-log-format`)
@@ -151,6 +152,14 @@ interface SessionLogRecord {
 		content?: unknown;
 		/** The Anthropic-API turn-termination reason (mirrored by pi into the session log). */
 		stop_reason?: unknown;
+		/**
+		 * pi's OWN normalised turn-termination reason (`stop` / `toolUse` / `length`
+		 * / `error` / `aborted`), the key real pi session logs carry on every
+		 * assistant message.
+		 */
+		stopReason?: unknown;
+		/** The provider's error text pi records on an `error`-stopped turn. */
+		errorMessage?: unknown;
 		/** The turn's token usage (mirrored by pi). `output` OR `output_tokens` is the produced-token count. */
 		usage?: unknown;
 	};
@@ -332,12 +341,26 @@ export interface LastAssistantTurn {
 	stopReason?: string | null;
 	/** The turn's produced output-token count (`usage.output` OR `usage.output_tokens`). */
 	outputTokens?: number;
+	/**
+	 * The stop reason of the FINAL assistant message in the log, WHATEVER it
+	 * carried (text, tool calls, or only a thinking block), read from pi's
+	 * `stopReason` key (falling back to `stop_reason`). Unlike {@link stopReason}
+	 * (which belongs to the last TEXT turn), this is how the run actually ENDED:
+	 * a turn that spent its whole output budget thinking has no text, so only this
+	 * field sees it. `undefined` when the log has no assistant message or the
+	 * final one carries no stop reason. Read by {@link cutOffTurnOf}.
+	 */
+	finalStopReason?: string;
+	/** The final assistant message's `errorMessage` (pi records it on an `error` stop). */
+	finalErrorMessage?: string;
 }
 
 export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 	let lastText: string | undefined;
 	let lastStopReason: string | null | undefined = undefined;
 	let lastOutputTokens: number | undefined = undefined;
+	let finalStopReason: string | undefined = undefined;
+	let finalErrorMessage: string | undefined = undefined;
 	for (const line of jsonl.split('\n')) {
 		const trimmed = line.trim();
 		if (trimmed === '') {
@@ -360,6 +383,14 @@ export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 		if (!message || message.role !== 'assistant') {
 			continue;
 		}
+		// EVERY assistant message (text or not) moves the "how did the run end"
+		// pointer: the final one wins.
+		const ended = message.stopReason ?? message.stop_reason;
+		finalStopReason = typeof ended === 'string' ? ended : undefined;
+		finalErrorMessage =
+			typeof message.errorMessage === 'string' && message.errorMessage !== ''
+				? message.errorMessage
+				: undefined;
 		const text = assistantContentText(message.content);
 		if (text !== '') {
 			lastText = text; // a later text turn supersedes an earlier one.
@@ -371,7 +402,28 @@ export function lastAssistantTurn(jsonl: string): LastAssistantTurn {
 		text: lastText,
 		stopReason: lastStopReason,
 		outputTokens: lastOutputTokens,
+		finalStopReason,
+		finalErrorMessage,
 	};
+}
+
+/**
+ * Was the run's FINAL assistant turn CUT OFF rather than ended normally (task
+ * `a-truncated-agent-turn-routes-as-agent-failed`)? `length` (the per-turn
+ * output-token cap: observed with a turn whose whole 16,384-token budget went
+ * into a thinking block, no text, no tool call) and `error` (a provider error)
+ * are the two cut-off causes; every other reason (`stop`, `toolUse`, `aborted`,
+ * or none recorded) returns `undefined`. `aborted` is deliberately NOT a cut-off
+ * here: it is what a deliberate kill (the deadline stop) leaves, which has its
+ * own checkpoint route.
+ */
+export function cutOffTurnOf(turn: LastAssistantTurn): CutOffTurn | undefined {
+	if (turn.finalStopReason !== 'length' && turn.finalStopReason !== 'error') {
+		return undefined;
+	}
+	return turn.finalErrorMessage === undefined
+		? {cause: turn.finalStopReason}
+		: {cause: turn.finalStopReason, errorMessage: turn.finalErrorMessage};
 }
 
 /**

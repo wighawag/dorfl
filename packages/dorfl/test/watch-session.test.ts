@@ -7,6 +7,7 @@ import {
 	lastAssistantText,
 	lastAssistantTurn,
 	isOutputCappedTurn,
+	cutOffTurnOf,
 	SessionTailer,
 } from '../src/watch-session.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
@@ -681,5 +682,71 @@ describe('lastAssistantTurn — stop_reason + usage (the output-cap signal)', ()
 		expect(t.stopReason).toBeUndefined();
 		expect(t.outputTokens).toBeUndefined();
 		expect(isOutputCappedTurn(t)).toBe(false);
+	});
+});
+
+describe("cutOffTurnOf: how the run's FINAL assistant turn ended (task a-truncated-agent-turn-routes-as-agent-failed)", () => {
+	/** One pi-shaped assistant record (pi's own camelCase `stopReason` key). */
+	function record(message: Record<string, unknown>): string {
+		return (
+			JSON.stringify({
+				type: 'message',
+				message: {role: 'assistant', ...message},
+			}) + '\n'
+		);
+	}
+
+	it('a final THINKING-ONLY turn stopped on `length` is a cut-off, even though an earlier turn had text', () => {
+		// The observed shape: the whole output budget went into a thinking block,
+		// no text, no tool call. The text-turn reader alone cannot see it.
+		const log =
+			record({
+				content: [{type: 'text', text: 'Let me look at do.ts.'}],
+				stopReason: 'toolUse',
+			}) +
+			record({
+				content: [{type: 'thinking', thinking: '...'}],
+				stopReason: 'length',
+				usage: {output: 16384},
+			});
+		const t = lastAssistantTurn(log);
+		expect(t.text).toBe('Let me look at do.ts.');
+		expect(t.finalStopReason).toBe('length');
+		expect(cutOffTurnOf(t)).toEqual({cause: 'length'});
+	});
+
+	it('an `error` stop carries the provider errorMessage', () => {
+		const log = record({
+			content: [],
+			stopReason: 'error',
+			errorMessage: 'provider said no',
+		});
+		expect(cutOffTurnOf(lastAssistantTurn(log))).toEqual({
+			cause: 'error',
+			errorMessage: 'provider said no',
+		});
+	});
+
+	it('a later normal turn supersedes an earlier cut-off (pi retried and finished)', () => {
+		const log =
+			record({content: [], stopReason: 'error', errorMessage: 'x'}) +
+			record({content: [{type: 'text', text: 'done'}], stopReason: 'stop'});
+		expect(cutOffTurnOf(lastAssistantTurn(log))).toBeUndefined();
+	});
+
+	it('`stop`, `toolUse`, `aborted` and a missing stop reason are NOT cut-offs', () => {
+		for (const stopReason of ['stop', 'toolUse', 'aborted', undefined]) {
+			const log = record({
+				content: [{type: 'text', text: 'hi'}],
+				...(stopReason === undefined ? {} : {stopReason}),
+			});
+			expect(cutOffTurnOf(lastAssistantTurn(log))).toBeUndefined();
+		}
+		expect(cutOffTurnOf(lastAssistantTurn(''))).toBeUndefined();
+	});
+
+	it('falls back to the snake_case `stop_reason` key', () => {
+		const log = record({content: [], stop_reason: 'length'});
+		expect(cutOffTurnOf(lastAssistantTurn(log))).toEqual({cause: 'length'});
 	});
 });

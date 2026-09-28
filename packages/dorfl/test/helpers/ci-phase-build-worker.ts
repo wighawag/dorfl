@@ -50,6 +50,8 @@ interface WorkerArgs {
 		detail?: string;
 		output?: string;
 		timedOut?: boolean;
+		/** The harness's cut-off-final-turn signal (`length` / `error` stop). */
+		cutOffTurn?: {cause: 'length' | 'error'; errorMessage?: string};
 	};
 	/** The resolved `maxAutoCheckpoints` option (the config at baseSha wins). */
 	maxAutoCheckpoints?: number;

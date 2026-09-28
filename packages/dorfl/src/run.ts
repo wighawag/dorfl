@@ -16,7 +16,7 @@ import {
 	type IsolationStrategy,
 } from './isolation.js';
 import {runConcurrent, createKeyedLock} from './concurrency.js';
-import type {Harness} from './harness.js';
+import type {CutOffTurn, Harness} from './harness.js';
 import {createHarness} from './pi-harness.js';
 import {generateSessionPath} from './session-path.js';
 import {
@@ -32,6 +32,7 @@ import {
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
 	emptyDiffDisposeEnvelope,
+	resolveCutOffTurnFailure,
 	type AgentStopKind,
 } from './agent-stop.js';
 import {surfaceStuckToNeedsAttention} from './needs-attention.js';
@@ -233,6 +234,12 @@ export type Dorfl = (input: {
 	 * provider degrades to `--fill` (no regression).
 	 */
 	output?: string;
+	/**
+	 * The agent's final model turn was CUT OFF (`length` / `error` stop; the
+	 * harness seam's `LaunchResult.cutOffTurn`, mirrors `DoDorfl.cutOffTurn`). An
+	 * empty diff with this set routes `agent-failed`, never the empty-diff STOP.
+	 */
+	cutOffTurn?: CutOffTurn;
 };
 
 export interface RunOnceOptions {
@@ -837,7 +844,12 @@ async function runOneItem(
 		//    resolved per-repo `buildModel` (ADR §13, which inherits the general
 		//    `model` when unset) flows through the seam to the adapter; a
 		//    `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
-		let agent: {ok: boolean; detail?: string; output?: string};
+		let agent: {
+			ok: boolean;
+			detail?: string;
+			output?: string;
+			cutOffTurn?: CutOffTurn;
+		};
 		try {
 			agent = runAgent(
 				ctx,
@@ -874,6 +886,21 @@ async function runOneItem(
 		//     catches a stop without one. Either routes to needs-attention (surfaced on
 		//     the arbiter) and SKIPS the gate + Gate-2 (the whole `performIntegration`
 		//     band) — a clean STOP is NOT "a build that changed nothing".
+		//     A CUT-OFF final turn (`length`/`error`) with an empty diff is a harness
+		//     failure, not a STOP: route it `agent-failed` before the empty-diff
+		//     backstop (task `a-truncated-agent-turn-routes-as-agent-failed`, the
+		//     same guard `do` runs).
+		const cutOffDetail = await resolveCutOffTurnFailure({
+			cutOffTurn: agent.cutOffTurn,
+			output: agent.output,
+			slug,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
+			env: gitEnv,
+		});
+		if (cutOffDetail !== undefined) {
+			return await saveAgentFailure(base, tree, slug, cutOffDetail, ctx);
+		}
 		const sentinel = parseStopSentinel(agent.output);
 		const stopReason: {kind: AgentStopKind; reason: string} | undefined =
 			sentinel !== undefined
@@ -1119,7 +1146,12 @@ function runAgent(
 	agentCmd: string,
 	model: string | undefined,
 	sessionsDir: string | undefined,
-): {ok: boolean; detail?: string; output?: string} {
+): {
+	ok: boolean;
+	detail?: string;
+	output?: string;
+	cutOffTurn?: CutOffTurn;
+} {
 	if (ctx.dorfl) {
 		return ctx.dorfl({cwd: tree.dir, prompt, slug, env: ctx.env});
 	}
@@ -1148,7 +1180,13 @@ function runAgent(
 	// Surface the agent's FINAL SUMMARY (`LaunchResult.output`) — the source channel
 	// for the propose-mode PR body — instead of dropping it (mirrors `do`'s
 	// `runDoAgent`). Absent (no parseable assistant text) ⇒ undefined ⇒ `--fill`.
-	return {ok: launched.ok, detail: launched.detail, output: launched.output};
+	return {
+		ok: launched.ok,
+		detail: launched.detail,
+		output: launched.output,
+		// How the final model turn ended (the cut-off guard before the STOP route).
+		cutOffTurn: launched.cutOffTurn,
+	};
 }
 
 /**

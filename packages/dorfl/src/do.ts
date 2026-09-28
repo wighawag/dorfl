@@ -21,6 +21,7 @@ import {
 import {
 	NullHarness,
 	type AgentTreeReap,
+	type CutOffTurn,
 	type Harness,
 	type HarnessRecord,
 } from './harness.js';
@@ -67,6 +68,7 @@ import {
 	isWorkBranchDiffEmpty,
 	emptyDiffStopReason,
 	emptyDiffDisposeEnvelope,
+	resolveCutOffTurnFailure,
 	type AgentStopClass,
 } from './agent-stop.js';
 import {surfaceStuckToNeedsAttention} from './needs-attention.js';
@@ -384,6 +386,14 @@ export type DoDorfl = (input: {
 	 * Absent ⇒ nothing was left running (the pre-existing behaviour).
 	 */
 	reap?: AgentTreeReap;
+	/**
+	 * **The agent's final model turn was CUT OFF** (`length` / `error` stop; the
+	 * harness seam's `LaunchResult.cutOffTurn`, task
+	 * `a-truncated-agent-turn-routes-as-agent-failed`). An empty diff with this
+	 * set routes `agent-failed`, never the empty-diff STOP. Lets an injected agent
+	 * drive that routing; production reads it off the pi session log.
+	 */
+	cutOffTurn?: CutOffTurn;
 };
 
 export interface DoOptions {
@@ -1377,6 +1387,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		output?: string;
 		timedOut?: boolean;
 		reap?: AgentTreeReap;
+		cutOffTurn?: CutOffTurn;
 	};
 	try {
 		agent = await runDoAgent(options, tree.dir, prompt, slug);
@@ -1431,6 +1442,29 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     deterministic empty-diff backstop. Either routes to needs-attention and
 	//     SKIPS the acceptance gate AND Gate-2 — a clean STOP is NOT "a build that
 	//     changed nothing".
+	//     A CUT-OFF final turn (`length`/`error`) with an empty diff is NOT a STOP:
+	//     it is a harness failure, routed `agent-failed` (WIP save, requeue-able)
+	//     BEFORE the empty-diff backstop can read it as "nothing to build" (task
+	//     `a-truncated-agent-turn-routes-as-agent-failed`).
+	const cutOffDetail = await resolveCutOffTurnFailure({
+		cutOffTurn: agent.cutOffTurn,
+		output: agent.output,
+		slug,
+		cwd: tree.dir,
+		arbiter: tree.arbiterRemote,
+		env,
+	});
+	if (cutOffDetail !== undefined) {
+		return await saveAgentFailure({
+			slug,
+			branch,
+			cwd: tree.dir,
+			arbiter: tree.arbiterRemote,
+			detail: cutOffDetail,
+			env,
+			note,
+		});
+	}
 	const stopReason = await resolveStopReason({
 		output: agent.output,
 		slug,
@@ -2056,6 +2090,8 @@ async function runDoAgent(
 	 * (observation `deadline-reap-lets-node-exit-0-before-the-checkpoint-runs`).
 	 */
 	record?: HarnessRecord;
+	/** The harness's cut-off-final-turn signal (`LaunchResult.cutOffTurn`). */
+	cutOffTurn?: CutOffTurn;
 }> {
 	if (options.dorfl) {
 		return options.dorfl({cwd, prompt, slug, env: options.env});
@@ -2106,6 +2142,7 @@ async function launchAgentUnderWriterLock(params: {
 	timedOut?: boolean;
 	reap?: AgentTreeReap;
 	record?: HarnessRecord;
+	cutOffTurn?: CutOffTurn;
 }> {
 	const {options, cwd, prompt, slug, harness} = params;
 	// Convert the dorfl-internal deadline (minutes) into a wall-clock epoch-ms so
@@ -2150,6 +2187,9 @@ async function launchAgentUnderWriterLock(params: {
 		// Threaded to {@link routeDeadlineCheckpoint}, which refuses to release the
 		// item lock without it.
 		reap: launched.reap,
+		// How the final model turn ended: a `length`/`error` cut-off turns an
+		// empty diff into an agent failure (see `resolveCutOffTurnFailure`).
+		cutOffTurn: launched.cutOffTurn,
 	};
 }
 
@@ -3021,6 +3061,7 @@ async function runRemotePipeline(
 		timedOut?: boolean;
 		reap?: AgentTreeReap;
 		record?: HarnessRecord;
+		cutOffTurn?: CutOffTurn;
 	};
 	try {
 		agent = await runDoAgent(options, cwd, prompt, slug);
@@ -3081,6 +3122,27 @@ async function runRemotePipeline(
 	//     sentinel STOP (verbatim reason) or an empty work-branch diff routes to
 	//     needs-attention (surfaced on the arbiter) and SKIPS the gate + Gate-2. The
 	//     diff base is the worktree's `origin` (arbiterRemote).
+	//     A cut-off final turn with an empty diff is an agent failure, not a STOP
+	//     (same guard as in-place `do`).
+	const cutOffDetail = await resolveCutOffTurnFailure({
+		cutOffTurn: agent.cutOffTurn,
+		output: agent.output,
+		slug,
+		cwd,
+		arbiter: arbiterRemote,
+		env,
+	});
+	if (cutOffDetail !== undefined) {
+		return await saveRemoteAgentFailure({
+			slug,
+			branch,
+			cwd,
+			arbiterRemote,
+			detail: cutOffDetail,
+			env,
+			note,
+		});
+	}
 	const stopReason = await resolveStopReason({
 		output: agent.output,
 		slug,
