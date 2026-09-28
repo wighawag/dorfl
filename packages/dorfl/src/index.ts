@@ -545,6 +545,7 @@ export {
 	encodeWorkId,
 	jobWorktreePath,
 	createJob,
+	RetainedWorktreeUnsavedWorkError,
 	writeJobRecord,
 	readJobRecord,
 	updateJobRecord,

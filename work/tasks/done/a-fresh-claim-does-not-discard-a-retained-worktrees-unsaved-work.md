@@ -30,3 +30,15 @@ Before clearing, apply the same "is there local-only work here?" check `gc` and 
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED). If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal"). The task body lives in `work/tasks/backlog/` (a deliberate drive-from-staging build).
 >
 > RECORD non-obvious in-scope decisions in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles. Never read or write the real `~/.dorfl`, `~/.pi` or other real home state from tests: isolate it to a scratch dir.
+
+## Decisions
+
+- **Refuse instead of saving at claim time.** When a retained worktree holds local-only work, `createJob` throws `RetainedWorktreeUnsavedWorkError` and leaves the worktree alone. Reasons:
+  - Reusing the requeue save would have meant making `createJob` async, which touches `isolation.ts` `prepare`, `run`, `do` and both merge-action paths.
+  - An automatic save could bring back work a human had discarded with `requeue --reset`, which deletes only the remote branch and leaves the worktree in place.
+  - The refusal names `dorfl requeue <slug>`, which already does the save, and the refused claim holds the lock that requeue needs.
+
+  The alternative was an automatic save and continue. This adds a new failure mode for any `createJob` caller (`do --isolated`, `run`, `apply-merge-action`), which then shows up as a claim failure while the lock is still held.
+- **`do --isolated` skips its post-throw cleanup for this error.** That cleanup only checks whether the branch tip is on the arbiter, so it would delete a dirty worktree whose tip is already on main. This touches only the `do --isolated` failure path.
+- **The check runs only on git worktrees.** Orphan directories and dangling symlinks keep today's self-heal removal, since they hold no work git knows about.
+- **Only the fresh-cut path is guarded.** The continue path has the same gap, but the task scoped this to the fresh cut, so I recorded it as an observation instead.

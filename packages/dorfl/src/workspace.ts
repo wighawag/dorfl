@@ -2,11 +2,19 @@ import {
 	existsSync,
 	lstatSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import {basename, dirname, join} from 'node:path';
-import {git} from './git.js';
+import {git, run} from './git.js';
+// Call-time use only (gc.ts imports this module too; an ESM cycle is fine for
+// functions/constants read inside function bodies).
+import {
+	evaluateDeletionSafety,
+	RETAIN_REASON_TEXT,
+	type RetainReason,
+} from './gc.js';
 import {
 	encodeRepoKey,
 	ensureMirror,
@@ -344,6 +352,22 @@ export function createJob(options: CreateJobOptions): Job {
 			}
 		}
 	} else {
+		// NEVER-LOSE-WORK guard (task
+		// `a-fresh-claim-does-not-discard-a-retained-worktrees-unsaved-work`): a
+		// RETAINED worktree at this work-id (a crashed run whose lock was released
+		// some way other than `requeue`, e.g. `release-lock`) may hold work the
+		// arbiter lacks. Apply the SAME deletion-safety predicate `gc` and the
+		// requeue save use; if it does not hold, REFUSE loudly (throw) and leave the
+		// worktree untouched instead of clearing it below.
+		refuseToClearUnsavedWorktree({
+			dir,
+			branch,
+			slug,
+			type: options.type ?? 'task',
+			mirrorPath: mirror.path,
+			env,
+		});
+
 		// Clear any stale registration for this work-id (idempotent re-create): a
 		// leftover worktree dir or branch from a prior crashed run would block the
 		// `worktree add`. We use git's own removal, never a bare rm -rf (ADR §4).
@@ -382,6 +406,117 @@ export function createJob(options: CreateJobOptions): Job {
 			pruneAndDropBranch(mirror.path, branch, env);
 		},
 	};
+}
+
+/**
+ * Thrown by {@link createJob} when its FRESH-cut path finds a RETAINED job
+ * worktree at the work-id that holds work the arbiter lacks (the gc
+ * deletion-safety predicate, {@link evaluateDeletionSafety}, does not hold).
+ * Clearing it would silently discard that work, so the claim is refused and the
+ * worktree is left untouched. The message names the path and the recovery.
+ *
+ * A caller that best-effort reaps a leaked worktree after `createJob` threw
+ * (`do --isolated`'s `reapPreparedWorktreeLeak`) MUST skip that reap for this
+ * error: the worktree is not a leak, it is the work being protected.
+ */
+export class RetainedWorktreeUnsavedWorkError extends Error {
+	readonly dir: string;
+	/** The branch the retained worktree is on (its HEAD branch, else the job branch). */
+	readonly retainedBranch: string;
+	readonly reason: RetainReason;
+	constructor(input: {
+		message: string;
+		dir: string;
+		retainedBranch: string;
+		reason: RetainReason;
+	}) {
+		super(input.message);
+		this.name = 'RetainedWorktreeUnsavedWorkError';
+		this.dir = input.dir;
+		this.retainedBranch = input.retainedBranch;
+		this.reason = input.reason;
+	}
+}
+
+/**
+ * The claim-time never-lose-work guard: if `dir` is a real git working tree (a
+ * retained job worktree, not an orphan dir / dangling symlink the self-heal in
+ * {@link forceClearWorktreePath} handles) and the shared deletion-safety
+ * predicate does NOT hold for it (dirty tree, or a tip the arbiter lacks),
+ * throw {@link RetainedWorktreeUnsavedWorkError}. A worktree that is provably
+ * safe (clean AND merged/pushed) passes, and the caller clears it as before.
+ */
+function refuseToClearUnsavedWorktree(input: {
+	dir: string;
+	branch: string;
+	slug: string;
+	type: SlugNamespace;
+	mirrorPath: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): void {
+	const {dir, branch, slug, type, mirrorPath, env} = input;
+	if (!isGitWorkingTreeRoot(dir, env)) {
+		return;
+	}
+	// Judge the worktree by the branch it is ACTUALLY on (a same-slug run of the
+	// other type shares this work-id), falling back to the job branch when HEAD
+	// is detached (e.g. a run killed mid-rebase).
+	const head = run('git', ['symbolic-ref', '-q', '--short', 'HEAD'], dir, {
+		env,
+	});
+	const retainedBranch =
+		head.status === 0 && head.stdout.trim() !== ''
+			? head.stdout.trim()
+			: branch;
+	const verdict = evaluateDeletionSafety({
+		dir,
+		branch: retainedBranch,
+		env,
+	});
+	if (verdict.safe) {
+		return;
+	}
+	const reason = verdict.reason ?? 'unmerged-commits';
+	const save =
+		type === 'task' && retainedBranch === branch
+			? `Save it with \`dorfl requeue ${slug}\` (with the lock held, it commits ` +
+				`any residue as a wip commit and pushes ${branch}, so the next claim ` +
+				`continues from it), or push ${retainedBranch} from ${dir} yourself.`
+			: `Save it by pushing ${retainedBranch} from ${dir}, then release the lock.`;
+	throw new RetainedWorktreeUnsavedWorkError({
+		dir,
+		retainedBranch,
+		reason,
+		message:
+			`refusing to cut a fresh ${branch} for '${slug}': the retained job ` +
+			`worktree ${dir} (on ${retainedBranch}) holds work the arbiter lacks ` +
+			`(${RETAIN_REASON_TEXT[reason]}), and clearing it would discard that ` +
+			`work. The worktree is left untouched. ${save} To discard it on purpose, ` +
+			`run \`git -C ${mirrorPath} worktree remove --force ${dir}\` and claim again.`,
+	});
+}
+
+/**
+ * True iff `dir` is itself the ROOT of a git working tree (a registered job
+ * worktree). An orphan directory git does not manage, or a dangling symlink,
+ * is not (it holds no git-tracked work, and the self-heal removes it).
+ */
+function isGitWorkingTreeRoot(
+	dir: string,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	if (!existsSync(dir)) {
+		return false;
+	}
+	const top = run('git', ['rev-parse', '--show-toplevel'], dir, {env});
+	if (top.status !== 0) {
+		return false;
+	}
+	try {
+		return realpathSync(top.stdout.trim()) === realpathSync(dir);
+	} catch {
+		return false;
+	}
 }
 
 /**

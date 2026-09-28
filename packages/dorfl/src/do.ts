@@ -40,7 +40,11 @@ import {
 	type IsolatedTree,
 } from './isolation.js';
 import {ensureMirror, encodeRepoKey, mirrorPath} from './repo-mirror.js';
-import {jobWorktreePath, updateJobRecord} from './workspace.js';
+import {
+	jobWorktreePath,
+	RetainedWorktreeUnsavedWorkError,
+	updateJobRecord,
+} from './workspace.js';
 import {reapJob} from './gc.js';
 import {isGitHubArbiterUrl, GitHubProvider} from './github.js';
 import type {ReviewProvider} from './integrator.js';
@@ -2731,7 +2735,12 @@ export async function performDoRemote(
 				// build's fetch. Best-effort reap the deterministic worktree path for this
 				// slug (it is reaped ONLY if its branch is reachable on the arbiter —
 				// never lose work), then re-throw so the failure is still reported.
-				reapPreparedWorktreeLeak(mirror.url, slug, workspacesDir, env, note);
+				// EXCEPT when `createJob` REFUSED over a retained worktree holding
+				// unsaved work: that tree is the work being protected, not a leak, and
+				// the reachable-only reap would discard its uncommitted changes.
+				if (!(err instanceof RetainedWorktreeUnsavedWorkError)) {
+					reapPreparedWorktreeLeak(mirror.url, slug, workspacesDir, env, note);
+				}
 				throw err;
 			}
 			result = await runRemotePipeline(options, tree, slug, note, env);
