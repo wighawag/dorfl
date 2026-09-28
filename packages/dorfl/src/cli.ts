@@ -66,7 +66,11 @@ import {
 	type IsolatedAdvanceContext,
 } from './advance-isolated.js';
 import {advanceRegistrySetRunTick} from './advance-loop-driver.js';
-import {performIntake, resolveIntakeIntegrationModes} from './intake.js';
+import {
+	performIntake,
+	resolveIntakeIntegrationModes,
+	type PerformIntakeOptions,
+} from './intake.js';
 import {workFolderPrefix} from './work-layout.js';
 import {
 	performDoAuto,
@@ -164,6 +168,7 @@ import {installSkills, type InstallSkillsResult} from './install-skills.js';
 import {parsePhase, PhaseUsageError, type Phase} from './phase.js';
 import {activateProcessPhase} from './phase-recorder.js';
 import {performBuildPhase, type BuildPhaseVerb} from './ci-phase-build.js';
+import {performIntakePhase} from './ci-phase-intake.js';
 import {
 	AgentResultUsageError,
 	parseAgentJobResult,
@@ -826,6 +831,14 @@ interface IntakeFlags {
 	config?: string;
 	/** Hidden, CI-only `--phase lock|agent|apply` (see {@link phaseOption}). */
 	phase?: Phase;
+	/** Hidden, CI-only: the directory the agent phase writes the handoff to. */
+	handoffOut?: string;
+	/** Hidden, CI-only: the directory the apply phase reads the handoff from. */
+	handoffIn?: string;
+	/** Hidden, CI-only: `needs.agent.result`, for the apply phase. */
+	agentResult?: AgentJobResult;
+	/** Hidden, CI-only: accepted for parity with `do`/`advance`; intake does not use it. */
+	agentTimeoutMinutes?: number;
 	arbiter?: string;
 	merge?: boolean;
 	propose?: boolean;
@@ -1459,6 +1472,43 @@ async function runBuildPhaseAndExit(
 		allowBacklog: flags.allowBacklog === true,
 		agentResult: flags.agentResult,
 		agentTimeoutMinutes: flags.agentTimeoutMinutes,
+	});
+	if (result.exitCode !== 0) {
+		console.error(`error: ${result.message}`);
+	} else {
+		console.error(`>> ${result.message}`);
+	}
+	process.exit(result.exitCode);
+}
+
+/**
+ * Run ONE phase of the split intake path (`intake <N> --phase`) and exit with
+ * its code (task `ci-split-intake`). The agent and apply phases read the lock
+ * job's facts from `DORFL_LOCK_OUTPUTS`.
+ */
+async function runIntakePhaseAndExit(
+	flags: IntakeFlags,
+	options: PerformIntakeOptions,
+): Promise<never> {
+	const phase = flags.phase!;
+	const handoffDir = phase === 'agent' ? flags.handoffOut : flags.handoffIn;
+	if (phase !== 'lock' && handoffDir === undefined) {
+		console.error(
+			`error: --phase ${phase} needs ${phase === 'agent' ? '--handoff-out' : '--handoff-in'} <dir>.`,
+		);
+		process.exit(1);
+	}
+	if (phase === 'apply' && flags.agentResult === undefined) {
+		console.error(
+			'error: --phase apply needs --agent-result <result> (needs.agent.result).',
+		);
+		process.exit(1);
+	}
+	const result = await performIntakePhase({
+		...options,
+		phase,
+		handoffDir,
+		agentResult: flags.agentResult,
 	});
 	if (result.exitCode !== 0) {
 		console.error(`error: ${result.message}`);
@@ -4640,6 +4690,10 @@ export function buildProgram(): Command {
 			'HOST-ONLY root folder under which the pi session file is generated',
 		)
 		.addOption(phaseOption())
+		.addOption(handoffDirOptions()[0])
+		.addOption(handoffDirOptions()[1])
+		.addOption(agentResultOptions()[0])
+		.addOption(agentResultOptions()[1])
 		.action(async (rawNumber: string, flags: IntakeFlags) => {
 			enterCliPhase(flags.phase);
 			const issueNumber = Number(rawNumber);
@@ -4746,7 +4800,7 @@ export function buildProgram(): Command {
 				);
 				process.exit(1);
 			}
-			const result = await performIntake({
+			const intakeOptions: PerformIntakeOptions = {
 				issueNumber,
 				cwd,
 				phase: flags.phase,
@@ -4789,7 +4843,13 @@ export function buildProgram(): Command {
 				// decision/review AGENT launches); absent ⇒ ambient.
 				identity: config.identity,
 				note: (message) => console.error(`>> ${message}`),
-			});
+			};
+			// CI PHASE MODE (task `ci-split-intake`): `--phase` runs ONE job of the
+			// split item workflow for `issue:<N>`, on the SAME intake pipeline.
+			if (flags.phase !== undefined) {
+				await runIntakePhaseAndExit(flags, intakeOptions);
+			}
+			const result = await performIntake(intakeOptions);
 			if (result.exitCode !== 0) {
 				console.error(`error: ${result.message}`);
 			} else {

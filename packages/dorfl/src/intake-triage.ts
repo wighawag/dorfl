@@ -89,8 +89,12 @@ export function triageIntake(comments: IssueComment[]): IntakeTriageDecision {
 		const humanComments = comments.filter(
 			(c) => parseIntakeMarker(c.body) === undefined,
 		);
-		const currentHumanIds = new Set(
-			humanComments
+		// EVERY comment id still in the thread (not only the human ones): a CI run's
+		// `seen=` lists every comment id its lock job read, intake's own included
+		// (task `ci-split-intake`), and an intake comment that is still there was
+		// not deleted.
+		const currentIds = new Set(
+			comments
 				.map((c) => c.id)
 				.filter((id): id is string => id !== undefined && id !== ''),
 		);
@@ -105,7 +109,7 @@ export function triageIntake(comments: IssueComment[]): IntakeTriageDecision {
 			// previously-seen human id no longer present in the thread was deleted.
 			let deletedSeenCount = 0;
 			for (const id of seenSet) {
-				if (!currentHumanIds.has(id)) {
+				if (!currentIds.has(id)) {
 					deletedSeenCount += 1;
 				}
 			}

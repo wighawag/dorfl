@@ -5,8 +5,8 @@
  * The lock job's outputs are the apply job's TRUSTED channel
  * (`needs.lock.outputs.*`): they choose refs, rungs and artifact names. So the
  * serializer emits only values that cannot carry attacker text: commit ids,
- * enums, booleans, bounded integers (the agent timeout, comment ids) and the
- * dorfl-derived artifact name. Every key is known here with its type, and every
+ * enums, booleans, bounded integers (the agent timeout), provider-assigned
+ * comment ids and the dorfl-derived artifact name. Every key is known here with its type, and every
  * value is re-checked at runtime (a TypeScript type does not stop a string read
  * from an issue), so free text such as an issue title is REFUSED, never
  * escaped.
@@ -41,8 +41,13 @@ export interface LockOutputs {
 	originTrust?: 'trusted' | 'untrusted';
 	/** The intake document mode. */
 	documentMode?: IntegrationMode;
-	/** The issue comment ids the lock job read (intake). */
-	seenCommentIds?: number[];
+	/**
+	 * The issue comment ids the lock job read (intake), as the issue provider
+	 * reports them: a REST database id (a positive integer) or a GraphQL node id
+	 * (`IC_kwDO...`, what `gh issue view --json comments` reports). A parsed
+	 * integer id stays a number; a node id is a string.
+	 */
+	seenCommentIds?: Array<number | string>;
 }
 
 /** A lock output the serializer will not emit. */
@@ -59,6 +64,14 @@ export const MAX_AGENT_TIMEOUT_MINUTES = 7200;
 export const MAX_SEEN_COMMENT_IDS = 5000;
 
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * A GitHub GraphQL node id (`IC_kwDODKw3uc7tpgEC`): an upper-case type prefix,
+ * `_`, then URL-safe base64. Assigned by GitHub, never chosen by an issue
+ * author; the charset holds no `,` (the list separator), `=`, space or line
+ * break, so it cannot forge another output line.
+ */
+const NODE_ID_RE = /^[A-Z]{1,8}_[A-Za-z0-9_-]{1,80}$/;
 
 function refuse(key: string, why: string): never {
 	throw new LockOutputRefused(`${key} ${why}`);
@@ -113,7 +126,11 @@ const SCHEMA: Record<keyof LockOutputs, (key: string, v: unknown) => string> = {
 			refuse(key, `is not a list of at most ${MAX_SEEN_COMMENT_IDS} ids`);
 		}
 		const check = integer(1, Number.MAX_SAFE_INTEGER);
-		return v.map((id) => check(key, id)).join(',');
+		return v
+			.map((id) =>
+				typeof id === 'string' && NODE_ID_RE.test(id) ? id : check(key, id),
+			)
+			.join(',');
 	},
 };
 
@@ -170,7 +187,8 @@ const PARSE: Record<keyof LockOutputs, (key: string, raw: string) => unknown> =
 		originTrust: (key, raw) => SCHEMA.originTrust(key, raw),
 		documentMode: (key, raw) => SCHEMA.documentMode(key, raw),
 		seenCommentIds: (key, raw) => {
-			const ids = raw.split(',').map((part) => {
+			const ids = raw.split(',').map((part): number | string => {
+				if (NODE_ID_RE.test(part)) return part;
 				if (!/^[0-9]{1,16}$/.test(part)) {
 					refuse(key, 'is not a comma-separated list of ids');
 				}

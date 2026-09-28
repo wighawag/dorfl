@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest';
 import {
 	LockOutputRefused,
+	parseLockOutputLines,
 	serializeLockOutputs,
 	type LockOutputs,
 } from '../src/ci-lock-outputs.js';
@@ -75,6 +76,29 @@ describe('serializeLockOutputs', () => {
 				seenCommentIds: [ISSUE_TITLE] as unknown as number[],
 			}),
 		).toThrow(LockOutputRefused);
+	});
+
+	it('carries GitHub comment node ids (what `gh issue view --json comments` reports) next to integer ids', () => {
+		const out = serializeLockOutputs({
+			seenCommentIds: ['IC_kwDODKw3uc7tpgEC', 42, 'IC_kw-_x9'],
+		});
+		expect(out).toBe('seenCommentIds=IC_kwDODKw3uc7tpgEC,42,IC_kw-_x9\n');
+		expect(parseLockOutputLines(out)).toEqual({
+			seenCommentIds: ['IC_kwDODKw3uc7tpgEC', 42, 'IC_kw-_x9'],
+		});
+		for (const bad of [
+			'IC_kw,x',
+			'IC_kw x',
+			'IC_kw\nbaseSha=x',
+			'ic_lowercase',
+			'NOPREFIX',
+			'IC_kw=',
+			'42',
+		]) {
+			expect(() => serializeLockOutputs({seenCommentIds: [bad]}), bad).toThrow(
+				LockOutputRefused,
+			);
+		}
 	});
 
 	it('refuses an unknown key', () => {

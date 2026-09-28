@@ -81,6 +81,22 @@ describe('triageIntake \u2014 last comment is INTAKE\u2019s', () => {
 		}
 	});
 
+	it('an intake comment id in `seen=` (a CI run records every id its lock job read) is never counted as deleted', () => {
+		// CI run m2 read [1, m1] and recorded both; human 3 then raced in.
+		const thread = [
+			human('1'),
+			intake('ask', ['1'], 'm1'),
+			human('3'),
+			intake('ask', ['1', 'm1'], 'm2'),
+		];
+		const decision = triageIntake(thread);
+		expect(decision.action).toBe('proceed');
+		if (decision.action === 'proceed') {
+			expect(decision.predatingIds).toEqual(['3']);
+			expect(decision.deletedSeenCount).toBe(0);
+		}
+	});
+
 	it('DELETION-ONLY (no unseen comment) \u2192 SKIP no-new-input (a bare deletion is not a wake trigger)', () => {
 		// seenSet = {1,2}; human 2 deleted but NO new comment \u2014 still no-new-input.
 		const thread = [human('1'), intake('ask', ['1', '2'], 'm1')];
