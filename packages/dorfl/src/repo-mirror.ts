@@ -36,6 +36,27 @@ export function readOriginUrl(
 }
 
 /**
+ * Is `mirrorPath` inside a `--reconcile-locks` write scope? `undefined` scope
+ * means every mirror (the explicit `--all-arbiters`); otherwise only the mirror
+ * whose `origin` URL hub-keys to `arbiterKey` (the SAME keying `gc` uses for its
+ * per-job arbiter scope). A mirror whose `origin` is unreadable is OUT of scope:
+ * the safe direction for a write. Shared by `status --reconcile-locks` (task
+ * `reconcile-locks-stays-within-the-current-arbiter`) and `scan
+ * --reconcile-locks` (task `status-no-arbiter-is-honoured`).
+ */
+export function mirrorInReconcileScope(
+	mirrorPath: string,
+	arbiterKey: string | undefined,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	if (arbiterKey === undefined) {
+		return true;
+	}
+	const url = readOriginUrl(mirrorPath, env);
+	return url !== undefined && encodeRepoKey(url) === arbiterKey;
+}
+
+/**
  * The shared **hub-mirror primitive**: one bare mirror per repo under
  * `<workspacesDir>/repos/<key>.git`, re-fetched from the arbiter. Both the
  * autonomous job runner (`agent-workspaces`) and the human `work-on` build on

@@ -185,8 +185,59 @@ interface ScanFlags {
 	json?: boolean;
 	here?: boolean;
 	reconcileLocks?: boolean;
+	allArbiters?: boolean;
 	arbiterRemote?: string;
 	arbiter?: string;
+}
+
+/**
+ * Resolve the ARBITER SCOPE of a `--reconcile-locks` write for `status` or `scan`
+ * (tasks `reconcile-locks-stays-within-the-current-arbiter` and
+ * `status-no-arbiter-is-honoured`). Like `gc`, the drain is arbiter-scoped by
+ * DEFAULT: the hub key of the arbiter resolved from the cwd (its `--arbiter`
+ * remote, else the configured `defaultArbiter`), so a drain run in repo A never
+ * releases repo B's locks. `--all-arbiters` is the explicit, loud global opt-in
+ * and returns `undefined` (= every mirror). With neither a resolvable cwd arbiter
+ * nor the flag this REFUSES (exit 1) rather than silently widening the write.
+ * Returns `undefined` too when `--reconcile-locks` is absent (the key is then
+ * ignored by the report builders).
+ */
+function resolveReconcileArbiterKey(
+	verb: 'status' | 'scan',
+	flags: {
+		reconcileLocks?: boolean;
+		allArbiters?: boolean;
+		arbiter?: string | false;
+	},
+	defaultArbiter: string,
+): string | undefined {
+	if (flags.reconcileLocks !== true) {
+		return undefined;
+	}
+	if (flags.allArbiters === true) {
+		console.error(
+			'>> --all-arbiters: releasing stale per-item locks GLOBALLY across ' +
+				'ALL registered arbiters (NOT scoped to the current repo).',
+		);
+		return undefined;
+	}
+	// `typeof` guard: on `status`, `--no-arbiter` is commander's negation of
+	// `--arbiter`, so it arrives as `arbiter: false`, not a remote name.
+	const remote =
+		typeof flags.arbiter === 'string' ? flags.arbiter : defaultArbiter;
+	const key = resolveArbiterKeyFromCwd(process.cwd(), remote, process.env);
+	if (key === undefined) {
+		console.error(
+			`refusing: \`${verb} --reconcile-locks\` is ARBITER-SCOPED and could ` +
+				`not resolve an arbiter from the current directory (no '${remote}' ` +
+				'git remote, or not inside a repo). It will NOT fall back to ' +
+				'releasing locks on every arbiter. Run it from a repo with an ' +
+				'arbiter remote, pass --arbiter <remote>, or --all-arbiters to ' +
+				'reconcile every registered arbiter.',
+		);
+		process.exit(1);
+	}
+	return key;
 }
 
 /**
@@ -1064,8 +1115,12 @@ interface StatusFlags {
 	config?: string;
 	workspace?: string;
 	arbiterRemote?: string;
-	arbiter?: string;
-	noArbiter?: boolean;
+	/**
+	 * `--arbiter <remote>` gives the remote name; `--no-arbiter` is commander's
+	 * NEGATION of the same option and arrives as `false` (there is no separate
+	 * `noArbiter` key). `undefined` when neither is passed.
+	 */
+	arbiter?: string | false;
 	here?: boolean;
 	reconcileLocks?: boolean;
 	allArbiters?: boolean;
@@ -1675,7 +1730,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--reconcile-locks',
-			'WRITE: release the per-item locks whose item is already at rest in a terminal folder on the arbiter’s main (e.g. a merged propose PR left its lock behind). Without this flag `scan` is strictly read-only. Not normally needed, the claim path releases them automatically on every unit of work. An item that is NOT terminal on main (a live build, an open PR, a stuck item) is NEVER released, with or without the flag.',
+			'WRITE: release the per-item locks whose item is already at rest in a terminal folder on the arbiter’s main (e.g. a merged propose PR left its lock behind). Without this flag `scan` is strictly read-only. SCOPE: by DEFAULT this is ARBITER-SCOPED, like gc and `status --reconcile-locks`: it releases locks ONLY on the arbiter resolved from the current directory (its --arbiter remote, default: the configured defaultArbiter), so a drain run in repo A never touches repo B’s locks (other repos’ stale locks are still classified). Pass --all-arbiters to release across EVERY registered arbiter. Refuses when no arbiter resolves from the cwd and --all-arbiters is not given. Not normally needed, the claim path releases them automatically on every unit of work. An item that is NOT terminal on main (a live build, an open PR, a stuck item) is NEVER released, with or without the flag.',
+		)
+		.option(
+			'--all-arbiters',
+			'with --reconcile-locks: release stale locks across EVERY registered arbiter (loud + global), not just the current repo’s. No effect on the read-only report, which always covers every registered repo.',
 		)
 		.option('--json', 'output the raw report as JSON')
 		.action(async (flags: ScanFlags, command: Commander) => {
@@ -1718,10 +1777,19 @@ export function buildProgram(): Command {
 				}
 				return;
 			}
+			// SCOPE of the registry-loop `--reconcile-locks` WRITE: arbiter-scoped by
+			// default, `--all-arbiters` for the global drain, refusal when neither
+			// resolves (the SAME rule `status --reconcile-locks` applies).
+			const reconcileArbiterKey = resolveReconcileArbiterKey(
+				'scan',
+				flags,
+				config.defaultArbiter,
+			);
 			const report = await scan(config, {
 				warn,
 				override,
 				reconcileLocks: flags.reconcileLocks === true,
+				reconcileArbiterKey,
 			});
 			// The cwd-local section: resolve it ONLY when a participating cwd is NOT
 			// already covered by a registered mirror. A FETCH-FREE pre-check
@@ -4267,7 +4335,10 @@ export function buildProgram(): Command {
 					config,
 					override,
 					arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
-					lockArbiterRemote: flags.arbiter ?? 'origin',
+					// `--no-arbiter` arrives as `arbiter: false` (commander negation):
+					// never pass `false` on as a remote name.
+					lockArbiterRemote:
+						typeof flags.arbiter === 'string' ? flags.arbiter : 'origin',
 					reconcileLocks: flags.reconcileLocks === true,
 					warn,
 				});
@@ -4300,42 +4371,17 @@ export function buildProgram(): Command {
 			// never releases repo B's locks. `--all-arbiters` is the explicit, loud
 			// global opt-in. With neither a resolvable cwd arbiter nor the flag we
 			// REFUSE rather than silently widening the write to every arbiter.
-			let reconcileArbiterKey: string | undefined;
-			if (flags.reconcileLocks === true) {
-				if (flags.allArbiters === true) {
-					console.error(
-						'>> --all-arbiters: releasing stale per-item locks GLOBALLY across ' +
-							'ALL registered arbiters (NOT scoped to the current repo).',
-					);
-				} else {
-					// `typeof` guard: `--no-arbiter` is commander's negation of
-					// `--arbiter`, so it arrives here as `arbiter: false`, not a name.
-					const remote =
-						typeof flags.arbiter === 'string'
-							? flags.arbiter
-							: config.defaultArbiter;
-					reconcileArbiterKey = resolveArbiterKeyFromCwd(
-						process.cwd(),
-						remote,
-						process.env,
-					);
-					if (reconcileArbiterKey === undefined) {
-						console.error(
-							'refusing: `status --reconcile-locks` is ARBITER-SCOPED and could ' +
-								`not resolve an arbiter from the current directory (no '${remote}' ` +
-								'git remote, or not inside a repo). It will NOT fall back to ' +
-								'releasing locks on every arbiter. Run it from a repo with an ' +
-								'arbiter remote, pass --arbiter <remote>, or --all-arbiters to ' +
-								'reconcile every registered arbiter.',
-						);
-						process.exit(1);
-					}
-				}
-			}
+			const reconcileArbiterKey = resolveReconcileArbiterKey(
+				'status',
+				flags,
+				config.defaultArbiter,
+			);
 			// Fold in the current repo's arbiter state (the old `arbiter status`, ADR
 			// §1/§7) unless --no-arbiter. Read-only; tolerates not being in a repo.
+			// Commander treats `--no-arbiter` as the NEGATION of `--arbiter <remote>`
+			// (one `arbiter` key): it sets `arbiter: false`, never a `noArbiter` key.
 			const arbiter =
-				flags.noArbiter === true
+				flags.arbiter === false
 					? undefined
 					: arbiterStatus({
 							cwd: process.cwd(),
