@@ -73,7 +73,12 @@ const SAMPLE: Record<string, Record<string, unknown>> = {
 		reason: 'review blocked',
 		questions: ['Split?'],
 	},
-	surface: {questions: ['What is X?']},
+	surface: {
+		questions: [
+			'What is X?',
+			{question: 'Which Y?', context: 'Y is new.', default: 'The old Y.'},
+		],
+	},
 	triage: {disposition: 'map', target: 'task:add-thing', reason: 'same'},
 	'apply-decision': {
 		outcome: 'task',
@@ -515,7 +520,7 @@ describe('record rejections', () => {
 					const over = 'x'.repeat(spec.maxChars + 1);
 					const atLimit = 'x'.repeat(spec.maxChars);
 					const value = (s: string) =>
-						spec.type === 'text-list'
+						spec.type === 'text-list' || spec.type === 'question-list'
 							? [s]
 							: spec.type === 'documents'
 								? {'a-task': s}
@@ -539,6 +544,106 @@ describe('record rejections', () => {
 				});
 			}
 		}
+	});
+
+	describe('a surfaced question with its context and default', () => {
+		const surface = {item: 'task:add-thing', rung: 'surface' as const};
+		const triage = {
+			item: 'observation:odd-note',
+			rung: 'triage-observation' as const,
+		};
+		const surfaceWith = (questions: unknown) => ({
+			...base(),
+			products: {questions},
+		});
+		const keepWith = (questions: unknown) => ({
+			...recordFor(rowNamed('triage')).record,
+			products: {disposition: 'keep', questions},
+		});
+		const full = {question: 'Q?', context: 'C.', default: 'D.'};
+
+		it('takes the closed object and the bare text, on surface and triage', () => {
+			validateHandoffRecord(
+				surfaceWith([full, {question: 'Q2?'}, 'Q3?']),
+				surface,
+			);
+			validateHandoffRecord(keepWith([full, 'Q2?']), triage);
+		});
+
+		it('rejects an unknown key in a question', () => {
+			for (const check of [
+				() =>
+					validateHandoffRecord(
+						surfaceWith([{...full, kind: 'merge'}]),
+						surface,
+					),
+				() => validateHandoffRecord(keepWith([{...full, id: 'q1'}]), triage),
+				() =>
+					validateHandoffRecord(
+						surfaceWith([{...full, answer: 'yes'}]),
+						surface,
+					),
+			]) {
+				expectRejected(check, 'field');
+			}
+		});
+
+		it('rejects an oversize question, context or default', () => {
+			const max = HANDOFF_LIMITS.reasonChars;
+			for (const key of ['question', 'context', 'default'] as const) {
+				validateHandoffRecord(
+					surfaceWith([{...full, [key]: 'x'.repeat(max)}]),
+					surface,
+				);
+				expectRejected(
+					() =>
+						validateHandoffRecord(
+							surfaceWith([{...full, [key]: 'x'.repeat(max + 1)}]),
+							surface,
+						),
+					'limit',
+				);
+				expectRejected(
+					() =>
+						validateHandoffRecord(
+							keepWith([{...full, [key]: 'x'.repeat(max + 1)}]),
+							triage,
+						),
+					'limit',
+				);
+			}
+		});
+
+		it('rejects a wrong type, a missing question and a control character', () => {
+			for (const questions of [
+				[42],
+				[null],
+				[['Q?']],
+				[{...full, context: 7}],
+				[{...full, default: ['D.']}],
+				[{...full, question: {text: 'Q?'}}],
+				[{context: 'C.', default: 'D.'}],
+				[{...full, context: 'bell\u0007'}],
+				{question: 'Q?'},
+			]) {
+				expectRejected(
+					() => validateHandoffRecord(surfaceWith(questions), surface),
+					'field',
+				);
+			}
+		});
+
+		it('keeps an ask to question texts', () => {
+			const a = recordFor(rowNamed('apply-decision')).record;
+			expectRejected(
+				() =>
+					validateHandoffRecord(
+						{...a, products: {outcome: 'ask', questions: [full]}},
+						{item: 'observation:odd-note', rung: 'apply'},
+					),
+				'field',
+			);
+		});
 	});
 
 	it('uses the limits of the spec', () => {

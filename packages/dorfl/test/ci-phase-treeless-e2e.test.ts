@@ -4,6 +4,7 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {git} from '../src/git.js';
+import {parseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import {performAdvance} from '../src/advance.js';
 import {runAdvanceTickWithTreelessPublish} from '../src/advance-drivers.js';
 import {
@@ -234,6 +235,19 @@ describe('the tree-less rungs in three processes', () => {
 			expect(ci).toEqual(lap);
 			// Every scenario changes `main` (or, for the reset, a branch).
 			expect(ci.subjects === '' && s.branches === undefined).toBe(false);
+			if (s.sidecarEntries !== undefined) {
+				const {item, entries} = s.sidecarEntries;
+				const sidecar = parseSidecar(
+					g(seeded.arbiter, 'show', `main:${sidecarPathFor(item)}`),
+				);
+				expect(
+					sidecar.entries.slice(-entries.length).map((e) => ({
+						question: e.question,
+						...(e.context === '' ? {} : {context: e.context}),
+						...(e.default === undefined ? {} : {default: e.default}),
+					})),
+				).toEqual(entries);
+			}
 		},
 		120_000,
 	);

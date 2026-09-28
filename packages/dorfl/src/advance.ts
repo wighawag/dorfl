@@ -1636,8 +1636,14 @@ async function applyAgenticDecision(
 	if (verdict.outcome === 'ask') {
 		// ask-follow-up → the EXISTING append/re-pause loop. One BATCH of follow-ups.
 		const apply = context.applyPersist ?? applyAnsweredQuestions;
-		const question = (verdict.question ?? '').trim();
-		if (question === '') {
+		const questions = (
+			verdict.questions !== undefined && verdict.questions.length > 0
+				? verdict.questions
+				: [verdict.question ?? '']
+		)
+			.map((q) => q.trim())
+			.filter((q) => q !== '');
+		if (questions.length === 0) {
 			return {
 				exitCode: 1,
 				outcome: 'usage-error',
@@ -1649,7 +1655,7 @@ async function applyAgenticDecision(
 				cwd,
 				item,
 				itemPath,
-				appendQuestions: [{question}],
+				appendQuestions: questions.map((question) => ({question})),
 				note,
 			});
 			return {

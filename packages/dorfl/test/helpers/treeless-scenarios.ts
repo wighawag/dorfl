@@ -43,6 +43,15 @@ export interface TreelessScenario {
 	/** The intent the agent phase hands over (agent scenarios). */
 	intent?: 'surface' | 'triage' | 'apply-decision';
 	emits: ScenarioEmits;
+	/**
+	 * The last entries of the sidecar `main` must end with, on top of the laptop
+	 * comparison: proof the compared sidecar holds what the agents gave (an
+	 * engine-built question may precede them).
+	 */
+	sidecarEntries?: {
+		item: string;
+		entries: {question: string; context?: string; default?: string}[];
+	};
 }
 
 export const OBS = 'noisy-flake';
@@ -199,6 +208,83 @@ export const SCENARIOS: readonly TreelessScenario[] = [
 		},
 	},
 	{
+		// Task `ci-surface-questions-keep-their-context-and-default`: a question's
+		// context and suggested default reach the sidecar as on the laptop.
+		name: 'surface with context and default',
+		arg: `task:${TASK}`,
+		files: {[TASK_REL]: task(['needsAnswers: true'])},
+		rung: 'surface',
+		needsAgent: true,
+		intent: 'surface',
+		emits: {
+			surface: {
+				questions: [
+					{
+						question: 'Which API version do we target?',
+						context: 'The client still speaks v1;\nv2 dropped the batch call.',
+						default: 'v2, with a v1 shim.',
+					},
+					{
+						question: 'Is a migration needed?',
+						context: 'Rows are keyed by id.',
+					},
+					{question: 'Who owns the rollout?', default: 'The API team.'},
+					{question: 'Do we announce it?'},
+				],
+			},
+		},
+		sidecarEntries: {
+			item: TASK_ITEM,
+			entries: [
+				{
+					question: 'Which API version do we target?',
+					context: 'The client still speaks v1;\nv2 dropped the batch call.',
+					default: 'v2, with a v1 shim.',
+				},
+				{question: 'Is a migration needed?', context: 'Rows are keyed by id.'},
+				{question: 'Who owns the rollout?', default: 'The API team.'},
+				{question: 'Do we announce it?'},
+			],
+		},
+	},
+	{
+		name: 'triage fall-through with context and default',
+		arg: `obs:${OBS}`,
+		files: {
+			[OBS_REL]: observation([
+				'## Open questions',
+				'',
+				'- Is it the runner or the test?',
+				'',
+			]),
+		},
+		observationTriage: 'ask',
+		rung: 'triage-observation',
+		needsAgent: true,
+		intent: 'triage',
+		emits: {
+			surface: {
+				questions: [
+					{
+						question: 'Is it the runner or the test?',
+						context: 'It only flakes on the shared runner.',
+						default: 'The runner.',
+					},
+				],
+			},
+		},
+		sidecarEntries: {
+			item: OBS_ITEM,
+			entries: [
+				{
+					question: 'Is it the runner or the test?',
+					context: 'It only flakes on the shared runner.',
+					default: 'The runner.',
+				},
+			],
+		},
+	},
+	{
 		name: 'surface short-circuit',
 		arg: `obs:${OBS}`,
 		files: {[OBS_REL]: observation()},
@@ -238,6 +324,20 @@ export const SCENARIOS: readonly TreelessScenario[] = [
 		outcome: 'ask',
 		question: 'Which runner shows the flake?',
 	}),
+	{
+		...applyDecision('apply-decision ask with two questions', 'Maybe.', {
+			outcome: 'ask',
+			questions: ['Which runner shows the flake?', 'Since which commit?'],
+		}),
+		sidecarEntries: {
+			item: OBS_ITEM,
+			entries: [
+				{question: 'What should become of this observation?'},
+				{question: 'Which runner shows the flake?'},
+				{question: 'Since which commit?'},
+			],
+		},
+	},
 	{
 		name: 'kind: stuck reset',
 		arg: `task:${TASK}`,

@@ -53,7 +53,7 @@ export const HANDOFF_LIMITS = {
 	prTitleChars: PR_TITLE_MAX,
 	/** A PR body, and every text posted as one comment (under GitHub's 65,536). */
 	commentChars: 60_000,
-	/** Each reason or question. */
+	/** Each reason or question (and a surfaced question's context and default). */
 	reasonChars: 10_000,
 	/**
 	 * A drafted document title (task, spec or ADR `title:`). Not in the spec's
@@ -249,8 +249,25 @@ export interface TaskingSurfaceProducts {
 	reason: string;
 	questions?: string[];
 }
+/**
+ * A surfaced question with the optional context and suggested default the
+ * `surface-questions` agent gave it (the sidecar authoring fields, see
+ * `SurfaceQuestion` in `surface-gate.ts`). A closed shape: no other key is
+ * accepted, and each text is bounded by `reasonChars`.
+ */
+export interface HandoffQuestion {
+	question: string;
+	context?: string;
+	default?: string;
+}
+/**
+ * One entry of a surfaced-question list: a {@link HandoffQuestion}, or a bare
+ * string for a question with neither context nor default (the plain form every
+ * schema-1 writer before the object form wrote, still read).
+ */
+export type HandoffQuestionEntry = string | HandoffQuestion;
 export interface SurfaceProducts {
-	questions: string[];
+	questions: HandoffQuestionEntry[];
 }
 export interface TriageProducts {
 	disposition: (typeof TRIAGE_DISPOSITIONS)[number];
@@ -258,7 +275,7 @@ export interface TriageProducts {
 	target?: string;
 	reason?: string;
 	/** The surface agent's questions when the rung fell through (`keep`). */
-	questions?: string[];
+	questions?: HandoffQuestionEntry[];
 }
 export interface ApplyDecisionProducts {
 	outcome: (typeof APPLY_DECISION_OUTCOMES)[number];
@@ -267,7 +284,7 @@ export interface ApplyDecisionProducts {
 	body?: string;
 	slug?: string;
 	reason?: string;
-	/** For `ask`: the follow-up questions. */
+	/** For `ask`: the follow-up questions, one entry per question (never joined). */
 	questions?: string[];
 }
 export interface IntakeAskProducts {
@@ -324,6 +341,7 @@ export type FieldSpec = {required: boolean} & (
 	| {type: 'line'; maxChars: number}
 	| {type: 'text'; maxChars: number}
 	| {type: 'text-list'; maxChars: number}
+	| {type: 'question-list'; maxChars: number}
 	| {type: 'documents'; maxChars: number}
 	| {type: 'enum'; values: readonly string[]}
 	| {type: 'boolean'}
@@ -344,6 +362,11 @@ const text = (maxChars: number, required = true): FieldSpec => ({
 });
 const textList = (maxChars: number, required = true): FieldSpec => ({
 	type: 'text-list',
+	maxChars,
+	required,
+});
+const questionList = (maxChars: number, required = true): FieldSpec => ({
+	type: 'question-list',
 	maxChars,
 	required,
 });
@@ -540,7 +563,7 @@ export const HANDOFF_INTENT_TABLE: readonly IntentRow[] = [
 			'sidecar path',
 			'engine-built base questions',
 		],
-		record: {questions: textList(L.reasonChars)},
+		record: {questions: questionList(L.reasonChars)},
 		bundle: NO_BUNDLE,
 		resumesAt: 'persistSurfacedQuestions, publish, release',
 	},
@@ -558,7 +581,7 @@ export const HANDOFF_INTENT_TABLE: readonly IntentRow[] = [
 			disposition: oneOf(TRIAGE_DISPOSITIONS),
 			target: {type: 'item-ref', required: false},
 			reason: text(L.reasonChars, false),
-			questions: textList(L.reasonChars, false),
+			questions: questionList(L.reasonChars, false),
 		},
 		check: (p) => {
 			const auto = p.disposition !== 'keep';
@@ -753,6 +776,28 @@ function checkText(
 	if (singleLine && value.trim() === '') reject('field', `${path} is blank`);
 }
 
+/** The keys a {@link HandoffQuestion} may carry (a closed shape). */
+const QUESTION_KEYS = ['question', 'context', 'default'] as const;
+
+/** One {@link HandoffQuestionEntry}: a bare question text, or the closed object. */
+function checkQuestion(path: string, value: unknown, maxChars: number): void {
+	if (typeof value === 'string') {
+		return checkText(path, value, maxChars, false);
+	}
+	if (!isPlainObject(value)) {
+		reject('field', `${path} is neither a question text nor a question object`);
+	}
+	checkKeys(`${path}.`, value, QUESTION_KEYS);
+	if (value.question === undefined) {
+		reject('field', `${path}.question is required`);
+	}
+	for (const key of QUESTION_KEYS) {
+		if (value[key] !== undefined) {
+			checkText(`${path}.${key}`, value[key], maxChars, false);
+		}
+	}
+}
+
 function checkField(path: string, spec: FieldSpec, value: unknown): void {
 	switch (spec.type) {
 		case 'line':
@@ -763,6 +808,10 @@ function checkField(path: string, spec: FieldSpec, value: unknown): void {
 			value.forEach((v, i) =>
 				checkText(`${path}[${i}]`, v, spec.maxChars, false),
 			);
+			return;
+		case 'question-list':
+			if (!Array.isArray(value)) reject('field', `${path} is not a list`);
+			value.forEach((v, i) => checkQuestion(`${path}[${i}]`, v, spec.maxChars));
 			return;
 		case 'documents':
 			if (!isPlainObject(value)) reject('field', `${path} is not an object`);

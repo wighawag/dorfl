@@ -138,6 +138,16 @@ export interface DecisionVerdict {
 	 * append/re-pause loop).
 	 */
 	question?: string;
+	/**
+	 * The follow-up questions as SEPARATE questions (`ask` outcome); when
+	 * non-empty it takes precedence over {@link question}, and each becomes its
+	 * own sidecar entry. The decision agent's contract emits the single
+	 * `question` ({@link parseDecisionVerdict} does not read this field); the CI
+	 * apply phase sets it when it replays a handed-over `ask`, so a handoff's
+	 * questions are never joined into one (task
+	 * `ci-surface-questions-keep-their-context-and-default`).
+	 */
+	questions?: string[];
 }
 
 /**

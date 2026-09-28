@@ -388,6 +388,53 @@ describe('apply: the agent job did not succeed', () => {
 	}, 60_000);
 });
 
+describe('apply: surfaced questions keep their shape', () => {
+	it('an apply-decision ask with two questions surfaces two questions', async () => {
+		const s = scenario('apply-decision ask');
+		seedScenario(seeded, s);
+		const held = await lock(s);
+		rawHandoff({
+			intent: {kind: 'apply-decision'},
+			products: {
+				outcome: 'ask',
+				questions: ['Which runner shows the flake?', 'Since which commit?'],
+			},
+		});
+		const r = await apply(s, held);
+		expect(r.outcome, r.message).toBe('applied');
+		const sidecar = parseSidecar(
+			showOnArbiter(`main:${sidecarPathFor(ITEM)}`) as string,
+		);
+		expect(sidecar.entries.map((e) => [e.id, e.question])).toEqual([
+			['q1', 'What should become of this observation?'],
+			['q2', 'Which runner shows the flake?'],
+			['q3', 'Since which commit?'],
+		]);
+		expect(lockRefOnArbiter()).toBeUndefined();
+	}, 60_000);
+
+	it('a surface question with an unknown key is rejected and nothing from it lands', async () => {
+		const s = scenario('triage fall-through with context and default');
+		seedScenario(seeded, s);
+		const held = await lock(s);
+		rawHandoff({
+			intent: {kind: 'triage'},
+			products: {
+				disposition: 'keep',
+				questions: [{question: 'Q?', kind: 'merge'}],
+			},
+		});
+		const r = await apply(s, held);
+		expect(r.outcome, r.message).toBe('rejected');
+		expect(r.exitCode).toBe(1);
+		const sidecar = parseSidecar(
+			showOnArbiter(`main:${sidecarPathFor(ITEM)}`) as string,
+		);
+		expect(sidecar.entries.some((e) => e.question === 'Q?')).toBe(false);
+		expectNoteSurfaced();
+	}, 60_000);
+});
+
 describe('apply: the publish carries only the rung commit', () => {
 	it('an apply checkout that carries an extra commit refuses the publish', async () => {
 		const s = scenario('apply-decision resolve');
