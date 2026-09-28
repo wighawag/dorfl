@@ -37,6 +37,7 @@ import {git, run, runAsync, type RunResult} from './git.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 import {workBranchRef} from './slug-namespace.js';
 import {isAncestor} from './gc.js';
+import {clearOwnQuestionResidueOnLand} from './land-question-residue.js';
 import {
 	detectColocatedSidecars,
 	formatSidecarGuardReason,
@@ -1126,6 +1127,19 @@ export async function performIntegration(
 		transcribeDecisionsIntoDoneRecord({cwd, slug, output: input.body, note});
 	}
 
+	// 2c. CLEAR THE TASK'S OWN STALE QUESTION STATE in the SAME done-move commit
+	//     (task `a-recovered-task-lands-without-stale-question-state`). A task that
+	//     was surfaced to needs-attention and then recovered carries
+	//     `needsAnswers: true` + its `work/questions/task-<slug>.md` sidecar on
+	//     this branch; the done-move makes both moot, so they leave in the commit
+	//     that makes them moot rather than on some later claim's reconcile. A
+	//     normal land is untouched. Residue that only ARRIVES with the rebase (the
+	//     surface landed on `main` after this branch was cut) is folded in after
+	//     the rebase instead ({@link foldQuestionResidueIntoTip}).
+	if (!lifecycle) {
+		clearOwnQuestionResidueOnLand({cwd, slug, note});
+	}
+
 	// 3. Commit: git add -A (the agent's uncommitted work + the move) into ONE
 	//    atomic commit. Nothing to commit is FATAL (no-op-is-fatal, like claim.sh).
 	await gitHard(['add', '-A'], cwd, env);
@@ -1604,8 +1618,57 @@ async function rebaseOntoMainWithReconcile(
 			return {route: await rebaseConflictRoute(ctx)};
 		}
 	}
-	// Clean rebase (or a reconciled one): fall through to the gate + integrate.
+	// Clean rebase (or a reconciled one): fold any question residue the rebase
+	// brought in into the tip, then fall through to the gate + integrate.
+	if (!lifecycle) {
+		await foldQuestionResidueIntoTip(ctx);
+	}
 	return {};
+}
+
+/**
+ * After a rebase onto `<arbiter>/main`, CLEAR the landing task's own stale
+ * question state that the rebase BROUGHT IN, and AMEND it into the tip commit
+ * (the completion commit), so the land still carries it in the done-move commit
+ * itself (task `a-recovered-task-lands-without-stale-question-state`).
+ *
+ * This is the half step 2c cannot see: a kept branch cut BEFORE the item was
+ * surfaced (a re-dispatch continuing from the kept branch, a stranded-branch
+ * finish) replays its `git mv ... → tasks/done/` over a `main` whose body now
+ * carries `needsAnswers: true` and a sidecar, and git carries the flag into
+ * `tasks/done/` and keeps the sidecar. Runs on every rebase of the land: the
+ * build path's first rebase, the merge CAS loop's re-rebase (so the CI apply
+ * phase is covered), and the stranded-recovery tail.
+ *
+ * A no-op (no amend) when there is nothing to clear, and when the tip is already
+ * on `main` (never rewrite a commit that is not ours). Best-effort: a fault is
+ * reported and the land proceeds; the claim-time reconcile remains the backstop.
+ */
+async function foldQuestionResidueIntoTip(params: {
+	cwd: string;
+	arbiter: string;
+	slug: string;
+	env?: NodeJS.ProcessEnv;
+	note: (message: string) => void;
+}): Promise<void> {
+	const {cwd, arbiter, slug, env, note} = params;
+	try {
+		if (isAncestor(cwd, 'HEAD', `${arbiter}/main`, env)) {
+			return; // no commit of ours on top of main to fold into.
+		}
+		const cleared = clearOwnQuestionResidueOnLand({cwd, slug, note});
+		if (cleared.changed.length === 0) {
+			return;
+		}
+		await gitHard(['add', '-A', '--', ...cleared.changed], cwd, env);
+		await gitHard(['commit', '-q', '--amend', '--no-edit'], cwd, env);
+	} catch (err) {
+		note(
+			`Could not fold the stale question state of '${slug}' into its land ` +
+				`(${err instanceof Error ? err.message : String(err)}); the next ` +
+				'claim reconcile will drain it.',
+		);
+	}
 }
 
 // The rebase-conflict needs-attention route, factored so the divergent-ledger
@@ -2116,7 +2179,10 @@ async function recoverAlreadyCommitted(params: {
 	for (;;) {
 		const rebase = await gitSoft(rebaseArgs(), cwd, env);
 		if (rebase.status === 0) {
-			break; // clean rebase ⇒ fall through to integrate
+			// Clean rebase ⇒ fold in any question residue it brought (the kept
+			// branch predates a surface on `main`), then fall through to integrate.
+			await foldQuestionResidueIntoTip({cwd, arbiter, slug, env, note});
+			break;
 		}
 		// ALWAYS abort on conflict — never leave mid-rebase between attempts.
 		await gitSoft(['rebase', '--abort'], cwd, env);
