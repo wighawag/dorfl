@@ -125,7 +125,10 @@ import {
 	type DataLeak,
 } from './prd-to-spec.js';
 import {resyncProtocol, type ResyncResult} from './resync-protocol.js';
-import {sweepRemoteMergedBranches} from './reap-branches.js';
+import {
+	sweepRemoteMergedBranches,
+	sweepTerminalItemLocks,
+} from './reap-branches.js';
 import {sweepOrphanSidecars} from './orphan-sidecar.js';
 import {sweepLedgerDuplicates, formatLedgerSweep} from './ledger-lint.js';
 import {status, formatStatus} from './status.js';
@@ -3854,7 +3857,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--remote-branches',
-			'SWEEP the arbiter’s remote work/* BRANCHES instead of job worktrees: delete (via git push --delete, NEVER --force) exactly those PROVABLY MERGED into <arbiter>/main (git merge-base --is-ancestor, the SAME predicate the worktree reaper uses), and RETAIN the rest with a reason. An in-flight/un-merged branch (the recovery point) is NEVER touched. Provider-agnostic plain git — works on a --bare arbiter. The merged-only complement of `requeue --reset`.',
+			'SWEEP the arbiter’s remote work/* BRANCHES instead of job worktrees: delete (via git push --delete, NEVER --force) exactly those PROVABLY MERGED into <arbiter>/main (git merge-base --is-ancestor, the SAME predicate the worktree reaper uses), and RETAIN the rest with a reason. An in-flight/un-merged branch (the recovery point) is NEVER touched. Provider-agnostic plain git — works on a --bare arbiter. The merged-only complement of `requeue --reset`. The same run ALSO releases every per-item lock whose item is TERMINAL on <arbiter>/main (the `status --reconcile-locks` reconcile: leased on the sha it read, never forced; a lock whose item is not terminal is never touched), so the locks merged propose PRs leave behind do not accumulate.',
 		)
 		.option(
 			'--arbiter <remote-or-url>',
@@ -3870,7 +3873,7 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--dry-run',
-			'(with --remote-branches) REPORT which merged branches WOULD be reaped without deleting anything (a read-only preview)',
+			'(with --remote-branches) REPORT which merged branches WOULD be reaped (and which terminal-item locks WOULD be released) without deleting anything (a read-only preview)',
 		)
 		.option('--json', 'output the raw result as JSON')
 		.action(async (flags: GcFlags) => {
@@ -4024,9 +4027,27 @@ export function buildProgram(): Command {
 					dryRun: flags.dryRun === true,
 					note: (message) => console.error(`>> ${message}`),
 				});
+				// The TERMINAL-LOCK release (task `ci-releases-locks-of-terminal-items`)
+				// rides this SAME invocation for the same reason the orphan sweep does: the
+				// scheduled `reap-merged-branches` CI job runs exactly this command, and a
+				// merged propose item is never claimed again, so without it the lock a
+				// merged PR leaves behind accumulates on the arbiter for ever. It is the
+				// `status --reconcile-locks` reconcile (terminal-on-main only, leased on
+				// the sha it read, never forced), scoped to the one `--arbiter` swept
+				// here. Honours `--dry-run` (report-only preview).
+				const locks = await sweepTerminalItemLocks({
+					cwd: sweepCwd,
+					arbiter: flags.arbiter ?? 'origin',
+					dryRun: flags.dryRun === true,
+					note: (message) => console.error(`>> ${message}`),
+				});
 				if (flags.json) {
 					console.log(
-						JSON.stringify({...sweep, orphanSidecars: orphans}, null, 2),
+						JSON.stringify(
+							{...sweep, orphanSidecars: orphans, terminalLocks: locks},
+							null,
+							2,
+						),
 					);
 					return;
 				}
@@ -4037,6 +4058,11 @@ export function buildProgram(): Command {
 					for (const w of orphans.wouldReap) {
 						console.log(`  [would-reap] ${w.path} \u2014 orphan sidecar`);
 					}
+					for (const entry of locks.wouldRelease) {
+						console.log(
+							`  [would-release] lock ${entry} \u2014 item terminal on main`,
+						);
+					}
 				} else {
 					for (const r of sweep.reaped) {
 						console.log(`  [reaped]   ${r.branch} \u2014 merged`);
@@ -4044,6 +4070,14 @@ export function buildProgram(): Command {
 					for (const r of orphans.reaped) {
 						console.log(`  [reaped]   ${r.path} \u2014 orphan sidecar`);
 					}
+					for (const entry of locks.released) {
+						console.log(
+							`  [released] lock ${entry} \u2014 item terminal on main`,
+						);
+					}
+				}
+				for (const e of locks.errors) {
+					console.log(`  [kept]     lock ${e.entry} \u2014 ${e.message}`);
 				}
 				for (const ret of sweep.retained) {
 					console.log(`  [retained] ${ret.branch} \u2014 ${ret.reasonText}`);
@@ -4053,8 +4087,19 @@ export function buildProgram(): Command {
 						? sweep.wouldReap.length + orphans.wouldReap.length
 						: sweep.reaped.length + orphans.reaped.length;
 				const verb = flags.dryRun === true ? 'would reap' : 'reaped';
+				const releasedLocks =
+					flags.dryRun === true
+						? locks.wouldRelease.length
+						: locks.released.length;
+				const releaseVerb =
+					flags.dryRun === true ? 'would release' : 'released';
 				console.log(
-					`Summary: ${reapedCount} ${verb}, ${sweep.retained.length} retained.`,
+					`Summary: ${reapedCount} ${verb}, ${sweep.retained.length} retained; ` +
+						`${releasedLocks} terminal-item lock(s) ${releaseVerb}` +
+						(locks.errors.length > 0
+							? `, ${locks.errors.length} kept on error`
+							: '') +
+						'.',
 				);
 				return;
 			}
