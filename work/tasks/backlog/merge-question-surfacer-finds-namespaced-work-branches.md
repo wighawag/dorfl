@@ -2,7 +2,7 @@
 title: 'The merge-question surfacer finds namespaced work branches on the arbiter'
 slug: merge-question-surfacer-finds-namespaced-work-branches
 blockedBy: []
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -34,3 +34,9 @@ Resolve branch names with `parseWorkBranchRef` (both namespaced forms and any le
 ### q1: 'task:merge-question-surfacer-finds-namespaced-work-branches' was bounced — how should we proceed?
 
 keep (the gate failed only on 5s timeouts in unrelated tests under host load; the surfacer work on the kept branch is complete, re-run the gate)
+
+## Applied answers 2026-09-29
+
+### q1: 'task:merge-question-surfacer-finds-namespaced-work-branches' was bounced — how should we proceed?
+
+reset (the kept branch cannot rebase: its Decisions and the applied keep answer both append to the task body; rebuild from scratch, human-approved)
