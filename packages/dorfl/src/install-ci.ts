@@ -29,6 +29,7 @@ import {
 	type CapabilityEmitter,
 	type SecretSetResult,
 	DEFAULT_HARNESS,
+	PR_IDENTITY_SECRET_NAME,
 	loadCIConfigFile,
 	resolveCIConfig,
 	exportCIConfig,
@@ -332,6 +333,9 @@ export async function installCI(
 		fake,
 		log,
 	});
+	for (const line of prApprovalReminderLines(secrets)) {
+		log(line);
+	}
 	// CI-autonomy posture (task `install-ci-emits-no-gate-env-let-config-decide`):
 	// the emitted advance workflow carries NO DORFL_AUTO_BUILD /
 	// DORFL_AUTO_TASK / DORFL_OBSERVATION_TRIAGE /
@@ -390,6 +394,41 @@ export async function installCI(
 		branchProtection,
 		actionsPrCreation,
 	};
+}
+
+/**
+ * The closing-summary note (task `document-that-bot-opened-prs-need-approval`)
+ * about GitHub holding the `verify` run of a PR opened with `GITHUB_TOKEN` in
+ * `action_required` until someone approves it. When this run did NOT set the
+ * PR-identity token (skipped, failed, or `--fake`, where no secret is touched)
+ * the advance PRs fall back to `GITHUB_TOKEN`, so the full note is printed. When
+ * it was set, only the intake line remains true: `intake.yml` never passes
+ * {@link PR_IDENTITY_SECRET_NAME} (`ci-split-generate-workflows` Decisions), so
+ * intake PRs always need the approval. See `docs/ci/README.md`.
+ */
+export function prApprovalReminderLines(secrets: SecretSetResult[]): string[] {
+	const name = PR_IDENTITY_SECRET_NAME;
+	const tokenSet = secrets.some((r) => r.name === name && r.status === 'set');
+	const intakeLine = `  - intake PRs always need it: intake.yml keeps the built-in GITHUB_TOKEN and never passes ${name}.`;
+	const approveLine =
+		'  To approve: open the PR, Files changed, "Awaiting approval", "Approve workflows to run" (see docs/ci/README.md).';
+	if (tokenSet) {
+		return [
+			'',
+			`PR approval: ${name} is set, so advance PRs trigger verify on their own.`,
+			intakeLine,
+			approveLine,
+		];
+	}
+	return [
+		'',
+		`PR approval: no ${name} was set in this run. Unless that secret already exists on the repository,`,
+		'  the workflows open PRs with GITHUB_TOKEN, and GitHub holds their verify run in "action_required"',
+		'  until someone with write access approves it:',
+		`  - advance PRs (build, tasking): set ${name} (a PAT or App token) and they trigger verify on their own;`,
+		intakeLine,
+		approveLine,
+	];
 }
 
 /**

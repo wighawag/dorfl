@@ -531,8 +531,10 @@ export function requiredSecretNames(config: ResolvedCIConfig): string[] {
  * under a CHOSEN identity (a PAT / App token). The generated workflows reference it as
  * `${{ secrets.DORFL_GH_TOKEN || secrets.GITHUB_TOKEN }}` so it is
  * OPTIONAL: unset ⇒ the legs fall back to the built-in `GITHUB_TOKEN` (PRs are
- * `github-actions[bot]` and do not trigger downstream `on: pull_request`
- * workflows); set ⇒ PRs carry the token's identity and DO trigger them.
+ * `github-actions[bot]`, and GitHub holds their `on: pull_request` runs in
+ * `action_required` until someone approves them); set ⇒ PRs carry the token's
+ * identity and trigger those workflows on their own. `intake.yml` never passes
+ * it, so intake PRs always need the approval (`docs/ci/README.md`).
  */
 export const PR_IDENTITY_SECRET_NAME = 'DORFL_GH_TOKEN';
 
