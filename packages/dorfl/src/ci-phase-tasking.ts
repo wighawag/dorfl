@@ -184,6 +184,7 @@ export type TaskingPhaseOutcome =
 
 /** The result of one tasking phase run. */
 export interface TaskingPhaseResult {
+	/** See "A handled outcome is green" in `ci-phase-driver.ts`. */
 	exitCode: 0 | 1 | 2 | 3 | 4;
 	outcome: TaskingPhaseOutcome;
 	/**
@@ -382,7 +383,7 @@ export async function performTaskingLockPhase(
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${slug}' is already locked on ${arbiter}; backing off.`;
 		return {
-			exitCode: 2,
+			exitCode: 0,
 			outcome: 'lost',
 			slug,
 			message,
@@ -399,7 +400,9 @@ export async function performTaskingLockPhase(
 				? 'lost'
 				: 'usage-error';
 		return {
-			exitCode: acquired.exitCode,
+			// A lock lost to another run is handled, so green ("A handled
+			// outcome is green", `ci-phase-driver.ts`).
+			exitCode: outcome === 'lost' ? 0 : acquired.exitCode,
 			outcome,
 			slug,
 			message: acquired.message,
@@ -607,7 +610,7 @@ export async function performTaskingAgentPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			slug,
 			message: ownership.message,
@@ -931,7 +934,7 @@ export async function performTaskingApplyPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			slug,
 			message: ownership.message,
@@ -1120,9 +1123,12 @@ async function applyOwned(ctx: ApplyContext): Promise<TaskingPhaseResult> {
 			env,
 			note,
 		});
+		// A rejected handoff whose surface landed is handled, so green ("A
+		// handled outcome is green", `ci-phase-driver.ts`).
+		const surfaced = r.outcome === 'needs-attention';
 		return {
-			exitCode: 1,
-			outcome: r.outcome === 'needs-attention' ? 'rejected' : 'surface-unmoved',
+			exitCode: surfaced ? 0 : 1,
+			outcome: surfaced ? 'rejected' : 'surface-unmoved',
 			slug,
 			message: `${reason}; ${r.message}`,
 		};

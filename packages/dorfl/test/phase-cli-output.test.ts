@@ -114,9 +114,10 @@ describe('a CI phase run prints its result line once', () => {
 			['advance', `task:${TASK}`, ...LOCK],
 			seeded.clone('second'),
 		);
-		expect(second.code, second.lines.join('\n')).toBe(2);
+		// Backing off is a handled outcome: green, printed as a `>> ` line.
+		expect(second.code, second.lines.join('\n')).toBe(0);
 		const r = resultLine(second.lines);
-		expect(r.line).toMatch(/already locked .*backing off/);
+		expect(r.line).toMatch(/^>> .*already locked .*backing off/);
 		expect(r.count, second.lines.join('\n')).toBe(1);
 	});
 
@@ -140,7 +141,7 @@ describe('a CI phase run prints its result line once', () => {
 			['advance', `spec:${SPEC}`, ...LOCK],
 			seeded.clone('second'),
 		);
-		expect(second.code, second.lines.join('\n')).not.toBe(0);
+		expect(second.code, second.lines.join('\n')).toBe(0);
 		expect(resultLine(second.lines).count, second.lines.join('\n')).toBe(1);
 	});
 
@@ -169,7 +170,7 @@ describe('a CI phase run prints its result line once', () => {
 			['advance', 'observation:odd-thing', ...LOCK],
 			seeded.clone('second'),
 		);
-		expect(second.code, second.lines.join('\n')).not.toBe(0);
+		expect(second.code, second.lines.join('\n')).toBe(0);
 		expect(resultLine(second.lines).count, second.lines.join('\n')).toBe(1);
 	});
 

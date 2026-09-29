@@ -268,6 +268,7 @@ export type TreelessPhaseOutcome =
 
 /** The result of one tree-less phase run. */
 export interface TreelessPhaseResult {
+	/** See "A handled outcome is green" in `ci-phase-driver.ts`. */
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: TreelessPhaseOutcome;
 	/**
@@ -566,7 +567,7 @@ export async function performTreelessLockPhase(
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${item}' is already locked on ${arbiter}; backing off.`;
 		return {
-			exitCode: 2,
+			exitCode: 0,
 			outcome: 'lost',
 			item,
 			message,
@@ -584,9 +585,12 @@ export async function performTreelessLockPhase(
 		}),
 	);
 	if (acquired.exitCode !== 0) {
+		const outcome = acquired.outcome === 'usage-error' ? 'usage-error' : 'lost';
 		return {
-			exitCode: acquired.exitCode,
-			outcome: acquired.outcome === 'usage-error' ? 'usage-error' : 'lost',
+			// A lock lost to another run is handled, so green ("A handled
+			// outcome is green", `ci-phase-driver.ts`).
+			exitCode: outcome === 'lost' ? 0 : acquired.exitCode,
+			outcome,
 			item,
 			message: acquired.message,
 			lockOutputs: publish({acquired: false, rung, baseSha}),
@@ -1056,7 +1060,7 @@ export async function performTreelessAgentPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			item,
 			message: ownership.message,
@@ -1168,7 +1172,7 @@ export async function performTreelessApplyPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			item,
 			message: ownership.message,
@@ -1918,8 +1922,10 @@ async function surfaceItem(
 	if (!r.surfaced) {
 		return {exitCode: 1, outcome: 'surface-unmoved', item, message};
 	}
+	// A clean surface is green, a rejected handoff's included ("A handled
+	// outcome is green", `ci-phase-driver.ts`).
 	return {
-		exitCode: outcome === 'rejected' ? 1 : 0,
+		exitCode: 0,
 		outcome,
 		item,
 		message,

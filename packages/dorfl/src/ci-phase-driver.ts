@@ -23,6 +23,23 @@
  *    to do with the agent job's result before it reads any artifact
  *    ({@link resolveAgentResult}, `ci-agent-result.ts`): only `success` reads
  *    it (task `ci-split-agent-result-and-reruns`).
+ *
+ * **A handled outcome is green** (task `a-handled-surface-exits-green-in-ci`):
+ * the job's exit code is the only signal a CI run's colour carries, so every
+ * phase (build, tasking, tree-less, intake) exits 0 for an outcome it HANDLED
+ * and non-zero only for one it did not:
+ *
+ *  - exit 0: the item was surfaced to needs-attention (including a rejected
+ *    handoff whose surface landed: outcome `rejected` / `surfaced`); a lock
+ *    phase that backed off because another run holds the lock (`lost`,
+ *    `backed-off`); an agent or apply phase whose lock is no longer this run's
+ *    (`stale-lock`, e.g. a "Re-run failed jobs" of a finished run), which
+ *    writes nothing;
+ *  - non-zero: a surface that did not land (`surface-unmoved`), a refused or
+ *    failed publish or release (`stale-lease`, `publish-refused`,
+ *    `publish-failed`, `release-refused`, `land-failed`), an agent that failed
+ *    without a handoff (`agent-failed`), a usage or environment problem, and
+ *    any unexpected error.
  */
 
 import {mkdtempSync, rmSync, appendFileSync} from 'node:fs';

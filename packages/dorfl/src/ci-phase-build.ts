@@ -215,6 +215,12 @@ export type BuildPhaseOutcome =
 
 /** The result of one build phase run. */
 export interface BuildPhaseResult {
+	/**
+	 * The job's exit code: a HANDLED outcome is 0 (a surface that landed, a
+	 * rejected handoff that was surfaced, a lock lost to another run, a stale
+	 * lock on a re-run); only an unhandled one is non-zero. See "A handled
+	 * outcome is green" in `ci-phase-driver.ts`.
+	 */
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: BuildPhaseOutcome;
 	/**
@@ -369,7 +375,7 @@ export async function performBuildLockPhase(
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${slug}' is already locked on ${arbiter}; backing off.`;
 		return {
-			exitCode: 2,
+			exitCode: 0,
 			outcome: 'lost',
 			slug,
 			message,
@@ -388,7 +394,9 @@ export async function performBuildLockPhase(
 	if (claim.exitCode !== 0) {
 		const outcome = claim.outcome === 'lost' ? 'lost' : 'usage-error';
 		return {
-			exitCode: claim.exitCode,
+			// A claim lost to another run is handled, so green ("A handled
+			// outcome is green", `ci-phase-driver.ts`).
+			exitCode: outcome === 'lost' ? 0 : claim.exitCode,
 			outcome,
 			slug,
 			message: claim.message,
@@ -692,7 +700,7 @@ export async function performBuildAgentPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			slug,
 			message: ownership.message,
@@ -789,9 +797,11 @@ async function surface(params: {
 	const where = surfaced.moved
 		? 'surfaced it to needs-attention'
 		: `could not surface it (${surfaced.reasonNotMoved ?? 'unknown'})`;
+	// A clean surface is green ("A handled outcome is green",
+	// `ci-phase-driver.ts`); only a surface that did not land stays red.
 	return {
-		exitCode: 1,
-		outcome: params.outcome,
+		exitCode: surfaced.moved ? 0 : 1,
+		outcome: surfaced.moved ? params.outcome : 'surface-unmoved',
 		slug: params.slug,
 		message: `${params.reason}; ${where}.`,
 	};
@@ -830,7 +840,8 @@ export async function performBuildApplyPhase(
 	// reaped or re-taken since the lock job ran means this run writes nothing.
 	// This is also what makes a "Re-run failed jobs" of a finished run safe: it
 	// replays the old lock outputs and artifact, but the first apply already
-	// released or surfaced the item, so the lock is gone and nothing is written.
+	// released or surfaced the item, so the lock is gone and nothing is written:
+	// a handled outcome, so the re-run is green.
 	const ownership = await checkLockOwnership({
 		cwd,
 		arbiter,
@@ -840,7 +851,7 @@ export async function performBuildApplyPhase(
 	});
 	if (!ownership.owned) {
 		return {
-			exitCode: 1,
+			exitCode: 0,
 			outcome: 'stale-lock',
 			slug,
 			message: ownership.message,
