@@ -12,6 +12,7 @@ import {
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {git} from '../src/git.js';
+import {parseLockEntry} from '../src/item-lock.js';
 import {
 	parseLockOutputLines,
 	type LockOutputs,
@@ -292,9 +293,15 @@ describe('the build path in three processes (lock, agent, apply)', () => {
 		const branch = `refs/heads/work/task-${SLUG}`;
 		expect(showOnArbiter(`${branch}:src/thing.ts`)).toContain('thing = 1');
 		expect(showOnArbiter(`${branch}:work/tasks/done/${SLUG}.md`)).toBeDefined();
-		// main is untouched (propose), and the lock stays held until the PR merges.
+		// main is untouched (propose), and the lock stays held until the PR merges,
+		// now stamped as kept for a propose PR (task
+		// `wire-merge-questions-into-the-advance-tick`, decision 4): the build's
+		// entry, with the marker.
 		expect(showOnArbiter(`main:work/tasks/ready/${SLUG}.md`)).toBeDefined();
-		expect(onArbiter(lockRef())).toBe(run.lock.lockSha);
+		const kept = parseLockEntry(showOnArbiter(`${lockRef()}:lock.md`) ?? '');
+		expect(kept?.keptFor).toBe('propose-pr');
+		expect(kept?.action).toBe('implement');
+		expect(onArbiter(lockRef())).not.toBe(run.lock.lockSha);
 
 		const calls = readProviderLog(run.applyProviderLog);
 		expect(calls.map((c) => c.method)).toEqual([

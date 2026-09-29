@@ -4,7 +4,11 @@ import {runAsync, type RunResult} from './git.js';
 import {ledgerWrite} from './ledger-write.js';
 import {resolveSidecarIdentity} from './sidecar.js';
 import {readFrontmatterField} from './frontmatter.js';
-import {acquireItemLock, releaseItemLock} from './item-lock.js';
+import {
+	acquireItemLock,
+	releaseItemLock,
+	takeOverProposeKeptLock,
+} from './item-lock.js';
 import {realSleep, type Sleep} from './retry-backoff.js';
 
 /**
@@ -110,6 +114,15 @@ export interface AcquireAdvancingLockOptions {
 	 * nothing). This module stays rung-agnostic — it only knows "unified or not".
 	 */
 	acquireUnified?: boolean;
+	/**
+	 * When the unified acquire finds the item locked, TAKE OVER the lock if (and
+	 * only if) a finished propose build of the same item keeps it held (its entry
+	 * carries the `propose-pr` marker, see `takeOverProposeKeptLock`). The advance
+	 * tick sets it for an answered `merge` (task
+	 * `wire-merge-questions-into-the-advance-tick`, decisions 2 and 4); any other
+	 * held lock is still `lost`. Ignored unless `acquireUnified`.
+	 */
+	takeOverProposeKept?: boolean;
 	/** Environment for child git processes. */
 	env?: NodeJS.ProcessEnv;
 	/** Sink for human-readable progress notes. */
@@ -214,6 +227,28 @@ async function runAcquire(
 		throw new AdvancingLockUsageError(
 			`failed to acquire the item lock for '${entry}': ${lock.message}`,
 		);
+	}
+	if (lock.outcome === 'lost' && options.takeOverProposeKept === true) {
+		const taken = await takeOverProposeKeptLock({
+			item: options.item,
+			action: 'advance',
+			cwd,
+			arbiter,
+			holder: by,
+			env,
+		});
+		if (taken.outcome === 'error') {
+			throw new AdvancingLockUsageError(
+				`failed to take over the item lock for '${entry}': ${taken.message}`,
+			);
+		}
+		if (taken.outcome === 'acquired') {
+			const message = `LOCKED '${entry}' for advancing on ${arbiter}: ${taken.message}.`;
+			note(message);
+			return {exitCode: 0, outcome: 'acquired', message, entry};
+		}
+		note(taken.message);
+		return {exitCode: 2, outcome: 'lost', message: taken.message, entry};
 	}
 	if (lock.outcome === 'lost') {
 		note(lock.message);

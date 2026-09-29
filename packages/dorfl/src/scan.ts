@@ -689,6 +689,14 @@ export function scanRepoPaths(
 	 * handle); DEFAULTS empty.
 	 */
 	heldSpecSlugs: Set<string> = new Set(),
+	/**
+	 * The held TASK slugs whose lock a finished propose build keeps (the
+	 * `propose-pr` marker): passed to {@link gatherLifecycleInPlace}, which lets
+	 * such a slug through the lifecycle subtraction when its merge question is
+	 * answered `merge` (task `wire-merge-questions-into-the-advance-tick`,
+	 * decision 6). The build pool is unaffected. DEFAULTS empty.
+	 */
+	proposeKeptSlugs: Set<string> = new Set(),
 ): ScanReport {
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
@@ -726,6 +734,7 @@ export function scanRepoPaths(
 				// symmetric to the `scoreItems` subtraction above, so a held task never
 				// leaks into a surface/apply leg either.
 				heldSlugs,
+				proposeKeptSlugs,
 			}),
 		);
 		// The one-slug-one-folder LINT over THIS working tree's `work/` ledger.

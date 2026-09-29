@@ -129,7 +129,26 @@ export interface LockEntry {
 	state: LockState;
 	holder: string;
 	since: string;
+	/**
+	 * Why a finished build still holds the lock, when it does (task
+	 * `wire-merge-questions-into-the-advance-tick`, decision 4). Absent on every
+	 * live hold. See {@link LockKeptFor}.
+	 */
+	keptFor?: LockKeptFor;
 }
+
+/**
+ * The PROPOSE-KEPT marker a lock entry may carry. `propose-pr`: a propose land
+ * pushed the work branch (and opened a PR where the host allows it) but the
+ * work is not on `main` yet, so the build's `implement` lock is KEPT HELD
+ * "until the PR merges" (task `propose-keep-lock-until-pr-merge`). No build is
+ * running under it. It is what lets the merge-question surfacer tell a finished
+ * propose build (ask) from a live build (skip), and what the answered-merge
+ * lock phase may take over (for the same item) instead of backing off. A lock
+ * WITHOUT the marker is a live build, including the rebuild of a bounced task's
+ * kept branch, whose tip can already carry the done-move.
+ */
+export type LockKeptFor = 'propose-pr';
 
 /** Outcome of an acquire attempt. `acquired` = we hold it; `lost` = someone else
  * does (a genuine same-item conflict). `error` = environment/usage. */
@@ -214,9 +233,12 @@ export function serialiseLockEntry(e: LockEntry): string {
 		`state: ${e.state}`,
 		`holder: ${e.holder}`,
 		`since: ${e.since}`,
+		...(e.keptFor === undefined ? [] : [`keptFor: ${e.keptFor}`]),
 		'---',
 		'',
-		`Lock held for \`${e.entry}\` (${e.action}/${e.state}).`,
+		e.keptFor === undefined
+			? `Lock held for \`${e.entry}\` (${e.action}/${e.state}).`
+			: `Lock kept for \`${e.entry}\` (${e.action}/${e.state}, ${e.keptFor}): the build finished; its work is not on main yet.`,
 		'',
 	].join('\n');
 }
@@ -856,6 +878,207 @@ export async function resumeItemLock(
 			entry,
 			ref,
 			message: `'${entry}' is active and not surfaced on ${arbiter}/main — nothing to resume (a healthy in-flight hold; a parked item is drained via its needsAnswers sidecar).`,
+		};
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+export interface MarkProposeKeptOptions {
+	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
+	item: string;
+	cwd: string;
+	arbiter?: string;
+	/**
+	 * The lock sha the caller holds (the CI apply phase's `lockSha`). When set,
+	 * the mark is refused (`lost`) unless the ref still points at it. Unset: the
+	 * current sha is read and leased on (the laptop `complete`, which holds the
+	 * lock it claimed).
+	 */
+	expectedSha?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * STAMP the {@link LockKeptFor} `propose-pr` marker on a held lock (task
+ * `wire-merge-questions-into-the-advance-tick`, decision 4): a propose land
+ * that keeps the build's lock held "until the PR merges" calls this, so the lock
+ * says it is kept for a propose PR and no longer covers a live build. The entry
+ * keeps its `action`, `holder` and `since`; the ref is replaced by a leased CAS
+ * (never forced), so a concurrent change is `lost`. Idempotent: a lock that
+ * already carries the marker is `transitioned` without a write.
+ */
+export async function markLockKeptForProposePr(
+	opts: MarkProposeKeptOptions,
+): Promise<TransitionResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const {cwd, env} = opts;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		if (!held) {
+			return {
+				outcome: 'not-held',
+				entry,
+				ref,
+				message: `'${entry}' not locked; nothing to mark`,
+			};
+		}
+		if (opts.expectedSha !== undefined && held.sha !== opts.expectedSha) {
+			return {
+				outcome: 'lost',
+				entry,
+				ref,
+				message: `'${entry}' now points at ${held.sha}, not ${opts.expectedSha}; not marked`,
+			};
+		}
+		if (held.lock.keptFor === 'propose-pr') {
+			return {
+				outcome: 'transitioned',
+				entry,
+				ref,
+				message: `'${entry}' is already kept for a propose PR`,
+				lock: held.lock,
+			};
+		}
+		const lock: LockEntry = {...held.lock, keptFor: 'propose-pr'};
+		const commit = await buildLockCommit(lock, cwd, env);
+		const push = await refWrite.replaceLockRef({
+			arbiter,
+			ref,
+			commit,
+			expectedSha: held.sha,
+			cwd,
+			env,
+		});
+		if (push.status !== 0) {
+			return {
+				outcome: 'lost',
+				entry,
+				ref,
+				message: `marking '${entry}' kept for a propose PR was rejected: ${push.stderr.trim()}`,
+			};
+		}
+		return {
+			outcome: 'transitioned',
+			entry,
+			ref,
+			message: `marked '${entry}' kept for a propose PR`,
+			lock,
+		};
+	} catch (err) {
+		return {
+			outcome: 'error',
+			entry,
+			ref,
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+export interface TakeOverProposeKeptOptions {
+	/** The NAMESPACED item identity (same forms as {@link AcquireOptions.item}). */
+	item: string;
+	/** The action the taken-over lock is held for (the answered merge: `advance`). */
+	action: LockAction;
+	cwd: string;
+	arbiter?: string;
+	holder?: string;
+	env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * TAKE OVER a lock that a finished propose build of the SAME item keeps held
+ * (task `wire-merge-questions-into-the-advance-tick`, decisions 2 and 4): the
+ * answered-merge lock phase calls this when the create-only acquire found the
+ * item locked. It succeeds ONLY when the held entry carries the
+ * {@link LockKeptFor} `propose-pr` marker and was taken for `implement` (the
+ * propose build's own claim); the ref is then replaced, leased on the sha read,
+ * by a fresh `action` hold without the marker, so the rest of the run owns it
+ * exactly like a lock it created. Any other held lock (a live build, a tasking,
+ * another advance) is `lost`, as the plain acquire reports it. A lock released
+ * meanwhile falls back to the plain create-only acquire.
+ */
+export async function takeOverProposeKeptLock(
+	opts: TakeOverProposeKeptOptions,
+): Promise<AcquireResult> {
+	const arbiter = opts.arbiter ?? 'origin';
+	const {cwd, env} = opts;
+	if (!opts.item) {
+		return {outcome: 'error', entry: '', ref: '', message: 'missing item'};
+	}
+	const entry = lockEntryFor(opts.item);
+	const ref = itemLockRef(entry);
+	try {
+		const held = await fetchHeldEntry(entry, ref, cwd, arbiter, env);
+		if (!held) {
+			return acquireItemLock({
+				item: opts.item,
+				action: opts.action,
+				cwd,
+				arbiter,
+				holder: opts.holder,
+				env,
+			});
+		}
+		if (
+			held.lock.keptFor !== 'propose-pr' ||
+			held.lock.action !== 'implement' ||
+			held.lock.entry !== entry
+		) {
+			return {
+				outcome: 'lost',
+				entry,
+				ref,
+				message:
+					`'${entry}' is already locked (${held.lock.action}, not kept for a ` +
+					'propose PR): a live hold is never taken over. Back off.',
+			};
+		}
+		const holder = opts.holder ?? (await resolveHolder(cwd, env));
+		const commit = await buildLockCommit(
+			{
+				entry,
+				action: opts.action,
+				state: 'active',
+				holder,
+				since: new Date().toISOString(),
+			},
+			cwd,
+			env,
+		);
+		const push = await refWrite.replaceLockRef({
+			arbiter,
+			ref,
+			commit,
+			expectedSha: held.sha,
+			cwd,
+			env,
+		});
+		if (push.status !== 0) {
+			return {
+				outcome: 'lost',
+				entry,
+				ref,
+				message: `taking over '${entry}' lost the race: ${push.stderr.trim()}`,
+			};
+		}
+		// Keep the local copy in step, as the create-only acquire's fetch would.
+		await gitSoft(['update-ref', ref, commit], cwd, env);
+		return {
+			outcome: 'acquired',
+			entry,
+			ref,
+			message: `took over '${entry}' from its finished propose build (kept for a propose PR)`,
 		};
 	} catch (err) {
 		return {
@@ -2341,6 +2564,65 @@ export async function heldTaskSlugsStrict(
 }
 
 /**
+ * STRICT (fail-CLOSED) twin of {@link listItemLockEntries}: THROWS when the
+ * lock refs cannot be read (the same fetch {@link listItemLocks} does), so a
+ * caller that ACTS on the absence of a lock (the merge-question surfacer asks
+ * about a branch only when no live build holds its item) never mistakes an
+ * unreadable arbiter for "no locks". A held ref whose body does not parse is
+ * returned as a plain `implement` hold without the marker (a live build: the
+ * safe reading).
+ */
+export async function listItemLockEntriesStrict(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<LockEntry[]> {
+	const names = await listItemLocks(cwd, arbiter, env);
+	const entries: LockEntry[] = [];
+	for (const entry of names) {
+		const show = await gitSoft(
+			['show', `${itemLockRef(entry)}:lock.md`],
+			cwd,
+			env,
+		);
+		const lock = show.status === 0 ? parseLockEntry(show.stdout) : undefined;
+		entries.push(
+			lock ?? {
+				entry,
+				action: 'implement',
+				state: 'active',
+				holder: '',
+				since: '',
+			},
+		);
+	}
+	return entries;
+}
+
+/**
+ * The TASK slugs whose lock a finished propose build keeps held, i.e. whose
+ * entry carries the {@link LockKeptFor} `propose-pr` marker (task
+ * `wire-merge-questions-into-the-advance-tick`, decision 6). Selection uses it
+ * to let an answered `merge` through the held-slug subtraction; the
+ * merge-question surfacer to tell a finished propose build from a live one.
+ * GRACEFUL: a read fault yields an empty set, so a held lock keeps excluding
+ * its item (the safe direction).
+ */
+export async function proposeKeptTaskSlugs(
+	cwd: string,
+	arbiter = 'origin',
+	env?: NodeJS.ProcessEnv,
+): Promise<Set<string>> {
+	const entries = await listItemLockEntries(cwd, arbiter, env);
+	const prefix = 'task-';
+	return new Set(
+		entries
+			.filter((e) => e.keptFor === 'propose-pr' && e.entry.startsWith(prefix))
+			.map((e) => e.entry.slice(prefix.length)),
+	);
+}
+
+/**
  * List the SPEC slugs currently lock-held on the arbiter — the held-SPEC set the
  * TASKABLE-spec pool readers SUBTRACT (fix
  * `propose-tasking-releases-lock-so-spec-is-retasked-and-pr-force-pushed-every-tick`).
@@ -2422,6 +2704,10 @@ export function parseLockEntry(body: string): LockEntry | undefined {
 		state: 'active',
 		holder: fields.holder ?? '',
 		since: fields.since ?? '',
+		// Only the one known marker value is read; anything else is a live hold.
+		...(fields.keptFor === 'propose-pr'
+			? {keptFor: 'propose-pr' as const}
+			: {}),
 	};
 }
 

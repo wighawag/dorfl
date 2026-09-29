@@ -4,10 +4,15 @@ import {mkdirSync, writeFileSync, existsSync, readFileSync} from 'node:fs';
 import {
 	surfaceMergeQuestions,
 	listUnmergedWorkBranchesViaGit,
+	listOpenPullRequestsViaGh,
 	type MergeQuestionPullRequest,
 	type UnmergedWorkBranch,
 } from '../src/merge-question-surfacer.js';
-import {parseSidecar, sidecarPathFor} from '../src/sidecar.js';
+import {
+	parseSidecar,
+	serialiseSidecar,
+	sidecarPathFor,
+} from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
 import {workBranchRef} from '../src/slug-namespace.js';
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
@@ -82,9 +87,17 @@ function makeUnmergedWorkBranch(
 	repo: string,
 	slug: string,
 	branch: string = workBranchRef('task', slug),
+	opts: {doneMove?: boolean} = {},
 ): void {
 	gitIn(['checkout', '-q', '-b', branch], repo);
 	writeFileSync(join(repo, `work-${slug}.txt`), `pushed work for ${slug}\n`);
+	// A finished build's tip carries its done-move (the state the answered-merge
+	// land lands); a bounced build's kept work does not.
+	const ready = `work/tasks/ready/${slug}.md`;
+	if (opts.doneMove !== false && existsSync(join(repo, ready))) {
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(['mv', ready, `work/tasks/done/${slug}.md`], repo);
+	}
 	gitIn(['add', '-A'], repo);
 	gitIn(['commit', '-q', '-m', `${branch}: pushed work`], repo);
 	gitIn(['checkout', '-q', 'main'], repo);
@@ -135,7 +148,6 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 		expect(row.item).toBe('task:foo');
 		expect(row.ref).toBe('work/task-foo');
 		expect(row.sidecarPath).toBe(sidecarPathFor('task:foo'));
-		expect(row.prUrl).toBeUndefined();
 
 		// The sidecar carries ONE entry with `kind: merge` and the `merge | hold |
 		// drop` HINT in `default` — NEVER a `disposition=` field.
@@ -210,7 +222,7 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 });
 
 describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr list`)', () => {
-	it('enriches the question CONTEXT with PR metadata from the injected seam, never shelling real `gh`', () => {
+	it('asks NOTHING about a branch with an OPEN PR (the PR is the land decision); asks about the rest, never shelling real `gh`', () => {
 		const {repo} = seedRepo(['foo', 'bar']);
 		makeUnmergedWorkBranch(repo, 'foo');
 		makeUnmergedWorkBranch(repo, 'bar');
@@ -239,34 +251,21 @@ describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr lis
 		});
 
 		expect(seamCalled).toBe(1);
-		expect(result.surfaced).toHaveLength(2);
+		expect(result.surfaced.map((r) => r.ref)).toEqual(['work/task-bar']);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-foo', slug: 'foo', reason: 'open-pr'},
+		]);
+		expect(existsSync(join(repo, sidecarPathFor('task:foo')))).toBe(false);
 
-		const byRef = new Map(result.surfaced.map((r) => [r.ref, r]));
-		expect(byRef.get('work/task-foo')?.prUrl).toBe(
-			'https://github.com/o/r/pull/42',
-		);
-		expect(byRef.get('work/task-bar')?.prUrl).toBeUndefined();
-
-		const fooSidecar = parseSidecar(
-			readFileSync(join(repo, byRef.get('work/task-foo')!.sidecarPath), 'utf8'),
-		);
-		expect(fooSidecar.entries[0].kind).toBe('merge');
-		expect(fooSidecar.entries[0].default).toBe('merge | hold | drop');
-		expect(fooSidecar.entries[0].context).toMatch(/PR #42/);
-		expect(fooSidecar.entries[0].context).toMatch(
-			/github\.com\/o\/r\/pull\/42/,
-		);
-
-		// The bar branch — no PR matched — still surfaces, with the
-		// no-host-metadata note in its context.
+		// The bar branch (no open PR) says so in its context.
 		const barSidecar = parseSidecar(
-			readFileSync(join(repo, byRef.get('work/task-bar')!.sidecarPath), 'utf8'),
+			readFileSync(join(repo, result.surfaced[0].sidecarPath), 'utf8'),
 		);
 		expect(barSidecar.entries[0].kind).toBe('merge');
-		expect(barSidecar.entries[0].context).toMatch(/git-alone floor/);
+		expect(barSidecar.entries[0].context).toMatch(/no open PR/);
 	});
 
-	it('degrades silently when the CEILING seam throws — the FLOOR still surfaces', () => {
+	it('asks about NO branch when the CEILING seam throws (a branch whose PR it cannot see is never asked about)', () => {
 		const {repo} = seedRepo(['foo']);
 		makeUnmergedWorkBranch(repo, 'foo');
 		const notes: string[] = [];
@@ -279,9 +278,124 @@ describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr lis
 			},
 			note: (m) => notes.push(m),
 		});
-		expect(result.surfaced).toHaveLength(1);
-		expect(result.surfaced[0].prUrl).toBeUndefined();
+		expect(result.surfaced).toEqual([]);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-foo', slug: 'foo', reason: 'pr-state-unknown'},
+		]);
 		expect(notes.some((n) => n.includes('gh pr list failed'))).toBe(true);
+	});
+
+	it('the production `gh pr list` seam THROWS on a failing `gh` (so the pass asks nothing)', () => {
+		const {repo} = seedRepo([]);
+		expect(() =>
+			listOpenPullRequestsViaGh({
+				cwd: repo,
+				ghBin: 'false',
+				base: 'main',
+				env: gitEnv(),
+			}),
+		).toThrow(/pr list exited/);
+	});
+});
+
+describe('surfaceMergeQuestions: which branches are asked about (decisions 4 and 6)', () => {
+	const lock = (
+		slug: string,
+		keptFor?: 'propose-pr',
+	): import('../src/item-lock.js').LockEntry => ({
+		entry: `task-${slug}`,
+		action: 'implement',
+		state: 'active',
+		holder: 'someone',
+		since: '2026-09-29T00:00:00.000Z',
+		...(keptFor === undefined ? {} : {keptFor}),
+	});
+
+	it('skips a branch whose lock is held WITHOUT the propose-pr marker (a live build); asks about one kept for a propose PR', () => {
+		const {repo} = seedRepo(['live', 'kept']);
+		makeUnmergedWorkBranch(repo, 'live');
+		makeUnmergedWorkBranch(repo, 'kept');
+		const result = surfaceMergeQuestions({
+			cwd: repo,
+			env: gitEnv(),
+			locks: [lock('live'), lock('kept', 'propose-pr')],
+		});
+		expect(result.surfaced.map((r) => r.item)).toEqual(['task:kept']);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-live', slug: 'live', reason: 'lock-held'},
+		]);
+	});
+
+	it('skips a branch whose task body is TERMINAL (done/ or cancelled/ on main, e.g. a squash-merged PR)', () => {
+		const {repo} = seedRepo(['merged', 'gone']);
+		makeUnmergedWorkBranch(repo, 'merged');
+		makeUnmergedWorkBranch(repo, 'gone');
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		mkdirSync(join(repo, 'work', 'tasks', 'cancelled'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/ready/merged.md', 'work/tasks/done/merged.md'],
+			repo,
+		);
+		gitIn(
+			['mv', 'work/tasks/ready/gone.md', 'work/tasks/cancelled/gone.md'],
+			repo,
+		);
+		gitIn(['commit', '-q', '-m', 'terminal'], repo);
+		const result = surfaceMergeQuestions({cwd: repo, env: gitEnv()});
+		expect(result.surfaced).toEqual([]);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-gone', slug: 'gone', reason: 'terminal'},
+			{ref: 'work/task-merged', slug: 'merged', reason: 'terminal'},
+		]);
+	});
+
+	it('asks about a task body resting in tasks/backlog/', () => {
+		const {repo} = seedRepo(['staged']);
+		makeUnmergedWorkBranch(repo, 'staged');
+		mkdirSync(join(repo, 'work', 'tasks', 'backlog'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/ready/staged.md', 'work/tasks/backlog/staged.md'],
+			repo,
+		);
+		gitIn(['commit', '-q', '-m', 'stage'], repo);
+		const result = surfaceMergeQuestions({cwd: repo, env: gitEnv()});
+		expect(result.surfaced.map((r) => r.item)).toEqual(['task:staged']);
+		expect(
+			parseFrontmatter(
+				readFileSync(join(repo, 'work/tasks/backlog/staged.md'), 'utf8'),
+			).needsAnswers,
+		).toBe(true);
+	});
+
+	it("skips a branch whose tip lacks the done-move (a bounced build's kept work)", () => {
+		const {repo} = seedRepo(['bounced']);
+		makeUnmergedWorkBranch(repo, 'bounced', undefined, {doneMove: false});
+		const result = surfaceMergeQuestions({cwd: repo, env: gitEnv()});
+		expect(result.surfaced).toEqual([]);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-bounced', slug: 'bounced', reason: 'no-done-move'},
+		]);
+	});
+
+	it('never appends to an ANSWERED merge question awaiting its apply', () => {
+		const {repo} = seedRepo(['foo']);
+		makeUnmergedWorkBranch(repo, 'foo');
+		surfaceMergeQuestions({cwd: repo, env: gitEnv()});
+		const abs = join(repo, sidecarPathFor('task:foo'));
+		const model = parseSidecar(readFileSync(abs, 'utf8'));
+		writeFileSync(
+			abs,
+			serialiseSidecar({
+				...model,
+				entries: model.entries.map((e) => ({...e, answer: 'hold'})),
+			}),
+		);
+		const again = surfaceMergeQuestions({cwd: repo, env: gitEnv()});
+		expect(again.surfaced).toEqual([]);
+		expect(again.skipped).toEqual([
+			{ref: 'work/task-foo', slug: 'foo', reason: 'merge-question-answered'},
+		]);
+		expect(parseSidecar(readFileSync(abs, 'utf8')).entries).toHaveLength(1);
 	});
 });
 

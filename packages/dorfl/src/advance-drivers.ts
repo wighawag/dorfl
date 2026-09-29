@@ -8,7 +8,11 @@ import {
 import {TREELESS_RUNGS} from './advance-treeless-publish.js';
 import {refWrite} from './ref-write.js';
 import {scanRepoPaths} from './scan.js';
-import {heldTaskSlugs, heldSpecSlugs} from './item-lock.js';
+import {
+	heldTaskSlugs,
+	heldSpecSlugs,
+	proposeKeptTaskSlugs,
+} from './item-lock.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	selectPrioritised,
@@ -18,6 +22,11 @@ import {
 } from './select-priority.js';
 import {gatherLifecycleInPlace} from './lifecycle-gather.js';
 import type {LifecyclePoolGates} from './lifecycle-pools.js';
+import {
+	runMergeQuestionTick,
+	type MergeQuestionTickOptions,
+	type MergeQuestionTickResult,
+} from './merge-question-tick.js';
 import type {Config} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
 
@@ -118,6 +127,15 @@ export interface PerformAdvanceMultiOptions extends SharedAdvanceContext {
 	 * this same hook to exercise the triage/surface paths.
 	 */
 	lifecycleGates?: LifecyclePoolGates;
+	/**
+	 * The merge-question pass the bare/`-n` form runs BEFORE it selects (task
+	 * `wire-merge-questions-into-the-advance-tick`), gated by
+	 * `config.mergeQuestions`. Defaults to {@link runMergeQuestionTick}; tests
+	 * inject a stub, or `false` to skip it.
+	 */
+	mergeQuestionTick?:
+		| ((options: MergeQuestionTickOptions) => Promise<MergeQuestionTickResult>)
+		| false;
 }
 
 /** The aggregate result of a multi-item `advance` invocation. */
@@ -166,6 +184,24 @@ export async function performAdvanceAuto(
 	const note = options.note ?? (() => {});
 	const cwd = options.cwd;
 	const count = options.count ?? 1;
+
+	// The MERGE-QUESTION pass (task `wire-merge-questions-into-the-advance-tick`):
+	// ask about every unmerged work branch with no open PR and no live build,
+	// behind `mergeQuestions` (`off` skips it). Deterministic, no agent. It runs
+	// BEFORE selection so an answer committed since the last tick is not raced
+	// by a fresh question, and it publishes like a tree-less rung (only with an
+	// arbiter configured; a no-arbiter checkout sits on the real `main`).
+	if (options.mergeQuestionTick !== false) {
+		const tick = options.mergeQuestionTick ?? runMergeQuestionTick;
+		const pass = await tick({
+			cwd,
+			arbiter: options.arbiter ?? 'origin',
+			mergeQuestions: options.config.mergeQuestions,
+			publish: options.arbiter !== undefined,
+			note,
+		});
+		if (pass.ran || pass.failed) note(pass.message);
+	}
 
 	// Held-slug subtraction (task
 	// `in-place-scan-subtracts-held-locked-slugs-from-propose-matrix`): read the
@@ -226,6 +262,9 @@ export async function performAdvanceAuto(
 		// Subtract held task slugs from the triage/surface/apply candidate inputs,
 		// symmetric to Pool 1's `scoreItems` subtraction above.
 		heldSlugs,
+		// ...except an answered `merge` on a lock a finished propose build keeps,
+		// whose apply takes that lock over (decision 6).
+		proposeKeptSlugs: await proposeKeptTaskSlugs(cwd, options.arbiter),
 	});
 
 	// Order across the (up to) FIVE pools per the resolved `selectionOrder` (apply
@@ -407,8 +446,10 @@ function sharedAdvanceContext(
 		run: _run,
 		read: _read,
 		lifecycleGates: _lifecycleGates,
+		mergeQuestionTick: _mergeQuestionTick,
 		...rest
 	} = options;
+	void _mergeQuestionTick;
 	void _config;
 	void _count;
 	void _run;

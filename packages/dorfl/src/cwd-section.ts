@@ -6,6 +6,7 @@ import {listMirrors} from './registry.js';
 import {encodeRepoKey, mirrorPath} from './repo-mirror.js';
 import {
 	heldTaskSlugsStrict,
+	proposeKeptTaskSlugs,
 	heldSpecSlugsStrict,
 	listItemLockEntries,
 	classifyTerminalItemLocks,
@@ -421,12 +422,21 @@ export async function resolveCwdSection(
 	//    with the arbiter-read held set SUBTRACTED so in-flight (lock-held) items are
 	//    not reported eligible. Thread the per-machine override so the cwd section's
 	//    eligibility matches what `do`/`advance` autopick will actually select.
+	// The held tasks whose lock a finished propose build keeps (the `propose-pr`
+	// marker): an answered `merge` on one of them is still enumerated, because
+	// its apply takes that lock over (task
+	// `wire-merge-questions-into-the-advance-tick`, decision 6). GRACEFUL: a read
+	// fault yields an empty set, so every held lock keeps excluding its item.
+	const proposeKeptSlugs = hasLockRemote
+		? await proposeKeptTaskSlugs(cwd, lockRemote, env)
+		: new Set<string>();
 	const localReport = scanRepoPaths(
 		[cwd],
 		config,
 		heldSlugs,
 		options.override,
 		heldSpecSlugs,
+		proposeKeptSlugs,
 	);
 	const repo = localReport.repos[0];
 

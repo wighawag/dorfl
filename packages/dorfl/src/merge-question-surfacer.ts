@@ -15,6 +15,7 @@ import {
 } from './surface-persist.js';
 import {parseWorkBranchRef} from './slug-namespace.js';
 import {workItemRel, type WorkFolderKey} from './work-layout.js';
+import type {LockEntry} from './item-lock.js';
 
 /**
  * The **MERGE-QUESTION SURFACER** (spec `land-time-reverify-and-parallel-merge-ceiling`,
@@ -38,17 +39,30 @@ import {workItemRel, type WorkFolderKey} from './work-layout.js';
  *
  * Layered like the spec asks: the FLOOR (git-alone reachability) is the
  * authoritative enumerator — it works against a bare `--bare` arbiter with
- * `NoneProvider`. The CEILING (`gh pr list` PR metadata) is pure ENRICHMENT
- * layered on top when a GitHub host is configured; the surfacer functions
- * identically without it.
+ * `NoneProvider`. The CEILING (`gh pr list`) runs when a GitHub host is
+ * configured, and there it FILTERS (task
+ * `wire-merge-questions-into-the-advance-tick`, decision 1): an open PR already
+ * IS the human's land decision (merge or close it), so a branch with an open PR
+ * gets no merge question. Merge questions are for branches with no PR: the
+ * git-alone floor, or a branch whose PR was closed unmerged.
  *
- * OUT OF SCOPE for this task (covered by sibling tasks of the same spec):
+ * Which branches it asks about (decisions 1, 4 and 6 of that task), in order:
  *
- *   - The APPLY rung dispatch that lands an answered `kind: merge` through the
- *     land primitive (rebase → re-verify → advance). Task
- *     `apply-rung-merge-disposition`.
- *   - The GATE axis that decides whether this surfacer runs at all on a given
- *     advance tick. Task `merge-questions-gate-axis`.
+ *   - the task body rests in `tasks/ready/` or `tasks/backlog/` (a body in
+ *     `done/` or `cancelled/` is terminal, which also covers a squash-merged PR
+ *     whose branch was not deleted);
+ *   - the sidecar carries no merge question yet (pending or answered);
+ *   - no open PR (GitHub only; an unreadable PR list asks nothing);
+ *   - the item's lock is not held, or is held WITH the `propose-pr` marker (a
+ *     finished propose build keeps it until its work lands); a lock held without
+ *     it is a live build, including the rebuild of a bounced task's kept branch;
+ *   - the branch tip carries the done-move (`work/tasks/done/<slug>.md`), the
+ *     state the answered-merge land (the committed-recovery tail) lands. A
+ *     bounced build's kept work stops before its done-move, so it is not asked
+ *     about.
+ *
+ * WIRED by `merge-question-tick.ts` (the laptop bare `advance` and the CI
+ * `surface-merge-questions` job), behind the `mergeQuestions: off | ask` gate.
  *
  * Tests inject the two seams ({@link listUnmergedWorkBranches},
  * {@link listOpenPullRequests}) so they NEVER hit real GitHub — the floor uses
@@ -134,6 +148,12 @@ export interface SurfaceMergeQuestionsOptions {
 	) => Map<string, MergeQuestionPullRequest>;
 	/** Seam: persist a single merge-question. Defaults to {@link persistSurfacedQuestions}. */
 	persist?: (options: SurfacePersistOptions) => SurfacePersistResult;
+	/**
+	 * The per-item locks held on the arbiter (`listItemLockEntries`), read by the
+	 * caller. A task whose lock is held WITHOUT the `propose-pr` marker is a live
+	 * build and is skipped (`lock-held`). Omitted ⇒ no lock is held.
+	 */
+	locks?: readonly LockEntry[];
 }
 
 /** One surfaced merge-question (a row in the result). */
@@ -148,8 +168,6 @@ export interface MergeQuestionSurfaced {
 	sidecarPath: string;
 	/** The persist commit (`undefined` if the persist was a no-op). */
 	commit?: string;
-	/** PR url when a GitHub ceiling matched the branch (advisory). */
-	prUrl?: string;
 }
 
 /**
@@ -165,7 +183,22 @@ export interface MergeQuestionSkipped {
 	ref: string;
 	slug: string;
 	/** PROVISIONAL vocabulary — see {@link MergeQuestionSkipped}. */
-	reason: 'no-item-body' | 'already-pending-merge-question' | 'persist-nothing';
+	reason:
+		| 'no-item-body'
+		/** The body rests in `tasks/done/` or `tasks/cancelled/`. */
+		| 'terminal'
+		| 'already-pending-merge-question'
+		/** An answered merge question awaits its apply. */
+		| 'merge-question-answered'
+		/** The branch has an open PR (GitHub): the PR is the land decision. */
+		| 'open-pr'
+		/** GitHub, but the open PRs could not be listed: nothing is asked. */
+		| 'pr-state-unknown'
+		/** The item's lock is held without the `propose-pr` marker (a live build). */
+		| 'lock-held'
+		/** The branch tip does not carry the task's done-move. */
+		| 'no-done-move'
+		| 'persist-nothing';
 }
 
 /** Aggregate result of one surfacer pass. */
@@ -187,21 +220,18 @@ export class MergeQuestionSurfacerError extends Error {
 }
 
 /**
- * The lifecycle folders {@link findTaskItemPath} scans for a task body to flip
- * `needsAnswers:true` on. This set DELIBERATELY DIVERGES from `advance.ts`'s
- * `FOLDERS_FOR_TYPE.task` (`['tasks-backlog','tasks-ready','in-progress','done']`):
- *
- *   - OMITS `in-progress` (and `needs-attention`): an unmerged `work/task-<slug>`
- *     branch whose body is mid-build should NOT trigger a merge-question — the
- *     build is still active, and surfacing a land-decision now would race the
- *     builder. Such tasks fall through to the `no-item-body` skip.
- *   - ADDS `cancelled`: a cancelled task with a lingering unmerged `work/*`
- *     branch SHOULD surface a merge-question so the operator explicitly decides
- *     whether to merge the branch or drop it.
+ * The lifecycle folders {@link findTaskItemPath} asks about (task
+ * `wire-merge-questions-into-the-advance-tick`, decision 6): the pool and
+ * staging. `in-progress` / `needs-attention` no longer exist as folders (a
+ * build in flight is a held lock, filtered separately).
  */
 const TASK_FOLDERS: readonly WorkFolderKey[] = [
 	'tasks-ready',
 	'tasks-backlog',
+] as const;
+
+/** A body in one of these is TERMINAL: its branch is never asked about. */
+const TERMINAL_TASK_FOLDERS: readonly WorkFolderKey[] = [
 	'done',
 	'cancelled',
 ] as const;
@@ -236,7 +266,10 @@ export function surfaceMergeQuestions(
 
 	// CEILING: only consult `gh pr list` when the arbiter is GitHub-shaped. A
 	// bare / non-GitHub arbiter never spawns `gh` (the floor is sufficient).
-	let prs: Map<string, MergeQuestionPullRequest> = new Map();
+	// On GitHub an open PR is the land decision, so a branch with one is not
+	// asked about; a failed listing asks about NOTHING this pass (a question on
+	// a branch with an open PR would land it behind the PR's back).
+	let prs: Map<string, MergeQuestionPullRequest> | undefined = new Map();
 	const ghEnabled =
 		options.arbiterUrl !== undefined && isGitHubArbiterUrl(options.arbiterUrl);
 	if (ghEnabled && branches.length > 0) {
@@ -249,18 +282,30 @@ export function surfaceMergeQuestions(
 				env,
 			});
 		} catch (err) {
-			// `gh` is the ENRICHMENT layer — a failure must NEVER suppress the
-			// floor's surfacing. Note it and proceed with an empty PR map.
 			const detail = err instanceof Error ? err.message : String(err);
 			note(
-				`merge-question surfacer: gh pr list failed (${detail}) — continuing with the git-only floor.`,
+				`merge-question surfacer: gh pr list failed (${detail}); asking about no branch this pass.`,
 			);
-			prs = new Map();
+			prs = undefined;
+		}
+	}
+
+	// The item locks by task slug (`task-<slug>` entries only).
+	const locks = new Map<string, LockEntry>();
+	for (const lock of options.locks ?? []) {
+		if (lock.entry.startsWith('task-')) {
+			locks.set(lock.entry.slice('task-'.length), lock);
 		}
 	}
 
 	const surfaced: MergeQuestionSurfaced[] = [];
 	const skipped: MergeQuestionSkipped[] = [];
+	const skip = (
+		branch: UnmergedWorkBranch,
+		reason: MergeQuestionSkipped['reason'],
+	): void => {
+		skipped.push({ref: branch.ref, slug: branch.slug, reason});
+	};
 
 	// The `main` every question of this pass is asked against: recorded on the
 	// entry so a `strictMergeApproval` apply can tell whether `main` moved since
@@ -272,36 +317,56 @@ export function surfaceMergeQuestions(
 	for (const branch of branches) {
 		const item = `task:${branch.slug}`;
 
-		// Idempotency: if the sidecar already carries a PENDING `kind: merge`
-		// entry, this surfacer must not append a duplicate. (An ANSWERED merge
-		// entry is fine — apply will dispatch it; appending a new entry would
-		// re-pause the sidecar unnecessarily.)
-		if (alreadyHasPendingMergeQuestion(cwd, item)) {
-			skipped.push({
-				ref: branch.ref,
-				slug: branch.slug,
-				reason: 'already-pending-merge-question',
-			});
-			continue;
-		}
-
 		const itemPath = findTaskItemPath(cwd, branch.slug);
 		if (itemPath === undefined) {
+			// A terminal body (done / cancelled): its branch is finished business
+			// (a squash-merged PR whose branch was not deleted rests here too).
+			if (isTerminalTask(cwd, branch.slug)) {
+				skip(branch, 'terminal');
+				continue;
+			}
 			// The `branch:`/`ref:`-keyed sidecar identity (SPEC sidecar Q5-i, the
 			// cross-cutting open question SHARED with the stuck-lock surfacer) is
-			// OUT OF SCOPE for this task — without a body to flip `needsAnswers`
-			// on, persist would tear the invariant. Skip with the reason so the
-			// case is visible to the caller.
-			skipped.push({
-				ref: branch.ref,
-				slug: branch.slug,
-				reason: 'no-item-body',
-			});
+			// OUT OF SCOPE: without a body to flip `needsAnswers` on, persist would
+			// tear the invariant. Skip with the reason so the case is visible.
+			skip(branch, 'no-item-body');
 			continue;
 		}
 
-		const pr = prs.get(branch.ref);
-		const question = buildMergeQuestion(branch, pr, askedAtMain);
+		// Idempotency: never append a second merge question. A PENDING one is
+		// awaiting its answer; an ANSWERED one awaits its apply (appending would
+		// re-pause the sidecar and strand the answer).
+		const existing = existingMergeQuestion(cwd, item);
+		if (existing === 'pending') {
+			skip(branch, 'already-pending-merge-question');
+			continue;
+		}
+		if (existing === 'answered') {
+			skip(branch, 'merge-question-answered');
+			continue;
+		}
+
+		if (prs === undefined) {
+			skip(branch, 'pr-state-unknown');
+			continue;
+		}
+		if (prs.has(branch.ref)) {
+			skip(branch, 'open-pr');
+			continue;
+		}
+
+		const lock = locks.get(branch.slug);
+		if (lock !== undefined && lock.keptFor !== 'propose-pr') {
+			skip(branch, 'lock-held');
+			continue;
+		}
+
+		if (!tipHasDoneMove(cwd, branch, env)) {
+			skip(branch, 'no-done-move');
+			continue;
+		}
+
+		const question = buildMergeQuestion(branch, ghEnabled, askedAtMain);
 
 		const result = persist({
 			cwd,
@@ -312,11 +377,7 @@ export function surfaceMergeQuestions(
 			note,
 		});
 		if (result.outcome === 'nothing') {
-			skipped.push({
-				ref: branch.ref,
-				slug: branch.slug,
-				reason: 'persist-nothing',
-			});
+			skip(branch, 'persist-nothing');
 			continue;
 		}
 
@@ -326,7 +387,6 @@ export function surfaceMergeQuestions(
 			ref: branch.ref,
 			sidecarPath: result.sidecarPath,
 			commit: result.commit,
-			prUrl: pr?.url,
 		});
 	}
 
@@ -348,24 +408,15 @@ export function surfaceMergeQuestions(
  */
 function buildMergeQuestion(
 	branch: UnmergedWorkBranch,
-	pr: MergeQuestionPullRequest | undefined,
+	ghEnabled: boolean,
 	askedAtMain: string | undefined,
 ): NewQuestion {
 	const contextLines: string[] = [
 		`The branch \`${branch.ref}\` is not reachable from \`main\` — it carries pushed work that has not yet landed.`,
+		ghEnabled
+			? 'It has no open PR (none was opened, or its PR was closed without merging).'
+			: 'No host PR metadata available (git-alone floor: the branch is the source of truth).',
 	];
-	if (pr !== undefined) {
-		const titleSuffix = pr.title ? `: ${pr.title}` : '';
-		const urlSuffix = pr.url ? ` (${pr.url})` : '';
-		const stateSuffix = pr.state ? ` [${pr.state}]` : '';
-		contextLines.push(
-			`Open PR #${pr.number}${stateSuffix}${titleSuffix}${urlSuffix}.`,
-		);
-	} else {
-		contextLines.push(
-			`No host PR metadata available (git-alone floor — the branch is the source of truth).`,
-		);
-	}
 	return {
 		question: `Land \`${branch.ref}\`? An unmerged \`work/*\` branch is awaiting an integration decision.`,
 		context: contextLines.join('\n'),
@@ -398,21 +449,56 @@ function resolveCommit(
 	return sha === '' ? undefined : sha;
 }
 
-/** Probe the sidecar for an existing pending `kind: merge` entry. */
-function alreadyHasPendingMergeQuestion(cwd: string, item: string): boolean {
+/**
+ * Probe the sidecar for an existing `kind: merge` entry: `pending` when one is
+ * unanswered, `answered` when every one is answered, `undefined` when there is
+ * none.
+ */
+function existingMergeQuestion(
+	cwd: string,
+	item: string,
+): 'pending' | 'answered' | undefined {
 	const rel = sidecarPathFor(item);
 	const abs = join(cwd, rel);
 	if (!existsSync(abs)) {
-		return false;
+		return undefined;
 	}
 	try {
-		const model = parseSidecar(readFileSync(abs, 'utf8'));
-		return model.entries.some((e) => e.kind === 'merge' && !isEntryAnswered(e));
+		const merge = parseSidecar(readFileSync(abs, 'utf8')).entries.filter(
+			(e) => e.kind === 'merge',
+		);
+		if (merge.length === 0) return undefined;
+		return merge.some((e) => !isEntryAnswered(e)) ? 'pending' : 'answered';
 	} catch {
 		// A malformed sidecar is not THIS surfacer's problem — pretend there is
-		// no pending merge-question and let the persist write surface the issue.
-		return false;
+		// no merge-question and let the persist write surface the issue.
+		return undefined;
 	}
+}
+
+/** Does the body of `slug` rest in a terminal task folder? */
+function isTerminalTask(cwd: string, slug: string): boolean {
+	return TERMINAL_TASK_FOLDERS.some((folder) =>
+		existsSync(join(cwd, workItemRel(folder, `${slug}.md`))),
+	);
+}
+
+/**
+ * Does the branch tip carry the task's done-move (its body at
+ * `work/tasks/done/<slug>.md`)? The answered-merge land is the
+ * committed-recovery tail, which presupposes it. Read at the tip sha the
+ * listing gave; a branch listed without one is not asked about.
+ */
+function tipHasDoneMove(
+	cwd: string,
+	branch: UnmergedWorkBranch,
+	env: NodeJS.ProcessEnv | undefined,
+): boolean {
+	if (branch.sha === undefined) return false;
+	const done = workItemRel('done', `${branch.slug}.md`);
+	return (
+		gitSoft(['cat-file', '-e', `${branch.sha}:${done}`], cwd, env).status === 0
+	);
 }
 
 /** Locate the task body `work/<folder>/<slug>.md` across lifecycle folders. */
@@ -560,14 +646,14 @@ function arbiterRefSource(
 
 /**
  * Production CEILING: shell `gh pr list --state open --json …` and index the
- * results by their `headRefName` so the surfacer can enrich the matching
- * branch's question. A non-zero / missing `gh` is treated as "no host
- * metadata available" — the floor still surfaces every unmerged branch.
+ * results by their `headRefName`, so the surfacer can skip a branch with an
+ * open PR. A non-zero `gh` (or output that is not a JSON array) THROWS: the
+ * surfacer then asks about no branch this pass, rather than asking about
+ * branches whose PR it cannot see.
  *
- * Best-effort enrichment. The git-reachability FLOOR is authoritative; the
- * `--state open`, `--base <base>`, and `--limit 200` arguments are DELIBERATE
- * ceilings — a PR targeting a non-`main` base (e.g. a stacked PR) or the case
- * of >200 open PRs degrades to floor-only output, never corrupts it.
+ * The `--state open`, `--base <base>`, and `--limit 200` arguments are
+ * DELIBERATE ceilings: a PR targeting a non-`main` base (e.g. a stacked PR) or
+ * the case of >200 open PRs is not seen, so its branch may still be asked about.
  */
 export function listOpenPullRequestsViaGh(
 	input: ListPullRequestsInput,
@@ -591,16 +677,18 @@ export function listOpenPullRequestsViaGh(
 		{env},
 	);
 	if (result.status !== 0) {
-		return new Map();
+		throw new Error(
+			`${ghBin} pr list exited ${result.status}: ${result.stderr.trim().slice(0, 300)}`,
+		);
 	}
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(result.stdout);
 	} catch {
-		return new Map();
+		throw new Error(`${ghBin} pr list printed no JSON`);
 	}
 	if (!Array.isArray(parsed)) {
-		return new Map();
+		throw new Error(`${ghBin} pr list printed no JSON array`);
 	}
 	const out = new Map<string, MergeQuestionPullRequest>();
 	for (const raw of parsed) {

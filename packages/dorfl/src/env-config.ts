@@ -64,12 +64,14 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	// so `DORFL_OBSERVATION_TRIAGE=off|ask|auto` works and a typo FAILS
 	// LOUDLY naming the variable + the valid options.
 	observationTriage: {enum: ['off', 'ask', 'auto']},
-	// The merge-question SURFACER gate is a 3-state ENUM coercion (mirrors
-	// `observationTriage`'s shape; SEPARATE axis with a HIGHER default, spec
+	// The merge-question SURFACER gate is a 2-state ENUM coercion (a SEPARATE
+	// axis from `observationTriage` with a HIGHER default, spec
 	// `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
-	// `merge-questions-gate-axis`), so `DORFL_MERGE_QUESTIONS=off|ask|auto`
-	// works and a typo FAILS LOUDLY naming the variable + the valid options.
-	mergeQuestions: {enum: ['off', 'ask', 'auto']},
+	// `merge-questions-gate-axis`; `auto` removed by task
+	// `wire-merge-questions-into-the-advance-tick`), so
+	// `DORFL_MERGE_QUESTIONS=off|ask` works and a typo (or the retired `auto`)
+	// FAILS LOUDLY naming the variable + the valid options.
+	mergeQuestions: {enum: ['off', 'ask']},
 	// The surface-blockers gate is a BOOLEAN coercion (like `autoBuild`), so
 	// `DORFL_SURFACE_BLOCKERS=true|false` works and a typo FAILS LOUDLY.
 	surfaceBlockers: 'boolean',

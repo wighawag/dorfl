@@ -203,6 +203,10 @@ id. This does NOT mint a new mirror-pool JSON CLI surface (that enumeration live
 in `scanMirrorPool`, consumed by the loop driver; exposing it as a CLI is a
 separate concern, not this template's).
 
+### Merge questions for unmerged work branches
+
+The `surface-merge-questions` job (no agent, `contents: write`) runs `dorfl surface-merge-questions`: it fetches the arbiter and asks a merge question (a `kind: merge` sidecar entry, answered `merge | hold | drop`) for every unmerged `work/task-<slug>` branch that has no open PR, whose task rests in `tasks/ready/` or `tasks/backlog/`, whose per-item lock is free or kept by its finished propose build, and whose tip carries the done-move. An open PR is already the land decision, so on GitHub these questions are for branches whose PR was closed without merging; on a git-alone arbiter they are how a propose build lands. The questions are published to `main`. An answered `merge` is enumerated like any answered sidecar, and its item run takes over the lock the propose build kept and lands the branch (rebase, re-verify on the rebased tip, advance). The `mergeQuestions` config key gates it: `ask` (default) or `off`. `enumerate` stays read-only. The bare laptop `dorfl advance` runs the same pass before it selects.
+
 ## Writing a CI-safe `verify` gate (the toolchain-boundary pitfalls)
 
 `dorfl-setup` provisions ONLY what dorfl itself needs — Node, `dorfl`, the agent

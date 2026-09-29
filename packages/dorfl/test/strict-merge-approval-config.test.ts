@@ -53,7 +53,7 @@ describe('strictMergeApproval \u2014 default + carry-through (positive, default-
 		expect(cfg.mergeQuestions).toBe('ask');
 		expect(cfg.observationTriage).toBe('off');
 		// And the reverse: setting `mergeQuestions` must not flip `strictMergeApproval`.
-		const cfg2 = mergeConfig({mergeQuestions: 'auto'});
+		const cfg2 = mergeConfig({mergeQuestions: 'off'});
 		expect(cfg2.strictMergeApproval).toBe(false);
 	});
 });
