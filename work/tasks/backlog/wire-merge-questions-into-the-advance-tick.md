@@ -2,7 +2,7 @@
 title: 'Wire the merge-question surfacer into the advance tick and resolve its clash with the propose lock'
 slug: wire-merge-questions-into-the-advance-tick
 blockedBy: [merge-question-surfacer-finds-namespaced-work-branches]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -52,3 +52,9 @@ keep (the three design questions are answered in the task body under "Decided in
 ## Requeue 2026-09-29
 
 Gate-3 BLOCKED PR #459 (see its review comment). Keep all the work; fix only this: the generated surface-merge-questions job (advance-lifecycle-template.ts AND docs/ci/advance-loop.yml.template) gives gh no credential, so on a GitHub arbiter gh pr list fails and every branch is skipped as pr-state-unknown. (1) Add permissions pull-requests: read beside contents: write, and env GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} on the step (or the DORFL_GH_TOKEN || GITHUB_TOKEN expression, stated in Decisions). (2) Require both in validateAdvanceLifecycleWorkflow and its test. (3) Make a pass whose PR listing failed visible: dorfl surface-merge-questions exits non-zero with a clear error line when the gh ceiling could not be read; test it with a failing gh stub. Do not edit this repository's .github/.
+
+## Applied answers 2026-09-29
+
+### q1: 'task:wire-merge-questions-into-the-advance-tick' was bounced — how should we proceed?
+
+reset (the kept branch cannot rebase: the requeue note and its Decisions both append to the task body; rebuild from scratch with the Requeue fix list, human-approved)
