@@ -110,6 +110,7 @@ import {
 	arbiterLockSha,
 	arbiterRefSha,
 	boundHandoffText,
+	acquireNotingOnce,
 	checkLockOwnership,
 	emitLockOutputs,
 	fetchArbiterMain,
@@ -269,6 +270,10 @@ export type TreelessPhaseOutcome =
 export interface TreelessPhaseResult {
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: TreelessPhaseOutcome;
+	/**
+	 * The result line: the CLI prints it (`>> ` or `error: `), so the phase does
+	 * NOT also `note` it (each line appears once in the job log).
+	 */
 	message: string;
 	/** The canonical item (`<namespace>:<slug>`). */
 	item?: string;
@@ -540,7 +545,6 @@ export async function performTreelessLockPhase(
 	);
 	const {item} = verdict.resolved;
 	if ('skip' in verdict) {
-		note(verdict.skip);
 		return {
 			exitCode: 0,
 			outcome: 'no-op',
@@ -550,7 +554,6 @@ export async function performTreelessLockPhase(
 		};
 	}
 	if ('invariant' in verdict) {
-		note(verdict.invariant);
 		return {
 			exitCode: 1,
 			outcome: 'invariant-violation',
@@ -562,7 +565,6 @@ export async function performTreelessLockPhase(
 	const {rung, needsAgent, continueTip} = verdict;
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${item}' is already locked on ${arbiter}; backing off.`;
-		note(message);
 		return {
 			exitCode: 2,
 			outcome: 'lost',
@@ -571,14 +573,16 @@ export async function performTreelessLockPhase(
 			lockOutputs: publish({acquired: false, rung, baseSha}),
 		};
 	}
-	const acquired = await acquireAdvancingLock({
-		item,
-		cwd,
-		arbiter,
-		acquireUnified: true,
-		env,
-		note,
-	});
+	const acquired = await acquireNotingOnce(note, (acquireNote) =>
+		acquireAdvancingLock({
+			item,
+			cwd,
+			arbiter,
+			acquireUnified: true,
+			env,
+			note: acquireNote,
+		}),
+	);
 	if (acquired.exitCode !== 0) {
 		return {
 			exitCode: acquired.exitCode,
@@ -1051,7 +1055,6 @@ export async function performTreelessAgentPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -1104,7 +1107,6 @@ export async function performTreelessAgentPhase(
 		}
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		note(message);
 		return {exitCode: 1, outcome: 'agent-failed', item, message};
 	} finally {
 		// The answered merge's job worktree, once its bundle is written.
@@ -1112,7 +1114,6 @@ export async function performTreelessAgentPhase(
 	}
 	const kind = record.intent.kind;
 	const message = `handed over ${kind} for ${item}`;
-	note(message);
 	return {exitCode: 0, outcome: 'handed-over', item, message, intent: kind};
 }
 
@@ -1166,7 +1167,6 @@ export async function performTreelessApplyPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -1413,7 +1413,6 @@ async function applyAnsweredMerge(
 				`refused (${pushed.stderr.trim()}). Nothing was written and the lock ` +
 				`of ${item} is still held: inspect the branch, then \`dorfl ` +
 				`release-lock ${item}\` to retry the item.`;
-			note(message);
 			return {exitCode: 1, outcome: 'stale-lease', item, message};
 		}
 	}
@@ -1443,7 +1442,6 @@ async function applyAnsweredMerge(
 		const message = routed.moved
 			? `Surfaced '${item}' to needs-attention: ${reason}`
 			: `Could not surface '${item}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
-		note(message);
 		return {
 			exitCode: routed.moved ? 0 : 1,
 			outcome: routed.moved ? 'surfaced' : 'surface-unmoved',
@@ -1485,7 +1483,6 @@ async function applyAnsweredMerge(
 	if (!landed) {
 		const message = land.reason ?? `the land ended as ${land.outcome}`;
 		if (land.routedToNeedsAttention) {
-			note(message);
 			return {exitCode: 0, outcome: 'surfaced', item, message};
 		}
 		return releaseAfter(ctx, {
@@ -1918,7 +1915,6 @@ async function surfaceItem(
 	const message = r.surfaced
 		? `Surfaced '${item}' to needs-attention: ${reason}`
 		: `Could not surface '${item}' (${r.reasonNotSurfaced ?? 'unknown'}): ${reason}`;
-	note(message);
 	if (!r.surfaced) {
 		return {exitCode: 1, outcome: 'surface-unmoved', item, message};
 	}

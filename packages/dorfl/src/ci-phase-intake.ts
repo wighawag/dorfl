@@ -166,6 +166,10 @@ export interface IntakePhaseResult {
 	exitCode: 0 | 1 | 4;
 	outcome: IntakePhaseOutcome;
 	issueNumber: number;
+	/**
+	 * The result line: the CLI prints it (`>> ` or `error: `), so the phase does
+	 * NOT also `note` it (each line appears once in the job log).
+	 */
 	message: string;
 	/** lock: the facts published. */
 	lockOutputs?: LockOutputs;
@@ -294,7 +298,6 @@ export async function performIntakeLockPhase(
 		message: string,
 		facts: LockOutputs,
 	): IntakePhaseResult => {
-		note(message);
 		return {
 			exitCode,
 			outcome,
@@ -547,7 +550,6 @@ export async function performIntakeAgentPhase(
 	if (held.needsAgent === false) {
 		const message =
 			'the lock job said no agent is needed (needsAgent: false); nothing to do';
-		note(message);
 		return {exitCode: 0, outcome: 'no-op', issueNumber, message};
 	}
 	if (options.handoffDir === undefined) {
@@ -563,7 +565,6 @@ export async function performIntakeAgentPhase(
 	} catch (err) {
 		const detail = err instanceof Error ? err.message : String(err);
 		const message = `Could not read issue #${issueNumber}: ${detail}`;
-		note(message);
 		return {exitCode: 1, outcome: 'usage-error', issueNumber, message};
 	}
 	// ONLY the comments the lock job read: one posted since is neither shown to
@@ -600,7 +601,6 @@ export async function performIntakeAgentPhase(
 		writeHandoff({dir: options.handoffDir, rung: 'intake', record});
 	} catch (err) {
 		if (!(err instanceof HandoffRejected)) throw err;
-		note(err.message);
 		return {
 			exitCode: 1,
 			outcome: 'agent-failed',
@@ -610,7 +610,6 @@ export async function performIntakeAgentPhase(
 	}
 	const kind = record.intent.kind;
 	const message = `handed over ${kind} for ${itemOf(issueNumber)}`;
-	note(message);
 	return {
 		exitCode: 0,
 		outcome: 'handed-over',
@@ -700,7 +699,6 @@ export async function performIntakeApplyPhase(
 		outcome: IntakePhaseOutcome,
 		message: string,
 	): IntakePhaseResult => {
-		note(message);
 		return {exitCode, outcome, issueNumber, message};
 	};
 

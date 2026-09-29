@@ -217,6 +217,10 @@ export type BuildPhaseOutcome =
 export interface BuildPhaseResult {
 	exitCode: 0 | 1 | 2 | 3;
 	outcome: BuildPhaseOutcome;
+	/**
+	 * The result line: the CLI prints it (`>> ` or `error: `), so the phase does
+	 * NOT also `note` it (each line appears once in the job log).
+	 */
 	message: string;
 	slug?: string;
 	/** lock: the facts published. */
@@ -354,7 +358,6 @@ export async function performBuildLockPhase(
 	const slug = verdict.slug;
 	const item = `task:${slug}`;
 	if (verdict.skip !== undefined) {
-		note(verdict.skip);
 		return {
 			exitCode: 0,
 			outcome: 'no-op',
@@ -365,7 +368,6 @@ export async function performBuildLockPhase(
 	}
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${slug}' is already locked on ${arbiter}; backing off.`;
-		note(message);
 		return {
 			exitCode: 2,
 			outcome: 'lost',
@@ -689,7 +691,6 @@ export async function performBuildAgentPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -743,7 +744,6 @@ export async function performBuildAgentPhase(
 	}
 	const kind = handover.record.intent.kind;
 	const message = `handed over ${kind} for ${item}`;
-	note(message);
 	return {
 		exitCode: 0,
 		outcome: 'handed-over',
@@ -839,7 +839,6 @@ export async function performBuildApplyPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -986,7 +985,6 @@ async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
 					`was refused (${pushed.stderr.trim()}). Nothing was written and the ` +
 					`lock of ${item} is still held: inspect the branch, then \`dorfl ` +
 					`requeue ${slug}\` to retry the item.`;
-				note(message);
 				return {exitCode: 1, outcome: 'stale-lease', slug, message};
 			}
 		}
@@ -1021,7 +1019,6 @@ async function applyOwned(ctx: ApplyContext): Promise<BuildPhaseResult> {
 			const message = routed.moved
 				? `Surfaced '${slug}' to needs-attention: ${reason}`
 				: `Could not surface '${slug}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
-			note(message);
 			return {
 				exitCode: routed.moved ? 0 : 1,
 				outcome: routed.moved ? 'surfaced' : 'surface-unmoved',
@@ -1113,7 +1110,6 @@ async function surfaceAgentResult(
 	const message = routed.moved
 		? `Surfaced '${slug}' to needs-attention: ${reason}`
 		: `Could not surface '${slug}' (${routed.reasonNotMoved ?? 'unknown'}): ${reason}`;
-	note(message);
 	return {
 		exitCode: routed.moved ? 0 : 1,
 		outcome: routed.moved ? 'surfaced' : 'surface-unmoved',

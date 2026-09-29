@@ -435,6 +435,28 @@ export type HandoffLfsPush =
 	  };
 
 /**
+ * Run a shared lock acquire whose refusal is BOTH noted and returned as its
+ * `message`, which the phase returns as its result line and the CLI prints:
+ * its notes are held back until it returns, then every one is passed on except
+ * a refusal's own message, so that line appears once in the job log (task
+ * `ci-phase-logs-each-line-once`). An acquire is one short arbiter round trip,
+ * so holding its notes back does not delay the log noticeably.
+ */
+export async function acquireNotingOnce<
+	R extends {exitCode: number; message: string},
+>(
+	note: (message: string) => void,
+	acquire: (note: (message: string) => void) => Promise<R>,
+): Promise<R> {
+	const held: string[] = [];
+	const result = await acquire((m) => held.push(m));
+	for (const m of held) {
+		if (result.exitCode === 0 || m !== result.message) note(m);
+	}
+	return result;
+}
+
+/**
  * Push the validated handoff's Git LFS objects to the arbiter (decision 6),
  * the apply phase's FIRST write: before any ref of any intent (a continue push,
  * the land's pushes, a WIP branch save), so a ref never lands pointing at a
