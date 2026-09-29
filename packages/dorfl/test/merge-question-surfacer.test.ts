@@ -9,6 +9,7 @@ import {
 } from '../src/merge-question-surfacer.js';
 import {parseSidecar, sidecarPathFor} from '../src/sidecar.js';
 import {parseFrontmatter} from '../src/frontmatter.js';
+import {workBranchRef} from '../src/slug-namespace.js';
 import {makeScratch, gitEnv, gitIn, type Scratch} from './helpers/gitRepo.js';
 
 /**
@@ -72,14 +73,20 @@ function seedRepo(slugs: string[]): {repo: string} {
 }
 
 /**
- * Create a `work/<slug>` branch with ONE extra commit so its tip is NOT
- * reachable from `main`. Leaves the working tree back on `main`.
+ * Create a task build branch `work/task-<slug>` (the {@link workBranchRef}
+ * form) with ONE extra commit so its tip is NOT reachable from `main`. Leaves
+ * the working tree back on `main`. `branch` overrides the branch name (for the
+ * non-task forms the FLOOR must ignore).
  */
-function makeUnmergedWorkBranch(repo: string, slug: string): void {
-	gitIn(['checkout', '-q', '-b', `work/${slug}`], repo);
+function makeUnmergedWorkBranch(
+	repo: string,
+	slug: string,
+	branch: string = workBranchRef('task', slug),
+): void {
+	gitIn(['checkout', '-q', '-b', branch], repo);
 	writeFileSync(join(repo, `work-${slug}.txt`), `pushed work for ${slug}\n`);
 	gitIn(['add', '-A'], repo);
-	gitIn(['commit', '-q', '-m', `work/${slug}: pushed work`], repo);
+	gitIn(['commit', '-q', '-m', `${branch}: pushed work`], repo);
 	gitIn(['checkout', '-q', 'main'], repo);
 }
 
@@ -99,13 +106,9 @@ describe('surfaceMergeQuestions — empty case', () => {
 
 	it('emits NOTHING when every `work/*` branch is already reachable from main', () => {
 		const {repo} = seedRepo(['foo']);
-		// Create work/foo and MERGE it into main so it is reachable.
-		gitIn(['checkout', '-q', '-b', 'work/foo'], repo);
-		writeFileSync(join(repo, 'foo.txt'), 'merged work\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'work/foo: done'], repo);
-		gitIn(['checkout', '-q', 'main'], repo);
-		gitIn(['merge', '-q', '--no-ff', '-m', 'merge work/foo', 'work/foo'], repo);
+		// Create work/task-foo and MERGE it into main so it is reachable.
+		makeUnmergedWorkBranch(repo, 'foo');
+		gitIn(['merge', '-q', '--no-ff', '-m', 'merge', 'work/task-foo'], repo);
 
 		const result = surfaceMergeQuestions({cwd: repo, env: gitEnv()});
 		expect(result.considered).toBe(0);
@@ -130,7 +133,7 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 
 		const row = result.surfaced[0];
 		expect(row.item).toBe('task:foo');
-		expect(row.ref).toBe('work/foo');
+		expect(row.ref).toBe('work/task-foo');
 		expect(row.sidecarPath).toBe(sidecarPathFor('task:foo'));
 		expect(row.prUrl).toBeUndefined();
 
@@ -182,7 +185,7 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 		expect(second.surfaced).toEqual([]);
 		expect(second.skipped).toEqual([
 			{
-				ref: 'work/foo',
+				ref: 'work/task-foo',
 				slug: 'foo',
 				reason: 'already-pending-merge-question',
 			},
@@ -201,7 +204,7 @@ describe('surfaceMergeQuestions — bare arbiter / no-host FLOOR', () => {
 		expect(result.considered).toBe(1);
 		expect(result.surfaced).toEqual([]);
 		expect(result.skipped).toEqual([
-			{ref: 'work/orphan', slug: 'orphan', reason: 'no-item-body'},
+			{ref: 'work/task-orphan', slug: 'orphan', reason: 'no-item-body'},
 		]);
 	});
 });
@@ -214,7 +217,7 @@ describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr lis
 
 		const prMap = new Map<string, MergeQuestionPullRequest>([
 			[
-				'work/foo',
+				'work/task-foo',
 				{
 					number: 42,
 					url: 'https://github.com/o/r/pull/42',
@@ -239,11 +242,13 @@ describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr lis
 		expect(result.surfaced).toHaveLength(2);
 
 		const byRef = new Map(result.surfaced.map((r) => [r.ref, r]));
-		expect(byRef.get('work/foo')?.prUrl).toBe('https://github.com/o/r/pull/42');
-		expect(byRef.get('work/bar')?.prUrl).toBeUndefined();
+		expect(byRef.get('work/task-foo')?.prUrl).toBe(
+			'https://github.com/o/r/pull/42',
+		);
+		expect(byRef.get('work/task-bar')?.prUrl).toBeUndefined();
 
 		const fooSidecar = parseSidecar(
-			readFileSync(join(repo, byRef.get('work/foo')!.sidecarPath), 'utf8'),
+			readFileSync(join(repo, byRef.get('work/task-foo')!.sidecarPath), 'utf8'),
 		);
 		expect(fooSidecar.entries[0].kind).toBe('merge');
 		expect(fooSidecar.entries[0].default).toBe('merge | hold | drop');
@@ -255,7 +260,7 @@ describe('surfaceMergeQuestions — GitHub-configured CEILING (mocked `gh pr lis
 		// The bar branch — no PR matched — still surfaces, with the
 		// no-host-metadata note in its context.
 		const barSidecar = parseSidecar(
-			readFileSync(join(repo, byRef.get('work/bar')!.sidecarPath), 'utf8'),
+			readFileSync(join(repo, byRef.get('work/task-bar')!.sidecarPath), 'utf8'),
 		);
 		expect(barSidecar.entries[0].kind).toBe('merge');
 		expect(barSidecar.entries[0].context).toMatch(/git-alone floor/);
@@ -284,13 +289,9 @@ describe('listUnmergedWorkBranchesViaGit — the production FLOOR', () => {
 	it('returns only `work/*` branches whose tip is not reachable from `<base>`', () => {
 		const {repo} = seedRepo(['foo', 'bar']);
 		makeUnmergedWorkBranch(repo, 'foo');
-		// `work/bar` is created and MERGED into main → must NOT appear.
-		gitIn(['checkout', '-q', '-b', 'work/bar'], repo);
-		writeFileSync(join(repo, 'bar.txt'), 'merged\n');
-		gitIn(['add', '-A'], repo);
-		gitIn(['commit', '-q', '-m', 'work/bar: done'], repo);
-		gitIn(['checkout', '-q', 'main'], repo);
-		gitIn(['merge', '-q', '--no-ff', '-m', 'merge work/bar', 'work/bar'], repo);
+		// `work/task-bar` is created and MERGED into main → must NOT appear.
+		makeUnmergedWorkBranch(repo, 'bar');
+		gitIn(['merge', '-q', '--no-ff', '-m', 'merge', 'work/task-bar'], repo);
 		// And a non-work branch must be ignored.
 		gitIn(['branch', 'feature/x', 'main'], repo);
 
@@ -299,7 +300,7 @@ describe('listUnmergedWorkBranchesViaGit — the production FLOOR', () => {
 			base: 'main',
 			env: gitEnv(),
 		});
-		expect(branches.map((b) => b.ref).sort()).toEqual(['work/foo']);
+		expect(branches.map((b) => b.ref).sort()).toEqual(['work/task-foo']);
 		expect(branches[0].slug).toBe('foo');
 	});
 
@@ -313,5 +314,128 @@ describe('listUnmergedWorkBranchesViaGit — the production FLOOR', () => {
 			env: gitEnv(),
 		});
 		expect(branches).toEqual([]);
+	});
+});
+
+describe('listUnmergedWorkBranchesViaGit — namespaced branch names', () => {
+	it('lists only the task BUILD branch `work/task-<slug>`, parsing the slug with `parseWorkBranchRef`', () => {
+		const {repo} = seedRepo(['foo']);
+		makeUnmergedWorkBranch(repo, 'foo');
+		// Not a task build branch: an intake branch, a spec branch, and a
+		// pre-cutover un-namespaced `work/<slug>` are all ignored.
+		makeUnmergedWorkBranch(
+			repo,
+			'foo',
+			workBranchRef('task', 'foo', {producer: 'intake'}),
+		);
+		makeUnmergedWorkBranch(repo, 'foo', workBranchRef('spec', 'foo'));
+		makeUnmergedWorkBranch(repo, 'foo', 'work/foo');
+
+		const branches = listUnmergedWorkBranchesViaGit({
+			cwd: repo,
+			base: 'main',
+			env: gitEnv(),
+		});
+		expect(branches.map((b) => [b.ref, b.slug])).toEqual([
+			['work/task-foo', 'foo'],
+		]);
+	});
+});
+
+/**
+ * The arbiter side of the clone / mirror tests: a repo holding `main` (with the
+ * task bodies) and the work branches, as the arbiter would.
+ */
+function seedArbiter(): {arbiter: string} {
+	const {repo} = seedRepo(['foo', 'bar']);
+	// Unmerged, with a task body: must surface.
+	makeUnmergedWorkBranch(repo, 'foo');
+	// Merged into main: skipped (not listed).
+	makeUnmergedWorkBranch(repo, 'bar');
+	gitIn(['merge', '-q', '--no-ff', '-m', 'merge', 'work/task-bar'], repo);
+	// Unmerged, no task body: skipped with `no-item-body`.
+	makeUnmergedWorkBranch(repo, 'orphan');
+	return {arbiter: repo};
+}
+
+describe('surfaceMergeQuestions — reads the ARBITER branches in a clone and in the mirror', () => {
+	it('in a CLONE, surfaces from the remote-tracking `refs/remotes/<arbiter>/work/task-*` refs', () => {
+		const {arbiter} = seedArbiter();
+		const clone = join(scratch.root, 'clone');
+		gitIn(['clone', '-q', arbiter, clone], scratch.root);
+		// The clone has NO local work heads: only remote-tracking ones.
+		expect(
+			gitIn(['for-each-ref', '--format=%(refname)', 'refs/heads/work/'], clone),
+		).toBe('');
+		// A local-only head in the clone is this machine's, not the arbiter's.
+		makeUnmergedWorkBranch(clone, 'local', 'work/task-foo-local');
+
+		const result = surfaceMergeQuestions({cwd: clone, env: gitEnv()});
+
+		expect(result.considered).toBe(2);
+		expect(result.surfaced.map((r) => [r.item, r.ref])).toEqual([
+			['task:foo', 'work/task-foo'],
+		]);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-orphan', slug: 'orphan', reason: 'no-item-body'},
+		]);
+		const model = parseSidecar(
+			readFileSync(join(clone, sidecarPathFor('task:foo')), 'utf8'),
+		);
+		expect(model.entries).toHaveLength(1);
+		expect(model.entries[0].kind).toBe('merge');
+	});
+
+	it('in a CLONE, checks reachability against the arbiter `main`, not the local one', () => {
+		const {arbiter} = seedArbiter();
+		const clone = join(scratch.root, 'clone');
+		gitIn(['clone', '-q', arbiter, clone], scratch.root);
+		// Merge foo on the ARBITER only; the clone's local `main` stays behind.
+		gitIn(['merge', '-q', '--no-ff', '-m', 'merge', 'work/task-foo'], arbiter);
+		gitIn(['fetch', '-q', 'origin'], clone);
+
+		const branches = listUnmergedWorkBranchesViaGit({
+			cwd: clone,
+			base: 'main',
+			env: gitEnv(),
+		});
+		expect(branches.map((b) => b.ref)).toEqual(['work/task-orphan']);
+	});
+
+	it('in a worktree of the bare hub MIRROR, surfaces from the mirror local heads', () => {
+		const {arbiter} = seedArbiter();
+		const mirror = join(scratch.root, 'mirror.git');
+		gitIn(['clone', '-q', '--bare', arbiter, mirror], scratch.root);
+		// A stale remote-tracking ref (left by an explicit-refspec fetch) must
+		// not be read: in the mirror the local heads ARE the arbiter's branches.
+		gitIn(
+			[
+				'update-ref',
+				'refs/remotes/origin/work/task-stale',
+				gitIn(['rev-parse', 'work/task-orphan'], mirror).trim(),
+			],
+			mirror,
+		);
+		const wt = join(scratch.root, 'wt');
+		gitIn(['worktree', 'add', '-q', wt, 'main'], mirror);
+
+		// The bare mirror itself lists the same branches.
+		expect(
+			listUnmergedWorkBranchesViaGit({
+				cwd: mirror,
+				base: 'main',
+				env: gitEnv(),
+			}).map((b) => b.ref),
+		).toEqual(['work/task-foo', 'work/task-orphan']);
+
+		const result = surfaceMergeQuestions({cwd: wt, env: gitEnv()});
+
+		expect(result.considered).toBe(2);
+		expect(result.surfaced.map((r) => [r.item, r.ref])).toEqual([
+			['task:foo', 'work/task-foo'],
+		]);
+		expect(result.skipped).toEqual([
+			{ref: 'work/task-orphan', slug: 'orphan', reason: 'no-item-body'},
+		]);
 	});
 });

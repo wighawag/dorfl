@@ -13,6 +13,7 @@ import {
 	type SurfacePersistOptions,
 	type SurfacePersistResult,
 } from './surface-persist.js';
+import {parseWorkBranchRef} from './slug-namespace.js';
 import {workItemRel, type WorkFolderKey} from './work-layout.js';
 
 /**
@@ -55,11 +56,11 @@ import {workItemRel, type WorkFolderKey} from './work-layout.js';
  * `gh pr list` stub.
  */
 
-/** A `work/<slug>` branch whose tip is not reachable from `<base>`. */
+/** A task build branch (`work/task-<slug>`) whose tip is not reachable from `<base>`. */
 export interface UnmergedWorkBranch {
-	/** The full short ref, e.g. `work/foo`. */
+	/** The branch name as it is on the arbiter, e.g. `work/task-foo`. */
 	ref: string;
-	/** The bare slug (`work/` prefix stripped), e.g. `foo`. */
+	/** The bare task slug, parsed by `parseWorkBranchRef`, e.g. `foo`. */
 	slug: string;
 	/** Branch tip SHA (advisory). */
 	sha?: string;
@@ -77,6 +78,12 @@ export interface MergeQuestionPullRequest {
 export interface ListUnmergedInput {
 	cwd: string;
 	base: string;
+	/**
+	 * The arbiter's remote NAME in `cwd` (default `origin`). In a clone the
+	 * arbiter's branches are read from `refs/remotes/<arbiter>/`; ignored in the
+	 * hub mirror, whose local heads ARE the arbiter's branches.
+	 */
+	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
 }
 
@@ -99,6 +106,12 @@ export interface SurfaceMergeQuestionsOptions {
 	arbiterUrl?: string;
 	/** The base branch reachability is checked against. Default `main`. */
 	base?: string;
+	/**
+	 * The arbiter's remote NAME in `cwd` (default `origin`), whose
+	 * remote-tracking refs the FLOOR reads in a clone. See
+	 * {@link listUnmergedWorkBranchesViaGit}.
+	 */
+	arbiter?: string;
 	/** The `gh` CLI binary to invoke for the ceiling. Default `gh` on PATH. */
 	ghBin?: string;
 	/** Environment for spawned git/gh processes. */
@@ -129,7 +142,7 @@ export interface MergeQuestionSurfaced {
 	item: string;
 	/** The bare slug. */
 	slug: string;
-	/** The `work/<slug>` ref the question is about. */
+	/** The `work/task-<slug>` branch the question is about. */
 	ref: string;
 	/** The sidecar path the persist touched (repo-relative). */
 	sidecarPath: string;
@@ -178,7 +191,7 @@ export class MergeQuestionSurfacerError extends Error {
  * `needsAnswers:true` on. This set DELIBERATELY DIVERGES from `advance.ts`'s
  * `FOLDERS_FOR_TYPE.task` (`['tasks-backlog','tasks-ready','in-progress','done']`):
  *
- *   - OMITS `in-progress` (and `needs-attention`): an unmerged `work/<slug>`
+ *   - OMITS `in-progress` (and `needs-attention`): an unmerged `work/task-<slug>`
  *     branch whose body is mid-build should NOT trigger a merge-question — the
  *     build is still active, and surfacing a land-decision now would race the
  *     builder. Such tasks fall through to the `no-item-body` skip.
@@ -219,7 +232,7 @@ export function surfaceMergeQuestions(
 
 	const listBranches =
 		options.listUnmergedWorkBranches ?? listUnmergedWorkBranchesViaGit;
-	const branches = listBranches({cwd, base, env});
+	const branches = listBranches({cwd, base, arbiter: options.arbiter, env});
 
 	// CEILING: only consult `gh pr list` when the arbiter is GitHub-shaped. A
 	// bare / non-GitHub arbiter never spawns `gh` (the floor is sufficient).
@@ -424,19 +437,50 @@ function gitSoft(
 }
 
 /**
- * Production FLOOR: enumerate every `refs/heads/work/*` whose tip is NOT
- * reachable from `<base>`. A repo with no `<base>` (e.g. a fresh init before
- * the first commit) yields the empty list — the surfacer is a no-op until
- * `main` exists.
+ * Production FLOOR: enumerate the ARBITER's task build branches
+ * (`work/task-<slug>`, the {@link workBranchRef} form) whose tip is NOT
+ * reachable from the arbiter's `<base>`.
+ *
+ * WHERE the arbiter's refs live depends on the repo `cwd` is:
+ *
+ *   - A **clone** (non-bare, with an `<arbiter>` remote): the arbiter's branches
+ *     are the remote-tracking refs `refs/remotes/<arbiter>/work/*`, checked
+ *     against `refs/remotes/<arbiter>/<base>`. Local `refs/heads/work/*` in a
+ *     clone are this machine's own (possibly unpushed or stale) heads, not the
+ *     arbiter's, so they are NOT listed.
+ *   - The **hub mirror** (a `--bare` clone, or a worktree added from one, where
+ *     `core.bare` reads `true`) or a repo with no `<arbiter>` remote (the repo IS
+ *     the arbiter's ref store): the local heads `refs/heads/work/*`, checked
+ *     against the local `<base>`.
+ *
+ * The item slug comes from {@link parseWorkBranchRef}, never from slicing the
+ * ref. Only the plain BUILD branch of a task (`namespace: 'task'`, no producer)
+ * is listed: an intake branch (`work/intake-*`) creates an item rather than
+ * building one, a spec branch (`work/spec-*`) carries tasking, and an
+ * un-namespaced `work/<slug>` is a pre-cutover ref `parseWorkBranchRef` refuses
+ * (the clean-break stance). None of those is what a `kind: merge` answer lands.
+ *
+ * Purely local: it reads refs already in `cwd` (no fetch, no `ls-remote`); the
+ * caller refreshes them. A repo whose `<base>` does not resolve (e.g. a fresh
+ * init before the first commit, or a clone that never fetched `<base>`) yields
+ * the empty list: without a base, "unmerged" is meaningless and every branch
+ * would over-surface.
  */
 export function listUnmergedWorkBranchesViaGit(
 	input: ListUnmergedInput,
 ): UnmergedWorkBranch[] {
 	const {cwd, base, env} = input;
-	// Bail if `<base>` does not resolve — without a base, "unmerged" is
-	// meaningless and we'd over-surface every branch as unmerged.
+	const arbiter = input.arbiter ?? 'origin';
+	const source = arbiterRefSource(cwd, arbiter, env);
+	const baseRef =
+		source === 'remote-tracking'
+			? `refs/remotes/${arbiter}/${base}`
+			: `refs/heads/${base}`;
+	const branchPrefix =
+		source === 'remote-tracking' ? `refs/remotes/${arbiter}/` : 'refs/heads/';
+
 	const haveBase = gitSoft(
-		['rev-parse', '--verify', '--quiet', base],
+		['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`],
 		cwd,
 		env,
 	);
@@ -446,8 +490,8 @@ export function listUnmergedWorkBranchesViaGit(
 	const refs = gitSoft(
 		[
 			'for-each-ref',
-			'--format=%(refname:short) %(objectname)',
-			'refs/heads/work/',
+			'--format=%(refname) %(objectname)',
+			`${branchPrefix}work/`,
 		],
 		cwd,
 		env,
@@ -465,23 +509,53 @@ export function listUnmergedWorkBranchesViaGit(
 		if (space === -1) {
 			continue;
 		}
-		const ref = line.slice(0, space);
+		const fullRef = line.slice(0, space);
 		const sha = line.slice(space + 1).trim();
-		if (!ref.startsWith('work/')) {
+		if (!fullRef.startsWith(branchPrefix)) {
 			continue;
 		}
-		const slug = ref.slice('work/'.length);
-		if (slug === '') {
+		// The branch name AS IT IS ON THE ARBITER (`work/task-<slug>`), whichever
+		// local namespace it was read from.
+		const ref = fullRef.slice(branchPrefix.length);
+		const parsed = parseWorkBranchRef(ref);
+		if (
+			parsed === undefined ||
+			parsed.namespace !== 'task' ||
+			parsed.producer !== undefined
+		) {
 			continue;
 		}
-		// `git merge-base --is-ancestor <sha> <base>` — exit 0 ⇒ reachable
+		// `git merge-base --is-ancestor <sha> <base>`: exit 0 ⇒ reachable
 		// (merged), exit 1 ⇒ unmerged.
-		const reach = gitSoft(['merge-base', '--is-ancestor', sha, base], cwd, env);
+		const reach = gitSoft(
+			['merge-base', '--is-ancestor', sha, baseRef],
+			cwd,
+			env,
+		);
 		if (reach.status !== 0) {
-			unmerged.push({ref, slug, sha});
+			unmerged.push({ref, slug: parsed.slug, sha});
 		}
 	}
 	return unmerged;
+}
+
+/**
+ * Which local ref namespace holds the arbiter's branches in `cwd`: the local
+ * heads for the bare hub mirror (and its worktrees, which share its
+ * `core.bare = true` config) or for a repo with no `<arbiter>` remote; the
+ * remote-tracking refs for an ordinary clone.
+ */
+function arbiterRefSource(
+	cwd: string,
+	arbiter: string,
+	env: NodeJS.ProcessEnv | undefined,
+): 'local-heads' | 'remote-tracking' {
+	const bare = gitSoft(['config', '--bool', 'core.bare'], cwd, env);
+	if (bare.status === 0 && bare.stdout.trim() === 'true') {
+		return 'local-heads';
+	}
+	const remote = gitSoft(['remote', 'get-url', arbiter], cwd, env);
+	return remote.status === 0 ? 'remote-tracking' : 'local-heads';
 }
 
 /**
