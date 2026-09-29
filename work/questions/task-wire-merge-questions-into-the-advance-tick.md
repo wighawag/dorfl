@@ -29,3 +29,5 @@
 <!-- q1 fields: id=q1 kind=stuck -->
 
 **Your answer** (write below this line):
+
+keep (the three design questions are answered in the task body under "Decided in a second round"; build it)
