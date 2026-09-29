@@ -2,7 +2,7 @@
 title: 'The merge-question surfacer finds namespaced work branches on the arbiter'
 slug: merge-question-surfacer-finds-namespaced-work-branches
 blockedBy: []
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -28,3 +28,9 @@ Resolve branch names with `parseWorkBranchRef` (both namespaced forms and any le
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Applied answers 2026-09-29
+
+### q1: 'task:merge-question-surfacer-finds-namespaced-work-branches' was bounced — how should we proceed?
+
+keep (the gate failed only on 5s timeouts in unrelated tests under host load; the surfacer work on the kept branch is complete, re-run the gate)
