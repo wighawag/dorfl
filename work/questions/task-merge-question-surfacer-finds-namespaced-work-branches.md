@@ -30,3 +30,5 @@
 <!-- q1 fields: id=q1 kind=stuck -->
 
 **Your answer** (write below this line):
+
+keep (the gate failed only on 5s timeouts in unrelated tests under host load; the surfacer work on the kept branch is complete, re-run the gate)
