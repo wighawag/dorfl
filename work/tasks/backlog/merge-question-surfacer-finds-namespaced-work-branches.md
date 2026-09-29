@@ -2,7 +2,7 @@
 title: 'The merge-question surfacer finds namespaced work branches on the arbiter'
 slug: merge-question-surfacer-finds-namespaced-work-branches
 blockedBy: []
-needsAnswers: false
+needsAnswers: true
 ---
 
 ## What to build
