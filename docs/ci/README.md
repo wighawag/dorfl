@@ -329,6 +329,19 @@ gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow \
 
 If your organization disables this setting for its repositories, the repository-level call is refused: enable it at the organization level, or configure the optional PR-identity token so the pull requests are opened by that identity instead of `GITHUB_TOKEN`.
 
+## Pull requests opened with `GITHUB_TOKEN` wait for an approval before `verify` runs
+
+GitHub does not start workflows freely for events created by a job's built-in `GITHUB_TOKEN`, so one workflow cannot trigger another by accident. For a pull request opened with that token (its author is `github-actions[bot]`), GitHub does create the `pull_request` runs, including `verify`, but in the state `action_required`: they wait until someone with write access approves them. Until then the PR shows `verify` as waiting, not red or green, and a branch protection that requires `verify` blocks the merge. This is GitHub's behaviour, not dorfl's, and no workflow setting turns it off.
+
+**How to approve.** Open the pull request, go to **Files changed**, click the **Awaiting approval** button (top right), then **Approve workflows to run** in the panel it opens. Look at the diff first: approving runs your workflows on that branch. A run left unapproved for 30 days expires and is marked failed.
+
+**Which pull requests it affects.** Only pull requests, so only `propose` mode (merge mode lands on `main` with no PR):
+
+- **Advance pull requests (build and tasking)** are opened by the apply job with `DORFL_GH_TOKEN` when that secret is set, else with `GITHUB_TOKEN`. Set `DORFL_GH_TOKEN` (the optional PR-identity token `install-ci` offers: a personal access token or GitHub App token with `contents`, `issues` and `pull-requests` write on the repository) and these PRs are opened under that identity, so `verify` starts on its own. The trade-off: the PRs, their comments and their pushes carry that identity instead of `github-actions[bot]`, and the token is one more long-lived write credential to rotate. It reaches the lock and apply jobs only, never an agent job (see "The three-job shape" above).
+- **Intake pull requests always need the approval.** `intake.yml` deliberately passes no `DORFL_GH_TOKEN` (decision recorded in task `ci-split-generate-workflows`): intake runs an agent over issue text any GitHub user can write, and its writes stay under the built-in identity. Setting `DORFL_GH_TOKEN` does not change intake; approve its `verify` run by hand. That approval is also a useful moment to read what an issue made the agent draft.
+
+`install-ci` reminds you of this in its closing summary when it did not set `DORFL_GH_TOKEN` in that run. If you set the secret earlier (or by hand with `gh secret set DORFL_GH_TOKEN`), the reminder about advance pull requests does not apply.
+
 ## Branch protection and the tree-less answer-loop (a required-check caveat)
 
 The answer-loop's tree-less rungs (`surface` / `apply` / `triage-observation`) publish their ledger writes (a question sidecar, a `triaged:` marker, an applied answer) by a **direct `git push HEAD:main`** of a freshly-made commit. This is deliberate: `integrationMode` governs how CODE integrates (build/slice branches → PR or merge), it does NOT govern the question ledger, so tree-less writes go straight to `main` in BOTH modes (SPEC `ci-advance-surfaces-questions-not-only-builds`).
