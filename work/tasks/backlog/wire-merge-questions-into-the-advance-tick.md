@@ -2,6 +2,7 @@
 title: 'Wire the merge-question surfacer into the advance tick and resolve its clash with the propose lock'
 slug: wire-merge-questions-into-the-advance-tick
 blockedBy: [merge-question-surfacer-finds-namespaced-work-branches]
+needsAnswers: true
 ---
 
 ## What to build
