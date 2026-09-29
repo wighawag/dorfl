@@ -9,3 +9,5 @@
 <!-- q1 fields: id=q1 kind=stuck -->
 
 **Your answer** (write below this line):
+
+reset (the kept branch cannot rebase: its Decisions and the applied keep answer both append to the task body; rebuild from scratch, human-approved)
