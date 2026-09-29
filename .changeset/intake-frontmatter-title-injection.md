@@ -1,7 +1,0 @@
----
-'dorfl': patch
----
-
-Fix a frontmatter injection in `intake`. The title the intake decision agent drafts (from issue text any GitHub user can write) was written unescaped as the first frontmatter line of the emitted task or spec, before the `origin: issue` / `originTrust` stamp. A title containing a line break and `---` closed the frontmatter early, so the stamp landed in the body, the item read as unstamped (trusted), and the rule that forces an untrusted-origin item's build to a code PR no longer applied. The same title could also inject other keys such as `humanOnly`, `blockedBy` or a different `slug`.
-
-Now an intake verdict whose task or spec title is not a single line, holds a control character (including tab, NEL and the Unicode line/paragraph separators), or is blank is refused as `agent-failed`: nothing is written and nothing is integrated. Every runner-rendered frontmatter that carries agent text (the intake task and spec, the ADR `mint-adr` writes, the promoted observation) writes the title through one shared quoter, so titles are now emitted single-quoted (`title: 'Fix it: now'`), and each rendered document is re-parsed to check that the runner-owned keys (`slug`, `issue`, `origin`, `originTrust`, and for promotion `promotedFrom`) read back exactly as written, failing loudly otherwise. `mint-adr` refuses a multi-line ADR title, and promotion refuses an agent-drafted body that repeats `slug:` or `promotedFrom:`, leaving the observation in place. The frontmatter readers now decode a single-quoted `''` back to `'`.
