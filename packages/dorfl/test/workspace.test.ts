@@ -10,6 +10,7 @@ import {
 	writeJobRecord,
 	updateJobRecord,
 	JOB_RECORD_FILENAME,
+	withCheckoutCommitIdentity,
 	type JobRecord,
 } from '../src/workspace.js';
 import {mirrorPath, encodeRepoKey} from '../src/repo-mirror.js';
@@ -256,5 +257,44 @@ describe('createJob — hub mirror + isolated worktree', () => {
 		const workspacesDir = join(scratch.root, '.dorfl');
 		const job = createJob({url, slug: 'feat', workspacesDir, env: gitEnv()});
 		expect(job.dir.startsWith(job.mirror.path)).toBe(false);
+	});
+});
+
+describe('withCheckoutCommitIdentity', () => {
+	/** gitEnv minus the pinned identity: only repo config can supply one. */
+	function noIdentityEnv(): NodeJS.ProcessEnv {
+		const env = gitEnv();
+		for (const name of [
+			'GIT_AUTHOR_NAME',
+			'GIT_AUTHOR_EMAIL',
+			'GIT_COMMITTER_NAME',
+			'GIT_COMMITTER_EMAIL',
+		]) {
+			delete env[name];
+		}
+		return env;
+	}
+
+	it("carries the checkout's local identity into env git config, which another repository then uses", () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['config', 'user.name', 'dorfl[bot]'], repo);
+		gitIn(['config', 'user.email', 'bot@example.com'], repo);
+		const env = withCheckoutCommitIdentity(repo, noIdentityEnv());
+		const other = join(scratch.root, 'other');
+		git(['init', '-q', other], scratch.root, {env});
+		expect(git(['config', 'user.name'], other, {env}).trim()).toBe(
+			'dorfl[bot]',
+		);
+		expect(git(['config', 'user.email'], other, {env}).trim()).toBe(
+			'bot@example.com',
+		);
+		// Appended after the existing env config, which still applies.
+		expect(git(['config', 'gc.auto'], other, {env}).trim()).toBe('0');
+	});
+
+	it('returns env unchanged when the checkout resolves no identity', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const env = noIdentityEnv();
+		expect(withCheckoutCommitIdentity(repo, env)).toBe(env);
 	});
 });

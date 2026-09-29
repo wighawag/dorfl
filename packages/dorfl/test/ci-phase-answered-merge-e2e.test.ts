@@ -97,12 +97,52 @@ function showOnArbiter(spec: string): string | undefined {
 	}
 }
 
+/**
+ * The git identity a phase has on a GitHub-hosted runner: none in the
+ * environment and none global, only what the generated setup action writes
+ * into the CHECKOUT with `git config user.name` / `user.email`
+ * ({@link configureCheckoutIdentity}). `user.useConfigOnly` stops git guessing
+ * an address from the host name, which a runner host cannot supply either
+ * (observation `ci-answered-merge-reports-a-conflict-a-plain-rebase-does-not-have`).
+ */
+function runnerIdentityEnv(): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = {...ciPhaseEnv()};
+	for (const name of [
+		'GIT_AUTHOR_NAME',
+		'GIT_AUTHOR_EMAIL',
+		'GIT_COMMITTER_NAME',
+		'GIT_COMMITTER_EMAIL',
+	]) {
+		delete env[name];
+	}
+	const count = Number(env.GIT_CONFIG_COUNT ?? '0');
+	env.GIT_CONFIG_COUNT = String(count + 1);
+	env[`GIT_CONFIG_KEY_${count}`] = 'user.useConfigOnly';
+	env[`GIT_CONFIG_VALUE_${count}`] = 'true';
+	return env;
+}
+
+/** What the generated setup action's "Configure git identity" step does. */
+function configureCheckoutIdentity(clone: string): string {
+	g(clone, 'config', 'user.name', 'dorfl[bot]');
+	g(clone, 'config', 'user.email', 'dorfl[bot]@users.noreply.github.com');
+	return clone;
+}
+
+/** A phase checkout as the workflow prepares it (see {@link runnerIdentityEnv}). */
+function phaseClone(label: string): string {
+	return configureCheckoutIdentity(seeded.clone(label));
+}
+
 function runWorker(
 	args: Record<string, unknown>,
 	lockOutputs?: LockOutputs,
 ): Promise<{exitCode: number; stderr: string; out?: WorkerOutput}> {
 	return new Promise((resolve, reject) => {
-		const env: NodeJS.ProcessEnv = {...ciPhaseEnv(), GITHUB_ACTIONS: 'true'};
+		const env: NodeJS.ProcessEnv = {
+			...runnerIdentityEnv(),
+			GITHUB_ACTIONS: 'true',
+		};
 		if (lockOutputs !== undefined) {
 			const asStrings: Record<string, string> = {};
 			for (const [k, v] of Object.entries(lockOutputs)) {
@@ -236,7 +276,7 @@ async function threePhases(
 	const lockRun = await runWorker({
 		...common,
 		phase: 'lock',
-		cwd: seeded.clone('lock'),
+		cwd: phaseClone('lock'),
 		githubOutput,
 	});
 	expect(lockRun.exitCode, lockRun.stderr).toBe(0);
@@ -246,7 +286,7 @@ async function threePhases(
 	const handoffDir = join(runnerTemp, 'handoff');
 	let agent: WorkerOutput | undefined;
 	if (lock.needsAgent === true) {
-		const agentClone = seeded.clone('agent');
+		const agentClone = phaseClone('agent');
 		g(agentClone, 'remote', 'set-url', '--push', 'origin', '/nonexistent.git');
 		opts.agentSetup?.(agentClone);
 		const before = arbiterRefs();
@@ -268,7 +308,7 @@ async function threePhases(
 		{
 			...common,
 			phase: 'apply',
-			cwd: seeded.clone('apply'),
+			cwd: phaseClone('apply'),
 			handoffDir,
 			runnerTemp,
 			agentJobResult: lock.needsAgent === true ? 'success' : 'skipped',
@@ -305,7 +345,11 @@ afterEach(() => {
 describe('the answered merge action in three processes', () => {
 	it('lands: the rebased tip is gated by the agent, landed by the apply, then the answer is recorded', async () => {
 		const keptTip = seedAnsweredMerge();
-		// main moves after the answer, so the agent job must rebase.
+		// main moves after the answer, so the agent job must rebase. The rebase
+		// rewrites the kept commit in the hub-mirror job worktree, which needs the
+		// identity the workflow configured in the checkout only (the CI sandbox's
+		// false "conflicted", observation
+		// `ci-answered-merge-reports-a-conflict-a-plain-rebase-does-not-have`).
 		commitToMain({'sibling.txt': 'benign sibling\n'}, 'a sibling lands');
 		const run = await threePhases({
 			verify: 'test "$(cat feature.txt)" = "the work" && test -f sibling.txt',
@@ -418,6 +462,26 @@ describe('the answered merge action in three processes', () => {
 			showOnArbiter(`main:${sidecarPathFor(ITEM)}`) as string,
 		);
 		expect(sidecar.entries.some((e) => e.kind === 'stuck')).toBe(true);
+		expect(onArbiter(LOCK_REF)).toBeUndefined();
+	}, 180_000);
+
+	it('a genuine conflict on the continue rebase surfaces the item naming the conflicting path and the main it rebased onto', async () => {
+		const keptTip = seedAnsweredMerge({
+			files: {'shared.txt': 'branch version\n'},
+		});
+		const main = commitToMain(
+			{'shared.txt': 'main version\n'},
+			'main edits shared.txt',
+		);
+		const run = await threePhases({verify: 'true'});
+		expect(run.agent?.intent).toBe('needs-attention');
+		expect(run.apply.outcome, run.apply.message).toBe('surfaced');
+		expect(run.apply.message).toContain(
+			`rebasing \`${BRANCH}\` onto current main (${main}) conflicted on shared.txt`,
+		);
+		// Nothing landed; the kept branch is untouched on the arbiter.
+		expect(showOnArbiter('main:shared.txt')).toBe('main version\n');
+		expect(onArbiter(`refs/heads/${BRANCH}`)).toBe(keptTip);
 		expect(onArbiter(LOCK_REF)).toBeUndefined();
 	}, 180_000);
 

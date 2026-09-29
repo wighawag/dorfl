@@ -1,4 +1,5 @@
 import type {Phase} from './phase.js';
+import {continueRebaseSentence} from './continue-branch.js';
 import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {performStart} from './start.js';
@@ -1255,8 +1256,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//     did NOT onboard; the runner owns the bounce.
 	if (tree.continueRebaseConflict) {
 		const reason =
-			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-			'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+			`continuing the kept ${tree.branch}: ` +
+			`${continueRebaseSentence(tree.branch, tree.continueRebaseFailure)} — ` +
+			'run `requeue --reconcile` ' +
 			'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
 			'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
 			'branch and starts fresh.';
@@ -2888,8 +2890,9 @@ async function runRemotePipeline(
 	//     agent — the §10 path `run` uses.
 	if (tree.continueRebaseConflict) {
 		const reason =
-			`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-			'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+			`continuing the kept ${tree.branch}: ` +
+			`${continueRebaseSentence(tree.branch, tree.continueRebaseFailure)} — ` +
+			'run `requeue --reconcile` ' +
 			'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
 			'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
 			'branch and starts fresh.';

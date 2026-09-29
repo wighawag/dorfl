@@ -23,6 +23,7 @@ import {
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
+	type ContinueRebaseFailure,
 } from './continue-branch.js';
 import {refWrite} from './ref-write.js';
 import {type HarnessRecord} from './harness.js';
@@ -217,12 +218,21 @@ export interface Job {
 	 */
 	continued: boolean;
 	/**
-	 * True iff a CONTINUE rebase onto fresh main CONFLICTED (aborted, never
-	 * auto-resolved). The caller (`run`'s pipeline / `do --remote`) routes the
-	 * item to needs-attention via the §10 path; the worktree is left on the
-	 * un-rebased kept branch as the never-lose-work signal.
+	 * True iff a CONTINUE rebase onto fresh main did not apply (aborted, never
+	 * auto-resolved): a genuine conflict OR any other rebase failure, which
+	 * {@link continueRebaseFailure} tells apart. The caller (`run`'s pipeline /
+	 * `do --remote`) routes the item to needs-attention via the §10 path; the
+	 * worktree is left on the un-rebased kept branch as the never-lose-work
+	 * signal.
 	 */
 	continueRebaseConflict: boolean;
+	/**
+	 * Why the continue rebase did not apply (set exactly when
+	 * {@link continueRebaseConflict} is): the conflicting paths or git's report,
+	 * and the `main` sha rebased onto. Render it with
+	 * `describeContinueRebaseFailure` in the needs-attention reason.
+	 */
+	continueRebaseFailure?: ContinueRebaseFailure;
 	/**
 	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY (the
 	 * stale-lease retry cap was exhausted, or a non-stale-lease rejection such as
@@ -244,6 +254,48 @@ export interface Job {
 }
 
 const DEFAULT_HARNESS: HarnessRecord = {adapter: 'null'};
+
+/**
+ * Carry the commit identity git resolves in the checkout `cwd` (`user.name` /
+ * `user.email`, read with `env`) into `env`'s own git config
+ * (`GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>`), so a
+ * job worktree cut from the hub mirror commits as that checkout does.
+ *
+ * WHY (task `a-failed-rebase-reports-its-real-cause`): the hub mirror is its
+ * OWN repository under `workspacesDir`, so it does not see the checkout's
+ * local config. The generated CI workflows set the identity with a plain
+ * `git config user.name` / `user.email` IN THE CHECKOUT, and a GitHub-hosted
+ * runner has no global identity, so in the CI agent job the continue rebase of
+ * an answered merge (which rewrites commits, so needs a committer) failed with
+ * git's `unable to auto-detect email address`, reported as a conflict.
+ *
+ * Returns `env` unchanged when the checkout resolves no complete identity (git
+ * then behaves as before). The value is exactly what git already uses in the
+ * checkout, so this changes nothing for a caller whose identity was global.
+ */
+export function withCheckoutCommitIdentity(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv | undefined {
+	const read = (key: string): string =>
+		run('git', ['config', '--get', key], cwd, {env}).stdout.trim();
+	const name = read('user.name');
+	const email = read('user.email');
+	if (name === '' || email === '') {
+		return env;
+	}
+	const base = env ?? process.env;
+	const parsed = Number(base.GIT_CONFIG_COUNT ?? '0');
+	const count = Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+	return {
+		...base,
+		GIT_CONFIG_COUNT: String(count + 2),
+		[`GIT_CONFIG_KEY_${count}`]: 'user.name',
+		[`GIT_CONFIG_VALUE_${count}`]: name,
+		[`GIT_CONFIG_KEY_${count + 1}`]: 'user.email',
+		[`GIT_CONFIG_VALUE_${count + 1}`]: email,
+	};
+}
 
 /**
  * Create (or recreate) a job: ensure the hub mirror via `repo-mirror`, then
@@ -291,7 +343,7 @@ export function createJob(options: CreateJobOptions): Job {
 		env,
 	});
 	let continued = false;
-	let continueRebaseConflict = false;
+	let continueRebaseFailure: ContinueRebaseFailure | undefined;
 	let continuePushFailure: string | undefined;
 
 	if (continueFromKept) {
@@ -318,8 +370,8 @@ export function createJob(options: CreateJobOptions): Job {
 		// NEVER --force, NEVER to main (§11). A CONFLICT → aborted (never
 		// auto-resolved) + flagged so the caller routes to needs-attention.
 		const rebase = rebaseContinuedBranchOntoMain(dir, 'main', env);
-		if (rebase.kind === 'conflict') {
-			continueRebaseConflict = true;
+		if (rebase.kind !== 'clean') {
+			continueRebaseFailure = rebase;
 		} else if (options.localContinue !== true) {
 			// Push the rebased tip with --force-with-lease, SURVIVING a stale-lease
 			// ("stale info") rejection: re-fetch the arbiter `work/<slug>` + main,
@@ -344,8 +396,8 @@ export function createJob(options: CreateJobOptions): Job {
 					expectedRemoteTip,
 					env,
 				});
-				if (pushed.kind === 'conflict') {
-					continueRebaseConflict = true;
+				if (pushed.kind !== 'pushed') {
+					continueRebaseFailure = pushed;
 				}
 			} catch (err) {
 				continuePushFailure = err instanceof Error ? err.message : String(err);
@@ -398,7 +450,8 @@ export function createJob(options: CreateJobOptions): Job {
 		record,
 		mirror,
 		continued,
-		continueRebaseConflict,
+		continueRebaseConflict: continueRebaseFailure !== undefined,
+		...(continueRebaseFailure === undefined ? {} : {continueRebaseFailure}),
 		continuePushFailure,
 		dispose() {
 			git(['worktree', 'remove', '--force', dir], mirror.path, {env});

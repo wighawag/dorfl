@@ -165,11 +165,91 @@ export function branchAheadOfArbiter(options: {
 	return branchAheadOf(cwd, branchRef, mainRef, env);
 }
 
+/**
+ * Why a continue rebase did not apply (task
+ * `a-failed-rebase-reports-its-real-cause`). Either way the rebase was
+ * `--abort`ed (NEVER auto-resolved) and the kept branch is back on its
+ * un-rebased tip; the two kinds differ only in what the report says:
+ *
+ *  - `conflict`: git stopped on conflicting paths (`paths`, the unmerged index
+ *    entries; empty only when git printed a `CONFLICT (...)` line but left no
+ *    unmerged entry). A genuine content conflict for a human to resolve.
+ *  - `failed`: the rebase exited non-zero WITHOUT a conflict (a missing
+ *    committer identity, an unresolvable `main`, a dirty tree, a hook, ...).
+ *    Calling it "conflicted" hid the real cause (observation
+ *    `ci-answered-merge-reports-a-conflict-a-plain-rebase-does-not-have`).
+ *
+ * `onto` is the sha `mainRef` resolved to when the rebase ran (`''` when it did
+ * not resolve), and `output` is git's own report (stderr, then stdout),
+ * condensed to one line by {@link condenseGitOutput}.
+ */
+export type ContinueRebaseFailure =
+	| {kind: 'conflict'; onto: string; paths: string[]; output: string}
+	| {kind: 'failed'; onto: string; output: string};
+
 /** The result of rebasing a continued branch onto the freshly-fetched main. */
-export interface ContinueRebaseResult {
-	/** `clean` — the rebase replayed onto main with no conflict. */
-	/** `conflict` — the rebase conflicted; it was `--abort`ed (never auto-resolved). */
-	kind: 'clean' | 'conflict';
+export type ContinueRebaseResult = {kind: 'clean'} | ContinueRebaseFailure;
+
+/** The longest git report a {@link ContinueRebaseFailure} carries. */
+const MAX_GIT_OUTPUT = 600;
+
+/**
+ * Condense git's multi-line report into one line for a reason / note: split
+ * on newlines and on the carriage returns of git's progress lines, drop blank
+ * and `hint:` lines, join the rest with ` / `, and cap the length.
+ */
+export function condenseGitOutput(text: string): string {
+	const lines = text
+		.split(/[\r\n]+/)
+		.map((l) => l.trim())
+		.filter((l) => l !== '' && !l.startsWith('hint:'));
+	const joined = lines.join(' / ');
+	return joined.length > MAX_GIT_OUTPUT
+		? `${joined.slice(0, MAX_GIT_OUTPUT)}...`
+		: joined;
+}
+
+/**
+ * What happened to a continue rebase, as the tail of a sentence that starts
+ * "rebasing `<branch>` onto current main ...". A conflict names its paths and
+ * the `main` sha; any other failure says so and quotes git. Both say the rebase
+ * was aborted, so the kept work is intact.
+ */
+export function describeContinueRebaseFailure(
+	failure: ContinueRebaseFailure,
+): string {
+	const onto = failure.onto === '' ? 'an unresolved main' : failure.onto;
+	if (failure.kind === 'conflict') {
+		const on =
+			failure.paths.length > 0 ? ` on ${failure.paths.join(', ')}` : '';
+		return (
+			`(${onto}) conflicted${on} (aborted, never auto-resolved)` +
+			(failure.paths.length > 0 || failure.output === ''
+				? ''
+				: `; git: ${failure.output}`)
+		);
+	}
+	return (
+		`(${onto}) failed without a conflict (aborted); git: ` +
+		(failure.output === '' ? '(no output)' : failure.output)
+	);
+}
+
+/**
+ * The whole sentence for a continue rebase that did not apply: "rebasing
+ * `<branch>` onto current main (<sha>) conflicted on <paths> ..." or "... failed
+ * without a conflict (aborted); git: <report>". `failure` is optional only so a
+ * caller holding just the legacy boolean still gets a sentence.
+ */
+export function continueRebaseSentence(
+	branch: string,
+	failure: ContinueRebaseFailure | undefined,
+): string {
+	const tail =
+		failure === undefined
+			? 'did not apply (aborted, never auto-resolved)'
+			: describeContinueRebaseFailure(failure);
+	return `rebasing \`${branch}\` onto current main ${tail}`;
 }
 
 /**
@@ -188,10 +268,13 @@ export interface ContinueRebaseResult {
  * rename/rename ledger conflict that inheritance caused) is deleted. The ONLY
  * commits replayed are the agent's own wip / `→done` commits.
  *
- * A CLEAN rebase returns `{kind: 'clean'}`; a CONFLICTING rebase (a GENUINE code
- * conflict) is `--abort`ed (NEVER auto-resolved) and returns `{kind: 'conflict'}`
- * so the caller can route the item to needs-attention via the §10 path. Must be
- * called while HEAD is the continued branch.
+ * A CLEAN rebase returns `{kind: 'clean'}`. Any other outcome is `--abort`ed
+ * (NEVER auto-resolved) and returns a {@link ContinueRebaseFailure} carrying the
+ * `main` sha rebased onto and git's report: `conflict` (with the conflicting
+ * paths) when git stopped on a GENUINE conflict, `failed` for every other
+ * non-zero exit. The caller routes either to needs-attention via the §10 path,
+ * naming the real cause ({@link describeContinueRebaseFailure}). Must be called
+ * while HEAD is the continued branch.
  *
  * RENAME-DETECTION-OFF (task `disable-rename-detection-on-continue-rebase`): the
  * rebase is invoked with `-c merge.directoryRenames=false` SCOPED to the
@@ -210,6 +293,11 @@ export function rebaseContinuedBranchOntoMain(
 	mainRef: string,
 	env: NodeJS.ProcessEnv | undefined,
 ): ContinueRebaseResult {
+	const onto = gitSoft(
+		['rev-parse', '--verify', '--quiet', `${mainRef}^{commit}`],
+		cwd,
+		env,
+	).stdout.trim();
 	const rebase = gitSoft(
 		['-c', 'merge.directoryRenames=false', 'rebase', mainRef],
 		cwd,
@@ -218,9 +306,20 @@ export function rebaseContinuedBranchOntoMain(
 	if (rebase.status === 0) {
 		return {kind: 'clean'};
 	}
-	// NEVER auto-resolve: abort back to a clean continued-branch tip.
+	// Read the conflicting paths (the unmerged index entries) BEFORE the abort
+	// clears them. git prints its `CONFLICT (...)` lines on stdout.
+	const paths = gitSoft(['diff', '--name-only', '--diff-filter=U'], cwd, env)
+		.stdout.split('\n')
+		.map((p) => p.trim())
+		.filter((p) => p !== '');
+	const output = condenseGitOutput([rebase.stderr, rebase.stdout].join('\n'));
+	// NEVER auto-resolve: abort back to a clean continued-branch tip. A failure
+	// that never started a rebase leaves nothing to abort; that exit is harmless.
 	gitSoft(['rebase', '--abort'], cwd, env);
-	return {kind: 'conflict'};
+	if (paths.length > 0 || /^CONFLICT \(/m.test(rebase.stdout)) {
+		return {kind: 'conflict', onto, paths, output};
+	}
+	return {kind: 'failed', onto, output};
 }
 
 /**
@@ -426,11 +525,12 @@ export type ContinuedPushResult =
 	/** The work branch landed on the arbiter (first try or after a clean re-rebase). */
 	| {kind: 'pushed'}
 	/**
-	 * A re-rebase onto the freshly-fetched main CONFLICTED on a retry; it was
-	 * `--abort`ed (NEVER auto-resolved). The caller routes the item to
-	 * needs-attention via the §10 path — the green work stays intact on the branch.
+	 * A re-rebase onto the freshly-fetched main did not apply on a retry (a
+	 * `conflict`, or a non-conflict `failed`); it was `--abort`ed (NEVER
+	 * auto-resolved). The caller routes the item to needs-attention via the §10
+	 * path, naming the cause; the green work stays intact on the branch.
 	 */
-	| {kind: 'conflict'};
+	| ContinueRebaseFailure;
 
 /**
  * Push the CONTINUED `work/<slug>` branch to the arbiter with
@@ -561,8 +661,8 @@ export function pushContinuedBranchWithStaleLeaseRetry(options: {
 		// merge). A CONFLICT is the EXISTING abort → needs-attention path — the retry
 		// handles ONLY the clean-rebase stale-lease case (never auto-resolves).
 		const rebase = rebaseContinuedBranchOntoMain(cwd, mainRef, env);
-		if (rebase.kind === 'conflict') {
-			return {kind: 'conflict'};
+		if (rebase.kind !== 'clean') {
+			return rebase;
 		}
 		// Loop: retry the push, now re-leased against the freshly-fetched remote tip.
 	}
