@@ -15,6 +15,15 @@ Found in the CI sandbox `wighawag/dorfl-ci-sandbox` (a private repository runnin
 2. **The lock clash is therefore moot on GitHub.** A branch the surfacer asks about has no open PR, so no propose build is holding its lock "until the PR merges". For the remaining no-PR case, if a stale lock of the same item's own propose build is still held, the answered-merge lock phase may take it over (same item, entry action `implement`); cover that case with a test.
 3. **Remove `mergeQuestions: auto`** and the dead `advance --merge-questions` flag. The gate keeps `off` and `ask` (default `ask`); unattended landing is what merge mode is for. Update `config.ts`, the docs and any tests that mention `auto` or the flag.
 
+### Decided in a second round (answered by the human, 2026-09-29, after the first build agent STOPPED on three open design questions)
+
+4. **Takeover criterion (refines decision 2): mark a propose-kept lock.** When a propose land keeps the per-item lock "until the PR merges" (`propose-keep-lock-until-pr-merge`), it stamps the lock entry with a new marker saying it is kept for a propose PR (not a live build). The answered-merge lock phase may take over ONLY a lock carrying that marker, for the same item. The surfacer skips a branch whose lock is held WITHOUT that marker (a live build, including a rebuild of a bounced task's kept branch, whose tip can already carry the done-move, so "the tip has the done-move" is NOT a valid finished-build signal). Test both: takeover of a marked lock succeeds, an unmarked held lock is neither surfaced nor taken over.
+5. **CI writer shape: a new no-agent writer job.** Surfacing is deterministic, so the generated `advance-lifecycle` workflow gains a no-agent job (like `reap-merged-branches`) that runs a new CLI entry point to surface merge questions (the `--merge-questions` flag is removed per decision 3, so this is a new command or subcommand), honouring `mergeQuestions: off|ask`. `enumerate` stays read-only. This changes the workflow TEMPLATES `install-ci` generates (and their seed `docs/ci/advance-loop.yml.template`); do NOT edit this repository's own `.github/` (its advance-lifecycle workflow is disabled on purpose). The entry point fetches the arbiter before listing branches.
+6. **Selection, folders and squash merges.**
+   - Selection (laptop `advance` and CI `enumerate`/`scan --here`) may pick an item whose lock is held when it has an answered `kind=merge` entry AND the lock carries the decision-4 marker; otherwise a held lock still excludes it.
+   - The surfacer asks only about task bodies in `tasks/ready/` and `tasks/backlog/`. A body already in `done/` or `cancelled/` is terminal and is skipped; this also covers a squash-merged PR whose branch was not deleted (its body is in `done/` on `main`).
+   - The apply step reads merge answers on bodies in both `tasks/ready/` and `tasks/backlog/`.
+
 ## Acceptance criteria
 
 - [ ] With `mergeQuestions: ask`, the advance tick (laptop and the CI `enumerate` / dispatch path) surfaces a merge question for an unmerged work branch, per the decisions above (skipping branches with an open PR) (tested).
