@@ -21,7 +21,7 @@ import {
 	type IntegrationCoreResult,
 } from './integration-core.js';
 import type {IntegrationMode} from './config.js';
-import type {ReviewProvider} from './integrator.js';
+import {proposeRequestNotOpened, type ReviewProvider} from './integrator.js';
 import {
 	resolveTaskingEligibility,
 	type TaskingEligibilityResult,
@@ -1225,10 +1225,17 @@ function integrationToTaskResult(
 ): TaskResult {
 	const {slug, emitted, loop} = ctx;
 	if (core.outcome === 'completed') {
+		// Say "opened a PR" ONLY when the provider opened one (task
+		// `intake-reports-the-pr-it-actually-opened`); a degraded `gh pr create`
+		// pushed the branch but opened nothing, and the shared core printed why.
+		const notOpened = proposeRequestNotOpened(core.integration);
 		const landed =
 			core.integration?.mode === 'merge'
 				? 'landed them on the arbiter main'
-				: 'opened a PR carrying them (main untouched)';
+				: notOpened !== undefined
+					? `pushed them on branch ${core.integration?.pushedRef ?? core.branch} ` +
+						'but opened NO PR (main untouched; see the provider note above)'
+					: 'opened a PR carrying them (main untouched)';
 		const message =
 			`Tasked '${slug}' -> ${emitted.length} backlog task` +
 			`${emitted.length === 1 ? '' : 's'}; the runner integrated the transition ` +

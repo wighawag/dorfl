@@ -310,6 +310,31 @@ describe('the build path in three processes (lock, agent, apply)', () => {
 		});
 	}, 120_000);
 
+	it('propose: a failed PR creation is reported, not implied, and the provider instruction is printed', async () => {
+		const ghError =
+			'GraphQL: GitHub Actions is not permitted to create or approve pull requests';
+		const run = await threePhases({
+			integration: 'propose',
+			agentFiles: {'src/thing.ts': 'export const thing = 1;\n'},
+			apply: {prCreationFails: ghError},
+		});
+		expect(run.apply.outcome).toBe('proposed');
+		const branch = `work/task-${SLUG}`;
+		// The branch is pushed (the work is safe), but no PR exists.
+		expect(showOnArbiter(`refs/heads/${branch}:src/thing.ts`)).toContain(
+			'thing = 1',
+		);
+		expect(run.apply.message).not.toMatch(/for review/);
+		expect(run.apply.message).toContain(`pushed ${branch} but opened NO PR`);
+		expect(run.apply.message).toContain(ghError);
+		const notes = run.apply.notes;
+		expect(notes.join('\n')).toContain(`No PR was opened for ${branch}`);
+		expect(notes.join('\n')).toContain(ghError);
+		// No review comment was attempted on a PR that does not exist.
+		const calls = readProviderLog(run.applyProviderLog);
+		expect(calls.map((c) => c.method)).toEqual(['openRequest']);
+	}, 120_000);
+
 	it('propose: a bundle that edits another item puts the ledger report in the PR body', async () => {
 		const run = await threePhases({
 			integration: 'propose',

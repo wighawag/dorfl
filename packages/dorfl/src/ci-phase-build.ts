@@ -112,6 +112,7 @@ import {
 	type IntegrationCoreResult,
 	type IntegrationLandInput,
 } from './integration-core.js';
+import {proposeRequestNotOpened} from './integrator.js';
 import {ledgerRead} from './ledger-read.js';
 import {ledgerWrite} from './ledger-write.js';
 import {
@@ -1259,13 +1260,20 @@ async function applyIntegrate(
 			land,
 		};
 	}
+	// Say "for review" ONLY when a PR was opened (task
+	// `intake-reports-the-pr-it-actually-opened`): a degraded `gh pr create`
+	// pushed the branch but opened nothing, and the land already printed why.
+	const notOpened = proposeRequestNotOpened(integration);
 	return {
 		exitCode: 0,
 		outcome: 'proposed',
 		slug,
 		message:
-			`Completed '${slug}': pushed ${branch} for review; the lock stays held ` +
-			'until the PR merges.',
+			notOpened === undefined
+				? `Completed '${slug}': pushed ${branch} for review; the lock stays ` +
+					'held until the PR merges.'
+				: `Completed '${slug}': pushed ${branch} but opened NO PR ` +
+					`(${notOpened}); the lock stays held until the branch lands.`,
 		land,
 	};
 }

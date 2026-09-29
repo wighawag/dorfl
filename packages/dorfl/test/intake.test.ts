@@ -14,6 +14,7 @@ import {
 } from '../src/intake.js';
 import {stampIntakeMarker, parseIntakeMarker} from '../src/intake-marker.js';
 import {GitHubProvider} from '../src/github.js';
+import type {ReviewProvider} from '../src/integrator.js';
 import {performDo, type DoDorfl} from '../src/do.js';
 import {brand} from '../src/brand.js';
 import {
@@ -2652,6 +2653,126 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 
 		// The two messages are DISTINCT (PR link vs commit link).
 		expect(propose).not.toBe(merge);
+	});
+
+	it('composeIntakeCompletionComment: a propose land that opened NO PR names the pushed branch and quotes the reason verbatim', () => {
+		const reason =
+			'Pushed work/intake-task-add-quiet-flag to origin. pull request create failed: ' +
+			'GraphQL: GitHub Actions is not permitted to create or approve pull requests ' +
+			'(createPullRequest) No PR was opened, open one manually, e.g. ' +
+			'`gh pr create --base main --head work/intake-task-add-quiet-flag --fill`.' +
+			'\nSuggested body:\n```sh\nnpm test\n```';
+		const body = composeIntakeCompletionComment({
+			kind: 'task',
+			slug: 'add-quiet-flag',
+			integration: {
+				mode: 'propose',
+				mergedToMain: false,
+				pushedRef: 'work/intake-task-add-quiet-flag',
+				provider: 'github',
+				requestOpened: false,
+				instruction: reason,
+			},
+			seen: ['7'],
+		});
+		expect(body).toContain('Created task `add-quiet-flag`');
+		expect(body).toContain('`work/intake-task-add-quiet-flag`');
+		expect(body).toMatch(/no PR\s+could be opened/);
+		expect(body).not.toMatch(/carried by the PR/);
+		// The reason is fenced so its own backticks cannot break the fence.
+		expect(body).toContain('````text\n' + reason + '\n````');
+		expect(body).toContain(
+			`<!-- ${NS} kind=created slug=add-quiet-flag seen=7 -->`,
+		);
+	});
+
+	it('an intake whose PR creation FAILS logs that no PR was opened, prints the provider instruction, and says so in the completion comment', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 42}});
+		const ghError =
+			'GraphQL: GitHub Actions is not permitted to create or approve pull requests';
+		const failingProvider: ReviewProvider = {
+			name: 'github',
+			async openRequest(input) {
+				return {
+					opened: false,
+					instruction:
+						`Pushed ${input.branch} to ${input.arbiter}. ${ghError} No PR ` +
+						`was opened, open one manually, e.g. \`gh pr create --head ${input.branch}\`.`,
+				};
+			},
+			postPRComment: () => ({posted: false, instruction: 'no PR'}),
+			postPRCommentOnBranch: () => ({posted: false, instruction: 'no PR'}),
+			closeRequestOnBranch: async () => ({closed: false, instruction: 'no PR'}),
+		};
+		const notes: string[] = [];
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => TASK_VERDICT,
+			reviewTask: convergingReviewGate,
+			providerInstance: failingProvider,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		expect(result.outcome).toBe('tasked');
+		const branch = 'work/intake-task-add-quiet-flag';
+
+		// The log says no PR was opened and prints the provider's instruction.
+		const printed = notes.join('\n');
+		expect(printed).toContain(`No PR was opened for ${branch}`);
+		expect(printed).toContain(ghError);
+		expect(result.message).not.toMatch(/opened a PR/);
+		expect(result.message).toContain(`pushed it on branch ${branch}`);
+		expect(result.message).toContain('opened NO PR');
+
+		// The completion comment names the branch, says no PR exists, gives the reason.
+		expect(issueProvider.comments).toHaveLength(1);
+		const body = issueProvider.comments[0].body;
+		expect(body).toContain(`\`${branch}\``);
+		expect(body).toMatch(/no PR\s+could be opened/);
+		expect(body).toContain(ghError);
+		expect(body).not.toMatch(/carried by the PR/);
+	});
+
+	it('an intake whose PR creation SUCCEEDS still links the PR and logs no failure', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const issueProvider = stubIssueProvider({issue: {number: 42}});
+		const openingProvider: ReviewProvider = {
+			name: 'github',
+			async openRequest(input) {
+				return {
+					opened: true,
+					instruction: `Opened a GitHub PR for ${input.branch}.`,
+					url: 'https://github.com/o/r/pull/9',
+				};
+			},
+			postPRComment: () => ({posted: true, instruction: 'ok'}),
+			postPRCommentOnBranch: () => ({posted: true, instruction: 'ok'}),
+			closeRequestOnBranch: async () => ({closed: true, instruction: 'ok'}),
+		};
+		const notes: string[] = [];
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider,
+			decide: async () => TASK_VERDICT,
+			reviewTask: convergingReviewGate,
+			providerInstance: openingProvider,
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		expect(result.outcome).toBe('tasked');
+		expect(result.message).toContain('opened a PR carrying it');
+		expect(notes.join('\n')).not.toContain('No PR was opened');
+		const body = issueProvider.comments[0].body;
+		expect(body).toContain(
+			'It is carried by the PR: https://github.com/o/r/pull/9',
+		);
+		expect(body).not.toMatch(/no PR/i);
 	});
 
 	it('NO completion comment is posted on locked / asked / bounced', async () => {
