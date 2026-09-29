@@ -548,6 +548,49 @@ describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-f
 	});
 });
 
+describe('do prd: output through performIntegration — the propose PR body points at the tasked spec', () => {
+	// Task `propose-pr-bodies-point-at-the-real-item`: the header used to name
+	// `work/tasks/done/<spec-slug>.md`, a path that never exists for a spec.
+	it('names work/specs/tasked/<slug>.md, not a task done path', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const bodies: (string | undefined)[] = [];
+		const capturingProvider: ReviewProvider = {
+			name: 'github',
+			async openRequest(input) {
+				bodies.push(input.body);
+				return {
+					opened: true,
+					instruction: `Opened a GitHub PR for ${input.branch}.`,
+					url: 'https://github.com/o/r/pull/10',
+				};
+			},
+			postPRComment: () => ({posted: true, instruction: 'ok'}),
+			postPRCommentOnBranch: () => ({posted: true, instruction: 'ok'}),
+			closeRequestOnBranch: async () => ({closed: true, instruction: 'ok'}),
+		};
+		const result = await performTask({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoTask: true,
+			integration: 'propose',
+			providerInstance: capturingProvider,
+			dorfl: taskingAgent('child'),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		expect(bodies).toHaveLength(1);
+		const body = bodies[0] ?? '';
+		expect(body.split('\n')[0]).toBe('Spec: `work/specs/tasked/it.md`');
+		expect(body).not.toContain('work/tasks/done/');
+		// The pointer names a file that really exists on the pushed branch.
+		expect(
+			onArbiterBranch(repo, 'work/spec-it', 'work/specs/tasked/it.md'),
+		).toBe(true);
+	});
+});
+
 describe('do prd: output through performIntegration — --propose whose PR creation FAILS', () => {
 	it('logs that no PR was opened, prints the provider instruction, and never claims a PR', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, []);

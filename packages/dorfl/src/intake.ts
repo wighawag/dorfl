@@ -7,6 +7,7 @@ import {paramCase} from './brand.js';
 import {ensureSafeSlug} from './slug-safety.js';
 import {
 	performIntegration,
+	proposePointer,
 	type IntegrationCoreResult,
 } from './integration-core.js';
 import {
@@ -1431,6 +1432,9 @@ export async function emitIntakeDocument(
 		noPR: ctx.noPR,
 		providerInstance: ctx.providerInstance,
 		type: 'feat',
+		// A short PR body so an intake PR is never blank (`gh --fill`): it names the
+		// source issue WITHOUT a closing keyword (the issue must outlive the merge).
+		body: composeIntakeProposeBody({kind, issueNumber}),
 		lifecycle: {
 			// The document IS the title source. Pass the DRAFTED title EXPLICITLY:
 			// `stage()` writes the file AFTER the core reads the title, so a
@@ -1439,6 +1443,9 @@ export async function emitIntakeDocument(
 			titlePath: join(cwd, relPath),
 			title,
 			commitTag: 'intake',
+			// The document RESTS at its placed path (staged or pool), so point the
+			// reviewer at THAT file, never the task-build `work/tasks/done/` default.
+			proposeHeader: proposePointer(kind === 'task' ? 'Task' : 'Spec', relPath),
 			stage: () => stageIntakeContent({cwd, relPath, content, env}),
 		},
 		env,
@@ -1456,6 +1463,25 @@ export async function emitIntakeDocument(
 		env,
 		note,
 	});
+}
+
+/**
+ * The propose PR prose of an intake emit (task
+ * `propose-pr-bodies-point-at-the-real-item`); the shared core puts the
+ * document pointer above it. It names the source issue as a plain `#<n>`
+ * reference and deliberately uses NO closing keyword (`closes`, `fixes`,
+ * `resolves`, ...): merging an intake PR only files the task or spec, and the
+ * issue stays open until that work is done (the close job owns closing it).
+ */
+export function composeIntakeProposeBody(params: {
+	kind: IntakeArtifactType;
+	issueNumber: number;
+}): string {
+	const {kind, issueNumber} = params;
+	return (
+		`Intake drafted this ${kind} from issue #${issueNumber}. Merging this PR ` +
+		`files the ${kind}; it leaves the issue open.`
+	);
 }
 
 /**
