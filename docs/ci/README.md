@@ -309,6 +309,26 @@ This rule is for the workflows you write yourself, next to the ones `install-ci`
 
 Why: the Actions cache is shared per branch, and entries written on the default branch are restored by every later job on it. The intake and advance agents run in default-branch jobs, and an agent with a shell can reach its job's `ACTIONS_RUNTIME_TOKEN` (from a parent process's `/proc/<pid>/environ`, or with `sudo` on a GitHub-hosted runner). dorfl strips that token from the agent's own environment, but it cannot remove it from the job, so a prompt-injected agent can write a cache entry under the key your release job looks up. The release job then restores the poisoned dependency store and runs it with your publishing identity. Moving the agent to a job without a write token does not close this, because every job gets a runtime token. The cost of the rule is one uncached dependency install per run of those jobs; read-only jobs such as `verify` may keep their cache. dorfl's own `release.yml` and `deploy-gh-pages.yml` follow it, and `packages/dorfl/test/workflows-no-cache-in-write-jobs.test.ts` fails if a cache restore comes back in a write-holding job there; you can copy that check for your repository.
 
+## Required repository setting: let GitHub Actions create pull requests
+
+Propose mode needs the repository setting **"Allow GitHub Actions to create and approve pull requests"** (Settings → Actions → General → Workflow permissions) to be ON. The generated workflows open their pull requests with the job's built-in `GITHUB_TOKEN` (unless you configured the optional PR-identity token), and while this setting is off GitHub refuses every pull request created with that token, so intake and propose builds open no PR. A new repository has it OFF (`gh api repos/<owner>/<repo>/actions/permissions/workflow` answers `"can_approve_pull_request_reviews": false`); an older repository may already have it on, which is why the problem can hide.
+
+`dorfl install-ci` checks it for you, with the same posture as branch protection:
+
+- already on: it is left alone;
+- off, and your `gh` credential is repo-admin: install-ci turns it on and reports it, keeping `default_workflow_permissions` (the `GITHUB_TOKEN`'s default read/write scope) exactly as it was;
+- off (or unreadable), and the credential is not admin: install-ci calls nothing and prints the exact command to run as an admin, plus the settings page. A rejected call (for example an organization policy that forbids it) is reported as FAILED with the same command to retry by hand;
+- `--fake`: reports the check without calling GitHub.
+
+The command to run yourself (pass back your current `default_workflow_permissions`, `read` on a new repository, so it is not changed):
+
+```sh
+gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow \
+  -F can_approve_pull_request_reviews=true -f default_workflow_permissions=read
+```
+
+If your organization disables this setting for its repositories, the repository-level call is refused: enable it at the organization level, or configure the optional PR-identity token so the pull requests are opened by that identity instead of `GITHUB_TOKEN`.
+
 ## Branch protection and the tree-less answer-loop (a required-check caveat)
 
 The answer-loop's tree-less rungs (`surface` / `apply` / `triage-observation`) publish their ledger writes (a question sidecar, a `triaged:` marker, an applied answer) by a **direct `git push HEAD:main`** of a freshly-made commit. This is deliberate: `integrationMode` governs how CODE integrates (build/slice branches → PR or merge), it does NOT govern the question ledger, so tree-less writes go straight to `main` in BOTH modes (SPEC `ci-advance-surfaces-questions-not-only-builds`).

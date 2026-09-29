@@ -41,6 +41,10 @@ import {
 	installCIBranchProtectionStep,
 	type BranchProtectionStepResult,
 } from './install-ci-branch-protection.js';
+import {
+	installCIActionsPrCreationStep,
+	type ActionsPrCreationStepResult,
+} from './install-ci-actions-pr-creation.js';
 
 /**
  * The interactive prompt SEAM the wizard drives. Production wires readline; tests
@@ -105,6 +109,11 @@ export interface InstallCIResult {
 	secrets: SecretSetResult[];
 	/** The Tier-1 branch-protection outcome (undefined on `exported`). */
 	branchProtection?: BranchProtectionStepResult;
+	/**
+	 * The "Allow GitHub Actions to create and approve pull requests" outcome
+	 * (undefined on `exported`).
+	 */
+	actionsPrCreation?: ActionsPrCreationStepResult;
 }
 
 /**
@@ -311,6 +320,18 @@ export async function installCI(
 		fake,
 		log,
 	});
+
+	// 5c. "Allow GitHub Actions to create and approve pull requests" (task
+	// install-ci-enables-actions-pr-creation). Off on a new repo, and with it off
+	// GitHub refuses every propose-mode PR the workflows open with GITHUB_TOKEN.
+	// Same posture as branch protection: set when off and admin-scoped (keeping
+	// default_workflow_permissions), print the exact command otherwise, report
+	// only under --fake.
+	const actionsPrCreation = await installCIActionsPrCreationStep({
+		ctx: options.ctx,
+		fake,
+		log,
+	});
 	// CI-autonomy posture (task `install-ci-emits-no-gate-env-let-config-decide`):
 	// the emitted advance workflow carries NO DORFL_AUTO_BUILD /
 	// DORFL_AUTO_TASK / DORFL_OBSERVATION_TRIAGE /
@@ -361,7 +382,14 @@ export async function installCI(
 	log(
 		'without that hook the conflicting case is unsupported. install-ci does NOT detect likely conflicts — this is a documented boundary.',
 	);
-	return {outcome: 'generated', config, written, secrets, branchProtection};
+	return {
+		outcome: 'generated',
+		config,
+		written,
+		secrets,
+		branchProtection,
+		actionsPrCreation,
+	};
 }
 
 /**
