@@ -1369,6 +1369,7 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			cwd: tree.dir,
 			continueContext,
 			promptGuidance: itemGuidance,
+			taskFolder: task.folder,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {
@@ -3047,6 +3048,7 @@ async function runRemotePipeline(
 			cwd,
 			continueContext,
 			promptGuidance: itemGuidance,
+			taskFolder: task.folder,
 		});
 	} catch (err) {
 		if (err instanceof PromptError) {

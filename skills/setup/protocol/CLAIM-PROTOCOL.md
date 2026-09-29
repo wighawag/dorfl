@@ -226,6 +226,8 @@ body tasks/ready/ -> work/tasks/done/, transcribing your "## Decisions" block in
 that done record, the completion commit, the lock release, and integration.
 ```
 
+The wrapper names the pool path `work/tasks/ready/<slug>.md` because that is where a normal claim finds the body. When the runner resolved the body from another folder (a staged `work/tasks/backlog/` body under `do --allow-backlog`, or a stranded continue from `work/tasks/done/`), it rewrites those path mentions to the folder it actually read. Likewise the source spec is named at `work/specs/tasked/<spec>.md` once the spec has been tasked. The agent is never pointed at a file that does not exist.
+
 The "no git" line is **in-band** in the prompt (not delegated to a host config like a global `AGENTS.md`): a portable runner cannot assume the target machine has any such rule, so the boundary travels with the prompt. This keeps the acceptance-test gate authoritative (the agent can't commit/merge around it) and the runner the single owner of git state.
 
 ## Completed-task commit message

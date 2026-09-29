@@ -379,6 +379,32 @@ describe('status — fetch-first (ADR §5/§6) degrades on a broken mirror origi
 	});
 });
 
+describe('status: mirrors whose LOCAL arbiter no longer exists are summarised on ONE line', () => {
+	it('three dead local arbiters produce a single warning naming the count, not one flood line each', async () => {
+		const mirrors = ['dead-a', 'dead-b', 'dead-c'].map((name) => {
+			const {mirrorPath} = registerMirrorWithWork(workspacesDir(), name, {
+				backlog: {'open.md': '---\nslug: open\n---\n'},
+			});
+			breakMirrorOrigin(mirrorPath);
+			return mirrorPath;
+		});
+
+		const warnings: string[] = [];
+		await status({
+			workspacesDir: workspacesDir(),
+			mirrorPaths: mirrors,
+			warn: (m) => warnings.push(m),
+		});
+
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatch(/3 registered mirrors/);
+		expect(warnings[0]).toMatch(/no longer exists/);
+		expect(warnings[0]).toMatch(/dorfl remote rm/);
+		// The git error text is not repeated per mirror.
+		expect(warnings[0]).not.toMatch(/does not appear to be a git repository/);
+	});
+});
+
 describe('status — arbiter fold-in (the old `arbiter status`, ADR §1/§7)', () => {
 	it('renders the folded-in arbiter section when an arbiter report is given', async () => {
 		const report = await status({

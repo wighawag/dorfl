@@ -9,7 +9,7 @@ import {
 } from './ledger-read.js';
 import {listMirrors} from './registry.js';
 import {
-	fetchMirrorMainOrWarn,
+	createMirrorRefresher,
 	mirrorInReconcileScope,
 	resolveRepoConfigFromMirror,
 } from './repo-mirror.js';
@@ -455,15 +455,17 @@ export async function scan(
 	const repos: RepoReport[] = [];
 	const counts = {totalItems: 0, totalEligible: 0};
 
+	// Dead LOCAL arbiters are summarised on one line after the loop (see
+	// `createMirrorRefresher`), not warned once per mirror.
+	const refresher = createMirrorRefresher({
+		warn: options.warn,
+		env: options.env,
+	});
 	for (const mirror of mirrors) {
 		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the read below
 		// sees the remote truth. Never fatal — a failed fetch WARNS and falls back to
 		// the mirror's last-known `main` (the read strategy is unchanged).
-		fetchMirrorMainOrWarn({
-			mirrorPath: mirror.path,
-			warn: options.warn,
-			env: options.env,
-		});
+		refresher.refresh(mirror.path);
 		// Read the full `work/` lifecycle from the mirror's bare `main` ref through
 		// the read seam (git ls-tree/show; NOT a working-tree read).
 		const state = await ledgerRead.resolveMirrorState({
@@ -630,6 +632,7 @@ export async function scan(
 			staleLocks: staleLockEntries,
 		});
 	}
+	refresher.flush();
 
 	return {
 		repos,

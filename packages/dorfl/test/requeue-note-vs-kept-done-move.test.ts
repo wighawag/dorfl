@@ -45,9 +45,27 @@ const ARBITER = 'arbiter';
  * APPENDED a `## Decisions` block to it (the runner's completion shape), pushed
  * to a bare arbiter, with the per-item lock stuck (e.g. a Gate-3 block).
  */
-async function keptDoneMovedBranch(slug: string): Promise<SeededRepo> {
+async function keptDoneMovedBranch(
+	slug: string,
+	opts: {withoutAcceptanceCriteria?: boolean} = {},
+): Promise<SeededRepo> {
 	const seeded = seedRepoWithArbiter(scratch.root, [slug]);
 	const repo = seeded.repo;
+	if (opts.withoutAcceptanceCriteria === true) {
+		// A body with NO `## Acceptance criteria` heading (a hand-written chore task):
+		// the note must still land away from the done-move tail.
+		const bodyPath = join(repo, 'work', 'tasks', 'ready', `${slug}.md`);
+		writeFileSync(
+			bodyPath,
+			readFileSync(bodyPath, 'utf8').replace(
+				'## Acceptance criteria\n\n- [ ] works\n\n',
+				'',
+			),
+		);
+		expect(readFileSync(bodyPath, 'utf8')).not.toMatch(/Acceptance criteria/);
+		gitIn(['commit', '-q', '-am', 'chore: no acceptance criteria'], repo);
+		gitIn(['push', '-q', ARBITER, 'main'], repo);
+	}
 	const claim = await performClaim({
 		slug,
 		cwd: repo,
@@ -150,6 +168,37 @@ describe('requeue -m on a kept branch that done-moved + appended to the body', (
 		expect(prompt).toContain('fix the gate-3 finding: rename the helper');
 	});
 
+	it('continues CLEANLY when the body has NO `## Acceptance criteria` heading (the note must not fall back to the tail)', async () => {
+		const slug = 'gamma';
+		const seeded = await keptDoneMovedBranch(slug, {
+			withoutAcceptanceCriteria: true,
+		});
+		const result = await returnToBacklog({
+			cwd: seeded.repo,
+			slug,
+			arbiter: ARBITER,
+			message: 'steer without acceptance criteria',
+			env: gitEnv(),
+		});
+		expect(result.moved).toBe(true);
+
+		const fresh = seeded.clone('continuer');
+		const started = await performStart({
+			slug,
+			cwd: fresh,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(started.outcome).not.toBe('needs-attention');
+		expect(started.exitCode).toBe(0);
+		const doneBody = readFileSync(
+			join(fresh, 'work', 'tasks', 'done', `${slug}.md`),
+			'utf8',
+		);
+		expect(doneBody).toMatch(/steer without acceptance criteria/);
+		expect(doneBody).toMatch(/## Decisions\n\n- chose the prior approach/);
+	});
+
 	it('requeue WITHOUT -m leaves the body byte-identical (and still continues)', async () => {
 		const slug = 'beta';
 		const seeded = await keptDoneMovedBranch(slug);
@@ -215,7 +264,17 @@ describe('insertRequeueNoteText — placement away from the done-move tail', () 
 		);
 	});
 
-	it('falls back to appending at the end when the body has no `## Acceptance criteria`', () => {
+	it('falls back to inserting BEFORE `## Prompt` when the body has no `## Acceptance criteria`', () => {
+		const out = insertRequeueNoteText(
+			'## What to build\n\nthing\n\n## Prompt\n\n> do it\n',
+			'steer',
+		);
+		expect(out).toMatch(
+			/^## What to build\n\nthing\n\n## Requeue \d{4}-\d{2}-\d{2}\n\nsteer\n\n## Prompt\n\n> do it\n$/,
+		);
+	});
+
+	it('falls back to appending at the end when the body has neither `## Acceptance criteria` nor `## Prompt`', () => {
 		const out = insertRequeueNoteText('## What to build\n\nthing\n', 'steer');
 		expect(out).toMatch(
 			/^## What to build\n\nthing\n\n## Requeue \d{4}-\d{2}-\d{2}\n\nsteer\n$/,

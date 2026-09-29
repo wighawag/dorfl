@@ -379,6 +379,28 @@ describe('scan — fetch-first (ADR §5/§6; offline-scan invariant retired)', (
 	});
 });
 
+describe('scan: mirrors whose LOCAL arbiter no longer exists', () => {
+	it('are summarised on ONE warning line and still read from last-known state', async () => {
+		for (const name of ['dead-a', 'dead-b']) {
+			const {mirrorPath} = registerMirrorWithWork(workspacesDir(), name, {
+				backlog: {'known.md': task({slug: 'known'})},
+			});
+			breakMirrorOrigin(mirrorPath);
+		}
+
+		const warnings: string[] = [];
+		const report = await scan(
+			mergeConfig({workspacesDir: workspacesDir(), autoBuild: true}),
+			{warn: (m) => warnings.push(m)},
+		);
+
+		expect(report.repos).toHaveLength(2);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatch(/2 registered mirrors/);
+		expect(warnings[0]).toMatch(/no longer exists/);
+	});
+});
+
 describe('scanRepoPaths (working-tree scan for in-place/run)', () => {
 	it('reads eligibility from a working checkout and honours per-repo autoBuild', () => {
 		writeItem('repo', 'backlog', 'u.md', {slug: 'u', blockedBy: '[]'});

@@ -4,7 +4,7 @@ import {resolveHarness, type Harness} from './harness.js';
 // harness registry so `resolveHarness` dispatches pi jobs' liveness to it.
 import './pi-harness.js';
 import {type JobState} from './workspace.js';
-import {fetchMirrorMainOrWarn, mirrorInReconcileScope} from './repo-mirror.js';
+import {createMirrorRefresher, mirrorInReconcileScope} from './repo-mirror.js';
 import {formatArbiterStatus, type ArbiterStatusReport} from './arbiter.js';
 import {
 	listItemLockEntries,
@@ -277,11 +277,17 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 	const lockHeld: RepoLockEntries[] = [];
 	const staleLocks: RepoStaleLocks[] = [];
 	const ledgerDuplicates: RepoLedgerDuplicates[] = [];
+	// Dead LOCAL arbiters are summarised on one line after the loop (see
+	// `createMirrorRefresher`), not warned once per mirror.
+	const refresher = createMirrorRefresher({
+		warn: options.warn,
+		env: options.env,
+	});
 	for (const mirrorPath of options.mirrorPaths ?? []) {
 		// Fetch-first (ADR §5/§6): refresh this mirror's `main` so the duplicate lint
 		// reflects the remote truth. Never fatal — a failed fetch WARNS and falls back
 		// to the mirror's last-known `main`.
-		fetchMirrorMainOrWarn({mirrorPath, warn: options.warn, env: options.env});
+		refresher.refresh(mirrorPath);
 		// CLASSIFY the mirror's held locks against its `main` (fix for the propose-path
 		// lock leak; observation
 		// `every-completed-task-leaves-its-lock-ref-reporting-in-progress`). A
@@ -369,6 +375,7 @@ export async function status(options: StatusOptions): Promise<StatusReport> {
 			ledgerDuplicates.push({repoPath: mirrorPath, duplicates: dups});
 		}
 	}
+	refresher.flush();
 	lockHeld.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 	staleLocks.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 	ledgerDuplicates.sort((a, b) => a.repoPath.localeCompare(b.repoPath));

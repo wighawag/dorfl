@@ -831,6 +831,7 @@ async function runOneItem(
 				cwd: tree.dir,
 				continueContext,
 				promptGuidance: itemGuidance,
+				taskFolder: task.folder,
 			});
 		} catch (err) {
 			if (err instanceof PromptError) {

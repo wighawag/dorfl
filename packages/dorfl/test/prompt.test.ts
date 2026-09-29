@@ -434,6 +434,42 @@ describe('buildAgentPrompt', () => {
 	});
 });
 
+describe('buildAgentPrompt: names the folder the body was RESOLVED from', () => {
+	it('a staged body (--allow-backlog) is named at work/tasks/backlog/, never work/tasks/ready/', () => {
+		const prompt = buildAgentPrompt('staged', 'my-spec', 'BODY', {
+			taskFolder: 'tasks-backlog',
+		});
+		expect(prompt).toContain('lives at work/tasks/backlog/staged.md');
+		expect(prompt).toContain('body at work/tasks/backlog/staged.md');
+		expect(prompt).toContain('body work/tasks/backlog/ -> work/tasks/done/');
+		expect(prompt).not.toContain('tasks/ready/');
+	});
+
+	it('a TASKED spec is named at work/specs/tasked/, not the assumed work/specs/ready/', () => {
+		const scratch = makeScratch('dorfl-prompt-spec-');
+		try {
+			const dir = join(scratch.root, 'work', 'specs', 'tasked');
+			mkdirSync(dir, {recursive: true});
+			writeFileSync(join(dir, 'my-spec.md'), '---\nslug: my-spec\n---\n');
+			const prompt = buildAgentPrompt('alpha', 'my-spec', 'BODY', {
+				cwd: scratch.root,
+			});
+			expect(prompt).toContain('at work/specs/tasked/my-spec.md');
+			expect(prompt).not.toContain('work/specs/ready/my-spec.md');
+		} finally {
+			scratch.cleanup();
+		}
+	});
+
+	it('a pool body (tasks-ready, or no folder given) keeps the canonical wrapper byte-identical', () => {
+		const canonical = buildAgentPrompt('alpha', 'my-spec', 'BODY');
+		expect(
+			buildAgentPrompt('alpha', 'my-spec', 'BODY', {taskFolder: 'tasks-ready'}),
+		).toBe(canonical);
+		expect(canonical).toContain('lives at work/tasks/ready/alpha.md');
+	});
+});
+
 describe('extractRequeueNotes — accumulated handoff notes from the body', () => {
 	it('returns [] when no `## Requeue` section is present', () => {
 		expect(extractRequeueNotes('# Title\n\nbody only')).toEqual([]);
@@ -875,7 +911,9 @@ describe('renderPrompt — slug given', () => {
 	it('renders the wrapper + task prompt for an explicit slug', () => {
 		seedTask(scratch.root, 'in-progress', 'given', '> GIVEN-BODY', 'the-spec');
 		const out = renderPrompt({slug: 'given', cwd: scratch.root});
-		expect(out).toContain('work/tasks/ready/given.md');
+		// The wrapper names the folder the body was RESOLVED from (in-progress here).
+		expect(out).toContain('work/in-progress/given.md');
+		expect(out).not.toContain('work/tasks/ready/given.md');
 		expect(out).toContain('the-spec');
 		expect(out).toContain('GIVEN-BODY');
 		expect(out).not.toContain('<slug>');
@@ -916,7 +954,7 @@ describe('renderPrompt — slug inferred from a work/<slug> branch', () => {
 		initRepoOnBranch('work/inferred');
 		seedTask(scratch.root, 'in-progress', 'inferred', '> INFERRED-BODY');
 		const out = renderPrompt({cwd: scratch.root, env: gitEnv()});
-		expect(out).toContain('work/tasks/ready/inferred.md');
+		expect(out).toContain('work/in-progress/inferred.md');
 		expect(out).toContain('INFERRED-BODY');
 	});
 

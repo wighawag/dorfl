@@ -3427,9 +3427,14 @@ const BOUNCE_BODY_PROBE_ORDER: Record<SidecarType, readonly WorkFolderKey[]> = {
 	observation: ['observations'],
 };
 
-/** The body heading a requeue handoff note is inserted BEFORE (see
- * {@link insertRequeueNoteText}). */
-const ACCEPTANCE_HEADING_RE = /^##\s+Acceptance criteria\s*$/m;
+/** The body headings a requeue handoff note is inserted BEFORE, in preference
+ * order (see {@link insertRequeueNoteText}). `## Prompt` is the fallback anchor:
+ * every BUILDABLE task has one (`resolveTask` refuses a body without it), so a
+ * buildable body never falls through to the tail. */
+const REQUEUE_NOTE_ANCHORS: readonly RegExp[] = [
+	/^##\s+Acceptance criteria\s*$/m,
+	/^##\s+Prompt\s*$/m,
+];
 
 /**
  * Add a dated `## Requeue YYYY-MM-DD` handoff section to an item body's TEXT
@@ -3445,8 +3450,10 @@ const ACCEPTANCE_HEADING_RE = /^##\s+Acceptance criteria\s*$/m;
  * `## Decisions` block at the END; a tail-appended note on `main` then collided
  * with that tail in the continue rebase (which never auto-resolves, ADR §10) and
  * bounced the item. Mid-body, the two edits are disjoint hunks and the rebase
- * merges them cleanly. A body with no `## Acceptance criteria` heading falls back
- * to the end (the old behaviour). The continue prompt reads every `## Requeue`
+ * merges them cleanly. A body with no `## Acceptance criteria` heading anchors on
+ * `## Prompt` instead (a chore task written without acceptance criteria used to
+ * fall back to the tail and still collide); only a body with NEITHER heading
+ * (which is not buildable anyway) falls back to the end. The continue prompt reads every `## Requeue`
  * section wherever it sits (`extractRequeueNotes`), so the note still reaches
  * the continuing agent.
  *
@@ -3460,8 +3467,10 @@ export function insertRequeueNoteText(
 ): string {
 	const date = new Date().toISOString().slice(0, 10);
 	const section = `${REQUEUE_HEADING_PREFIX} ${date}\n\n${message}\n`;
-	const anchor = ACCEPTANCE_HEADING_RE.exec(content);
-	if (anchor === null) {
+	const anchor = REQUEUE_NOTE_ANCHORS.map((re) => re.exec(content)).find(
+		(m) => m !== null,
+	);
+	if (anchor === undefined || anchor === null) {
 		const base = content.replace(/\s*$/, '');
 		return `${base}\n\n${section}`;
 	}

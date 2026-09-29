@@ -1,5 +1,6 @@
 import {existsSync, mkdirSync} from 'node:fs';
-import {dirname, join} from 'node:path';
+import {dirname, isAbsolute, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {git, run} from './git.js';
 import type {Config, PartialConfig} from './config.js';
 import type {ConfigOverrideMap} from './config-override.js';
@@ -429,4 +430,88 @@ export function fetchMirrorMainOrWarn(options: {
 		);
 		return false;
 	}
+}
+
+/**
+ * The mirror's `origin` URL when it names a LOCAL arbiter (a `file://` URL or an
+ * absolute path) that no longer exists on disk; `undefined` otherwise (a live
+ * local arbiter, a network remote, or an unreadable origin). Read-only.
+ */
+export function missingLocalOrigin(
+	mirrorPath: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	const url = readOriginUrl(mirrorPath, env);
+	if (url === undefined) {
+		return undefined;
+	}
+	let localPath: string | undefined;
+	if (url.startsWith('file://')) {
+		try {
+			localPath = fileURLToPath(url);
+		} catch {
+			return undefined;
+		}
+	} else if (isAbsolute(url)) {
+		localPath = url;
+	}
+	return localPath !== undefined && !existsSync(localPath) ? url : undefined;
+}
+
+/** How many dead mirrors the summary line names before "and N more". */
+const DEAD_MIRROR_EXAMPLES = 3;
+
+/**
+ * The fetch-first refresh `status` and `scan` run over every registered mirror,
+ * with DEAD LOCAL ARBITERS summarised on ONE line instead of one warning each.
+ *
+ * A mirror whose origin is a local path that no longer exists (typically a
+ * throwaway `/tmp` arbiter, or a disk that is not mounted) cannot be fetched, and
+ * warning once per mirror buried the real output under hundreds of identical
+ * git errors. Such a mirror is NOT fetched and NOT removed: it is still read
+ * from its last-known state exactly like an offline mirror, because a read-only
+ * command must never delete state (an unmounted disk comes back). `flush()`
+ * then emits a single line with the count, a few examples and the removal
+ * command. Every other fetch failure keeps its own warning, as before.
+ */
+export function createMirrorRefresher(options: {
+	warn?: (message: string) => void;
+	env?: NodeJS.ProcessEnv;
+}): {refresh(mirrorPath: string): void; flush(): void} {
+	const dead: {mirrorPath: string; url: string}[] = [];
+	return {
+		refresh(mirrorPath: string): void {
+			const url = missingLocalOrigin(mirrorPath, options.env);
+			if (url !== undefined) {
+				dead.push({mirrorPath, url});
+				return;
+			}
+			fetchMirrorMainOrWarn({
+				mirrorPath,
+				warn: options.warn,
+				env: options.env,
+			});
+		},
+		flush(): void {
+			if (dead.length === 0) {
+				return;
+			}
+			const shown = dead
+				.slice(0, DEAD_MIRROR_EXAMPLES)
+				.map((d) => d.url)
+				.join(', ');
+			const more =
+				dead.length > DEAD_MIRROR_EXAMPLES
+					? ` and ${dead.length - DEAD_MIRROR_EXAMPLES} more`
+					: '';
+			const noun =
+				dead.length === 1
+					? '1 registered mirror points at a local arbiter that no longer exists'
+					: `${dead.length} registered mirrors point at a local arbiter that no longer exists`;
+			options.warn?.(
+				`${noun} (${shown}${more}); skipped the fetch and read their last-known ` +
+					'state. Remove each with `dorfl remote rm <origin-url>` if it is gone for good.',
+			);
+		},
+	};
 }

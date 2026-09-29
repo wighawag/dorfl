@@ -242,6 +242,8 @@ export function wrapper(
 		protocolPath?: string;
 		cwd?: string;
 		promptGuidance?: {testFirst?: boolean};
+		/** The folder the body was resolved from; see {@link retargetBodyFolder}. */
+		taskFolder?: TaskFolder;
 	} = {},
 ): string {
 	const protocolPath = resolveProtocolDoc(
@@ -251,8 +253,70 @@ export function wrapper(
 	);
 	const protocol = readFileSync(protocolPath, 'utf8');
 	const template = extractCanonicalWrapperTemplate(protocol);
-	const resolved = applyPromptGuidance(template, options.promptGuidance);
+	const resolved = retargetSpecFolder(
+		retargetBodyFolder(
+			applyPromptGuidance(template, options.promptGuidance),
+			options.taskFolder,
+		),
+		spec,
+		options.cwd,
+	);
 	return resolved.replace(/<slug>/g, slug).replace(/<spec>/g, spec ?? '<spec>');
+}
+
+/**
+ * Point the wrapper's source-spec mention at the folder the spec ACTUALLY rests
+ * in. The canonical wrapper assumes `work/specs/ready/<spec>.md`, but once a spec
+ * has been tasked it rests in `work/specs/tasked/`, so builds of its tasks were
+ * told to read a file that does not exist. Located with {@link findSpecPath} (the
+ * same ready-then-tasked lookup the per-item prompt-guidance layer uses). No
+ * `cwd`, no spec, or a spec in `specs/ready/` (or nowhere) leaves the text as is.
+ */
+function retargetSpecFolder(
+	template: string,
+	spec: string | undefined,
+	cwd: string | undefined,
+): string {
+	if (spec === undefined || cwd === undefined) {
+		return template;
+	}
+	const found = findSpecPath(cwd, spec);
+	if (found === undefined || found === workItemPath(cwd, 'specs-ready', spec)) {
+		return template;
+	}
+	return template
+		.split(`${workFolderRel('specs-ready')}/<spec>.md`)
+		.join(`${workFolderRel('specs-tasked')}/<spec>.md`);
+}
+
+/**
+ * Point the wrapper's body-path mentions at the folder the body was ACTUALLY
+ * resolved from. The canonical wrapper (CLAIM-PROTOCOL.md) describes the normal
+ * case, a claim from the pool, so it names `work/tasks/ready/<slug>.md`. Under
+ * `do --allow-backlog` the body rests in `work/tasks/backlog/` (and a stranded
+ * continue resolves it from `work/tasks/done/`), and telling the agent the wrong
+ * path made build agents file observations about it.
+ *
+ * A TEXT rewrite of the extracted template, not a new placeholder: a target repo's
+ * adopted `work/protocol/CLAIM-PROTOCOL.md` may predate any placeholder, and the
+ * rewrite still works on it. Pool bodies (`tasks-ready`) and an omitted folder
+ * leave the wrapper byte-identical to the canonical text.
+ */
+function retargetBodyFolder(
+	template: string,
+	folder: TaskFolder | undefined,
+): string {
+	if (folder === undefined || folder === 'tasks-ready') {
+		return template;
+	}
+	const pool = workFolderRel('tasks-ready');
+	const actual = workFolderRel(folder);
+	const poolBare = pool.slice(`${WORK_ROOT}/`.length);
+	return template
+		.split(`${pool}/<slug>.md`)
+		.join(`${actual}/<slug>.md`)
+		.split(`body ${poolBare}/ ->`)
+		.join(`body ${actual}/ ->`);
 }
 
 /**
@@ -434,6 +498,8 @@ export function buildAgentPrompt(
 		cwd?: string;
 		continueContext?: ContinueContext;
 		promptGuidance?: {testFirst?: boolean};
+		/** The folder the task body was resolved from (`ResolvedTask.folder`). */
+		taskFolder?: TaskFolder;
 	} = {},
 ): string {
 	const head = wrapper(slug, spec, options);
@@ -754,5 +820,6 @@ export function renderPrompt(options: PromptOptions): string {
 		protocolPath: options.protocolPath,
 		cwd: options.cwd,
 		promptGuidance: resolvedGuidance,
+		taskFolder: task.folder,
 	});
 }

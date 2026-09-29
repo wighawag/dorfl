@@ -30,9 +30,25 @@
  *     `GITHUB_ACTIONS=true`; the suite starts outside that mode so it behaves
  *     the same on a dev box and on a runner (see the block below).
  *
- * All three are pure ENVIRONMENT isolation: they do not change product behaviour, only
+ *  4. REAL-HOME LEAKAGE. `DEFAULT_CONFIG.workspacesDir` (`~/.dorfl`) and
+ *     `arbitersDir` are computed from `homedir()` ONCE, when `config.ts` is first
+ *     imported, so a test that sets `HOME` in `beforeEach` cannot redirect them.
+ *     Any test that forgot an explicit workspaces dir materialised hub mirrors in
+ *     the developer's REAL `~/.dorfl/repos/` (hundreds of dead
+ *     `tmp/pre-backlog-step-a-*` mirrors, each a `dorfl status` warning). We point
+ *     `HOME` + `XDG_CONFIG_HOME` at a per-file scratch dir HERE, before any test
+ *     file imports product code, so every home-derived default is scratch. Tests
+ *     that set their own `HOME` still do; they restore to this scratch home.
+ *     Guarded by `suite-home-isolation.test.ts`.
+ *
+ * All four are pure ENVIRONMENT isolation: they do not change product behaviour, only
  * stop the host's ambient state from bleeding into the suite.
  */
+
+import {afterAll} from 'vitest';
+import {mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 // 1. Deterministic, host-independent git identity + config isolation.
 process.env.GIT_AUTHOR_NAME = 'Test Runner';
@@ -56,3 +72,11 @@ for (const key of Object.keys(process.env)) {
 //    on a dev box and on a runner, so it starts outside that mode; the tests
 //    that cover it set it explicitly for their own spawns.
 delete process.env.GITHUB_ACTIONS;
+
+// 4. A scratch HOME for this test file, set before any product module loads.
+const scratchHome = mkdtempSync(join(tmpdir(), 'dorfl-test-home-'));
+process.env.HOME = scratchHome;
+process.env.XDG_CONFIG_HOME = join(scratchHome, '.config');
+afterAll(() => {
+	rmSync(scratchHome, {recursive: true, force: true});
+});

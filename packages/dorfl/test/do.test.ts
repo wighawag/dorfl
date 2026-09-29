@@ -205,6 +205,29 @@ describe('do task:<slug> --allow-backlog — drive a STAGED task in place (backl
 		expect(existsOnArbiterMain(repo, 'done', 'staged')).toBe(true);
 	});
 
+	it('the build prompt names the STAGED path the body was resolved from, not tasks/ready/', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
+		let seenPrompt = '';
+		const capturingAgent: DoDorfl = ({cwd, prompt}) => {
+			seenPrompt = prompt;
+			writeFileSync(join(cwd, 'agent-output.txt'), 'work\n');
+			return {ok: true};
+		};
+		const result = await performDo({
+			arg: 'task:staged',
+			cwd: repo,
+			arbiter: ARBITER,
+			integration: 'merge',
+			verify: PASS,
+			allowBacklog: true,
+			dorfl: capturingAgent,
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('completed');
+		expect(seenPrompt).toContain('lives at work/tasks/backlog/staged.md');
+		expect(seenPrompt).not.toContain('work/tasks/ready/staged.md');
+	});
+
 	it('WITHOUT the flag: the same staged task fails to resolve (no silent widening)', async () => {
 		const {repo} = seedRepoWithArbiter(scratch.root, [], {staged: ['staged']});
 		const result = await performDo({
