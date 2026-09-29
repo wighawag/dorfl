@@ -123,10 +123,14 @@ describe('work-layout — the single source of every work/ path + folder union',
 		// `needs-attention` was dropped post-cutover
 		// (`finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`,
 		// ADR `needs-attention-folder-cutover-followup-nits`): the folder is retired.
+		// `tasks-backlog` + `cancelled` added by `spec-complete-counts-staged-and-cancelled-tasks`
+		// (a staged task keeps its spec incomplete; a cancelled one is seen, not blind).
 		expect([...TASK_LIFECYCLE_FOLDERS]).toEqual([
+			'tasks-backlog',
 			'tasks-ready',
 			'in-progress',
 			'done',
+			'cancelled',
 		]);
 		expect([...LEDGER_STATUS_FOLDERS]).toEqual([
 			'tasks-ready',

@@ -217,18 +217,26 @@ export type TaskResolutionFolder =
 	| 'tasks-backlog';
 
 /**
- * The task LIFECYCLE folders a `task:<slug>` / lone-task `issue:` can reside
- * in (spec-complete.ts + close-job.ts `TASK_FOLDERS`): `tasks-ready`, `in-progress`,
- * `done`. `needs-attention` was dropped post-cutover
+ * The task LIFECYCLE folders a `spec:<slug>` task / lone-task `issue:` can reside
+ * in (spec-complete.ts + close-job.ts `TASK_FOLDERS`): EVERY folder a task body can
+ * rest in, staged to terminal: `tasks-backlog`, `tasks-ready`, `in-progress`,
+ * `done`, `cancelled`. `tasks-backlog` and `cancelled` were added by task
+ * `spec-complete-counts-staged-and-cancelled-tasks`: tasking stages new tasks in
+ * `tasks/backlog/` by default, so a scan that skipped it declared a spec complete
+ * (and the CI close-job closed its issue) while work was still staged; `cancelled`
+ * is scanned so a caller can tell "all cancelled" apart from "no tasks".
+ * `needs-attention` was dropped post-cutover
  * (`finish-needs-attention-folder-cutover-remove-legacy-recovery-readers`, ratified
  * in `docs/adr/needs-attention-folder-cutover-followup-nits.md`): the folder is
  * retired — a stuck item is the per-item lock `state: stuck` with the body resting
  * in `tasks/ready/`, so no task ever resides in `work/needs-attention/`.
  */
 export const TASK_LIFECYCLE_FOLDERS = [
+	'tasks-backlog',
 	'tasks-ready',
 	'in-progress',
 	'done',
+	'cancelled',
 ] as const satisfies readonly WorkFolderKey[];
 
 /** One of the task lifecycle folders (spec-complete.ts / close-job.ts). */

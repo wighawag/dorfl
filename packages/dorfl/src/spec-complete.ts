@@ -12,8 +12,13 @@ import {
 /**
  * The read-only **"is this spec complete?"** core query (spec `issue-intake`, US #8 —
  * the closure-linkage half). Given a spec slug + a `work/` tree, a spec is COMPLETE
- * iff there is **≥1 task carrying `spec:<slug>`** AND **all such tasks reside in
- * `work/done/`**. Pure `work/`-folder logic — no seam, no git, no `gh`, no mutation.
+ * iff there is **≥1 task carrying `spec:<slug>` in `work/tasks/done/`** AND **every
+ * other such task is in `work/tasks/cancelled/`**. A task that names the spec
+ * ANYWHERE else (staged in `tasks/backlog/`, in `tasks/ready/`, in progress) keeps
+ * the spec incomplete; a cancelled task does not block completion, but a spec whose
+ * tasks are ALL cancelled (none done) is NOT complete (reported as
+ * {@link SpecCompleteResult.allCancelled}, so the close-job never closes its issue
+ * as `completed`). Pure `work/`-folder logic — no seam, no git, no `gh`, no mutation.
  *
  * This is the LINKAGE the intake engine emits for CI to ACT on: a spec fans out to N
  * tasks = N PRs whose tasks carry `spec:` ONLY (no `Refs #N` keyword is emitted),
@@ -26,9 +31,11 @@ import {
  * It is a `work/`-FOLDER RESIDENCE scan keyed on the parsed `spec:` field — NOT the
  * claim ledger (`ledger-read.ts` resolves claim-STATE, a different concern). It
  * reuses {@link parseFrontmatter} (the `spec:` field) rather than hand-rolling a YAML
- * parse, and scans the task lifecycle folders directly: `work/tasks/ready/`,
- * `work/in-progress/`, and `work/done/`. A task that has NOT yet landed in
- * `work/done/` (still in backlog / in-progress) means the spec is not yet complete.
+ * parse, and scans EVERY task lifecycle folder directly ({@link TASK_LIFECYCLE_FOLDERS}:
+ * backlog, ready, in-progress, done, cancelled). Task
+ * `spec-complete-counts-staged-and-cancelled-tasks`: the scan used to skip
+ * `tasks/backlog/`, so a spec whose tasks were still staged read as complete as
+ * soon as its first task landed.
  */
 
 /** The task lifecycle folders a `spec:<slug>` task can reside in. */
@@ -62,11 +69,18 @@ export interface SpecTask {
  */
 export interface SpecCompleteResult {
 	/**
-	 * `true` iff ≥1 task carries `spec:<slug>` AND every such task resides in
-	 * `work/done/`. `false` when no task carries the slug (≥1 is REQUIRED) OR when
-	 * any matching task is still outside `work/done/`.
+	 * `true` iff ≥1 `spec:<slug>` task resides in `work/tasks/done/` AND every other
+	 * such task resides in `work/tasks/cancelled/`. `false` when no task carries the
+	 * slug, when any matching task is still open (backlog / ready / in-progress), or
+	 * when every matching task is cancelled (see {@link allCancelled}).
 	 */
 	complete: boolean;
+	/**
+	 * `true` iff ≥1 task carries `spec:<slug>` AND every one of them is in
+	 * `work/tasks/cancelled/` (none done): the spec did not complete, it was
+	 * abandoned. Never `true` together with {@link complete}.
+	 */
+	allCancelled: boolean;
 	/** Every task carrying `spec:<slug>`, across all task folders, sorted by slug. */
 	tasks: SpecTask[];
 }
@@ -84,10 +98,10 @@ function listMarkdown(repoPath: string, folder: TaskFolder): string[] {
 }
 
 /**
- * Is this spec COMPLETE? Read-only: scan the task lifecycle folders, parse each
+ * Is this spec COMPLETE? Read-only: scan every task lifecycle folder, parse each
  * task's `spec:` via {@link parseFrontmatter}, keep those whose `spec:` equals
- * `slug`, and return COMPLETE iff that set is NON-EMPTY and EVERY member resides in
- * `work/done/`. Touches no git, no network, no mutation — a pure `work/`-folder
+ * `slug`, and return COMPLETE iff ≥1 member resides in `work/tasks/done/` and EVERY
+ * member resides in `work/tasks/done/` or `work/tasks/cancelled/`. Touches no git, no network, no mutation — a pure `work/`-folder
  * residence scan keyed on the parsed `spec:` field.
  */
 export function isSpecComplete(input: SpecCompleteInput): SpecCompleteResult {
@@ -111,7 +125,15 @@ export function isSpecComplete(input: SpecCompleteInput): SpecCompleteResult {
 	}
 	tasks.sort((a, b) => a.slug.localeCompare(b.slug));
 
-	// COMPLETE iff ≥1 such task AND every one of them is in `work/done/`.
-	const complete = tasks.length > 0 && tasks.every((s) => s.folder === 'done');
-	return {complete, tasks};
+	// COMPLETE iff ≥1 such task is done AND every one of them is done or
+	// cancelled. A staged/ready/in-progress task keeps it open; an all-cancelled
+	// set is NOT complete (nothing was delivered).
+	const settled = tasks.every(
+		(s) => s.folder === 'done' || s.folder === 'cancelled',
+	);
+	const anyDone = tasks.some((s) => s.folder === 'done');
+	const complete = settled && anyDone;
+	const allCancelled =
+		tasks.length > 0 && tasks.every((s) => s.folder === 'cancelled');
+	return {complete, allCancelled, tasks};
 }
