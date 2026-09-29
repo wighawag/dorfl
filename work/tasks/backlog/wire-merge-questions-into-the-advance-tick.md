@@ -48,3 +48,7 @@ Found in the CI sandbox `wighawag/dorfl-ci-sandbox` (a private repository runnin
 ### q1: 'task:wire-merge-questions-into-the-advance-tick' was bounced — how should we proceed?
 
 keep (the three design questions are answered in the task body under "Decided in a second round"; build it)
+
+## Requeue 2026-09-29
+
+Gate-3 BLOCKED PR #459 (see its review comment). Keep all the work; fix only this: the generated surface-merge-questions job (advance-lifecycle-template.ts AND docs/ci/advance-loop.yml.template) gives gh no credential, so on a GitHub arbiter gh pr list fails and every branch is skipped as pr-state-unknown. (1) Add permissions pull-requests: read beside contents: write, and env GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} on the step (or the DORFL_GH_TOKEN || GITHUB_TOKEN expression, stated in Decisions). (2) Require both in validateAdvanceLifecycleWorkflow and its test. (3) Make a pass whose PR listing failed visible: dorfl surface-merge-questions exits non-zero with a clear error line when the gh ceiling could not be read; test it with a failing gh stub. Do not edit this repository's .github/.
