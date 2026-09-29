@@ -4,6 +4,7 @@ import {reapJob} from './gc.js';
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
+	type ContinueRebaseFailure,
 } from './continue-branch.js';
 import {refWrite} from './ref-write.js';
 import {activePhase} from './phase.js';
@@ -70,13 +71,22 @@ export interface IsolatedTree {
 	 */
 	continued?: boolean;
 	/**
-	 * True iff a CONTINUE rebase onto fresh main CONFLICTED at onboard-time
+	 * True iff a CONTINUE rebase onto fresh main did not apply at onboard-time
 	 * (a requeue kept a `work/<slug>` whose commits did not replay onto the
-	 * current main; aborted, never auto-resolved). The pipeline routes the item
+	 * current main, by a genuine conflict or any other rebase failure; aborted,
+	 * never auto-resolved). The pipeline routes the item
 	 * to needs-attention (the §10 path) instead of running the agent. Absent /
 	 * false on a fresh cut and on a clean continue.
 	 */
 	continueRebaseConflict?: boolean;
+	/**
+	 * Why the continue rebase did not apply (set exactly when
+	 * {@link continueRebaseConflict} is): a genuine conflict with its paths, or
+	 * any other rebase failure with git's report, plus the `main` sha rebased
+	 * onto. The needs-attention reason renders it with
+	 * `describeContinueRebaseFailure`.
+	 */
+	continueRebaseFailure?: ContinueRebaseFailure;
 	/**
 	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY at
 	 * onboard-time (the stale-lease retry cap exhausted, or a non-stale-lease
@@ -200,6 +210,7 @@ export function jobWorktreeHandle(
 		arbiterUrl: job.mirror.url,
 		continued: job.continued,
 		continueRebaseConflict: job.continueRebaseConflict,
+		continueRebaseFailure: job.continueRebaseFailure,
 		continuePushFailure: job.continuePushFailure,
 		teardown(opts?: {reachableOnly?: boolean}): void {
 			// Auto-reap at end-of-job (ADR §4): re-apply the provably-safe deletion
@@ -262,7 +273,7 @@ export function inPlaceStrategy(options: {
 			// it)? In a normal clone the refs are the remote-tracking
 			// `<arbiter>/work/<slug>` and `<arbiter>/main`.
 			let continued = false;
-			let continueRebaseConflict = false;
+			let continueRebaseFailure: ContinueRebaseFailure | undefined;
 			let continuePushFailure: string | undefined;
 			// ARBITER-AUTHORITATIVE continue-detection: `ls-remote` the arbiter so a
 			// STALE local remote-tracking ref (a plain `git fetch` does NOT prune
@@ -311,8 +322,8 @@ export function inPlaceStrategy(options: {
 					`${arbiter}/main`,
 					env,
 				);
-				if (rebase.kind === 'conflict') {
-					continueRebaseConflict = true;
+				if (rebase.kind !== 'clean') {
+					continueRebaseFailure = rebase;
 				} else if (activePhase() === 'agent') {
 					// CI AGENT PHASE (ADR `ci-agent-job-holds-no-write-token` decision 7):
 					// the agent job holds no write token, so the rebase stays LOCAL. The
@@ -334,8 +345,8 @@ export function inPlaceStrategy(options: {
 							expectedRemoteTip,
 							env,
 						});
-						if (pushed.kind === 'conflict') {
-							continueRebaseConflict = true;
+						if (pushed.kind !== 'pushed') {
+							continueRebaseFailure = pushed;
 						}
 					} catch (err) {
 						continuePushFailure =
@@ -383,7 +394,8 @@ export function inPlaceStrategy(options: {
 				arbiterRemote: arbiter,
 				arbiterUrl,
 				continued,
-				continueRebaseConflict,
+				continueRebaseConflict: continueRebaseFailure !== undefined,
+				continueRebaseFailure,
 				continuePushFailure,
 				// NO-OP teardown: the checkout is the human's / CI's tree — left on
 				// `work/<slug>` in a defined state, NEVER reaped (ADR §2/§4). The

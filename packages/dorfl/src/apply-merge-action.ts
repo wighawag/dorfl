@@ -9,7 +9,8 @@ import {
 	type SidecarModel,
 } from './sidecar.js';
 import {run as runProc} from './git.js';
-import {createJob, type Job} from './workspace.js';
+import {createJob, withCheckoutCommitIdentity, type Job} from './workspace.js';
+import {continueRebaseSentence} from './continue-branch.js';
 import {ensureMirrorMain, type EnsureMirrorResult} from './repo-mirror.js';
 import {
 	performIntegration,
@@ -490,17 +491,17 @@ export async function performMergeAction(
 	}
 
 	try {
-		// CONTINUE-rebase-conflict: createJob's CONTINUE-rebase aborted on a
-		// genuine code conflict. The kept work stays on the branch (recoverable);
-		// we refuse the land and route via the standard refusal shape.
+		// CONTINUE-rebase-conflict: createJob's CONTINUE-rebase aborted (a
+		// genuine code conflict, or any other rebase failure, named as such). The
+		// kept work stays on the branch (recoverable); we refuse the land and
+		// route via the standard refusal shape.
 		if (job.continueRebaseConflict) {
-			return {
-				outcome: 'refused',
-				message:
-					`merge-question for ${input.item} answered MERGE — but rebasing ` +
-					`\`work/${input.slug}\` onto current main conflicted (the kept work is ` +
-					`intact on the branch; resolve and re-answer). NOT landing.`,
-			};
+			const message =
+				`merge-question for ${input.item} answered MERGE — but ` +
+				`${continueRebaseSentence(job.branch, job.continueRebaseFailure)} (the kept work is intact on the ` +
+				`branch; resolve and re-answer). NOT landing.`;
+			note(message);
+			return {outcome: 'refused', message};
 		}
 		if (job.continuePushFailure !== undefined) {
 			return {
@@ -654,8 +655,16 @@ export interface PreparedMergeLand {
  * fails (the agent job then fails, and the apply job surfaces the item).
  */
 export async function prepareMergeLand(
-	input: MergeActionInput,
+	answered: MergeActionInput,
 ): Promise<PreparedMergeLand> {
+	// The job worktree lives in the hub mirror, which does not see the
+	// checkout's local git config, where the CI workflow sets the identity: the
+	// continue rebase (and the wip commit of a red gate) need it
+	// (`withCheckoutCommitIdentity`).
+	const input: MergeActionInput = {
+		...answered,
+		env: withCheckoutCommitIdentity(answered.cwd, answered.env),
+	};
 	const note = input.note ?? (() => {});
 	const identity = resolveSidecarIdentity(input.item);
 	if (identity.type !== 'task' || input.action.verb !== 'merge') {
@@ -708,13 +717,11 @@ export async function prepareMergeLand(
 	});
 	try {
 		if (job.continueRebaseConflict) {
-			return prepared({
-				kind: 'needs-attention',
-				reason:
-					`rebasing \`work/task-${input.slug}\` onto current main conflicted ` +
-					'(aborted, never auto-resolved); the kept work is intact on the ' +
-					'branch. Resolve it, then answer the merge question again.',
-			});
+			const reason =
+				`${continueRebaseSentence(job.branch, job.continueRebaseFailure)}; the kept work is intact on the ` +
+				'branch. Resolve it, then answer the merge question again.';
+			note(reason);
+			return prepared({kind: 'needs-attention', reason});
 		}
 		const outcome = await runAgentPhase(
 			createPhaseRecorder({

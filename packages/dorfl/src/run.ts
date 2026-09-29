@@ -1,3 +1,4 @@
+import {continueRebaseSentence} from './continue-branch.js';
 import {type Config, resolvePromptGuidance} from './config.js';
 import {resolveRepoConfig} from './repo-config.js';
 import type {ConfigOverrideMap} from './config-override.js';
@@ -732,8 +733,9 @@ async function runOneItem(
 		//     predicate still HOLDS and this worktree is reaped — more §14-aligned.
 		if (tree.continueRebaseConflict) {
 			const reason =
-				`continuing the kept ${tree.branch}: rebase onto the latest main ` +
-				'conflicted (aborted, never auto-resolved) — run `requeue --reconcile` ' +
+				`continuing the kept ${tree.branch}: ` +
+				`${continueRebaseSentence(tree.branch, tree.continueRebaseFailure)} — ` +
+				'run `requeue --reconcile` ' +
 				'to non-destructively re-sync the mirror and retry the rebase (keeps ' +
 				'the work). Last resort: `requeue --reset` DESTRUCTIVELY discards the ' +
 				'branch and starts fresh.';

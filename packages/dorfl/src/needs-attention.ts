@@ -12,6 +12,7 @@ import {run, runAsync, type RunResult} from './git.js';
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
+	describeContinueRebaseFailure,
 } from './continue-branch.js';
 import {
 	acquireItemLock,
@@ -1027,7 +1028,9 @@ async function requeueHeldItem(params: {
 			const message =
 				`requeue --reconcile for '${slug}': re-synced the ${arbiter} mirror ` +
 				`and RETRIED the rebase of ${branch} onto latest ${arbiter}/main, but ` +
-				`the rebase still conflicts on genuine content (${attempt.detail}). The ` +
+				(attempt.genuineConflict === false
+					? `the rebase still fails (${attempt.detail}). The `
+					: `the rebase still conflicts on genuine content (${attempt.detail}). The `) +
 				'kept branch is left UNTOUCHED on the arbiter (nothing deleted) and the ' +
 				'item is left stuck. A supported mirror-side "resolve against latest ' +
 				'main" command that fetches the kept branch into a scratch worktree, ' +
@@ -1282,7 +1285,7 @@ async function requeueHeldItem(params: {
 type ReconcileAttempt =
 	| {kind: 'reconciled'}
 	| {kind: 'no-branch'}
-	| {kind: 'conflict'; detail: string};
+	| {kind: 'conflict'; detail: string; genuineConflict?: boolean};
 
 /**
  * The `--reconcile` recovery attempt — the non-destructive middle rung of the
@@ -1351,8 +1354,12 @@ async function attemptReconcile(params: {
 	}
 	try {
 		const rebase = rebaseContinuedBranchOntoMain(worktree, arbMainRef, env);
-		if (rebase.kind === 'conflict') {
-			return {kind: 'conflict', detail: 'rebase conflicted after re-sync'};
+		if (rebase.kind !== 'clean') {
+			return {
+				kind: 'conflict',
+				detail: `rebase after re-sync ${describeContinueRebaseFailure(rebase)}`,
+				genuineConflict: rebase.kind === 'conflict',
+			};
 		}
 		// 4. Push the reconciled tip back (`--force-with-lease`, WORK branch only).
 		const observedTip = gitSoftRun(

@@ -11,6 +11,9 @@ import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
 	pushContinuedBranchWithStaleLeaseRetry,
+	continueRebaseSentence,
+	describeContinueRebaseFailure,
+	type ContinueRebaseFailure,
 } from '../src/continue-branch.js';
 import {run} from '../src/git.js';
 import {
@@ -142,12 +145,92 @@ describe('rebaseContinuedBranchOntoMain', () => {
 			gitEnv(),
 		);
 		expect(result.kind).toBe('conflict');
+		// The report names the conflicting path and the main it rebased onto.
+		const mainSha = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(result).toMatchObject({
+			kind: 'conflict',
+			onto: mainSha,
+			paths: ['shared.txt'],
+		});
+		expect(
+			continueRebaseSentence(
+				'work/task-alpha',
+				result as ContinueRebaseFailure,
+			),
+		).toBe(
+			`rebasing \`work/task-alpha\` onto current main (${mainSha}) conflicted ` +
+				'on shared.txt (aborted, never auto-resolved)',
+		);
 		// The rebase was aborted: HEAD is back on a clean work/task-alpha (no rebase
 		// in progress), still on its own tip.
 		const status = gitIn(['status', '--porcelain'], repo);
 		expect(status.trim()).toBe('');
 		expect(gitIn(['rev-parse', '--abbrev-ref', 'HEAD'], repo).trim()).toBe(
 			'work/task-alpha',
+		);
+	});
+
+	it("reports a non-conflict failure (no committer identity) as failed with git's report, not conflicted", () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		writeFileSync(join(repo, 'feature.txt'), 'the work\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'prior work'], repo);
+		const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(join(repo, 'unrelated.txt'), 'unrelated\n');
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'main moved'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+
+		// No identity anywhere, and git may not guess one (a CI runner's case).
+		const env = gitEnv();
+		for (const name of [
+			'GIT_AUTHOR_NAME',
+			'GIT_AUTHOR_EMAIL',
+			'GIT_COMMITTER_NAME',
+			'GIT_COMMITTER_EMAIL',
+		]) {
+			delete env[name];
+		}
+		const count = Number(env.GIT_CONFIG_COUNT ?? '0');
+		env.GIT_CONFIG_COUNT = String(count + 1);
+		env[`GIT_CONFIG_KEY_${count}`] = 'user.useConfigOnly';
+		env[`GIT_CONFIG_VALUE_${count}`] = 'true';
+
+		const result = rebaseContinuedBranchOntoMain(repo, 'arbiter/main', env);
+		const mainSha = gitIn(['rev-parse', 'arbiter/main'], repo).trim();
+		expect(result.kind).toBe('failed');
+		expect(result).toMatchObject({onto: mainSha});
+		const sentence = continueRebaseSentence(
+			'work/task-alpha',
+			result as ContinueRebaseFailure,
+		);
+		expect(sentence).toContain(
+			`onto current main (${mainSha}) failed without a conflict (aborted); git: `,
+		);
+		expect(sentence).toMatch(/no email was given|identity unknown/i);
+		expect(sentence).not.toMatch(/conflicted/);
+		// Aborted: back on the untouched kept tip, clean tree.
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(priorTip);
+	});
+
+	it('reports an unresolvable main as a failure, not a conflict', () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/no-such-main',
+			gitEnv(),
+		);
+		expect(result).toMatchObject({kind: 'failed', onto: ''});
+		expect(
+			describeContinueRebaseFailure(result as ContinueRebaseFailure),
+		).toMatch(
+			/^\(an unresolved main\) failed without a conflict \(aborted\); git: .*no-such-main/,
 		);
 	});
 

@@ -457,6 +457,7 @@ describe('selectIsolationStrategy — by "is there a checkout", not a hardcoded 
 				'branch',
 				'continuePushFailure',
 				'continueRebaseConflict',
+				'continueRebaseFailure',
 				'continued',
 				'dir',
 				'teardown',

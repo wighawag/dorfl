@@ -5,6 +5,8 @@ import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
+	continueRebaseSentence,
+	type ContinueRebaseFailure,
 } from './continue-branch.js';
 import {refWrite} from './ref-write.js';
 import {runAsync, type RunResult} from './git.js';
@@ -368,7 +370,14 @@ async function startFromBacklog(params: {
 	// includes the claim).
 	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
 	if (switched.rebaseConflict) {
-		return continueConflictResult({slug, arbiter, cwd, env, note});
+		return continueConflictResult({
+			slug,
+			arbiter,
+			cwd,
+			failure: switched.rebaseFailure,
+			env,
+			note,
+		});
 	}
 	if (switched.pushFailure !== undefined) {
 		return continuePushFailureResult({
@@ -396,6 +405,7 @@ async function continueConflictResult(params: {
 	slug: string;
 	arbiter: string;
 	cwd: string;
+	failure: ContinueRebaseFailure | undefined;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
 }): Promise<StartResult> {
@@ -405,7 +415,8 @@ async function continueConflictResult(params: {
 	}
 	const message =
 		`Could not continue '${params.slug}': the kept work branch did not rebase ` +
-		`cleanly onto ${params.arbiter}/main; marked stuck on its per-item lock ` +
+		`cleanly onto ${params.arbiter}/main ` +
+		`(${continueRebaseSentence(workBranchRef('task', params.slug), params.failure)}); marked stuck on its per-item lock ` +
 		'(surfaced by status). Resolve against the latest main, or `requeue --reset` ' +
 		'to discard and start fresh.';
 	return {
@@ -479,7 +490,14 @@ async function startFromNeedsAttention(params: {
 
 	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
 	if (switched.rebaseConflict) {
-		return continueConflictResult({slug, arbiter, cwd, env, note});
+		return continueConflictResult({
+			slug,
+			arbiter,
+			cwd,
+			failure: switched.rebaseFailure,
+			env,
+			note,
+		});
 	}
 	if (switched.pushFailure !== undefined) {
 		return continuePushFailureResult({
@@ -531,7 +549,14 @@ async function startFromInProgress(params: {
 
 	const switched = await switchToWorkBranch({slug, arbiter, cwd, env, note});
 	if (switched.rebaseConflict) {
-		return continueConflictResult({slug, arbiter, cwd, env, note});
+		return continueConflictResult({
+			slug,
+			arbiter,
+			cwd,
+			failure: switched.rebaseFailure,
+			env,
+			note,
+		});
 	}
 	if (switched.pushFailure !== undefined) {
 		return continuePushFailureResult({
@@ -557,10 +582,13 @@ interface SwitchResult {
 	/** True iff we CONTINUED from a kept arbiter `work/<slug>` (not a fresh cut). */
 	continued: boolean;
 	/**
-	 * True iff a CONTINUE rebase onto fresh main CONFLICTED (and was aborted,
-	 * never auto-resolved). The caller routes the item to needs-attention (§10).
+	 * True iff a CONTINUE rebase onto fresh main did not apply (a conflict or any
+	 * other rebase failure; aborted, never auto-resolved). The caller routes the
+	 * item to needs-attention (§10), naming {@link rebaseFailure}.
 	 */
 	rebaseConflict: boolean;
+	/** Why the continue rebase did not apply (set exactly when {@link rebaseConflict} is). */
+	rebaseFailure?: ContinueRebaseFailure;
 	/**
 	 * Set iff the CONTINUE reconcile push to the arbiter FAILED TERMINALLY (the
 	 * stale-lease retry cap was exhausted, or a non-connectivity rejection such as
@@ -673,8 +701,13 @@ async function continueFromKeptBranch(params: {
 	// REBASE onto the freshly-fetched main at onboard-time (§10: rebase, not
 	// merge) so the agent builds on a CURRENT base. Conflict → aborted + reported.
 	const rebase = rebaseContinuedBranchOntoMain(cwd, `${arbiter}/main`, env);
-	if (rebase.kind === 'conflict') {
-		return {branch, continued: true, rebaseConflict: true};
+	if (rebase.kind !== 'clean') {
+		return {
+			branch,
+			continued: true,
+			rebaseConflict: true,
+			rebaseFailure: rebase,
+		};
 	}
 
 	// The arbiter `work/<slug>` tip the fetch above brought down, READ AFTER the
@@ -711,8 +744,13 @@ async function continueFromKeptBranch(params: {
 			env,
 			note,
 		});
-		if (pushed.kind === 'conflict') {
-			return {branch, continued: true, rebaseConflict: true};
+		if (pushed.kind !== 'pushed') {
+			return {
+				branch,
+				continued: true,
+				rebaseConflict: true,
+				rebaseFailure: pushed,
+			};
 		}
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -807,13 +845,14 @@ async function routeContinueConflict(params: {
 	slug: string;
 	arbiter: string;
 	cwd: string;
+	failure: ContinueRebaseFailure | undefined;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (m: string) => void;
 }): Promise<SurfaceToNeedsAttentionResult> {
-	const {slug, arbiter, cwd, env, note} = params;
+	const {slug, arbiter, cwd, failure, env, note} = params;
 	const reason =
-		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: rebase onto ` +
-		`${arbiter}/main conflicted (aborted, never auto-resolved) — run ` +
+		`continuing the kept ${arbiter}/${workBranchRef('task', slug)}: ` +
+		`${continueRebaseSentence(workBranchRef('task', slug), failure)} — run ` +
 		'`requeue --reconcile` to non-destructively re-sync the mirror and retry ' +
 		'the rebase (keeps the work). Last resort: `requeue --reset` ' +
 		'DESTRUCTIVELY discards the branch and starts fresh.';
