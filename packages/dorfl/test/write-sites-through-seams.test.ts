@@ -86,6 +86,8 @@ const ALLOWED: Record<string, string> = {
 		'exempt: human-run `install-ci`',
 	'install-ci-github.ts::GitHubCIContext.setBranchProtection':
 		'exempt: human-run `install-ci`',
+	'install-ci-github.ts::GitHubCIContext.setActionsWorkflowPermissions':
+		'exempt: human-run `install-ci`',
 };
 
 /**

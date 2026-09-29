@@ -5,7 +5,8 @@
  * wizard / config / `models.json` / `--export-config` / `--fake` / secret
  * orchestration; THIS adapter only supplies the GitHub-specific I/O (repo
  * detection, `gh secret set`, the optional `delete_branch_on_merge` repo
- * setting). Because the seam is the boundary, a second CI provider could be added
+ * setting, branch protection, and the Actions workflow permissions that let
+ * GitHub Actions open pull requests). Because the seam is the boundary, a second CI provider could be added
  * WITHOUT touching the core (US #7/#10).
  *
  * `install-ci` uses the SEAMS, never `gh` directly in the core: this adapter is
@@ -15,7 +16,7 @@
  *
  * WRITE-SEAM EXEMPT (task `ci-split-route-direct-writes-through-seams`): the
  * `gh secret set` / `gh api` writes here (secrets, rulesets, branch protection,
- * repo settings) are only reached from the human-run `install-ci` wizard, never
+ * repo settings, Actions workflow permissions) are only reached from the human-run `install-ci` wizard, never
  * from a CI job, so they stay on this adapter's own `runGh` wrapper instead of a
  * dorfl write seam.
  */
@@ -24,6 +25,7 @@ import {run, type RunResult} from './git.js';
 import {DEFAULT_GH_BIN} from './github.js';
 import {
 	parseRepoVisibility,
+	type ActionsWorkflowPermissions,
 	type CIProviderContext,
 	type RepoVisibility,
 } from './install-ci-core.js';
@@ -373,6 +375,72 @@ export class GitHubCIContext implements CIProviderContext {
 	}
 
 	/**
+	 * Read the repo's Actions workflow permissions via
+	 * `gh api repos/<repo>/actions/permissions/workflow`. Returns `undefined`
+	 * when `gh` is unavailable / the repo is unknown / the call fails (it needs
+	 * repo-admin read on some token kinds) / the answer is not the expected shape.
+	 */
+	async getActionsWorkflowPermissions(): Promise<
+		ActionsWorkflowPermissions | undefined
+	> {
+		if (!this.repo) {
+			return undefined;
+		}
+		const result = this.runGh([
+			'api',
+			`repos/${this.repo}/actions/permissions/workflow`,
+		]);
+		if (result === undefined || result.status !== 0) {
+			return undefined;
+		}
+		return parseActionsWorkflowPermissions(result.stdout);
+	}
+
+	/**
+	 * Set the repo's Actions workflow permissions via
+	 * `gh api -X PUT repos/<repo>/actions/permissions/workflow`, sending ONLY the
+	 * fields given (an omitted field keeps its GitHub value). `-F` sends the
+	 * boolean typed, `-f` the string. Throws on failure.
+	 */
+	async setActionsWorkflowPermissions(
+		permissions: Partial<ActionsWorkflowPermissions>,
+	): Promise<void> {
+		if (!this.repo) {
+			throw new Error('cannot set actions workflow permissions: repo unknown');
+		}
+		const args = [
+			'api',
+			'-X',
+			'PUT',
+			`repos/${this.repo}/actions/permissions/workflow`,
+		];
+		if (permissions.canApprovePullRequestReviews !== undefined) {
+			args.push(
+				'-F',
+				`can_approve_pull_request_reviews=${permissions.canApprovePullRequestReviews}`,
+			);
+		}
+		if (permissions.defaultWorkflowPermissions !== undefined) {
+			args.push(
+				'-f',
+				`default_workflow_permissions=${permissions.defaultWorkflowPermissions}`,
+			);
+		}
+		const result = this.runGh(args);
+		if (result === undefined) {
+			throw new Error(
+				'gh not available; cannot set actions workflow permissions',
+			);
+		}
+		if (result.status !== 0) {
+			throw new Error(
+				`gh api PUT repos/${this.repo}/actions/permissions/workflow failed: ` +
+					(result.stderr.trim() || 'unknown error'),
+			);
+		}
+	}
+
+	/**
 	 * Render the GitHub project-setup payload to the steps fragment the
 	 * composite setup action splices in FIRST. Free-function delegate so the
 	 * memory stub gets identical behaviour with no I/O.
@@ -401,6 +469,37 @@ export class GitHubCIContext implements CIProviderContext {
 }
 
 /**
+ * Parse the JSON body of `GET repos/<r>/actions/permissions/workflow` into
+ * {@link ActionsWorkflowPermissions}, or `undefined` when it is not that shape
+ * (unparseable, or either field missing / mistyped). Pure, no I/O.
+ */
+export function parseActionsWorkflowPermissions(
+	body: string,
+): ActionsWorkflowPermissions | undefined {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(body);
+	} catch {
+		return undefined;
+	}
+	if (typeof parsed !== 'object' || parsed === null) {
+		return undefined;
+	}
+	const {default_workflow_permissions, can_approve_pull_request_reviews} =
+		parsed as Record<string, unknown>;
+	if (
+		typeof default_workflow_permissions !== 'string' ||
+		typeof can_approve_pull_request_reviews !== 'boolean'
+	) {
+		return undefined;
+	}
+	return {
+		defaultWorkflowPermissions: default_workflow_permissions,
+		canApprovePullRequestReviews: can_approve_pull_request_reviews,
+	};
+}
+
+/**
  * An in-memory STUB provider context for tests + `--fake` mode: `setSecret`
  * records to memory (NO real secrets store touched), `ghAvailable` is fixed
  * (default `false`), `repo` is a fixture. This is the mechanism the task's
@@ -420,6 +519,16 @@ export class MemoryCIProviderContext implements CIProviderContext {
 	readonly branchProtections = new Map<string, unknown>();
 	/** Deadlock-guard rulesets recorded in memory (append-only). */
 	readonly rulesets: unknown[] = [];
+	/**
+	 * The Actions workflow permissions: seeded from the fixture, updated by
+	 * `setActionsWorkflowPermissions`. `undefined` ⇒ the read "fails".
+	 */
+	actionsWorkflowPermissions: ActionsWorkflowPermissions | undefined;
+	/** Every `setActionsWorkflowPermissions` body, in call order (append-only). */
+	readonly actionsWorkflowPermissionsSets: Partial<ActionsWorkflowPermissions>[] =
+		[];
+	/** Whether `setActionsWorkflowPermissions` should throw (tests configure). */
+	private readonly actionsWorkflowPermissionsError: string | undefined;
 	/** What `getRepoAdminScope()` should return (tests configure). */
 	private readonly adminScope: boolean | undefined;
 	/** What `getDefaultBranch()` should return (tests configure). */
@@ -449,6 +558,13 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		/** When set, `setBranchRuleset` throws with this message (failure path). */
 		branchRulesetError?: string;
 		/**
+		 * Fixture Actions workflow permissions; `undefined` ⇒ the read fails
+		 * (models a `gh` that could not read the setting).
+		 */
+		actionsWorkflowPermissions?: ActionsWorkflowPermissions;
+		/** When set, `setActionsWorkflowPermissions` throws with this message. */
+		actionsWorkflowPermissionsError?: string;
+		/**
 		 * The provider id this stub claims (default `github`). Tests of the
 		 * project-setup seam may override to assert the orchestrator's
 		 * payload-lookup path; the default models GitHub the way the live
@@ -464,6 +580,9 @@ export class MemoryCIProviderContext implements CIProviderContext {
 		this.visibility = options.visibility;
 		this.branchProtectionError = options.branchProtectionError;
 		this.branchRulesetError = options.branchRulesetError;
+		this.actionsWorkflowPermissions = options.actionsWorkflowPermissions;
+		this.actionsWorkflowPermissionsError =
+			options.actionsWorkflowPermissionsError;
 		this.providerId = options.providerId ?? GITHUB_PROVIDER_ID;
 	}
 
@@ -503,5 +622,28 @@ export class MemoryCIProviderContext implements CIProviderContext {
 			throw new Error(this.branchRulesetError);
 		}
 		this.rulesets.push(ruleset);
+	}
+
+	async getActionsWorkflowPermissions(): Promise<
+		ActionsWorkflowPermissions | undefined
+	> {
+		return this.actionsWorkflowPermissions === undefined
+			? undefined
+			: {...this.actionsWorkflowPermissions};
+	}
+
+	async setActionsWorkflowPermissions(
+		permissions: Partial<ActionsWorkflowPermissions>,
+	): Promise<void> {
+		if (this.actionsWorkflowPermissionsError !== undefined) {
+			throw new Error(this.actionsWorkflowPermissionsError);
+		}
+		this.actionsWorkflowPermissionsSets.push({...permissions});
+		if (this.actionsWorkflowPermissions !== undefined) {
+			this.actionsWorkflowPermissions = {
+				...this.actionsWorkflowPermissions,
+				...permissions,
+			};
+		}
 	}
 }

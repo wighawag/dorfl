@@ -223,6 +223,20 @@ export const DEFAULT_INSTALL_SOURCE: InstallSource = 'registry';
 // ─── The CI-provider SEAM (provider-agnostic; GitHub is the first adapter) ───
 
 /**
+ * A repository's GitHub Actions workflow permissions, as
+ * `GET /repos/{owner}/{repo}/actions/permissions/workflow` answers them (the
+ * same two fields the PUT accepts). `defaultWorkflowPermissions` is `read` or
+ * `write` on GitHub; typed as a string so an unexpected value is carried
+ * through untouched rather than rewritten.
+ */
+export interface ActionsWorkflowPermissions {
+	/** The GITHUB_TOKEN's default scope (`read` / `write`); preserved on set. */
+	defaultWorkflowPermissions: string;
+	/** "Allow GitHub Actions to create and approve pull requests". */
+	canApprovePullRequestReviews: boolean;
+}
+
+/**
  * The thin CI-provider seam (whitesmith's proven `GitHubCIContext` shape,
  * generalised so a second provider could slot in without touching the core). A
  * provider supplies: where it is (`repo`), whether its CLI is usable
@@ -302,6 +316,25 @@ export interface CIProviderContext {
 	 * GitHub provider. Throws on failure (caller catches + logs).
 	 */
 	setBranchRuleset?(ruleset: unknown): Promise<void>;
+	/**
+	 * OPTIONALLY read the repo's Actions workflow permissions (GitHub:
+	 * `GET /repos/{owner}/{repo}/actions/permissions/workflow`), whose
+	 * `can_approve_pull_request_reviews` is the "Allow GitHub Actions to create
+	 * and approve pull requests" setting propose mode needs. Returns `undefined`
+	 * when the read fails. Absent on a provider with no such setting.
+	 */
+	getActionsWorkflowPermissions?(): Promise<
+		ActionsWorkflowPermissions | undefined
+	>;
+	/**
+	 * OPTIONALLY set the repo's Actions workflow permissions (GitHub:
+	 * `PUT /repos/{owner}/{repo}/actions/permissions/workflow`). A field left
+	 * `undefined` is not sent, so GitHub keeps its current value. Throws on
+	 * failure (caller catches + logs). Absent on a provider with no such setting.
+	 */
+	setActionsWorkflowPermissions?(
+		permissions: Partial<ActionsWorkflowPermissions>,
+	): Promise<void>;
 	/**
 	 * OPTIONALLY render the user's project-setup payload (the value of
 	 * {@link CIConfigFile.projectSetup}[providerId]) to the NATIVE-SYNTAX
