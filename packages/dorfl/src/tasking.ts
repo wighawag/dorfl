@@ -18,6 +18,7 @@ import {
 } from './work-layout.js';
 import {
 	performIntegration,
+	proposePointer,
 	type IntegrationCoreResult,
 } from './integration-core.js';
 import type {IntegrationMode} from './config.js';
@@ -1067,6 +1068,12 @@ export async function integrateTaskingCandidates(
 			// Read the PR title / commit summary from the held spec (before it moves).
 			titlePath: workItemPath(cwd, 'specs-ready', slug),
 			commitTag: 'tasked',
+			// The spec RESTS in `work/specs/tasked/` once this lands (never
+			// `work/tasks/done/`, the task-build default), so point the reviewer there.
+			proposeHeader: proposePointer(
+				'Spec',
+				workItemRel('specs-tasked', `${slug}.md`),
+			),
 			stage: () =>
 				stageTaskingLifecycle({
 					cwd,

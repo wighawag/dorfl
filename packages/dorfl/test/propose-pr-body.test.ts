@@ -4,6 +4,7 @@ import {
 	composeProposeBody,
 	PR_TITLE_MAX,
 } from '../src/complete.js';
+import {proposePointer} from '../src/integration-core.js';
 import {prCreateContentArgs} from '../src/github.js';
 import {NoneProvider, manualRequestText} from '../src/integrator.js';
 
@@ -114,6 +115,22 @@ describe('composeProposeBody — Half B (agent summary under a runner header)', 
 		expect(body!.indexOf('work/tasks/done/widget.md')).toBeLessThan(
 			body!.indexOf('Built the widget'),
 		);
+	});
+
+	it('a task build body is unchanged: exactly `Task: <done path>` then the prose', () => {
+		expect(composeProposeBody({slug: 'widget', body: 'The summary.'})).toBe(
+			'Task: `work/tasks/done/widget.md`\n\nThe summary.',
+		);
+	});
+
+	it('a lifecycle header replaces the task-build pointer', () => {
+		expect(
+			composeProposeBody({
+				slug: 'widget',
+				body: 'The summary.',
+				header: proposePointer('Spec', 'work/specs/tasked/widget.md'),
+			}),
+		).toBe('Spec: `work/specs/tasked/widget.md`\n\nThe summary.');
 	});
 
 	it('returns undefined when no body is supplied (⇒ provider degrades to --fill)', () => {

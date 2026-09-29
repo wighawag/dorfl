@@ -209,6 +209,16 @@ export interface IntegrationLifecycle {
 	 * WHICH lifecycle landed; it gates nothing.
 	 */
 	commitTag?: string;
+	/**
+	 * The reviewer POINTER line heading the propose-mode PR body (task
+	 * `propose-pr-bodies-point-at-the-real-item`): it names the item's REAL resting
+	 * path after this lifecycle lands, so a reviewer can open the file the PR
+	 * carries. The task build default (`Task: work/tasks/done/<slug>.md`) is wrong
+	 * for a lifecycle (a tasked spec rests in `work/specs/tasked/`, an intake
+	 * document in its staged folder), so every lifecycle states its own. Compose it
+	 * with {@link proposePointer}.
+	 */
+	proposeHeader: string;
 }
 
 /**
@@ -1358,7 +1368,11 @@ export async function performIntegration(
 			providerInstance: input.providerInstance,
 			openPr: input.openPr,
 			title: prTitle,
-			body: composeProposeBody({slug, body: input.body}),
+			body: composeProposeBody({
+				slug,
+				body: input.body,
+				header: lifecycle?.proposeHeader,
+			}),
 			reviewProse: approvedVerdict?.review ?? input.approvedReviewProse,
 			mergeRetries: input.mergeRetries,
 			mergeJitterMs: input.mergeJitterMs,
@@ -2641,18 +2655,32 @@ export function synthesiseProposeTitle(input: {
  * header that points a reviewer back to the task file. Returns `undefined` when
  * no body was supplied — so the provider degrades to today's `gh ... --fill` (no
  * regression); the header is ONLY scaffolded when there IS prose to carry.
+ * `header` overrides the default task-build pointer (`Task: work/tasks/done/<slug>.md`)
+ * for a non-task lifecycle (tasking, intake), whose item rests elsewhere.
  * Exported for unit tests of the header + pointer.
  */
 export function composeProposeBody(input: {
 	slug: string;
 	body?: string;
+	header?: string;
 }): string | undefined {
 	const prose = input.body?.trim();
 	if (!prose) {
 		return undefined;
 	}
-	const header = `Task: \`${workItemRel('done', `${input.slug}.md`)}\``;
+	const header =
+		input.header ??
+		proposePointer('Task', workItemRel('done', `${input.slug}.md`));
 	return `${header}\n\n${prose}`;
+}
+
+/**
+ * The one-line reviewer pointer a propose PR body opens with: `<label>: `<path>``,
+ * where `path` is the repo-relative file the PR carries (task
+ * `propose-pr-bodies-point-at-the-real-item`).
+ */
+export function proposePointer(label: 'Task' | 'Spec', path: string): string {
+	return `${label}: \`${path}\``;
 }
 
 /**

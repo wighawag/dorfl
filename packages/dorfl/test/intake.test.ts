@@ -2775,6 +2775,83 @@ describe('intake <N> — the completion comment on task/prd success', () => {
 		expect(body).not.toMatch(/no PR/i);
 	});
 
+	// Task `propose-pr-bodies-point-at-the-real-item`: an intake PR used to open
+	// with an EMPTY body. It now names the staged document and the source issue,
+	// with no closing keyword (merging the PR must not close the issue).
+	const CLOSING_KEYWORD =
+		/\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[\s:]*(\S+)?#\d+/i;
+	function bodyCapturingProvider(
+		bodies: (string | undefined)[],
+	): ReviewProvider {
+		return {
+			name: 'github',
+			async openRequest(input) {
+				bodies.push(input.body);
+				return {
+					opened: true,
+					instruction: `Opened a GitHub PR for ${input.branch}.`,
+					url: 'https://github.com/o/r/pull/9',
+				};
+			},
+			postPRComment: () => ({posted: true, instruction: 'ok'}),
+			postPRCommentOnBranch: () => ({posted: true, instruction: 'ok'}),
+			closeRequestOnBranch: async () => ({closed: true, instruction: 'ok'}),
+		};
+	}
+
+	it('a task intake PR body names the staged task file and the source issue, without a closing keyword', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const bodies: (string | undefined)[] = [];
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 42}}),
+			decide: async () => TASK_VERDICT,
+			reviewTask: convergingReviewGate,
+			providerInstance: bodyCapturingProvider(bodies),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('tasked');
+		expect(bodies).toHaveLength(1);
+		const body = bodies[0] ?? '';
+		expect(body.split('\n')[0]).toBe(
+			'Task: `work/tasks/backlog/add-quiet-flag.md`',
+		);
+		expect(body).toContain('issue #42');
+		expect(body).not.toContain('work/tasks/done/');
+		expect(body).not.toMatch(CLOSING_KEYWORD);
+	});
+
+	it('a spec intake PR body names the staged spec file and the source issue, without a closing keyword', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		const bodies: (string | undefined)[] = [];
+		const result = await performIntake({
+			issueNumber: 42,
+			cwd: repo,
+			arbiter: ARBITER,
+			issueProvider: stubIssueProvider({issue: {number: 42}}),
+			decide: async () => ({
+				outcome: 'spec',
+				specSlug: 'quiet-and-verbose-modes',
+				specTitle: 'Quiet and verbose output modes for the CLI',
+				specHumanOnly: true,
+				specNeedsAnswers: false,
+				specBody: '## Problem Statement\n\nNo verbosity control.',
+			}),
+			providerInstance: bodyCapturingProvider(bodies),
+			env: gitEnv(),
+		});
+		expect(result.outcome).toBe('spec-written');
+		expect(bodies).toHaveLength(1);
+		const body = bodies[0] ?? '';
+		expect(body.split('\n')[0]).toBe(
+			'Spec: `work/specs/proposed/quiet-and-verbose-modes.md`',
+		);
+		expect(body).toContain('issue #42');
+		expect(body).not.toMatch(CLOSING_KEYWORD);
+	});
+
 	it('NO completion comment is posted on locked / asked / bounced', async () => {
 		// locked: a second run while the lock is held backs off — no comment.
 		const {repo} = seedRepoWithArbiter(scratch.root, []);
