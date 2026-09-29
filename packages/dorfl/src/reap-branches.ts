@@ -1,5 +1,9 @@
 import {run} from './git.js';
 import {isProvablyMergedForReap} from './gc.js';
+import {
+	classifyTerminalItemLocks,
+	reconcileTerminalItemLocks,
+} from './item-lock.js';
 import {parseWorkBranchRef} from './slug-namespace.js';
 import type {SidecarType} from './sidecar.js';
 
@@ -210,6 +214,106 @@ export function sweepRemoteMergedBranches(
 	}
 
 	return {reaped, retained, wouldReap};
+}
+
+export interface SweepTerminalItemLocksInput {
+	/**
+	 * A local repo (a checkout or a hub mirror) whose `<arbiter>` remote points at
+	 * the arbiter whose per-item locks to sweep. Only refs are read + deleted.
+	 */
+	cwd: string;
+	/** The arbiter remote name (the SAME one the branch sweep targets). */
+	arbiter: string;
+	/** Sink for human-readable progress notes (per released / kept lock). */
+	note?: (message: string) => void;
+	/** Only REPORT which locks WOULD be released (the `--dry-run` preview). */
+	dryRun?: boolean;
+	env?: NodeJS.ProcessEnv;
+}
+
+export interface SweepTerminalItemLocksResult {
+	/** Lock entries whose item is terminal on main and whose ref was deleted. */
+	released: string[];
+	/** On `dryRun`, the lock entries that WOULD be released (nothing deleted). */
+	wouldRelease: string[];
+	/** Lock entries left HELD because the item is not terminal on main. */
+	kept: string[];
+	/**
+	 * Locks left HELD because their classification or release faulted, including
+	 * a lease REJECTED because the ref moved between the read and the delete.
+	 */
+	errors: {entry: string; message: string}[];
+}
+
+/**
+ * Release every per-item lock whose item is already TERMINAL on the arbiter's
+ * `main` (task `ci-releases-locks-of-terminal-items`). It rides the SAME
+ * `gc --remote-branches` invocation the scheduled `reap-merged-branches` CI job
+ * runs, so the locks a merged propose PR leaves behind stop accumulating in CI
+ * (where no later claim of that item ever comes to release them) WITHOUT any
+ * change to the generated workflows.
+ *
+ * It is NOT a second mechanism: it is exactly the terminal-lock reconcile behind
+ * `status --reconcile-locks` and the claim path
+ * ({@link reconcileTerminalItemLocks}): ONE predicate (the item's body rests in a
+ * terminal folder on `<arbiter>/main`), every delete leased on the sha that was
+ * read (`--force-with-lease`, never forced), every uncertainty resolved towards
+ * KEEPING the lock. SCOPE is the one arbiter the branch sweep targets (the
+ * `<arbiter>` remote of `cwd`). `dryRun` uses the read-only twin
+ * ({@link classifyTerminalItemLocks}). Best-effort and never throws.
+ */
+export async function sweepTerminalItemLocks(
+	input: SweepTerminalItemLocksInput,
+): Promise<SweepTerminalItemLocksResult> {
+	const note = input.note ?? (() => {});
+	const out: SweepTerminalItemLocksResult = {
+		released: [],
+		wouldRelease: [],
+		kept: [],
+		errors: [],
+	};
+	try {
+		if (input.dryRun === true) {
+			const classified = await classifyTerminalItemLocks(
+				input.cwd,
+				input.arbiter,
+				input.env,
+			);
+			out.wouldRelease = classified.terminal.map((l) => l.entry);
+			out.kept = classified.inFlight.map((l) => l.entry);
+			out.errors = classified.errors;
+		} else {
+			const rec = await reconcileTerminalItemLocks(
+				input.cwd,
+				input.arbiter,
+				input.env,
+			);
+			out.released = rec.released;
+			const errored = new Set(rec.errors.map((e) => e.entry));
+			// `kept` in the reconcile report ALSO lists a terminal lock whose release
+			// was refused; that one is reported under `errors` instead, so the two
+			// lists here stay disjoint.
+			out.kept = rec.kept.filter((entry) => !errored.has(entry));
+			out.errors = rec.errors;
+		}
+	} catch (err) {
+		out.errors.push({
+			entry: '(locks)',
+			message: err instanceof Error ? err.message : String(err),
+		});
+	}
+	for (const entry of out.wouldRelease) {
+		note(
+			`Would release lock ${entry} (item terminal on main) on ${input.arbiter}.`,
+		);
+	}
+	for (const entry of out.released) {
+		note(`Released lock ${entry} (item terminal on main) on ${input.arbiter}.`);
+	}
+	for (const e of out.errors) {
+		note(`Kept lock ${e.entry}: ${e.message}`);
+	}
+	return out;
 }
 
 /** Push a retained branch into the result + emit its note. */
