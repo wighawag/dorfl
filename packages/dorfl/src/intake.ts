@@ -1015,7 +1015,8 @@ export async function decideIntake(
 		outcome: 'agent-failed' | 'usage-error',
 		message: string,
 	): {ok: false; result: IntakeResult} => {
-		note(message);
+		// Not noted: every caller returns this result, whose message the CLI
+		// prints as the run's result line (task `ci-phase-logs-each-line-once`).
 		return {ok: false, result: {exitCode: 1, outcome, issueNumber, message}};
 	};
 

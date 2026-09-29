@@ -57,6 +57,7 @@ import {
 	agentTimeoutMinutesAt,
 	arbiterLockSha,
 	boundHandoffText,
+	acquireNotingOnce,
 	checkLockOwnership,
 	emitLockOutputs,
 	fetchArbiterMain,
@@ -185,6 +186,10 @@ export type TaskingPhaseOutcome =
 export interface TaskingPhaseResult {
 	exitCode: 0 | 1 | 2 | 3 | 4;
 	outcome: TaskingPhaseOutcome;
+	/**
+	 * The result line: the CLI prints it (`>> ` or `error: `), so the phase does
+	 * NOT also `note` it (each line appears once in the job log).
+	 */
 	message: string;
 	slug?: string;
 	/** lock: the facts published. */
@@ -357,7 +362,6 @@ export async function performTaskingLockPhase(
 	const slug = verdict.slug;
 	const item = `spec:${slug}`;
 	if (verdict.skip !== undefined) {
-		note(verdict.skip);
 		return {
 			exitCode: 0,
 			outcome: 'no-op',
@@ -367,7 +371,6 @@ export async function performTaskingLockPhase(
 		};
 	}
 	if (verdict.refused !== undefined) {
-		note(verdict.refused);
 		return {
 			exitCode: 1,
 			outcome: 'gate-refused',
@@ -378,7 +381,6 @@ export async function performTaskingLockPhase(
 	}
 	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
 		const message = `'${slug}' is already locked on ${arbiter}; backing off.`;
-		note(message);
 		return {
 			exitCode: 2,
 			outcome: 'lost',
@@ -388,7 +390,9 @@ export async function performTaskingLockPhase(
 		};
 	}
 
-	const acquired = await acquireTaskingLock({slug, cwd, arbiter, env, note});
+	const acquired = await acquireNotingOnce(note, (acquireNote) =>
+		acquireTaskingLock({slug, cwd, arbiter, env, note: acquireNote}),
+	);
 	if (acquired.exitCode !== 0) {
 		const outcome =
 			acquired.outcome === 'lost' || acquired.outcome === 'contended'
@@ -602,7 +606,6 @@ export async function performTaskingAgentPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -626,12 +629,10 @@ export async function performTaskingAgentPhase(
 		writeHandoff({dir: options.handoffDir, rung: 'task-spec', record});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		note(message);
 		return {exitCode: 1, outcome: 'agent-failed', slug, message};
 	}
 	const kind = record.intent.kind;
 	const message = `handed over ${kind} for ${item}`;
-	note(message);
 	return {exitCode: 0, outcome: 'handed-over', slug, message, intent: kind};
 }
 
@@ -929,7 +930,6 @@ export async function performTaskingApplyPhase(
 		env,
 	});
 	if (!ownership.owned) {
-		note(ownership.message);
 		return {
 			exitCode: 1,
 			outcome: 'stale-lock',
@@ -1022,7 +1022,6 @@ async function surfaceSpec(
 	const message = moved
 		? `Surfaced '${slug}' to needs-attention: ${reason}`
 		: `Could not surface '${slug}' (${routed.message}): ${reason}`;
-	note(message);
 	return {
 		exitCode: moved ? 0 : 1,
 		outcome: moved ? 'surfaced' : 'surface-unmoved',
