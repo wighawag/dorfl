@@ -1,7 +1,6 @@
 import type {
 	Config,
 	IntegrationMode,
-	MergeQuestions,
 	ObservationTriage,
 	PartialConfig,
 } from './config.js';
@@ -79,7 +78,6 @@ export function doFlagOverrides(
 		SelectionOrderFlags &
 		ObservationTriageFlags &
 		SurfaceBlockersFlags &
-		MergeQuestionsFlags &
 		StrictMergeApprovalFlags &
 		NoPRFlags &
 		MergeRetriesFlags,
@@ -94,17 +92,10 @@ export function doFlagOverrides(
 		// boolean gate over DECLARED blocked work (the orthogonal peer of
 		// `--observation-triage`).
 		...surfaceBlockersFlagOverrides(flags),
-		// `--merge-questions <off|ask|auto>` rides the SAME flag-override chain
-		// (flag > env > per-repo > global > default `ask`): the 3-state gate over
-		// the merge-question SURFACER (spec `land-time-reverify-and-parallel-
-		// merge-ceiling` Story 17 / task `merge-questions-gate-axis`). SEPARATE
-		// axis from `--observation-triage` with a HIGHER default — NEVER rides
-		// `--observation-triage`.
-		...mergeQuestionsFlagOverrides(flags),
 		// `--strict-merge-approval`/`--no-strict-merge-approval` rides the SAME
 		// flag-override chain (flag > env > per-repo > global > default `false`):
 		// the OPT-IN strictness layered on the OQ6 stale-approval default. SEPARATE
-		// axis from `--merge-questions` — the re-surface vs. land branch is
+		// axis from `mergeQuestions`: the re-surface vs. land branch is
 		// `apply-rung-merge-disposition`'s consumer; this only resolves the boolean.
 		...strictMergeApprovalFlagOverrides(flags),
 		// `--selection-order <order>` rides the SAME flag-override chain (flag > env >
@@ -451,51 +442,6 @@ export function mergeRetriesFlagOverrides(
 }
 
 /**
- * The merge-questions CLI flag (`advance`): `--merge-questions <off|ask|auto>`,
- * the 3-state gate over the MERGE-QUESTION SURFACER (spec
- * `land-time-reverify-and-parallel-merge-ceiling` Story 17 / task
- * `merge-questions-gate-axis`). MIRRORS `--observation-triage`'s SHAPE but is a
- * SEPARATE axis with a HIGHER default (`ask`, never `off` — a dropped merge-
- * question means pushed work never lands). Resolved through the SAME
- * `flag > env > per-repo > global > default` chain as the other gate flags.
- */
-export interface MergeQuestionsFlags {
-	/** `--merge-questions <off|ask|auto>` — the merge-question surfacer gate. */
-	mergeQuestions?: string;
-}
-
-/** The valid `--merge-questions` values (mirrors the env enum coercion). */
-const MERGE_QUESTIONS_VALUES: readonly MergeQuestions[] = [
-	'off',
-	'ask',
-	'auto',
-];
-
-/**
- * Map the `--merge-questions` flag into a {@link PartialConfig} override. Only a
- * present flag contributes (absent ⇒ absent key). An INVALID value FAILS LOUDLY
- * (the same loud-failure contract `--observation-triage` enforces) rather than
- * silently falling through — a typo on a question-surfacing gate must never be
- * quietly ignored.
- */
-export function mergeQuestionsFlagOverrides(
-	flags: MergeQuestionsFlags,
-): PartialConfig {
-	const overrides: PartialConfig = {};
-	if (flags.mergeQuestions !== undefined) {
-		const raw = flags.mergeQuestions;
-		if (!MERGE_QUESTIONS_VALUES.includes(raw as MergeQuestions)) {
-			throw new Error(
-				`Invalid value for --merge-questions: '${raw}'. ` +
-					`Expected one of: ${MERGE_QUESTIONS_VALUES.join(', ')}.`,
-			);
-		}
-		overrides.mergeQuestions = raw as MergeQuestions;
-	}
-	return overrides;
-}
-
-/**
  * **The strict-merge-approval CLI flag** (`--strict-merge-approval` /
  * `--no-strict-merge-approval`) — spec
  * `land-time-reverify-and-parallel-merge-ceiling` sidecar OQ6 / task
@@ -504,8 +450,7 @@ export function mergeQuestionsFlagOverrides(
  * change instead of auto-landing on a green re-verify (the host-agnostic
  * analogue of GitHub's "dismiss stale approvals when the base changes"); OFF
  * (default) honours the prior answer + lands when the rebased tip re-verifies
- * GREEN. Offered alongside `--merge-questions` on `advance` (the apply rung is
- * the consumer). Resolved through the SAME `flag > env > per-repo > global >
+ * GREEN. Offered on `advance` (the apply rung is the consumer). Resolved through the SAME `flag > env > per-repo > global >
  * default` chain as the other gate-family members. A negatable boolean
  * (mirrors `--fresh-worktree-gate`).
  */

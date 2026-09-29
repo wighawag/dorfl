@@ -37,6 +37,7 @@ import {
 	type SeededRepo,
 } from './helpers/gitRepo.js';
 import {answeredSidecar} from './helpers/treeless-scenarios.js';
+import {acquireItemLock, markLockKeptForProposePr} from '../src/item-lock.js';
 
 /**
  * END TO END: the answered merge action split into three CI phases (task
@@ -803,3 +804,78 @@ describe.skipIf(!HAS_GIT_LFS && !IN_CI)(
 		}, 180_000);
 	},
 );
+
+/**
+ * Task `wire-merge-questions-into-the-advance-tick` (decisions 2 and 4): the
+ * finished propose build of the item keeps its `implement` lock held "until the
+ * PR merges", stamped as kept for a propose PR. An answered `merge` on that item
+ * must land WITHOUT a manual `release-lock`: the lock phase takes the marked
+ * lock over. A lock held WITHOUT the marker (a live build) is never taken over.
+ */
+describe('the answered merge of an item whose lock its finished propose build keeps', () => {
+	/** Hold the item's `implement` lock from a sibling clone, as a build would. */
+	async function holdBuildLock(opts: {kept: boolean}): Promise<string> {
+		const builder = seeded.clone('builder');
+		const acquired = await acquireItemLock({
+			item: ITEM,
+			action: 'implement',
+			cwd: builder,
+			arbiter: 'origin',
+			holder: 'the-build',
+			env: ciPhaseEnv(),
+		});
+		expect(acquired.outcome).toBe('acquired');
+		if (opts.kept) {
+			const marked = await markLockKeptForProposePr({
+				item: ITEM,
+				cwd: builder,
+				arbiter: 'origin',
+				env: ciPhaseEnv(),
+			});
+			expect(marked.outcome).toBe('transitioned');
+		}
+		return onArbiter(LOCK_REF)!;
+	}
+
+	it('takes over the propose-kept lock, lands the branch, records the answer and releases the lock', async () => {
+		const keptLock = await holdBuildLock({kept: true});
+		const keptTip = seedAnsweredMerge();
+		const run = await threePhases({
+			verify: 'test "$(cat feature.txt)" = "the work"',
+		});
+		expect(run.lock).toMatchObject({
+			acquired: true,
+			rung: 'apply',
+			continueTip: keptTip,
+		});
+		// The lock job took the kept lock over: a new lock commit, an advance hold.
+		expect(run.lock.lockSha).not.toBe(keptLock);
+		expect(run.apply.outcome, run.apply.message).toBe('applied');
+		expect(showOnArbiter('main:feature.txt')).toBe('the work\n');
+		expectAnswerRecorded('done');
+		expect(onArbiter(LOCK_REF)).toBeUndefined();
+	}, 180_000);
+
+	it('backs off (green, nothing written) when the held lock carries no propose-pr marker: a live build', async () => {
+		const liveLock = await holdBuildLock({kept: false});
+		seedAnsweredMerge();
+		const githubOutput = join(scratch.root, 'github-output-live');
+		writeFileSync(githubOutput, '');
+		const before = arbiterRefs();
+		const lockRun = await runWorker({
+			arg: ITEM,
+			emits: {},
+			workspacesDir: join(scratch.root, 'ws'),
+			phase: 'lock',
+			cwd: phaseClone('lock-live'),
+			githubOutput,
+		});
+		expect(lockRun.exitCode, lockRun.stderr).toBe(0);
+		expect(lockRun.out?.outcome, lockRun.out?.message).toBe('lost');
+		expect(
+			parseLockOutputLines(readFileSync(githubOutput, 'utf8')).acquired,
+		).toBe(false);
+		expect(onArbiter(LOCK_REF)).toBe(liveLock);
+		expect(arbiterRefs()).toBe(before);
+	}, 180_000);
+});

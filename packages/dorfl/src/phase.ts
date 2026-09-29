@@ -170,6 +170,7 @@ export const NON_AGENT_VERBS: ReadonlySet<string> = new Set([
 	'migrate-stuck-locks',
 	'drop',
 	'close-merged-issues',
+	'surface-merge-questions',
 	'remote',
 	'install-ci',
 	'skills',

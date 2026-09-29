@@ -22,7 +22,11 @@
  *     sidecar is answered;
  *   - (already in the absorbed seed) capability F — the `reap-merged-branches` job
  *     (`gc --remote-branches`) on the same `schedule:` cron, opt-out via the
- *     `sweepMergedBranches` dispatch input.
+ *     `sweepMergedBranches` dispatch input;
+ *   - (also in the seed) the no-agent `surface-merge-questions` job (`dorfl
+ *     surface-merge-questions`, task `wire-merge-questions-into-the-advance-tick`),
+ *     which asks a merge question for each unmerged work branch with no open PR,
+ *     behind the `mergeQuestions` config gate.
  *
  * THE SPLIT (spec `ci-agent-job-without-write-token`, ADR
  * `ci-agent-job-holds-no-write-token`, task `ci-split-generate-workflows`): the
@@ -365,6 +369,34 @@ ${dispatchGateEnv}
         run: |
 ${DISPATCH_SCRIPT}
 
+  # ── SURFACE MERGE QUESTIONS (no agent) ──────────────────────────────────────
+  # Ask a merge question (a \`kind: merge\` sidecar entry the human answers
+  # \`merge | hold | drop\`) for every unmerged \`work/task-<slug>\` branch with no
+  # open PR (an open PR already is the land decision), whose task rests in
+  # tasks/ready/ or tasks/backlog/, whose lock is free or kept by its finished
+  # propose build, and whose tip carries the done-move; then publish the
+  # questions to main. An answered \`merge\` is enumerated like any answered
+  # sidecar and lands through the item run's apply rung. Gated by the
+  # \`mergeQuestions\` config (off|ask, default ask): \`off\` surfaces nothing.
+  # Deterministic: it runs no agent, so the writer-role setup (Node and dorfl
+  # only). It fetches the arbiter before listing the branches. \`gh\` reads the
+  # open PRs with the built-in token (\`pull-requests: read\`); a failed PR
+  # listing fails the job loudly rather than skipping every branch silently.
+  surface-merge-questions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: ${pinnedUses(ACTION_PINS.checkout)}
+        with:
+          fetch-depth: 0
+      - uses: ${WRITER_SETUP_ACTION_USES}
+      - name: surface merge questions for unmerged work/* branches (surface-merge-questions)
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: dorfl surface-merge-questions --arbiter origin
+
   # ── REAP merged remote work/* branches (capability F, the hygiene sweep) ─────
   # PRESERVED from the seed (NOT a separate gc-sweep workflow): the provider-
   # agnostic counterpart of the worktree reaper. Deletes remote \`work/<slug>\`
@@ -617,6 +649,30 @@ export function validateAdvanceLifecycleWorkflow(
 		text,
 	), 'the reap job runs no agent: it must use the writer-role setup ' +
 		'(`./.github/actions/dorfl-setup-writer`: Node and dorfl only).');
+
+	// --- The merge-question writer job (no agent) -------------------------------
+	// Task `wire-merge-questions-into-the-advance-tick` (decision 5): surfacing is
+	// deterministic, so a no-agent writer job runs it; `enumerate` stays
+	// read-only.
+	require('surface-merge-questions-job', /\n {2}surface-merge-questions:\s*\n {4}runs-on: ubuntu-latest\s*\n {4}permissions:\s*\n {6}contents: write\s*\n {6}pull-requests: read\s*\n {4}steps:/.test(
+		text,
+	), 'the workflow must carry the `surface-merge-questions` job (contents: write, ' +
+		'pull-requests: read, no agent) that asks the merge questions.');
+	// Gate-3 (PR #459): `gh pr list` needs a credential, or every branch is
+	// skipped as `pr-state-unknown` on a GitHub arbiter. The built-in token
+	// suffices (a read), so the step carries `GH_TOKEN: secrets.GITHUB_TOKEN`.
+	require('surface-merge-questions-gh-token', /surface-merge-questions:[\s\S]*?env:\s*\n\s*GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}\s*\n\s*run: dorfl surface-merge-questions\b/.test(
+		operative,
+	), 'the `surface-merge-questions` step must give `gh` a credential ' +
+		'(`env: GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`), else the open-PR listing ' +
+		'fails and every branch is skipped.');
+	require('surface-merge-questions-runs-the-command', /surface-merge-questions:[\s\S]*?run: dorfl surface-merge-questions\b/.test(
+		operative,
+	), 'the `surface-merge-questions` job must run `dorfl surface-merge-questions`.');
+	require('surface-merge-questions-writer-role', /surface-merge-questions:[\s\S]*?uses:\s*\.\/\.github\/actions\/dorfl-setup-writer\b/.test(
+		text,
+	), 'the `surface-merge-questions` job runs no agent: it must use the ' +
+		'writer-role setup (`./.github/actions/dorfl-setup-writer`).');
 
 	// --- CI runs IN-PLACE: no isolation machinery ------------------------------
 	require('no-isolated-flag', !/--isolated\b/.test(

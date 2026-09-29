@@ -10,19 +10,17 @@ import {
 	resolveRepoConfig,
 } from '../src/repo-config.js';
 import {envOverrides, envVarName} from '../src/env-config.js';
-import {
-	doFlagOverrides,
-	mergeQuestionsFlagOverrides,
-} from '../src/do-config.js';
+import * as doConfig from '../src/do-config.js';
 
 /**
  * `mergeQuestions` gate-axis precedence (prd
  * `land-time-reverify-and-parallel-merge-ceiling`, Story 17 + task
- * `merge-questions-gate-axis`): the 3-state `off | ask | auto` gate over the
- * MERGE-QUESTION SURFACER. MIRRORS `observationTriage`'s SHAPE but is a
- * SEPARATE axis with a HIGHER default (`ask`, never `off` — a dropped merge-
- * question means pushed work never lands). Resolved through the SAME gate-
- * family precedence chain (flag > env > per-repo > global > default). House
+ * `merge-questions-gate-axis`): the `off | ask` gate over the MERGE-QUESTION
+ * SURFACER (`auto` and the `--merge-questions` flag were removed by task
+ * `wire-merge-questions-into-the-advance-tick`, decision 3: unattended landing
+ * is merge mode's job). A SEPARATE axis from `observationTriage` with a HIGHER
+ * default (`ask`, never `off`: a dropped merge-question means pushed work
+ * never lands). Resolved env > per-repo > global > default. House
  * style mirrors `merge-retries-config.test.ts` + `observation-triage-gate.test.ts`
  * — pure logic, no git.
  */
@@ -37,8 +35,8 @@ describe('mergeQuestions — default + carry-through (separate axis, higher defa
 		// The fixed PRD invariant: mergeQuestions must not ride observationTriage.
 		expect(DEFAULT_CONFIG.observationTriage).toBe('off');
 		// Setting one must NOT bleed into the other.
-		const cfg = mergeConfig({mergeQuestions: 'auto'});
-		expect(cfg.mergeQuestions).toBe('auto');
+		const cfg = mergeConfig({mergeQuestions: 'off'});
+		expect(cfg.mergeQuestions).toBe('off');
 		expect(cfg.observationTriage).toBe('off');
 		const cfg2 = mergeConfig({observationTriage: 'ask'});
 		expect(cfg2.observationTriage).toBe('ask');
@@ -49,20 +47,22 @@ describe('mergeQuestions — default + carry-through (separate axis, higher defa
 	it('carries through mergeConfig when explicitly set', () => {
 		expect(mergeConfig({mergeQuestions: 'off'}).mergeQuestions).toBe('off');
 		expect(mergeConfig({mergeQuestions: 'ask'}).mergeQuestions).toBe('ask');
-		expect(mergeConfig({mergeQuestions: 'auto'}).mergeQuestions).toBe('auto');
 	});
 });
 
 describe('mergeQuestions — env coercion (typed, loud)', () => {
-	it('coerces DORFL_MERGE_QUESTIONS as the off|ask|auto enum', () => {
+	it('coerces DORFL_MERGE_QUESTIONS as the off|ask enum', () => {
 		expect(envOverrides({DORFL_MERGE_QUESTIONS: 'off'}).mergeQuestions).toBe(
 			'off',
 		);
 		expect(envOverrides({DORFL_MERGE_QUESTIONS: 'ask'}).mergeQuestions).toBe(
 			'ask',
 		);
-		expect(envOverrides({DORFL_MERGE_QUESTIONS: 'auto'}).mergeQuestions).toBe(
-			'auto',
+	});
+
+	it('refuses the retired `auto` LOUDLY (no silent fall-back)', () => {
+		expect(() => envOverrides({DORFL_MERGE_QUESTIONS: 'auto'})).toThrow(
+			/DORFL_MERGE_QUESTIONS/,
 		);
 	});
 
@@ -70,53 +70,29 @@ describe('mergeQuestions — env coercion (typed, loud)', () => {
 		expect(envVarName('mergeQuestions')).toBe('DORFL_MERGE_QUESTIONS');
 	});
 
-	it('fails LOUDLY on a value outside the off|ask|auto enum', () => {
+	it('fails LOUDLY on a value outside the off|ask enum', () => {
 		expect(() => envOverrides({DORFL_MERGE_QUESTIONS: 'sometimes'})).toThrow(
 			/DORFL_MERGE_QUESTIONS/,
 		);
 		// The error names the valid options (the same loud-failure contract the
 		// observationTriage env enum enforces).
 		expect(() => envOverrides({DORFL_MERGE_QUESTIONS: 'sometimes'})).toThrow(
-			/off, ask, auto/,
+			/Expected one of: off, ask\./,
 		);
 	});
 });
 
-describe('mergeQuestions — the flag override (--merge-questions <off|ask|auto>)', () => {
-	it('parses a present enum value; an absent flag ⇒ undefined', () => {
+describe('mergeQuestions: there is NO CLI flag (removed with `auto`)', () => {
+	it('do-config exports no --merge-questions override, and doFlagOverrides never sets the key', () => {
+		expect('mergeQuestionsFlagOverrides' in doConfig).toBe(false);
 		expect(
-			mergeQuestionsFlagOverrides({mergeQuestions: 'off'}).mergeQuestions,
-		).toBe('off');
-		expect(
-			mergeQuestionsFlagOverrides({mergeQuestions: 'ask'}).mergeQuestions,
-		).toBe('ask');
-		expect(
-			mergeQuestionsFlagOverrides({mergeQuestions: 'auto'}).mergeQuestions,
-		).toBe('auto');
-		expect(mergeQuestionsFlagOverrides({}).mergeQuestions).toBeUndefined();
-	});
-
-	it('FAILS LOUDLY on an out-of-enum value (matches --observation-triage)', () => {
-		// A typo on a gate is a usage error, NEVER silently dropped — same
-		// loud-failure contract `--observation-triage` enforces.
-		expect(() =>
-			mergeQuestionsFlagOverrides({mergeQuestions: 'sometimes'}),
-		).toThrow(/--merge-questions/);
-		expect(() =>
-			mergeQuestionsFlagOverrides({mergeQuestions: 'sometimes'}),
-		).toThrow(/off, ask, auto/);
-	});
-
-	it('is folded into doFlagOverrides (so `do`/`advance` resolve it on the same chain)', () => {
-		expect(doFlagOverrides({mergeQuestions: 'auto'}).mergeQuestions).toBe(
-			'auto',
-		);
-		// Absent ⇒ no key (never clobbers a lower-precedence source with undefined).
-		expect('mergeQuestions' in doFlagOverrides({})).toBe(false);
+			'mergeQuestions' in
+				doConfig.doFlagOverrides({mergeQuestions: 'off'} as never),
+		).toBe(false);
 	});
 });
 
-describe('mergeQuestions — the full precedence chain (flag > env > per-repo > global > default)', () => {
+describe('mergeQuestions: the full precedence chain (env > per-repo > global > default)', () => {
 	const writeRepoConfig = (repoDir: string, obj: Record<string, unknown>) => {
 		writeFileSync(
 			join(repoDir, REPO_CONFIG_FILENAME),
@@ -128,45 +104,37 @@ describe('mergeQuestions — the full precedence chain (flag > env > per-repo > 
 		expect(REPO_ALLOWED_KEYS).toContain('mergeQuestions');
 		const repoDir = mkdtempSync(join(tmpdir(), 'merge-questions-repo-'));
 		try {
-			writeRepoConfig(repoDir, {mergeQuestions: 'auto'});
+			writeRepoConfig(repoDir, {mergeQuestions: 'off'});
 			const resolved = resolveRepoConfig({
 				repoPath: repoDir,
 				global: mergeConfig({}),
 				env: {},
 			});
-			// per-repo (auto) beats the global/default (ask).
-			expect(resolved.config.mergeQuestions).toBe('auto');
+			// per-repo (off) beats the global/default (ask).
+			expect(resolved.config.mergeQuestions).toBe('off');
 		} finally {
 			rmrf(repoDir);
 		}
 	});
 
-	it('flag > env > per-repo > global', () => {
+	it('env > per-repo > global', () => {
 		const repoDir = mkdtempSync(join(tmpdir(), 'merge-questions-repo-'));
 		try {
 			// per-repo beats global (the rung above default).
-			writeRepoConfig(repoDir, {mergeQuestions: 'auto'});
+			writeRepoConfig(repoDir, {mergeQuestions: 'ask'});
 			const perRepoWins = resolveRepoConfig({
 				repoPath: repoDir,
 				global: mergeConfig({mergeQuestions: 'off'}),
 				env: {},
 			});
-			expect(perRepoWins.config.mergeQuestions).toBe('auto');
+			expect(perRepoWins.config.mergeQuestions).toBe('ask');
 			// env beats per-repo.
 			const envWins = resolveRepoConfig({
 				repoPath: repoDir,
-				global: mergeConfig({mergeQuestions: 'off'}),
-				env: {DORFL_MERGE_QUESTIONS: 'ask'},
+				global: mergeConfig({mergeQuestions: 'ask'}),
+				env: {DORFL_MERGE_QUESTIONS: 'off'},
 			});
-			expect(envWins.config.mergeQuestions).toBe('ask');
-			// flag beats env + per-repo + global.
-			const flagWins = resolveRepoConfig({
-				repoPath: repoDir,
-				global: mergeConfig({mergeQuestions: 'off'}),
-				env: {DORFL_MERGE_QUESTIONS: 'ask'},
-				flags: doFlagOverrides({mergeQuestions: 'auto'}),
-			});
-			expect(flagWins.config.mergeQuestions).toBe('auto');
+			expect(envWins.config.mergeQuestions).toBe('off');
 		} finally {
 			rmrf(repoDir);
 		}

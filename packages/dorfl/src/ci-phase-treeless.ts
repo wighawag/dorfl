@@ -67,6 +67,7 @@ import type {
 	TreelessAgentNeed,
 } from './advance.js';
 import {
+	answersMerge,
 	defaultRungExecutor,
 	findItemPath,
 	readItemSignals,
@@ -493,7 +494,12 @@ export async function performTreelessLockPhase(
 	type Verdict = {resolved: ResolvedItem} & (
 		| {skip: string}
 		| {invariant: string}
-		| {rung: TreelessPhaseRung; needsAgent: boolean; continueTip?: string}
+		| {
+				rung: TreelessPhaseRung;
+				needsAgent: boolean;
+				continueTip?: string;
+				takeOverProposeKept: boolean;
+		  }
 	);
 	const verdict = await withBaseWorktree(
 		{cwd, baseSha, env},
@@ -541,6 +547,12 @@ export async function performTreelessLockPhase(
 				rung: kind,
 				needsAgent: need.needsAgent,
 				...(continueTip === undefined ? {} : {continueTip}),
+				takeOverProposeKept: answersMerge(
+					base,
+					resolved.item,
+					resolved.namespace,
+					classification,
+				),
 			};
 		},
 	);
@@ -563,8 +575,16 @@ export async function performTreelessLockPhase(
 			lockOutputs: publish({acquired: false, baseSha}),
 		};
 	}
-	const {rung, needsAgent, continueTip} = verdict;
-	if ((await arbiterLockSha({cwd, arbiter, item, env})) !== undefined) {
+	const {rung, needsAgent, continueTip, takeOverProposeKept} = verdict;
+	// An answered `merge` may take over the lock a finished propose build of the
+	// same item keeps held (task `wire-merge-questions-into-the-advance-tick`,
+	// decisions 2 and 4), so it does not back off on a held lock here: the
+	// acquire below takes the lock over ONLY when it carries the `propose-pr`
+	// marker, and reports any other hold as `lost`.
+	if (
+		!takeOverProposeKept &&
+		(await arbiterLockSha({cwd, arbiter, item, env})) !== undefined
+	) {
 		const message = `'${item}' is already locked on ${arbiter}; backing off.`;
 		return {
 			exitCode: 0,
@@ -580,6 +600,7 @@ export async function performTreelessLockPhase(
 			cwd,
 			arbiter,
 			acquireUnified: true,
+			takeOverProposeKept,
 			env,
 			note: acquireNote,
 		}),
