@@ -163,6 +163,7 @@ export type IntakePhaseOutcome =
 
 /** The result of one intake phase run. */
 export interface IntakePhaseResult {
+	/** See "A handled outcome is green" in `ci-phase-driver.ts`. */
 	exitCode: 0 | 1 | 4;
 	outcome: IntakePhaseOutcome;
 	issueNumber: number;
@@ -732,8 +733,10 @@ export async function performIntakeApplyPhase(
 		labels.outcome === 'ok' &&
 		!labels.labels.includes(PROCESSING_LOCK_LABEL)
 	) {
+		// A handled outcome, so green ("A handled outcome is green",
+		// `ci-phase-driver.ts`).
 		return result(
-			1,
+			0,
 			'stale-lock',
 			`the \`${PROCESSING_LOCK_LABEL}\` label of issue #${issueNumber} is gone ` +
 				'(the run already finished, or another run released it); nothing was ' +

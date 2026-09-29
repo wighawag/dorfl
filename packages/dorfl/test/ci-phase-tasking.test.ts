@@ -298,7 +298,8 @@ describe('apply: a hostile tasking handoff (RED first)', () => {
 			land({[key]: task('evil')});
 			const r = await apply(held);
 			expect(r.outcome, r.message).toBe('rejected');
-			expect(r.exitCode).toBe(1);
+			// Surfaced cleanly: a handled outcome, so green.
+			expect(r.exitCode).toBe(0);
 			expect(showOnArbiter(`main:${landedPath}`)).toBeUndefined();
 			expect(showOnArbiter('main:work/tasks/ready/evil.md')).toBeUndefined();
 			expectSurfacedNothingLanded();

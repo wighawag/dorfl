@@ -152,7 +152,8 @@ describe('the lock phase', () => {
 			githubOutput: join(scratch.root, 'out'),
 		});
 		expect(r.outcome).toBe('lost');
-		expect(r.exitCode).toBe(2);
+		// Backing off is handled: the lock job is green.
+		expect(r.exitCode).toBe(0);
 		expect(arbiterRefs()).toBe(before);
 	});
 
@@ -277,7 +278,7 @@ describe('lock ownership', () => {
 			runnerTemp,
 		});
 		expect(apply.outcome).toBe('stale-lock');
-		expect(apply.exitCode).toBe(1);
+		expect(apply.exitCode).toBe(0);
 		expect(apply.message).toMatch(/start a NEW run/);
 		expect(arbiterRefs()).toBe(before);
 	});
@@ -396,6 +397,93 @@ describe('outcomes other than integrate', () => {
 		expect(retaken).not.toBe(lock.lockSha);
 		// The other run's lock is untouched.
 		expect(onArbiter(LOCK_REF)).toBe(retaken);
+	});
+});
+
+describe('a handled outcome is green (task a-handled-surface-exits-green-in-ci)', () => {
+	/** Lock, then an agent phase whose green build adds a root `.gitattributes`. */
+	async function protectedPathHandoff(): Promise<{
+		lock: LockOutputs;
+		handoffDir: string;
+	}> {
+		const lock = await lockPhase();
+		const handoffDir = join(runnerTemp, 'handoff');
+		const agent = await phase('agent', {
+			cwd: jobClone('agent', lock.baseSha),
+			lockOutputs: lock,
+			handoffDir,
+			dorfl: ({cwd}) => {
+				writeFileSync(
+					join(cwd, '.gitattributes'),
+					'docs/** linguist-documentation\n',
+				);
+				return {ok: true, output: 'done'};
+			},
+		});
+		expect(agent.intent, agent.message).toBe('integrate');
+		return {lock, handoffDir};
+	}
+
+	it('a protected-path rejection that surfaced the item exits 0', async () => {
+		const {lock, handoffDir} = await protectedPathHandoff();
+		const apply = await phase('apply', {
+			cwd: jobClone('apply', lock.baseSha),
+			lockOutputs: lock,
+			handoffDir,
+			runnerTemp,
+		});
+		expect(apply.outcome, apply.message).toBe('rejected');
+		expect(apply.exitCode).toBe(0);
+		expect(apply.message).toMatch(/protected path/);
+		expect(apply.message).toMatch(/surfaced it to needs-attention/);
+		// Surfaced on main, nothing from the handoff landed, the lock released.
+		const body = g(seeded.arbiter, 'show', `main:work/tasks/ready/${SLUG}.md`);
+		expect(body).toMatch(/needsAnswers: true/);
+		expect(onArbiter('main:.gitattributes')).toBeUndefined();
+		expect(onArbiter(`refs/heads/work/task-${SLUG}`)).toBeUndefined();
+		expect(onArbiter(LOCK_REF)).toBeUndefined();
+	});
+
+	it('a rejection whose surface could not be written still exits non-zero', async () => {
+		const {lock, handoffDir} = await protectedPathHandoff();
+		const spy = vi
+			.spyOn(ledgerWrite, 'applyTreelessNeedsAttentionTransition')
+			.mockResolvedValue({
+				moved: false,
+				reasonNotMoved: 'contention exhausted',
+			});
+		let apply: BuildPhaseResult;
+		try {
+			apply = await phase('apply', {
+				cwd: jobClone('apply', lock.baseSha),
+				lockOutputs: lock,
+				handoffDir,
+				runnerTemp,
+			});
+			expect(spy).toHaveBeenCalledOnce();
+		} finally {
+			spy.mockRestore();
+		}
+		expect(apply.outcome, apply.message).toBe('surface-unmoved');
+		expect(apply.exitCode).toBe(1);
+		expect(apply.message).toMatch(
+			/could not surface it \(contention exhausted\)/,
+		);
+	});
+
+	it('an agent phase whose lock is gone exits 0 and writes nothing', async () => {
+		const lock = await lockPhase();
+		g(seeded.clone('releaser'), 'push', '-q', 'origin', `:${LOCK_REF}`);
+		const before = arbiterRefs();
+		const agent = await phase('agent', {
+			cwd: jobClone('agent', lock.baseSha),
+			lockOutputs: lock,
+			handoffDir: join(runnerTemp, 'handoff'),
+			dorfl: () => ({ok: true}),
+		});
+		expect(agent.outcome).toBe('stale-lock');
+		expect(agent.exitCode).toBe(0);
+		expect(arbiterRefs()).toBe(before);
 	});
 });
 

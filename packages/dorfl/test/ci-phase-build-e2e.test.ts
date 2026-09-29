@@ -796,7 +796,8 @@ describe('GitHub re-runs in three processes', () => {
 		);
 		expect(rerun.exitCode, rerun.stderr).toBe(0);
 		expect(rerun.out?.outcome).toBe('stale-lock');
-		expect(rerun.out?.exitCode).toBe(1);
+		// A handled outcome: the re-run is green.
+		expect(rerun.out?.exitCode).toBe(0);
 		expect(rerun.out?.message).toMatch(/start a NEW run/);
 		expect(arbiterRefs()).toBe(before);
 		expect(readProviderLog(join(scratch.root, 'provider-rerun.jsonl'))).toEqual(

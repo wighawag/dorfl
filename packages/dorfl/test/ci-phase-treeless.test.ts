@@ -185,7 +185,8 @@ describe('apply: a hostile tree-less handoff (RED first)', () => {
 		});
 		const r = await apply(decision, held);
 		expect(r.outcome, r.message).toBe('rejected');
-		expect(r.exitCode).toBe(1);
+		// Surfaced cleanly: a handled outcome, so green.
+		expect(r.exitCode).toBe(0);
 		expect(showOnArbiter(`main:${OTHER_REL}`)).toBeDefined();
 		expectNoteSurfaced();
 	}, 60_000);
@@ -426,7 +427,8 @@ describe('apply: surfaced questions keep their shape', () => {
 		});
 		const r = await apply(s, held);
 		expect(r.outcome, r.message).toBe('rejected');
-		expect(r.exitCode).toBe(1);
+		// Surfaced cleanly: a handled outcome, so green.
+		expect(r.exitCode).toBe(0);
 		const sidecar = parseSidecar(
 			showOnArbiter(`main:${sidecarPathFor(ITEM)}`) as string,
 		);
