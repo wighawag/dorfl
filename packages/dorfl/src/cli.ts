@@ -5105,7 +5105,7 @@ export function buildProgram(): Command {
 		.command('close-merged-issues')
 		.helpGroup(ADVANCED_GROUP)
 		.description(
-			'Close source issues whose work has landed on main (CI capability E, spec runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.spec: → spec issue:`), runs the existing "spec complete?" query for the spec case (closes ONLY when ALL its spec:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main; DEGRADES (never crashes) on a missing/unauthenticated gh.',
+			'Close source issues whose work has landed on main (CI capability E, spec runner-in-ci). Resolves each closing issue from the work/ tree (resolveClosingIssue: a lone task closes its own `issue:`; a fanned task reaches the number via `task.spec: → spec issue:`), runs the existing "spec complete?" query for the spec case (closes ONLY when ALL its spec:<slug> tasks are in work/done/), and closes via the IssueProvider seam (atomic comment+close; NO direct gh). Re-implements NONE of the resolution/query/close — it WIRES them. Invoked by the emitted close-job workflow on a merge to main and hourly (a land the CI pushes itself triggers no workflow); an issue that is already closed is skipped (`already-closed`), not closed again. DEGRADES (never crashes) on a missing/unauthenticated gh.',
 		)
 		.option(
 			'--cwd <dir>',
@@ -5127,6 +5127,10 @@ export function buildProgram(): Command {
 					if (c.decision === 'closed') {
 						console.error(
 							`>> closed issue #${c.issueNumber} (${c.via} ${c.slug}).`,
+						);
+					} else if (c.decision === 'already-closed') {
+						console.error(
+							`>> issue #${c.issueNumber} (${c.via} ${c.slug}) already closed.`,
 						);
 					} else if (c.decision === 'close-failed') {
 						console.error(

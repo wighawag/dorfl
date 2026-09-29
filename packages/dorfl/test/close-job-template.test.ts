@@ -90,9 +90,30 @@ describe('the close-job workflow satisfies every structural invariant', () => {
 		expect(result.problems.map((p) => p.id)).not.toContain(
 			'not-pull-request-trigger',
 		);
-		// And NOT the build/task tick's cron/dispatch drain shape.
-		expect(result.problems.map((p) => p.id)).not.toContain('no-cron-trigger');
 		expect(/work\/questions\//.test(text)).toBe(false);
+	});
+
+	it('TRIGGER: ALSO an hourly schedule (the advance-lifecycle cron) and workflow_dispatch', () => {
+		// A land the CI pushes with its GITHUB_TOKEN starts no workflow, so the
+		// timed run is what closes its issue.
+		const text = generateCloseJobWorkflow(config);
+		expect(text).toMatch(/\n {2}schedule:\n {4}- cron: '0 \* \* \* \*'\n/);
+		expect(text).toMatch(/\n {2}workflow_dispatch:\n/);
+		expect(text).not.toMatch(/not a cron drain/i);
+		const ids = validateCloseJobWorkflow(text).problems.map((p) => p.id);
+		expect(ids).not.toContain('trigger-cron');
+		expect(ids).not.toContain('trigger-workflow-dispatch');
+	});
+
+	it('keeps the permissions and the concurrency group unchanged', () => {
+		const text = generateCloseJobWorkflow(config);
+		expect(text).toMatch(/\npermissions: \{\}\n/);
+		expect(text).toMatch(
+			/ {4}permissions:\n {6}contents: read\n {6}issues: write\n {4}steps:/,
+		);
+		expect(text).toMatch(
+			/\nconcurrency:\n {2}group: close-job-\$\{\{ github\.ref \}\}\n {2}cancel-in-progress: false\n/,
+		);
 	});
 
 	it('invokes `dorfl close-merged-issues` (consumes the unchanged resolution + query + close)', () => {
@@ -161,13 +182,17 @@ describe('validateCloseJobWorkflow flags a workflow missing each invariant', () 
 		);
 	});
 
-	it('flags a cron trigger (the close-job is merge-triggered, not a drain)', () => {
+	it('flags a missing schedule (CI-pushed lands would never close their issue)', () => {
 		expectFlagged(
-			base.replace(
-				/  push:\n    branches:\n      - main\n/,
-				"  schedule:\n    - cron: '0 * * * *'\n",
-			),
-			'no-cron-trigger',
+			base.replace(/  schedule:\n    - cron: '0 \* \* \* \*'\n/, ''),
+			'trigger-cron',
+		);
+	});
+
+	it('flags a missing workflow_dispatch trigger', () => {
+		expectFlagged(
+			base.replace(/  workflow_dispatch:\n/, ''),
+			'trigger-workflow-dispatch',
 		);
 	});
 
