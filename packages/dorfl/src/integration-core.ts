@@ -27,7 +27,11 @@ import {
 	formatBlockReason,
 	reviewRoundsExhaustedReason,
 } from './review-gate.js';
-import {type IntegrateResult, type ReviewProvider} from './integrator.js';
+import {
+	type IntegrateResult,
+	type ReviewProvider,
+	proposeRequestNotOpened,
+} from './integrator.js';
 import {extractDecisionsBlock} from './agent-stop.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
@@ -1870,6 +1874,7 @@ export async function landIntegration(
 	if (regateReport !== undefined && integration.mergedToMain === true) {
 		note(`${branch} ${regateReport}.`);
 	}
+	noteRequestNotOpened(integration, branch, note);
 
 	// The Race-1 needs-attention route for a merge that could not land (a genuine
 	// re-rebase conflict is handled by `rebaseOntoMainWithReconcile`'s `route`; this
@@ -2372,6 +2377,7 @@ async function recoverAlreadyCommitted(params: {
 					`(absorbed a moving ${arbiter}/main across ${attempt} re-fetch+re-` +
 					`rebase attempt${attempt === 1 ? '' : 's'}).`,
 	);
+	noteRequestNotOpened(integration, branch, note);
 	// Post the Gate-2 review as a PR comment (task `committed-recovery-always-
 	// reviews`): the SAME post-integrate audit trail the build path keeps — the
 	// approved verdict's authored `review` prose, on the opened PR. Advisory only
@@ -2404,6 +2410,26 @@ async function recoverAlreadyCommitted(params: {
 		branch,
 		integration,
 	};
+}
+
+/**
+ * Say so when a propose land opened NO review request (task
+ * `intake-reports-the-pr-it-actually-opened`): the branch is pushed, but the
+ * provider could not (or was told not to) open a PR, so the log prints the
+ * provider's instruction (the real `gh` error + the manual `gh pr create`
+ * command) instead of leaving it unread. Every land (build, tasking, intake,
+ * recovery) passes through here, so no caller has to remember to print it. A
+ * merge land, an opened request and an already-landed no-op print nothing.
+ */
+function noteRequestNotOpened(
+	integration: IntegrateResult,
+	branch: string,
+	note: (message: string) => void,
+): void {
+	const reason = proposeRequestNotOpened(integration);
+	if (reason !== undefined) {
+		note(`No PR was opened for ${branch}: ${reason}`);
+	}
 }
 
 /**

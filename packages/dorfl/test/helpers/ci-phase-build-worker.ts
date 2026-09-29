@@ -67,6 +67,11 @@ interface WorkerArgs {
 	 * asked for is appended to `log`.
 	 */
 	actionsApi?: {agentMinutes: number; annotationPages: string[][]; log: string};
+	/**
+	 * apply: the stub provider's `openRequest` DEGRADES with this `gh` error
+	 * (`opened: false`), as a repository that refuses PR creation by Actions does.
+	 */
+	prCreationFails?: string;
 }
 
 /** The stub Actions API of {@link WorkerArgs.actionsApi}. */
@@ -111,7 +116,7 @@ function stubActionsApi(
 	};
 }
 
-function stubProvider(log: string): ReviewProvider {
+function stubProvider(log: string, prCreationFails?: string): ReviewProvider {
 	const record = (method: string, input: object): void => {
 		const {env: _env, ...rest} = input as {env?: unknown};
 		appendFileSync(log, JSON.stringify({method, ...rest}) + '\n');
@@ -120,6 +125,14 @@ function stubProvider(log: string): ReviewProvider {
 		name: 'github',
 		async openRequest(input) {
 			record('openRequest', input);
+			if (prCreationFails !== undefined) {
+				return {
+					opened: false,
+					instruction:
+						`Pushed ${input.branch} to ${input.arbiter}. ${prCreationFails} ` +
+						'No PR was opened, open one manually.',
+				};
+			}
 			return {
 				opened: true,
 				instruction: 'opened',
@@ -181,7 +194,7 @@ async function main(): Promise<void> {
 			args.actionsApi === undefined
 				? undefined
 				: stubActionsApi(args.actionsApi),
-		providerInstance: stubProvider(args.providerLog),
+		providerInstance: stubProvider(args.providerLog, args.prCreationFails),
 		env: {
 			...process.env,
 			GITHUB_REPOSITORY: 'o/r',

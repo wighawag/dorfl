@@ -380,6 +380,34 @@ export interface IntegrateResult {
 	commit?: string;
 }
 
+/**
+ * The HONEST propose-land check (task `intake-reports-the-pr-it-actually-opened`):
+ * the reason NO review request exists for a propose land that pushed its branch,
+ * else `undefined`. A propose land whose provider did not open a request (a
+ * degraded `gh pr create`, e.g. a repository that refuses PR creation by Actions;
+ * the push-only `none` provider; the `noPR` intent) returns the provider's
+ * `instruction` (the real `gh` error + the manual `gh pr create` command), so every
+ * caller can say "pushed, but no PR" instead of implying one. `undefined` for a
+ * merge land, an opened request, a benign already-landed no-op (nothing was
+ * pushed, nothing to propose), or no integration at all.
+ */
+export function proposeRequestNotOpened(
+	integration: IntegrateResult | undefined,
+): string | undefined {
+	if (
+		integration === undefined ||
+		integration.mode !== 'propose' ||
+		integration.requestOpened ||
+		integration.alreadyLanded === true
+	) {
+		return undefined;
+	}
+	return (
+		integration.instruction ??
+		`Pushed ${integration.pushedRef}; no review request was opened.`
+	);
+}
+
 /** Outcome of the full rebase-then-integrate flow. */
 export interface IntegrateWithRebaseResult {
 	outcome: 'integrated' | 'needs-attention';

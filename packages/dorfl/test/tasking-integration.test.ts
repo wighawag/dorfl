@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {mkdirSync, writeFileSync, readFileSync, chmodSync} from 'node:fs';
 import {performTask, type TaskDorfl} from '../src/tasking.js';
 import {GitHubProvider} from '../src/github.js';
+import type {ReviewProvider} from '../src/integrator.js';
 import {listItemLocks} from '../src/item-lock.js';
 import {
 	makeScratch,
@@ -544,5 +545,52 @@ describe('do prd: PROPAGATES origin-trust onto emitted tasks (untrusted-origin-f
 		).stdout;
 		expect(task).not.toMatch(/^origin:/m);
 		expect(task).not.toMatch(/^originTrust:/m);
+	});
+});
+
+describe('do prd: output through performIntegration — --propose whose PR creation FAILS', () => {
+	it('logs that no PR was opened, prints the provider instruction, and never claims a PR', async () => {
+		const {repo} = seedRepoWithArbiter(scratch.root, []);
+		seedPrd(repo, 'it');
+		const ghError =
+			'GraphQL: GitHub Actions is not permitted to create or approve pull requests';
+		const failingProvider: ReviewProvider = {
+			name: 'github',
+			async openRequest(input) {
+				return {
+					opened: false,
+					instruction:
+						`Pushed ${input.branch} to ${input.arbiter}. ${ghError} No PR ` +
+						`was opened, open one manually, e.g. \`gh pr create --head ${input.branch}\`.`,
+				};
+			},
+			postPRComment: () => ({posted: false, instruction: 'no PR'}),
+			postPRCommentOnBranch: () => ({posted: false, instruction: 'no PR'}),
+			closeRequestOnBranch: async () => ({closed: false, instruction: 'no PR'}),
+		};
+		const notes: string[] = [];
+		const result = await performTask({
+			slug: 'it',
+			cwd: repo,
+			arbiter: ARBITER,
+			autoTask: true,
+			integration: 'propose',
+			providerInstance: failingProvider,
+			dorfl: taskingAgent('child'),
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.outcome).toBe('tasked');
+		// The branch is pushed (the work is safe) but no PR exists: say so.
+		expect(
+			onArbiterBranch(repo, 'work/spec-it', 'work/tasks/backlog/child.md'),
+		).toBe(true);
+		const printed = notes.join('\n');
+		expect(printed).toContain('No PR was opened for work/spec-it');
+		expect(printed).toContain(ghError);
+		expect(result.message).not.toMatch(/opened a PR/);
+		expect(result.message).toContain('pushed them on branch work/spec-it');
+		expect(result.message).toContain('opened NO PR');
 	});
 });

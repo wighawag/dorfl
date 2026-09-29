@@ -9,7 +9,11 @@ import {
 	performIntegration,
 	type IntegrationCoreResult,
 } from './integration-core.js';
-import type {IntegrateResult, ReviewProvider} from './integrator.js';
+import {
+	proposeRequestNotOpened,
+	type IntegrateResult,
+	type ReviewProvider,
+} from './integrator.js';
 import {integrationFromFlags} from './complete.js';
 import type {IntegrationMode, SpecsLandIn, TasksLandIn} from './config.js';
 import {
@@ -1584,10 +1588,19 @@ async function integrationToIntakeResult(
 	const kind = ctx.kind ?? 'task';
 	const artifact = kind === 'spec' ? 'spec' : 'task';
 	if (core.outcome === 'completed') {
+		// HONEST propose report (task `intake-reports-the-pr-it-actually-opened`):
+		// say "opened a PR" ONLY when the provider opened one. A degraded `gh pr
+		// create` (e.g. a repository that refuses PR creation by Actions) pushed the
+		// branch but opened nothing; the shared core already printed the provider's
+		// instruction, and the message names the branch the work is on.
+		const notOpened = proposeRequestNotOpened(core.integration);
 		const landed =
 			core.integration?.mode === 'merge'
 				? 'landed it on the arbiter main'
-				: 'opened a PR carrying it (main untouched)';
+				: notOpened !== undefined
+					? `pushed it on branch ${core.integration?.pushedRef ?? core.branch} ` +
+						'but opened NO PR (main untouched; see the provider note above)'
+					: 'opened a PR carrying it (main untouched)';
 		// Both a lone task and a spec carry `issue: N` as their closure link (the task
 		// closes its own issue; a spec is reached via `task.spec: → spec issue:`). On the
 		// task/spec path `intake` never closes the issue (CI's close-job does, via the
@@ -1657,10 +1670,14 @@ async function integrationToIntakeResult(
  * - reports `task created` / `spec created` framed as CREATED — NEVER "issue
  *   resolved/closed" (intake never closes on the task/spec path).
  * - LINKS the artifact by INTEGRATION MODE: the PR `url` in propose, the landed
- *   `commit` (the additive {@link IntegrateResult.commit}) in merge. A degraded
- *   propose (no `url`) or a failed merge-tip read (no `commit`) simply OMITS the
+ *   `commit` (the additive {@link IntegrateResult.commit}) in merge. An opened PR
+ *   whose `url` was unparseable or a failed merge-tip read (no `commit`) simply OMITS the
  *   link — the comment still confirms what was created (the artifact is safe on the
  *   branch/main regardless). No spec link beyond the slug.
+ * - says so when a propose land opened NO PR at all (the provider degraded, e.g. a
+ *   repository that refuses PR creation by Actions, or a push-only provider): it
+ *   names the pushed branch and quotes the provider's reason verbatim, instead of
+ *   reading as if a PR carried the artifact.
  * - carries the FULL intake MARKER via the SHARED {@link stampIntakeMarker} helper
  *   (`kind=created slug=<slug> seen=<id>,…`) so the triage's `already-terminal`
  *   branch consumes it — the comment cannot re-trigger intake.
@@ -1673,14 +1690,22 @@ export function composeIntakeCompletionComment(params: {
 }): string {
 	const {kind, slug, integration, seen} = params;
 	const artifact = kind === 'spec' ? 'spec' : 'task';
+	// A propose land that opened NO PR (the provider degraded, or push-only) says
+	// so, names the pushed branch and quotes the provider's reason, instead of
+	// implying a PR (task `intake-reports-the-pr-it-actually-opened`).
+	const notOpened = proposeRequestNotOpened(integration);
 	const link =
 		integration?.mode === 'merge'
 			? integration.commit !== undefined
 				? `\n\nIt landed on \`main\` in commit ${integration.commit}.`
 				: ''
-			: integration?.url !== undefined
-				? `\n\nIt is carried by the PR: ${integration.url}`
-				: '';
+			: notOpened !== undefined
+				? `\n\nIt is pushed on branch \`${integration!.pushedRef}\`, but **no PR ` +
+					`could be opened**, so nothing proposes it for review yet. The ` +
+					`reason reported:\n\n${fenceVerbatim(notOpened)}`
+				: integration?.url !== undefined
+					? `\n\nIt is carried by the PR: ${integration.url}`
+					: '';
 	const body =
 		`Created ${artifact} \`${slug}\` from this issue.${link}\n\n` +
 		`This is an informational update — the issue stays open (it remains in play ` +
@@ -1688,6 +1713,21 @@ export function composeIntakeCompletionComment(params: {
 	// STAMP the FULL marker (incl. `seen=`) via the SHARED helper, so the triage's
 	// `already-terminal` branch recognises this terminal `created` comment.
 	return stampIntakeMarker(body, {kind: 'created', seen, slug});
+}
+
+/**
+ * Wrap `text` in a fenced code block that renders it VERBATIM: the fence is one
+ * backtick longer than the longest backtick run inside `text` (minimum three), so
+ * a provider instruction carrying inline code or a quoted PR body can never close
+ * the fence early.
+ */
+function fenceVerbatim(text: string): string {
+	const longest = Math.max(
+		0,
+		...Array.from(text.matchAll(/`+/g), (m) => m[0].length),
+	);
+	const fence = '`'.repeat(Math.max(3, longest + 1));
+	return `${fence}text\n${text}\n${fence}`;
 }
 
 /**

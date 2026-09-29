@@ -6,6 +6,7 @@ import {
 	NoneProvider,
 	rebaseOntoArbiterMain,
 	type ReviewProvider,
+	proposeRequestNotOpened,
 } from '../src/integrator.js';
 import {git, run} from '../src/git.js';
 import {
@@ -372,5 +373,48 @@ describe('Integrator — rebase-before-integrate refuses on conflict', () => {
 			env: gitEnv(),
 		});
 		expect(mainShared).toBe('main version\n');
+	});
+});
+
+describe('proposeRequestNotOpened — the honest propose-land check', () => {
+	const base = {
+		mergedToMain: false,
+		pushedRef: 'work/task-x',
+		provider: 'github',
+	};
+	it('returns the provider instruction when a propose land opened no request', () => {
+		expect(
+			proposeRequestNotOpened({
+				...base,
+				mode: 'propose',
+				requestOpened: false,
+				instruction: 'gh said no',
+			}),
+		).toBe('gh said no');
+		expect(
+			proposeRequestNotOpened({...base, mode: 'propose', requestOpened: false}),
+		).toContain('work/task-x');
+	});
+	it('is undefined for an opened request, a merge land, an already-landed no-op, or no integration', () => {
+		expect(
+			proposeRequestNotOpened({...base, mode: 'propose', requestOpened: true}),
+		).toBeUndefined();
+		expect(
+			proposeRequestNotOpened({
+				...base,
+				mode: 'merge',
+				mergedToMain: true,
+				requestOpened: false,
+			}),
+		).toBeUndefined();
+		expect(
+			proposeRequestNotOpened({
+				...base,
+				mode: 'propose',
+				requestOpened: false,
+				alreadyLanded: true,
+			}),
+		).toBeUndefined();
+		expect(proposeRequestNotOpened(undefined)).toBeUndefined();
 	});
 });
