@@ -39,6 +39,7 @@ const ALLOWED: Record<string, string> = {
 	// --- the ref-write seam (task ci-split-route-direct-writes-through-seams) ---
 	'ref-write.ts::currentRefWrite.createLockRef': 'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.deleteLockRef': 'the ref-write seam itself',
+	'ref-write.ts::currentRefWrite.replaceLockRef': 'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.pushTaskingCandidatesBranch':
 		'the ref-write seam itself',
 	'ref-write.ts::currentRefWrite.pushLeasedWorkBranch':

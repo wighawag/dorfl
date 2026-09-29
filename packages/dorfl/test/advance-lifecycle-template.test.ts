@@ -354,6 +354,42 @@ describe('the advance-lifecycle workflow satisfies every structural invariant', 
 		);
 	});
 
+	it('carries the no-agent `surface-merge-questions` writer job (task wire-merge-questions-into-the-advance-tick), in the seed too', () => {
+		const text = generateAdvanceLifecycleWorkflow(config);
+		const job =
+			/\n {2}surface-merge-questions:[\s\S]*?(?=\n {2}#|\n {2}\S+:\n|$)/.exec(
+				text,
+			)?.[0];
+		expect(job).toBeDefined();
+		expect(job).toContain('contents: write');
+		// Gate-3 (PR #459): `gh pr list` needs a read scope and a credential.
+		expect(job).toContain('pull-requests: read');
+		expect(job).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+		expect(job).toContain(
+			'run: dorfl surface-merge-questions --arbiter origin',
+		);
+		expect(job).toContain('uses: ./.github/actions/dorfl-setup-writer');
+		// No agent: no provider key, no agent-role setup, no agent verb.
+		expect(job).not.toMatch(
+			/ANTHROPIC|OPENAI|dorfl-setup\n|dorfl (?:advance|do)\b/,
+		);
+		// `enumerate` stays read-only and runs no surfacer.
+		expect(
+			/\n {2}enumerate:[\s\S]*?\n {2}dispatch:/.exec(text)?.[0],
+		).not.toContain('surface-merge-questions');
+		// The seed carries the same job (install-ci parameterises it).
+		const seed = loadAdvanceCiTemplate();
+		expect(seed).toContain(
+			'run: dorfl surface-merge-questions --arbiter origin',
+		);
+		const seedJob =
+			/\n {2}surface-merge-questions:[\s\S]*?(?=\n {2}#|\n {2}\S+:\n|$)/.exec(
+				seed,
+			)?.[0];
+		expect(seedJob).toContain('pull-requests: read');
+		expect(seedJob).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+	});
+
 	it('the SCHEDULED `gc --remote-branches` invocation ALSO reaps orphan sidecars (US #10) — it fires in CI, not behind an un-passed flag', () => {
 		const text = generateAdvanceLifecycleWorkflow(config);
 		const result = validateAdvanceLifecycleWorkflow(text);
@@ -600,6 +636,31 @@ describe('validateAdvanceLifecycleWorkflow flags a workflow missing each invaria
 		expectFlagged(
 			base.replace(/reap-merged-branches:/, '# reap removed:'),
 			'reap-merged-branches-job',
+		);
+	});
+
+	it('flags a stripped surface-merge-questions job', () => {
+		expectFlagged(
+			base.replace(/surface-merge-questions:/, '# removed:'),
+			'surface-merge-questions-job',
+		);
+		expectFlagged(
+			base.replace(
+				/run: dorfl surface-merge-questions --arbiter origin/,
+				'run: echo skip',
+			),
+			'surface-merge-questions-runs-the-command',
+		);
+		expectFlagged(
+			base.replace(/\n {6}pull-requests: read/, ''),
+			'surface-merge-questions-job',
+		);
+		expectFlagged(
+			base.replace(
+				/\n {10}GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}(\s*\n\s*run: dorfl surface-merge-questions)/,
+				'$1',
+			),
+			'surface-merge-questions-gh-token',
 		);
 	});
 

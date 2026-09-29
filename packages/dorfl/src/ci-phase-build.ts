@@ -105,7 +105,7 @@ import {
 import {run, runAsync} from './git.js';
 import {selectProvider} from './github.js';
 import {identityEnv} from './identity.js';
-import {leaseLockReleases} from './item-lock.js';
+import {leaseLockReleases, markLockKeptForProposePr} from './item-lock.js';
 import {
 	arbiterUrl,
 	integrationLand,
@@ -1267,6 +1267,19 @@ async function applyIntegrate(
 			land,
 		};
 	}
+	// The lock stays held until the PR merges; stamp it as kept for a propose
+	// PR (task `wire-merge-questions-into-the-advance-tick`, decision 4), leased
+	// on this run's `lockSha`, so the merge-question surfacer and an answered
+	// `merge` can tell it from a live build. Best-effort: an unmarked kept lock
+	// only keeps the branch out of the merge-question loop.
+	const marked = await markLockKeptForProposePr({
+		item,
+		cwd,
+		arbiter,
+		expectedSha: held.lockSha,
+		env,
+	});
+	if (marked.outcome !== 'transitioned') note(marked.message);
 	// Say "for review" ONLY when a PR was opened (task
 	// `intake-reports-the-pr-it-actually-opened`): a degraded `gh pr create`
 	// pushed the branch but opened nothing, and the land already printed why.

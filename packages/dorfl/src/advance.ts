@@ -1961,6 +1961,16 @@ export async function performAdvance(
 	//    `cutover-retire-slicing-advancing-markers-and-trim-folder-sets`): there is no
 	//    marker CAS for any rung, only the per-item lock ref (see `advancing-lock.ts`).
 	const unifiedForRung = isTreeLessRung(classification.kind);
+	// An answered `merge` may take over the lock a finished propose build of the
+	// SAME item keeps held (the `propose-pr` marker; task
+	// `wire-merge-questions-into-the-advance-tick`, decisions 2 and 4). Any other
+	// held lock still makes this tick back off.
+	const takeOverProposeKept = answersMerge(
+		repoPath,
+		item,
+		resolved.namespace,
+		classification,
+	);
 	const acquire =
 		options.acquireLock ??
 		((lockItem: string) =>
@@ -1969,6 +1979,7 @@ export async function performAdvance(
 				cwd,
 				arbiter,
 				acquireUnified: unifiedForRung,
+				takeOverProposeKept,
 				note,
 			}));
 	const lock = await acquire(item);
@@ -2063,6 +2074,24 @@ export async function performAdvance(
 function isTreeLessRung(kind: TickClassification['kind']): boolean {
 	return (
 		kind === 'surface' || kind === 'apply' || kind === 'triage-observation'
+	);
+}
+
+/**
+ * Is this tick the apply of a task whose merge question is answered `merge`
+ * (the case that may take over a propose-kept lock)? Read off the same tree the
+ * classification read.
+ */
+export function answersMerge(
+	repoPath: string,
+	item: string,
+	namespace: SlugNamespace,
+	classification: TickClassification,
+): boolean {
+	return (
+		classification.kind === 'apply' &&
+		namespace === 'task' &&
+		detectAnsweredMergeAction(repoPath, item)?.verb === 'merge'
 	);
 }
 

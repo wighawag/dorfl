@@ -7,6 +7,7 @@ import {
 	type SidecarModel,
 } from './sidecar.js';
 import {runAsync} from './git.js';
+import {answeredMergeActionIn} from './merge-answer.js';
 import {
 	buildLifecyclePools,
 	type LifecyclePoolGates,
@@ -153,10 +154,20 @@ export function gatherLifecycleInPlace(input: {
 	 * behaviour) so callers who cannot resolve a lock read still work.
 	 */
 	heldSlugs?: Set<string>;
+	/**
+	 * The held TASK slugs whose lock a finished propose build keeps (the
+	 * `propose-pr` marker, `proposeKeptTaskSlugs`). Such a slug is NOT subtracted
+	 * when its sidecar carries an answered `merge` (task
+	 * `wire-merge-questions-into-the-advance-tick`, decision 6): the answered-merge
+	 * apply takes that lock over. Every other held slug is still subtracted.
+	 * Defaults empty.
+	 */
+	proposeKeptSlugs?: Set<string>;
 }): SelectedLifecyclePools {
 	const read = input.read ?? ledgerRead;
 	const repoPath = input.repoPath;
 	const heldSlugs = input.heldSlugs ?? new Set<string>();
+	const proposeKept = input.proposeKeptSlugs ?? new Set<string>();
 
 	const rawObservations = read.resolveLocalState({repoPath}).observations;
 	const observations: ObservationCandidate[] = rawObservations.map((obs) => ({
@@ -165,21 +176,40 @@ export function gatherLifecycleInPlace(input: {
 		sidecar: readSidecarInPlace(repoPath, 'observation', obs.slug),
 	}));
 	const surfaceStaging = input.gates?.surfaceStaging === true;
-	const needsAnswers: NeedsAnswersCandidate[] = blockedItemsInPlace(
-		read,
-		repoPath,
-		surfaceStaging,
-	)
-		// Held-slug subtraction (task-scoped): a `needsAnswers` TASK whose per-item
-		// lock is currently held is EXCLUDED from surface/apply enumeration. Spec /
-		// observation entries are untouched — the lock ref set here is task-only.
-		.filter((item) => !(item.namespace === 'task' && heldSlugs.has(item.slug)))
+	const blocked = blockedItemsInPlace(read, repoPath, surfaceStaging);
+	if (!surfaceStaging) {
+		// A merge question on a STAGED body (`tasks/backlog/`) is applied even with
+		// `surfaceStaging` off (task `wire-merge-questions-into-the-advance-tick`,
+		// decision 6): the surfacer asked it, the staging gate did not.
+		for (const item of read.resolveLocalTaskStaging({repoPath})) {
+			if (
+				item.needsAnswers === true &&
+				hasMergeQuestion(readSidecarInPlace(repoPath, 'task', item.slug))
+			) {
+				blocked.push({namespace: 'task', slug: item.slug});
+			}
+		}
+	}
+	const needsAnswers: NeedsAnswersCandidate[] = blocked
 		.map((item) => ({
 			repoPath,
 			namespace: item.namespace,
 			slug: item.slug,
 			sidecar: readSidecarInPlace(repoPath, item.namespace, item.slug),
-		}));
+		}))
+		// Held-slug subtraction (task-scoped): a `needsAnswers` TASK whose per-item
+		// lock is currently held is EXCLUDED from surface/apply enumeration, unless
+		// the lock is kept for a propose PR and the item's merge question is
+		// answered `merge` (the answered-merge apply takes that lock over). Spec /
+		// observation entries are untouched: the lock ref set here is task-only.
+		.filter(
+			(item) =>
+				!(
+					item.namespace === 'task' &&
+					heldSlugs.has(item.slug) &&
+					!mayTakeOverProposeKept(proposeKept, item.slug, item.sidecar)
+				),
+		);
 
 	return buildLifecyclePools({
 		repoPath,
@@ -187,6 +217,28 @@ export function gatherLifecycleInPlace(input: {
 		needsAnswers,
 		gates: input.gates,
 	});
+}
+
+/** Does the sidecar carry a merge question (answered or not)? */
+function hasMergeQuestion(sidecar: SidecarModel | undefined): boolean {
+	return sidecar?.entries.some((e) => e.kind === 'merge') === true;
+}
+
+/**
+ * May a HELD task still be selected? Only when its lock is kept for a propose PR
+ * (`proposeKept`) and its merge question is answered `merge`: that apply takes
+ * the lock over (task `wire-merge-questions-into-the-advance-tick`, decision 6).
+ */
+export function mayTakeOverProposeKept(
+	proposeKept: Set<string>,
+	slug: string,
+	sidecar: SidecarModel | undefined,
+): boolean {
+	return (
+		proposeKept.has(slug) &&
+		sidecar !== undefined &&
+		answeredMergeActionIn(sidecar)?.verb === 'merge'
+	);
 }
 
 /**
@@ -243,6 +295,25 @@ export async function gatherLifecycleMirror(input: {
 				read.resolveMirrorSpecStaging({mirrorPath, ref, env}),
 			])
 		: [[], []];
+	// A merge question on a STAGED body is applied even with `surfaceStaging`
+	// off (decision 6), as in {@link gatherLifecycleInPlace}.
+	const stagedMergeQuestions: BlockedItem[] = [];
+	if (!surfaceStaging) {
+		for (const item of await read.resolveMirrorTaskStaging({
+			mirrorPath,
+			ref,
+			env,
+		})) {
+			if (
+				item.needsAnswers === true &&
+				hasMergeQuestion(
+					await readSidecarMirror(mirrorPath, ref, 'task', item.slug, env),
+				)
+			) {
+				stagedMergeQuestions.push({namespace: 'task', slug: item.slug});
+			}
+		}
+	}
 
 	const blocked: BlockedItem[] = [];
 	for (const item of state.ready) {
@@ -282,6 +353,7 @@ export async function gatherLifecycleMirror(input: {
 			blocked.push({namespace: 'spec', slug: spec.slug});
 		}
 	}
+	blocked.push(...stagedMergeQuestions);
 
 	const needsAnswers: NeedsAnswersCandidate[] = await Promise.all(
 		blocked.map(async (item) => ({

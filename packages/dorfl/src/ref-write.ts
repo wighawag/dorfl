@@ -58,6 +58,15 @@ export interface RefWriteStrategy {
 	 */
 	deleteLockRef(input: LockRefDeleteInput): Promise<RunResult>;
 	/**
+	 * REPLACE a held per-item lock ref on the arbiter with a new lock commit,
+	 * leased on the sha the caller read (`push <commit>:<ref>
+	 * --force-with-lease=<ref>:<expectedSha>`): the amend of a held lock (the
+	 * propose-kept marker, and the answered-merge takeover of a lock carrying
+	 * it). A concurrent change to the ref rejects the push; it is never forced.
+	 * CI phase: lock (the takeover) and apply (the marker).
+	 */
+	replaceLockRef(input: LockRefReplaceInput): Promise<RunResult>;
+	/**
 	 * Push the CONTINUED (rebased) kept `work/<slug>` branch with a lease on the
 	 * tip observed before the rebase, surviving a stale lease by re-fetching and
 	 * re-rebasing (see {@link pushContinuedBranchWithStaleLeaseRetry}). Throws
@@ -158,6 +167,22 @@ export interface LockRefDeleteInput {
 	env: NodeJS.ProcessEnv | undefined;
 }
 
+/** Input of {@link RefWriteStrategy.replaceLockRef}. */
+export interface LockRefReplaceInput {
+	/** The arbiter remote name. */
+	arbiter: string;
+	/** The full lock ref (`refs/dorfl/lock/<entry>`). */
+	ref: string;
+	/** The prepared (parentless) lock commit to publish at {@link ref}. */
+	commit: string;
+	/** The ref's sha the caller read; the replace is leased on it. */
+	expectedSha: string;
+	/** Working clone the push runs in. */
+	cwd: string;
+	/** Environment for the child git process. */
+	env: NodeJS.ProcessEnv | undefined;
+}
+
 /** Input of {@link RefWriteStrategy.pushContinuedBranch}. */
 export type ContinuedBranchPushInput = Parameters<
 	typeof pushContinuedBranchWithStaleLeaseRetry
@@ -213,6 +238,20 @@ export const currentRefWrite: RefWriteStrategy = {
 				arbiter,
 				'--delete',
 				ref,
+				`--force-with-lease=${ref}:${expectedSha}`,
+			],
+			cwd,
+			{env},
+		);
+	},
+
+	replaceLockRef({arbiter, ref, commit, expectedSha, cwd, env}) {
+		return runAsync(
+			'git',
+			[
+				'push',
+				arbiter,
+				`${commit}:${ref}`,
 				`--force-with-lease=${ref}:${expectedSha}`,
 			],
 			cwd,

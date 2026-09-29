@@ -66,6 +66,7 @@ describe('ref-write seam: shape', () => {
 		const methods: (keyof RefWriteStrategy)[] = [
 			'createLockRef',
 			'deleteLockRef',
+			'replaceLockRef',
 			'pushContinuedBranch',
 			'pushLeasedWorkBranch',
 			'saveWorkBranch',

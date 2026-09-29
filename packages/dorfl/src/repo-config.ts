@@ -176,16 +176,15 @@ export const REPO_ALLOWED_KEYS = [
 	// same chain as `integration`/`autoBuild`. It REPLACES the old `autoTriage`
 	// boolean (no alias; no external users owed a migration window, 2026-06-12).
 	'observationTriage',
-	// `mergeQuestions` (the 3-state `off|ask|auto` gate over the MERGE-QUESTION
+	// `mergeQuestions` (the 2-state `off|ask` gate over the MERGE-QUESTION
 	// SURFACER — spec `land-time-reverify-and-parallel-merge-ceiling` Story 17 /
 	// task `merge-questions-gate-axis`) is a genuine repo property exactly like
 	// `observationTriage`: whether THIS repo's unmerged `work/*` branches surface
-	// as merge-questions (and whether they auto-land) is agreed by all
-	// collaborators + travels with the repo. SEPARATE axis from
-	// `observationTriage` (never rides it) with a HIGHER default (`ask`, never
-	// `off` — a dropped merge-question means pushed work never lands). Resolved
-	// per-repo through the SAME precedence chain as the rest of the gate family
-	// (flag > env > per-repo > global > default `ask`).
+	// as merge-questions is agreed by all collaborators + travels with the repo.
+	// SEPARATE axis from `observationTriage` (never rides it) with a HIGHER
+	// default (`ask`, never `off`: a dropped merge-question means pushed work
+	// never lands). Resolved per-repo through the SAME precedence chain as the
+	// rest of the gate family (env > per-repo > global > default `ask`).
 	'mergeQuestions',
 	// `surfaceBlockers` (the BOOLEAN gate over DECLARED blocked work — whether a
 	// task/spec carrying `needsAnswers:true` is rendered into a question sidecar) is a

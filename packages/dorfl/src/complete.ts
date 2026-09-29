@@ -11,7 +11,7 @@ import {
 	PR_TITLE_MAX,
 } from './integration-core.js';
 import {ledgerWrite} from './ledger-write.js';
-import {releaseItemLock} from './item-lock.js';
+import {markLockKeptForProposePr, releaseItemLock} from './item-lock.js';
 import {workBranchRef, parseWorkBranchRef} from './slug-namespace.js';
 import {isProvablyMergedForReap} from './gc.js';
 import type {SidecarType} from './sidecar.js';
@@ -1272,6 +1272,24 @@ async function releaseClaimLockAfterDurableMove(
 				'the lock is released by the next claim (or now, with `dorfl status ' +
 				'--reconcile-locks`).',
 		);
+		// Say so ON the lock (task `wire-merge-questions-into-the-advance-tick`,
+		// decision 4): the kept lock no longer covers a live build, so the
+		// merge-question surfacer may ask about the branch (when no PR is open) and
+		// an answered `merge` may take the lock over. Best-effort: an unmarked kept
+		// lock only means the branch is treated as a live build (never surfaced).
+		try {
+			const marked = await markLockKeptForProposePr({
+				item: `task:${slug}`,
+				cwd,
+				arbiter,
+				env,
+			});
+			if (marked.outcome === 'lost' || marked.outcome === 'error') {
+				note(marked.message);
+			}
+		} catch {
+			// Never fail a completed propose on the marker.
+		}
 		return;
 	}
 	try {

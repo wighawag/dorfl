@@ -94,6 +94,7 @@ import {
 	encodeRepoKey,
 } from './repo-mirror.js';
 import {identityEnv, type Identity} from './identity.js';
+import {runMergeQuestionTick} from './merge-question-tick.js';
 import {
 	harnessFlagOverrides,
 	doFlagOverrides,
@@ -845,8 +846,6 @@ interface DoFlags {
 	observationTriage?: string;
 	/** `--surface-blockers` / `--no-surface-blockers`: the declared-blocked-work gate (`advance`). */
 	surfaceBlockers?: boolean;
-	/** `--merge-questions <off|ask|auto>`: the merge-question SURFACER gate (`advance`). SEPARATE from `--observation-triage` with a HIGHER default. */
-	mergeQuestions?: string;
 	/** `--strict-merge-approval` / `--no-strict-merge-approval`: the OPT-IN strictness layered on the OQ6 stale-approval default (`advance`). Default OFF — ON re-surfaces the merge-question on a merge-base change instead of auto-landing on a green re-verify. */
 	strictMergeApproval?: boolean;
 	merge?: boolean;
@@ -3334,7 +3333,7 @@ export function buildProgram(): Command {
 		.command('advance')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Advance work/ item(s) one lifecycle rung toward ready/built (SPEC advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix).',
+			'Advance work/ item(s) one lifecycle rung toward ready/built (SPEC advance-loop), the SEQUENTIAL one-shot driver over the advance tick. advance <slug> (bare = the task) | advance spec:<slug> (the spec tasking rung) | advance obs:<slug> (triage an observation) | advance (auto-pick one eligible) | advance <a> <b> (those, in sequence) | advance -n <x> (x eligible, in sequence). Each item: classify (read-only, no model, no lock) → take the `advancing` CAS lock → dispatch winner-only — build/task rungs ORCHESTRATE `do`/`do spec:`, surface/apply always run, triage respects observationTriage (off|ask|auto). The bare/`-n` selection respects the per-action gates (build→autoBuild, task→autoTask, triage→observationTriage); `-n` is ALWAYS sequential (parallelism is `run` / the CI matrix). Before it selects, the bare/`-n` form also asks a merge question for each unmerged work/task-<slug> branch with no open PR and no live build (the `surface-merge-questions` pass; gated by mergeQuestions off|ask).',
 		)
 		.argument(
 			'[slugs...]',
@@ -3376,10 +3375,6 @@ export function buildProgram(): Command {
 		.option(
 			'--no-strict-merge-approval',
 			'honour the prior merge-answer and land when the rebased tip re-verifies GREEN even if `main` moved since the question was asked (default; the cheap green-re-verify-is-enough path)',
-		)
-		.option(
-			'--merge-questions <mode>',
-			'the merge-question SURFACER gate (off|ask|auto): off drops the surfacer (only for a repo that lands by some other means); ask (default) enumerates unmerged `work/*` branches and surfaces a merge-question sidecar a human answers; auto self-supplies the `merge` answer and lands via the SAME deterministic apply-time re-verify (the merge-mode-like fast path). SEPARATE axis from --observation-triage with a HIGHER default (a dropped merge-question means pushed work never lands). Resolved flag > env > per-repo > global > default ask.',
 		)
 		.option(
 			'--merge',
@@ -3738,6 +3733,14 @@ export function buildProgram(): Command {
 				observationTriage: config.observationTriage,
 				triageGate: harnessTriageGate({harness, agentCmd: config.agentCmd}),
 				triageModel: config.triageModel,
+				// The answered-merge land (the apply rung's `kind: merge` action) cuts
+				// its job worktree under `workspacesDir` and gates the rebased tip with
+				// `prepare` / `verify`; without them an answered `merge` is refused
+				// as a usage error (task `wire-merge-questions-into-the-advance-tick`).
+				workspacesDir: config.workspacesDir,
+				prepare: config.prepare,
+				verify: config.verify,
+				strictMergeApproval: config.strictMergeApproval,
 				note: (message) => console.error(`>> ${message}`),
 			};
 
@@ -5143,6 +5146,56 @@ export function buildProgram(): Command {
 			// crash (exit 0), exactly like intake's bounce close.
 			process.exit(0);
 		});
+
+	// `surface-merge-questions` (task `wire-merge-questions-into-the-advance-tick`,
+	// decision 5): the no-agent entry point the generated `advance-lifecycle`
+	// workflow's `surface-merge-questions` job runs. It asks, in the current
+	// checkout of `main`, a merge question for every unmerged `work/task-<slug>`
+	// branch with no open PR and no live build, and publishes the questions to
+	// `<arbiter>/main`. Gated by `mergeQuestions` (`off` does nothing). The laptop
+	// bare `advance` runs the SAME pass before it selects.
+	program
+		.command('surface-merge-questions')
+		.helpGroup(ADVANCED_GROUP)
+		.description(
+			'Ask a merge question (a `kind: merge` sidecar entry, answered `merge | hold | drop`) for every unmerged `work/task-<slug>` branch on the arbiter that has no open PR (GitHub), whose task rests in tasks/ready/ or tasks/backlog/, whose lock is free or kept by its finished propose build, and whose tip carries the done-move; then publish the questions to <arbiter>/main (never --force). Fetches the arbiter first. Runs no agent. Gated by `mergeQuestions` (off|ask, default ask; DORFL_MERGE_QUESTIONS > dorfl.json > global): `off` surfaces nothing. The CI `advance-lifecycle` workflow runs it as its `surface-merge-questions` job; the bare laptop `advance` runs the same pass before it selects.',
+		)
+		.option(
+			'--arbiter <name>',
+			'the arbiter remote whose work branches to ask about (default: the configured defaultArbiter)',
+		)
+		.option('--gh-bin <bin>', 'the gh CLI binary (default: gh on PATH)')
+		.option('-c, --config <path>', 'config file path', defaultConfigPath())
+		.action(
+			async (flags: {arbiter?: string; ghBin?: string; config: string}) => {
+				const cwd = process.cwd();
+				const {global, override} = loadGlobalAndOverride(flags.config);
+				let config;
+				try {
+					config = resolveRepoConfig({repoPath: cwd, global, override}).config;
+				} catch (err) {
+					console.error(
+						`error: ${err instanceof Error ? err.message : String(err)}`,
+					);
+					process.exit(1);
+				}
+				const pass = await runMergeQuestionTick({
+					cwd,
+					arbiter: flags.arbiter ?? config.defaultArbiter,
+					mergeQuestions: config.mergeQuestions,
+					ghBin: flags.ghBin,
+					env: identityEnv(config.identity, process.env),
+					note: (message) => console.error(`>> ${message}`),
+				});
+				// A failed pass (fetch, lock read, or the GitHub open-PR listing) is
+				// an `error:` line and a non-zero exit, so a CI job cannot go green
+				// while asking about no branch.
+				console.error(
+					pass.failed ? `error: ${pass.message}` : `>> ${pass.message}`,
+				);
+				process.exit(pass.failed ? 1 : 0);
+			},
+		);
 
 	// The REGISTRY command group (ADR §1): the registered set of targets IS the
 	// hub-mirror set on disk. `remote add --local` absorbs the old `arbiter init`;

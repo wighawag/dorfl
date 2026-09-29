@@ -375,6 +375,7 @@ export type {
 	ReleaseHeldResult,
 	LockReportEntry,
 	ItemLockReport,
+	LockKeptFor,
 } from './item-lock.js';
 export {
 	LOCK_REF_PREFIX,
@@ -396,6 +397,9 @@ export {
 	listItemLocks,
 	listItemLockEntries,
 	heldTaskSlugs,
+	proposeKeptTaskSlugs,
+	markLockKeptForProposePr,
+	takeOverProposeKeptLock,
 	resolveLockHolder,
 	serialiseLockEntry,
 	parseLockEntry,
