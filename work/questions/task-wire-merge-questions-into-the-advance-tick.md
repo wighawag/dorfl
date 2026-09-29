@@ -9,3 +9,5 @@
 <!-- q1 fields: id=q1 kind=stuck -->
 
 **Your answer** (write below this line):
+
+reset (the kept branch cannot rebase: the requeue note and its Decisions both append to the task body; rebuild from scratch with the Requeue fix list, human-approved)
