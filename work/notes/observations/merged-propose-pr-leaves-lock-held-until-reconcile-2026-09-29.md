@@ -1,0 +1,6 @@
+# After a propose PR is merged out of band, its per-item lock stays held until `status --reconcile-locks`
+
+Date: 2026-09-29
+Observer: conductor of a drive-tasks run over wighawag/serpcast and wighawag/webveil (dorfl 0.14.3).
+
+`do --propose` ends with "keeping the per-item lock HELD (propose PR open) ... released by the next claim (or now, with `dorfl status --reconcile-locks`)". In a conductor loop that merges each PR with `gh pr merge` and then dispatches a different task, the next claim is never on that item, so every merged task's lock lingers on the arbiter (`refs/dorfl/lock/task-<slug>`) until someone runs `dorfl status --reconcile-locks`; the conductor had to run it after every merge. The lock ref is harmless for building, but `status` shows in-flight locks for items that are done on main. Options: have any claim (or `scan`/`status` without the flag) release locks whose item is terminal on main, or give a documented "land" verb that merges and releases together (the drive-tasks skill already anticipates an `approve`/`land` verb). Separately, `dorfl status` in a checkout whose arbiter remote is `origin` printed "no 'arbiter' remote configured" (see `status-no-arbiter-flag-is-never-honoured.md`).
