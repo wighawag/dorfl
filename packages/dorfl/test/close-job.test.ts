@@ -155,6 +155,65 @@ describe('runCloseJob — the spec case (consumes the "spec complete?" query)', 
 		);
 	});
 
+	it("leaves the spec's issue OPEN when one task is done and another is STAGED in work/tasks/backlog/", async () => {
+		// The CI-sandbox bug: issue closed after the first merge while two tasks
+		// were still staged (tasking stages in `tasks/backlog/` by default).
+		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '4'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('pre-backlog', 'b.md', {slug: 'b', spec: 'my-spec'});
+		write('pre-backlog', 'c.md', {slug: 'c', spec: 'my-spec'});
+
+		const provider = new MemoryIssueProvider();
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(result.closed).toEqual([]);
+		expect(provider.closeCalls).toHaveLength(0);
+		expect(result.candidates.find((c) => c.issueNumber === 4)?.decision).toBe(
+			'not-complete',
+		);
+	});
+
+	it("closes the spec's issue as completed when its tasks are done and the rest cancelled", async () => {
+		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('cancelled', 'b.md', {slug: 'b', spec: 'my-spec'});
+
+		const provider = new MemoryIssueProvider();
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(result.closed).toEqual([42]);
+		expect(provider.closeCalls[0]).toMatchObject({
+			issueNumber: 42,
+			reason: 'completed',
+		});
+	});
+
+	it("leaves the spec's issue OPEN (decision `cancelled`) when ALL its tasks are cancelled", async () => {
+		// Nothing was delivered, so it is not closed as `completed`; abandoning the
+		// issue (close as not planned) is left to a human, so no close call at all.
+		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('cancelled', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('cancelled', 'b.md', {slug: 'b', spec: 'my-spec'});
+
+		const provider = new MemoryIssueProvider();
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(result.closed).toEqual([]);
+		expect(provider.closeCalls).toHaveLength(0);
+		expect(result.candidates.find((c) => c.issueNumber === 42)?.decision).toBe(
+			'cancelled',
+		);
+	});
+
 	it('finds the spec issue from work/specs/tasked/ too (a spec that has been tasked)', async () => {
 		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '7'});
 		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
@@ -200,6 +259,38 @@ describe('runCloseJob — the lone-task case (closes its own issue:)', () => {
 		expect(provider.closeCalls).toHaveLength(0);
 		expect(result.candidates.find((c) => c.issueNumber === 13)?.decision).toBe(
 			'not-landed',
+		);
+	});
+});
+
+describe('runCloseJob — the lone-task case, staged and cancelled', () => {
+	it('leaves a lone task STAGED in work/tasks/backlog/ OPEN (not-landed)', async () => {
+		write('pre-backlog', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider();
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(provider.closeCalls).toHaveLength(0);
+		expect(result.candidates.find((c) => c.issueNumber === 13)?.decision).toBe(
+			'not-landed',
+		);
+	});
+
+	it('leaves a CANCELLED lone task OPEN (decision `cancelled`, never closed as completed)', async () => {
+		write('cancelled', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider();
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(provider.closeCalls).toHaveLength(0);
+		expect(result.candidates.find((c) => c.issueNumber === 13)?.decision).toBe(
+			'cancelled',
 		);
 	});
 });

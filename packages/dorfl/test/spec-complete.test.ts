@@ -9,7 +9,7 @@ let root: string;
 
 /** Seed one `work/<folder>/<file>` task with the given frontmatter. */
 function writeTask(
-	folder: 'backlog' | 'in-progress' | 'done',
+	folder: 'pre-backlog' | 'backlog' | 'in-progress' | 'done' | 'cancelled',
 	file: string,
 	frontmatter: Record<string, string>,
 	body = 'body',
@@ -135,6 +135,65 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 		]);
 	});
 
+	it('NOT complete when a matching task is STAGED in work/tasks/backlog/ (one done, one staged)', () => {
+		// The CI-sandbox bug: tasking stages new tasks in `tasks/backlog/`, and the
+		// scan used to skip that folder, so the spec read complete after its first merge.
+		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('pre-backlog', 'b.md', {slug: 'b', spec: 'issue-intake'});
+
+		const result = isSpecComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(false);
+		expect(result.allCancelled).toBe(false);
+		expect(result.tasks.map((t) => [t.slug, t.folder])).toEqual([
+			['a', 'done'],
+			['b', 'tasks-backlog'],
+		]);
+	});
+
+	it('COMPLETE when every task is done or cancelled and ≥1 is done (a cancelled task does not block)', () => {
+		writeTask('done', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('cancelled', 'b.md', {slug: 'b', spec: 'issue-intake'});
+
+		const result = isSpecComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(true);
+		expect(result.allCancelled).toBe(false);
+		expect(result.tasks.map((t) => t.folder)).toEqual(['done', 'cancelled']);
+	});
+
+	it('NOT complete (allCancelled) when EVERY matching task is cancelled and none is done', () => {
+		writeTask('cancelled', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('cancelled', 'b.md', {slug: 'b', spec: 'issue-intake'});
+
+		const result = isSpecComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(false);
+		expect(result.allCancelled).toBe(true);
+	});
+
+	it('NOT complete when a cancelled task sits beside a still-open one (none done)', () => {
+		writeTask('cancelled', 'a.md', {slug: 'a', spec: 'issue-intake'});
+		writeTask('backlog', 'b.md', {slug: 'b', spec: 'issue-intake'});
+
+		const result = isSpecComplete({
+			repoPath: repoPath(),
+			slug: 'issue-intake',
+		});
+
+		expect(result.complete).toBe(false);
+		expect(result.allCancelled).toBe(false);
+	});
+
 	it('reads cleanly with NO work/ folders present (no throw, NOT complete)', () => {
 		// An empty repo (no work/ tree at all) → no tasks → not complete.
 		const result = isSpecComplete({
@@ -142,6 +201,7 @@ describe('isSpecComplete — the read-only "is this spec complete?" core query',
 			slug: 'issue-intake',
 		});
 		expect(result.complete).toBe(false);
+		expect(result.allCancelled).toBe(false);
 		expect(result.tasks).toEqual([]);
 	});
 });

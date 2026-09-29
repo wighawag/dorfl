@@ -10,8 +10,9 @@
  *     fanned task reaches the number via `task.spec: → work/specs/<spec>.md spec
  *     issue:`, and `spec:` WINS on a (hand-edited) conflict;
  *   - the QUERY — {@link isSpecComplete} (`spec-complete.ts`, task
- *     `prd-complete-query`, done): a spec is COMPLETE iff ≥1 `spec:<slug>` task AND
- *     all such tasks are in `work/done/`;
+ *     `prd-complete-query`, done): a spec is COMPLETE iff ≥1 `spec:<slug>` task is
+ *     in `work/tasks/done/` AND every other one is in `work/tasks/cancelled/` (a
+ *     task staged in backlog, ready or in progress keeps it open);
  *   - the CLOSE — {@link IssueProvider.closeIssue} (`issue-provider.ts`, the atomic
  *     comment+close seam intake already uses): NO direct `gh` in this core; any
  *     informational comment rides the SAME close call (never the PR seam
@@ -25,7 +26,14 @@
  *     `spec:<slug>` tasks are in `work/done/` (reason `completed`).
  *
  * A spec whose query is NOT yet complete is left OPEN (the final fanned task's
- * merge tick closes it). A lone task still outside `work/done/` is skipped. The
+ * merge tick closes it). A lone task still outside `work/done/` is skipped.
+ *
+ * CANCELLED work never closes an issue (task
+ * `spec-complete-counts-staged-and-cancelled-tasks`): a spec whose tasks are ALL
+ * cancelled, and a lone task that was cancelled, are left OPEN with decision
+ * `cancelled`, not closed as `completed` (nothing was delivered) and not closed
+ * as `not planned` either: abandoning an issue is a human's call (drop the spec,
+ * close the issue by hand), not something a merge-to-main job infers. The
  * close DEGRADES (never throws) on a missing/unauthenticated provider, exactly
  * like intake's bounce close — the run reports the real cause and stays exit-0.
  *
@@ -64,6 +72,7 @@ export type CloseDecision =
 	| 'closed' // the issue was closed via the provider seam
 	| 'not-complete' // a spec whose query says it is not yet complete → left open
 	| 'not-landed' // a lone task not yet in work/done/ → left open
+	| 'cancelled' // a spec whose tasks are ALL cancelled, or a cancelled lone task → left open
 	| 'close-failed'; // closure condition held but the provider close degraded
 
 /** One candidate the close-job considered, with the decision it reached. */
@@ -199,11 +208,15 @@ function resolveCandidates(repoPath: string): {
 	return [...specCandidates, ...taskCandidates];
 }
 
-/** True iff the lone task with this slug resides in `work/done/`. */
-function loneTaskLanded(repoPath: string, taskSlug: string): boolean {
-	for (const file of listMarkdown(repoPath, 'done')) {
+/** True iff the lone task with this slug resides in `work/<folder>/`. */
+function loneTaskIn(
+	repoPath: string,
+	taskSlug: string,
+	folder: 'done' | 'cancelled',
+): boolean {
+	for (const file of listMarkdown(repoPath, folder)) {
 		const fm = parseFrontmatter(
-			readFileSync(join(repoPath, workItemRel('done', file)), 'utf8'),
+			readFileSync(join(repoPath, workItemRel(folder, file)), 'utf8'),
 		);
 		const slug = fm.slug ?? basename(file, '.md');
 		if (slug === taskSlug) {
@@ -243,11 +256,14 @@ export async function runCloseJob(
 		let shouldClose: boolean;
 		let notReady: CloseDecision;
 		if (cand.via === 'spec') {
-			shouldClose = isSpecComplete({repoPath, slug: cand.slug}).complete;
-			notReady = 'not-complete';
+			const query = isSpecComplete({repoPath, slug: cand.slug});
+			shouldClose = query.complete;
+			notReady = query.allCancelled ? 'cancelled' : 'not-complete';
 		} else {
-			shouldClose = loneTaskLanded(repoPath, cand.slug);
-			notReady = 'not-landed';
+			shouldClose = loneTaskIn(repoPath, cand.slug, 'done');
+			notReady = loneTaskIn(repoPath, cand.slug, 'cancelled')
+				? 'cancelled'
+				: 'not-landed';
 		}
 
 		if (!shouldClose) {
