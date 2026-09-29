@@ -14,6 +14,15 @@
  *     a normal (non-fork-restricted) `GITHUB_TOKEN` that can actually close issues
  *     — whereas a `pull_request` event from a FORK gets a read-only token and
  *     cannot close. (See the `## Decisions` block in the task.)
+ *   - PLUS an hourly `schedule:` (the same `'0 * * * *'` cron the generated
+ *     `advance-lifecycle` uses) and `workflow_dispatch:` (task
+ *     `close-job-also-runs-on-a-schedule`): GitHub starts NO workflow for a push
+ *     made with a job's `GITHUB_TOKEN`, so a land the CI apply job pushes itself
+ *     (merge mode, an answered `merge` question, a tree-less publish) never fires
+ *     the `push` trigger. `close-merged-issues` keeps no state (every run
+ *     re-derives from `main` what is complete) and skips an issue that is already
+ *     closed, so the timed run is safe and quiet; it catches those lands within
+ *     the hour. The `push` trigger stays so a human-merged PR closes at once.
  *   - The job INVOKES the close machinery via `dorfl close-merged-issues`,
  *     which CONSUMES the UNCHANGED engine pieces: the resolution
  *     (`resolveClosingIssue`), the "spec complete?" query (`prd-complete-query`,
@@ -45,7 +54,7 @@ export const CLOSE_JOB_CAPABILITY_ID = 'close-job';
 
 /** The wizard-facing label for the close-job capability. */
 export const CLOSE_JOB_CAPABILITY_LABEL =
-	'Close issues when their work lands (the close-job: on a merge to main)';
+	'Close issues when their work lands (the close-job: on a merge to main, and hourly)';
 
 /** The repo-relative path (under the output base) of the emitted workflow. */
 export const CLOSE_JOB_WORKFLOW_PATH = 'workflows/close-job.yml';
@@ -81,6 +90,13 @@ export function generateCloseJobWorkflow(config: ResolvedCIConfig): string {
 #     actually CLOSE issues — a \`pull_request\` event from a FORK gets a read-only
 #     token and could not close (a real limitation we deliberately avoid).
 #
+# PLUS an HOURLY schedule (and workflow_dispatch for a manual catch-up). GitHub
+# starts NO workflow for a push made with a job's GITHUB_TOKEN, so a land the CI
+# pushes itself (merge mode, an answered \`merge\` question, a tree-less publish)
+# never fires the push trigger above. The schedule closes those issues within the
+# hour. It is safe to repeat: \`close-merged-issues\` keeps no state (every run
+# re-derives from main what is complete) and skips an issue already closed.
+#
 # WHAT IT DOES — \`dorfl close-merged-issues\` resolves which source issue(s)
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
@@ -109,6 +125,12 @@ on:
   push:
     branches:
       - main
+  # Hourly (the same cadence as advance-lifecycle): a land the CI pushes with its
+  # GITHUB_TOKEN starts no workflow, so this catches the issues those lands close.
+  schedule:
+    - cron: '0 * * * *'
+  # Manual catch-up.
+  workflow_dispatch:
 
 # Serialise overlapping close ticks on main; the close-job mutates only the ISSUE
 # (not the main-CAS), so this just avoids redundant concurrent passes.
@@ -196,11 +218,18 @@ export function validateCloseJobWorkflow(text: string): CloseJobValidation {
 		operative,
 	), 'must NOT use the `pull_request` trigger (a fork PR gets a read-only token ' +
 		'that cannot close; `push: [main]` is the chosen trigger).');
-	// And it must NOT be the build/task tick's cron/dispatch shape — the close-job
-	// is event-driven on a merge, not a scheduled drain.
-	require('no-cron-trigger', !/\bschedule:\s*[\s\S]*?-\s*cron:/.test(
+	// AND an hourly schedule + workflow_dispatch: GitHub starts no workflow for a
+	// push made with a job's GITHUB_TOKEN, so a land the CI pushes itself never
+	// fires the push trigger; the timed run closes those issues. Operative lines
+	// only: the header comment mentions the schedule.
+	require('trigger-cron', /\bschedule:\s*[\s\S]*?-\s*cron:/.test(
 		operative,
-	), 'the close-job is merge-triggered, NOT a cron drain (no `on.schedule.cron`).');
+	), 'must ALSO trigger on a cron schedule (`on.schedule[].cron`): a land the ' +
+		'CI pushes with its GITHUB_TOKEN starts no workflow, so only the timed run ' +
+		'closes its issue.');
+	require('trigger-workflow-dispatch', /\bworkflow_dispatch:/.test(
+		operative,
+	), 'must trigger on `workflow_dispatch` (manual catch-up).');
 	require('no-answer-loop-push-trigger', !/work\/questions\//.test(
 		text,
 	), 'the close-job must NOT carry the `push work/questions/**` (answer-loop) ' +

@@ -37,9 +37,16 @@
  * close DEGRADES (never throws) on a missing/unauthenticated provider, exactly
  * like intake's bounce close — the run reports the real cause and stays exit-0.
  *
+ * An issue the provider already reports CLOSED is skipped with decision
+ * `already-closed` (no close call, no comment, not counted in `closed`): the
+ * workflow also runs HOURLY, so without this every pass would re-close and
+ * re-report issues closed long ago.
+ *
  * This is the JOB the close-job WORKFLOW (capability E) invokes via
  * `dorfl close-merged-issues`; the workflow is triggered on a merge to
- * `main` (`push: {branches: [main]}`). The driver itself is provider-pluggable
+ * `main` (`push: {branches: [main]}`) AND on an hourly `schedule:`, because a
+ * land the CI pushes with its `GITHUB_TOKEN` starts no workflow. Every pass
+ * re-derives everything from the `work/` tree (no state), so repeating is safe. The driver itself is provider-pluggable
  * (it takes an {@link IssueProvider}) and reads only the `work/` tree.
  */
 
@@ -73,6 +80,7 @@ export type CloseDecision =
 	| 'not-complete' // a spec whose query says it is not yet complete → left open
 	| 'not-landed' // a lone task not yet in work/done/ → left open
 	| 'cancelled' // a spec whose tasks are ALL cancelled, or a cancelled lone task → left open
+	| 'already-closed' // closure condition held but the issue is already closed → no close call
 	| 'close-failed'; // closure condition held but the provider close degraded
 
 /** One candidate the close-job considered, with the decision it reached. */
@@ -234,6 +242,32 @@ function closeComment(via: 'issue' | 'spec', slug: string): string {
 }
 
 /**
+ * True iff the provider reports the issue as already `closed` (via the existing
+ * {@link IssueProvider.getIssue} read, whose `state` is lower-cased). A read that
+ * FAILS (the GitHub adapter throws on a `gh` failure) or reports no state answers
+ * `false`, so the pass falls through to the close attempt exactly as before: the
+ * close then either succeeds or reports `close-failed` with the real cause. A
+ * state read must never be the reason an issue stays open.
+ */
+async function isAlreadyClosed(
+	issueProvider: IssueProvider,
+	repoPath: string,
+	issueNumber: number,
+	env: NodeJS.ProcessEnv | undefined,
+): Promise<boolean> {
+	try {
+		const issue = await issueProvider.getIssue({
+			cwd: repoPath,
+			issueNumber,
+			env,
+		});
+		return issue.state === 'closed';
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Run the close-job over a repo's `work/` tree: resolve the closure candidates,
  * apply the per-kind closure condition (a landed lone task; a spec whose
  * {@link isSpecComplete} query holds), and close the qualifying issues through the
@@ -272,6 +306,21 @@ export async function runCloseJob(
 				via: cand.via,
 				slug: cand.slug,
 				decision: notReady,
+			});
+			continue;
+		}
+
+		// ALREADY CLOSED? The close-job also runs hourly (task
+		// `close-job-also-runs-on-a-schedule`), so most passes meet issues an
+		// earlier pass (or a human) already closed. Read the state through the
+		// provider seam (NO direct `gh`) and skip those: no second close, no second
+		// comment, not counted in `closed`.
+		if (await isAlreadyClosed(issueProvider, repoPath, cand.issueNumber, env)) {
+			candidates.push({
+				issueNumber: cand.issueNumber,
+				via: cand.via,
+				slug: cand.slug,
+				decision: 'already-closed',
 			});
 			continue;
 		}

@@ -42,9 +42,17 @@ class MemoryIssueProvider implements IssueProvider {
 	readonly closeCalls: CloseIssueInput[] = [];
 	/** When false, `closeIssue` reports a degraded close (provider unavailable). */
 	private readonly canClose: boolean;
+	/** Issue numbers the provider reports as already `closed` (`getIssue().state`). */
+	private readonly closedIssues: Set<number>;
+	/** When true, `getIssue` throws (a failed state read, like `gh` unavailable). */
+	private readonly readFails: boolean;
 
-	constructor(opts: {canClose?: boolean} = {}) {
+	constructor(
+		opts: {canClose?: boolean; closed?: number[]; readFails?: boolean} = {},
+	) {
 		this.canClose = opts.canClose ?? true;
+		this.closedIssues = new Set(opts.closed ?? []);
+		this.readFails = opts.readFails ?? false;
 	}
 
 	async closeIssue(input: CloseIssueInput): Promise<CloseIssueResult> {
@@ -59,10 +67,20 @@ class MemoryIssueProvider implements IssueProvider {
 		return {closed: true, instruction: `Closed issue #${input.issueNumber}.`};
 	}
 
-	// The rest of the seam is unused by the close-job driver — minimal stubs.
+	/** The state read the driver uses to skip an already-closed issue. */
 	async getIssue(input: GetIssueInput): Promise<Issue> {
-		return {number: input.issueNumber, title: '', body: ''};
+		if (this.readFails) {
+			throw new Error('stub: could not read the issue');
+		}
+		return {
+			number: input.issueNumber,
+			title: '',
+			body: '',
+			state: this.closedIssues.has(input.issueNumber) ? 'closed' : 'open',
+		};
 	}
+
+	// The rest of the seam is unused by the close-job driver — minimal stubs.
 	async listComments(_input: ListCommentsInput): Promise<IssueComment[]> {
 		return [];
 	}
@@ -394,5 +412,69 @@ describe('runCloseJob — DEGRADES, never throws (terminal CI tick)', () => {
 		});
 		expect(result.candidates).toEqual([]);
 		expect(result.closed).toEqual([]);
+	});
+});
+
+describe('runCloseJob — an issue that is already closed (the hourly schedule)', () => {
+	it("does not close a landed lone task's issue again: no close call, no comment, decision `already-closed`, not counted", async () => {
+		write('done', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider({closed: [13]});
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(provider.closeCalls).toHaveLength(0);
+		expect(result.closed).toEqual([]);
+		expect(result.candidates.find((c) => c.issueNumber === 13)?.decision).toBe(
+			'already-closed',
+		);
+	});
+
+	it("does not close a complete spec's issue again, while still closing another open one", async () => {
+		write('specs-tasked', 'my-spec.md', {slug: 'my-spec', issue: '42'});
+		write('done', 'a.md', {slug: 'a', spec: 'my-spec'});
+		write('done', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider({closed: [42]});
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(provider.closeCalls.map((c) => c.issueNumber)).toEqual([13]);
+		expect(result.closed).toEqual([13]);
+		expect(result.candidates.find((c) => c.issueNumber === 42)?.decision).toBe(
+			'already-closed',
+		);
+	});
+
+	it('does not read the state of an issue whose closure condition does not hold', async () => {
+		// A not-landed task stays `not-landed` even if its issue was closed by hand.
+		write('backlog', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider({closed: [13]});
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(result.candidates.find((c) => c.issueNumber === 13)?.decision).toBe(
+			'not-landed',
+		);
+	});
+
+	it('falls through to the close when the state read fails (a read never keeps an issue open)', async () => {
+		write('done', 'lone.md', {slug: 'lone', issue: '13'});
+
+		const provider = new MemoryIssueProvider({readFails: true});
+		const result = await runCloseJob({
+			repoPath: repoPath(),
+			issueProvider: provider,
+		});
+
+		expect(provider.closeCalls).toHaveLength(1);
+		expect(result.closed).toEqual([13]);
 	});
 });

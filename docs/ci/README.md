@@ -346,6 +346,10 @@ GitHub does not start workflows freely for events created by a job's built-in `G
 
 `install-ci` reminds you of this in its closing summary when it did not set `DORFL_GH_TOKEN` in that run. If you set the secret earlier (or by hand with `gh secret set DORFL_GH_TOKEN`), the reminder about advance pull requests does not apply.
 
+## The close-job runs on every push to `main` and hourly
+
+The generated `close-job.yml` runs `dorfl close-merged-issues`, which closes the source issue of a lone task once it is in `work/tasks/done/`, and the issue of a spec once all its tasks are done. It triggers on a `push` to `main`, so a pull request a human merges closes its issue at once. That push trigger alone is not enough: for the same reason as above, GitHub starts no workflow for a push made with a job's `GITHUB_TOKEN`, so a land the CI pushes itself (merge mode, an answered `merge` question, a tree-less publish) never starts the close-job. The workflow therefore also runs on an hourly `schedule` (the same `'0 * * * *'` cron as `advance-lifecycle`) and on `workflow_dispatch` for a manual catch-up, so such an issue closes within the hour. Repeating is safe: the command keeps no state, re-derives from `main` what is complete on every run, and skips an issue that is already closed (logged as `already closed`, with no second close or comment, and not counted in `closed N issue(s)`).
+
 ## Branch protection and the tree-less answer-loop (a required-check caveat)
 
 The answer-loop's tree-less rungs (`surface` / `apply` / `triage-observation`) publish their ledger writes (a question sidecar, a `triaged:` marker, an applied answer) by a **direct `git push HEAD:main`** of a freshly-made commit. This is deliberate: `integrationMode` governs how CODE integrates (build/slice branches → PR or merge), it does NOT govern the question ledger, so tree-less writes go straight to `main` in BOTH modes (SPEC `ci-advance-surfaces-questions-not-only-builds`).
