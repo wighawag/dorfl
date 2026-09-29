@@ -2,7 +2,7 @@
 title: 'Wire the merge-question surfacer into the advance tick and resolve its clash with the propose lock'
 slug: wire-merge-questions-into-the-advance-tick
 blockedBy: [merge-question-surfacer-finds-namespaced-work-branches]
-needsAnswers: true
+needsAnswers: false
 ---
 
 ## What to build
@@ -42,3 +42,9 @@ Found in the CI sandbox `wighawag/dorfl-ci-sandbox` (a private repository runnin
 > FIRST, check this task against current reality (it is a launch snapshot and may have DRIFTED): does it still match the code in `tasks/done/`, the relevant ADRs, and the tasks it depends on? If the premise no longer holds, do NOT build on it: route the task to needs-attention with the discrepancy as the reason (WORK-CONTRACT.md "Drift is a needs-attention signal").
 >
 > RECORD non-obvious in-scope decisions you make while building in a `## Decisions` block at the end of your FINAL REPORT (see `work/protocol/task-template.md`). Do no git. Bound every exploratory shell command (`timeout 30`, capped output) and never run an unbounded regex over `node_modules`, `dist` or lockfiles.
+
+## Applied answers 2026-09-29
+
+### q1: 'task:wire-merge-questions-into-the-advance-tick' was bounced — how should we proceed?
+
+keep (the three design questions are answered in the task body under "Decided in a second round"; build it)
