@@ -1,5 +1,11 @@
 # dorfl
 
+## 0.15.1
+
+### Patch Changes
+
+- 96c9c4e: The writer-role CI jobs no longer fail in a repository whose `dorfl.json` declares a `dorflCmd` that points into its dependencies, such as `"dorflCmd": "node_modules/.bin/dorfl"`. In 0.15.0 every job using the generated `.github/actions/dorfl-setup-writer` action (`close-merged-issues` in `close-job.yml`; `enumerate`, `surface-merge-questions` and `reap-merged-branches` in `advance-lifecycle.yml`; `lock` and `apply` in `dorfl-item.yml`) exited 1 with "could NOT run the repo-declared dorflCmd": that action installs dorfl globally and, by design, never installs the project's dependencies, so the global dorfl forwarded to a path that does not exist. The writer action now appends `DORFL_NO_FORWARD=1` to `$GITHUB_ENV` right after installing dorfl, so every later step of those jobs runs the dorfl the action installed (the exact version `install-ci` generated the workflows with). The agent-role `.github/actions/dorfl-setup` is unchanged and still forwards to `dorflCmd`. Because writer jobs no longer forward, the registry-mode writer action also warns (a `::warning`, never a failure) when the repository pins another dorfl version: an exact `dorfl@<version>` inside `dorflCmd`, or, for `node_modules/.bin/dorfl`, an exact `dorfl` version in `package.json` `devDependencies`/`dependencies`. It reads those files as JSON only and runs no project code. Re-run `dorfl install-ci` to pick up the fix.
+
 ## 0.15.0
 
 ### Minor Changes
