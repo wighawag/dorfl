@@ -9,6 +9,13 @@
 #     actually CLOSE issues — a `pull_request` event from a FORK gets a read-only
 #     token and could not close (a real limitation we deliberately avoid).
 #
+# PLUS an HOURLY schedule (and workflow_dispatch for a manual catch-up). GitHub
+# starts NO workflow for a push made with a job's GITHUB_TOKEN, so a land the CI
+# pushes itself (merge mode, an answered `merge` question, a tree-less publish)
+# never fires the push trigger above. The schedule closes those issues within the
+# hour. It is safe to repeat: `close-merged-issues` keeps no state (every run
+# re-derives from main what is complete) and skips an issue already closed.
+#
 # WHAT IT DOES — `dorfl close-merged-issues` resolves which source issue(s)
 # the landed work closes and closes them. CI owns ONLY this job + the trigger; the
 # command CONSUMES the engine's UNCHANGED pieces and re-implements none of them:
@@ -37,6 +44,12 @@ on:
   push:
     branches:
       - main
+  # Hourly (the same cadence as advance-lifecycle): a land the CI pushes with its
+  # GITHUB_TOKEN starts no workflow, so this catches the issues those lands close.
+  schedule:
+    - cron: '0 * * * *'
+  # Manual catch-up.
+  workflow_dispatch:
 
 # Serialise overlapping close ticks on main; the close-job mutates only the ISSUE
 # (not the main-CAS), so this just avoids redundant concurrent passes.

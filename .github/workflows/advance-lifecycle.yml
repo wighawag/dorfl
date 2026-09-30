@@ -275,6 +275,34 @@ jobs:
             echo "dispatched ${item}  slot ${slot}  (run 'dorfl-item ${item}')"
           done
 
+  # ── SURFACE MERGE QUESTIONS (no agent) ──────────────────────────────────────
+  # Ask a merge question (a `kind: merge` sidecar entry the human answers
+  # `merge | hold | drop`) for every unmerged `work/task-<slug>` branch with no
+  # open PR (an open PR already is the land decision), whose task rests in
+  # tasks/ready/ or tasks/backlog/, whose lock is free or kept by its finished
+  # propose build, and whose tip carries the done-move; then publish the
+  # questions to main. An answered `merge` is enumerated like any answered
+  # sidecar and lands through the item run's apply rung. Gated by the
+  # `mergeQuestions` config (off|ask, default ask): `off` surfaces nothing.
+  # Deterministic: it runs no agent, so the writer-role setup (Node and dorfl
+  # only). It fetches the arbiter before listing the branches. `gh` reads the
+  # open PRs with the built-in token (`pull-requests: read`); a failed PR
+  # listing fails the job loudly rather than skipping every branch silently.
+  surface-merge-questions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/dorfl-setup-writer
+      - name: surface merge questions for unmerged work/* branches (surface-merge-questions)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dorfl surface-merge-questions --arbiter origin
+
   # ── REAP merged remote work/* branches (capability F, the hygiene sweep) ─────
   # PRESERVED from the seed (NOT a separate gc-sweep workflow): the provider-
   # agnostic counterpart of the worktree reaper. Deletes remote `work/<slug>`
