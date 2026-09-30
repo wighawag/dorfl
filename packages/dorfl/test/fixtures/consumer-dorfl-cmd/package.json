@@ -1,0 +1,7 @@
+{
+	"name": "consumer-dorfl-cmd-fixture",
+	"private": true,
+	"devDependencies": {
+		"dorfl": "0.0.1"
+	}
+}

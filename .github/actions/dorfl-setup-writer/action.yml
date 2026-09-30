@@ -61,3 +61,11 @@ runs:
         pnpm install --frozen-lockfile --ignore-scripts --filter 'dorfl...'
         pnpm --filter 'dorfl...' build
         cd packages/dorfl && pnpm link --global
+
+    # The writer role runs the dorfl installed above and never forwards to the
+    # repository's dorflCmd: that command usually points into the project's
+    # dependencies (node_modules/.bin/dorfl), which this role never installs.
+    # Exported to $GITHUB_ENV so it holds for every later step of the job.
+    - name: Run the dorfl installed above, not the repository's dorflCmd
+      shell: bash
+      run: echo "DORFL_NO_FORWARD=1" >> "$GITHUB_ENV"

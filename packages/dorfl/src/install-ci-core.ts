@@ -34,6 +34,11 @@ import {
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {HarnessAdapter} from './config.js';
+import {NO_FORWARD_ENV} from './bootstrap-forward.js';
+import {
+	REPO_CONFIG_FILENAME,
+	REPO_CONFIG_FILENAME_LEGACY,
+} from './repo-config.js';
 import {
 	ACTION_PINS,
 	pinnedUses,
@@ -1195,6 +1200,12 @@ export const WRITER_SETUP_ACTION_USES = './.github/actions/dorfl-setup-writer';
  * `--ignore-scripts`. In merge mode that is code an earlier agent landed on
  * `main`, which is the trust merge mode already implies.
  *
+ * In both modes it then exports `DORFL_NO_FORWARD=1` for the rest of the job
+ * ({@link writerNoForwardStep}): the writer role never forwards to the
+ * repository's `dorflCmd`, which usually points into dependencies this role
+ * never installs. In `registry` mode it also warns when the repository pins a
+ * different dorfl version ({@link WRITER_PIN_CHECK_SCRIPT}).
+ *
  * It is a SIBLING action rather than a `role` input on `dorfl-setup`: the
  * project-setup hook is an opaque fragment spliced first into `dorfl-setup`
  * (ADR `install-ci-project-provisioning-native-passthrough`), and a composite
@@ -1204,6 +1215,10 @@ export const WRITER_SETUP_ACTION_USES = './.github/actions/dorfl-setup-writer';
 export function generateWriterSetupAction(config: ResolvedCIConfig): string {
 	let installSteps: string;
 	let inputsBlock = '';
+	// Registry mode only: warn when the repository's `dorflCmd` names an exact
+	// `dorfl@<version>` that is not the version pinned here. Workspace mode builds
+	// dorfl from the checked-out source, so there is no second version to compare.
+	let pinCheckStep = '';
 	if (config.installSource === 'workspace') {
 		inputsBlock = `inputs:
   source-ref:
@@ -1255,6 +1270,7 @@ export function generateWriterSetupAction(config: ResolvedCIConfig): string {
       run: |
         cd "$RUNNER_TEMP"
         npm install -g --ignore-scripts dorfl@${dorflPackageVersion()}`;
+		pinCheckStep = writerPinCheckStep(dorflPackageVersion());
 	}
 	return `\
 name: Setup dorfl (writer role)
@@ -1284,7 +1300,102 @@ runs:
         git config user.email "dorfl[bot]@users.noreply.github.com"
 
 ${installSteps}
+
+${writerNoForwardStep()}${pinCheckStep}
 `;
+}
+
+/**
+ * The writer-role step that turns OFF the bootstrap self-forward for every later
+ * step of the job, by exporting {@link NO_FORWARD_ENV}`=1` to `$GITHUB_ENV`.
+ *
+ * Why: a repository that pins dorfl through its dependencies declares
+ * `"dorflCmd": "node_modules/.bin/dorfl"`. The writer role deliberately installs
+ * no project dependency, so that path does not exist, and a forwarding dorfl
+ * would fail every writer job (0.15.0 regression). The dorfl installed above is
+ * already the exact version `install-ci` generated these workflows with (or,
+ * in workspace mode, dorfl built from the checked-out source), so forwarding
+ * gains nothing here. Set ONCE in the action so no job template can forget it.
+ * The agent-role `dorfl-setup` does install dependencies and keeps forwarding.
+ */
+function writerNoForwardStep(): string {
+	return `\
+    # The writer role runs the dorfl installed above and never forwards to the
+    # repository's dorflCmd: that command usually points into the project's
+    # dependencies (node_modules/.bin/dorfl), which this role never installs.
+    # Exported to $GITHUB_ENV so it holds for every later step of the job.
+    - name: Run the dorfl installed above, not the repository's dorflCmd
+      shell: bash
+      run: echo "${NO_FORWARD_ENV}=1" >> "$GITHUB_ENV"`;
+}
+
+/**
+ * The JavaScript the registry-mode writer step runs with `node -e '<script>'
+ * <pinned>` to WARN (never fail) when the repository pins a different dorfl
+ * than the one the writer role installed. Exported so a test can run it.
+ *
+ * It reads JSON only (`dorfl.json`, and `package.json` for the devDependency
+ * case) and runs no project code, so it is safe next to a write token. It
+ * recognises two version-bearing shapes of `dorflCmd`:
+ *
+ * - an exact `dorfl@<version>` inside the command (`npx dorfl@0.16.0`,
+ *   `mise exec dorfl@0.16.0 --`);
+ * - `node_modules/.bin/dorfl`, when `package.json` declares `dorfl` in
+ *   `devDependencies` (or `dependencies`) at an EXACT version.
+ *
+ * Anything else (a caret range, `./bin/dorfl`, no `dorflCmd`) is skipped
+ * silently: resolving it would need the project's dependencies installed,
+ * which the writer role never does. No single quote may appear in it (it is
+ * wrapped in a single-quoted bash string).
+ */
+export const WRITER_PIN_CHECK_SCRIPT = `\
+const fs = require("fs");
+const pinned = process.argv[1];
+const readJson = (p) => {
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch (e) { return undefined; }
+};
+const semver = "\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-[0-9A-Za-z.-]+)?";
+const config = readJson("${REPO_CONFIG_FILENAME}") || readJson("${REPO_CONFIG_FILENAME_LEGACY}") || {};
+const cmd = config.dorflCmd;
+if (typeof cmd !== "string") process.exit(0);
+let found;
+let where;
+const inCmd = new RegExp("(?:^|\\\\s)dorfl@(" + semver + ")(?=\\\\s|$)").exec(cmd);
+if (inCmd) {
+  found = inCmd[1];
+  where = "${REPO_CONFIG_FILENAME} dorflCmd";
+} else if (/(?:^|[\\s/])node_modules\\/\\.bin\\/dorfl(?=\\s|$)/.test(cmd)) {
+  const pkg = readJson("package.json") || {};
+  const spec = (pkg.devDependencies || {}).dorfl || (pkg.dependencies || {}).dorfl;
+  if (typeof spec === "string" && new RegExp("^" + semver + "$").test(spec)) {
+    found = spec;
+    where = "package.json (the dorflCmd " + cmd + ")";
+  }
+}
+if (found !== undefined && found !== pinned) {
+  const esc = (s) => s.replace(/%/g, "%25").replace(/\\r/g, "%0D").replace(/\\n/g, "%0A");
+  console.log("::warning title=dorfl-setup-writer::" + esc(where + " pins dorfl@" + found + " but the writer-role jobs run dorfl@" + pinned + ", the version install-ci generated these workflows with (writer jobs do not forward to dorflCmd). Re-run dorfl install-ci with dorfl " + found + " so every job runs the same version."));
+}`;
+
+/**
+ * The registry-mode writer step that runs {@link WRITER_PIN_CHECK_SCRIPT}. With
+ * the forward off (see {@link writerNoForwardStep}) a disagreement between the
+ * pinned global and the repository's own pin would otherwise go unnoticed: the
+ * agent job forwards to `dorflCmd` while the writer jobs run the pin.
+ */
+function writerPinCheckStep(pinned: string): string {
+	return `
+
+    # Warn (never fail) when the repository pins a dorfl version other than the
+    # one installed above: the agent job forwards to dorflCmd, these writer jobs
+    # do not, so the two roles would run different versions. Reads dorfl.json
+    # and package.json as JSON only; runs no project code.
+    - name: Warn if the repository pins another dorfl version
+      shell: bash
+      run: |
+        node -e '
+${indent(WRITER_PIN_CHECK_SCRIPT, 10)}
+        ' "${pinned}"`;
 }
 
 // ─── the --fake snapshot mechanism + artifact assembly ───────────────────────

@@ -37,7 +37,10 @@ deliverable: CI adoption is **one step** and is **not entangled with the tick**
    shape" below). (If the repo pins its dorfl via
    **`dorflCmd`** in `dorfl.json`, CI's bare `dorfl` self-forwards to that pin by the
    same mechanism the laptop uses, so CI and local run the same version — see
-   [`docs/dorfl-cmd/README.md`](../dorfl-cmd/README.md).)
+   [`docs/dorfl-cmd/README.md`](../dorfl-cmd/README.md). The writer-role jobs are
+   the exception: `dorfl-setup-writer` sets `DORFL_NO_FORWARD=1`, because it never
+   installs the dependencies a `dorflCmd` like `node_modules/.bin/dorfl` points
+   into, so those jobs run the dorfl version `install-ci` pinned.)
 
 3. Pick the integration mode with the `workflow_dispatch` `integrationMode` input
    (default `propose`). This ONE value drives BOTH the job shape AND the
