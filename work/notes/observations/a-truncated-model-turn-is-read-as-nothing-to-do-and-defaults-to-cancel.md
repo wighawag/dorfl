@@ -27,3 +27,5 @@ Two separate levers:
 - **Budget.** 16,384 output tokens per turn is small for a thinking model on a large task; a single long deliberation can exhaust it. Worth checking whether the model's max-output setting for the build agent can be raised, or thinking bounded.
 
 Unverified: how often this happens, and whether pi retries a `length` stop on its own in other modes.
+
+Update, 2026-10-27 (moved here from `wighawag/arts`, where it was filed as `dorfl-build-agent-died-on-output-token-limit.md`): seen again with dorfl 0.15.1 and the `pi` harness on the first attempt at `archers-and-firing-over-walls`. This time it bounced as an agent failure rather than an empty-diff STOP, with the reason `Response was truncated: the model reached its output token limit.` (preceded by an unrelated MCP startup line, see `a-bounced-job-reports-the-harness-startup-warning-instead-of-why-it-died.md`). A plain retry with a note asking for smaller edits succeeded; the other 12 tasks of that drive did not hit it.

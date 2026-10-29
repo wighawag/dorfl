@@ -54,3 +54,5 @@ A related, cheaper improvement: when the recorded reason is an infrastructure ev
 ## Provenance
 
 Moved here from `wighawag/etherfold`'s observations bucket on 2026-09-20, where it was filed during the drive that hit it. It is a defect in this tool, not in that repo, so it is recorded against the tool.
+
+Update, 2026-10-27 (from `wighawag/arts`, dorfl 0.15.1, `pi` harness): a bounce reason began with `MCP: Failed to connect to miro: OAuth authentication required. Run /mcp-auth miro.`, a startup line from the user's global MCP config that has nothing to do with building the repo; the real cause was the next line, an output-token truncation (`a-truncated-model-turn-is-read-as-nothing-to-do-and-defaults-to-cancel.md`). Same shape as the `ollama` warning above.
