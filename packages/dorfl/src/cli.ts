@@ -4552,6 +4552,17 @@ export function buildProgram(): Command {
 			console.log(
 				`Requeued '${slug}' to backlog for re-claiming.${how}${saved}`,
 			);
+			if (result.handoffNoteUndelivered !== undefined) {
+				// The requeue itself succeeded (lock released), but the -m note reached
+				// neither main nor the kept branch. It was printed in full above; fail
+				// loudly so a wrapper cannot mistake this for a clean requeue.
+				console.error(
+					'error: the requeue succeeded, but the -m handoff note was NOT ' +
+						'delivered (it is printed in full above). Record it yourself before ' +
+						're-dispatching.',
+				);
+				process.exit(1);
+			}
 		});
 
 	// `promote [item]` (spec `staging-pool-position-gate-and-trust-model`, tasks

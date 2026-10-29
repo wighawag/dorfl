@@ -24,7 +24,12 @@ import {
 	parseLockEntry,
 	type LockEntry,
 } from './item-lock.js';
-import {ledgerWrite, type LedgerTransitionKind} from './ledger-write.js';
+import {
+	ledgerWrite,
+	pushRefusalDetail,
+	type LedgerTransitionKind,
+} from './ledger-write.js';
+import {refWrite} from './ref-write.js';
 import {workBranchRef} from './slug-namespace.js';
 import {refreshArbiterRefs, resolveArbiterBranch} from './arbiter-refs.js';
 import {
@@ -296,6 +301,20 @@ export interface ReturnToBacklogResult {
 	 * which discards the branch by design, or an early refusal).
 	 */
 	continueBranch?: ResolvedContinueBranch;
+	/**
+	 * Where the `-m` handoff note was delivered: `main` (the item body on
+	 * `<arbiter>/main`, the normal path) or `work-branch` (the body on the kept
+	 * `work/<type>-<slug>` branch, the fallback when `main` refused the write, e.g. a
+	 * protected branch). Absent when no note was given or it was not delivered.
+	 */
+	handoffNoteDeliveredTo?: 'main' | 'work-branch';
+	/**
+	 * The FULL `-m` note text when it could be delivered NOWHERE. The requeue still
+	 * releases the lock (the load-bearing recovery), but the note is printed in full
+	 * and surfaced here; the `requeue` CLI exits non-zero when it is set, so it is
+	 * never silently dropped.
+	 */
+	handoffNoteUndelivered?: string;
 }
 
 /**
@@ -1187,6 +1206,8 @@ async function requeueHeldItem(params: {
 	// append degrades to a WARNING and the lock release below STILL runs, because the
 	// lock release is the load-bearing recovery and must never be stranded by an
 	// optional note (obs `requeue-dash-m-fails-and-strands-lock-for-staged-backlog-item`).
+	let handoffNoteDeliveredTo: 'main' | 'work-branch' | undefined;
+	let handoffNoteUndelivered: string | undefined;
 	if (handoff !== undefined) {
 		const noted = await runTreelessLedgerMove({
 			cwd,
@@ -1219,16 +1240,68 @@ async function requeueHeldItem(params: {
 				});
 			},
 		});
-		if (!noted) {
-			// NON-FATAL: warn and fall through to the lock release. We do NOT strand the
-			// lock for a failed OPTIONAL note (the previous behaviour, which left a
-			// half-applied state: branch deleted on --reset, lock still held).
-			note(
-				`requeue for '${slug}': could not append the -m handoff note (the body ` +
-					`is in neither tasks/ready/ nor tasks/backlog/ on ${arbiter}/main, or ` +
-					'main kept moving). Releasing the lock anyway — the requeue still ' +
-					'recovers the item; only the note was skipped.',
-			);
+		if (noted.kind === 'landed') {
+			handoffNoteDeliveredTo = 'main';
+		} else {
+			// FALLBACK: `main` could not take the note (refused, e.g. a protected
+			// branch; or contended; or the body is not on main). Deliver it on the KEPT
+			// work branch instead: the next claim continues from that branch and the
+			// existing continue context reads every `## Requeue` section in the body
+			// it resolves there, so the note reaches the agent with no new plumbing.
+			const whyNotMain =
+				noted.kind === 'refused'
+					? noted.message
+					: noted.kind === 'missing'
+						? `the body is in neither tasks/ready/ nor tasks/backlog/ on ${arbiter}/main`
+						: `${arbiter}/main kept moving (${TREELESS_CONTENTION_ATTEMPTS} lost races)`;
+			const kept =
+				continueBranch !== undefined &&
+				continueBranch.present &&
+				continueBranch.aheadOfMain &&
+				continueBranch.sha !== undefined
+					? continueBranch
+					: undefined;
+			const onBranch =
+				kept === undefined
+					? {
+							delivered: false as const,
+							detail: options.reset
+								? '--reset discarded the work branch, so there is no kept branch to carry it'
+								: `there is no kept work branch on ${arbiter} to carry it`,
+						}
+					: await appendHandoffNoteToKeptBranch({
+							cwd,
+							slug,
+							arbiter,
+							branch: kept.branch,
+							tip: kept.sha!,
+							handoff,
+							env,
+						});
+			if (onBranch.delivered) {
+				handoffNoteDeliveredTo = 'work-branch';
+				note(
+					`requeue for '${slug}': the -m handoff note could not go on ` +
+						`${arbiter}/main (${whyNotMain}). Delivered it on the kept branch ` +
+						`${kept!.branch} instead (${onBranch.bodyRel}); the next claim ` +
+						'continues from that branch and its continue prompt carries the note.',
+				);
+			} else {
+				// NOWHERE to put it. Still NON-FATAL for the lock (we never strand the
+				// lock for a failed optional note: that left a half-applied state), but
+				// the note is printed IN FULL and surfaced on the result, so it is never
+				// silently lost.
+				handoffNoteUndelivered = handoff;
+				note(
+					`requeue for '${slug}': could not append the -m handoff note. On ` +
+						`${arbiter}/main: ${whyNotMain}. On the work branch: ` +
+						`${onBranch.detail}. Releasing the lock anyway (the requeue still ` +
+						'recovers the item), but the note was NOT DELIVERED. Record it ' +
+						'yourself (e.g. a PR adding it to the task body). The note, in full:\n' +
+						`----- BEGIN UNDELIVERED HANDOFF NOTE -----\n${handoff}\n` +
+						'----- END UNDELIVERED HANDOFF NOTE -----',
+				);
+			}
 		}
 	}
 
@@ -1264,7 +1337,100 @@ async function requeueHeldItem(params: {
 		deletedRemoteBranch,
 		reconciled,
 		continueBranch,
+		...(handoffNoteDeliveredTo !== undefined ? {handoffNoteDeliveredTo} : {}),
+		...(handoffNoteUndelivered !== undefined ? {handoffNoteUndelivered} : {}),
 	};
+}
+
+/**
+ * Deliver a `requeue -m` handoff note on the KEPT `work/<type>-<slug>` branch,
+ * the fallback when `<arbiter>/main` cannot take it (a protected branch). One
+ * commit on top of the branch tip, built with plumbing on a scratch index (the
+ * caller's tree, index and HEAD are never touched), inserting the same dated
+ * `## Requeue` section into the item body wherever the branch carries it: the
+ * done record when the prior run already done-moved it (a propose PR), else the
+ * pool or staging body. Published with a lease on the tip, so a concurrent writer
+ * to the branch is never overwritten.
+ *
+ * Why the branch: the next claim CONTINUES from it, and the continue prompt
+ * already reads every `## Requeue` section of the body it resolves on that branch
+ * (`resolveContinueContext`), so this needs no new reader. The note also travels
+ * with the open PR, so it reaches `main` if that PR merges.
+ */
+async function appendHandoffNoteToKeptBranch(params: {
+	cwd: string;
+	slug: string;
+	arbiter: string;
+	branch: string;
+	tip: string;
+	handoff: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<
+	{delivered: true; bodyRel: string} | {delivered: false; detail: string}
+> {
+	const {cwd, slug, arbiter, branch, tip, handoff, env} = params;
+	// Make sure the tip's objects are local (the guard above usually fetched them).
+	await refreshArbiterRefs({cwd, arbiter, branches: [branch], env});
+	if (
+		run('git', ['cat-file', '-e', `${tip}^{commit}`], cwd, {env}).status !== 0
+	) {
+		return {
+			delivered: false,
+			detail: `could not fetch the branch tip ${tip.slice(0, 12)}`,
+		};
+	}
+	const candidates: readonly WorkFolderKey[] = [
+		'done',
+		'tasks-ready',
+		'tasks-backlog',
+	];
+	const bodyRel = candidates
+		.map((folder) => workItemRel(folder, `${slug}.md`))
+		.find((rel) => pathInCommit(tip, rel, cwd, env));
+	if (bodyRel === undefined) {
+		return {
+			delivered: false,
+			detail: `the branch carries no body for '${slug}' in tasks/done/, tasks/ready/ or tasks/backlog/`,
+		};
+	}
+	let prepared: {ref: string; commit: string};
+	try {
+		prepared = prepareTreelessMoveCommit({
+			cwd,
+			slug,
+			base: tip,
+			sourceRel: bodyRel,
+			destRel: bodyRel,
+			transformBody: (body) => insertRequeueNoteText(body, handoff),
+			commitMessage: `chore(${slug}): requeue handoff note`,
+			refNamespace: 'requeue-branch-note',
+			env,
+		});
+	} catch (err) {
+		return {
+			delivered: false,
+			detail: `could not build the note commit (${err instanceof Error ? err.message : String(err)})`,
+		};
+	}
+	// Through the ref-write seam (guard: `write-sites-through-seams.test.ts`): the
+	// same leased one-shot work-branch push the CI apply phase uses.
+	const push = await refWrite.pushLeasedWorkBranch({
+		arbiter,
+		branch,
+		commit: prepared.commit,
+		expectedTip: tip,
+		cwd,
+		env,
+	});
+	await gitSoftAsync(['update-ref', '-d', prepared.ref], cwd, env);
+	if (push.status !== 0) {
+		return {
+			delivered: false,
+			detail: `the push to ${branch} failed: ${pushRefusalDetail(push.stderr) || `exit ${push.status}`}`,
+		};
+	}
+	await refreshArbiterRefs({cwd, arbiter, branches: [branch], env});
+	return {delivered: true, bodyRel};
 }
 
 /**
@@ -1582,15 +1748,17 @@ export async function promoteFromPreBacklog(
 				});
 			},
 		});
-		if (moved) {
+		if (moved.kind === 'landed') {
 			note(`Promoted '${slug}' from tasks/backlog to tasks/ready (claimable).`);
 			return {moved: true, commitMessage};
 		}
 
 		const message =
-			`promote for '${slug}': the arbiter's main kept moving (contended) after ` +
-			`${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in tasks/backlog ` +
-			'(no move). Try again shortly.';
+			moved.kind === 'refused'
+				? `promote for '${slug}': ${moved.message}\nItem left in tasks/backlog (no move).`
+				: `promote for '${slug}': the arbiter's main kept moving (contended) after ` +
+					`${TREELESS_CONTENTION_ATTEMPTS} attempts; item left in tasks/backlog ` +
+					'(no move). Try again shortly.';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	} finally {
@@ -1767,7 +1935,7 @@ export async function promoteFromPreSpec(
 				});
 			},
 		});
-		if (moved) {
+		if (moved.kind === 'landed') {
 			note(
 				`Promoted spec '${slug}' from specs/proposed to specs/ready (auto-taskable).`,
 			);
@@ -1775,9 +1943,11 @@ export async function promoteFromPreSpec(
 		}
 
 		const message =
-			`promote for '${slug}': the arbiter's main kept moving (contended) ` +
-			`after ${TREELESS_CONTENTION_ATTEMPTS} attempts — item left in specs/proposed ` +
-			'(no move). Try again shortly.';
+			moved.kind === 'refused'
+				? `promote for '${slug}': ${moved.message}\nItem left in specs/proposed (no move).`
+				: `promote for '${slug}': the arbiter's main kept moving (contended) ` +
+					`after ${TREELESS_CONTENTION_ATTEMPTS} attempts; item left in specs/proposed ` +
+					'(no move). Try again shortly.';
 		note(message);
 		return {moved: false, reasonNotMoved: message};
 	} finally {
@@ -1906,7 +2076,7 @@ type TreelessAttemptPlan =
  * retry safe when the item itself moved under us (e.g. a prior attempt landed but
  * the CAS verify reported rejected): the next plan sees it `already-done`.
  */
-async function runTreelessLedgerMove(params: {
+interface TreelessLedgerMoveParams {
 	cwd: string;
 	slug: string;
 	arbiter: string;
@@ -1928,7 +2098,30 @@ async function runTreelessLedgerMove(params: {
 	explicitMainRefspec: boolean;
 	env: NodeJS.ProcessEnv | undefined;
 	note: (message: string) => void;
-}): Promise<boolean> {
+}
+
+/**
+ * Why a tree-less ledger move did or did not land (see
+ * {@link runTreelessLedgerMove}). `refused` carries the remote's message:
+ * the arbiter refused the `main` write without `main` moving (a protected branch),
+ * which no retry can fix.
+ */
+type TreelessMoveOutcome =
+	| {kind: 'landed'}
+	| {kind: 'missing'}
+	| {kind: 'refused'; message: string}
+	| {kind: 'contended'};
+
+/**
+ * Run the shared tree-less ledger move (see {@link TreelessLedgerMoveParams})
+ * and say why it did or did not land. A REFUSED push (the remote declined the
+ * write while `main` stayed put) is terminal on the FIRST attempt: it is returned
+ * as a refusal carrying the remote's text, never reported as "main advanced under
+ * us", and never retried. The CALLER reports it (once), in its own terms.
+ */
+async function runTreelessLedgerMove(
+	params: TreelessLedgerMoveParams,
+): Promise<TreelessMoveOutcome> {
 	const {
 		cwd,
 		arbiter,
@@ -1965,10 +2158,10 @@ async function runTreelessLedgerMove(params: {
 		// rejected attempt) or absent — both are terminal, no push.
 		const prepared = plan(base);
 		if (prepared === 'already-done') {
-			return true;
+			return {kind: 'landed'};
 		}
 		if (prepared === 'missing') {
-			return false;
+			return {kind: 'missing'};
 		}
 
 		// COMMIT-LEVEL IDEMPOTENCE (observation
@@ -1986,7 +2179,7 @@ async function runTreelessLedgerMove(params: {
 		).stdout.trim();
 		if (preparedTree === baseTree) {
 			await gitSoftAsync(['update-ref', '-d', prepared.ref], cwd, env);
-			return true;
+			return {kind: 'landed'};
 		}
 
 		// Publish THROUGH the shared seam (the same `:main` push + force-with-lease +
@@ -2009,14 +2202,20 @@ async function runTreelessLedgerMove(params: {
 			// Advance the LOCAL remote-tracking `<arbiter>/main` so it INCLUDES the
 			// move (the push only moved the arbiter's main). Best-effort.
 			await refreshMain();
-			return true;
+			return {kind: 'landed'};
+		}
+		if (result.kind === 'refused') {
+			// main did NOT move: the remote declined the write. A retry would be
+			// refused identically, and calling it a race misleads the operator. The
+			// caller reports it (once), so it is not echoed here.
+			return {kind: 'refused', message: result.message};
 		}
 		// rejected: main moved under us — refetch + REPLAN against the new base.
 		note(
 			`main advanced under us — ${onContended} refetch and retry (${i + 1}/${TREELESS_CONTENTION_ATTEMPTS})...`,
 		);
 	}
-	return false;
+	return {kind: 'contended'};
 }
 
 /** True iff `path` exists in the given commit's tree (a soft cat-file probe). */
@@ -3001,7 +3200,7 @@ export async function reconcileTerminalQuestionResidue(params: {
 	// OPPORTUNISTIC HYGIENE on unrelated items. A fault here (a stale scratch ref,
 	// a protected `main`, a permission refusal) must degrade to "left it alone",
 	// never fail the caller's actual work.
-	let landed = false;
+	let landed: TreelessMoveOutcome = {kind: 'contended'};
 	try {
 		landed = await runTreelessLedgerMove({
 			cwd,
@@ -3040,12 +3239,14 @@ export async function reconcileTerminalQuestionResidue(params: {
 		});
 		return result;
 	}
-	if (!landed) {
+	if (landed.kind !== 'landed') {
 		result.errors.push({
 			item: '(publish)',
 			message:
-				'the stranded-question drain did not land on the arbiter’s main ' +
-				'(contention exhausted, or nothing to do); state left untouched.',
+				landed.kind === 'refused'
+					? `the stranded-question drain was not published: ${landed.message}\nState left untouched.`
+					: 'the stranded-question drain did not land on the arbiter’s main ' +
+						'(contention exhausted, or nothing to do); state left untouched.',
 		});
 		return result;
 	}
@@ -3359,13 +3560,17 @@ export async function surfaceStuckToNeedsAttention(
 		},
 	});
 
-	if (!surfaced) {
+	if (surfaced.kind !== 'landed') {
 		return {
 			surfaced: false,
 			released: false,
 			reasonNotSurfaced:
-				`surface for '${item}' did not land on ${arbiter}/main ` +
-				'(item missing on main, or contention exhausted after retries).',
+				surfaced.kind === 'refused'
+					? `surface for '${item}' did not land on ${arbiter}/main: ${surfaced.message}`
+					: `surface for '${item}' did not land on ${arbiter}/main ` +
+						(surfaced.kind === 'missing'
+							? '(item missing on main).'
+							: '(contention exhausted after retries).'),
 		};
 	}
 

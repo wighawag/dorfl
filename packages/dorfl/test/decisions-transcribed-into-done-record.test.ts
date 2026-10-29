@@ -202,4 +202,110 @@ describe("the runner transcribes the agent's `## Decisions` block into the done 
 		expect(record).toContain('already recorded earlier');
 		expect(record).not.toContain('a NEW decision that must not be appended');
 	});
+
+	it('an ANNOTATED instruction heading (`## Decisions (to record while building)`) does not suppress a first-run transcription', async () => {
+		const repo = await claimAndBranch('eta');
+		const readyPath = join(repo, 'work/tasks/ready/eta.md');
+		writeFileSync(
+			readyPath,
+			`${readFileSync(readyPath, 'utf8')}\n## Decisions (to record while building)\n\n- say which flag name you kept\n`,
+		);
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'eta',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: reportWithDecisions('- kept `--strict` as the flag name'),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/eta.md');
+		expect(record).toContain('say which flag name you kept');
+		expect(record).toMatch(/^## Decisions\s*$/m);
+		expect(record).toContain('kept `--strict` as the flag name');
+	});
+
+	it('on a CONTINUED run (kept branch already done-moved), APPENDS the new run decisions under a continued-run heading and keeps the first run', async () => {
+		const repo = await claimAndBranch('epsilon');
+		// The kept branch from the FIRST run: its done-move commit already carries the
+		// first run's transcribed `## Decisions` block (a requeue keep+continue).
+		const readyRel = 'work/tasks/ready/epsilon.md';
+		const doneRel = 'work/tasks/done/epsilon.md';
+		run('mkdir', ['-p', join(repo, 'work/tasks/done')], repo);
+		gitIn(['mv', readyRel, doneRel], repo);
+		writeFileSync(
+			join(repo, doneRel),
+			`${readFileSync(join(repo, doneRel), 'utf8')}\n## Decisions\n\n- first run: kept the old flag name\n`,
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(epsilon): first run'], repo);
+		// The CONTINUED run's agent: new uncommitted work outside its first scope.
+		writeFileSync(join(repo, 'outside-scope.txt'), 'second run work\n');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'epsilon',
+			source: 'done',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: reportWithDecisions(
+				'- second run: also touched outside-scope.txt to fix the build',
+			),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, doneRel);
+		// The first run's decisions are KEPT.
+		expect(record).toContain('first run: kept the old flag name');
+		// The second run's decisions are RECORDED, under a heading marking a later run.
+		expect(record).toMatch(
+			/^## Decisions \(continued run, \d{4}-\d{2}-\d{2}\)\s*$/m,
+		);
+		expect(record).toContain(
+			'second run: also touched outside-scope.txt to fix the build',
+		);
+		// Ordered: first run's block, then the continued run's block.
+		expect(record.indexOf('first run:')).toBeLessThan(
+			record.indexOf('second run:'),
+		);
+	});
+
+	it('on a CONTINUED run, does not re-append a decisions block the record already carries verbatim', async () => {
+		const repo = await claimAndBranch('zeta');
+		const readyRel = 'work/tasks/ready/zeta.md';
+		const doneRel = 'work/tasks/done/zeta.md';
+		run('mkdir', ['-p', join(repo, 'work/tasks/done')], repo);
+		gitIn(['mv', readyRel, doneRel], repo);
+		writeFileSync(
+			join(repo, doneRel),
+			`${readFileSync(join(repo, doneRel), 'utf8')}\n## Decisions\n\n- the same decision\n`,
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(zeta): first run'], repo);
+		writeFileSync(join(repo, 'more.txt'), 'more\n');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'zeta',
+			source: 'done',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: reportWithDecisions('- the same decision'),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, doneRel);
+		expect(record.match(/^##\s+Decisions\b/gm)?.length).toBe(1);
+	});
 });

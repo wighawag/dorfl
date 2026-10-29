@@ -291,8 +291,13 @@ export interface ApplyTransitionResult {
 	 * `rejected` — the CAS lease failed (the ledger moved under us); the caller
 	 * decides whether to refetch+retry or give up. The seam never throws for this
 	 * expected contended case.
+	 * `refused`: the push failed but the arbiter's `main` did NOT move (it is still
+	 * `expectedBase`), so this is NOT a lost race: the remote refused the write (a
+	 * protected branch, a hook, missing permission). Retrying cannot help; the
+	 * caller must report it as what it is. `message` carries the remote's own error
+	 * text.
 	 */
-	kind: 'published' | 'rejected';
+	kind: 'published' | 'rejected' | 'refused';
 	/** Human-readable summary of the terminal condition. */
 	message: string;
 	/**
@@ -493,6 +498,84 @@ async function stampNonce(params: {
 }
 
 /**
+ * The remote's error text from a failed `git push`, condensed for a note: the
+ * non-empty stderr lines minus git's `To <url>` header, capped so a chatty hook
+ * cannot flood the output.
+ */
+export function pushRefusalDetail(stderr: string): string {
+	const text = stderr
+		.split('\n')
+		.map((line) => line.trimEnd())
+		.filter((line) => line.trim() !== '' && !/^To\s/.test(line))
+		.join('\n')
+		.trim();
+	const cap = 2000;
+	return text.length > cap ? `${text.slice(0, cap)}...` : text;
+}
+
+/**
+ * True iff a failed push's stderr names a git-level RACE (the ref moved under us):
+ * a stale lease, a non-fast-forward, or a ref the remote could not lock because a
+ * concurrent update held it. Anything else (a `[remote rejected] ... declined`
+ * from a hook or branch protection, a permission error) is a refusal.
+ */
+function stderrLooksLikeRace(stderr: string): boolean {
+	return /stale info|non-fast-forward|fetch first|cannot lock ref|failed to update ref|incorrect old value/i.test(
+		stderr,
+	);
+}
+
+/**
+ * Classify a FAILED `main` push as a lost race (`rejected`, worth a refetch and
+ * retry) or a REFUSAL (`refused`, never worth retrying). The authoritative test is
+ * the arbiter itself: if its `main` is still `expectedBase`, nothing moved, so the
+ * lease cannot have been what failed and the remote refused the write (a protected
+ * branch is the common case). Only when the arbiter cannot be read do we fall back
+ * to the push's stderr shape.
+ */
+async function classifyFailedPush(params: {
+	arbiter: string;
+	expectedBase: string;
+	stderr: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<ApplyTransitionResult> {
+	const {arbiter, expectedBase, stderr, cwd, env} = params;
+	const resolved = await resolveArbiterBranch({
+		cwd,
+		arbiter,
+		branch: 'main',
+		env,
+	});
+	const moved = resolved.trustworthy
+		? resolved.sha !== expectedBase
+		: stderrLooksLikeRace(stderr);
+	if (moved) {
+		return {kind: 'rejected', message: 'push rejected / lease failed'};
+	}
+	const detail = pushRefusalDetail(stderr) || '(the remote gave no error text)';
+	if (!resolved.trustworthy) {
+		// We could NOT check whether main moved, so do not claim it did not. Still
+		// terminal (the stderr is not race-shaped, so a retry is not expected to
+		// help), but say honestly what we know.
+		return {
+			kind: 'refused',
+			message:
+				`the push to ${arbiter}/main failed, and ${arbiter} could not be re-read ` +
+				`to tell a refusal from a race (${resolved.unreachableDetail ?? 'arbiter unreachable'}); ` +
+				`the push error does not look like a race, so it is not retried. Remote said:\n${detail}`,
+		};
+	}
+	return {
+		kind: 'refused',
+		message:
+			`the push to ${arbiter}/main was REFUSED by the remote (main did not ` +
+			`move, so this is not a lost race; a protected branch refuses direct ` +
+			`pushes). Remote said:\n${detail}`,
+	};
+}
+
+/**
  * The ONLY ledger-write strategy: current behaviour. It CAS-publishes the
  * prepared transition commit to the arbiter's `main` — the `main` push and the
  * `--force-with-lease=main:<base>` lease live HERE, not in the public input — and
@@ -610,8 +693,15 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			emit(
 				`push reported up-to-date / no change of our making — ${arbiter}/main is not our commit — treating as rejected.`,
 			);
+			return {kind: 'rejected', message: 'push rejected / lease failed'};
 		}
-		return {kind: 'rejected', message: 'push rejected / lease failed'};
+		return classifyFailedPush({
+			arbiter,
+			expectedBase,
+			stderr: push.stderr,
+			cwd,
+			env,
+		});
 	},
 
 	/**

@@ -1138,7 +1138,13 @@ export async function performIntegration(
 	//     not a second one). Skipped for a TASKING transition (`lifecycle`), which
 	//     lands a spec: no done record, and no building agent.
 	if (!lifecycle) {
-		transcribeDecisionsIntoDoneRecord({cwd, slug, output: input.body, note});
+		transcribeDecisionsIntoDoneRecord({
+			cwd,
+			slug,
+			output: input.body,
+			continued: source === 'done',
+			note,
+		});
 	}
 
 	// 2c. CLEAR THE TASK'S OWN STALE QUESTION STATE in the SAME done-move commit
@@ -2853,9 +2859,17 @@ const CAPTURE_NOTE_DIRS = [
  *     ONE atomic completion commit, never a second, dangling one).
  *   - **Verbatim.** The agent's prose is appended unaltered under a `## Decisions`
  *     heading; we add structure, never interpretation.
- *   - **Idempotent.** A record that ALREADY carries a `## Decisions` section is left
- *     untouched, so a `requeue` continue, or a re-run over an already-done-moved
- *     branch (`source: 'done'`), cannot append the same block twice.
+ *   - **Idempotent, but never lossy on a continue.** On a FIRST run, a record that
+ *     ALREADY carries an exact `## Decisions` heading is left untouched (an
+ *     annotated instruction heading like `## Decisions (to record while building)`
+ *     does not count), since the tasker may have written resolved decisions
+ *     into the body. On a CONTINUED run
+ *     (`continued`: the kept branch already done-moved the record, `source:
+ *     'done'`), the record carries the PRIOR run's block, and this run's decisions
+ *     are a different run's rationale: they are APPENDED under
+ *     `## Decisions (continued run, YYYY-MM-DD)`, keeping the earlier block. Only a
+ *     block whose text the record already contains verbatim is skipped, so a
+ *     re-run over the same output never duplicates it.
  *   - **Best-effort.** No block, no record on disk, or an unreadable/unwritable file
  *     is a silent no-op: a rationale note must NEVER fail an otherwise-green
  *     completion (the same stance as {@link reportScoopedNotes}).
@@ -2864,9 +2878,11 @@ function transcribeDecisionsIntoDoneRecord(params: {
 	cwd: string;
 	slug: string;
 	output: string | undefined;
+	/** True on a continue-build over a kept, already-done-moved branch. */
+	continued: boolean;
 	note: (message: string) => void;
 }): void {
-	const {cwd, slug, output, note} = params;
+	const {cwd, slug, output, continued, note} = params;
 	const decisions = extractDecisionsBlock(output);
 	if (decisions === undefined) {
 		return; // the common case: the agent recorded no in-scope decision.
@@ -2877,13 +2893,25 @@ function transcribeDecisionsIntoDoneRecord(params: {
 	}
 	try {
 		const body = readFileSync(path, 'utf8');
-		if (/^##\s+Decisions\s*$/m.test(body)) {
-			return; // already transcribed (a continue/re-run): never duplicate.
+		// First run: skip only on an EXACT `## Decisions` heading (a prior
+		// transcription, or resolved decisions the tasker wrote). An ANNOTATED
+		// heading such as `## Decisions (to record while building)` is a tasker's
+		// instruction, not a record, and must not suppress the builder's block.
+		// Continued run: append unless this exact text is already recorded.
+		const alreadyRecorded = continued
+			? body.includes(decisions)
+			: /^##\s+Decisions\s*$/m.test(body);
+		if (alreadyRecorded) {
+			return;
 		}
+		const heading = continued
+			? `## Decisions (continued run, ${new Date().toISOString().slice(0, 10)})`
+			: '## Decisions';
 		const separator = body.endsWith('\n') ? '\n' : '\n\n';
-		writeFileSync(path, `${body}${separator}## Decisions\n\n${decisions}\n`);
+		writeFileSync(path, `${body}${separator}${heading}\n\n${decisions}\n`);
 		note(
-			`Recorded the agent's "## Decisions" block in ${workItemRel('done', `${slug}.md`)}.`,
+			`Recorded the agent's "## Decisions" block in ${workItemRel('done', `${slug}.md`)}` +
+				(continued ? ' (as a continued run, after the earlier run).' : '.'),
 		);
 	} catch {
 		// Best-effort: never fail a green completion over a rationale note.
