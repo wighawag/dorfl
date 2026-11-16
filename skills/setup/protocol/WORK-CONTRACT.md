@@ -201,6 +201,7 @@ needsAnswers: true # gate axis 2 (DISCOVERED): open questions block autonomous w
 blockedBy: [] # list of slugs that must reach tasks/done/ first; [] = startable now
 covers: [] # optional: user-story numbers (within `spec`) this task covers
 promptGuidance.testFirst: true # optional per-item NUDGE override: pin the test-first nudge ON or OFF for THIS task, regardless of the repo's resolved `promptGuidance.testFirst` policy. true | false | omitted (= inherit spec, else repo policy). NEVER an acceptance criterion — `verify` still decides pass/fail. See "`promptGuidance.*` per-item override" below.
+massDeletionGuard: false # optional, task-only: skip the runner's mass-deletion check for THIS task (a planned refactor that splits, moves or retires large files; otherwise the build is asked once to restore or confirm any pre-existing file that lost a large share of its lines, and what remains is flagged in the PR body). true | false | omitted (= inherit the repo's `massDeletionGuard`, on by default). Advisory either way: it never fails a build.
 ---
 ```
 

@@ -29,6 +29,13 @@ import {
 import {acquireWorktreeWriterLock} from './worktree-writer-lock.js';
 import {PiHarness} from './pi-harness.js';
 import {launchWithOptionalWatch} from './agent-launch.js';
+import {
+	massDeletionGuardForTask,
+	runWithMassDeletionGuard,
+	withMassDeletionNote,
+	type GuardableAgentResult,
+	type MassDeletionGuardConfig,
+} from './mass-deletion-guard.js';
 import {ledgerRead, type LedgerReadStrategy} from './ledger-read.js';
 import {
 	ledgerWrite,
@@ -674,6 +681,12 @@ export interface DoOptions {
 	 * deadline checkpoint surfaces to a human instead of auto-continuing.
 	 */
 	maxAutoCheckpoints?: number;
+	/**
+	 * The mass-deletion guard knobs (config `massDeletionGuard*`, see
+	 * `mass-deletion-guard.ts`). Absent ⇒ the built-in default (ON, >150 lines or
+	 * >40% of a pre-existing file).
+	 */
+	massDeletionGuard?: MassDeletionGuardConfig;
 }
 
 /**
@@ -718,6 +731,10 @@ interface DoAgentLaunchOptions {
 	 * value; the default is 5).
 	 */
 	maxAutoCheckpoints?: number;
+	/** As {@link DoOptions.massDeletionGuard}. */
+	massDeletionGuard?: MassDeletionGuardConfig;
+	/** Progress sink (the guard reports what it flagged). */
+	note?: (message: string) => void;
 	env?: NodeJS.ProcessEnv;
 	/**
 	 * The optional runner IDENTITY (a bot). Threaded from the host-only
@@ -1328,6 +1345,8 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 	//    — in-place that IS `cwd`, but reading the handle keeps the shared shape the
 	//    future advance-loop tick wraps (no in-place-only special case).
 	let prompt: string;
+	// The task's own guard override, resolved with the prompt (repo policy if none).
+	let itemMassDeletionGuard = options.massDeletionGuard;
 	try {
 		// CONTINUE-aware resolution: on a continue (the arbiter holds a kept
 		// `work/<slug>` whose tip is STRANDED off main) the task may already be in
@@ -1360,6 +1379,12 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
+		// Per-item override of the mass-deletion guard: a planned refactor's task
+		// may carry `massDeletionGuard: false`.
+		itemMassDeletionGuard = massDeletionGuardForTask(
+			options.massDeletionGuard,
+			readFileSync(task.path, 'utf8'),
+		);
 		// Per-item override layer: a task or spec may pin `promptGuidance.testFirst`
 		// in its frontmatter, superseding the resolved repo policy for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
@@ -1395,9 +1420,16 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		timedOut?: boolean;
 		reap?: AgentTreeReap;
 		cutOffTurn?: CutOffTurn;
+		massDeletionNote?: string;
 	};
 	try {
-		agent = await runDoAgent(options, tree.dir, prompt, slug);
+		agent = await runDoAgent(
+			{...options, note, massDeletionGuard: itemMassDeletionGuard},
+			tree.dir,
+			prompt,
+			slug,
+			tree.arbiterRemote,
+		);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return await saveAgentFailure({
@@ -1552,7 +1584,9 @@ export async function performDo(options: DoOptions): Promise<DoResult> {
 		// below) and threaded as the PR description. `complete` scaffolds a
 		// deterministic header (task pointer) above it. Undefined ⇒ no body ⇒ the
 		// provider degrades to `gh ... --fill` (no regression).
-		body: agent.output,
+		// The mass-deletion guard's residue (a pre-existing file still gutted
+		// after its follow-up turn) rides at the end so the reviewer sees it.
+		body: withMassDeletionNote(agent.output, agent.massDeletionNote),
 		// Gate 2 (PR/code review) rides INSIDE `complete`: run the `review` SKILL as a
 		// fresh-context agent after the green `verify` (the non-skippable floor) and
 		// before the done-move. A `block` re-uses the same needs-attention surfacing
@@ -2082,6 +2116,7 @@ async function runDoAgent(
 	cwd: string,
 	prompt: string,
 	slug: string,
+	arbiter: string,
 ): Promise<{
 	ok: boolean;
 	detail?: string;
@@ -2099,9 +2134,35 @@ async function runDoAgent(
 	record?: HarnessRecord;
 	/** The harness's cut-off-final-turn signal (`LaunchResult.cutOffTurn`). */
 	cutOffTurn?: CutOffTurn;
+	/**
+	 * The mass-deletion guard's PR-body note: set when a pre-existing file is
+	 * still gutted after the guard's one follow-up turn (see
+	 * `mass-deletion-guard.ts`). The caller appends it to the PR body.
+	 */
+	massDeletionNote?: string;
 }> {
+	// The MASS-DELETION GUARD wraps whichever launch runs: after a clean build it
+	// diffs the work, and when a pre-existing file lost a large share of its
+	// lines it gives the agent ONE follow-up turn in the same session (restore or
+	// confirm), then reports what is still flagged for the PR body.
+	const guarded = <R extends GuardableAgentResult>(
+		launch: (prompt: string, session?: string) => R | Promise<R>,
+	) =>
+		runWithMassDeletionGuard({
+			launch,
+			prompt,
+			slug,
+			cwd,
+			arbiter,
+			env: options.env,
+			guard: options.massDeletionGuard,
+			note: options.note,
+		});
 	if (options.dorfl) {
-		return options.dorfl({cwd, prompt, slug, env: options.env});
+		const dorfl = options.dorfl;
+		return await guarded((p) =>
+			dorfl({cwd, prompt: p, slug, env: options.env}),
+		);
 	}
 	const harness = options.harness ?? new NullHarness();
 
@@ -2117,14 +2178,24 @@ async function runDoAgent(
 	if (!writer.acquired) {
 		return {ok: false, detail: writer.reason};
 	}
+	// One deadline for the build AND the guard's follow-up turn: the follow-up
+	// spends what is left of the budget, never a fresh one.
+	const deadlineMs =
+		options.agentDeadlineMinutes !== undefined
+			? Date.now() + options.agentDeadlineMinutes * 60_000
+			: undefined;
 	try {
-		return await launchAgentUnderWriterLock({
-			options,
-			cwd,
-			prompt,
-			slug,
-			harness,
-		});
+		return await guarded((p, session) =>
+			launchAgentUnderWriterLock({
+				options,
+				cwd,
+				prompt: p,
+				slug,
+				harness,
+				deadlineMs,
+				session,
+			}),
+		);
 	} finally {
 		writer.release();
 	}
@@ -2142,6 +2213,17 @@ async function launchAgentUnderWriterLock(params: {
 	prompt: string;
 	slug: string;
 	harness: Harness;
+	/**
+	 * The dorfl-internal deadline as a wall-clock epoch-ms (spec
+	 * `graceful-pre-timeout-wip-checkpoint`), computed ONCE by {@link runDoAgent}
+	 * so the harness (`launchAsync`) can race the child against it. Absent ⇒ no
+	 * deadline; a run that finishes before it is byte-for-byte unchanged (the
+	 * harness clears the timer on normal exit). Forcing the async path when a
+	 * deadline is set is {@link launchWithOptionalWatch}'s job.
+	 */
+	deadlineMs?: number;
+	/** Resume this session file (the mass-deletion guard's follow-up turn). */
+	session?: string;
 }): Promise<{
 	ok: boolean;
 	detail?: string;
@@ -2151,17 +2233,7 @@ async function launchAgentUnderWriterLock(params: {
 	record?: HarnessRecord;
 	cutOffTurn?: CutOffTurn;
 }> {
-	const {options, cwd, prompt, slug, harness} = params;
-	// Convert the dorfl-internal deadline (minutes) into a wall-clock epoch-ms so
-	// the harness (`launchAsync`) can race the child against it (spec
-	// `graceful-pre-timeout-wip-checkpoint`). Absent ⇒ no deadline; a run that
-	// finishes before it is byte-for-byte unchanged (the harness clears the
-	// timer on normal exit). Forcing the async path when a deadline is set is
-	// {@link launchWithOptionalWatch}'s job.
-	const deadlineMs =
-		options.agentDeadlineMinutes !== undefined
-			? Date.now() + options.agentDeadlineMinutes * 60_000
-			: undefined;
+	const {options, cwd, prompt, slug, harness, deadlineMs, session} = params;
 	const launched = await launchWithOptionalWatch({
 		harness,
 		dir: cwd,
@@ -2172,6 +2244,7 @@ async function launchAgentUnderWriterLock(params: {
 		// In-place `do` has NO work-id, so the build session id is the slug.
 		sessionId: slug,
 		sessionsDir: options.sessionsDir,
+		session,
 		watch: options.watch,
 		deadlineMs,
 		watchSink: options.watchSink,
@@ -3012,6 +3085,8 @@ async function runRemotePipeline(
 	// 6. Build the prompt + run the agent autonomously in the worktree (the SAME
 	//    assembly in-place `do` uses). The agent only edits code.
 	let prompt: string;
+	// The task's own guard override, resolved with the prompt (repo policy if none).
+	let itemMassDeletionGuard = options.massDeletionGuard;
 	try {
 		// CONTINUE-aware resolution (job-worktree path): admit `work/done/` ONLY
 		// behind the tip-vs-arbiter stranded gate (story 5), using the worktree's
@@ -3040,6 +3115,11 @@ async function runRemotePipeline(
 			content: readFileSync(task.path, 'utf8'),
 			env,
 		});
+		// Per-item override of the mass-deletion guard (mirrors in-place `do`).
+		itemMassDeletionGuard = massDeletionGuardForTask(
+			options.massDeletionGuard,
+			readFileSync(task.path, 'utf8'),
+		);
 		// Per-item override layer (mirrors in-place `do`): the task/spec frontmatter
 		// may override the resolved repo `promptGuidance.testFirst` for THIS item.
 		const itemGuidance = resolvePromptGuidanceForItem({
@@ -3076,9 +3156,16 @@ async function runRemotePipeline(
 		reap?: AgentTreeReap;
 		record?: HarnessRecord;
 		cutOffTurn?: CutOffTurn;
+		massDeletionNote?: string;
 	};
 	try {
-		agent = await runDoAgent(options, cwd, prompt, slug);
+		agent = await runDoAgent(
+			{...options, note, massDeletionGuard: itemMassDeletionGuard},
+			cwd,
+			prompt,
+			slug,
+			arbiterRemote,
+		);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return await saveRemoteAgentFailure({
@@ -3206,7 +3293,9 @@ async function runRemotePipeline(
 		mergeRetries: options.mergeRetries,
 		noPR: options.noPR,
 		providerInstance: options.providerInstance,
-		body: agent.output,
+		// The mass-deletion guard's residue (a pre-existing file still gutted
+		// after its follow-up turn) rides at the end so the reviewer sees it.
+		body: withMassDeletionNote(agent.output, agent.massDeletionNote),
 		review: options.review,
 		reviewModel: options.reviewModel,
 		reviewMaxRounds: options.reviewMaxRounds,
@@ -3476,6 +3565,7 @@ export function jobWorktreeDoDriver(closure: {
 			color: options.color,
 			agentDeadlineMinutes: options.agentDeadlineMinutes,
 			maxAutoCheckpoints: options.maxAutoCheckpoints,
+			massDeletionGuard: options.massDeletionGuard,
 			read: options.read,
 			env: options.env,
 			note: options.note,

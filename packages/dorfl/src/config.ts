@@ -813,6 +813,23 @@ export interface Config {
 	 */
 	maxAutoCheckpoints: number;
 	/**
+	 * **The mass-deletion guard** (ADR
+	 * `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`). After a
+	 * build agent finishes cleanly and before the acceptance gate, dorfl diffs the
+	 * work against its merge-base with `<arbiter>/main`; any PRE-EXISTING tracked
+	 * text file that lost more than `massDeletionLines` lines net, or more than
+	 * `massDeletionRatio` of its lines (and at least 20), is fed back to the agent
+	 * ONCE in the same session (restore it, or confirm the task asked for it).
+	 * Whatever is still flagged after that turn is appended to the PR body. Advisory
+	 * only: it never fails a build. Default ON. Resolved per-repo (flag-less: env
+	 * `DORFL_MASS_DELETION_GUARD` > per-repo > global > default).
+	 */
+	massDeletionGuard: boolean;
+	/** Net lines a file may lose before the guard flags it (default 150). */
+	massDeletionLines: number;
+	/** Share of a file's lines it may lose before the guard flags it, in (0, 1] (default 0.4). */
+	massDeletionRatio: number;
+	/**
 	 * The optional runner **identity** (a bot): run the runner's git + provider
 	 * operations as a configured entity via process-scoped env overrides, without
 	 * mutating the user's global git/`gh` config (see `identity.ts`). HOST-ONLY
@@ -1016,7 +1033,35 @@ export const DEFAULT_CONFIG: Config = {
 	// past that the next checkpoint SURFACES to a human (spec
 	// `graceful-pre-timeout-wip-checkpoint` anti-loop guard).
 	maxAutoCheckpoints: 5,
+	// The mass-deletion guard is ON by default: a gutted doc passes every gate
+	// that does not test prose, so the cheap check runs unless a repo opts out.
+	massDeletionGuard: true,
+	massDeletionLines: 150,
+	massDeletionRatio: 0.4,
 };
+
+/**
+ * Fail-loud validation of the mass-deletion guard thresholds, called next to
+ * {@link validateDeadlineConfig} at both resolution final points.
+ */
+export function validateMassDeletionConfig(config: Config): void {
+	const lines = config.massDeletionLines;
+	if (!Number.isInteger(lines) || lines < 1) {
+		throw new Error(
+			`massDeletionLines must be a positive integer (got ${lines}). It is the ` +
+				'net number of lines a pre-existing file may lose before the ' +
+				'mass-deletion guard flags it.',
+		);
+	}
+	const ratio = config.massDeletionRatio;
+	if (typeof ratio !== 'number' || !(ratio > 0 && ratio <= 1)) {
+		throw new Error(
+			`massDeletionRatio must be a number in (0, 1] (got ${ratio}). It is the ` +
+				'share of its lines a pre-existing file may lose before the ' +
+				'mass-deletion guard flags it.',
+		);
+	}
+}
 
 /**
  * Fail-loud range validation for the deadline / backstop / ceiling triple
@@ -1204,6 +1249,7 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
 	}
 	const merged = mergeConfig(parsed);
 	validateDeadlineConfig(merged);
+	validateMassDeletionConfig(merged);
 	// Validate + normalise (trim; empty ⇒ unset; non-string ⇒ fail-loud) the
 	// repo-declared dorfl command from the global chain (ADR
 	// `dorfl-cmd-repo-settable-exception-to-host-only`).

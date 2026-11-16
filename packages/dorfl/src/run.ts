@@ -45,6 +45,12 @@ import {
 } from './failure-cause.js';
 import {performIntegration} from './integration-core.js';
 import {
+	massDeletionGuardForTask,
+	massDeletionGuardFromConfig,
+	runWithMassDeletionGuard,
+	withMassDeletionNote,
+} from './mass-deletion-guard.js';
+import {
 	shouldFailProposePrIntent,
 	PROPOSE_PR_INTENT_GH_UNAVAILABLE_MESSAGE,
 } from './do-config.js';
@@ -788,6 +794,8 @@ async function runOneItem(
 		// 3. Build the prompt — the SAME dual-use assembly `dorfl prompt`
 		//    emits: the canonical wrapper (+ source spec) + the task's ## Prompt.
 		let prompt: string;
+		// The task's own guard override, resolved with the prompt (repo policy if none).
+		let itemMassDeletionGuard = massDeletionGuardFromConfig(config);
 		try {
 			// CONTINUE-aware resolution: only on a continue (the job continued a kept
 			// arbiter `work/<slug>`) may the task already be in `work/done/`; admit
@@ -824,6 +832,12 @@ async function runOneItem(
 			// Thread the resolved per-repo nudge through the per-item override layer
 			// (a task or spec may pin `promptGuidance.testFirst` in its frontmatter,
 			// superseding the repo policy for THIS item) before the wrapper is built.
+			// Per-item override of the mass-deletion guard: a planned refactor's task
+			// may carry `massDeletionGuard: false`.
+			itemMassDeletionGuard = massDeletionGuardForTask(
+				itemMassDeletionGuard,
+				readFileSync(task.path, 'utf8'),
+			);
 			const itemGuidance = resolvePromptGuidanceForItem({
 				cwd: tree.dir,
 				repoResolved: resolvePromptGuidance(config),
@@ -847,22 +861,37 @@ async function runOneItem(
 		//    resolved per-repo `buildModel` (ADR §13, which inherits the general
 		//    `model` when unset) flows through the seam to the adapter; a
 		//    `{model}`-in-agentCmd misconfiguration surfaces as agent-failed.
+		//    The MASS-DELETION GUARD wraps the launch (the same one `do` runs): a
+		//    clean build that gutted a pre-existing file gets ONE follow-up turn in
+		//    the same session, and whatever is still flagged rides in the PR body.
 		let agent: {
 			ok: boolean;
 			detail?: string;
 			output?: string;
 			cutOffTurn?: CutOffTurn;
+			massDeletionNote?: string;
 		};
+		const agentTree = tree;
 		try {
-			agent = runAgent(
-				ctx,
-				tree,
+			agent = await runWithMassDeletionGuard({
+				launch: (p, session) =>
+					runAgent(
+						ctx,
+						agentTree,
+						p,
+						slug,
+						config.agentCmd,
+						config.buildModel,
+						config.sessionsDir,
+						session,
+					),
 				prompt,
 				slug,
-				config.agentCmd,
-				config.buildModel,
-				config.sessionsDir,
-			);
+				cwd: tree.dir,
+				arbiter: tree.arbiterRemote,
+				env: gitEnv,
+				guard: itemMassDeletionGuard,
+			});
 		} catch (err) {
 			return await saveAgentFailure(
 				base,
@@ -1037,7 +1066,8 @@ async function runOneItem(
 				// final summary as the PR body (the core scaffolds the task-pointer
 				// header). `title` is synthesised inside the core from the task's
 				// frontmatter; `body` is the agent output (undefined ⇒ `--fill`).
-				body: agent.output,
+				// Plus the mass-deletion guard's residue, when a file is still gutted.
+				body: withMassDeletionNote(agent.output, agent.massDeletionNote),
 				env: gitEnv,
 				// The review AGENT (Gate 2) launches AMBIENT — never the identity env
 				// (an agent must not act as the bot; only the runner's git ops do).
@@ -1149,11 +1179,14 @@ function runAgent(
 	agentCmd: string,
 	model: string | undefined,
 	sessionsDir: string | undefined,
+	/** Resume this session file (the mass-deletion guard's follow-up turn). */
+	resumeSession?: string,
 ): {
 	ok: boolean;
 	detail?: string;
 	output?: string;
 	cutOffTurn?: CutOffTurn;
+	record?: {session?: string};
 } {
 	if (ctx.dorfl) {
 		return ctx.dorfl({cwd: tree.dir, prompt, slug, env: ctx.env});
@@ -1163,11 +1196,13 @@ function runAgent(
 	// `sessionsDir` is unset. The work-id (arbiter URL + slug) is `run`'s natural
 	// unique-per-claim id. Threaded through the seam so the pi adapter passes
 	// `--session <path>` (never `--session-dir` into the worktree).
-	const session = generateSessionPath({
-		sessionsDir,
-		cwd: tree.dir,
-		id: encodeWorkId(tree.arbiterUrl, slug),
-	});
+	const session =
+		resumeSession ??
+		generateSessionPath({
+			sessionsDir,
+			cwd: tree.dir,
+			id: encodeWorkId(tree.arbiterUrl, slug),
+		});
 	const launched = ctx.harness.launch({
 		dir: tree.dir,
 		slug,
@@ -1189,6 +1224,8 @@ function runAgent(
 		output: launched.output,
 		// How the final model turn ended (the cut-off guard before the STOP route).
 		cutOffTurn: launched.cutOffTurn,
+		// The session file, so the mass-deletion guard's follow-up resumes it.
+		record: {session},
 	};
 }
 

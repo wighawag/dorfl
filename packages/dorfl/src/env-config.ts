@@ -195,6 +195,11 @@ const KEY_COERCIONS: {[K in keyof Config]?: Coercion} = {
 	agentDeadlineMinutes: 'number',
 	checkpointHeadroomMinutes: 'number',
 	maxAutoCheckpoints: 'number',
+	// The mass-deletion guard: `DORFL_MASS_DELETION_GUARD=false` turns it off for
+	// one machine/CI; the thresholds coerce as numbers (validated at load).
+	massDeletionGuard: 'boolean',
+	massDeletionLines: 'number',
+	massDeletionRatio: 'number',
 	// `promptGuidance` is a STRUCTURED (nested) namespace, so it has no scalar env
 	// var of its own — each MEMBER carries its own env var (the nested-key form
 	// `DORFL_PROMPT_GUIDANCE_<MEMBER>`), handled out-of-band in

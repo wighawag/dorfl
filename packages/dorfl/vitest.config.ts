@@ -108,6 +108,10 @@ const RACE_SENSITIVE = [
 	// --bare arbiter, writes main (the failure / empty-diff surfacing) AND launches
 	// a stubbed pi writing a fake session log; same reasoning as do-watch.test.ts.
 	'test/cut-off-turn-routes-agent-failed.test.ts',
+	// The mass-deletion guard end to end: `do` and `run` builds against a --bare
+	// arbiter that write main; same deterministic claim/main-CAS reasoning as
+	// do.test.ts.
+	'test/mass-deletion-guard-e2e.test.ts',
 	// `do --remote <r>` materialises a hub mirror + job worktree in a temp agents'
 	// area, runs the pipeline against the worktree, AND writes main (the autonomous
 	// needs-attention surfacing) against a --bare arbiter; keep it out of

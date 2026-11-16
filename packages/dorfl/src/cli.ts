@@ -112,6 +112,7 @@ import {harnessTriageGate} from './triage-gate.js';
 import {harnessApplyDecider} from './apply-decide.js';
 import {harnessTaskReviewGate} from './tasker-review-loop.js';
 import {runVerify} from './verify.js';
+import {massDeletionGuardFromConfig} from './mass-deletion-guard.js';
 import {renderPrompt} from './prompt.js';
 import {resolvePromptGuidance, applyModelFallbacks} from './config.js';
 import {
@@ -3061,6 +3062,9 @@ export function buildProgram(): Command {
 					// remote-repo config (its committed `dorfl.json` on <arbiter>/main).
 					agentDeadlineMinutes: remoteConfig.agentDeadlineMinutes,
 					maxAutoCheckpoints: remoteConfig.maxAutoCheckpoints,
+					// The mass-deletion guard thresholds (ADR
+					// `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`).
+					massDeletionGuard: massDeletionGuardFromConfig(remoteConfig),
 					color: shouldUseColor(process.stdout),
 					note: (message) => console.error(`>> ${message}`),
 					noteBlock: (message) => console.error(message),
@@ -3249,6 +3253,9 @@ export function buildProgram(): Command {
 				// per-repo config so an edit to dorfl.json reflects on the NEXT tick.
 				agentDeadlineMinutes: config.agentDeadlineMinutes,
 				maxAutoCheckpoints: config.maxAutoCheckpoints,
+				// The mass-deletion guard thresholds (ADR
+				// `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`).
+				massDeletionGuard: massDeletionGuardFromConfig(config),
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),
@@ -3710,6 +3717,9 @@ export function buildProgram(): Command {
 				// `graceful-pre-timeout-wip-checkpoint`). Threaded from resolved config.
 				agentDeadlineMinutes: config.agentDeadlineMinutes,
 				maxAutoCheckpoints: config.maxAutoCheckpoints,
+				// The mass-deletion guard thresholds (ADR
+				// `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`).
+				massDeletionGuard: massDeletionGuardFromConfig(config),
 				color: shouldUseColor(process.stdout),
 				note: (message) => console.error(`>> ${message}`),
 				noteBlock: (message) => console.error(message),

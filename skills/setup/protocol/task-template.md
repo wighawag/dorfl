@@ -5,6 +5,7 @@ spec: <source-spec-slug> # slug of the work/specs/ready/<slug>.md this task deri
 # humanOnly: true     # gate axis 1 (DECIDED, NARROW): NEVER-for-agents BY NATURE (secrets/release/security). Survives even in the pool work/tasks/ready/. OMIT otherwise — "review this before the agent builds" is the POSITION's job (the task is BIRTHED in work/tasks/backlog/), NOT humanOnly's.
 # needsAnswers: true  # gate axis 2 (DISCOVERED): open questions block autonomous work. OMIT otherwise. List them in the body.
 # promptGuidance.testFirst: true  # optional per-item NUDGE override: pin the test-first nudge ON (true) or OFF (false) for THIS task, regardless of the repo's resolved policy. OMIT to inherit (spec, else repo). NEVER an acceptance criterion — `verify` still decides pass/fail.
+# massDeletionGuard: false  # optional: skip the runner's mass-deletion check for THIS task (a planned refactor that splits, moves or retires large files). true forces it on. OMIT to inherit the repo policy (`massDeletionGuard` in dorfl.json, on by default).
 blockedBy: [] # slugs that must reach work/tasks/done/ first; [] = startable now
 covers: [] # optional: user-story numbers within `spec` this task covers
 ---

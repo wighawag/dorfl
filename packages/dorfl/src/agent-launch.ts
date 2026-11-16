@@ -64,6 +64,12 @@ export interface LaunchWithOptionalWatchInput {
 	 * pi's default per-cwd folder for {@link dir} (see {@link generateSessionPath}).
 	 */
 	sessionsDir?: string;
+	/**
+	 * An EXISTING session file to resume instead of generating a fresh one (the
+	 * mass-deletion guard's follow-up turn continues the build conversation).
+	 * pi resumes a `--session <path>` that already exists.
+	 */
+	session?: string;
 	/** Tail the session `.jsonl` live (pi harness only). */
 	watch?: boolean;
 	/**
@@ -103,11 +109,13 @@ export async function launchWithOptionalWatch(
 	// pi's per-cwd default folder. The non-pi null adapter ignores `session`, but
 	// generating it unconditionally keeps ONE path for BOTH the watch and
 	// non-watch branches.
-	const session = generateSessionPath({
-		sessionsDir: input.sessionsDir,
-		cwd: input.dir,
-		id: input.sessionId,
-	});
+	const session =
+		input.session ??
+		generateSessionPath({
+			sessionsDir: input.sessionsDir,
+			cwd: input.dir,
+			id: input.sessionId,
+		});
 
 	const wantsAsync =
 		(input.watch === true || input.deadlineMs !== undefined) &&

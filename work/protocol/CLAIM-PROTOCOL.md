@@ -115,6 +115,10 @@ Implement it to satisfy every Acceptance criterion. TDD where the task asks for
 it; match the repo's house style.
 <!-- /if -->
 
+Edit large existing files with targeted edits; never rewrite them whole. (The
+runner checks your diff before the gate: a pre-existing file that loses a large
+share of its lines is handed back to you once to restore or confirm.)
+
 If you NOTICE a problem OUTSIDE this task's scope (a flaky test, a latent bug, a
 suspicious behaviour), do NOT fix it and do NOT expand your scope. Instead drop a
 short, dated note in work/notes/observations/<short-slug>.md (one or two sentences

@@ -4,6 +4,7 @@ import {
 	mergeConfig,
 	applyModelFallbacks,
 	validateDeadlineConfig,
+	validateMassDeletionConfig,
 	validateDorflCmdConfig,
 	warnDeprecatedConfigKeys,
 	type Config,
@@ -281,6 +282,14 @@ export const REPO_ALLOWED_KEYS = [
 	'agentDeadlineMinutes',
 	'checkpointHeadroomMinutes',
 	'maxAutoCheckpoints',
+	// The mass-deletion guard (ADR
+	// `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`): whether a
+	// build that shrinks a pre-existing file past the threshold is sent back to the
+	// agent once and flagged in the PR body. Repo policy (a docs-heavy repo may
+	// tune it), resolved per-repo through the same chain.
+	'massDeletionGuard',
+	'massDeletionLines',
+	'massDeletionRatio',
 	// `promptGuidance` (the NUDGE namespace — prompt-text knobs that strengthen
 	// the worker's in-band wrapper line, e.g. `testFirst`) is a genuine repo
 	// property: "is this repo nudged toward test-first?" travels with the repo
@@ -654,6 +663,7 @@ export function resolveRepoConfigFromLoaded(
 	// (flag / env / per-repo / global) throws with a clear message naming the
 	// field + range — NEVER silently clamped.
 	validateDeadlineConfig(config);
+	validateMassDeletionConfig(config);
 	// Validate + normalise the repo-declared dorfl command (trim; empty ⇒ unset;
 	// non-string ⇒ fail-loud) after layering, so a malformed value from ANY layer
 	// (flag / env / per-repo / global) surfaces the same clear error (ADR

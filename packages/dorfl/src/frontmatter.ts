@@ -136,6 +136,16 @@ export interface Frontmatter {
 	 * silent coerce to true/false.
 	 */
 	promptGuidance: {testFirst: boolean | undefined};
+	/**
+	 * Task-only per-item override for the mass-deletion guard (config
+	 * `massDeletionGuard`; ADR
+	 * `mass-deletion-guard-asks-the-agent-once-then-tells-the-reviewer`). A task
+	 * planned as a large refactor (splitting or retiring files) sets
+	 * `massDeletionGuard: false` so its build is not sent back to restore what it
+	 * deliberately moved; `true` turns the guard on for this task on a repo that
+	 * disabled it. `undefined` when omitted or malformed (⇒ the repo policy).
+	 */
+	massDeletionGuard: boolean | undefined;
 }
 
 /**
@@ -537,6 +547,7 @@ export function parseFrontmatter(content: string): Frontmatter {
 		blockedBy: [],
 		taskedAfter: [],
 		promptGuidance: {testFirst: undefined},
+		massDeletionGuard: undefined,
 	};
 	if (block === undefined) {
 		return result;
@@ -593,6 +604,9 @@ export function parseFrontmatter(content: string): Frontmatter {
 			// malformed value reads as `undefined` (⇒ inherit the next layer), the
 			// same silent-on-malformed shape `humanOnly` uses — never a silent coerce.
 			result.promptGuidance.testFirst =
+				rawValue === '' ? undefined : toBoolean(rawValue);
+		} else if (key === 'massDeletionGuard') {
+			result.massDeletionGuard =
 				rawValue === '' ? undefined : toBoolean(rawValue);
 		} else if (key === 'humanOnly') {
 			result.humanOnly = rawValue === '' ? undefined : toBoolean(rawValue);
