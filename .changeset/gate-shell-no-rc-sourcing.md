@@ -1,5 +1,0 @@
----
-'dorfl': patch
----
-
-The acceptance gate (`verify`), `prepare`, the null/shell agent adapter and the bootstrap self-forward no longer lose the caller's PATH. Each runs its command with `bash -c`, and Node gives a child with piped stdio a socket as stdin. Bash treats a non-interactive shell with a socket stdin and no `SHLVL` as started by rshd/sshd, and sources the system bashrc and `~/.bashrc`. On NixOS that re-sources `/etc/profile`, which resets PATH. So when dorfl was started without `SHLVL` (from a systemd unit or a supervisor), a gate that passed in the caller's shell failed inside dorfl, for example with `spawnSync openssl ENOENT`. Every dorfl shell now runs as `bash --norc -c`, which turns that path off whatever the distro, and the gate and `prepare` also get `/dev/null` as stdin. As a result, a gate or prepare command that reads stdin now gets end-of-file instead of hanging forever. The `NOSYSBASHRC=1` workaround is no longer needed. If a gate only worked because `~/.bashrc` was sourced (for example nvm set up only there, with dorfl started from systemd), put that setup in the command or in the caller's environment instead.
