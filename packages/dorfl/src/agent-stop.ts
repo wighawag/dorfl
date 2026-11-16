@@ -142,6 +142,127 @@ export function extractDecisionsBlock(
 }
 
 /**
+ * Lines in a `## Decisions` block that talk TO the reviewer/runner about the
+ * record instead of BEING the record: "I could not add the ## Decisions section
+ * myself", "Please append this line to work/tasks/done/<slug>.md: ...", "Note to
+ * the reviewer: ...". The runner copies the block verbatim into the done record,
+ * so such a line would land there permanently as chatter (seen in the wild: a
+ * builder following a stale "link them from the done record" wording asked the
+ * reviewer to do the edit for it). Deliberately NARROW: a request or an
+ * inability only counts when the same line names the RECORD (the done record,
+ * a `work/tasks/done/` path, the `## Decisions` section, "this line"), and quoted
+ * text is ignored (see {@link proseOf}), so ordinary rationale ("we could not
+ * reuse X because ...", "- Runner: claim now refuses ...", a refusal message
+ * that says "please add ...") is kept.
+ */
+const REVIEWER_ADDRESSED_LINE: readonly RegExp[] = [
+	// A request to someone else to do the recording ("please append this line to
+	// work/tasks/done/<slug>.md"). Only when the same line names the record.
+	/\bplease\s+(?:append|add|copy|paste|insert|record|transcribe|include|put|move)\b[^]*?RECORD_REF/i,
+	// The builder explaining it could not write the record itself.
+	/\bI\s+(?:could\s*not|couldn['’]t|cannot|can['’]t|can\s+not|was\s+(?:not\s+able|unable)\s+to|am\s+(?:not\s+able|unable)\s+to|did\s+not|didn['’]t)\s+(?:add|write|edit|append|record|update|modify|touch|create)\b[^.]*?RECORD_REF/i,
+	// An explicit aside addressed to the reviewer / runner / conductor.
+	/\bnote\s+(?:to|for)\s+(?:the\s+)?(?:reviewer|runner|conductor|maintainer|human)\b/i,
+].map(
+	(re) =>
+		new RegExp(
+			re.source.replace(
+				'RECORD_REF',
+				// What "the record" looks like in such a line: the done record, a
+				// work/tasks/done/ path, the task body/file, the Decisions section/block,
+				// or a deictic "this line/block/entry".
+				String.raw`(?:done[- ]record|work\/tasks\/done\/|task\s+(?:body|file|record)|##\s*Decisions|Decisions\s+(?:section|block|heading)|this\s+(?:line|block|entry))`,
+			),
+			re.flags,
+		),
+);
+
+/**
+ * The text of a line as the reviewer-addressed patterns see it: inline code
+ * spans and double-quoted strings are blanked out, so a decision that QUOTES a
+ * user-facing message (`` `unknown flag; please add it to dorfl.json` ``) is
+ * never mistaken for a request. A code span that only names the record itself
+ * (`` `## Decisions` ``, `` `work/tasks/done/x.md` ``) keeps its text, since
+ * that is how a builder refers to the record it could not write.
+ */
+function proseOf(line: string): string {
+	return line
+		.replace(/`([^`]*)`/g, (_, inner: string) =>
+			/^##\s*Decisions$|^work\/tasks\/done\//.test(inner.trim()) ? inner : ' ',
+		)
+		.replace(/"[^"]*"|“[^”]*”/g, ' ');
+}
+
+/**
+ * Salvage the payload of a "Please append this line to <file>: <payload>" line:
+ * the part after the first `: ` when it is substantive, with one layer of
+ * wrapping backticks or quotes removed. Returns `undefined` when there is
+ * nothing after the colon (the payload is then on the following lines, which
+ * are kept as-is).
+ */
+function salvageRequestPayload(line: string): string | undefined {
+	const match = /\bplease\s+\w+\b[^:]*:\s+(.+)$/i.exec(line);
+	if (!match) {
+		return undefined;
+	}
+	let payload = match[1].trim();
+	const wrapped = /^([`"'“])(.*)([`"'”])$/.exec(payload);
+	if (wrapped) {
+		payload = wrapped[2].trim();
+	}
+	return payload === '' ? undefined : payload;
+}
+
+/** The result of {@link sanitizeDecisionsBlock}. */
+export interface SanitizedDecisions {
+	/** The block as it should be recorded; `undefined` when nothing is left. */
+	text: string | undefined;
+	/** The reviewer-addressed lines that were removed, verbatim, for a warning. */
+	dropped: string[];
+}
+
+/**
+ * Strip the obvious reviewer-addressed lines from a `## Decisions` block before
+ * the runner transcribes it into the done record (see
+ * {@link REVIEWER_ADDRESSED_LINE}). The block is meant to be written AS the
+ * done-record section; a line that instead talks about the record ("I could not
+ * add this myself, please append ...") is dropped. When such a request carries
+ * its payload inline after a colon, the payload is KEPT in the line's place, so
+ * the decision itself is never lost. Lines inside a fenced code block are never
+ * touched. Everything else is returned verbatim (blank-line runs left by a drop
+ * are collapsed). Pure.
+ */
+export function sanitizeDecisionsBlock(block: string): SanitizedDecisions {
+	const dropped: string[] = [];
+	const kept: string[] = [];
+	let inFence = false;
+	for (const line of block.replace(/\r\n/g, '\n').split('\n')) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			inFence = !inFence;
+			kept.push(line);
+			continue;
+		}
+		if (
+			inFence ||
+			!REVIEWER_ADDRESSED_LINE.some((re) => re.test(proseOf(line)))
+		) {
+			kept.push(line);
+			continue;
+		}
+		dropped.push(line.trim());
+		const payload = salvageRequestPayload(line);
+		if (payload !== undefined) {
+			kept.push(payload);
+		}
+	}
+	const text = kept
+		.join('\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+	return {text: text === '' ? undefined : text, dropped};
+}
+
+/**
  * The DETERMINISTIC backstop for the STOP sentinel: did the agent leave NO source
  * change at all? An `agent.ok` run that changed NOTHING is NEVER a successful
  * build — treat it as an implicit STOP/no-op and route to needs-attention WITHOUT

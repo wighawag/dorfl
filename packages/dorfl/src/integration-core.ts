@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, posix} from 'node:path';
 import {
 	LEDGER_STATUS_FOLDERS,
 	type LedgerStatusFolder,
@@ -32,7 +32,7 @@ import {
 	type ReviewProvider,
 	proposeRequestNotOpened,
 } from './integrator.js';
-import {extractDecisionsBlock} from './agent-stop.js';
+import {extractDecisionsBlock, sanitizeDecisionsBlock} from './agent-stop.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
@@ -1169,6 +1169,16 @@ export async function performIntegration(
 				'(Did the agent produce changes? Is the task already done?)',
 			slug,
 		);
+	}
+	// 3a. LINK a DECISIONS NOTE the agent wrote in this run but did not link from
+	//     its `## Decisions` block (a builder following an older protocol wording,
+	//     "record decisions durably and link them from the done record", writes a
+	//     decisions-shaped note under `work/notes/observations/`
+	//     ({@link isDecisionsNoteName}) it cannot link itself). Read from the
+	//     STAGED set, so only a note landing in THIS commit counts; the done record
+	//     edit is re-staged so it rides the same commit. Build path only.
+	if (!lifecycle) {
+		await linkStagedDecisionsNotes({cwd, slug, env, note});
 	}
 	// SCOOP + REPORT agent-authored CAPTURED NOTES (task `runner-scoops-captured-notes`,
 	// advance-loop's reporting-channel fold-in). A rung's agent may write capture-bucket
@@ -2883,9 +2893,26 @@ function transcribeDecisionsIntoDoneRecord(params: {
 	note: (message: string) => void;
 }): void {
 	const {cwd, slug, output, continued, note} = params;
-	const decisions = extractDecisionsBlock(output);
-	if (decisions === undefined) {
+	const raw = extractDecisionsBlock(output);
+	if (raw === undefined) {
 		return; // the common case: the agent recorded no in-scope decision.
+	}
+	// The block is meant to be written AS the done-record section. Drop the
+	// obvious lines addressed to the reviewer instead ("I could not add this
+	// myself, please append ..."), which would otherwise land in the record
+	// permanently, and say so out loud.
+	const {text: decisions, dropped} = sanitizeDecisionsBlock(raw);
+	if (dropped.length > 0) {
+		note(
+			`Warning: dropped ${dropped.length} reviewer-addressed line` +
+				`${dropped.length === 1 ? '' : 's'} from the agent's "## Decisions" block ` +
+				`for ${workItemRel('done', `${slug}.md`)} (the block is copied as the ` +
+				'done-record section, so it must not talk to the reviewer): ' +
+				dropped.map((line) => JSON.stringify(line)).join('; '),
+		);
+	}
+	if (decisions === undefined) {
+		return; // nothing but chatter: record nothing rather than an empty section.
 	}
 	const path = workItemPath(cwd, 'done', slug);
 	if (!existsSync(path)) {
@@ -2916,6 +2943,170 @@ function transcribeDecisionsIntoDoneRecord(params: {
 	} catch {
 		// Best-effort: never fail a green completion over a rationale note.
 	}
+}
+
+/**
+ * LINK, from the done record, every DECISIONS NOTE the agent wrote in this run
+ * that the record does not already reference: a `work/notes/observations/` note
+ * ADDED (or renamed in) by this commit whose name has the decisions-note shape
+ * ({@link isDecisionsNoteName}). A note the agent merely modified is not
+ * "written during this build" and is left alone.
+ *
+ * The contract's channel for build-time rationale is the report's `## Decisions`
+ * block (WORK-CONTRACT.md, "Where a BUILDER's RATIONALE lives"), and it tells the
+ * builder not to open such a note. But a repo whose adopted `work/protocol/` copy
+ * predates that wording (or a task body that inlined it) still says "record
+ * decisions durably and LINK them from the done record", which the builder cannot
+ * do: it does not own the done-move. It writes the note and nothing points at it,
+ * so the rationale is effectively lost. This is the runner's tolerant half: it adds
+ * the link the builder could not, with the path RELATIVE to the done record
+ * (`../../notes/observations/<name>.md`), and warns so the stale wording gets
+ * fixed (`dorfl sync` refreshes `work/protocol/`).
+ *
+ * Placement: when the record's LAST `## ` section is a Decisions section (the
+ * block just transcribed, or one the tasker wrote), the link is appended to it;
+ * otherwise a new `## Decisions` section is added (`## Decisions (linked notes)`
+ * when an exact `## Decisions` heading already exists elsewhere in the body).
+ * A note the record already names (by repo path, relative path or basename) is
+ * skipped, so a block that links its own note is left alone. Best-effort, like
+ * {@link transcribeDecisionsIntoDoneRecord}: a failure never fails a green land.
+ */
+async function linkStagedDecisionsNotes(params: {
+	cwd: string;
+	slug: string;
+	env: NodeJS.ProcessEnv | undefined;
+	note: (message: string) => void;
+}): Promise<void> {
+	const {cwd, slug, env, note} = params;
+	const doneRel = workItemRel('done', `${slug}.md`);
+	const path = workItemPath(cwd, 'done', slug);
+	if (!existsSync(path)) {
+		return;
+	}
+	const staged = await gitSoft(
+		['diff', '--cached', '--name-only', '--diff-filter=AR'],
+		cwd,
+		env,
+	);
+	if (staged.status !== 0) {
+		return;
+	}
+	const observations = workFolderPrefix('observations');
+	const notes = staged.stdout
+		.split('\n')
+		.map((line) => line.trim())
+		.filter(
+			(rel) =>
+				rel.startsWith(observations) &&
+				rel.endsWith('.md') &&
+				isDecisionsNoteName(posix.basename(rel)),
+		)
+		.sort();
+	if (notes.length === 0) {
+		return;
+	}
+	let body: string | undefined;
+	let written = false;
+	try {
+		body = readFileSync(path, 'utf8');
+		const original = body;
+		const links = notes
+			.map((rel) => ({
+				rel,
+				relative: posix.relative(posix.dirname(doneRel), rel),
+			}))
+			.filter(
+				({rel, relative}) =>
+					!original.includes(rel) &&
+					!original.includes(relative) &&
+					!original.includes(posix.basename(rel)),
+			);
+		if (links.length === 0) {
+			return; // every note is already linked (the builder's block names it).
+		}
+		const lines = links.map(
+			({rel, relative}) => `- [${posix.basename(rel)}](${relative})`,
+		);
+		const lastHeading = lastSectionHeading(body);
+		const separator = body.endsWith('\n') ? '\n' : '\n\n';
+		let addition: string;
+		// Only a RECORD heading is a target: the exact `## Decisions`, or one the
+		// runner itself writes. A tasker's annotated instruction heading such as
+		// `## Decisions (to record while building)` is not.
+		if (
+			/^Decisions(?:\s+\((?:continued run|linked notes)\b[^)]*\))?$/.test(
+				lastHeading,
+			)
+		) {
+			addition = `${separator}Decisions note${links.length === 1 ? '' : 's'} written during this build:\n\n${lines.join('\n')}\n`;
+		} else {
+			const heading = /^##\s+Decisions\s*$/m.test(body)
+				? '## Decisions (linked notes)'
+				: '## Decisions';
+			addition =
+				`${separator}${heading}\n\n` +
+				`The builder recorded its in-scope decisions in a separate note; see:\n\n` +
+				`${lines.join('\n')}\n`;
+		}
+		writeFileSync(path, `${body}${addition}`);
+		written = true;
+		await gitHard(['add', '--', doneRel], cwd, env);
+		written = false; // staged: the edit now rides the commit, nothing to undo.
+		note(
+			`Warning: the agent wrote ${links.map(({rel}) => rel).join(', ')} without ` +
+				`linking it from its "## Decisions" block; linked it from ${doneRel}. ` +
+				'The contract channel is the report\'s "## Decisions" block, not a ' +
+				'decisions note (if this repo\'s work/protocol/ still asks to "link ' +
+				'decisions from the done record", run `dorfl sync`).',
+		);
+	} catch {
+		// Best-effort: never fail a green completion over a rationale link. If the
+		// record was rewritten but could not be staged, put it back, so no unstaged
+		// edit is left to trip the later rebase on a dirty tree.
+		if (written && body !== undefined) {
+			try {
+				writeFileSync(path, body);
+			} catch {
+				// Nothing more we can do; the warning-free path is still a green land.
+			}
+		}
+	}
+}
+
+/**
+ * Does an observation note's BASENAME have the shape of a builder's decisions
+ * note: `decisions-<slug>.md`, `<slug>-decision(s).md`, or either with a
+ * trailing date (`<slug>-decisions-2026-07-12.md`)? Deliberately not "contains
+ * decision": a genuine observation about a decision gate or a decision parser
+ * (`decision-gate-flaky.md`) is not a rationale note and must not be linked.
+ */
+function isDecisionsNoteName(basename: string): boolean {
+	const stem = basename.replace(/\.md$/i, '');
+	return (
+		/^decisions[-_]/i.test(stem) ||
+		/[-_]decisions?(?:[-_]\d{4}-\d{2}-\d{2})?$/i.test(stem)
+	);
+}
+
+/**
+ * The text of the LAST `## ` heading in a markdown body, ignoring anything
+ * inside fenced code blocks (a task body may quote a `## Decisions` example in a
+ * fence). Empty when there is none.
+ */
+function lastSectionHeading(body: string): string {
+	let inFence = false;
+	let last = '';
+	for (const line of body.split('\n')) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			inFence = !inFence;
+			continue;
+		}
+		const match = inFence ? null : /^##\s+(.*)$/.exec(line);
+		if (match) {
+			last = match[1].trim();
+		}
+	}
+	return last;
 }
 
 /**

@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {
 	parseStopSentinel,
 	extractDecisionsBlock,
+	sanitizeDecisionsBlock,
 	emptyDiffStopReason,
 	isWorkBranchDiffEmpty,
 	STOP_SENTINEL_OPEN,
@@ -109,6 +110,80 @@ describe('extractDecisionsBlock — the SOFT decisions log on agent.output', () 
 
 	it('returns undefined for an empty decisions block', () => {
 		expect(extractDecisionsBlock('## Decisions\n\n')).toBeUndefined();
+	});
+});
+
+describe('sanitizeDecisionsBlock: the block is the done-record section, not a note to the reviewer', () => {
+	it('keeps ordinary rationale verbatim (nothing dropped)', () => {
+		const block = [
+			'- Chose to REFUSE on an unknown flag; we could not reuse the old parser',
+			'  because it ignores typos. Touches `run --strict`.',
+			'- Recorded in [the note](../../notes/observations/x-decisions.md).',
+		].join('\n');
+		expect(sanitizeDecisionsBlock(block)).toEqual({text: block, dropped: []});
+	});
+
+	it('drops the reviewer-addressed lines seen in the wild and keeps the decision', () => {
+		const block = [
+			'I could not add the ## Decisions section myself (I must not edit the task body).',
+			'Please append this line to work/tasks/done/alpha.md:',
+			'',
+			'- Kept `--strict` as the flag name; renaming it would break `run`.',
+			'',
+			'Note to the reviewer: the JSDoc in src/x.ts carries the same rationale.',
+		].join('\n');
+		const out = sanitizeDecisionsBlock(block);
+		expect(out.text).toBe(
+			'- Kept `--strict` as the flag name; renaming it would break `run`.',
+		);
+		expect(out.dropped).toHaveLength(3);
+		expect(out.dropped[0]).toContain(
+			'I could not add the ## Decisions section',
+		);
+		expect(out.dropped[1]).toContain('Please append this line');
+		expect(out.dropped[2]).toContain('Note to the reviewer');
+	});
+
+	it('salvages a payload given inline after the request colon', () => {
+		const out = sanitizeDecisionsBlock(
+			'Please append this line to work/tasks/done/alpha.md: `- Chose X over Y because Z.`',
+		);
+		expect(out.text).toBe('- Chose X over Y because Z.');
+		expect(out.dropped).toHaveLength(1);
+	});
+
+	it('returns undefined text when the block was nothing but chatter', () => {
+		const out = sanitizeDecisionsBlock(
+			"I couldn't write the done record myself, sorry.",
+		);
+		expect(out.text).toBeUndefined();
+		expect(out.dropped).toHaveLength(1);
+	});
+
+	it('keeps real decisions that merely LOOK like requests or asides', () => {
+		const block = [
+			'- The refusal now reads `unknown flag; please add it to dorfl.json` (exit 2).',
+			'- The hint says "please add the remote first" before refusing.',
+			'- Runner: claim now refuses a slug already in tasks/done/.',
+			'- Reviewer, gate-2: the prompt names the failing step.',
+			'- I did not add a `## Troubleshooting` section to the README (out of scope).',
+			'- I could not reuse the old parser because it ignores typos.',
+			'- Left a follow-up: please add tests later, see work/tasks/ready/foo.md.',
+		].join('\n');
+		expect(sanitizeDecisionsBlock(block)).toEqual({text: block, dropped: []});
+	});
+
+	it('drops a request that names the record through a code span', () => {
+		const out = sanitizeDecisionsBlock(
+			'- I could not write the `## Decisions` part myself.\n- Chose X.',
+		);
+		expect(out.text).toBe('- Chose X.');
+		expect(out.dropped).toHaveLength(1);
+	});
+
+	it('never touches lines inside a fenced code block', () => {
+		const block = ['```', 'please add this to the config', '```'].join('\n');
+		expect(sanitizeDecisionsBlock(block)).toEqual({text: block, dropped: []});
 	});
 });
 

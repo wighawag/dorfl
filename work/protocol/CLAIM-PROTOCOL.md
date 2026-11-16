@@ -153,8 +153,25 @@ alternative(s) you considered + what it touches (which other flag/command/task).
 
 That block is the ONE sanctioned channel for build-time rationale, and the runner
 TRANSCRIBES it verbatim into the done record (work/tasks/done/<slug>.md) in the
-SAME commit as the done-move. Emit it as a plain "## Decisions" heading in the
-report you end with; everything under it up to the next "## " heading is captured.
+SAME commit as the done-move. END your final report with it, as a plain
+"## Decisions" heading; everything under it up to the next "## " heading is
+captured. Write it AS the done-record section, for a reader of that record
+months from now: decisions only, never a note to the reviewer or the runner
+about the record ("I could not add this myself", "please append this line to
+..."). The runner copies it verbatim, strips such lines, and warns. Links in it
+resolve from work/tasks/done/, so a repo path takes ../../../ (an ADR is
+../../../docs/adr/<file>.md) and another work/ item takes ../../ (a note is
+../../notes/<bucket>/<file>.md). For example, the report ends with:
+
+    ## Decisions
+
+    - Unknown flags are REFUSED (exit 2), not ignored: ignoring hides typos.
+      Alternative: warn and continue. Touches `run --strict`.
+    - Kept one queue per session rather than a global one; see
+      [ADR 0007](../../../docs/adr/0007-per-session-queues.md).
+
+If the task body asks you to "record decisions durably and link them from the
+done record" (an older wording), THIS block is how you do it.
 Do NOT try to write the rationale into the done record yourself: you must not
 edit the task body and you do no git, so the report is the only surface you own.
 Do NOT open a work/notes/observations/decisions-<slug>.md note for it either: an

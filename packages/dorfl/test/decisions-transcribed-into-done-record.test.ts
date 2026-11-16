@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, readFileSync} from 'node:fs';
+import {writeFileSync, readFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {performIntegration} from '../src/integration-core.js';
 import {performClaim} from '../src/claim-cas.js';
@@ -307,5 +307,262 @@ describe("the runner transcribes the agent's `## Decisions` block into the done 
 		expect(core.outcome).toBe('completed');
 		const record = readFromArbiterMain(repo, doneRel);
 		expect(record.match(/^##\s+Decisions\b/gm)?.length).toBe(1);
+	});
+
+	it('drops reviewer-addressed lines from the block and WARNS, keeping the decision', async () => {
+		const repo = await claimAndBranch('theta');
+		const sink = noteSink();
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'theta',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			note: sink.note,
+			body: reportWithDecisions(
+				[
+					'I could not add the ## Decisions section myself (no edits to the task body).',
+					'Please append this line to work/tasks/done/theta.md:',
+					'',
+					'- Kept the queue per session; a global queue would leak replies.',
+				].join('\n'),
+			),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/theta.md');
+		expect(record).toContain('Kept the queue per session');
+		expect(record).not.toContain('I could not add');
+		expect(record).not.toContain('Please append');
+		expect(
+			sink.lines.some((l) =>
+				/Warning: dropped 2 reviewer-addressed lines/.test(l),
+			),
+		).toBe(true);
+	});
+});
+
+/** Capture every `note(...)` line a run emits. */
+function noteSink(): {note: (m: string) => void; lines: string[]} {
+	const lines: string[] = [];
+	return {note: (m: string) => lines.push(m), lines};
+}
+
+/** The agent writes a decisions note under `work/notes/observations/` (no git). */
+function writeDecisionsNote(repo: string, name: string): string {
+	const rel = `work/notes/observations/${name}`;
+	mkdirSync(join(repo, 'work/notes/observations'), {recursive: true});
+	writeFileSync(join(repo, rel), '# Decisions\n\n- chose A over B\n');
+	return rel;
+}
+
+describe('the runner links a decisions NOTE the agent wrote but did not link', () => {
+	it('no `## Decisions` block: adds one linking the note with a path relative to the done record', async () => {
+		const repo = await claimAndBranch('iota');
+		const noteRel = writeDecisionsNote(repo, 'iota-decisions.md');
+		const sink = noteSink();
+		const before = commitCountOnArbiterMain(repo);
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'iota',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			note: sink.note,
+			body: 'Built it. Decisions are in the observations note.',
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/iota.md');
+		expect(record).toMatch(/^## Decisions\s*$/m);
+		expect(record).toContain(
+			'[iota-decisions.md](../../notes/observations/iota-decisions.md)',
+		);
+		// The note itself landed too, and all of it in ONE completion commit.
+		expect(readFromArbiterMain(repo, noteRel)).toContain('chose A over B');
+		expect(commitCountOnArbiterMain(repo)).toBe(before + 1);
+		expect(
+			sink.lines.some((l) =>
+				l.includes(`Warning: the agent wrote ${noteRel} without linking it`),
+			),
+		).toBe(true);
+	});
+
+	it('a block that does not mention the note: appends the link to that block', async () => {
+		const repo = await claimAndBranch('kappa');
+		writeDecisionsNote(repo, 'kappa-decisions.md');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'kappa',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: reportWithDecisions('- kept the old flag name'),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/kappa.md');
+		expect(record.match(/^##\s+Decisions\b/gm)?.length).toBe(1);
+		expect(record).toContain('- kept the old flag name');
+		expect(record).toContain('(../../notes/observations/kappa-decisions.md)');
+		expect(record.indexOf('kept the old flag name')).toBeLessThan(
+			record.indexOf('kappa-decisions.md'),
+		);
+	});
+
+	it('a block that already links the note is left exactly as written', async () => {
+		const repo = await claimAndBranch('lambda');
+		writeDecisionsNote(repo, 'lambda-decisions.md');
+		const sink = noteSink();
+		const block =
+			'- See [lambda-decisions.md](../../notes/observations/lambda-decisions.md).';
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'lambda',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			note: sink.note,
+			body: reportWithDecisions(block),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/lambda.md');
+		expect(record.match(/lambda-decisions\.md\)/g)?.length).toBe(1);
+		expect(sink.lines.some((l) => l.includes('without linking it'))).toBe(
+			false,
+		);
+	});
+
+	it('ordinary observation notes are NOT linked, even with "decision" in the name', async () => {
+		const repo = await claimAndBranch('mu');
+		writeDecisionsNote(repo, 'spotted-flaky-test.md');
+		writeDecisionsNote(repo, 'decision-gate-flaky.md');
+		writeDecisionsNote(repo, 'review-decision-parser-bug.md');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'mu',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: 'Built it.',
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/mu.md');
+		expect(record).not.toContain('## Decisions');
+		expect(record).not.toContain('spotted-flaky-test');
+		expect(record).not.toContain('decision-gate-flaky');
+		expect(record).not.toContain('review-decision-parser-bug');
+	});
+
+	it('a dated `<slug>-decisions-YYYY-MM-DD.md` note IS linked', async () => {
+		const repo = await claimAndBranch('nu');
+		writeDecisionsNote(repo, 'nu-decisions-2026-10-30.md');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'nu',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: 'Built it.',
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/nu.md');
+		expect(record).toContain(
+			'(../../notes/observations/nu-decisions-2026-10-30.md)',
+		);
+	});
+
+	it('a tasker instruction heading as the last section gets a NEW Decisions section, not an append under it', async () => {
+		const repo = await claimAndBranch('xi');
+		const readyPath = join(repo, 'work/tasks/ready/xi.md');
+		writeFileSync(
+			readyPath,
+			`${readFileSync(readyPath, 'utf8')}\n## Decisions (to record while building)\n\n- say which flag name you kept\n`,
+		);
+		writeDecisionsNote(repo, 'xi-decisions.md');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'xi',
+			source: 'tasks-ready',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: 'Built it.',
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, 'work/tasks/done/xi.md');
+		expect(record).toMatch(/^## Decisions\s*$/m);
+		expect(
+			record.indexOf('## Decisions (to record while building)'),
+		).toBeLessThan(record.search(/^## Decisions\s*$/m));
+		expect(record).toContain('(../../notes/observations/xi-decisions.md)');
+	});
+
+	it('on a CONTINUED run, links a decisions note new in that run under the continued-run block', async () => {
+		const repo = await claimAndBranch('omicron');
+		const readyRel = 'work/tasks/ready/omicron.md';
+		const doneRel = 'work/tasks/done/omicron.md';
+		run('mkdir', ['-p', join(repo, 'work/tasks/done')], repo);
+		gitIn(['mv', readyRel, doneRel], repo);
+		writeFileSync(
+			join(repo, doneRel),
+			`${readFileSync(join(repo, doneRel), 'utf8')}\n## Decisions\n\n- first run: kept the old flag name\n`,
+		);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'feat(omicron): first run'], repo);
+		writeFileSync(join(repo, 'more.txt'), 'second run\n');
+		writeDecisionsNote(repo, 'omicron-decisions.md');
+
+		const core = await performIntegration({
+			cwd: repo,
+			arbiter: ARBITER,
+			slug: 'omicron',
+			source: 'done',
+			recovering: false,
+			verify: PASS,
+			mode: 'merge',
+			env: gitEnv(),
+			body: reportWithDecisions('- second run: fixed the build'),
+		});
+
+		expect(core.outcome).toBe('completed');
+		const record = readFromArbiterMain(repo, doneRel);
+		expect(record).toContain('first run: kept the old flag name');
+		expect(record).toMatch(/^## Decisions \(continued run, /m);
+		expect(record).toContain('(../../notes/observations/omicron-decisions.md)');
+		expect(record.indexOf('second run: fixed the build')).toBeLessThan(
+			record.indexOf('omicron-decisions.md'),
+		);
 	});
 });
