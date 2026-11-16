@@ -16,6 +16,7 @@ import {
 	type ContinueRebaseFailure,
 } from '../src/continue-branch.js';
 import {run} from '../src/git.js';
+import {newSidecar, serialiseSidecar} from '../src/sidecar.js';
 import {
 	makeScratch,
 	seedRepoWithArbiter,
@@ -499,6 +500,279 @@ function advanceArbiterWorkBranch(
 	gitIn(['push', '-q', 'origin', `${branch}:${branch}`], dest);
 	return arbiterTip(arbiter, branch);
 }
+
+// --- Question-sidecar conflicts are resolved mechanically --------------------
+//
+// The sidecar `work/questions/task-<slug>.md` is runner-owned protocol state: the
+// surface writes it on main and the land deletes it in the done-move commit. A
+// kept branch whose land deleted it, replayed onto a main whose SECOND surface
+// rewrote it, is a modify/delete between two of the runner's own writes.
+
+const SIDECAR = 'work/questions/task-alpha.md';
+
+function sidecarText(reason: string, answer?: string): string {
+	const model = newSidecar('task:alpha', [
+		{question: `Why did it fail? ${reason}`, kind: 'stuck'},
+	]);
+	if (answer !== undefined) {
+		model.entries[0].answer = answer;
+	}
+	return serialiseSidecar(model);
+}
+
+/**
+ * main carries the first surface's sidecar; the kept branch (cut from it) deletes
+ * the sidecar in its completion commit (optionally with the done-move); main
+ * then rewrites the sidecar (`mainRewrite`). HEAD is left on the kept branch.
+ */
+function keptBranchDeletingSidecar(opts: {
+	doneMove: boolean;
+	mainRewrite: string;
+	alsoConflictOnCode?: boolean;
+}): {repo: string; priorTip: string} {
+	const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+	mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+	writeFileSync(join(repo, SIDECAR), sidecarText('first'));
+	writeFileSync(join(repo, 'shared.txt'), 'base\n');
+	gitIn(['add', '-A'], repo);
+	gitIn(['commit', '-q', '-m', 'surface alpha (first)'], repo);
+	gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+	gitIn(['fetch', '-q', 'arbiter'], repo);
+
+	gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+	writeFileSync(join(repo, 'feature.txt'), 'the work\n');
+	if (opts.alsoConflictOnCode) {
+		writeFileSync(join(repo, 'shared.txt'), 'branch\n');
+	}
+	if (opts.doneMove) {
+		mkdirSync(join(repo, 'work', 'tasks', 'done'), {recursive: true});
+		gitIn(
+			['mv', 'work/tasks/ready/alpha.md', 'work/tasks/done/alpha.md'],
+			repo,
+		);
+	}
+	gitIn(['rm', '-q', SIDECAR], repo);
+	gitIn(['add', '-A'], repo);
+	gitIn(['commit', '-q', '-m', 'feat(alpha): build; done'], repo);
+	const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
+
+	gitIn(['switch', '-q', 'main'], repo);
+	writeFileSync(join(repo, SIDECAR), opts.mainRewrite);
+	if (opts.alsoConflictOnCode) {
+		writeFileSync(join(repo, 'shared.txt'), 'main\n');
+	}
+	gitIn(['add', '-A'], repo);
+	gitIn(['commit', '-q', '-m', 'surface alpha (second)'], repo);
+	gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+	gitIn(['fetch', '-q', 'arbiter'], repo);
+	gitIn(['switch', '-q', 'work/task-alpha'], repo);
+	return {repo, priorTip};
+}
+
+describe('rebaseContinuedBranchOntoMain: question-sidecar conflicts', () => {
+	it("the branch's deletion wins when the branch done-moves the item", () => {
+		const {repo} = keptBranchDeletingSidecar({
+			doneMove: true,
+			mainRewrite: sidecarText('second'),
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toEqual({
+			kind: 'clean',
+			resolvedSidecars: [{path: SIDECAR, resolution: 'deleted'}],
+		});
+		expect(existsSync(join(repo, SIDECAR))).toBe(false);
+		expect(gitIn(['cat-file', '-e', 'HEAD:feature.txt'], repo)).toBe('');
+		expect(existsSync(join(repo, 'work', 'tasks', 'done', 'alpha.md'))).toBe(
+			true,
+		);
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+		expect(
+			gitIn(['merge-base', '--is-ancestor', 'arbiter/main', 'HEAD'], repo),
+		).toBe('');
+	});
+
+	it("takes main's version when main's sidecar carries a human answer", () => {
+		const answered = sidecarText('second', 'use the other API');
+		const {repo} = keptBranchDeletingSidecar({
+			doneMove: true,
+			mainRewrite: answered,
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toEqual({
+			kind: 'clean',
+			resolvedSidecars: [{path: SIDECAR, resolution: 'took-main'}],
+		});
+		expect(readFileSync(join(repo, SIDECAR), 'utf8')).toBe(answered);
+		expect(gitIn(['cat-file', '-e', 'HEAD:feature.txt'], repo)).toBe('');
+	});
+
+	it("takes main's version when the branch does not done-move the item", () => {
+		const rewrite = sidecarText('second');
+		const {repo} = keptBranchDeletingSidecar({
+			doneMove: false,
+			mainRewrite: rewrite,
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toEqual({
+			kind: 'clean',
+			resolvedSidecars: [{path: SIDECAR, resolution: 'took-main'}],
+		});
+		expect(readFileSync(join(repo, SIDECAR), 'utf8')).toBe(rewrite);
+	});
+
+	it('still aborts (never auto-resolves) when the same stop also conflicts on code', () => {
+		const {repo, priorTip} = keptBranchDeletingSidecar({
+			doneMove: true,
+			mainRewrite: sidecarText('second'),
+			alsoConflictOnCode: true,
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result.kind).toBe('conflict');
+		expect((result as {paths: string[]}).paths.sort()).toEqual(
+			[SIDECAR, 'shared.txt'].sort(),
+		);
+		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(priorTip);
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+
+	/**
+	 * Generic shape: main and the branch both start from a sidecar at `base`;
+	 * the branch commit sets it to `branch` (undefined = delete) plus `extra`
+	 * files, main sets it to `main` (undefined = delete).
+	 */
+	function sidecarDivergence(opts: {
+		branch: string | undefined;
+		main: string | undefined;
+		extra?: boolean;
+	}): {repo: string; priorTip: string} {
+		const {repo} = seedRepoWithArbiter(scratch.root, ['alpha']);
+		mkdirSync(join(repo, 'work', 'questions'), {recursive: true});
+		writeFileSync(join(repo, SIDECAR), sidecarText('first'));
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'surface alpha (first)'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		const apply = (text: string | undefined): void => {
+			if (text === undefined) {
+				gitIn(['rm', '-q', SIDECAR], repo);
+			} else {
+				writeFileSync(join(repo, SIDECAR), text);
+			}
+		};
+		gitIn(['switch', '-q', '-c', 'work/task-alpha', 'arbiter/main'], repo);
+		apply(opts.branch);
+		if (opts.extra) {
+			writeFileSync(join(repo, 'feature.txt'), 'the work\n');
+		}
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'branch touches sidecar'], repo);
+		const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		gitIn(['switch', '-q', 'main'], repo);
+		apply(opts.main);
+		gitIn(['add', '-A'], repo);
+		gitIn(['commit', '-q', '-m', 'main touches sidecar'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+		return {repo, priorTip};
+	}
+
+	it("skips a replayed commit the resolution leaves empty (its only change was the sidecar, main's version kept)", () => {
+		const rewrite = sidecarText('second');
+		const {repo} = sidecarDivergence({branch: undefined, main: rewrite});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toEqual({
+			kind: 'clean',
+			resolvedSidecars: [{path: SIDECAR, resolution: 'took-main'}],
+		});
+		expect(readFileSync(join(repo, SIDECAR), 'utf8')).toBe(rewrite);
+		// The emptied commit was dropped: the branch is exactly main now.
+		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(
+			gitIn(['rev-parse', 'arbiter/main'], repo).trim(),
+		);
+	});
+
+	it("aborts when the replayed commit's OWN sidecar carries an answer (not runner-written)", () => {
+		const {repo, priorTip} = sidecarDivergence({
+			branch: sidecarText('branch side', 'answered on the branch'),
+			main: sidecarText('second'),
+			extra: true,
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toMatchObject({kind: 'conflict', paths: [SIDECAR]});
+		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(priorTip);
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+
+	it("takes main's deletion when main deleted the sidecar the branch modified", () => {
+		const {repo} = sidecarDivergence({
+			branch: sidecarText('branch rewrite'),
+			main: undefined,
+			extra: true,
+		});
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toEqual({
+			kind: 'clean',
+			resolvedSidecars: [{path: SIDECAR, resolution: 'deleted'}],
+		});
+		expect(existsSync(join(repo, SIDECAR))).toBe(false);
+		expect(gitIn(['cat-file', '-e', 'HEAD:feature.txt'], repo)).toBe('');
+	});
+
+	it('aborts back to the untouched tip when a LATER commit conflicts on code after a resolved sidecar stop', () => {
+		const {repo} = keptBranchDeletingSidecar({
+			doneMove: true,
+			mainRewrite: sidecarText('second'),
+		});
+		// A second branch commit that conflicts with a further main change.
+		writeFileSync(join(repo, 'shared.txt'), 'branch\n');
+		gitIn(['commit', '-q', '-am', 'wip(alpha): more'], repo);
+		const priorTip = gitIn(['rev-parse', 'HEAD'], repo).trim();
+		gitIn(['switch', '-q', 'main'], repo);
+		writeFileSync(join(repo, 'shared.txt'), 'main\n');
+		gitIn(['commit', '-q', '-am', 'main edits shared'], repo);
+		gitIn(['push', '-q', 'arbiter', 'main:main'], repo);
+		gitIn(['fetch', '-q', 'arbiter'], repo);
+		gitIn(['switch', '-q', 'work/task-alpha'], repo);
+
+		const result = rebaseContinuedBranchOntoMain(
+			repo,
+			'arbiter/main',
+			gitEnv(),
+		);
+		expect(result).toMatchObject({kind: 'conflict', paths: ['shared.txt']});
+		expect(gitIn(['rev-parse', 'HEAD'], repo).trim()).toBe(priorTip);
+		expect(gitIn(['status', '--porcelain'], repo).trim()).toBe('');
+	});
+});
 
 /** The arbiter's current sha for `work/<branch>`. */
 function arbiterTip(arbiter: string, branch: string): string {

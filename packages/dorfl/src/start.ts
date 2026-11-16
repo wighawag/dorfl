@@ -5,6 +5,7 @@ import type {SurfaceToNeedsAttentionResult} from './needs-attention.js';
 import {
 	branchAheadOfArbiter,
 	rebaseContinuedBranchOntoMain,
+	describeSidecarResolutions,
 	continueRebaseSentence,
 	type ContinueRebaseFailure,
 } from './continue-branch.js';
@@ -701,6 +702,10 @@ async function continueFromKeptBranch(params: {
 	// REBASE onto the freshly-fetched main at onboard-time (§10: rebase, not
 	// merge) so the agent builds on a CURRENT base. Conflict → aborted + reported.
 	const rebase = rebaseContinuedBranchOntoMain(cwd, `${arbiter}/main`, env);
+	const resolvedSidecars = describeSidecarResolutions(rebase);
+	if (resolvedSidecars !== undefined) {
+		note(resolvedSidecars);
+	}
 	if (rebase.kind !== 'clean') {
 		return {
 			branch,

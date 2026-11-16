@@ -91,7 +91,8 @@ resolution/cache — use `npx dorfl@<version>`; no trust gate — same trust as
   gets the acceptance gate green; claim, done-move, and integration are the runner's
   job.
 - **Conflicts are never auto-resolved.** Integration rebases or aborts to a
-  needs-attention state for a human.
+  needs-attention state for a human. The one exception is dorfl's own question
+  sidecar (`work/questions/*.md`), which a continue rebase resolves mechanically.
 
 ## The `work/` contract
 

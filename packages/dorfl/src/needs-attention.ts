@@ -12,6 +12,7 @@ import {run, runAsync, type RunResult} from './git.js';
 import {
 	branchAheadOf,
 	rebaseContinuedBranchOntoMain,
+	describeSidecarResolutions,
 	describeContinueRebaseFailure,
 } from './continue-branch.js';
 import {
@@ -1471,7 +1472,10 @@ type ReconcileAttempt =
  *   3. **Rebase in a scratch worktree.** `git worktree add --detach <scratch>
  *      <arbiter>/work/<slug>` and run {@link rebaseContinuedBranchOntoMain}
  *      against `<arbiter>/main`. A CLEAN rebase is a full non-destructive fix;
- *      a CONFLICT is `--abort`ed (never auto-resolved) => `'conflict'`.
+ *      a conflict confined to question sidecars is resolved mechanically by
+ *      that helper (ADR `continue-rebase-resolves-question-sidecar-conflicts`:
+ *      the bounce/continue modify/delete, not the unbuilt mirror-side resolve);
+ *      any other CONFLICT is `--abort`ed (never auto-resolved) => `'conflict'`.
  *   4. **Push the reconciled tip back.** `git push <arbiter> HEAD:work/<slug>
  *      --force-with-lease=work/<slug>:<observed-arbiter-tip>` from the scratch
  *      worktree. `--force-with-lease` ONLY, NEVER bare `--force`, NEVER
@@ -1520,6 +1524,10 @@ async function attemptReconcile(params: {
 	}
 	try {
 		const rebase = rebaseContinuedBranchOntoMain(worktree, arbMainRef, env);
+		const resolvedSidecars = describeSidecarResolutions(rebase);
+		if (resolvedSidecars !== undefined) {
+			note(resolvedSidecars);
+		}
 		if (rebase.kind !== 'clean') {
 			return {
 				kind: 'conflict',
@@ -1557,7 +1565,6 @@ async function attemptReconcile(params: {
 		}
 		// Advance the local remote-tracking ref so subsequent reads see the truth.
 		await gitSoftAsync(['fetch', '--quiet', arbiter], cwd, env);
-		void note;
 		return {kind: 'reconciled'};
 	} finally {
 		await gitSoftAsync(['worktree', 'remove', '--force', worktree], cwd, env);

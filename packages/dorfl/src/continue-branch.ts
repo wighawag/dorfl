@@ -1,4 +1,6 @@
 import {run, type RunResult} from './git.js';
+import {isEntryAnswered, parseSidecar, sidecarPathFor} from './sidecar.js';
+import {workFolderPrefix, workItemRel} from './work-layout.js';
 
 /**
  * BROADENED SCOPE NOTE (follow-up task
@@ -187,8 +189,220 @@ export type ContinueRebaseFailure =
 	| {kind: 'conflict'; onto: string; paths: string[]; output: string}
 	| {kind: 'failed'; onto: string; output: string};
 
-/** The result of rebasing a continued branch onto the freshly-fetched main. */
-export type ContinueRebaseResult = {kind: 'clean'} | ContinueRebaseFailure;
+/**
+ * The result of rebasing a continued branch onto the freshly-fetched main. A
+ * clean result names the question sidecars whose conflict was resolved
+ * mechanically on the way (see {@link resolveQuestionSidecarConflicts}); the
+ * list is empty for an ordinary clean rebase.
+ */
+export type ContinueRebaseResult =
+	| {kind: 'clean'; resolvedSidecars?: SidecarResolution[]}
+	| ContinueRebaseFailure;
+
+/**
+ * How one conflicted question sidecar was resolved during a continue rebase:
+ * `deleted` (the branch's deletion won: it done-moves the item, so the question
+ * is moot) or `took-main` (main's version kept).
+ */
+export interface SidecarResolution {
+	path: string;
+	resolution: 'deleted' | 'took-main';
+}
+
+/** Bound on mechanically-resolved rebase stops (one per replayed commit). */
+const MAX_SIDECAR_RESOLUTION_STEPS = 50;
+
+/** The repo-relative `work/questions/` prefix every sidecar lives under. */
+const QUESTIONS_PREFIX = workFolderPrefix('questions');
+
+/** True iff `path` is a question sidecar (`work/questions/<type>-<slug>.md`). */
+export function isQuestionSidecarPath(path: string): boolean {
+	return (
+		path.startsWith(QUESTIONS_PREFIX) &&
+		path.endsWith('.md') &&
+		!path.slice(QUESTIONS_PREFIX.length).includes('/')
+	);
+}
+
+/** The content of index stage `stage` (2 = main, 3 = the replayed commit) of `path`, or undefined. */
+function indexStage(
+	cwd: string,
+	stage: 2 | 3,
+	path: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	const res = gitSoft(['show', `:${stage}:${path}`], cwd, env);
+	return res.status === 0 ? res.stdout : undefined;
+}
+
+/** True when a sidecar text carries a human answer, or cannot be read (hold either way). */
+function sidecarMustBeKept(text: string): boolean {
+	try {
+		return parseSidecar(text).entries.some((e) => isEntryAnswered(e));
+	} catch {
+		return true;
+	}
+}
+
+/**
+ * Decide how to resolve ONE conflicted question sidecar mechanically, or return
+ * `undefined` when it must go to a human (the caller then aborts as before).
+ *
+ * The sidecar is RUNNER-OWNED protocol state: the surface writes it on `main`,
+ * the land deletes it in the completion commit that makes it moot
+ * (`clearOwnQuestionResidueOnLand`). A kept branch that already done-moved its
+ * task and deleted the sidecar, replayed onto a `main` whose later surface
+ * REWROTE the sidecar, is a modify/delete conflict between two of the runner's
+ * own writes, not two lines of development. The rules mirror the land's own
+ * clear, so the two never disagree about what "stale" means:
+ *
+ *  - main's version carries an ANSWER (or is unparseable) => take main's version.
+ *    A human's answer is never discarded mechanically.
+ *  - the branch DELETES the sidecar and its tip done-moves the item
+ *    (`work/tasks/done/<slug>.md` for a `task-<slug>.md` sidecar) => the
+ *    deletion wins: the task is done, so the question is moot.
+ *  - anything else => take main's version (main is the truth for protocol
+ *    state the branch does not own).
+ *
+ * The only `undefined` (human) case is a replayed commit whose OWN version of
+ * the sidecar carries an answer: something the runner did not write, which
+ * neither rule may silently drop.
+ */
+function planSidecarResolution(params: {
+	cwd: string;
+	path: string;
+	branchTip: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): SidecarResolution['resolution'] | undefined {
+	const {cwd, path, branchTip, env} = params;
+	const mainSide = indexStage(cwd, 2, path, env);
+	const branchSide = indexStage(cwd, 3, path, env);
+	if (branchSide !== undefined && sidecarMustBeKept(branchSide)) {
+		return undefined;
+	}
+	if (mainSide === undefined) {
+		return 'deleted'; // main deleted it: main's version is the deletion.
+	}
+	if (sidecarMustBeKept(mainSide)) {
+		return 'took-main';
+	}
+	const name = path.slice(QUESTIONS_PREFIX.length, -'.md'.length);
+	if (branchSide === undefined && name.startsWith('task-')) {
+		const slug = name.slice('task-'.length);
+		const doneMoved =
+			sidecarPathFor(`task:${slug}`) === path &&
+			gitSoft(
+				['cat-file', '-e', `${branchTip}:${workItemRel('done', `${slug}.md`)}`],
+				cwd,
+				env,
+			).status === 0;
+		if (doneMoved) {
+			return 'deleted';
+		}
+	}
+	return 'took-main';
+}
+
+/**
+ * One line for a note naming the sidecar conflicts a clean continue rebase
+ * resolved mechanically, or `undefined` when there were none.
+ */
+export function describeSidecarResolutions(
+	result: ContinueRebaseResult,
+): string | undefined {
+	if (result.kind !== 'clean' || !result.resolvedSidecars?.length) {
+		return undefined;
+	}
+	const parts = result.resolvedSidecars.map((r) =>
+		r.resolution === 'deleted'
+			? `${r.path} (kept the branch's deletion: its done-move makes the question moot)`
+			: `${r.path} (kept main's version)`,
+	);
+	return (
+		'Resolved a question-sidecar conflict in the continue rebase ' +
+		`mechanically (runner-owned protocol state): ${parts.join('; ')}.`
+	);
+}
+
+/** The unmerged (conflicted) paths of an in-progress rebase step. */
+function unmergedPaths(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string[] {
+	return gitSoft(['diff', '--name-only', '--diff-filter=U'], cwd, env)
+		.stdout.split('\n')
+		.map((p) => p.trim())
+		.filter((p) => p !== '');
+}
+
+/**
+ * Drive a STOPPED continue rebase through every stop whose conflicts are ALL
+ * question sidecars, resolving each by {@link planSidecarResolution} and
+ * continuing. Returns the final rebase result (status 0 once the rebase
+ * completes) plus what it resolved. Stops (leaving the rebase in progress for
+ * the caller's abort) at the first stop carrying ANY non-sidecar conflict, or a
+ * sidecar a human must look at. A step that the resolution leaves EMPTY is
+ * skipped (its only change was the sidecar main already superseded).
+ */
+function resolveQuestionSidecarConflicts(params: {
+	cwd: string;
+	branchTip: string;
+	first: RunResult;
+	env: NodeJS.ProcessEnv | undefined;
+}): {rebase: RunResult; resolved: SidecarResolution[]} {
+	const {cwd, branchTip, env} = params;
+	let rebase = params.first;
+	const resolved: SidecarResolution[] = [];
+	const editorEnv = {...(env ?? process.env), GIT_EDITOR: 'true'};
+	for (
+		let step = 0;
+		rebase.status !== 0 && step < MAX_SIDECAR_RESOLUTION_STEPS;
+		step++
+	) {
+		const paths = unmergedPaths(cwd, env);
+		if (paths.length === 0 || !paths.every(isQuestionSidecarPath)) {
+			break;
+		}
+		const plans = paths.map((path) => ({
+			path,
+			resolution: planSidecarResolution({cwd, path, branchTip, env}),
+		}));
+		if (plans.some((p) => p.resolution === undefined)) {
+			break;
+		}
+		let applied = true;
+		for (const {path, resolution} of plans) {
+			// A failed resolve command must never let a half-resolved (possibly
+			// conflict-marked) sidecar be committed: stop, and the caller aborts.
+			const ok =
+				resolution === 'deleted'
+					? gitSoft(['rm', '-q', '--force', '--', path], cwd, env).status === 0
+					: gitSoft(['checkout', '--ours', '--', path], cwd, env).status ===
+							0 && gitSoft(['add', '--', path], cwd, env).status === 0;
+			if (!ok) {
+				applied = false;
+				break;
+			}
+			resolved.push({path, resolution: resolution!});
+		}
+		if (!applied) {
+			break;
+		}
+		const nothingLeft =
+			gitSoft(['diff', '--cached', '--quiet', 'HEAD'], cwd, env).status === 0;
+		rebase = gitSoft(
+			[
+				'-c',
+				'merge.directoryRenames=false',
+				'rebase',
+				nothingLeft ? '--skip' : '--continue',
+			],
+			cwd,
+			editorEnv,
+		);
+	}
+	return {rebase, resolved};
+}
 
 /** The longest git report a {@link ContinueRebaseFailure} carries. */
 const MAX_GIT_OUTPUT = 600;
@@ -268,7 +482,13 @@ export function continueRebaseSentence(
  * rename/rename ledger conflict that inheritance caused) is deleted. The ONLY
  * commits replayed are the agent's own wip / `→done` commits.
  *
- * A CLEAN rebase returns `{kind: 'clean'}`. Any other outcome is `--abort`ed
+ * A CLEAN rebase returns `{kind: 'clean'}`. ONE class of conflict is resolved
+ * mechanically instead of surfaced: a stop whose conflicts are ALL question
+ * sidecars (`work/questions/*.md`, runner-owned protocol state), most commonly
+ * the modify/delete a SECOND surface causes (the branch's land deleted the
+ * sidecar, a later surface on `main` rewrote it). See
+ * {@link planSidecarResolution} for the rules; the resolved paths are reported
+ * on the clean result. Any other outcome is `--abort`ed
  * (NEVER auto-resolved) and returns a {@link ContinueRebaseFailure} carrying the
  * `main` sha rebased onto and git's report: `conflict` (with the conflicting
  * paths) when git stopped on a GENUINE conflict, `failed` for every other
@@ -298,20 +518,28 @@ export function rebaseContinuedBranchOntoMain(
 		cwd,
 		env,
 	).stdout.trim();
-	const rebase = gitSoft(
+	const branchTip = gitSoft(
+		['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'],
+		cwd,
+		env,
+	).stdout.trim();
+	const first = gitSoft(
 		['-c', 'merge.directoryRenames=false', 'rebase', mainRef],
 		cwd,
 		env,
 	);
+	const {rebase, resolved} =
+		first.status === 0 || branchTip === ''
+			? {rebase: first, resolved: []}
+			: resolveQuestionSidecarConflicts({cwd, branchTip, first, env});
 	if (rebase.status === 0) {
-		return {kind: 'clean'};
+		return resolved.length > 0
+			? {kind: 'clean', resolvedSidecars: resolved}
+			: {kind: 'clean'};
 	}
 	// Read the conflicting paths (the unmerged index entries) BEFORE the abort
 	// clears them. git prints its `CONFLICT (...)` lines on stdout.
-	const paths = gitSoft(['diff', '--name-only', '--diff-filter=U'], cwd, env)
-		.stdout.split('\n')
-		.map((p) => p.trim())
-		.filter((p) => p !== '');
+	const paths = unmergedPaths(cwd, env);
 	const output = condenseGitOutput([rebase.stderr, rebase.stdout].join('\n'));
 	// NEVER auto-resolve: abort back to a clean continued-branch tip. A failure
 	// that never started a rebase leaves nothing to abort; that exit is harmless.
@@ -659,7 +887,8 @@ export function pushContinuedBranchWithStaleLeaseRetry(options: {
 
 		// Replay our green work onto the freshly-fetched main (ADR §10: rebase, not
 		// merge). A CONFLICT is the EXISTING abort → needs-attention path — the retry
-		// handles ONLY the clean-rebase stale-lease case (never auto-resolves).
+		// handles ONLY the clean-rebase stale-lease case (never auto-resolves content;
+		// question sidecars follow ADR `continue-rebase-resolves-question-sidecar-conflicts`).
 		const rebase = rebaseContinuedBranchOntoMain(cwd, mainRef, env);
 		if (rebase.kind !== 'clean') {
 			return rebase;
