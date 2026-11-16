@@ -1,4 +1,5 @@
 import {spawnSync} from 'node:child_process';
+import {bashCommandArgs} from './bash-shell.js';
 import {agentEnvFor} from './agent-env.js';
 import {assertAgentOrRepoCodeAllowed} from './phase.js';
 
@@ -374,7 +375,9 @@ export class NullHarness implements Harness {
 		// Inject the model routing intent into the shell command via the `{model}`
 		// placeholder (ADR §13) — offered, never forced (see substituteModel).
 		const command = substituteModel(input.command, input.model);
-		const result = spawnSync('bash', ['-c', command], {
+		// `--norc`: stdin must stay a pipe (it carries the prompt), so only the
+		// flag keeps bash off its rsh/sshd rc path (see bash-shell.ts).
+		const result = spawnSync('bash', bashCommandArgs(command), {
 			cwd: input.dir,
 			encoding: 'utf8',
 			input: input.prompt,

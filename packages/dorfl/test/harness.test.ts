@@ -3,6 +3,13 @@ import {join} from 'node:path';
 import {existsSync, readFileSync} from 'node:fs';
 import {NullHarness, isBenignPromptWriteError} from '../src/harness.js';
 import {makeScratch, type Scratch} from './helpers/gitRepo.js';
+import {
+	makeBashrcProbe,
+	parseProbe,
+	PATH_MARKER,
+	PROBE_COMMAND,
+	type BashrcProbe,
+} from './helpers/bashrcProbe.js';
 
 let scratch: Scratch;
 beforeEach(() => {
@@ -181,5 +188,34 @@ describe('NullHarness — liveness (from the harness, NOT mtime)', () => {
 		// Our own process IS alive — proves liveness comes from the PID table.
 		const self = harness.isAlive({adapter: 'null', pid: process.pid});
 		expect(self).toBe(true);
+	});
+});
+
+/**
+ * The null adapter feeds the prompt on a piped (socketpair) stdin, so it cannot
+ * use an 'ignore' stdin: it must still not take bash's rsh/sshd rc path.
+ */
+describe('NullHarness: the agent shell keeps the caller env (no rc sourcing)', () => {
+	let probe: BashrcProbe;
+	beforeEach(() => {
+		probe = makeBashrcProbe();
+	});
+	afterEach(() => {
+		probe.cleanup();
+	});
+
+	it('does not source ~/.bashrc, keeps PATH, and still delivers the prompt', () => {
+		const result = new NullHarness().launch({
+			dir: scratch.root,
+			slug: 'feat',
+			command: `${PROBE_COMMAND}; cat`,
+			prompt: 'the-prompt',
+			env: probe.env,
+		});
+		expect(result.ok).toBe(true);
+		const seen = parseProbe(result.output ?? '');
+		expect(seen.rc).toBe('no');
+		expect(seen.path.split(':')[0]).toBe(PATH_MARKER);
+		expect(result.output).toContain('the-prompt');
 	});
 });

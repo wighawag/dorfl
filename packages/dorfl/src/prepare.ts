@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {bashCommandArgs} from './bash-shell.js';
 import {assertAgentOrRepoCodeAllowed} from './phase.js';
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
@@ -126,9 +127,11 @@ function runOne(
 	sinks: {onStdout: (chunk: string) => void; onStderr: (chunk: string) => void},
 ): Promise<number> {
 	return new Promise((resolvePromise, reject) => {
-		const child = spawn('bash', ['-c', command], {
+		// `--norc` + an EOF stdin, exactly as the gate (see bash-shell.ts).
+		const child = spawn('bash', bashCommandArgs(command), {
 			cwd,
 			env: env ?? process.env,
+			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		child.stdout.on('data', (chunk: Buffer) => {
 			sinks.onStdout(chunk.toString('utf8'));

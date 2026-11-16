@@ -18,6 +18,13 @@ import {
 	VERIFY_OUTPUT_TAIL_LINES,
 } from '../src/verify.js';
 import {formatGateFailureContext} from '../src/integration-core.js';
+import {
+	makeBashrcProbe,
+	parseProbe,
+	PATH_MARKER,
+	PROBE_COMMAND,
+	type BashrcProbe,
+} from './helpers/bashrcProbe.js';
 
 describe('resolveVerifyCommands', () => {
 	it('THROWS VerifyNotConfiguredError when unset (there is NO default gate)', () => {
@@ -290,5 +297,51 @@ describe('formatGateFailureContext — the enriched bounce-reason tail', () => {
 		const ctx = formatGateFailureContext({failedCommand: 'pnpm test'});
 		expect(ctx).toContain('pnpm test');
 		expect(ctx).not.toContain('its last output was:');
+	});
+});
+
+/**
+ * Regression (dorfl 0.15.1, NixOS): the gate's `bash -c` must NOT take bash's
+ * "run by rshd/sshd" startup path. With piped (socketpair) stdin and no SHLVL,
+ * bash sourced the system bashrc + ~/.bashrc, which on NixOS reset PATH, so
+ * tools the caller had on PATH (openssl) vanished inside the gate.
+ */
+describe('runVerify: the gate shell keeps the caller env (no rc sourcing)', () => {
+	let dir: string;
+	let probe: BashrcProbe;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), 'dorfl-verify-rc-'));
+		probe = makeBashrcProbe();
+	});
+	afterEach(() => {
+		rmrf(dir);
+		probe.cleanup();
+	});
+
+	it('does not source ~/.bashrc and keeps every caller PATH entry', async () => {
+		let stdout = '';
+		const result = await runVerify({
+			cwd: dir,
+			verify: PROBE_COMMAND,
+			env: probe.env,
+			onStdout: (c) => (stdout += c),
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(true);
+		const seen = parseProbe(stdout);
+		expect(seen.rc).toBe('no');
+		expect(seen.path.split(':')[0]).toBe(PATH_MARKER);
+	});
+
+	it('gives the gate an EOF stdin (a stdin-reading command cannot hang)', async () => {
+		let stdout = '';
+		const result = await runVerify({
+			cwd: dir,
+			verify: 'cat; echo eof-reached',
+			onStdout: (c) => (stdout += c),
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(true);
+		expect(stdout).toContain('eof-reached');
 	});
 });

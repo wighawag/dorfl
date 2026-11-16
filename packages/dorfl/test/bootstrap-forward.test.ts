@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {mkdtempSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {
@@ -18,6 +18,13 @@ import {
 } from '../src/bootstrap-forward.js';
 import {REPO_CONFIG_FILENAME} from '../src/repo-config.js';
 import {runPrepare} from '../src/prepare.js';
+import {
+	makeBashrcProbe,
+	parseProbe,
+	PATH_MARKER,
+	PROBE_COMMAND,
+	type BashrcProbe,
+} from './helpers/bashrcProbe.js';
 import {rmrf} from './helpers/gitRepo.js';
 
 /**
@@ -434,8 +441,8 @@ describe('the forward is NOT recursive — gate-worktree prepare runs via bash, 
 	it('runPrepare spawns bash -c (argv0 = bash), NEVER a new dorfl bin', async () => {
 		// This is the load-bearing NON-RECURSION fact (spec §2 / task): the gate
 		// worktree that needs prepare is prepared by the ALREADY-RUNNING dorfl, which
-		// runs the repo command via spawn('bash', ['-c', cmd]) in the worktree — it
-		// NEVER launches a new dorfl. So a fresh worktree's empty node_modules never
+		// runs the repo command via spawn('bash', bashCommandArgs(cmd)) in the
+		// worktree, so it NEVER launches a new dorfl. So a fresh worktree's empty node_modules never
 		// re-triggers the forward hook (which fires once, at bare-dorfl entry). We
 		// prove it by capturing the child's argv0 + its argv, which are bash's, and
 		// asserting the dorfl bin name never appears as the process launched.
@@ -489,4 +496,44 @@ describe('defaultRepoCmdReader — reads the cwd dorfl.json (isolated fixture)',
 	it('isolates the fixture under a scratch dir (no shared location written)', () => {
 		expect(repo.startsWith(tmpdir())).toBe(true);
 	});
+});
+
+/**
+ * The forward shell inherits the caller's stdio (it IS the user's dorfl), so its
+ * stdin is whatever dorfl was given, possibly a socket (a supervisor's piped
+ * stdio). It must not take bash's rsh/sshd rc path either.
+ */
+describe('defaultForwardSpawn: the forward shell keeps the caller env', () => {
+	let dir: string;
+	let probe: BashrcProbe;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), 'dorfl-forward-rc-'));
+		probe = makeBashrcProbe();
+	});
+	afterEach(() => {
+		rmrf(dir);
+		probe.cleanup();
+	});
+
+	it('does not source ~/.bashrc when stdin is a socket, and keeps PATH', async () => {
+		// Run defaultForwardSpawn in a child node whose stdin IS a socketpair
+		// (Node's piped stdio), the condition under which bash's rsh heuristic fires.
+		const outFile = join(dir, 'probe.txt');
+		const script = [
+			`import(${JSON.stringify(new URL('../src/bootstrap-forward.ts', import.meta.url).href)}).then(({defaultForwardSpawn}) => {`,
+			`defaultForwardSpawn({cmd: ${JSON.stringify(`${PROBE_COMMAND} > ${JSON.stringify(outFile)}; true`)}, forwardedArgs: [], env: process.env}); });`,
+		].join('\n');
+		const {spawnSync} = await import('node:child_process');
+		const tsx = new URL('../node_modules/.bin/tsx', import.meta.url).pathname;
+		const r = spawnSync(tsx, ['--eval', script], {
+			env: probe.env,
+			stdio: 'pipe',
+			encoding: 'utf8',
+			timeout: 60_000,
+		});
+		expect(r.status, r.stderr).toBe(0);
+		const seen = parseProbe(readFileSync(outFile, 'utf8'));
+		expect(seen.rc).toBe('no');
+		expect(seen.path.split(':')[0]).toBe(PATH_MARKER);
+	}, 60_000);
 });

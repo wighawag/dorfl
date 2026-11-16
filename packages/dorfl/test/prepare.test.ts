@@ -20,6 +20,13 @@ import {
 	preparedMarkerPath,
 	PREPARE_MARKER_BASENAME,
 } from '../src/prepare.js';
+import {
+	makeBashrcProbe,
+	parseProbe,
+	PATH_MARKER,
+	PROBE_COMMAND,
+	type BashrcProbe,
+} from './helpers/bashrcProbe.js';
 
 /**
  * Unit tests for the `prepare` env-prep step (`prepare.ts`), the SIBLING of the
@@ -300,5 +307,46 @@ describe('prepare does NOT pollute the committed repo tree', () => {
 		} finally {
 			rmrf(repo);
 		}
+	});
+});
+
+/** Same regression as verify.test.ts: prepare's `bash -c` must not source rc files. */
+describe('runPrepare: the prepare shell keeps the caller env (no rc sourcing)', () => {
+	let dir: string;
+	let probe: BashrcProbe;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), 'dorfl-prepare-rc-'));
+		probe = makeBashrcProbe();
+	});
+	afterEach(() => {
+		rmrf(dir);
+		probe.cleanup();
+	});
+
+	it('does not source ~/.bashrc and keeps every caller PATH entry', async () => {
+		let stdout = '';
+		const result = await runPrepare({
+			cwd: dir,
+			prepare: PROBE_COMMAND,
+			env: probe.env,
+			onStdout: (c) => (stdout += c),
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(true);
+		const seen = parseProbe(stdout);
+		expect(seen.rc).toBe('no');
+		expect(seen.path.split(':')[0]).toBe(PATH_MARKER);
+	});
+
+	it('gives prepare an EOF stdin (a stdin-reading command cannot hang)', async () => {
+		let stdout = '';
+		const result = await runPrepare({
+			cwd: dir,
+			prepare: 'cat; echo eof-reached',
+			onStdout: (c) => (stdout += c),
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(true);
+		expect(stdout).toContain('eof-reached');
 	});
 });

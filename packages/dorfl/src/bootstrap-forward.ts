@@ -1,4 +1,5 @@
 import {spawnSync} from 'node:child_process';
+import {bashCommandArgs} from './bash-shell.js';
 import {brand} from './brand.js';
 import {
 	resolveRepoConfigPath,
@@ -27,8 +28,8 @@ import {
  * bare-`dorfl` startup, in the CHECKOUT ROOT — it is NOT recursive. The gate
  * worktree that runs `prepare`/`verify` is created + prepared by the
  * ALREADY-RUNNING dorfl, which runs the repo's commands via
- * `spawn('bash', ['-c', cmd], {cwd: worktreeDir})` (`prepare.ts`/`verify.ts`) —
- * it never launches a new `dorfl`, so a fresh worktree's empty `node_modules`
+ * `spawn('bash', bashCommandArgs(cmd), {cwd: worktreeDir})` (`prepare.ts`/`verify.ts`),
+ * so it never launches a new `dorfl`, so a fresh worktree's empty `node_modules`
  * never re-triggers the forward. Therefore a declared-but-ABSENT `dorflCmd` at
  * the top level is almost always a MISCONFIGURATION (the repo's install did not
  * run), and we FAIL LOUD (decision 2026-07-21, option B) rather than silently
@@ -170,7 +171,7 @@ export function decideForward(options: {
  * executable) which {@link performForward} turns into the loud, actionable error.
  *
  * Tests inject a stub that never touches a real process; the default
- * ({@link defaultForwardSpawn}) uses `spawnSync('bash', ['-c', ...])`.
+ * ({@link defaultForwardSpawn}) uses `spawnSync('bash', bashCommandArgs(...))`.
  */
 export interface ForwardSpawn {
 	(options: {
@@ -200,9 +201,12 @@ export function defaultForwardSpawn(options: {
 	// `bash -c '<cmd> "$@"' bash <forwardedArgs...>` passes the ORIGINAL argv
 	// through as positional params (quoting-safe) AFTER the (possibly multi-token)
 	// dorflCmd — so `npx dorfl@x <args>` and `./bin/dorfl <args>` both work.
+	// `--norc`: stdin is INHERITED (the forwarded dorfl is the user's dorfl), so it
+	// may itself be a socket; only the flag keeps bash off its rsh/sshd rc path
+	// (see bash-shell.ts).
 	const result = spawnSync(
 		'bash',
-		['-c', `${options.cmd} "$@"`, 'bash', ...options.forwardedArgs],
+		bashCommandArgs(`${options.cmd} "$@"`, 'bash', ...options.forwardedArgs),
 		{env: options.env, stdio: 'inherit'},
 	);
 	if (result.error) {

@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {bashCommandArgs} from './bash-shell.js';
 import {assertAgentOrRepoCodeAllowed} from './phase.js';
 
 /**
@@ -235,9 +236,13 @@ function runOne(
 	sinks: {onStdout: (chunk: string) => void; onStderr: (chunk: string) => void},
 ): Promise<number> {
 	return new Promise((resolvePromise, reject) => {
-		const child = spawn('bash', ['-c', command], {
+		// `--norc` + an EOF stdin: the gate must see the CALLER's env, never bash's
+		// rsh/sshd rc sourcing (see bash-shell.ts), and a stdin-reading command must
+		// not hang on a pipe nobody closes.
+		const child = spawn('bash', bashCommandArgs(command), {
 			cwd,
 			env: env ?? process.env,
+			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		child.stdout.on('data', (chunk: Buffer) => {
 			sinks.onStdout(chunk.toString('utf8'));
