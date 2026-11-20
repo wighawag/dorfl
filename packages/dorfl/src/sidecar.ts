@@ -1,3 +1,4 @@
+import {withoutEmDashes} from './plain-text.js';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {parseSlugArg, type SlugNamespace} from './slug-namespace.js';
@@ -825,12 +826,13 @@ export function appendQuestions(
 	for (const q of newQuestions) {
 		const entry: SidecarEntry = {
 			id: nextId(entries),
-			question: q.question,
-			context: q.context ?? '',
+			// Engine/agent prose committed to the repo: no em dashes (see plain-text.ts).
+			question: withoutEmDashes(q.question),
+			context: withoutEmDashes(q.context ?? ''),
 			answer: '',
 		};
 		if (q.default !== undefined) {
-			entry.default = q.default;
+			entry.default = withoutEmDashes(q.default);
 		}
 		if (q.kind !== undefined) {
 			entry.kind = q.kind;

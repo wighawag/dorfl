@@ -791,6 +791,7 @@ export const currentLedgerWrite: LedgerWriteStrategy = {
 			item: `task:${input.slug}`,
 			reason: input.reason,
 			questions: input.questions,
+			envelope: input.envelope,
 			arbiter: input.arbiter,
 			env: input.env,
 			note: input.note,
@@ -913,11 +914,12 @@ async function bounceThroughSurface(params: {
 	item: string;
 	reason: string;
 	questions?: string[];
+	envelope?: NewQuestion;
 	arbiter?: string;
 	env?: NodeJS.ProcessEnv;
 	note?: (message: string) => void;
 }): Promise<{moved: boolean; reasonNotMoved?: string}> {
-	const {cwd, slug, item, reason, questions, arbiter, env} = params;
+	const {cwd, slug, item, reason, questions, envelope, arbiter, env} = params;
 	const note = params.note ?? (() => {});
 	if (!arbiter) {
 		// No arbiter handle ⇒ no `<arbiter>/main` to surface on. A human local-only
@@ -940,6 +942,7 @@ async function bounceThroughSurface(params: {
 			item,
 			reason,
 			questions: asNewQuestions,
+			...(envelope !== undefined ? {envelope} : {}),
 			arbiter,
 			env,
 			note,

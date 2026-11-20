@@ -16,6 +16,7 @@ import {
 	VerifyNotConfiguredError,
 	VERIFY_NOT_CONFIGURED_MESSAGE,
 	VERIFY_OUTPUT_TAIL_LINES,
+	detectEnvironmentalGateFailure,
 } from '../src/verify.js';
 import {formatGateFailureContext} from '../src/integration-core.js';
 import {
@@ -282,8 +283,10 @@ describe('formatGateFailureContext — the enriched bounce-reason tail', () => {
 		expect(ctx).toContain('pnpm changeset status --since=main');
 		expect(ctx).toContain('its last output was:');
 		expect(ctx).toContain('no changesets');
-		// It is an APPENDABLE tail (starts with the em-dash separator).
-		expect(ctx.startsWith(' — ')).toBe(true);
+		// It is an APPENDABLE tail (starts with a colon separator; text dorfl
+		// commits never carries an em dash).
+		expect(ctx.startsWith(': ')).toBe(true);
+		expect(ctx).not.toContain('\u2014');
 	});
 
 	it('degrades to an empty string when nothing is known (older result / prepare failure)', () => {
@@ -343,5 +346,113 @@ describe('runVerify: the gate shell keeps the caller env (no rc sourcing)', () =
 		});
 		expect(result.passed).toBe(true);
 		expect(stdout).toContain('eof-reached');
+	});
+});
+
+/**
+ * Regression (dorfl 0.16.0, rocketh-playground): a gate that failed only because
+ * another project's e2e run held the ports the Playwright suite binds was
+ * surfaced as a question about the WORK. The gate now recognises an
+ * address-in-use failure, retries the failing step after a wait, and reports a
+ * persisting one as environmental.
+ */
+describe('runVerify: environmental (address-in-use) gate failures', () => {
+	let dir: string;
+	const sleeps: number[] = [];
+	const sleep = async (ms: number) => {
+		sleeps.push(ms);
+	};
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), 'dorfl-verify-env-'));
+		sleeps.length = 0;
+	});
+	afterEach(() => rmrf(dir));
+
+	const PLAYWRIGHT =
+		'Error: http://localhost:4273 is already used, make sure that nothing is ' +
+		'running on the port/url or set reuseExistingServer:true in config.webServer.';
+
+	it('recognises the address-in-use signatures, and nothing else', () => {
+		expect(detectEnvironmentalGateFailure(PLAYWRIGHT)).toMatch(/4273/);
+		expect(
+			detectEnvironmentalGateFailure('Error: listen EADDRINUSE: :::3000'),
+		).toMatch(/EADDRINUSE/);
+		expect(
+			detectEnvironmentalGateFailure(
+				'OSError: [Errno 98] Address already in use',
+			),
+		).toMatch(/already in use/);
+		expect(detectEnvironmentalGateFailure('Port 5173 is in use')).toMatch(
+			/5173/,
+		);
+		expect(
+			detectEnvironmentalGateFailure('AssertionError: expected 1 to be 2'),
+		).toBeUndefined();
+		expect(detectEnvironmentalGateFailure(undefined)).toBeUndefined();
+	});
+
+	it('retries the failing step after a wait and passes once the port is free', async () => {
+		const counter = join(dir, 'count');
+		// Fails with the Playwright message on the first run, passes on the second.
+		const cmd =
+			`n=$(cat ${counter} 2>/dev/null || echo 0); echo $((n+1)) > ${counter}; ` +
+			`if [ "$n" = 0 ]; then echo '${PLAYWRIGHT}' >&2; exit 1; fi; exit 0`;
+		const result = await runVerify({
+			cwd: dir,
+			verify: ['true', cmd],
+			environmentalRetryDelaysMs: [5, 7],
+			sleep,
+			onStdout: () => {},
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(true);
+		expect(sleeps).toEqual([5]);
+		expect(readFileSync(counter, 'utf8').trim()).toBe('2');
+	});
+
+	it('reports a persisting address-in-use failure as environmental after the retries', async () => {
+		const result = await runVerify({
+			cwd: dir,
+			verify: `echo '${PLAYWRIGHT}' >&2; exit 1`,
+			environmentalRetryDelaysMs: [1, 2],
+			sleep,
+			onStdout: () => {},
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(false);
+		expect(result.environmental).toMatch(/4273/);
+		expect(result.environmentalRetries).toBe(2);
+		expect(sleeps).toEqual([1, 2]);
+		const ctx = formatGateFailureContext(result);
+		expect(ctx).toMatch(/ENVIRONMENTAL, not the work/);
+		expect(ctx).toMatch(/retried 2 times/);
+	});
+
+	it('never retries a genuine failure', async () => {
+		const result = await runVerify({
+			cwd: dir,
+			verify: 'echo "expected 1 to be 2" >&2; exit 1',
+			environmentalRetryDelaysMs: [1, 2],
+			sleep,
+			onStdout: () => {},
+			onStderr: () => {},
+		});
+		expect(result.passed).toBe(false);
+		expect(result.environmental).toBeUndefined();
+		expect(sleeps).toEqual([]);
+	});
+
+	it('DORFL_GATE_ENV_RETRY_DELAYS_MS= (empty) disables the retry but still classifies', async () => {
+		const result = await runVerify({
+			cwd: dir,
+			verify: `echo '${PLAYWRIGHT}' >&2; exit 1`,
+			env: {...process.env, DORFL_GATE_ENV_RETRY_DELAYS_MS: ''},
+			sleep,
+			onStdout: () => {},
+			onStderr: () => {},
+		});
+		expect(result.environmental).toMatch(/4273/);
+		expect(result.environmentalRetries).toBe(0);
+		expect(sleeps).toEqual([]);
 	});
 });

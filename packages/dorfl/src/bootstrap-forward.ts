@@ -259,6 +259,25 @@ export function forwardFailureMessage(options: {
 	);
 }
 
+/**
+ * True iff the user args only ask for help or the version: no args at all
+ * (bare `dorfl` prints help), `help [...]`, or any `--help` / `-h` / `--version`
+ * / `-V` token before a `--` separator. Such a run reads and writes nothing in
+ * the repo, so it may fall back to the running dorfl when the pinned one cannot
+ * start (see {@link performForward}).
+ */
+export function isHelpOrVersionRequest(args: readonly string[]): boolean {
+	const user = args.filter((a) => a !== NO_FORWARD_FLAG);
+	if (user.length === 0 || user[0] === 'help') {
+		return true;
+	}
+	const end = user.indexOf('--');
+	const scoped = end === -1 ? user : user.slice(0, end);
+	return scoped.some(
+		(a) => a === '--help' || a === '-h' || a === '--version' || a === '-V',
+	);
+}
+
 /** What {@link performForward} tells the caller to do next. */
 export type ForwardOutcome =
 	/** A forward happened; exit the process with this code (transparent passthrough). */
@@ -303,6 +322,21 @@ export function performForward(options: {
 	const result = spawn({cmd: decision.cmd, forwardedArgs, env: childEnv});
 
 	if (result.kind === 'spawn-error') {
+		// A HELP / VERSION request needs nothing from the pinned version that the
+		// running dorfl cannot answer, and refusing it is the worst first contact
+		// with a fresh clone ("how do I use this?" -> "install first"). Fall back to
+		// the running dorfl, SAYING so (its help may differ from the pin's). Every
+		// other command still fails loud: running the wrong version against the
+		// repo is exactly what the pin exists to prevent.
+		if (isHelpOrVersionRequest(forwardedArgs)) {
+			writeNotice(
+				`${brand.bin}: the repo-declared dorflCmd \`${decision.cmd}\` could not ` +
+					`run (${result.message}; dependencies not installed yet?). Showing ` +
+					`help from the ${brand.bin} on PATH instead, which may differ from ` +
+					'the pinned version.',
+			);
+			return {kind: 'run-self', argv: stripNoForwardFlag(argv)};
+		}
 		return {
 			kind: 'error',
 			message: forwardFailureMessage({

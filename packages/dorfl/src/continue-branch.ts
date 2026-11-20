@@ -1,4 +1,7 @@
+import {writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
+import {parseWorkBranchRef} from './slug-namespace.js';
 import {isEntryAnswered, parseSidecar, sidecarPathFor} from './sidecar.js';
 import {workFolderPrefix, workItemRel} from './work-layout.js';
 
@@ -196,7 +199,16 @@ export type ContinueRebaseFailure =
  * list is empty for an ordinary clean rebase.
  */
 export type ContinueRebaseResult =
-	| {kind: 'clean'; resolvedSidecars?: SidecarResolution[]}
+	| {
+			kind: 'clean';
+			resolvedSidecars?: SidecarResolution[];
+			/**
+			 * The item's own done record(s) whose conflict was resolved mechanically
+			 * (main's body plus the branch's `## Decisions` sections, see
+			 * {@link mergeOwnDoneRecord}). Absent when there were none.
+			 */
+			resolvedRecords?: string[];
+	  }
 	| ContinueRebaseFailure;
 
 /**
@@ -310,18 +322,110 @@ function planSidecarResolution(params: {
 export function describeSidecarResolutions(
 	result: ContinueRebaseResult,
 ): string | undefined {
-	if (result.kind !== 'clean' || !result.resolvedSidecars?.length) {
+	if (result.kind !== 'clean') {
 		return undefined;
 	}
-	const parts = result.resolvedSidecars.map((r) =>
-		r.resolution === 'deleted'
-			? `${r.path} (kept the branch's deletion: its done-move makes the question moot)`
-			: `${r.path} (kept main's version)`,
-	);
-	return (
-		'Resolved a question-sidecar conflict in the continue rebase ' +
-		`mechanically (runner-owned protocol state): ${parts.join('; ')}.`
-	);
+	const sentences: string[] = [];
+	if (result.resolvedSidecars?.length) {
+		const parts = result.resolvedSidecars.map((r) =>
+			r.resolution === 'deleted'
+				? `${r.path} (kept the branch's deletion: its done-move makes the question moot)`
+				: `${r.path} (kept main's version)`,
+		);
+		sentences.push(
+			'Resolved a question-sidecar conflict in the continue rebase ' +
+				`mechanically (runner-owned protocol state): ${parts.join('; ')}.`,
+		);
+	}
+	if (result.resolvedRecords?.length) {
+		sentences.push(
+			"Resolved a conflict on the task's own lifecycle file in the continue " +
+				`rebase mechanically: ${result.resolvedRecords.join(', ')} now carries ` +
+				"main's body (the surfaced question and any applied answer) plus the " +
+				"branch's ## Decisions, at the branch's done path.",
+		);
+	}
+	return sentences.length > 0 ? sentences.join(' ') : undefined;
+}
+
+/** The repo-relative `work/tasks/done/` prefix a task's done record lives under. */
+const DONE_PREFIX = workFolderPrefix('done');
+
+/**
+ * The slug whose done record `path` is (`work/tasks/done/<slug>.md`), or
+ * undefined for any other path.
+ */
+function doneRecordSlug(path: string): string | undefined {
+	if (!path.startsWith(DONE_PREFIX) || !path.endsWith('.md')) {
+		return undefined;
+	}
+	const slug = path.slice(DONE_PREFIX.length, -'.md'.length);
+	return slug === '' || slug.includes('/') ? undefined : slug;
+}
+
+/**
+ * The `## Decisions...` sections of a task body (the heading line through the
+ * line before the next `## ` heading or EOF), trimmed. These are the runner's
+ * transcriptions of the builder's rationale (`transcribeDecisionsIntoDoneRecord`):
+ * the only part of the done record the branch writes that main does not.
+ */
+export function decisionsSections(body: string): string[] {
+	const lines = body.replace(/\r\n/g, '\n').split('\n');
+	const sections: string[] = [];
+	let current: string[] | undefined;
+	let fence = false;
+	for (const line of lines) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			fence = !fence;
+		}
+		if (!fence && /^##\s/.test(line)) {
+			if (current) {
+				sections.push(current.join('\n').trim());
+			}
+			current = /^##\s+Decisions\b/.test(line) ? [line] : undefined;
+			continue;
+		}
+		current?.push(line);
+	}
+	if (current) {
+		sections.push(current.join('\n').trim());
+	}
+	return sections.filter((s) => s !== '');
+}
+
+/**
+ * The merged done record for a conflict confined to the item's OWN lifecycle
+ * file: main's version (the source of truth for the task body, the surfaced
+ * question and any applied answer) with every `## Decisions...` section of the
+ * branch's version that main does not already carry appended at the end.
+ *
+ * Both sides are dorfl's own writes (the surface / apply edit the pool copy on
+ * main; the completion commit done-moves it and transcribes the decisions on
+ * the branch), so this is the outcome a human produced by hand, every time:
+ * keep main's body, append the branch's Decisions, one copy at the done path.
+ */
+export function mergeOwnDoneRecord(
+	mainSide: string,
+	branchSide: string,
+): string {
+	let merged = mainSide;
+	for (const section of decisionsSections(branchSide)) {
+		if (merged.includes(section)) {
+			continue;
+		}
+		const separator = merged.endsWith('\n\n')
+			? ''
+			: merged.endsWith('\n')
+				? '\n'
+				: '\n\n';
+		merged = `${merged}${separator}${section}\n`;
+	}
+	return merged;
+}
+
+/** True when `text` still carries a git conflict marker line. */
+function hasConflictMarkers(text: string): boolean {
+	return /^(<<<<<<<|>>>>>>>)( |$)/m.test(text);
 }
 
 /** The unmerged (conflicted) paths of an in-progress rebase step. */
@@ -347,30 +451,70 @@ function unmergedPaths(
 function resolveQuestionSidecarConflicts(params: {
 	cwd: string;
 	branchTip: string;
+	onto: string;
+	ownSlug: string | undefined;
 	first: RunResult;
 	env: NodeJS.ProcessEnv | undefined;
-}): {rebase: RunResult; resolved: SidecarResolution[]} {
-	const {cwd, branchTip, env} = params;
+}): {
+	rebase: RunResult;
+	resolved: SidecarResolution[];
+	records: string[];
+} {
+	const {cwd, branchTip, onto, ownSlug, env} = params;
 	let rebase = params.first;
 	const resolved: SidecarResolution[] = [];
+	const records: string[] = [];
 	const editorEnv = {...(env ?? process.env), GIT_EDITOR: 'true'};
+	const isOwnRecord = (path: string): boolean =>
+		ownSlug !== undefined && doneRecordSlug(path) === ownSlug;
 	for (
 		let step = 0;
 		rebase.status !== 0 && step < MAX_SIDECAR_RESOLUTION_STEPS;
 		step++
 	) {
 		const paths = unmergedPaths(cwd, env);
-		if (paths.length === 0 || !paths.every(isQuestionSidecarPath)) {
+		if (
+			paths.length === 0 ||
+			!paths.every((p) => isQuestionSidecarPath(p) || isOwnRecord(p))
+		) {
 			break;
 		}
-		const plans = paths.map((path) => ({
+		const recordPaths = paths.filter(isOwnRecord);
+		const recordPlans = recordPaths.map((path) => ({
 			path,
-			resolution: planSidecarResolution({cwd, path, branchTip, env}),
+			merged: planOwnRecordResolution({cwd, path, onto, env}),
 		}));
+		if (recordPlans.some((p) => p.merged === undefined)) {
+			break;
+		}
+		const plans = paths
+			.filter((p) => !isOwnRecord(p))
+			.map((path) => ({
+				path,
+				resolution: planSidecarResolution({cwd, path, branchTip, env}),
+			}));
 		if (plans.some((p) => p.resolution === undefined)) {
 			break;
 		}
 		let applied = true;
+		for (const {path, merged} of recordPlans) {
+			try {
+				writeFileSync(join(cwd, path), merged!);
+			} catch {
+				applied = false;
+				break;
+			}
+			if (gitSoft(['add', '--', path], cwd, env).status !== 0) {
+				applied = false;
+				break;
+			}
+			if (!records.includes(path)) {
+				records.push(path);
+			}
+		}
+		if (!applied) {
+			break;
+		}
 		for (const {path, resolution} of plans) {
 			// A failed resolve command must never let a half-resolved (possibly
 			// conflict-marked) sidecar be committed: stop, and the caller aborts.
@@ -388,6 +532,9 @@ function resolveQuestionSidecarConflicts(params: {
 		if (!applied) {
 			break;
 		}
+		if (unmergedPaths(cwd, env).length > 0) {
+			break; // something is still unmerged: never commit a half-resolved stop.
+		}
 		const nothingLeft =
 			gitSoft(['diff', '--cached', '--quiet', 'HEAD'], cwd, env).status === 0;
 		rebase = gitSoft(
@@ -401,7 +548,64 @@ function resolveQuestionSidecarConflicts(params: {
 			editorEnv,
 		);
 	}
-	return {rebase, resolved};
+	return {rebase, resolved, records};
+}
+
+/**
+ * The merged content for a conflict on the item's OWN done record
+ * (`work/tasks/done/<slug>.md` of the branch being continued), or `undefined`
+ * when it must go to a human (the caller then aborts as before).
+ *
+ * The shape this resolves: the replayed commit done-moved the task (the kept
+ * completion commit of a run whose gate failed on the rebased tip), while
+ * `main` edited the pool copy afterwards (the surface flips `needsAnswers`; the
+ * apply clears it and adds `## Applied answers`). Every one of those writes is
+ * dorfl's, so the merge is mechanical: {@link mergeOwnDoneRecord}.
+ *
+ * It refuses (returns `undefined`) when either side is missing (main deleted or
+ * cancelled the task, or the branch deleted its record), when main's side still
+ * carries conflict markers, or when `main` ALREADY has a done record of its own
+ * at that path (the task landed some other way: two done records are a genuine
+ * conflict, not this shape).
+ */
+function planOwnRecordResolution(params: {
+	cwd: string;
+	path: string;
+	onto: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): string | undefined {
+	const {cwd, path, onto, env} = params;
+	if (
+		onto !== '' &&
+		gitSoft(['cat-file', '-e', `${onto}:${path}`], cwd, env).status === 0
+	) {
+		return undefined;
+	}
+	const mainSide = indexStage(cwd, 2, path, env);
+	const branchSide = indexStage(cwd, 3, path, env);
+	if (mainSide === undefined || branchSide === undefined) {
+		return undefined;
+	}
+	if (hasConflictMarkers(mainSide) || hasConflictMarkers(branchSide)) {
+		return undefined;
+	}
+	return mergeOwnDoneRecord(mainSide, branchSide);
+}
+
+/** The slug of the checked-out `work/task-<slug>` branch, or undefined. */
+function checkedOutTaskSlug(
+	cwd: string,
+	env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+	const head = gitSoft(
+		['symbolic-ref', '--short', '-q', 'HEAD'],
+		cwd,
+		env,
+	).stdout.trim();
+	const parsed = parseWorkBranchRef(head);
+	return parsed?.namespace === 'task' && parsed.producer === undefined
+		? parsed.slug
+		: undefined;
 }
 
 /** The longest git report a {@link ContinueRebaseFailure} carries. */
@@ -512,7 +716,17 @@ export function rebaseContinuedBranchOntoMain(
 	cwd: string,
 	mainRef: string,
 	env: NodeJS.ProcessEnv | undefined,
+	options: {
+		/**
+		 * The task slug being continued, whose own done record a conflict may be
+		 * resolved on. Defaults to the slug of the checked-out `work/task-<slug>`
+		 * branch; a detached checkout (the requeue --reconcile scratch worktree)
+		 * passes it.
+		 */
+		slug?: string;
+	} = {},
 ): ContinueRebaseResult {
+	const ownSlug = options.slug ?? checkedOutTaskSlug(cwd, env);
 	const onto = gitSoft(
 		['rev-parse', '--verify', '--quiet', `${mainRef}^{commit}`],
 		cwd,
@@ -528,14 +742,23 @@ export function rebaseContinuedBranchOntoMain(
 		cwd,
 		env,
 	);
-	const {rebase, resolved} =
+	const {rebase, resolved, records} =
 		first.status === 0 || branchTip === ''
-			? {rebase: first, resolved: []}
-			: resolveQuestionSidecarConflicts({cwd, branchTip, first, env});
+			? {rebase: first, resolved: [], records: []}
+			: resolveQuestionSidecarConflicts({
+					cwd,
+					branchTip,
+					onto,
+					ownSlug,
+					first,
+					env,
+				});
 	if (rebase.status === 0) {
-		return resolved.length > 0
-			? {kind: 'clean', resolvedSidecars: resolved}
-			: {kind: 'clean'};
+		return {
+			kind: 'clean',
+			...(resolved.length > 0 ? {resolvedSidecars: resolved} : {}),
+			...(records.length > 0 ? {resolvedRecords: records} : {}),
+		};
 	}
 	// Read the conflicting paths (the unmerged index entries) BEFORE the abort
 	// clears them. git prints its `CONFLICT (...)` lines on stdout.

@@ -464,6 +464,7 @@ describe('do --remote — teardown re-applies the §4 predicate (reapJob)', () =
 		const {repo, arbiter} = seedRepoWithArbiter(scratch.root, ['alpha']);
 		const ws = workspacesDir();
 
+		const notes: string[] = [];
 		const result = await performDoRemote({
 			arg: 'alpha',
 			remote: remoteUrl(arbiter),
@@ -472,10 +473,21 @@ describe('do --remote — teardown re-applies the §4 predicate (reapJob)', () =
 			verify: FAIL,
 			dorfl: editingAgent,
 			env: gitEnv(),
+			note: (m) => notes.push(m),
 		});
 
 		expect(result.exitCode).toBe(1);
 		expect(result.outcome).toBe('needs-attention');
+		// The recovery named is the one that works for a SURFACED item (lock
+		// released, question on main): answer it with `requeue -m`, then `do`.
+		// Not "stuck on its per-item lock; requeue once resolved" (plain requeue is
+		// a no-op on a released lock) and not `complete --isolated` (it re-runs
+		// the integrate the gate refused).
+		const said = [result.message ?? '', ...notes].join('\n');
+		expect(result.message).toMatch(/dorfl requeue alpha -m "<instruction>"/);
+		expect(result.message).toMatch(/dorfl do task:alpha/);
+		expect(said).not.toMatch(/stuck on its per-item lock/);
+		expect(said).not.toMatch(/complete --isolated/);
 		// `do` is autonomous: the stuck state is SURFACED ON MAIN (mode-M cherry-pick
 		// of the move-only commit) so scan/status/another machine can see it.
 		// PR-2b (spec surface-stuck-as-questions-and-retire-stuck-lock-state,

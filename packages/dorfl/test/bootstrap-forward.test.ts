@@ -12,6 +12,7 @@ import {
 	NO_FORWARD_ENV,
 	NO_FORWARD_FLAG,
 	stripNoForwardFlag,
+	isHelpOrVersionRequest,
 	type ForwardSpawn,
 	type ForwardSpawnResult,
 	type RepoCmdReader,
@@ -267,6 +268,72 @@ describe('FAIL LOUD — declared-but-ABSENT dorflCmd (before dependency install)
 		expect(outcome.message).toContain(NO_FORWARD_ENV);
 		// It is NOT a silent degrade: the outcome is an error, never a run-self.
 		expect(outcome.kind).not.toBe('run-self');
+	});
+});
+
+/**
+ * Regression (dorfl 0.16.0): in a fresh clone without node_modules, even
+ * `dorfl promote --help` failed with the install-first error. A help/version
+ * request now falls back to the running dorfl, with a notice; every other
+ * command still fails loud (the pin's whole point).
+ */
+describe('absent dorflCmd: help and version fall back to the running dorfl', () => {
+	const ABSENT: ForwardSpawnResult = {
+		kind: 'spawn-error',
+		message: 'command not found: node_modules/.bin/dorfl',
+	};
+	const decision = {
+		kind: 'forward' as const,
+		cmd: 'node_modules/.bin/dorfl',
+		configPath: '/repo/dorfl.json',
+	};
+
+	for (const args of [
+		['promote', '--help'],
+		['-h'],
+		['help', 'do'],
+		['--version'],
+		[],
+	]) {
+		it(`\`dorfl ${args.join(' ')}\` runs self with a notice`, () => {
+			const {spawn, calls} = recordingSpawn(ABSENT);
+			const notices: string[] = [];
+			const outcome = performForward({
+				decision,
+				argv: ARGV(...args),
+				env: {},
+				spawn,
+				writeNotice: (l) => notices.push(l),
+			});
+			// The pinned one was TRIED first (it answers when installed).
+			expect(calls).toHaveLength(1);
+			expect(outcome.kind).toBe('run-self');
+			expect(notices.join('\n')).toMatch(/may differ from the pinned version/);
+		});
+	}
+
+	it('a real command (even read-only) still fails loud', () => {
+		for (const args of [
+			['status'],
+			['promote', 'task:x'],
+			['do', '--', '--help'],
+		]) {
+			const {spawn} = recordingSpawn(ABSENT);
+			const outcome = performForward({
+				decision,
+				argv: ARGV(...args),
+				env: {},
+				spawn,
+				writeNotice: () => {},
+			});
+			expect(outcome.kind).toBe('error');
+		}
+	});
+
+	it('isHelpOrVersionRequest', () => {
+		expect(isHelpOrVersionRequest(['promote', '--help'])).toBe(true);
+		expect(isHelpOrVersionRequest(['status'])).toBe(false);
+		expect(isHelpOrVersionRequest(['run', '--', '-h'])).toBe(false);
 	});
 });
 

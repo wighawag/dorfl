@@ -1,5 +1,14 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {writeFileSync, existsSync} from 'node:fs';
+import {
+	writeFileSync,
+	existsSync,
+	mkdirSync,
+	chmodSync,
+	readFileSync,
+} from 'node:fs';
+import {parseSidecar, serialiseSidecar} from '../src/sidecar.js';
+import {spawnSync} from 'node:child_process';
+import {parseFrontmatter} from '../src/frontmatter.js';
 import {join} from 'node:path';
 import {
 	returnToBacklog,
@@ -250,5 +259,154 @@ describe('plain requeue and unknown slugs with no held lock', () => {
 			expect(result.reasonNotMoved).toBe(expected);
 		}
 		expect(heldLockOnArbiter(seeded.repo, 'ghost')).toBe(false);
+	});
+});
+
+describe('requeue -m on a surfaced item whose lock the surface already released', () => {
+	function showOnMain(repo: string, path: string): string | undefined {
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const res = spawnSync('git', ['show', `${ARBITER}/main:${path}`], {
+			cwd: repo,
+			env: gitEnv(),
+			encoding: 'utf8',
+		});
+		return res.status === 0 ? res.stdout : undefined;
+	}
+
+	it('answers the surfaced question with the note, applies it, and the next start continues', async () => {
+		const {seeded, repo, priorTip} = await surfacedWithKeptBranch('foxtrot');
+
+		const notes: string[] = [];
+		const result = await returnToBacklog({
+			cwd: repo,
+			slug: 'foxtrot',
+			arbiter: ARBITER,
+			message: 'The ports were busy; just retry.',
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		expect(result.reasonNotMoved).toBeUndefined();
+		expect(result.moved).toBe(true);
+		expect(result.handoffNoteDeliveredTo).toBe('main-answer');
+		expect(notes.join('\n')).toMatch(/answered its surfaced question/);
+		// Resolved on main: no sidecar, needsAnswers cleared, the note recorded
+		// both as the applied answer and as the handoff the continue prompt reads.
+		expect(sidecarSurfacedOnArbiterMain(repo, 'foxtrot')).toBe(false);
+		const body = showOnMain(repo, 'work/tasks/ready/foxtrot.md')!;
+		expect(parseFrontmatter(body).needsAnswers).not.toBe(true);
+		expect(body).toMatch(/^## Applied answers/m);
+		expect(body).toMatch(/^## Requeue \d{4}-\d{2}-\d{2}$/m);
+		expect(body.match(/The ports were busy; just retry\./g)).toHaveLength(2);
+		// The kept branch is untouched and the lock is not left held.
+		expect(arbiterRef(seeded, 'refs/heads/work/task-foxtrot')).toBe(priorTip);
+		expect(heldLockOnArbiter(repo, 'foxtrot')).toBe(false);
+
+		const next = seeded.clone('next');
+		const started = await performStart({
+			slug: 'foxtrot',
+			cwd: next,
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(started.outcome).toBe('started');
+		expect(started.message).toMatch(/continued/);
+		expect(existsSync(join(next, 'prior.txt'))).toBe(true);
+	});
+
+	it('a released item that is not surfaced gets the plain note on main', async () => {
+		const {seeded, repo} = await surfacedWithKeptBranch('golf');
+		// Answer + apply by hand first, so the item is released but no longer surfaced.
+		const first = await returnToBacklog({
+			cwd: repo,
+			slug: 'golf',
+			arbiter: ARBITER,
+			message: 'first',
+			env: gitEnv(),
+		});
+		expect(first.handoffNoteDeliveredTo).toBe('main-answer');
+
+		const second = await returnToBacklog({
+			cwd: repo,
+			slug: 'golf',
+			arbiter: ARBITER,
+			message: 'second thoughts',
+			env: gitEnv(),
+		});
+		expect(second.moved).toBe(true);
+		expect(second.handoffNoteDeliveredTo).toBe('main');
+		const body = showOnMain(repo, 'work/tasks/ready/golf.md')!;
+		expect(body).toContain('second thoughts');
+		expect(arbiterRef(seeded, 'refs/heads/work/task-golf')).not.toBe('');
+	});
+});
+
+describe('requeue -m: a failing answer path never strands the lock or loses the note', () => {
+	it('a commit hook that refuses the answer commit degrades to the plain note on main', async () => {
+		const {repo} = await surfacedWithKeptBranch('hotel');
+		// The answer path commits in a scratch worktree of THIS repo, so the
+		// repo's own hooks run there; make the commit fail.
+		const hooks = join(repo, '.git', 'hooks');
+		mkdirSync(hooks, {recursive: true});
+		writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\nexit 1\n');
+		chmodSync(join(hooks, 'pre-commit'), 0o755);
+
+		const notes: string[] = [];
+		const result = await returnToBacklog({
+			cwd: repo,
+			slug: 'hotel',
+			arbiter: ARBITER,
+			message: 'retry please',
+			env: gitEnv(),
+			note: (m) => notes.push(m),
+		});
+
+		expect(result.moved).toBe(true);
+		expect(result.handoffNoteDeliveredTo).toBe('main');
+		expect(notes.join('\n')).toMatch(/could not answer its surfaced question/);
+		// The lock (the short one this requeue took) is not left held.
+		expect(heldLockOnArbiter(repo, 'hotel')).toBe(false);
+		// The question stays open; the note reached the body.
+		expect(sidecarSurfacedOnArbiterMain(repo, 'hotel')).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		expect(
+			gitIn(['show', `${ARBITER}/main:work/tasks/ready/hotel.md`], repo),
+		).toContain('retry please');
+	});
+});
+
+describe('a re-bounce of an item surfaced with the pre-0.16.1 question wording', () => {
+	it('is recognised as already surfaced (no duplicate entry)', async () => {
+		const {seeded, repo} = await surfacedWithKeptBranch('india');
+		// Rewrite the surfaced question to the old em-dash wording on main.
+		const old = seeded.clone('legacy');
+		const path = join(old, 'work', 'questions', 'task-india.md');
+		const model = parseSidecar(readFileSync(path, 'utf8'));
+		writeFileSync(
+			path,
+			serialiseSidecar({
+				...model,
+				entries: model.entries.map((e) => ({
+					...e,
+					question: "'task:india' was bounced \u2014 how should we proceed?",
+				})),
+			}),
+		);
+		gitIn(['commit', '-qam', 'legacy wording'], old);
+		gitIn(['push', '-q', ARBITER, 'HEAD:main'], old);
+
+		const again = await surfaceStuckToNeedsAttention({
+			cwd: repo,
+			slug: 'india',
+			reason: 'continue rebase conflicted',
+			arbiter: ARBITER,
+			env: gitEnv(),
+		});
+		expect(again.surfaced).toBe(true);
+		gitIn(['fetch', '-q', ARBITER], repo);
+		const after = parseSidecar(
+			gitIn(['show', `${ARBITER}/main:work/questions/task-india.md`], repo),
+		);
+		expect(after.entries).toHaveLength(1);
 	});
 });

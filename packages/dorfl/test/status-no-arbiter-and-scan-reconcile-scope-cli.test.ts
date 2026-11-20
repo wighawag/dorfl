@@ -2,7 +2,6 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {buildProgram} from '../src/cli.js';
-import {DEFAULT_ARBITER_REMOTE} from '../src/arbiter.js';
 import {acquireItemLock} from '../src/item-lock.js';
 import {git, run} from '../src/git.js';
 import {
@@ -156,13 +155,16 @@ describe('status --no-arbiter / --arbiter <remote>', () => {
 		expect(JSON.parse(out).arbiter).toBeUndefined();
 	});
 
-	it('with neither flag the arbiter section is shown (default unchanged)', async () => {
+	it('with neither flag the arbiter section is shown, on the default arbiter `do` uses (origin)', async () => {
 		const cwd = operatorRepo('plain', {origin: 'file:///nowhere/a.git'});
 		const {code, out} = await runCli(statusArgv(['--json']), cwd);
 		expect(code ?? 0).toBe(0);
 		const report = JSON.parse(out);
 		expect(report.arbiter).toBeDefined();
-		expect(report.arbiter.remote).toBe(DEFAULT_ARBITER_REMOTE);
+		// Not the legacy `arbiter`-named remote: the same defaultArbiter
+		// do/advance/requeue resolve (dorfl 0.16.0 bug: "no 'arbiter' remote").
+		expect(report.arbiter.remote).toBe('origin');
+		expect(report.arbiter.configured).toBe(true);
 	});
 
 	it('--arbiter <remote> keeps the arbiter section and is used as the remote', async () => {

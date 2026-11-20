@@ -1,3 +1,4 @@
+import {withoutEmDashes} from './plain-text.js';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {run, type RunResult} from './git.js';
@@ -294,7 +295,9 @@ export function buildAdrBody(input: {
 		const q = question.trim();
 		const a = answer.trim();
 		if (q !== '' || a !== '') {
-			decisionLines.push(`- **${q || '(question)'}** — ${a || '(no answer)'}`);
+			decisionLines.push(
+				`- **${withoutEmDashes(q) || '(question)'}**: ${a || '(no answer)'}`,
+			);
 			if (a !== '') {
 				whyLines.push(a);
 			}

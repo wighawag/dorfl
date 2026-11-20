@@ -2,6 +2,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {run, type RunResult} from './git.js';
 import {setFrontmatterMarker} from './frontmatter.js';
+import {withoutEmDashes} from './plain-text.js';
 import {applyAtomic, type ApplyAtomicResult} from './sidecar-apply.js';
 import {
 	allAnswered,
@@ -340,7 +341,10 @@ function appliedAnswersBlock(entries: SidecarEntry[]): string {
 	const date = new Date().toISOString().slice(0, 10);
 	const lines: string[] = ['', `${APPLIED_HEADING} ${date}`, ''];
 	for (const entry of entries) {
-		lines.push(`### ${entry.id}: ${entry.question.trim()}`);
+		// The heading copies the (engine-written) question into the item body,
+		// which lands in the done record: no em dashes there. The answer below is
+		// the human's, recorded verbatim.
+		lines.push(`### ${entry.id}: ${withoutEmDashes(entry.question.trim())}`);
 		lines.push('');
 		lines.push(entry.answer.trim());
 		lines.push('');

@@ -1,3 +1,7 @@
+import {
+	surfacedConflictRecoveryHint,
+	surfacedRecoveryHint,
+} from './surfaced-recovery.js';
 import {performClaim} from './claim-cas.js';
 import {readItemLock} from './item-lock.js';
 import {ledgerWrite} from './ledger-write.js';
@@ -417,9 +421,8 @@ async function continueConflictResult(params: {
 	const message =
 		`Could not continue '${params.slug}': the kept work branch did not rebase ` +
 		`cleanly onto ${params.arbiter}/main ` +
-		`(${continueRebaseSentence(workBranchRef('task', params.slug), params.failure)}); marked stuck on its per-item lock ` +
-		'(surfaced by status). Resolve against the latest main, or `requeue --reset` ' +
-		'to discard and start fresh.';
+		`(${continueRebaseSentence(workBranchRef('task', params.slug), params.failure)}). ` +
+		surfacedConflictRecoveryHint(params.slug);
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',
@@ -451,9 +454,9 @@ async function continuePushFailureResult(params: {
 	}
 	const message =
 		`Could not continue '${params.slug}': publishing the rebased work branch to ` +
-		`${params.arbiter} failed terminally (${params.pushFailure}); marked stuck ` +
-		'on its per-item lock (surfaced by status), the kept branch left intact on ' +
-		'the arbiter (recoverable). `requeue` to retry once the churn settles.';
+		`${params.arbiter} failed terminally (${params.pushFailure}); the kept ` +
+		'branch is left intact on the arbiter (recoverable). Once the churn ' +
+		`settles: ${surfacedRecoveryHint(params.slug)}`;
 	return {
 		exitCode: 1,
 		outcome: 'needs-attention',

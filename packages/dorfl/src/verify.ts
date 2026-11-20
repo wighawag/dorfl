@@ -92,6 +92,89 @@ export interface RunVerifyOptions {
 	onStdout?: (chunk: string) => void;
 	/** Sink for streamed stderr chunks. Defaults to `process.stderr.write`. */
 	onStderr?: (chunk: string) => void;
+	/**
+	 * How long to wait before each RETRY of a command whose failure looks
+	 * ENVIRONMENTAL ({@link detectEnvironmentalGateFailure}: a port the suite
+	 * needs is held by another process). One entry per retry; `[]` disables the
+	 * retry. Defaults to `DORFL_GATE_ENV_RETRY_DELAYS_MS` (comma-separated ms,
+	 * empty = no retry) when set in `env`, else {@link DEFAULT_ENV_RETRY_DELAYS_MS}.
+	 */
+	environmentalRetryDelaysMs?: number[];
+	/** Injectable sleep for the environmental retry (tests). */
+	sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * The default waits before re-running a gate command that failed for an
+ * ENVIRONMENTAL reason: two retries, 30 s then 90 s. Long enough for a sibling
+ * project's e2e run to release its ports, short enough not to stall a run.
+ */
+export const DEFAULT_ENV_RETRY_DELAYS_MS: readonly number[] = [30_000, 90_000];
+
+/**
+ * Output signatures of a gate failure caused by the MACHINE, not the work: a
+ * port the repository's suite binds is already taken (typically another
+ * project's dev server or e2e run on the same host). Matched against the failed
+ * command's output tail. Conservative on purpose: only phrases that name an
+ * address/port conflict, so a genuine test failure never reads as one.
+ */
+const ENVIRONMENTAL_GATE_SIGNATURES: readonly {re: RegExp; what: string}[] = [
+	{
+		re: /\bEADDRINUSE\b/,
+		what: 'a port the gate needs was already in use (EADDRINUSE)',
+	},
+	{
+		re: /address already in use/i,
+		what: 'a port the gate needs was already in use (address already in use)',
+	},
+	// Playwright's webServer: "http://localhost:4273 is already used, make sure
+	// that nothing is running on the port/url or set reuseExistingServer:true".
+	{
+		re: /\b(?:https?:\/\/)?[\w.-]+:(\d{2,5})\/?\s+is already used\b/i,
+		what: 'a port the gate needs was already in use (PORT is already used)',
+	},
+	{
+		re: /\bport\s+(\d{2,5})\s+is\s+(?:already\s+)?in\s+use\b/i,
+		what: 'a port the gate needs was already in use (port PORT is in use)',
+	},
+];
+
+/**
+ * If a failed gate command's output shows an ENVIRONMENTAL cause (see
+ * {@link ENVIRONMENTAL_GATE_SIGNATURES}), a one-line description of it; else
+ * undefined. Pure, so the classification is unit-testable and shared by the
+ * retry here and the surfaced reason upstream.
+ */
+export function detectEnvironmentalGateFailure(
+	output: string | undefined,
+): string | undefined {
+	if (output === undefined || output === '') {
+		return undefined;
+	}
+	for (const {re, what} of ENVIRONMENTAL_GATE_SIGNATURES) {
+		const m = re.exec(output);
+		if (m) {
+			return m[1] !== undefined ? what.replace('PORT', m[1]) : what;
+		}
+	}
+	return undefined;
+}
+
+/** The environmental retry delays in effect (see {@link RunVerifyOptions.environmentalRetryDelaysMs}). */
+function resolveEnvRetryDelays(options: RunVerifyOptions): number[] {
+	if (options.environmentalRetryDelaysMs !== undefined) {
+		return [...options.environmentalRetryDelaysMs];
+	}
+	const raw = (options.env ?? process.env).DORFL_GATE_ENV_RETRY_DELAYS_MS;
+	if (raw !== undefined) {
+		return raw
+			.split(',')
+			.map((p) => p.trim())
+			.filter((p) => p !== '')
+			.map((p) => Number(p))
+			.filter((n) => Number.isFinite(n) && n >= 0);
+	}
+	return [...DEFAULT_ENV_RETRY_DELAYS_MS];
 }
 
 export interface RunVerifyResult {
@@ -124,6 +207,16 @@ export interface RunVerifyResult {
 	 * rather than crashing on the thrown {@link VerifyNotConfiguredError}.
 	 */
 	notConfigured?: boolean;
+	/**
+	 * Set when the failure looks ENVIRONMENTAL (the machine, not the work: e.g. a
+	 * port the suite binds was held by another process), with a one-line
+	 * description. The failing command was already retried
+	 * {@link environmentalRetries} times; callers report it as environmental
+	 * rather than asking a human how to fix the work.
+	 */
+	environmental?: string;
+	/** How many environmental retries of the failing command ran (0 when none). */
+	environmentalRetries?: number;
 }
 
 /**
@@ -171,6 +264,10 @@ export async function runVerify(
 	const onStderr =
 		options.onStderr ?? ((chunk: string) => process.stderr.write(chunk));
 
+	const envDelays = resolveEnvRetryDelays(options);
+	const sleep =
+		options.sleep ??
+		((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	for (const command of commands) {
 		// Capture a bounded ring of this command's combined output so a FAILURE can
 		// carry the actual error text (not just an exit code). Reset per command so
@@ -188,16 +285,40 @@ export async function runVerify(
 				tail.splice(0, tail.length - maxRing);
 			}
 		};
-		const exitCode = await runOne(command, options.cwd, options.env, {
-			onStdout: (chunk) => {
+		const sinks = {
+			onStdout: (chunk: string) => {
 				capture(chunk);
 				onStdout(chunk);
 			},
-			onStderr: (chunk) => {
+			onStderr: (chunk: string) => {
 				capture(chunk);
 				onStderr(chunk);
 			},
-		});
+		};
+		let exitCode = await runOne(command, options.cwd, options.env, sinks);
+		let environmental: string | undefined;
+		let retries = 0;
+		// ENVIRONMENTAL retry: a failure the output pins on the machine (a port
+		// held by another process) is re-run after a wait, the failing command
+		// only (the earlier ones passed). A genuine failure is never retried.
+		while (exitCode !== 0) {
+			environmental = detectEnvironmentalGateFailure(
+				lastNonEmptyLines(tail, VERIFY_OUTPUT_TAIL_LINES * 4),
+			);
+			if (environmental === undefined || retries >= envDelays.length) {
+				break;
+			}
+			const wait = envDelays[retries];
+			retries++;
+			onStderr(
+				`[dorfl] gate step \`${command}\` failed for an environmental reason ` +
+					`(${environmental}); retrying in ${Math.round(wait / 1000)}s ` +
+					`(${retries}/${envDelays.length})...\n`,
+			);
+			await sleep(wait);
+			tail.length = 0;
+			exitCode = await runOne(command, options.cwd, options.env, sinks);
+		}
 		if (exitCode !== 0) {
 			return {
 				exitCode,
@@ -205,6 +326,9 @@ export async function runVerify(
 				passed: false,
 				failedCommand: command,
 				outputTail: lastNonEmptyLines(tail, VERIFY_OUTPUT_TAIL_LINES),
+				...(environmental !== undefined
+					? {environmental, environmentalRetries: retries}
+					: {}),
 			};
 		}
 	}

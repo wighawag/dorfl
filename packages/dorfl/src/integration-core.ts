@@ -32,7 +32,12 @@ import {
 	type ReviewProvider,
 	proposeRequestNotOpened,
 } from './integrator.js';
+import type {NewQuestion} from './sidecar.js';
 import {extractDecisionsBlock, sanitizeDecisionsBlock} from './agent-stop.js';
+import {
+	surfacedConflictRecoveryHint,
+	surfacedRecoveryHint,
+} from './surfaced-recovery.js';
 import {ledgerWrite} from './ledger-write.js';
 import {selectProvider} from './github.js';
 import type {IntegrationMode} from './config.js';
@@ -69,9 +74,24 @@ import {
 export function formatGateFailureContext(params: {
 	failedCommand?: string;
 	outputTail?: string;
+	/** {@link RunVerifyResult.environmental}: the failure was the machine's, not the work's. */
+	environmental?: string;
+	/** {@link RunVerifyResult.environmentalRetries}. */
+	environmentalRetries?: number;
 }): string {
-	const {failedCommand, outputTail} = params;
+	const {failedCommand, outputTail, environmental} = params;
 	const parts: string[] = [];
+	if (environmental !== undefined) {
+		const retries = params.environmentalRetries ?? 0;
+		parts.push(
+			`ENVIRONMENTAL, not the work: ${environmental}` +
+				(retries > 0
+					? ` (retried ${retries} time${retries === 1 ? '' : 's'}, still failing)`
+					: '') +
+				'. Free the port (or wait for the other run to finish) and retry; ' +
+				'nothing in the work needs to change',
+		);
+	}
 	if (failedCommand !== undefined && failedCommand.trim() !== '') {
 		parts.push(`the failing step was: \`${failedCommand.trim()}\``);
 	}
@@ -81,7 +101,39 @@ export function formatGateFailureContext(params: {
 	if (parts.length === 0) {
 		return '';
 	}
-	return ` — ${parts.join('; ')}`;
+	return `: ${parts.join('; ')}`;
+}
+
+/**
+ * The clause a gate-failure message carries when the failure was ENVIRONMENTAL
+ * (`` (ENVIRONMENTAL, not the work: <what>)``), or `''`.
+ */
+function environmentalNote(gate: {environmental?: string}): string {
+	return gate.environmental === undefined
+		? ''
+		: ` (ENVIRONMENTAL, not the work: ${gate.environmental})`;
+}
+
+/**
+ * The surfaced question for a gate failure: the generic bounce envelope, except
+ * for an ENVIRONMENTAL failure, which asks the one thing a human can decide
+ * (retry once the machine is clear) instead of "how should we proceed?".
+ */
+function gateFailureEnvelope(
+	slug: string,
+	gate: {environmental?: string},
+): NewQuestion | undefined {
+	if (gate.environmental === undefined) {
+		return undefined;
+	}
+	return {
+		kind: 'stuck',
+		question:
+			`'task:${slug}' failed its acceptance gate for an environmental reason ` +
+			`(${gate.environmental}), not because of the work. Retry once the ` +
+			'machine is clear?',
+		default: 'retry',
+	};
 }
 
 /**
@@ -927,11 +979,14 @@ export async function performIntegration(
 				formatGateFailureContext({
 					failedCommand: gate.failedCommand,
 					outputTail: gate.outputTail,
+					environmental: gate.environmental,
+					environmentalRetries: gate.environmentalRetries,
 				});
 			const routed = await ledgerWrite.applyNeedsAttentionTransition({
 				cwd,
 				slug,
 				reason,
+				envelope: gateFailureEnvelope(slug, gate),
 				// Autonomous caller (`do`) passes the arbiter so the seam both SURFACES
 				// the stuck state on `main` (OBSERVABLE, cross-machine visible) AND
 				// pushes the `work/<slug>` branch (RECOVERABLE — a requeue-continue on
@@ -949,9 +1004,8 @@ export async function performIntegration(
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: routed.moved
-					? `Acceptance gate failed (exit ${gate.exitCode}); marked '${slug}' ` +
-						'stuck on its per-item lock (surfaced by status; `requeue` once ' +
-						'resolved). Fix the work, or use --skip-verify to override.'
+					? `Acceptance gate failed (exit ${gate.exitCode})` +
+						`${environmentalNote(gate)}. ${surfacedRecoveryHint(slug)}`
 					: `Acceptance gate failed (exit ${gate.exitCode}); not completing ` +
 						`'${slug}'. Fix the work, or use --skip-verify to override.`,
 			};
@@ -1296,7 +1350,7 @@ export async function performIntegration(
 				const what =
 					gated.kind === 'prepare'
 						? `Env-prep (prepare) failed (exit ${gated.exitCode})`
-						: `Acceptance gate failed (exit ${gated.exitCode})`;
+						: `Acceptance gate failed (exit ${gated.exitCode})${environmentalNote(gated)}`;
 				// The gate-failure CONTEXT (which command failed + its output tail) is
 				// meaningful only for a `verify` failure; a prepare failure names its
 				// single command already. Enrich the surfaced reason so the question is
@@ -1307,6 +1361,8 @@ export async function performIntegration(
 						: formatGateFailureContext({
 								failedCommand: gated.failedCommand,
 								outputTail: gated.outputTail,
+								environmental: gated.environmental,
+								environmentalRetries: gated.environmentalRetries,
 							});
 				const reason =
 					gated.kind === 'prepare'
@@ -1316,6 +1372,7 @@ export async function performIntegration(
 					cwd,
 					slug,
 					reason,
+					envelope: gateFailureEnvelope(slug, gated),
 					arbiter: input.surfaceArbiter,
 					env,
 					note,
@@ -1326,9 +1383,7 @@ export async function performIntegration(
 					branch,
 					commitMessage,
 					reason: routed.moved
-						? `${what} on the rebased tip; marked '${slug}' stuck on its ` +
-							'per-item lock (surfaced by status; `requeue` once resolved). ' +
-							'Fix the work, or use --skip-verify to override.'
+						? `${what} on the rebased tip. ${surfacedRecoveryHint(slug)}`
 						: `${what} on the rebased tip; not completing '${slug}'. Fix the ` +
 							'work, or use --skip-verify to override.',
 				};
@@ -1739,9 +1794,7 @@ async function rebaseConflictRoute(
 		commitMessage,
 		reason: routed.moved
 			? `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
-				`aborted (never auto-resolved) and '${slug}' was marked stuck on ` +
-				'its per-item lock (surfaced by status). Resolve against the latest ' +
-				'main, then `requeue` to release the stuck lock and re-run.'
+				`aborted (never auto-resolved). ${surfacedConflictRecoveryHint(slug)}`
 			: `Rebasing ${branch} onto ${arbiter}/main conflicted; the rebase was ` +
 				'aborted (never auto-resolved). Resolve against the latest main, ' +
 				'then re-run complete.',
@@ -1929,10 +1982,8 @@ export async function landIntegration(
 			commitMessage,
 			reason: routed.moved
 				? `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
-					`non-fast-forward push (a sibling advanced main); '${slug}' was ` +
-					`marked stuck on its per-item lock (surfaced by status). Resolve ` +
-					`against the latest main, then \`requeue\` to release the stuck ` +
-					`lock and re-run.`
+					`non-fast-forward push (a sibling advanced main). ` +
+					surfacedRecoveryHint(slug)
 				: `Integrating ${branch} onto ${arbiter}/main kept hitting a ` +
 					`non-fast-forward push (a sibling advanced main). Resolve against the ` +
 					`latest main, then re-run complete.`,
@@ -2301,13 +2352,15 @@ async function recoverAlreadyCommitted(params: {
 			const what =
 				gated.kind === 'prepare'
 					? `Env-prep (prepare) failed (exit ${gated.exitCode})`
-					: `Acceptance gate failed (exit ${gated.exitCode})`;
+					: `Acceptance gate failed (exit ${gated.exitCode})${environmentalNote(gated)}`;
 			const context =
 				gated.kind === 'prepare'
 					? ''
 					: formatGateFailureContext({
 							failedCommand: gated.failedCommand,
 							outputTail: gated.outputTail,
+							environmental: gated.environmental,
+							environmentalRetries: gated.environmentalRetries,
 						});
 			const reason =
 				gated.kind === 'prepare'
@@ -2317,6 +2370,7 @@ async function recoverAlreadyCommitted(params: {
 				cwd,
 				slug,
 				reason,
+				envelope: gateFailureEnvelope(slug, gated),
 				arbiter: params.surfaceArbiter,
 				env,
 				note,
@@ -2326,10 +2380,8 @@ async function recoverAlreadyCommitted(params: {
 				routedToNeedsAttention: routed.moved,
 				branch,
 				reason: routed.moved
-					? `${what} on the rebased tip during committed-recovery; marked ` +
-						`'${slug}' stuck on its per-item lock (surfaced by status; ` +
-						'`requeue` once resolved). Fix the work, or use --skip-verify ' +
-						'to override.'
+					? `${what} on the rebased tip during committed-recovery. ` +
+						surfacedRecoveryHint(slug)
 					: `${what} on the rebased tip during committed-recovery; not ` +
 						`completing '${slug}'. Fix the work, or use --skip-verify to ` +
 						'override.',
@@ -3795,9 +3847,8 @@ async function runGate2Review(params: {
 			note,
 		});
 		const message = routed.moved
-			? `PR/code review (Gate 2) blocked '${slug}'; marked it stuck on its ` +
-				'per-item lock (surfaced by status; the blocking findings are ' +
-				'recorded on the lock entry). NOT integrated.'
+			? `PR/code review (Gate 2) blocked '${slug}'; NOT integrated. ` +
+				surfacedRecoveryHint(slug)
 			: `PR/code review (Gate 2) blocked '${slug}'; NOT integrating.`;
 		note(message);
 		return {
@@ -3841,6 +3892,10 @@ interface FreshGateResult {
 	 * actual error text.
 	 */
 	outputTail?: string;
+	/** {@link RunVerifyResult.environmental} (`verify` kind only). */
+	environmental?: string;
+	/** {@link RunVerifyResult.environmentalRetries} (`verify` kind only). */
+	environmentalRetries?: number;
 	/**
 	 * The Gate-2 REVIEW outcome, present ONLY when a review gate was supplied to the
 	 * fresh gate AND `verify` passed (so the review ran AFTER it on the rebased tip).
@@ -3936,6 +3991,8 @@ async function runFreshWorktreeGate(params: {
 				exitCode: gate.exitCode,
 				failedCommand: gate.failedCommand,
 				outputTail: gate.outputTail,
+				environmental: gate.environmental,
+				environmentalRetries: gate.environmentalRetries,
 			};
 		}
 		// GATE-2 REVIEW on the rebased tip, AFTER the green verify (verify-then-review

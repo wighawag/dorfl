@@ -32,7 +32,12 @@ import {
 } from './ledger-write.js';
 import {refWrite} from './ref-write.js';
 import {workBranchRef} from './slug-namespace.js';
+import {withoutEmDashes} from './plain-text.js';
 import {refreshArbiterRefs, resolveArbiterBranch} from './arbiter-refs.js';
+import {
+	pendingSidecarOnCommit,
+	prepareAnsweredRequeueCommit,
+} from './requeue-answer.js';
 import {
 	appendQuestions,
 	isEntryAnswered,
@@ -101,6 +106,12 @@ export interface RouteToNeedsAttentionOptions {
 	reason: string;
 	/** Any questions the agent surfaced for the human, recorded under the reason. */
 	questions?: string[];
+	/**
+	 * OPTIONAL engine-authored envelope override for the surfaced question (see
+	 * {@link SurfaceToNeedsAttentionOptions.envelope}), e.g. the environmental
+	 * gate-failure question. Absent: the generic bounce envelope.
+	 */
+	envelope?: NewQuestion;
 	/**
 	 * The arbiter remote to push the transition to (like the done-move). When
 	 * omitted, the move is committed locally only (the caller pushes the branch as
@@ -304,11 +315,13 @@ export interface ReturnToBacklogResult {
 	continueBranch?: ResolvedContinueBranch;
 	/**
 	 * Where the `-m` handoff note was delivered: `main` (the item body on
-	 * `<arbiter>/main`, the normal path) or `work-branch` (the body on the kept
+	 * `<arbiter>/main`, the normal path), `main-answer` (the item was SURFACED:
+	 * the note was written as the answer to its pending question and applied on
+	 * `<arbiter>/main`, plus the `## Requeue` section), or `work-branch` (the body on the kept
 	 * `work/<type>-<slug>` branch, the fallback when `main` refused the write, e.g. a
 	 * protected branch). Absent when no note was given or it was not delivered.
 	 */
-	handoffNoteDeliveredTo?: 'main' | 'work-branch';
+	handoffNoteDeliveredTo?: 'main' | 'main-answer' | 'work-branch';
 	/**
 	 * The FULL `-m` note text when it could be delivered NOWHERE. The requeue still
 	 * releases the lock (the load-bearing recovery), but the note is printed in full
@@ -431,7 +444,9 @@ export async function routeToNeedsAttention(
 	//    longer needs a folder source — the body rests in `backlog/` (task 9a) and
 	//    never moves on a bounce.
 	const hadWip = commitAbortedWork({cwd, slug, env});
-	const commitMessage = `chore(${slug}): bounce to stuck; ${options.reason}`;
+	const commitMessage = withoutEmDashes(
+		`chore(${slug}): bounce to stuck; ${options.reason}`,
+	);
 	const moveCommit = hadWip ? revParseHead(cwd, env) : undefined;
 	note(`Bounced '${slug}' to stuck (lock): ${options.reason}`);
 
@@ -788,11 +803,27 @@ export async function returnToBacklog(
 			branch: continueBranchName,
 			env,
 		});
+		// `-m` on a released item (task: the handoff path must work in the
+		// common gate-failed-and-surfaced case): a SURFACED item (its question
+		// pending on main) is a valid target even without a kept branch, since
+		// the note becomes the answer to that question.
+		const handoffGiven =
+			options.message !== undefined && options.message.trim() !== '';
+		const surfacedForHandoff =
+			handoffGiven &&
+			!options.reset &&
+			!options.reconcile &&
+			(await surfacedInPoolOnMain({cwd, slug, arbiter, env}));
 		if (
-			releasedRecoverable !== undefined &&
-			(options.reset || options.reconcile)
+			(releasedRecoverable !== undefined &&
+				(options.reset || options.reconcile || handoffGiven)) ||
+			surfacedForHandoff
 		) {
-			const verb = options.reset ? '--reset' : '--reconcile';
+			const verb = options.reset
+				? '--reset'
+				: options.reconcile
+					? '--reconcile'
+					: '-m';
 			const acquired = await acquireItemLock({
 				item: `task:${slug}`,
 				action: 'implement',
@@ -813,8 +844,13 @@ export async function returnToBacklog(
 			shortLock = true;
 			note(
 				`'${slug}' has no held lock (a surface or earlier requeue already ` +
-					`released it); took a short lock to ${options.reset ? 'discard' : 'reconcile'} ` +
-					`the kept ${continueBranchName} (${verb}).`,
+					`released it); took a short lock to ` +
+					(options.reset
+						? `discard the kept ${continueBranchName}`
+						: options.reconcile
+							? `reconcile the kept ${continueBranchName}`
+							: 'deliver the handoff note') +
+					` (${verb}).`,
 			);
 		}
 	}
@@ -867,6 +903,7 @@ export async function returnToBacklog(
 				? ` NOTE: '${slug}' rests in the pool (${releasedRecoverable.bodyRel}) ` +
 					`with a kept work branch ${continueBranchName} on ${arbiter}; the ` +
 					'next claim continues from it, so plain requeue has nothing to do. ' +
+					'To hand the next run an instruction: `requeue -m "<note>"`. ' +
 					'To act on the kept branch: `requeue --reconcile` (non-destructive ' +
 					're-sync + rebase retry) or `requeue --reset` (DESTRUCTIVELY discard ' +
 					'it and start fresh).'
@@ -1001,6 +1038,36 @@ async function probeReleasedRecoverableItem(params: {
 		return {bodyRel, branchSha: resolved.sha};
 	} catch {
 		return undefined;
+	}
+}
+
+/**
+ * Is `task:<slug>` SURFACED and at rest: its body in `tasks/ready/` or
+ * `tasks/backlog/` on `<arbiter>/main` with a pending question sidecar? The
+ * released-lock state a `requeue -m` answers (with or without a kept branch).
+ * Best-effort: any fault answers false (the plain refusal stands).
+ */
+async function surfacedInPoolOnMain(params: {
+	cwd: string;
+	slug: string;
+	arbiter: string;
+	env: NodeJS.ProcessEnv | undefined;
+}): Promise<boolean> {
+	const {cwd, slug, arbiter, env} = params;
+	try {
+		const bodyRel = await resolveBounceItemBodyPathOnMain({
+			cwd,
+			item: `task:${slug}`,
+			arbiter,
+			env,
+		});
+		return (
+			bodyRel !== undefined &&
+			pendingSidecarOnCommit({cwd, slug, commit: `${arbiter}/main`, env}) !==
+				undefined
+		);
+	} catch {
+		return false;
 	}
 }
 
@@ -1207,10 +1274,18 @@ async function requeueHeldItem(params: {
 	// append degrades to a WARNING and the lock release below STILL runs, because the
 	// lock release is the load-bearing recovery and must never be stranded by an
 	// optional note (obs `requeue-dash-m-fails-and-strands-lock-for-staged-backlog-item`).
-	let handoffNoteDeliveredTo: 'main' | 'work-branch' | undefined;
+	let handoffNoteDeliveredTo:
+		| 'main'
+		| 'main-answer'
+		| 'work-branch'
+		| undefined;
 	let handoffNoteUndelivered: string | undefined;
 	if (handoff !== undefined) {
-		const noted = await runTreelessLedgerMove({
+		// A SURFACED item (a pending question on main): the note IS the answer.
+		// Answer + apply it in one tree-less write, so the item is buildable again
+		// (needsAnswers cleared, sidecar gone) and the next `do` continues. An item
+		// with no pending question takes the plain-note path below, unchanged.
+		const answered = await runTreelessLedgerMove({
 			cwd,
 			slug,
 			arbiter,
@@ -1220,28 +1295,76 @@ async function requeueHeldItem(params: {
 			env,
 			note,
 			plan: (base) => {
-				const bodyRel = bodyResidenceCandidates
-					.map((folder) => workItemRel(folder, `${slug}.md`))
-					.find((rel) => pathInCommit(base, rel, cwd, env));
-				if (bodyRel === undefined) {
-					// The body is in neither tasks/ready/ nor tasks/backlog/ on this base —
-					// nothing to annotate (the durable move that placed it must land first).
+				// The answer path commits in a scratch worktree (so the repo's own
+				// commit hooks run) and applies the answer; ANY failure there must
+				// not escape: it would skip the lock release below and lose the note.
+				// Degrade to the plain-note path instead, saying why.
+				let prepared: ReturnType<typeof prepareAnsweredRequeueCommit>;
+				try {
+					prepared = prepareAnsweredRequeueCommit({
+						cwd,
+						slug,
+						base,
+						handoff,
+						insertNote: insertRequeueNoteText,
+						env,
+					});
+				} catch (err) {
+					note(
+						`requeue for '${slug}': could not answer its surfaced question with ` +
+							`the -m note (${err instanceof Error ? err.message : String(err)}); ` +
+							'delivering it as a plain handoff note instead (the question stays ' +
+							'open: answer it, or run `dorfl advance`).',
+					);
 					return 'missing';
 				}
-				return prepareTreelessMoveCommit({
-					cwd,
-					slug,
-					base,
-					sourceRel: bodyRel,
-					destRel: bodyRel,
-					transformBody: (body) => insertRequeueNoteText(body, handoff),
-					commitMessage: `chore(${slug}): requeue handoff note`,
-					refNamespace: 'requeue',
-					env,
-				});
+				// Not surfaced: nothing to answer; the plain note path runs instead.
+				return prepared === 'not-surfaced' ? 'missing' : prepared;
 			},
 		});
-		if (noted.kind === 'landed') {
+		const noted =
+			answered.kind === 'landed' || answered.kind === 'refused'
+				? answered
+				: await runTreelessLedgerMove({
+						cwd,
+						slug,
+						arbiter,
+						kind: 'requeue',
+						onContended: 'requeue',
+						explicitMainRefspec: false,
+						env,
+						note,
+						plan: (base) => {
+							const bodyRel = bodyResidenceCandidates
+								.map((folder) => workItemRel(folder, `${slug}.md`))
+								.find((rel) => pathInCommit(base, rel, cwd, env));
+							if (bodyRel === undefined) {
+								// The body is in neither tasks/ready/ nor tasks/backlog/ on this base —
+								// nothing to annotate (the durable move that placed it must land first).
+								return 'missing';
+							}
+							return prepareTreelessMoveCommit({
+								cwd,
+								slug,
+								base,
+								sourceRel: bodyRel,
+								destRel: bodyRel,
+								transformBody: (body) => insertRequeueNoteText(body, handoff),
+								commitMessage: `chore(${slug}): requeue handoff note`,
+								refNamespace: 'requeue',
+								env,
+							});
+						},
+					});
+		if (answered.kind === 'landed') {
+			handoffNoteDeliveredTo = 'main-answer';
+			note(
+				`requeue for '${slug}': answered its surfaced question on ${arbiter}/main ` +
+					'with the -m note and applied it (needsAnswers cleared, the question ' +
+					'sidecar removed, the note recorded in the body); the next `do` ' +
+					'picks it up.',
+			);
+		} else if (noted.kind === 'landed') {
 			handoffNoteDeliveredTo = 'main';
 		} else {
 			// FALLBACK: `main` could not take the note (refused, e.g. a protected
@@ -1523,7 +1646,9 @@ async function attemptReconcile(params: {
 		};
 	}
 	try {
-		const rebase = rebaseContinuedBranchOntoMain(worktree, arbMainRef, env);
+		const rebase = rebaseContinuedBranchOntoMain(worktree, arbMainRef, env, {
+			slug,
+		});
 		const resolvedSidecars = describeSidecarResolutions(rebase);
 		if (resolvedSidecars !== undefined) {
 			note(resolvedSidecars);
@@ -2346,7 +2471,7 @@ function buildBounceEnvelope(params: {
 		};
 	}
 	return {
-		question: `'${item}' was bounced — how should we proceed?`,
+		question: `'${item}' was bounced. How should we proceed?`,
 		context: reason,
 		kind: 'stuck',
 	};
@@ -2403,8 +2528,8 @@ function bounceAlreadySurfaced(params: {
 		return additions.every((addition) =>
 			pending.some(
 				(entry) =>
-					entry.question === addition.question &&
-					entry.context === (addition.context ?? ''),
+					sameBounceQuestion(entry.question, addition.question) &&
+					entry.context === withoutEmDashes(addition.context ?? ''),
 			),
 		);
 	} catch {
@@ -2412,6 +2537,22 @@ function bounceAlreadySurfaced(params: {
 		// and let the normal surface path run (the safe direction: record the bounce).
 		return false;
 	}
+}
+
+/**
+ * Do two bounce questions say the same thing? Compared after the committed-text
+ * normalisation ({@link withoutEmDashes}), and with the pre-0.16.1 generic
+ * envelope ("'<item>' was bounced \u2014 how should we proceed?") read as the
+ * current one, so an item surfaced before the wording change is not given a
+ * duplicate entry on its next identical bounce.
+ */
+function sameBounceQuestion(stored: string, wanted: string): boolean {
+	const norm = (q: string): string =>
+		withoutEmDashes(q).replace(
+			/ was bounced: how should we proceed\?$/,
+			' was bounced. How should we proceed?',
+		);
+	return norm(stored) === norm(wanted);
 }
 
 /** The heading that opens an appended requeue handoff note in the item body. */
@@ -3560,7 +3701,7 @@ export async function surfaceStuckToNeedsAttention(
 				reason,
 				questions,
 				envelope,
-				commitMessage: `surface ${item} (stuck): ${reason}`,
+				commitMessage: withoutEmDashes(`surface ${item} (stuck): ${reason}`),
 				refNamespace: 'surface-stuck',
 				env,
 			});

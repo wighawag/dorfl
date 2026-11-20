@@ -3336,8 +3336,10 @@ async function runRemotePipeline(
 		// the SAME work), the SAME convergence in-place `do`/`run` apply, so `do --remote`
 		// agrees on the label. The job worktree is RETAINED by the §4 reap (a
 		// not-provably-safe tree); hand the operator the recover-one-liner like the other
-		// retained-tree failures.
-		note(recoverIsolatedOneLiner(slug));
+		// retained-tree failures (only when NOT surfaced, as below).
+		if (completed.routedToNeedsAttention !== true) {
+			note(recoverIsolatedOneLiner(slug));
+		}
 		const cause = classifyFailureCause(completed.message);
 		return {
 			exitCode: 1,
@@ -3365,7 +3367,15 @@ async function runRemotePipeline(
 		// needs-attention on the arbiter) — `do --remote` inherits the fix here
 		// without per-caller duplication; mapped to the SAME `needs-attention`
 		// outcome shape the in-place `performDo` uses.
-		note(recoverIsolatedOneLiner(slug));
+		//
+		// A SURFACED item (question on main, lock released) is NOT recovered by
+		// `complete --isolated`: that re-runs the integrate the gate just refused,
+		// and after the answer lands it meets main's edit of the task file. Its
+		// message already names the recovery that works (`requeue -m`, then `do`),
+		// so the worktree one-liner is only for an item that was NOT surfaced.
+		if (completed.routedToNeedsAttention !== true) {
+			note(recoverIsolatedOneLiner(slug));
+		}
 		return {
 			exitCode: 1,
 			outcome: 'needs-attention',

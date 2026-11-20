@@ -585,6 +585,47 @@ function resolveDefaultArbiterForCwd(
 }
 
 /**
+ * The arbiter remotes `status` / `scan` report on, resolved from the cwd the
+ * SAME way `do`, `advance` and `requeue` resolve theirs: the coordination
+ * arbiter is `--arbiter <remote>` when given, else the per-repo/global
+ * `defaultArbiter` (default `origin`); the reported (divergence) remote is
+ * `--arbiter-remote` when given, else that same coordination arbiter. It used
+ * to default to a remote literally named `arbiter`, so a repo whose arbiter is
+ * `origin` (every GitHub-hosted one) was told "no 'arbiter' remote configured"
+ * while every other command worked against `origin`.
+ */
+export function resolveStatusArbiterRemotes(input: {
+	flags: {arbiter?: string | false; arbiterRemote?: string};
+	global: Config;
+	override?: ConfigOverrideMap;
+	cwd?: string;
+}): {report: string; coordination: string} {
+	const {flags} = input;
+	const coordination =
+		typeof flags.arbiter === 'string' && flags.arbiter !== ''
+			? flags.arbiter
+			: resolveDefaultArbiterForCwdSafe(
+					input.cwd ?? process.cwd(),
+					input.global,
+					input.override,
+				);
+	return {report: flags.arbiterRemote ?? coordination, coordination};
+}
+
+/** {@link resolveDefaultArbiterForCwd}, falling back to the global value on any read fault. */
+function resolveDefaultArbiterForCwdSafe(
+	cwd: string,
+	global: Config,
+	override?: ConfigOverrideMap,
+): string {
+	try {
+		return resolveDefaultArbiterForCwd(cwd, global, {}, override);
+	} catch {
+		return global.defaultArbiter;
+	}
+}
+
+/**
  * First-use prompt for the human worktree root (`work-on`). Offers `suggestion`
  * as the default (Enter accepts it); a blank non-interactive answer aborts. The
  * prompt goes to stderr so `--print-dir`'s stdout stays clean.
@@ -1721,11 +1762,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--arbiter-remote <name>',
-			`the current repo's arbiter remote to fetch + diff its local section against (default: ${DEFAULT_ARBITER_REMOTE})`,
+			"the current repo's arbiter remote to fetch + diff its local section against (default: the same arbiter `do` uses: --arbiter, else the per-repo/global defaultArbiter)",
 		)
 		.option(
 			'--arbiter <remote>',
-			'the COORDINATION arbiter remote whose per-item lock refs (refs/dorfl/lock/*) gate the cwd selection pool (held in-flight items are subtracted); default: origin (the same remote claim/do use, NOT the --arbiter-remote divergence name)',
+			'the COORDINATION arbiter remote whose per-item lock refs (refs/dorfl/lock/*) gate the cwd selection pool (held in-flight items are subtracted); default: the per-repo/global defaultArbiter (origin), the same remote claim/do use',
 		)
 		.option(
 			'--here',
@@ -1750,13 +1791,20 @@ export function buildProgram(): Command {
 				flagOverrides(flags, command),
 			);
 			const warn = (message: string) => console.error(`>> ${message}`);
+			// The same arbiter resolution as `status` and `do` (see
+			// resolveStatusArbiterRemotes).
+			const remotes = resolveStatusArbiterRemotes({
+				flags,
+				global: config,
+				override,
+			});
 			const resolveCwd = () =>
 				resolveCwdSection({
 					cwd: process.cwd(),
 					config,
 					override,
-					arbiterRemote: flags.arbiterRemote,
-					lockArbiterRemote: flags.arbiter ?? 'origin',
+					arbiterRemote: remotes.report,
+					lockArbiterRemote: remotes.coordination,
 					reconcileLocks: flags.reconcileLocks === true,
 					warn,
 				});
@@ -1786,7 +1834,7 @@ export function buildProgram(): Command {
 			const reconcileArbiterKey = resolveReconcileArbiterKey(
 				'scan',
 				flags,
-				config.defaultArbiter,
+				remotes.coordination,
 			);
 			const report = await scan(config, {
 				warn,
@@ -4360,11 +4408,11 @@ export function buildProgram(): Command {
 		)
 		.option(
 			'--arbiter-remote <name>',
-			`the current repo's arbiter remote to report on (folds in the old \`arbiter status\`; default: ${DEFAULT_ARBITER_REMOTE})`,
+			"the current repo's arbiter remote to report on (folds in the old `arbiter status`; default: the same arbiter `do` uses: --arbiter, else the per-repo/global defaultArbiter)",
 		)
 		.option(
 			'--arbiter <remote>',
-			'the COORDINATION arbiter remote whose per-item lock refs gate the cwd selection pool (held in-flight items are subtracted); default: origin',
+			'the COORDINATION arbiter remote whose per-item lock refs gate the cwd selection pool (held in-flight items are subtracted); default: the per-repo/global defaultArbiter (origin)',
 		)
 		.option('--no-arbiter', "skip the current repo's arbiter section")
 		.option(
@@ -4387,16 +4435,23 @@ export function buildProgram(): Command {
 			);
 			const workspacesDir = flags.workspace ?? config.workspacesDir;
 			const warn = (message: string) => console.error(`>> ${message}`);
+			// Resolve the cwd's arbiter EXACTLY like `do`/`advance`/`requeue`
+			// (`--arbiter` > per-repo/global `defaultArbiter`, default `origin`), so
+			// status reports on the arbiter the other commands actually use instead
+			// of a legacy `arbiter`-named remote. `--no-arbiter` arrives as
+			// `arbiter: false` (commander negation): never a remote name.
+			const remotes = resolveStatusArbiterRemotes({
+				flags,
+				global: config,
+				override,
+			});
 			const resolveCwd = () =>
 				resolveCwdSection({
 					cwd: process.cwd(),
 					config,
 					override,
-					arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
-					// `--no-arbiter` arrives as `arbiter: false` (commander negation):
-					// never pass `false` on as a remote name.
-					lockArbiterRemote:
-						typeof flags.arbiter === 'string' ? flags.arbiter : 'origin',
+					arbiterRemote: remotes.report,
+					lockArbiterRemote: remotes.coordination,
 					reconcileLocks: flags.reconcileLocks === true,
 					warn,
 				});
@@ -4432,7 +4487,7 @@ export function buildProgram(): Command {
 			const reconcileArbiterKey = resolveReconcileArbiterKey(
 				'status',
 				flags,
-				config.defaultArbiter,
+				remotes.coordination,
 			);
 			// Fold in the current repo's arbiter state (the old `arbiter status`, ADR
 			// §1/§7) unless --no-arbiter. Read-only; tolerates not being in a repo.
@@ -4443,7 +4498,7 @@ export function buildProgram(): Command {
 					? undefined
 					: arbiterStatus({
 							cwd: process.cwd(),
-							remote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+							remote: remotes.report,
 						});
 			// The cwd-local section: resolve it ONLY when a participating cwd is NOT
 			// already covered by a registered mirror, via the SAME fetch-free pre-check
@@ -4453,7 +4508,7 @@ export function buildProgram(): Command {
 			const disposition = cwdSectionDisposition({
 				cwd: process.cwd(),
 				config,
-				arbiterRemote: flags.arbiterRemote ?? DEFAULT_ARBITER_REMOTE,
+				arbiterRemote: remotes.report,
 			});
 			const cwdSection =
 				disposition.participating && !disposition.alsoRegistered
@@ -4479,7 +4534,7 @@ export function buildProgram(): Command {
 		.command('requeue <slug>')
 		.helpGroup(HEADLINE_GROUP)
 		.description(
-			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. Escalation ladder (least to most destructive): (1) DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note. (2) --reconcile (alias --rebase) = NON-DESTRUCTIVE recovery: re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept branch onto latest arbiter/main in a scratch worktree; on a clean rebase, push the reconciled tip back (--force-with-lease, work branch only) and release the lock; on a genuine content conflict AFTER the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted) so the human can retry when the churn settles. NEVER deletes the remote branch. (3) --reset = DESTRUCTIVE last resort: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). RELEASED LOCK: a surfaced item (question sidecar on main) has its lock already released by the surface; if its body rests in the pool and its work/<slug> branch is on the arbiter, --reconcile and --reset still act on it, taking a short per-item lock for the operation and releasing it on every outcome; plain requeue on such an item is a no-op (the next claim already continues from the kept branch). -m/--message adds a dated handoff note to the item body, just before its `## Acceptance criteria` so it cannot collide with a kept branch’s done-move tail on the continue rebase (all modes; additive). CRASHED RUN: when the lock is held and a DEAD run left its retained job worktree (workspacesDir/work/*) with commits or uncommitted files the arbiter’s work/<slug> lacks, requeue first commits the residue as a wip commit and pushes the branch (plain push, never --force), so the next claim continues from it; if that save fails, the lock and the worktree are KEPT and requeue says why (not on --reset, which discards the work by design).',
+			'Requeue a STUCK task to the backlog for re-claiming (ADR §12/§14). Recovers a task whose per-item lock is held — stuck (the resolved-recovery path: a previously-routed needs-attention item, now lock `state: stuck`) OR active (a claim that never surfaced — an un-surfaced abort, a killed run, or an in-place requeue note). The body rests in work/tasks/backlog/<slug>.md (claim never moves it under the per-item-lock model); requeue releases the lock so the item is claimable again. The release is published as a TREE-LESS compare-and-swap to the arbiter ref, EXACTLY like claim — it NEVER stages or commits in the cwd working tree, so a requeue in a shared checkout can never sweep up a concurrent writer’s uncommitted files. Escalation ladder (least to most destructive): (1) DEFAULT = keep + continue: leave the work/<slug> branch UNTOUCHED so the next claim CONTINUES from its tip (rebased onto fresh main at onboard-time); if the work/<slug> branch is not on the arbiter (never pushed, or a prior --reset already deleted it), default requeue succeeds anyway with a fresh-claim note. (2) --reconcile (alias --rebase) = NON-DESTRUCTIVE recovery: re-sync the mirror to the arbiter (prune-fetch) and RETRY the rebase of the kept branch onto latest arbiter/main in a scratch worktree; on a clean rebase, push the reconciled tip back (--force-with-lease, work branch only) and release the lock; on a genuine content conflict AFTER the clean re-sync, leave the item stuck and the branch UNTOUCHED (nothing deleted) so the human can retry when the churn settles. NEVER deletes the remote branch. (3) --reset = DESTRUCTIVE last resort: delete the remote work/<slug> branch FIRST (then release the lock) so the next claim starts fresh (guarded; never the default). RELEASED LOCK: a surfaced item (question sidecar on main) has its lock already released by the surface; if its body rests in the pool and its work/<slug> branch is on the arbiter, --reconcile and --reset still act on it, taking a short per-item lock for the operation and releasing it on every outcome; plain requeue on such an item is a no-op (the next claim already continues from the kept branch), but requeue -m acts on it. -m/--message adds a dated handoff note to the item body, just before its `## Acceptance criteria` so it cannot collide with a kept branch’s done-move tail on the continue rebase (all modes; additive). On a SURFACED item (a pending question on main, lock released or not) the note is ALSO written as the answer to that question and applied, exactly as `advance` would (needsAnswers cleared, sidecar removed, answer recorded), so the next `do` re-dispatches it: one command instead of answering the sidecar by hand and running advance. CRASHED RUN: when the lock is held and a DEAD run left its retained job worktree (workspacesDir/work/*) with commits or uncommitted files the arbiter’s work/<slug> lacks, requeue first commits the residue as a wip commit and pushes the branch (plain push, never --force), so the next claim continues from it; if that save fails, the lock and the worktree are KEPT and requeue says why (not on --reset, which discards the work by design).',
 		)
 		.option('-c, --config <path>', 'config file path', defaultConfigPath())
 		.option(

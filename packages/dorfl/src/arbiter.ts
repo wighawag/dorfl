@@ -264,9 +264,13 @@ export function formatArbiterStatus(report: ArbiterStatusReport): string {
 
 	lines.push(`Arbiter remote: ${report.remote}`);
 	lines.push(`  URL:    ${report.url ?? '(unknown)'}`);
-	if (report.path !== undefined) {
-		lines.push(`  path:   ${report.path}`);
+	if (report.path === undefined) {
+		// A hosted arbiter (GitHub, ssh): nothing local to inspect, and saying
+		// "exists: no" about a live remote would be wrong.
+		lines.push('  hosted: yes (a remote URL; not inspected locally, no fetch)');
+		return lines.join('\n');
 	}
+	lines.push(`  path:   ${report.path}`);
 	lines.push(`  exists: ${report.exists ? 'yes' : 'no'}`);
 	if (report.exists) {
 		lines.push(`  bare:   ${report.bare ? 'yes' : 'no'}`);
